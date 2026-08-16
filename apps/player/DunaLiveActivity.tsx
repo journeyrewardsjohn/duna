@@ -10,7 +10,7 @@ import { createLiveActivity } from "expo-widgets";
 
 export type DunaLiveActivityProps = {
   readonly subjectId: string;
-  readonly kind: "upcoming" | "match" | "event" | "player";
+  readonly kind: "upcoming" | "match" | "event" | "player" | "upload";
   readonly title: string;
   readonly subtitle: string;
   readonly status: string;
@@ -32,6 +32,8 @@ export type DunaLiveActivityProps = {
   readonly predictionLabel?: string;
   readonly predictionStatus?: "open" | "won" | "lost" | "void";
   readonly predictionCredits?: number;
+  /** Local multipart progress. Cloud processing is intentionally status-only. */
+  readonly progress?: number;
   readonly updatedAt: string;
 };
 
@@ -64,6 +66,143 @@ function Activity(
   props: DunaLiveActivityProps,
 ): ReturnType<Parameters<typeof createLiveActivity<DunaLiveActivityProps>>[1]> {
   "widget";
+
+  if (props.kind === "upload") {
+    const progress = Math.max(0, Math.min(1, props.progress ?? 0));
+    const percent = `${Math.round(progress * 100)}%`;
+    const mark = (
+      <Image color={sky} size={18} systemName="arrow.up.circle.fill" />
+    );
+    const uploadBanner = (
+      <VStack
+        alignment="leading"
+        modifiers={[padding({ all: 16 }), activityBackgroundTint(navy)]}
+        spacing={9}
+      >
+        <HStack alignment="center" spacing={8}>
+          {mark}
+          <Text
+            modifiers={[
+              font({ size: 12, weight: "bold", design: "rounded" }),
+              foregroundStyle(sky),
+            ]}
+          >
+            {props.status.toUpperCase()}
+          </Text>
+          <Spacer />
+          <Text
+            modifiers={[
+              font({ size: 11, weight: "semibold", design: "rounded" }),
+              foregroundStyle(mist),
+            ]}
+          >
+            DUNA VISION
+          </Text>
+        </HStack>
+        <Text
+          modifiers={[
+            font({ size: 19, weight: "bold", design: "rounded" }),
+            foregroundStyle(white),
+          ]}
+        >
+          {props.title}
+        </Text>
+        <HStack alignment="center" spacing={8}>
+          <Text
+            modifiers={[
+              font({ size: 12, weight: "medium", design: "rounded" }),
+              foregroundStyle(mist),
+            ]}
+          >
+            {props.subtitle}
+          </Text>
+          <Spacer />
+          <Text
+            modifiers={[
+              font({ size: 23, weight: "black", design: "rounded" }),
+              foregroundStyle(white),
+            ]}
+          >
+            {percent}
+          </Text>
+        </HStack>
+      </VStack>
+    );
+    const uploadSmall = (
+      <HStack
+        alignment="center"
+        modifiers={[padding({ horizontal: 12, vertical: 10 })]}
+        spacing={8}
+      >
+        {mark}
+        <VStack alignment="leading" spacing={1}>
+          <Text
+            modifiers={[
+              font({ size: 13, weight: "bold", design: "rounded" }),
+              foregroundStyle(white),
+            ]}
+          >
+            {props.title}
+          </Text>
+          <Text
+            modifiers={[
+              font({ size: 11, weight: "medium", design: "rounded" }),
+              foregroundStyle(mist),
+            ]}
+          >
+            {`${props.status} · ${percent}`}
+          </Text>
+        </VStack>
+        <Spacer />
+        <Text
+          modifiers={[
+            font({ size: 12, weight: "black", design: "rounded" }),
+            foregroundStyle(sky),
+          ]}
+        >
+          {percent}
+        </Text>
+      </HStack>
+    );
+    return {
+      banner: uploadBanner,
+      bannerSmall: uploadSmall,
+      compactLeading: mark,
+      compactTrailing: (
+        <Text
+          modifiers={[
+            font({ size: 13, weight: "bold", design: "rounded" }),
+            foregroundStyle(white),
+          ]}
+        >
+          {percent}
+        </Text>
+      ),
+      minimal: mark,
+      expandedLeading: mark,
+      expandedCenter: (
+        <Text
+          modifiers={[
+            font({ size: 16, weight: "black", design: "rounded" }),
+            foregroundStyle(white),
+          ]}
+        >
+          {percent}
+        </Text>
+      ),
+      expandedTrailing: (
+        <Text
+          modifiers={[
+            font({ size: 10, weight: "semibold", design: "rounded" }),
+            foregroundStyle(mist),
+          ]}
+        >
+          {props.status}
+        </Text>
+      ),
+      expandedBottom: uploadSmall,
+    };
+  }
 
   const isScore =
     props.kind === "match" || props.kind === "event" || props.kind === "player";

@@ -3,6 +3,7 @@ import type {
   DunaCourtCalibration,
   DunaVideoCaptureModuleEvents,
   PreparedVideo,
+  VideoFrameSample,
 } from "./DunaVideoCapture.types";
 
 declare class DunaVideoCaptureNativeModule extends NativeModule<DunaVideoCaptureModuleEvents> {
@@ -20,6 +21,10 @@ declare class DunaVideoCaptureNativeModule extends NativeModule<DunaVideoCapture
   startRecording(audioEnabled: boolean): Promise<void>;
   stopRecording(): Promise<PreparedVideo>;
   pickVideo(): Promise<PreparedVideo | null>;
+  sampleVideoFrames(
+    fileUri: string,
+    maximumFrames?: number,
+  ): Promise<readonly VideoFrameSample[]>;
   uploadPart(
     fileUri: string,
     uploadUrl: string,

@@ -1,0 +1,53 @@
+# Keep the standard repository exclusions. EAS gives this file precedence over
+# .gitignore, so these rules intentionally mirror the root ignore policy.
+
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds and caches
+.next/
+.expo/
+dist/
+build/
+coverage/
+.turbo/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# credentials and local state
+.env
+.env.local
+.env.*.local
+!.env.example
+.vercel/
+.neon/
+
+# mobile
+apps/*/android/
+apps/*/ios/
+apps/*/.expo/
+apps/*/credentials.json
+apps/*/credentials/
+
+# system and editor
+.DS_Store
+.idea/
+.vscode/
+*.log
+.worktrees/
+.codex/worktrees/
+
+# generated brand artifacts that have not been approved
+artifacts/
+
+# Server and documentation material not used by either native application.
+# Keeping it out of EAS archives makes signed build uploads reliable without
+# changing either app's installed workspace dependency graph.
+/apps/web/
+/apps/hq/
+/docs/
+/tests/
+/.agents/
+/packages/db/drizzle/meta/

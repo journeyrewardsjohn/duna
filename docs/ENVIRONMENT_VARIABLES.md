@@ -243,13 +243,31 @@ CE_SECRET_ACCESS_KEY
 
 `CF_TOKEN_VALUE` is an optional Cloudflare account operations token and is not
 used for application S3 uploads. `CF_ACCOUNT_ID` and `CF_SECRET_ACCESS_KEY` are
-accepted legacy aliases; prefer the canonical names above. Despite the unusual
-existing `CE_SECRET_ACCESS_KEY` spelling, it is the current canonical
-application name and must match code/provider configuration exactly.
+accepted legacy aliases; the server-only deployment aliases
+`cloudflare_account_id`, `cf_r2_access_key_id`, `cf_r2_secret_access_key`, and
+`cf_rs_s3_endpoint` are also accepted during the R2 rollout. Prefer the
+canonical names above for new environments. Despite the unusual existing
+`CE_SECRET_ACCESS_KEY` spelling, it is the current canonical application name
+and must match code/provider configuration exactly. An R2 S3 endpoint must be
+HTTPS and under `r2.cloudflarestorage.com`; Cloudflare account API tokens never
+substitute for the scoped S3 access key and secret.
 
 `BLOB_READ_WRITE_TOKEN` authorizes Vercel Blob paths. R2/Blob credentials are
 server secrets and should be configured separately in Web and HQ where those
 routes execute.
+
+### Duna Vision analysis worker
+
+```text
+DUNA_ANALYSIS_WORKER_URL
+DUNA_ANALYSIS_WORKER_TOKEN
+```
+
+The optional worker receives a queued server-to-server job and posts validated
+model observations back to `/api/video/analysis`. It may read private source
+video and write derived artifacts only under `video-analysis/{videoId}/` in R2.
+This worker is the model execution plane—not a Vercel request handler—and its
+token must remain server-side.
 
 ## LiveKit and voice
 

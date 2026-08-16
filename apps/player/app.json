@@ -21,6 +21,17 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
         "NSCameraUsageDescription": "Duna uses the camera to record and live stream beach volleyball.",
         "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to include audio in a recording or live stream.",
         "NSPhotoLibraryUsageDescription": "Duna lets you choose high-resolution volleyball action photos for profile artwork and videos for your private archive or profile.",
@@ -100,10 +111,10 @@
           "image": "./assets/splash.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#F6F5F1",
+          "backgroundColor": "#06233D",
           "dark": {
             "image": "./assets/splash-dark.png",
-            "backgroundColor": "#0D1114"
+            "backgroundColor": "#06233D"
           }
         }
       ],

@@ -128,6 +128,9 @@ import {
   liveVideoSessionSchema,
   videoAssociationOptionSchema,
   videoMetricsSchema,
+  videoAnalysisMarkerInputSchema,
+  videoAnalysisReportSchema,
+  videoAnalysisRunSchema,
   videoPlaybackSchema,
   videoStudioSchema,
   videoSummarySchema,
@@ -342,6 +345,13 @@ import {
   updateVideoQuotaPolicy,
   VideoServiceError,
 } from "./video-service";
+import {
+  createVideoAnalysisMarker,
+  loadVideoAnalysisReport,
+  requestVideoAnalysis,
+  reviewVideoAnalysisEvent,
+  VideoAnalysisError,
+} from "./video-analysis-service";
 import {
   appendVisionTimelineEvents,
   attachVisionSessionToVideo,
@@ -1073,6 +1083,19 @@ function throwDomainError(error: unknown): never {
             : error.code === "REMOTE_EXPIRED"
               ? "FORBIDDEN"
               : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof VideoAnalysisError) {
+    const code =
+      error.code === "VIDEO_NOT_FOUND" ||
+      error.code === "ANALYSIS_EVENT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "ANALYSIS_NOT_ALLOWED" ||
+            error.code === "ANALYSIS_EVENT_WRONG_VIDEO"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_REVIEW"
+            ? "BAD_REQUEST"
+            : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof HealthServiceError) {
@@ -2498,6 +2521,130 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  videoAnalysisReport: protectedProcedure
+    .input(z.object({ videoId: z.string().uuid() }))
+    .output(videoAnalysisReportSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadVideoAnalysisReport({
+          actor: ctx.actor!,
+          videoId: input.videoId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  requestVideoAnalysis: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-analysis-request",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoAnalysisRunSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestVideoAnalysis",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestVideoAnalysis({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createVideoAnalysisMarker: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-analysis-marker",
+        capacity: 90,
+        refillPerMinute: 60,
+      }),
+    )
+    .input(videoAnalysisMarkerInputSchema)
+    .output(videoAnalysisReportSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createVideoAnalysisMarker",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createVideoAnalysisMarker({
+              actor: ctx.actor!,
+              marker: input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewVideoAnalysisEvent: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-analysis-review",
+        capacity: 60,
+        refillPerMinute: 30,
+      }),
+    )
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        eventId: z.string().uuid(),
+        decision: z.enum(["confirmed", "corrected", "rejected"]),
+        correction: z.record(z.string(), z.unknown()).optional(),
+        note: z.string().trim().max(600).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoAnalysisReportSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.reviewVideoAnalysisEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewVideoAnalysisEvent({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              eventId: input.eventId,
+              decision: input.decision,
+              correction: input.correction,
+              note: input.note,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoAssociations: protectedProcedure
     .input(
       z.object({
@@ -2744,7 +2891,7 @@ const playerRouter = router({
         liveVisibility: z.enum(["public", "link-only"]),
         recordingVisibility: z.enum(["public", "private"]),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(false),
+        visionLearningConsent: z.boolean().default(true),
         courtCalibration: courtCalibrationSchema.optional(),
         idempotencyKey: z.string().uuid(),
       }),
@@ -2917,7 +3064,7 @@ const playerRouter = router({
         recordingVisibility: z.enum(["public", "private"]),
         publishedToProfile: z.boolean(),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(false),
+        visionLearningConsent: z.boolean().default(true),
         originalFileName: z.string().trim().min(1).max(255),
         mimeType: z.enum(["video/mp4", "video/quicktime"]),
         bytes: z

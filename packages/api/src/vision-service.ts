@@ -15,6 +15,7 @@ import type {
   VisionSessionSettings,
   VisionTimelineEvent,
 } from "./contracts";
+import { requestVideoAnalysis } from "./video-analysis-service";
 
 const REMOTE_SESSION_SECONDS = 12 * 60 * 60;
 
@@ -414,6 +415,7 @@ export async function attachVisionSessionToVideo(input: {
         id: true,
         matchId: true,
         ownerPersonId: true,
+        status: true,
         courtCalibration: true,
         visionLearningConsent: true,
       },
@@ -471,6 +473,22 @@ export async function attachVisionSessionToVideo(input: {
     ipAddress: input.ipAddress,
     now: input.now,
   });
+  // Attaching a session is the durable hand-off to Duna Vision. It provides
+  // the uploaded source plus player-confirmed court/player context without
+  // making someone find a second "Analyze" action after every upload.
+  if (
+    video.status === "ready" ||
+    video.status === "ended" ||
+    video.status === "processing"
+  ) {
+    await requestVideoAnalysis({
+      actor: input.actor,
+      videoId: video.id,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    }).catch(() => undefined);
+  }
   return serializeSession(
     {
       ...session,

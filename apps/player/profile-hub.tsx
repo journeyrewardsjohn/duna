@@ -1,6 +1,6 @@
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,12 @@ import { demoPlayer } from "@duna/core/demo";
 import { FellixText as Text } from "./fellix-text";
 import { dunaWebUrl } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
+import {
+  defaultVideoNetworkPreferences,
+  loadVideoNetworkPreferences,
+  saveVideoNetworkPreferences,
+  type VideoNetworkPreferences,
+} from "./video-offline";
 
 type HubDestination =
   "profile" | "wallet" | "predictions" | "health" | "performance";
@@ -142,6 +148,116 @@ function NotificationPreferencesModal({
               </View>
             );
           })}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+function VideoDataPreferencesModal({
+  onClose,
+  visible,
+}: {
+  readonly onClose: () => void;
+  readonly visible: boolean;
+}) {
+  const [preferences, setPreferences] = useState<VideoNetworkPreferences>(
+    defaultVideoNetworkPreferences,
+  );
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    void loadVideoNetworkPreferences().then((next) => {
+      if (active) {
+        setPreferences(next);
+        setReady(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [visible]);
+
+  const update = (next: VideoNetworkPreferences) => {
+    setPreferences(next);
+    void saveVideoNetworkPreferences(next);
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.modalHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>VIDEO + DATA</Text>
+            <Text style={styles.modalTitle}>Offline first.</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close video data preferences"
+            onPress={onClose}
+            style={styles.close}
+          >
+            <Text style={styles.closeText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.subscriptionContent}>
+          <Text style={styles.subscriptionIntro}>
+            Recording stays available without service. Duna keeps a protected
+            copy on this device, then starts the cloud upload and processing
+            automatically when the connection you allow is available.
+          </Text>
+          <View style={styles.notificationRow}>
+            <View style={styles.flex}>
+              <Text style={styles.notificationTitle}>
+                Use cellular for uploads
+              </Text>
+              <Text style={styles.notificationBody}>
+                When off, recordings and library videos wait for Wi‑Fi.
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel="Use cellular data for video uploads"
+              disabled={!ready}
+              onValueChange={(allowCellularUploads) =>
+                update({ ...preferences, allowCellularUploads })
+              }
+              trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+              value={preferences.allowCellularUploads}
+            />
+          </View>
+          <View style={styles.notificationRow}>
+            <View style={styles.flex}>
+              <Text style={styles.notificationTitle}>
+                Use cellular for live video
+              </Text>
+              <Text style={styles.notificationBody}>
+                When off, Duna only starts a live stream on Wi‑Fi.
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel="Use cellular data for live video"
+              disabled={!ready}
+              onValueChange={(allowCellularLive) =>
+                update({ ...preferences, allowCellularLive })
+              }
+              trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+              value={preferences.allowCellularLive}
+            />
+          </View>
+          <View style={styles.videoOfflineNote}>
+            <Text style={styles.videoOfflineNoteTitle}>What works offline</Text>
+            <Text style={styles.videoOfflineNoteBody}>
+              Capture, score, favorite moments, and prepare an existing video.
+              Live streaming needs an allowed internet connection; queued videos
+              never begin uploading over cellular unless you enable it here.
+            </Text>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -635,6 +751,7 @@ export function ProfileHubScreen({
   const [profileOpen, setProfileOpen] = useState(false);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [videoDataOpen, setVideoDataOpen] = useState(false);
   const actions: readonly {
     readonly key: HubDestination;
     readonly icon: string;
@@ -848,6 +965,18 @@ export function ProfileHubScreen({
             <Text style={styles.settingText}>Notifications</Text>
             <Text style={styles.settingArrow}>›</Text>
           </Pressable>
+          <Pressable
+            onPress={() => setVideoDataOpen(true)}
+            style={styles.setting}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.settingText}>Video + data</Text>
+              <Text style={styles.settingMeta}>
+                Offline recording and Wi‑Fi controls
+              </Text>
+            </View>
+            <Text style={styles.settingArrow}>›</Text>
+          </Pressable>
           {[
             ["Privacy + safety", "#privacy"],
             ["Language + units", "#profile"],
@@ -893,6 +1022,10 @@ export function ProfileHubScreen({
       <NotificationPreferencesModal
         onClose={() => setNotificationsOpen(false)}
         visible={notificationsOpen}
+      />
+      <VideoDataPreferencesModal
+        onClose={() => setVideoDataOpen(false)}
+        visible={videoDataOpen}
       />
     </>
   );
@@ -1314,4 +1447,19 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     marginTop: 7,
   },
+  videoOfflineNote: {
+    backgroundColor: "#edf2ef",
+    borderColor: "#c9dbd1",
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 18,
+    padding: 16,
+  },
+  videoOfflineNoteBody: {
+    color: "#577066",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+  },
+  videoOfflineNoteTitle: { color: "#203740", fontSize: 14, fontWeight: "800" },
 });

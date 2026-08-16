@@ -12,8 +12,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as Crypto from "expo-crypto";
+import * as Network from "expo-network";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { demoOrganization } from "@duna/core/demo";
 import {
@@ -82,8 +84,50 @@ type PlayerOrganizationAccess = Awaited<
   ReturnType<DunaApiClient["player"]["organizationAccess"]["query"]>
 >;
 
+interface PlayerRuntimeSnapshot {
+  readonly cachedAt: string;
+  readonly dashboard: PlayerDashboard;
+  readonly wallet: PlayerWallet;
+  readonly memberCard?: PlayerMemberCard;
+  readonly predictionWallet: PredictionWallet;
+  readonly predictionDiscovery?: PredictionDiscovery;
+  readonly settings: PlayerSettings;
+  readonly coachingNotes: PlayerCoachingNotes;
+  readonly people: PublicPeople;
+  readonly venues: PublicVenues;
+  readonly proCoverage?: PublicProCoverage;
+  readonly coaches: PublicCoaches;
+  readonly discoveryMap?: PublicDiscoveryMap;
+  readonly organizationWallets: OrganizationWallets;
+  readonly organizationAccess?: PlayerOrganizationAccess;
+}
+
+const runtimeCacheKey = "duna.player.runtime-snapshot.v1";
+
+function isPlayerRuntimeSnapshot(
+  value: unknown,
+): value is PlayerRuntimeSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.cachedAt === "string" &&
+    Boolean(candidate.dashboard) &&
+    Boolean(candidate.wallet) &&
+    Boolean(candidate.predictionWallet) &&
+    Boolean(candidate.settings) &&
+    Array.isArray(candidate.coachingNotes) &&
+    Array.isArray(candidate.people) &&
+    Array.isArray(candidate.venues) &&
+    Array.isArray(candidate.coaches) &&
+    Array.isArray(candidate.organizationWallets)
+  );
+}
+
 export interface PlayerRuntime {
   readonly mode: "preview" | "live";
+  /** A previously synced private snapshot is available without a connection. */
+  readonly isOffline?: boolean;
+  readonly lastSuccessfulSyncAt?: string;
   readonly client?: DunaApiClient;
   readonly messagingDelivery?: DeliveryEngine;
   readonly publicClient?: DunaApiClient;
@@ -132,6 +176,40 @@ const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 const dunaHeroVideo = require("./assets/duna-hero.mp4");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaHeroPoster = require("./assets/duna-hero-poster.jpg");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaLaunchVideo = require("./assets/duna-launch.mp4");
+
+function RuntimeLoadingState() {
+  const player = useVideoPlayer(dunaLaunchVideo, (nextPlayer) => {
+    nextPlayer.loop = true;
+    // First open is handled by PlayerLaunchExperience, where the film plays
+    // with sound and haptics. Runtime retries stay quiet so a network refresh
+    // never starts speaking over the player unexpectedly.
+    nextPlayer.muted = true;
+    nextPlayer.play();
+  });
+
+  return (
+    <View
+      accessibilityLabel="Loading Duna"
+      accessibilityRole="progressbar"
+      style={runtimeStyles.loadingScreen}
+    >
+      <VideoView
+        contentFit="cover"
+        nativeControls={false}
+        player={player}
+        style={StyleSheet.absoluteFill}
+      />
+      <View pointerEvents="none" style={runtimeStyles.loadingCopy}>
+        <Text style={runtimeStyles.loadingTitle}>Loading Your World</Text>
+        <Text style={runtimeStyles.loadingBody}>
+          Syncing your bookings, matches, wallet, and profile.
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 function RuntimeMark({
   color,
@@ -319,6 +397,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   );
   const safeSignOut = useCallback(async () => {
     await unregisterMessagingNotifications(client).catch(() => undefined);
+    await AsyncStorage.removeItem(runtimeCacheKey).catch(() => undefined);
     await signOut();
   }, [client, signOut]);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
@@ -340,6 +419,44 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     useState<PlayerOrganizationAccess>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string>();
+
+  const applySnapshot = useCallback((snapshot: PlayerRuntimeSnapshot) => {
+    setDashboard(snapshot.dashboard);
+    setWallet(snapshot.wallet);
+    setMemberCard(snapshot.memberCard);
+    setPredictionWallet(snapshot.predictionWallet);
+    setPredictionDiscovery(snapshot.predictionDiscovery);
+    setSettings(snapshot.settings);
+    setCoachingNotes(snapshot.coachingNotes);
+    setPeople(snapshot.people);
+    setVenues(snapshot.venues);
+    setProCoverage(snapshot.proCoverage);
+    setCoaches(snapshot.coaches);
+    setDiscoveryMap(snapshot.discoveryMap);
+    setOrganizationWallets(snapshot.organizationWallets);
+    setOrganizationAccess(snapshot.organizationAccess);
+    setLastSuccessfulSyncAt(snapshot.cachedAt);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(runtimeCacheKey)
+      .then((stored) => {
+        if (!active || !stored) return;
+        const parsed = JSON.parse(stored) as unknown;
+        if (isPlayerRuntimeSnapshot(parsed)) applySnapshot(parsed);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setCacheHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [applySnapshot]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -378,21 +495,31 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.player.organizationWallets.query().catch(() => []),
         client.player.organizationAccess.query().catch(() => undefined),
       ]);
-      setDashboard(nextDashboard);
-      setWallet(nextWallet);
-      setMemberCard(nextMemberCard);
-      setPredictionWallet(nextPredictionWallet);
-      setPredictionDiscovery(nextPredictionDiscovery);
-      setSettings(nextSettings);
-      setCoachingNotes(nextCoachingNotes);
-      setPeople(nextPeople);
-      setVenues(nextVenues);
-      setProCoverage(nextProCoverage);
-      setCoaches(nextCoaches);
-      setDiscoveryMap(nextDiscoveryMap);
-      setOrganizationWallets(nextOrganizationWallets);
-      setOrganizationAccess(nextOrganizationAccess);
+      const snapshot: PlayerRuntimeSnapshot = {
+        cachedAt: new Date().toISOString(),
+        dashboard: nextDashboard,
+        wallet: nextWallet,
+        memberCard: nextMemberCard,
+        predictionWallet: nextPredictionWallet,
+        predictionDiscovery: nextPredictionDiscovery,
+        settings: nextSettings,
+        coachingNotes: nextCoachingNotes,
+        people: nextPeople,
+        venues: nextVenues,
+        proCoverage: nextProCoverage,
+        coaches: nextCoaches,
+        discoveryMap: nextDiscoveryMap,
+        organizationWallets: nextOrganizationWallets,
+        organizationAccess: nextOrganizationAccess,
+      };
+      applySnapshot(snapshot);
+      setIsOffline(false);
+      void AsyncStorage.setItem(runtimeCacheKey, JSON.stringify(snapshot));
     } catch (reason) {
+      const state = await Network.getNetworkStateAsync().catch(() => undefined);
+      setIsOffline(
+        Boolean(!state?.isConnected || state?.isInternetReachable === false),
+      );
       setError(
         reason instanceof Error && /abort|timed? out/i.test(reason.message)
           ? "Duna took too long to reach the secure account service. Check your connection and try again."
@@ -403,7 +530,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [applySnapshot, client]);
 
   const switchOrganization = useCallback(
     async (nextOrganizationId: string) => {
@@ -425,7 +552,19 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) void refresh();
+    if (isLoaded && isSignedIn && cacheHydrated) void refresh();
+  }, [cacheHydrated, isLoaded, isSignedIn, refresh]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        void refresh();
+      } else {
+        setIsOffline(true);
+      }
+    });
+    return () => subscription.remove();
   }, [isLoaded, isSignedIn, refresh]);
 
   useEffect(() => {
@@ -434,38 +573,26 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   }, [client, isLoaded, isSignedIn]);
 
   if (!isLoaded) {
-    return (
-      <CenteredState
-        body="Restoring your encrypted session."
-        busy
-        title="Opening Duna"
-      />
-    );
+    return <RuntimeLoadingState />;
   }
   if (!isSignedIn) {
     return <SignedOutState error={authError} onSignIn={() => void signIn()} />;
   }
-  if (loading && !dashboard) {
-    return (
-      <CenteredState
-        body="Syncing your bookings, matches, wallet, and profile."
-        busy
-        title="Loading your world"
-      />
-    );
+  if (!cacheHydrated || (loading && !dashboard)) {
+    return <RuntimeLoadingState />;
   }
-  if (
-    error ||
-    !dashboard ||
-    !wallet ||
-    !predictionWallet ||
-    !settings ||
-    !coachingNotes ||
-    !people ||
-    !venues ||
-    !coaches ||
-    !organizationWallets
-  ) {
+  const hasUsableSnapshot = Boolean(
+    dashboard &&
+    wallet &&
+    predictionWallet &&
+    settings &&
+    coachingNotes &&
+    people &&
+    venues &&
+    coaches &&
+    organizationWallets,
+  );
+  if (!hasUsableSnapshot) {
     return (
       <CenteredState
         action="Try again"
@@ -480,6 +607,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     <RuntimeContext.Provider
       value={{
         mode: "live",
+        isOffline,
+        lastSuccessfulSyncAt,
         client,
         messagingDelivery,
         publicClient: client,
@@ -643,6 +772,32 @@ const runtimeStyles = StyleSheet.create({
     flex: 1,
     justifyContent: "space-between",
     overflow: "hidden",
+  },
+  loadingBody: {
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 320,
+    textAlign: "center",
+  },
+  loadingCopy: {
+    alignItems: "center",
+    bottom: "10%",
+    left: 24,
+    position: "absolute",
+    right: 24,
+  },
+  loadingScreen: {
+    backgroundColor: "#06233D",
+    flex: 1,
+    overflow: "hidden",
+  },
+  loadingTitle: {
+    color: "#ffffff",
+    fontSize: 23,
+    fontWeight: "800",
+    letterSpacing: -0.45,
+    marginBottom: 8,
   },
   entryBenefit: {
     borderColor: "rgba(255,255,255,0.24)",

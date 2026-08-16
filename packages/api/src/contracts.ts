@@ -1196,7 +1196,9 @@ export const courtCalibrationSchema = z.object({
   calibratedAt: z.iso.datetime(),
 });
 export const visionSessionSettingsSchema = z.object({
-  captureMode: z.enum(["record", "live"]).optional(),
+  // Upload sessions retain the same calibrated event graph as Duna-recorded
+  // footage, but disclose that the player supplied setup after the fact.
+  captureMode: z.enum(["record", "live", "upload"]).optional(),
   courtWidthMeters: z.number().positive().max(30),
   courtLengthMeters: z.number().positive().max(40),
   netHeightMeters: z.number().positive().max(4),
@@ -1246,6 +1248,7 @@ export const visionTimelineEventSchema = z
       "set-ended",
       "recording-stopped",
       "calibration-updated",
+      "review-marker",
     ]),
     winnerSide: z.enum(["A", "B"]).optional(),
     targetEventId: z.string().uuid().optional(),
@@ -1297,6 +1300,197 @@ export const visionPlaybackSchema = z.object({
   settings: visionSessionSettingsSchema,
   recordingStartedAt: z.iso.datetime().optional(),
   events: z.array(visionTimelineEventSchema).readonly(),
+});
+
+export const videoAnalysisSourceSchema = z.enum([
+  "model",
+  "human",
+  "watch",
+  "system",
+]);
+export const videoAnalysisEventTypeSchema = z.enum([
+  "rally-started",
+  "rally-ended",
+  "ball-contact",
+  "ball-landing",
+  "player-position",
+  "highlight",
+  "review-marker",
+]);
+export const videoAnalysisEventStateSchema = z.enum([
+  "proposed",
+  "confirmed",
+  "corrected",
+  "rejected",
+]);
+export const videoAnalysisConfidenceSchema = z.enum([
+  "verified",
+  "high",
+  "medium",
+  "low",
+  "unavailable",
+]);
+export const videoAnalysisCourtPointSchema = z.object({
+  xMeters: z.number().finite().min(0).max(30),
+  yMeters: z.number().finite().min(0).max(40),
+  observed: z.enum(["visible", "edge", "out-of-frame"]),
+});
+export const videoAnalysisCourtMapSchema = z.object({
+  widthMeters: z.number().positive().max(30),
+  lengthMeters: z.number().positive().max(40),
+  coordinateFrame: z.literal("canonical-court"),
+  calibrationSource: z.enum(["vision", "manual", "unknown"]),
+  calibrationQualityScore: z.number().int().min(0).max(100).optional(),
+});
+export const videoAnalysisCoverageSchema = z.object({
+  sampledDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+  usableDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+  sourceVideoAvailable: z.boolean(),
+  scoreTimelineAvailable: z.boolean(),
+});
+export const videoAnalysisRunSchema = z.object({
+  id: z.string().uuid(),
+  videoId: z.string().uuid(),
+  visionSessionId: z.string().uuid().optional(),
+  status: z.enum([
+    "queued",
+    "processing",
+    "ready",
+    "needs-review",
+    "failed",
+    "cancelled",
+  ]),
+  pipelineVersion: z.string(),
+  modelVersion: z.string().optional(),
+  courtMap: videoAnalysisCourtMapSchema.optional(),
+  coverage: videoAnalysisCoverageSchema.optional(),
+  artifactAvailable: z.boolean(),
+  failureCode: z.string().optional(),
+  startedAt: z.iso.datetime().optional(),
+  completedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const videoAnalysisEventSchema = z.object({
+  id: z.string().uuid(),
+  runId: z.string().uuid().optional(),
+  videoId: z.string().uuid(),
+  visionSessionId: z.string().uuid().optional(),
+  eventType: videoAnalysisEventTypeSchema,
+  source: videoAnalysisSourceSchema,
+  state: videoAnalysisEventStateSchema,
+  sessionTimeUs: z.number().int().min(0).max(43_200_000_000),
+  durationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+  confidence: z.number().finite().min(0).max(1).optional(),
+  courtPoint: videoAnalysisCourtPointSchema.optional(),
+  payload: z.record(z.string(), z.unknown()),
+  modelVersion: z.string().optional(),
+  createdAt: z.iso.datetime(),
+});
+export const videoAnalysisReviewSchema = z.object({
+  id: z.string().uuid(),
+  eventId: z.string().uuid(),
+  videoId: z.string().uuid(),
+  decision: z.enum(["confirmed", "corrected", "rejected"]),
+  correction: z.record(z.string(), z.unknown()).optional(),
+  note: z.string().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const videoAnalysisReportSchema = z.object({
+  videoId: z.string().uuid(),
+  run: videoAnalysisRunSchema.optional(),
+  court: videoAnalysisCourtMapSchema,
+  heatmap: z.object({
+    columns: z.number().int().min(2).max(12),
+    rows: z.number().int().min(2).max(16),
+    observedCount: z.number().int().nonnegative(),
+    summary: z.string(),
+    cells: z
+      .array(
+        z.object({
+          column: z.number().int().nonnegative(),
+          row: z.number().int().nonnegative(),
+          count: z.number().int().positive(),
+          confidence: videoAnalysisConfidenceSchema,
+        }),
+      )
+      .readonly(),
+  }),
+  score: z.object({
+    scoredRallies: z.number().int().nonnegative(),
+    favoriteMoments: z.number().int().nonnegative(),
+    lastSnapshot: visionScoreSnapshotSchema.optional(),
+  }),
+  highlights: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        sessionTimeUs: z.number().int().nonnegative(),
+        durationUs: z.number().int().nonnegative().optional(),
+        label: z.string(),
+        source: videoAnalysisSourceSchema,
+        confidence: videoAnalysisConfidenceSchema,
+      }),
+    )
+    .readonly(),
+  reviewQueue: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        sessionTimeUs: z.number().int().nonnegative(),
+        label: z.string(),
+        source: videoAnalysisSourceSchema,
+      }),
+    )
+    .readonly(),
+  evidence: z.object({
+    sourceVideoAvailable: z.boolean(),
+    scoreTimelineAvailable: z.boolean(),
+    trainingEligible: z.boolean(),
+    disclaimer: z.string(),
+  }),
+});
+export const videoAnalysisMarkerInputSchema = z
+  .object({
+    videoId: z.string().uuid(),
+    sessionTimeUs: z.number().int().min(0).max(43_200_000_000),
+    eventType: z.enum(["ball-landing", "highlight", "review-marker"]),
+    courtPoint: videoAnalysisCourtPointSchema.optional(),
+    label: z.string().trim().min(1).max(160).optional(),
+    idempotencyKey: z.string().uuid(),
+  })
+  .superRefine((value, context) => {
+    if (value.eventType === "ball-landing" && !value.courtPoint) {
+      context.addIssue({
+        code: "custom",
+        path: ["courtPoint"],
+        message: "A ball landing needs a court point.",
+      });
+    }
+  });
+export const videoAnalysisWorkerEventSchema = z.object({
+  id: z.string().uuid(),
+  eventType: videoAnalysisEventTypeSchema,
+  sessionTimeUs: z.number().int().min(0).max(43_200_000_000),
+  durationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+  confidence: z.number().finite().min(0).max(1).optional(),
+  courtPoint: videoAnalysisCourtPointSchema.optional(),
+  payload: z.record(z.string(), z.unknown()).default({}),
+});
+export const videoAnalysisWorkerResultSchema = z.object({
+  runId: z.string().uuid(),
+  status: z.enum(["ready", "needs-review", "failed"]),
+  modelVersion: z.string().trim().min(1).max(80).optional(),
+  artifactR2Key: z
+    .string()
+    .trim()
+    .regex(/^video-analysis\/[a-zA-Z0-9/_-]+$/)
+    .max(500)
+    .optional(),
+  failureCode: z.string().trim().min(1).max(80).optional(),
+  coverage: videoAnalysisCoverageSchema.optional(),
+  events: z.array(videoAnalysisWorkerEventSchema).max(100_000).default([]),
 });
 export const healthCategorySchema = z.enum([
   "heart",
@@ -5099,6 +5293,10 @@ export const teammateSearchResultSchema = z.object({
   person: personSummarySchema,
   relationship: z.enum(["recent-partner", "connection", "nearby", "search"]),
   sharedTeams: z.number().int().nonnegative(),
+  following: z.boolean(),
+  followsYou: z.boolean(),
+  lastActivityAt: z.iso.datetime().optional(),
+  reliability: attendanceReliabilitySchema,
   gender: z.string(),
   eligible: z.boolean(),
   eligibilityReasons: z.array(z.string()).readonly(),
@@ -5131,6 +5329,15 @@ export type VideoMetrics = z.infer<typeof videoMetricsSchema>;
 export type VisionSession = z.infer<typeof visionSessionSchema>;
 export type VisionSessionSettings = z.infer<typeof visionSessionSettingsSchema>;
 export type VisionTimelineEvent = z.infer<typeof visionTimelineEventSchema>;
+export type VideoAnalysisReport = z.infer<typeof videoAnalysisReportSchema>;
+export type VideoAnalysisRun = z.infer<typeof videoAnalysisRunSchema>;
+export type VideoAnalysisEvent = z.infer<typeof videoAnalysisEventSchema>;
+export type VideoAnalysisMarkerInput = z.infer<
+  typeof videoAnalysisMarkerInputSchema
+>;
+export type VideoAnalysisWorkerResult = z.infer<
+  typeof videoAnalysisWorkerResultSchema
+>;
 export type VisionScoreSnapshot = z.infer<typeof visionScoreSnapshotSchema>;
 export type HealthCategory = z.infer<typeof healthCategorySchema>;
 export type HealthMetric = z.infer<typeof healthMetricSchema>;

@@ -34,6 +34,8 @@ provider operations, and time-sensitive release evidence.
   — owned cursor-sync decision.
 - [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md) — Mux, R2, upload, playback, Vision,
   privacy, and release gates.
+- [`DUNA_VISION_ANALYSIS.md`](DUNA_VISION_ANALYSIS.md) — analysis event model,
+  human review, GPU-worker contract, and release gates.
 - [`HEALTH_PRIVACY.md`](HEALTH_PRIVACY.md) — HealthKit storage, sharing, and
   deletion boundary.
 - [`PREDICTION_CREDITS.md`](PREDICTION_CREDITS.md) — play-credit market boundary.

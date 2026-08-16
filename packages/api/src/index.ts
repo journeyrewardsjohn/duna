@@ -52,6 +52,7 @@ export * from "./router";
 export * from "./webhooks";
 export * from "./weather";
 export * from "./video-providers";
+export * from "./video-analysis-service";
 export * from "./video-service";
 export * from "./vision-service";
 export * from "./workflows";

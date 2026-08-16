@@ -505,6 +505,13 @@
       "when": 1786881853788,
       "tag": "0071_thick_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1786900037985,
+      "tag": "0072_solid_bushwacker",
+      "breakpoints": true
     }
   ]
 }

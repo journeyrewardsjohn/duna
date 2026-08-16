@@ -1,5 +1,5 @@
 import muxReactNativeVideo from "@mux/mux-data-react-native-video";
-import { MEMBERSHIP_PLANS } from "@duna/core";
+import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -13,6 +13,8 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  Image,
   KeyboardAvoidingView,
   Modal,
   PanResponder,
@@ -22,6 +24,7 @@ import {
   Share,
   StyleSheet,
   Switch,
+  useWindowDimensions,
   type LayoutChangeEvent,
   View,
 } from "react-native";
@@ -34,6 +37,7 @@ import VideoCapture, {
   type CapturePoint,
   type DunaCourtCalibration,
   type PreparedVideo,
+  type VideoFrameSample,
 } from "./modules/duna-video-capture";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import type { PlayerRuntime } from "./runtime";
@@ -69,6 +73,21 @@ import {
   type CourtCornerIndex,
   type CourtGeometry,
 } from "./court-calibration";
+import {
+  canUseVideoTransport,
+  defaultVideoNetworkPreferences,
+  enqueueOfflineVideoDraft,
+  loadOfflineVideoDrafts,
+  loadVideoNetworkPreferences,
+  removeOfflineVideoDraft,
+  retainVideoForOfflineUpload,
+  subscribeToVideoNetwork,
+  updateOfflineVideoDraft,
+  type OfflineVideoDraft,
+  type VideoNetworkPreferences,
+} from "./video-offline";
+import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
+import { startDunaLiveActivity } from "./live-activities";
 
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
@@ -85,6 +104,9 @@ type LiveVideoSession = Awaited<
 >;
 type VideoPlayback = Awaited<
   ReturnType<DunaApiClient["public"]["videoPlayback"]["query"]>
+>;
+type VideoAnalysisReport = Awaited<
+  ReturnType<DunaApiClient["player"]["videoAnalysisReport"]["query"]>
 >;
 type VisionSessionAccess = Awaited<
   ReturnType<DunaApiClient["player"]["createVisionSession"]["mutate"]>
@@ -125,6 +147,56 @@ interface CaptureForm {
   readonly contributeCalibration: boolean;
 }
 
+interface OfflineUploadPayload {
+  readonly form: CaptureForm;
+  readonly visionSessionId?: string;
+  readonly calibration?: DunaCourtCalibration;
+  readonly importedVision?: ImportedVisionPayload;
+}
+
+interface ImportedVisionPayload {
+  readonly courtFrame?: VideoFrameSample;
+  readonly playerFrameAtSeconds?: number;
+  readonly playerIds: readonly string[];
+  readonly geometry?: CourtGeometry;
+}
+
+interface ImportedVisionSetup {
+  readonly frames: readonly VideoFrameSample[];
+  readonly courtFrameId?: string;
+  readonly playerFrameId?: string;
+  readonly players: readonly PersonSummary[];
+  readonly geometry?: CourtGeometry;
+}
+
+export interface VideoTransferStatus {
+  readonly id: string;
+  readonly stage:
+    | "importing"
+    | "waiting"
+    | "uploading"
+    | "processing"
+    | "complete"
+    | "failed";
+  readonly title: string;
+  readonly detail: string;
+  readonly progress?: number;
+}
+
+function offlineUploadPayload(
+  value: Record<string, unknown>,
+): OfflineUploadPayload | undefined {
+  const candidate = value as Partial<OfflineUploadPayload>;
+  if (
+    !candidate.form ||
+    typeof candidate.form.title !== "string" ||
+    !candidate.form.category
+  ) {
+    return undefined;
+  }
+  return candidate as OfflineUploadPayload;
+}
+
 const initialCaptureForm: CaptureForm = {
   title: "",
   category: "match",
@@ -136,7 +208,10 @@ const initialCaptureForm: CaptureForm = {
   courtLengthMeters: 16,
   netHeightMeters: 2.43,
   orientation: "landscape",
-  contributeCalibration: false,
+  // This decision belongs to this recording only. It is intentionally not
+  // included in saved capture defaults, so turning it off once does not alter
+  // a player's consent for their future library.
+  contributeCalibration: true,
 };
 
 interface StoredCaptureDefaults {
@@ -208,6 +283,36 @@ const palette = {
   line: "#dedbd3",
 };
 
+const importedPlayerPalette: MobileSocialPalette = {
+  canvas: palette.canvas,
+  ink: palette.ink,
+  depth: palette.depth,
+  navy: palette.navy,
+  navyLift: "#31484f",
+  bone: palette.ink,
+  muted: palette.muted,
+  aqua: palette.aqua,
+  aquaDeep: "#274f5b",
+  sand: palette.sand,
+  flare: palette.flare,
+  positive: palette.positive,
+  warning: palette.warning,
+  danger: palette.danger,
+  onAccent: "#ffffff",
+  white: "#ffffff",
+  overlayRgb: "27,27,25",
+  accentRgb: "61,102,114",
+  warningRgb: "138,106,47",
+  positiveRgb: "47,107,58",
+  dangerRgb: "154,74,46",
+  flareRgb: "232,104,58",
+  inkRgb: "27,27,25",
+  depthRgb: "255,255,255",
+  navyRgb: "34,52,59",
+  boneRgb: "27,27,25",
+  whiteRgb: "255,255,255",
+};
+
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
@@ -243,6 +348,45 @@ function displayError(error: unknown): string {
   return message.length > 280
     ? "Duna could not complete that video request. Please try again."
     : message;
+}
+
+function frameForId(
+  setup: ImportedVisionSetup | undefined,
+  frameId: string | undefined,
+): VideoFrameSample | undefined {
+  if (!setup || !frameId) return undefined;
+  return setup.frames.find((frame) => frame.id === frameId);
+}
+
+function importedVisionPayload(
+  setup: ImportedVisionSetup | undefined,
+): ImportedVisionPayload | undefined {
+  if (!setup) return undefined;
+  const courtFrame = frameForId(setup, setup.courtFrameId);
+  const playerFrame = frameForId(setup, setup.playerFrameId);
+  return {
+    courtFrame,
+    playerFrameAtSeconds: playerFrame?.timestampSeconds,
+    playerIds: setup.players.map((player) => player.id),
+    geometry: setup.geometry,
+  };
+}
+
+function importedVisionSettings(
+  form: CaptureForm,
+  imported: ImportedVisionPayload | undefined,
+): VisionSettings {
+  return {
+    captureMode: "upload",
+    courtWidthMeters: form.courtWidthMeters,
+    courtLengthMeters: form.courtLengthMeters,
+    netHeightMeters: form.netHeightMeters,
+    cameraHeightMeters: 2.1,
+    overlayScoreboard: true,
+    teamA: "Side A",
+    teamB: "Side B",
+    ...(imported?.geometry ? geometrySettings(imported.geometry) : {}),
+  };
 }
 
 function qualityLabel(grade: CaptureGuidance["qualityGrade"]): string {
@@ -347,11 +491,13 @@ function compactScore(
 
 function VisionScoreboard({
   compact = false,
+  landscape = false,
   score,
   teamA,
   teamB,
 }: {
   readonly compact?: boolean;
+  readonly landscape?: boolean;
   readonly score: VisionScore;
   readonly teamA: string;
   readonly teamB: string;
@@ -376,6 +522,7 @@ function VisionScoreboard({
       style={[
         styles.visionScoreboard,
         compact && styles.visionScoreboardCompact,
+        landscape && styles.visionScoreboardLandscape,
       ]}
     >
       <View style={styles.visionScoreHeader}>
@@ -494,11 +641,13 @@ function ToggleRow({
 function AssociationPicker({
   category,
   client,
+  onCreateMatch,
   onChange,
   value,
 }: {
   readonly category: VideoCategory;
   readonly client?: DunaApiClient;
+  readonly onCreateMatch?: () => void;
   readonly value?: VideoAssociation;
   readonly onChange: (value: VideoAssociation | undefined) => void;
 }) {
@@ -539,6 +688,10 @@ function AssociationPicker({
   }, [category, client, query]);
 
   if (category !== "event" && category !== "match") return null;
+  const scheduledMatches =
+    category === "match"
+      ? options.filter((option) => option.associated).slice(0, 3)
+      : [];
 
   return (
     <View style={styles.field}>
@@ -557,6 +710,37 @@ function AssociationPicker({
         </View>
       ) : (
         <>
+          {scheduledMatches.length > 0 && (
+            <View style={styles.scheduledAssociationSection}>
+              <View style={styles.scheduledAssociationHeading}>
+                <View style={styles.flex}>
+                  <Text style={styles.scheduledAssociationEyebrow}>
+                    YOUR SCHEDULE
+                  </Text>
+                  <Text style={styles.scheduledAssociationTitle}>
+                    Today + next scheduled match
+                  </Text>
+                </View>
+                <Text style={styles.scheduledAssociationHint}>TAP TO LINK</Text>
+              </View>
+              {scheduledMatches.map((option) => (
+                <Pressable
+                  key={`scheduled-${option.id}`}
+                  onPress={() => onChange(option)}
+                  style={styles.scheduledAssociationCard}
+                >
+                  <View style={styles.scheduledAssociationDot} />
+                  <View style={styles.flex}>
+                    <Text style={styles.associationTitle}>{option.title}</Text>
+                    <Text style={styles.associationMeta}>
+                      {option.subtitle}
+                    </Text>
+                  </View>
+                  <Text style={styles.textAction}>Select</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           <TextInput
             autoCapitalize="words"
             onChangeText={setQuery}
@@ -583,9 +767,21 @@ function AssociationPicker({
               </Pressable>
             ))}
             {!loading && options.length === 0 && (
-              <Text style={styles.helper}>
-                Search all Duna events. Your registrations appear first.
-              </Text>
+              <View style={styles.matchEmptyState}>
+                <Text style={styles.helper}>
+                  Search all Duna events. Your registrations appear first.
+                </Text>
+                {category === "match" && onCreateMatch && (
+                  <Pressable
+                    onPress={onCreateMatch}
+                    style={styles.createMatchInlineButton}
+                  >
+                    <Text style={styles.createMatchInlineText}>
+                      + Create a Match
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             )}
           </View>
         </>
@@ -594,22 +790,201 @@ function AssociationPicker({
   );
 }
 
+function ImportedVisionSetupCard({
+  loading,
+  onChange,
+  onEditCourt,
+  onIdentifyPlayers,
+  setup,
+}: {
+  readonly loading: boolean;
+  readonly setup?: ImportedVisionSetup;
+  readonly onChange: (setup: ImportedVisionSetup) => void;
+  readonly onEditCourt: () => void;
+  readonly onIdentifyPlayers: () => void;
+}) {
+  const courtFrame = frameForId(setup, setup?.courtFrameId);
+  const playerFrame = frameForId(setup, setup?.playerFrameId);
+  const frames = setup?.frames ?? [];
+  const update = (partial: Partial<ImportedVisionSetup>) => {
+    if (!setup) return;
+    onChange({ ...setup, ...partial });
+  };
+  return (
+    <View style={styles.importedVisionCard}>
+      <View style={styles.importedVisionHeading}>
+        <View style={styles.importedVisionMark}>
+          <Text style={styles.importedVisionMarkText}>✦</Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.importedVisionEyebrow}>DUNA VISION SETUP</Text>
+          <Text style={styles.importedVisionTitle}>
+            Make the analysis fit this video.
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.importedVisionBody}>
+        Duna sampled clear moments across this recording on your iPhone. Pick
+        only what helps: a court view and player hints are optional.
+      </Text>
+
+      {loading ? (
+        <View style={styles.importedVisionLoading}>
+          <ActivityIndicator color={palette.aqua} />
+          <Text style={styles.importedVisionLoadingText}>
+            Finding useful court and player views…
+          </Text>
+        </View>
+      ) : frames.length > 0 ? (
+        <>
+          <Text style={styles.importedVisionLabel}>
+            COURT + NET · TAP THE BEST VIEW
+          </Text>
+          <ScrollView
+            contentContainerStyle={styles.importedFrameRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {frames.map((frame) => {
+              const selected = courtFrame?.id === frame.id;
+              return (
+                <Pressable
+                  accessibilityLabel={`Use ${formatClock(frame.timestampSeconds)} for court setup`}
+                  key={`court-${frame.id}`}
+                  onPress={() => update({ courtFrameId: frame.id })}
+                  style={[
+                    styles.importedFrame,
+                    selected && styles.importedFrameSelected,
+                  ]}
+                >
+                  <Image
+                    source={{
+                      uri: `data:image/jpeg;base64,${frame.jpegBase64}`,
+                    }}
+                    style={styles.importedFrameImage}
+                  />
+                  <Text style={styles.importedFrameTime}>
+                    {formatClock(frame.timestampSeconds)}
+                  </Text>
+                  {selected && (
+                    <View style={styles.importedFrameCheck}>
+                      <Text style={styles.importedFrameCheckText}>✓</Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable
+            disabled={!courtFrame}
+            onPress={onEditCourt}
+            style={[
+              styles.importedVisionAction,
+              !courtFrame && styles.disabled,
+            ]}
+          >
+            <Text style={styles.importedVisionActionText}>
+              {setup?.geometry
+                ? "Refine court + net"
+                : "Mark court + net (optional)"}
+            </Text>
+            <Text style={styles.importedVisionActionArrow}>›</Text>
+          </Pressable>
+
+          <Text style={styles.importedVisionLabel}>
+            PLAYERS · OPTIONAL PRIVATE HINT
+          </Text>
+          <ScrollView
+            contentContainerStyle={styles.importedFrameRail}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {frames.map((frame) => {
+              const selected = playerFrame?.id === frame.id;
+              return (
+                <Pressable
+                  accessibilityLabel={`Use ${formatClock(frame.timestampSeconds)} for player hints`}
+                  key={`players-${frame.id}`}
+                  onPress={() => update({ playerFrameId: frame.id })}
+                  style={[
+                    styles.importedFrame,
+                    selected && styles.importedFrameSelected,
+                  ]}
+                >
+                  <Image
+                    source={{
+                      uri: `data:image/jpeg;base64,${frame.jpegBase64}`,
+                    }}
+                    style={styles.importedFrameImage}
+                  />
+                  <Text style={styles.importedFrameTime}>
+                    {frame.playerCount > 0
+                      ? `${frame.playerCount} seen · ${formatClock(frame.timestampSeconds)}`
+                      : formatClock(frame.timestampSeconds)}
+                  </Text>
+                  {selected && (
+                    <View style={styles.importedFrameCheck}>
+                      <Text style={styles.importedFrameCheckText}>✓</Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable
+            onPress={onIdentifyPlayers}
+            style={styles.importedVisionAction}
+          >
+            <Text style={styles.importedVisionActionText}>
+              {setup?.players.length
+                ? `${setup.players.length} player${setup.players.length === 1 ? "" : "s"} identified`
+                : "Identify players (optional)"}
+            </Text>
+            <Text style={styles.importedVisionActionArrow}>›</Text>
+          </Pressable>
+        </>
+      ) : (
+        <Text style={styles.importedVisionUnavailable}>
+          Duna could not make a useful filmstrip from this format. You can still
+          set the court size and net height below, or upload now.
+        </Text>
+      )}
+      <Text style={styles.importedVisionPrivacy}>
+        Selected moments and player tags are private analysis instructions for
+        this video—not identity-model training.
+      </Text>
+    </View>
+  );
+}
+
 function VideoDetailsForm({
   client,
   form,
+  importedVision,
+  importedVisionLoading,
   mode,
+  onCreateMatch,
   onCancel,
   onChange,
   onContinue,
+  onEditImportedCourt,
+  onIdentifyImportedPlayers,
+  onImportedVisionChange,
   preparedVideo,
 }: {
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
+  readonly importedVision?: ImportedVisionSetup;
+  readonly importedVisionLoading: boolean;
   readonly mode: "live" | "record" | "upload";
   readonly preparedVideo?: PreparedVideo;
+  readonly onCreateMatch?: () => void;
   readonly onChange: (form: CaptureForm) => void;
   readonly onCancel: () => void;
   readonly onContinue: () => void;
+  readonly onEditImportedCourt: () => void;
+  readonly onIdentifyImportedPlayers: () => void;
+  readonly onImportedVisionChange: (setup: ImportedVisionSetup) => void;
 }) {
   const associationRequired =
     form.category === "event" || form.category === "match";
@@ -617,6 +992,7 @@ function VideoDetailsForm({
     form.title.trim().length >= 2 &&
     (!associationRequired || Boolean(form.association));
   const captureSetup = mode !== "upload";
+  const courtSetup = captureSetup || mode === "upload";
   const applyAssociation = (association: VideoAssociation | undefined) => {
     if (!association) {
       onChange({ ...form, association: undefined });
@@ -669,7 +1045,7 @@ function VideoDetailsForm({
             <Text style={styles.formIntro}>
               {captureSetup
                 ? "Duna remembers your last camera choices and can inherit court settings from the match you select."
-                : "A confirmed venue and match make this video easier to find later."}
+                : "Confirm the essentials once; Duna will keep uploading and processing while you use the rest of the app."}
             </Text>
           </View>
 
@@ -684,8 +1060,24 @@ function VideoDetailsForm({
                   {formatDuration(preparedVideo.durationSeconds)} ·{" "}
                   {formatBytes(preparedVideo.bytes)} · MP4
                 </Text>
+                {mode === "upload" && (
+                  <Text style={styles.importedVideoNote}>
+                    Imported video · Duna can process it, but it was not
+                    captured with on-court Duna Vision calibration.
+                  </Text>
+                )}
               </View>
             </View>
+          )}
+
+          {mode === "upload" && (
+            <ImportedVisionSetupCard
+              loading={importedVisionLoading}
+              onChange={onImportedVisionChange}
+              onEditCourt={onEditImportedCourt}
+              onIdentifyPlayers={onIdentifyImportedPlayers}
+              setup={importedVision}
+            />
           )}
 
           <View style={styles.field}>
@@ -749,6 +1141,7 @@ function VideoDetailsForm({
           <AssociationPicker
             category={form.category}
             client={client}
+            onCreateMatch={onCreateMatch}
             onChange={applyAssociation}
             value={form.association}
           />
@@ -842,19 +1235,27 @@ function VideoDetailsForm({
           />
 
           <ToggleRow
-            body="Opt in to send court landmarks and a low-resolution setup frame to Duna's reviewed training queue. Your video privacy does not change, and examples are never promoted into a model automatically."
-            label="Help improve court detection"
+            body="Share de-identified court geometry, a low-resolution setup frame, and quality signals to improve Duna Vision’s court guidance and video-analysis models. Your full video stays private. Nothing is used for model training without reviewed approval."
+            label="Help improve Duna Vision"
             onChange={(contributeCalibration) =>
               onChange({ ...form, contributeCalibration })
             }
             value={form.contributeCalibration}
           />
 
-          {captureSetup && (
+          {courtSetup && (
             <>
               <ChoiceRow
-                body="We guide you if the iPhone is held the wrong way. Landscape captures more of a full court."
-                label="How will you hold the phone?"
+                body={
+                  mode === "upload"
+                    ? "Tell Duna how this video was framed. Landscape usually gives Vision more court context."
+                    : "We guide you if the iPhone is held the wrong way. Landscape captures more of a full court."
+                }
+                label={
+                  mode === "upload"
+                    ? "How was this video framed?"
+                    : "How will you hold the phone?"
+                }
                 onChange={(orientation) => onChange({ ...form, orientation })}
                 options={[
                   {
@@ -925,7 +1326,9 @@ function VideoDetailsForm({
             style={[styles.primaryButton, !valid && styles.disabled]}
           >
             <Text style={styles.primaryButtonText}>
-              {mode === "upload" ? "Upload video" : "Continue to camera guide"}
+              {mode === "upload"
+                ? "Start upload in background"
+                : "Continue to camera guide"}
             </Text>
           </Pressable>
         </View>
@@ -981,11 +1384,14 @@ function CourtLine({
 }
 
 function CourtOverlay({
+  forceVisible = false,
   geometry,
   guidance,
 }: {
   readonly geometry: CourtGeometry;
   readonly guidance?: CaptureGuidance;
+  /** The editor may deliberately begin from an assisted shape. */
+  readonly forceVisible?: boolean;
 }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
@@ -1005,6 +1411,15 @@ function CourtOverlay({
   const safePoints = points.map((point) =>
     interpolatePoint(point, courtCenter, 0.09),
   );
+  const hasCourtGeometry = Boolean(
+    forceVisible || guidance?.courtDetected || geometry.mode !== "automatic",
+  );
+  const hasNetEvidence = Boolean(
+    !hasCourtGeometry && guidance?.netDetected && geometry.netTopLine,
+  );
+  const hasFramingGuide = Boolean(
+    guidance?.groundPlaneDetected || hasCourtGeometry || hasNetEvidence,
+  );
   return (
     <View
       onLayout={onLayout}
@@ -1013,33 +1428,54 @@ function CourtOverlay({
     >
       {size.width > 0 && (
         <>
-          {points.map((point, index) => (
-            <CourtLine
-              color={color}
-              dashed={
-                ![
-                  geometry.edgeVisibility.far,
-                  geometry.edgeVisibility.right,
-                  geometry.edgeVisibility.near,
-                  geometry.edgeVisibility.left,
-                ][index]
-              }
-              end={points[(index + 1) % points.length]!}
-              key={`outside-${index}`}
-              size={size}
-              start={point}
-              thickness={3}
-            />
-          ))}
-          <CourtLine
-            color={color}
-            dashed
-            end={geometry.netLine[1]}
-            opacity={0.72}
-            size={size}
-            start={geometry.netLine[0]}
-          />
-          {geometry.netTopLine && (
+          {hasCourtGeometry && (
+            <>
+              {points.map((point, index) => (
+                <CourtLine
+                  color={color}
+                  dashed={
+                    ![
+                      geometry.edgeVisibility.far,
+                      geometry.edgeVisibility.right,
+                      geometry.edgeVisibility.near,
+                      geometry.edgeVisibility.left,
+                    ][index]
+                  }
+                  end={points[(index + 1) % points.length]!}
+                  key={`outside-${index}`}
+                  size={size}
+                  start={point}
+                  thickness={3}
+                />
+              ))}
+              <CourtLine
+                color={color}
+                dashed
+                end={geometry.netLine[1]}
+                opacity={0.72}
+                size={size}
+                start={geometry.netLine[0]}
+              />
+              <CourtLine
+                color={color}
+                end={centerNear}
+                opacity={0.42}
+                size={size}
+                start={centerFar}
+              />
+              {safePoints.map((point, index) => (
+                <CourtLine
+                  color={color}
+                  dashed
+                  end={safePoints[(index + 1) % safePoints.length]!}
+                  key={`safe-${index}`}
+                  size={size}
+                  start={point}
+                />
+              ))}
+            </>
+          )}
+          {(hasCourtGeometry || hasNetEvidence) && geometry.netTopLine && (
             <CourtLine
               color={color}
               end={geometry.netTopLine[1]}
@@ -1048,50 +1484,51 @@ function CourtOverlay({
               thickness={4}
             />
           )}
-          {geometry.netTopLine && geometry.antennaPoints && (
+          {hasCourtGeometry &&
+            geometry.netTopLine &&
+            geometry.antennaPoints && (
+              <>
+                <CourtLine
+                  color={palette.flare}
+                  end={geometry.antennaPoints[0]}
+                  size={size}
+                  start={geometry.netTopLine[0]}
+                  thickness={4}
+                />
+                <CourtLine
+                  color={palette.flare}
+                  end={geometry.antennaPoints[1]}
+                  size={size}
+                  start={geometry.netTopLine[1]}
+                  thickness={4}
+                />
+              </>
+            )}
+          {hasFramingGuide && (
             <>
-              <CourtLine
-                color={palette.flare}
-                end={geometry.antennaPoints[0]}
-                size={size}
-                start={geometry.netTopLine[0]}
-                thickness={4}
+              <View
+                style={[
+                  styles.dynamicHorizon,
+                  {
+                    backgroundColor: color,
+                    top: (guidance?.horizonY ?? 0.16) * size.height,
+                  },
+                ]}
               />
-              <CourtLine
-                color={palette.flare}
-                end={geometry.antennaPoints[1]}
-                size={size}
-                start={geometry.netTopLine[1]}
-                thickness={4}
-              />
+              {!hasCourtGeometry && !hasNetEvidence && (
+                <View
+                  style={[
+                    styles.framingGuideLabel,
+                    { top: (guidance?.horizonY ?? 0.16) * size.height + 8 },
+                  ]}
+                >
+                  <Text style={styles.framingGuideLabelText}>
+                    FRAME THE NET HERE
+                  </Text>
+                </View>
+              )}
             </>
           )}
-          <CourtLine
-            color={color}
-            end={centerNear}
-            opacity={0.42}
-            size={size}
-            start={centerFar}
-          />
-          {safePoints.map((point, index) => (
-            <CourtLine
-              color={color}
-              dashed
-              end={safePoints[(index + 1) % safePoints.length]!}
-              key={`safe-${index}`}
-              size={size}
-              start={point}
-            />
-          ))}
-          <View
-            style={[
-              styles.dynamicHorizon,
-              {
-                backgroundColor: color,
-                top: (guidance?.horizonY ?? 0.16) * size.height,
-              },
-            ]}
-          />
         </>
       )}
     </View>
@@ -1210,7 +1647,7 @@ function CourtCalibrationEditor({
       style={styles.calibrationEditor}
     >
       <View pointerEvents="none" style={styles.calibrationEditorShade} />
-      <CourtOverlay geometry={geometry} guidance={guidance} />
+      <CourtOverlay forceVisible geometry={geometry} guidance={guidance} />
       {size.width > 0 &&
         geometry.corners.map((corner, index) => (
           <CalibrationAnchor
@@ -1363,6 +1800,7 @@ function CaptureExperience({
   client,
   form,
   mode,
+  networkPreferences,
   onClose,
   onFallbackToRecord,
   onFinished,
@@ -1371,6 +1809,7 @@ function CaptureExperience({
   readonly client: DunaApiClient;
   readonly form: CaptureForm;
   readonly mode: "live" | "record";
+  readonly networkPreferences: VideoNetworkPreferences;
   readonly onClose: () => void;
   readonly onFallbackToRecord: () => void;
   readonly onFinished: () => Promise<void>;
@@ -1380,6 +1819,8 @@ function CaptureExperience({
     visionSessionId?: string,
   ) => void;
 }) {
+  const { height, width } = useWindowDimensions();
+  const isLandscapeViewport = width > height;
   const labels = useMemo(() => teamLabels(form), [form]);
   const matchId =
     form.association?.type === "match" ? form.association.id : undefined;
@@ -1596,22 +2037,27 @@ function CaptureExperience({
       calibratedAt: guidance?.calibratedAt ?? new Date().toISOString(),
       acceptable: guidance?.acceptable ?? false,
     };
+    const hasCourtEvidence = Boolean(
+      guidance?.courtDetected ||
+      guidance?.netDetected ||
+      geometry.mode !== "automatic",
+    );
     return {
       ...base,
       courtWidthMeters: settings.courtWidthMeters,
       courtLengthMeters: settings.courtLengthMeters,
       netHeightMeters: settings.netHeightMeters,
       preferredOrientation: form.orientation,
-      corners: geometry.corners,
-      netLine: geometry.netLine,
-      netTopLine: geometry.netTopLine,
-      antennaPoints: geometry.antennaPoints,
-      visibleCornerCount: visibleCornerCount(geometry),
-      nearLineVisible: geometry.nearLineVisible,
-      partialCourt: visibleCornerCount(geometry) < 4,
-      edgeVisibility: geometry.edgeVisibility,
-      netDetected: Boolean(geometry.netTopLine),
-      antennaDetected: Boolean(geometry.antennaPoints),
+      corners: hasCourtEvidence ? geometry.corners : undefined,
+      netLine: hasCourtEvidence ? geometry.netLine : undefined,
+      netTopLine: hasCourtEvidence ? geometry.netTopLine : undefined,
+      antennaPoints: hasCourtEvidence ? geometry.antennaPoints : undefined,
+      visibleCornerCount: hasCourtEvidence ? visibleCornerCount(geometry) : 0,
+      nearLineVisible: hasCourtEvidence && geometry.nearLineVisible,
+      partialCourt: !hasCourtEvidence || visibleCornerCount(geometry) < 4,
+      edgeVisibility: hasCourtEvidence ? geometry.edgeVisibility : undefined,
+      netDetected: hasCourtEvidence && Boolean(geometry.netTopLine),
+      antennaDetected: hasCourtEvidence && Boolean(geometry.antennaPoints),
       calibrationMode: geometry.mode,
       modelVersion: guidance?.modelVersion ?? "court-v2-partial-2026-08-05",
     };
@@ -1732,6 +2178,15 @@ function CaptureExperience({
           Haptics.NotificationFeedbackType.Success,
         );
       } else {
+        const connection = await canUseVideoTransport(
+          "live",
+          networkPreferences,
+        );
+        if (!connection.allowed) {
+          throw new Error(
+            `${connection.reason ?? "Offline"}. Live video needs an allowed internet connection.`,
+          );
+        }
         const created = await client.player.createLiveVideo.mutate({
           title: form.title,
           category: form.category,
@@ -1887,6 +2342,7 @@ function CaptureExperience({
         occurredAt: event.occurredAt,
         score: event.score,
         label: event.label,
+        payload: event.payload,
       }));
       await client.player.appendVisionTimelineEvents.mutate({
         sessionId,
@@ -2180,13 +2636,25 @@ function CaptureExperience({
       {visionSettings.overlayScoreboard && (matchId || isActive) && (
         <VisionScoreboard
           compact
+          landscape={isLandscapeViewport}
           score={matchScoring ? compactScore(matchScoring.score) : visionScore}
           teamA={visionSettings.teamA}
           teamB={visionSettings.teamB}
         />
       )}
-      <SafeAreaView pointerEvents="box-none" style={styles.captureChrome}>
-        <View style={styles.captureTop}>
+      <SafeAreaView
+        pointerEvents="box-none"
+        style={[
+          styles.captureChrome,
+          isLandscapeViewport && styles.captureChromeLandscape,
+        ]}
+      >
+        <View
+          style={[
+            styles.captureTop,
+            isLandscapeViewport && styles.captureTopLandscape,
+          ]}
+        >
           <Pressable
             disabled={isActive}
             onPress={() => void closeCapture()}
@@ -2217,7 +2685,12 @@ function CaptureExperience({
             <Text style={styles.remoteButtonText}>REMOTE</Text>
           </Pressable>
         </View>
-        <View style={styles.captureBottom}>
+        <View
+          style={[
+            styles.captureBottom,
+            isLandscapeViewport && styles.captureBottomLandscape,
+          ]}
+        >
           {!isActive && (
             <View style={styles.guidanceCard}>
               {guidance?.orientationMatches === false && (
@@ -2250,15 +2723,21 @@ function CaptureExperience({
                 </Text>
               </View>
               <Text style={styles.guidanceWarning}>
-                {guidance?.warnings[0] ??
-                  "Point at the court and net. Missing boundary lines will not block capture."}
+                {guidance?.orientationMatches === false
+                  ? `Turn your phone to ${form.orientation}; every control will rotate with the camera.`
+                  : guidance?.courtDetected || guidance?.netDetected
+                    ? (guidance?.warnings[0] ??
+                      "Court evidence found. Keep the net and sidelines in frame for stronger analysis.")
+                    : "Find the net first. Duna keeps the court guide hidden until it sees a real court."}
               </Text>
               <Text style={styles.guidanceNote}>
-                {guidance?.projectionSource === "lidar"
-                  ? "LiDAR ground lock · Duna keeps off-screen court geometry"
+                {guidance?.courtDetected || guidance?.netDetected
+                  ? guidance?.projectionSource === "lidar"
+                    ? "LiDAR confirms the ground while Duna follows visible court evidence."
+                    : "Court guide is evidence-based. You can still adjust visible landmarks yourself."
                   : guidance?.groundPlaneDetected
-                    ? "Ground lock · move gradually or adjust the landmarks yourself"
-                    : "Point toward the sand and move slowly to find the ground plane"}
+                    ? "Ground found, not a court yet. Keep the net near the horizon and include both sidelines."
+                    : "Point toward the court and move slowly so Duna can find the sand and net."}
               </Text>
               <View style={styles.guidanceSignals}>
                 <View style={styles.guidanceSignal}>
@@ -2282,7 +2761,9 @@ function CaptureExperience({
                 style={styles.adjustCalibrationButton}
               >
                 <Text style={styles.adjustCalibrationButtonText}>
-                  Adjust court, net + antennas
+                  {guidance?.courtDetected || guidance?.netDetected
+                    ? "Adjust court, net + antennas"
+                    : "Mark court manually"}
                 </Text>
               </Pressable>
               {!courtGeometry.nearLineVisible && (
@@ -2476,6 +2957,253 @@ function CaptureExperience({
 type VideoComponentProps = ComponentProps<typeof Video>;
 const MuxVideo = muxReactNativeVideo<VideoComponentProps>(Video);
 
+function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
+  if (!report?.run) return "READY FOR EVIDENCE";
+  switch (report.run.status) {
+    case "queued":
+      return "ANALYSIS QUEUED";
+    case "processing":
+      return "ANALYSIS IN PROGRESS";
+    case "ready":
+      return "MODEL EVIDENCE READY";
+    case "needs-review":
+      return "COACH REVIEW NEEDED";
+    case "failed":
+      return "ANALYSIS NEEDS RETRY";
+    default:
+      return "ANALYSIS CANCELLED";
+  }
+}
+
+function VisionAnalysisCard({
+  client,
+  playbackSeconds,
+  videoId,
+}: {
+  readonly client: DunaApiClient;
+  readonly playbackSeconds: number;
+  readonly videoId: string;
+}) {
+  const [report, setReport] = useState<VideoAnalysisReport>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const [courtSize, setCourtSize] = useState({ width: 0, height: 0 });
+
+  const loadReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      setReport(await client.player.videoAnalysisReport.query({ videoId }));
+      setNotice(undefined);
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setLoading(false);
+    }
+  }, [client, videoId]);
+
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
+
+  const requestAnalysis = async () => {
+    setBusy(true);
+    try {
+      const run = await client.player.requestVideoAnalysis.mutate({
+        videoId,
+        idempotencyKey: idempotencyKey(),
+      });
+      setNotice(
+        run.status === "queued"
+          ? "Analysis is queued. Watch score and your court tags are already available below."
+          : "Duna Vision is processing the available evidence.",
+      );
+      await loadReport();
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markLanding = async (x: number, y: number) => {
+    if (!report || courtSize.width <= 0 || courtSize.height <= 0 || busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = await client.player.createVideoAnalysisMarker.mutate({
+        videoId,
+        sessionTimeUs: Math.max(0, Math.floor(playbackSeconds * 1_000_000)),
+        eventType: "ball-landing",
+        courtPoint: {
+          xMeters: Math.max(
+            0,
+            Math.min(
+              report.court.widthMeters,
+              (x / courtSize.width) * report.court.widthMeters,
+            ),
+          ),
+          yMeters: Math.max(
+            0,
+            Math.min(
+              report.court.lengthMeters,
+              (y / courtSize.height) * report.court.lengthMeters,
+            ),
+          ),
+          observed: "visible",
+        },
+        label: `Coach-confirmed landing at ${formatClock(playbackSeconds)}`,
+        idempotencyKey: idempotencyKey(),
+      });
+      setReport(next);
+      setNotice(`Verified landing saved at ${formatClock(playbackSeconds)}.`);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const maxHeat = Math.max(
+    1,
+    ...(report?.heatmap.cells.map((cell) => cell.count) ?? [1]),
+  );
+
+  return (
+    <View style={styles.visionAnalysisCard}>
+      <View style={styles.visionAnalysisHeader}>
+        <View style={styles.flex}>
+          <Text style={styles.visionAnalysisEyebrow}>DUNA VISION REPORT</Text>
+          <Text style={styles.visionAnalysisTitle}>Evidence, not guesses.</Text>
+        </View>
+        <Text style={styles.visionAnalysisStatus}>
+          {analysisStatusLabel(report)}
+        </Text>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={palette.aqua} />
+      ) : report ? (
+        <>
+          <Text style={styles.visionAnalysisBody}>
+            {report.heatmap.summary}
+          </Text>
+          <Pressable
+            accessibilityHint="Places a verified ball landing at the current playback time."
+            accessibilityLabel={`Court heatmap. ${report.heatmap.summary}. Double tap to mark the ball landing at ${formatClock(playbackSeconds)}.`}
+            disabled={busy}
+            onLayout={(event) => {
+              const { height, width } = event.nativeEvent.layout;
+              setCourtSize({ width, height });
+            }}
+            onPress={(event) =>
+              void markLanding(
+                event.nativeEvent.locationX,
+                event.nativeEvent.locationY,
+              )
+            }
+            style={styles.visionCourt}
+          >
+            <View style={styles.visionCourtNet} />
+            {report.heatmap.cells.map((cell) => (
+              <View
+                key={`${cell.column}-${cell.row}`}
+                pointerEvents="none"
+                style={[
+                  styles.visionHeatCell,
+                  {
+                    left: `${(cell.column / report.heatmap.columns) * 100}%`,
+                    top: `${(cell.row / report.heatmap.rows) * 100}%`,
+                    width: `${100 / report.heatmap.columns}%`,
+                    height: `${100 / report.heatmap.rows}%`,
+                    opacity: Math.min(
+                      0.86,
+                      0.22 + (cell.count / maxHeat) * 0.64,
+                    ),
+                  },
+                ]}
+              >
+                <Text style={styles.visionHeatCellText}>{cell.count}</Text>
+              </View>
+            ))}
+            <View pointerEvents="none" style={styles.visionCourtLabels}>
+              <Text style={styles.visionCourtLabel}>OPPONENT</Text>
+              <Text style={styles.visionCourtLabel}>YOUR SIDE</Text>
+            </View>
+            <View pointerEvents="none" style={styles.visionCourtTapHint}>
+              <Text style={styles.visionCourtTapText}>
+                TAP TO VERIFY A LANDING · {formatClock(playbackSeconds)}
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.visionMetricsRow}>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.score.scoredRallies}
+              </Text>
+              <Text style={styles.visionMetricLabel}>SCORED RALLIES</Text>
+            </View>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.heatmap.observedCount}
+              </Text>
+              <Text style={styles.visionMetricLabel}>VISIBLE LANDINGS</Text>
+            </View>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.highlights.length}
+              </Text>
+              <Text style={styles.visionMetricLabel}>SAVED MOMENTS</Text>
+            </View>
+          </View>
+
+          {report.reviewQueue.length > 0 && (
+            <View style={styles.visionReviewRail}>
+              <Text style={styles.visionReviewTitle}>COURTSIDE REVIEW</Text>
+              {report.reviewQueue.slice(0, 3).map((item) => (
+                <Text key={item.id} style={styles.visionReviewItem}>
+                  {formatClock(item.sessionTimeUs / 1_000_000)} · {item.label}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.visionEvidenceNote}>
+            {report.evidence.disclaimer}
+          </Text>
+          <Pressable
+            disabled={busy}
+            onPress={() => void requestAnalysis()}
+            style={[styles.visionAnalysisButton, busy && styles.disabled]}
+          >
+            <Text style={styles.visionAnalysisButtonText}>
+              {busy
+                ? "Working…"
+                : report.run
+                  ? "Refresh analysis status"
+                  : "Analyze available evidence"}
+            </Text>
+          </Pressable>
+        </>
+      ) : (
+        <Pressable
+          disabled={busy}
+          onPress={() => void requestAnalysis()}
+          style={[styles.visionAnalysisButton, busy && styles.disabled]}
+        >
+          <Text style={styles.visionAnalysisButtonText}>
+            {busy ? "Starting…" : "Start Duna Vision analysis"}
+          </Text>
+        </Pressable>
+      )}
+      {!!notice && <Text style={styles.visionAnalysisNotice}>{notice}</Text>}
+    </View>
+  );
+}
+
 export function VideoPlayerModal({
   client,
   metric,
@@ -2638,7 +3366,11 @@ export function VideoPlayerModal({
             </View>
           )}
         </View>
-        <View style={styles.playerInfo}>
+        <ScrollView
+          contentContainerStyle={styles.playerInfo}
+          showsVerticalScrollIndicator={false}
+          style={styles.playerDetailsScroll}
+        >
           <View style={styles.playerKickerRow}>
             {video.status === "live" && <View style={styles.liveDot} />}
             <Text style={styles.playerPrivacy}>
@@ -2686,7 +3418,14 @@ export function VideoPlayerModal({
               </View>
             </View>
           )}
-        </View>
+          {playback?.isOwner && (
+            <VisionAnalysisCard
+              client={client}
+              playbackSeconds={playbackSeconds}
+              videoId={video.id}
+            />
+          )}
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
@@ -2736,7 +3475,11 @@ function VideoCard({
         ) : (
           <Text style={styles.videoPrivacy}>
             {video.recordingVisibility === "public" ? "Public" : "Private"} ·{" "}
-            {video.source === "live" ? "Mux" : "Duna archive"}
+            {video.source === "live"
+              ? "Mux"
+              : video.source === "upload"
+                ? "Imported · calibration unavailable"
+                : "Duna archive"}
           </Text>
         )}
       </View>
@@ -2745,8 +3488,15 @@ function VideoCard({
 }
 
 export function VideoStudioScreen({
+  active = true,
+  onCreateMatch,
+  onTransferStatus,
   runtime,
 }: {
+  /** Keep the offline-sync worker mounted while another Duna tab is open. */
+  readonly active?: boolean;
+  readonly onCreateMatch?: () => void;
+  readonly onTransferStatus?: (status: VideoTransferStatus | undefined) => void;
   readonly runtime: PlayerRuntime;
 }) {
   const client = runtime.client;
@@ -2765,10 +3515,71 @@ export function VideoStudioScreen({
   const [visionSessionId, setVisionSessionId] = useState<string>();
   const [preparedCalibration, setPreparedCalibration] =
     useState<DunaCourtCalibration>();
-  const [preparingVideo, setPreparingVideo] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [importedVision, setImportedVision] = useState<ImportedVisionSetup>();
+  const [samplingImportedFrames, setSamplingImportedFrames] = useState(false);
+  const [importedCourtDraft, setImportedCourtDraft] = useState<CourtGeometry>();
+  const [editingImportedCourt, setEditingImportedCourt] = useState(false);
+  const [identifyingImportedPlayers, setIdentifyingImportedPlayers] =
+    useState(false);
   const [selectedVideo, setSelectedVideo] = useState<VideoSummary>();
+  const [networkPreferences, setNetworkPreferences] =
+    useState<VideoNetworkPreferences>(defaultVideoNetworkPreferences);
+  const [offlineDrafts, setOfflineDrafts] = useState<
+    readonly OfflineVideoDraft[]
+  >([]);
+  const [offlineNotice, setOfflineNotice] = useState<string>();
+  const flushingOfflineUploads = useRef(false);
+  const activeScreenRef = useRef(active);
+  const uploadLiveActivity = useRef<
+    Awaited<ReturnType<typeof startDunaLiveActivity>> | undefined
+  >(undefined);
+
+  useEffect(() => {
+    activeScreenRef.current = active;
+  }, [active]);
+
+  const reportTransfer = useCallback(
+    (status: VideoTransferStatus | undefined) => onTransferStatus?.(status),
+    [onTransferStatus],
+  );
+
+  const updateUploadLiveActivity = useCallback(
+    async (
+      draft: OfflineVideoDraft,
+      stage: "waiting" | "uploading" | "processing" | "complete",
+      progress?: number,
+    ) => {
+      const status =
+        stage === "waiting"
+          ? "Waiting for Wi‑Fi"
+          : stage === "uploading"
+            ? "Uploading"
+            : stage === "processing"
+              ? "Duna Vision processing"
+              : "Duna Vision processing";
+      const props = {
+        subjectId: draft.id,
+        kind: "upload" as const,
+        title: stage === "complete" ? "Upload complete" : "Duna video",
+        subtitle: draft.fileName,
+        status,
+        progress,
+        updatedAt: new Date().toISOString(),
+      };
+      if (stage === "complete") {
+        const current = uploadLiveActivity.current;
+        uploadLiveActivity.current = undefined;
+        if (current) await current.end("default", props).catch(() => undefined);
+        return;
+      }
+      if (!uploadLiveActivity.current) {
+        uploadLiveActivity.current = await startDunaLiveActivity(props);
+        return;
+      }
+      await uploadLiveActivity.current.update(props).catch(() => undefined);
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -2815,6 +3626,20 @@ export function VideoStudioScreen({
     };
   }, []);
 
+  const refreshOfflineDrafts = useCallback(async () => {
+    const [preferences, drafts] = await Promise.all([
+      loadVideoNetworkPreferences(),
+      loadOfflineVideoDrafts(),
+    ]);
+    setNetworkPreferences(preferences);
+    setOfflineDrafts(drafts);
+    return { preferences, drafts };
+  }, []);
+
+  useEffect(() => {
+    void refreshOfflineDrafts();
+  }, [refreshOfflineDrafts]);
+
   const rememberCaptureDefaults = (nextForm: CaptureForm) => {
     const defaults = storedDefaults(nextForm);
     setSavedCaptureDefaults(defaults);
@@ -2826,10 +3651,20 @@ export function VideoStudioScreen({
     [metrics],
   );
 
-  const openLive = () => {
+  const openLive = async () => {
+    const preferences = await loadVideoNetworkPreferences();
+    const connection = await canUseVideoTransport("live", preferences);
+    setNetworkPreferences(preferences);
+    if (!connection.allowed) {
+      setOfflineNotice(
+        `${connection.reason ?? "Offline"}. Recording works locally; live video starts when an allowed connection is available.`,
+      );
+      return;
+    }
     setPreparedVideo(undefined);
     setVisionSessionId(undefined);
     setPreparedCalibration(undefined);
+    setImportedVision(undefined);
     setForm(captureFormFromDefaults(savedCaptureDefaults));
     setDetailsMode("live");
   };
@@ -2839,24 +3674,78 @@ export function VideoStudioScreen({
       setError("Video upload requires the Duna iOS app.");
       return;
     }
-    setPreparingVideo(true);
+    const importId = Crypto.randomUUID();
+    reportTransfer({
+      id: importId,
+      stage: "importing",
+      title: "Importing your video",
+      detail:
+        "Duna is preparing a reliable local upload. You can keep using the app.",
+    });
     try {
       const selected = await VideoCapture.pickVideo();
-      if (!selected) return;
+      if (!selected) {
+        reportTransfer(undefined);
+        return;
+      }
       setPreparedVideo(selected);
       setVisionSessionId(undefined);
       setPreparedCalibration(undefined);
+      setImportedVision({ frames: [], players: [] });
       setForm(
         captureFormFromDefaults(savedCaptureDefaults, {
           category: "practice",
           title: "",
         }),
       );
-      setDetailsMode("upload");
+      setSamplingImportedFrames(true);
+      const sampler = VideoCapture.sampleVideoFrames;
+      if (typeof sampler === "function") {
+        void sampler(selected.fileUri, 14)
+          .then((frames) => {
+            const bestCourt = [...frames].sort(
+              (left, right) => right.courtScore - left.courtScore,
+            )[0];
+            const bestPlayers = [...frames].sort(
+              (left, right) =>
+                right.playerCount - left.playerCount ||
+                right.courtScore - left.courtScore,
+            )[0];
+            setImportedVision((current) => ({
+              frames,
+              players: current?.players ?? [],
+              courtFrameId: current?.courtFrameId ?? bestCourt?.id,
+              playerFrameId: current?.playerFrameId ?? bestPlayers?.id,
+              geometry: current?.geometry,
+            }));
+          })
+          .catch(() => {
+            // Imported footage remains uploadable even if its local filmstrip
+            // cannot be generated on this particular format.
+          })
+          .finally(() => setSamplingImportedFrames(false));
+      } else {
+        setSamplingImportedFrames(false);
+      }
+      if (activeScreenRef.current) {
+        setDetailsMode("upload");
+        reportTransfer(undefined);
+      } else {
+        reportTransfer({
+          id: importId,
+          stage: "complete",
+          title: "Video ready to review",
+          detail: "Tap to add optional Duna Vision setup and start the upload.",
+        });
+      }
     } catch (reason) {
       setError(displayError(reason));
-    } finally {
-      setPreparingVideo(false);
+      reportTransfer({
+        id: importId,
+        stage: "failed",
+        title: "Video import paused",
+        detail: displayError(reason),
+      });
     }
   };
 
@@ -2864,92 +3753,379 @@ export function VideoStudioScreen({
     setPreparedVideo(undefined);
     setVisionSessionId(undefined);
     setPreparedCalibration(undefined);
+    setImportedVision(undefined);
     setForm(
       captureFormFromDefaults(savedCaptureDefaults, {
-        title: "New court recording",
-        category: "practice",
+        title: "Match recording",
+        category: "match",
       }),
     );
     setDetailsMode("record");
   };
 
-  const upload = async () => {
-    if (!client || !VideoCapture || !preparedVideo) return;
-    setUploading(true);
-    setUploadProgress(0);
-    setError(undefined);
-    let videoId: string | undefined;
-    try {
-      const session = await client.player.beginVideoUpload.mutate({
-        title: form.title,
-        category: form.category,
-        ...associationInput(form.association),
-        venue: form.venue,
-        recordingVisibility: form.recordingVisibility,
-        publishedToProfile: form.publishedToProfile,
-        hasAudio: form.hasAudio,
-        visionLearningConsent: form.contributeCalibration,
-        originalFileName: preparedVideo.fileName,
-        mimeType: preparedVideo.mimeType,
-        bytes: preparedVideo.bytes,
-        durationSeconds: preparedVideo.durationSeconds,
-        courtCalibration: preparedCalibration,
+  const queuePreparedVideo = useCallback(
+    async (input: {
+      readonly video: PreparedVideo;
+      readonly nextForm: CaptureForm;
+      readonly calibration?: DunaCourtCalibration;
+      readonly sessionId?: string;
+      readonly importedVision?: ImportedVisionPayload;
+    }) => {
+      const id = Crypto.randomUUID();
+      const fileUri = await retainVideoForOfflineUpload({
+        id,
+        fileUri: input.video.fileUri,
+        extension: input.video.fileName.split(".").at(-1),
+      });
+      const draft: OfflineVideoDraft = {
+        id,
+        createdAt: new Date().toISOString(),
+        fileUri,
+        fileName: input.video.fileName,
+        mimeType: input.video.mimeType,
+        bytes: input.video.bytes,
+        durationSeconds: input.video.durationSeconds,
+        payload: {
+          form: input.nextForm,
+          visionSessionId: input.sessionId,
+          calibration: input.calibration,
+          importedVision: input.importedVision,
+        },
+      };
+      await enqueueOfflineVideoDraft(draft);
+      setOfflineDrafts((current) => [
+        ...current.filter((item) => item.id !== draft.id),
+        draft,
+      ]);
+      return draft;
+    },
+    [],
+  );
+
+  const ensureImportedVisionSession = useCallback(
+    async (
+      draft: OfflineVideoDraft,
+      payload: OfflineUploadPayload,
+    ): Promise<OfflineUploadPayload> => {
+      if (!client || payload.visionSessionId || !payload.importedVision) {
+        return payload;
+      }
+      const created = await client.player.createVisionSession.mutate({
+        title: payload.form.title,
+        matchId: associationInput(payload.form.association).matchId,
+        settings: importedVisionSettings(payload.form, payload.importedVision),
         idempotencyKey: idempotencyKey(),
       });
-      videoId = session.videoId;
-      if (visionSessionId) {
-        await client.player.attachVisionSessionToVideo.mutate({
-          sessionId: visionSessionId,
+      const sessionId = created.session.id;
+      const courtFrame = payload.importedVision.courtFrame;
+      if (courtFrame) {
+        await client.player.updateVisionPreview
+          .mutate({
+            sessionId,
+            jpegBase64: courtFrame.jpegBase64,
+            capturedAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+      await client.player.appendVisionTimelineEvents
+        .mutate({
+          sessionId,
+          events: [
+            {
+              id: Crypto.randomUUID(),
+              sessionId,
+              source: "iphone",
+              type: "review-marker",
+              elapsedMs: Math.max(
+                0,
+                Math.round((courtFrame?.timestampSeconds ?? 0) * 1_000),
+              ),
+              occurredAt: new Date().toISOString(),
+              label: "Imported-video setup",
+              payload: {
+                source: "library-upload",
+                courtFrameAtSeconds: courtFrame?.timestampSeconds,
+                playerFrameAtSeconds:
+                  payload.importedVision.playerFrameAtSeconds,
+                playerPersonIds: payload.importedVision.playerIds,
+                ...(payload.importedVision.geometry
+                  ? geometrySettings(payload.importedVision.geometry)
+                  : {}),
+              },
+            },
+          ],
+        })
+        .catch(() => undefined);
+      const nextPayload: OfflineUploadPayload = {
+        ...payload,
+        visionSessionId: sessionId,
+      };
+      const updatedDraft: OfflineVideoDraft = {
+        ...draft,
+        payload: { ...nextPayload },
+      };
+      await updateOfflineVideoDraft(updatedDraft);
+      setOfflineDrafts((current) =>
+        current.map((item) => (item.id === draft.id ? updatedDraft : item)),
+      );
+      return nextPayload;
+    },
+    [client],
+  );
+
+  const transferOfflineDraft = useCallback(
+    async (
+      draft: OfflineVideoDraft,
+      onProgress?: (progress: number) => void,
+    ) => {
+      if (!client || !VideoCapture) {
+        throw new Error(
+          "Duna will upload this video when the Player app is ready.",
+        );
+      }
+      const rawPayload = offlineUploadPayload(draft.payload);
+      if (!rawPayload) {
+        throw new Error("This local video is missing its Duna upload details.");
+      }
+      const payload = await ensureImportedVisionSession(draft, rawPayload);
+      const attachVisionSession = async (videoId: string) => {
+        if (!payload.visionSessionId) return true;
+        try {
+          await client.player.attachVisionSessionToVideo.mutate({
+            sessionId: payload.visionSessionId,
+            videoId,
+            idempotencyKey: idempotencyKey(),
+          });
+          return true;
+        } catch {
+          // The video is already safe in Duna Cloud. Keep this tiny queue item
+          // so the court-session link retries without uploading the original a
+          // second time.
+          return false;
+        }
+      };
+
+      if (draft.completedVideoId) {
+        return (await attachVisionSession(draft.completedVideoId))
+          ? "complete"
+          : "vision-link-pending";
+      }
+
+      let videoId: string | undefined;
+      let uploadCompleted = false;
+      try {
+        const session = await client.player.beginVideoUpload.mutate({
+          title: payload.form.title,
+          category: payload.form.category,
+          ...associationInput(payload.form.association),
+          venue: payload.form.venue,
+          recordingVisibility: payload.form.recordingVisibility,
+          publishedToProfile: payload.form.publishedToProfile,
+          hasAudio: payload.form.hasAudio,
+          visionLearningConsent: payload.form.contributeCalibration,
+          originalFileName: draft.fileName,
+          mimeType: draft.mimeType,
+          bytes: draft.bytes,
+          durationSeconds: draft.durationSeconds,
+          courtCalibration: payload.calibration,
+          idempotencyKey: idempotencyKey(),
+        });
+        videoId = session.videoId;
+        for (
+          let partNumber = 1;
+          partNumber <= session.totalParts;
+          partNumber++
+        ) {
+          const offset = (partNumber - 1) * session.partSizeBytes;
+          const length = Math.min(session.partSizeBytes, draft.bytes - offset);
+          const signed = await client.player.videoUploadPartUrl.mutate({
+            videoId: session.videoId,
+            partNumber,
+          });
+          const uploaded = await VideoCapture.uploadPart(
+            draft.fileUri,
+            signed.url,
+            offset,
+            length,
+          );
+          await client.player.recordVideoUploadPart.mutate({
+            videoId: session.videoId,
+            partNumber,
+            etag: uploaded.etag,
+            sizeBytes: uploaded.sizeBytes,
+          });
+          onProgress?.(partNumber / session.totalParts);
+        }
+        await client.player.completeVideoUpload.mutate({
           videoId: session.videoId,
           idempotencyKey: idempotencyKey(),
         });
+        uploadCompleted = true;
+        const completedDraft = { ...draft, completedVideoId: session.videoId };
+        // Persist the completed object before attaching metadata. If Wi-Fi
+        // drops on the next request, the retry only links Vision evidence; it
+        // never creates a duplicate full-video upload.
+        await updateOfflineVideoDraft(completedDraft);
+        return (await attachVisionSession(session.videoId))
+          ? "complete"
+          : "vision-link-pending";
+      } catch (reason) {
+        if (videoId && !uploadCompleted) {
+          void client.player.abortVideoUpload.mutate({
+            videoId,
+            idempotencyKey: idempotencyKey(),
+          });
+        }
+        throw reason;
       }
-      for (let partNumber = 1; partNumber <= session.totalParts; partNumber++) {
-        const offset = (partNumber - 1) * session.partSizeBytes;
-        const length = Math.min(
-          session.partSizeBytes,
-          preparedVideo.bytes - offset,
-        );
-        const signed = await client.player.videoUploadPartUrl.mutate({
-          videoId: session.videoId,
-          partNumber,
+    },
+    [client, ensureImportedVisionSession],
+  );
+
+  const flushOfflineUploads = useCallback(async () => {
+    if (!client || !VideoCapture || flushingOfflineUploads.current) return;
+    flushingOfflineUploads.current = true;
+    try {
+      const { preferences, drafts } = await refreshOfflineDrafts();
+      const connection = await canUseVideoTransport("upload", preferences);
+      if (drafts.length === 0) return;
+      if (!connection.allowed) {
+        const draft = drafts[0]!;
+        reportTransfer({
+          id: draft.id,
+          stage: "waiting",
+          title: "Video safely saved",
+          detail:
+            connection.reason ??
+            "Duna will begin the upload on your next allowed connection.",
         });
-        const uploaded = await VideoCapture.uploadPart(
-          preparedVideo.fileUri,
-          signed.url,
-          offset,
-          length,
-        );
-        await client.player.recordVideoUploadPart.mutate({
-          videoId: session.videoId,
-          partNumber,
-          etag: uploaded.etag,
-          sizeBytes: uploaded.sizeBytes,
-        });
-        setUploadProgress(partNumber / session.totalParts);
+        void updateUploadLiveActivity(draft, "waiting");
+        return;
       }
-      await client.player.completeVideoUpload.mutate({
-        videoId: session.videoId,
-        idempotencyKey: idempotencyKey(),
+      for (const draft of drafts) {
+        try {
+          reportTransfer({
+            id: draft.id,
+            stage: "uploading",
+            title: "Uploading to Duna Cloud",
+            detail: "You can keep using Duna while this video uploads.",
+            progress: 0,
+          });
+          void updateUploadLiveActivity(draft, "uploading", 0);
+          const result = await transferOfflineDraft(draft, (progress) => {
+            reportTransfer({
+              id: draft.id,
+              stage: "uploading",
+              title: "Uploading to Duna Cloud",
+              detail: `${Math.round(progress * 100)}% · You can keep using Duna.`,
+              progress,
+            });
+            void updateUploadLiveActivity(draft, "uploading", progress);
+          });
+          if (result === "vision-link-pending") {
+            setOfflineNotice(
+              "Your video reached Duna Cloud. Its court evidence will link as soon as the connection is stable.",
+            );
+            reportTransfer({
+              id: draft.id,
+              stage: "processing",
+              title: "Video uploaded",
+              detail:
+                "Duna Vision will connect its court setup when the connection is stable.",
+              progress: 1,
+            });
+            void updateUploadLiveActivity(draft, "complete", 1);
+            break;
+          }
+          await removeOfflineVideoDraft(draft.id);
+          setOfflineDrafts((current) =>
+            current.filter((item) => item.id !== draft.id),
+          );
+          setOfflineNotice(
+            "A saved video reached Duna Cloud and is processing.",
+          );
+          reportTransfer({
+            id: draft.id,
+            stage: "processing",
+            title: "Upload complete",
+            detail:
+              "Duna Vision is processing your video. We’ll let you know when it is ready.",
+            progress: 1,
+          });
+          void updateUploadLiveActivity(draft, "complete", 1);
+          await load();
+        } catch (reason) {
+          // Keep the protected local original and retry after the next network
+          // change rather than surfacing a disruptive failure during capture.
+          reportTransfer({
+            id: draft.id,
+            stage: "waiting",
+            title: "Upload paused safely",
+            detail: `${displayError(reason)} Duna will retry automatically.`,
+          });
+          break;
+        }
+      }
+    } finally {
+      flushingOfflineUploads.current = false;
+    }
+  }, [
+    client,
+    load,
+    refreshOfflineDrafts,
+    reportTransfer,
+    transferOfflineDraft,
+    updateUploadLiveActivity,
+  ]);
+
+  useEffect(() => {
+    void flushOfflineUploads();
+    const network = subscribeToVideoNetwork(() => {
+      void flushOfflineUploads();
+    });
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void flushOfflineUploads();
+    });
+    return () => {
+      network.remove();
+      appState.remove();
+    };
+  }, [flushOfflineUploads]);
+
+  const upload = async () => {
+    if (!preparedVideo) return;
+    setError(undefined);
+    try {
+      // Copy first. A recorded video can be a temporary OS file; this ensures
+      // it survives a flight, tunnel, or an interrupted upload.
+      const draft = await queuePreparedVideo({
+        video: preparedVideo,
+        nextForm: form,
+        calibration: preparedCalibration,
+        sessionId: visionSessionId,
+        importedVision: importedVisionPayload(importedVision),
       });
+      setOfflineNotice(
+        "Your video is safe on this iPhone. Duna will upload it in the background on your next allowed connection.",
+      );
+      reportTransfer({
+        id: draft.id,
+        stage: "waiting",
+        title: "Video queued safely",
+        detail:
+          "Duna will upload while you keep playing, planning, and browsing.",
+      });
+      void updateUploadLiveActivity(draft, "waiting");
       setDetailsMode(undefined);
       setPreparedVideo(undefined);
       setVisionSessionId(undefined);
       setPreparedCalibration(undefined);
+      setImportedVision(undefined);
       rememberCaptureDefaults(form);
       setForm(captureFormFromDefaults(savedCaptureDefaults));
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await load();
+      void flushOfflineUploads();
     } catch (reason) {
-      if (videoId) {
-        void client.player.abortVideoUpload.mutate({
-          videoId,
-          idempotencyKey: idempotencyKey(),
-        });
-      }
       setError(displayError(reason));
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -2967,6 +4143,8 @@ export function VideoStudioScreen({
     studio?.usage.uploads.limitSeconds ?? plan.monthlyUploadSeconds;
   const livePercent = Math.min(1, liveUsed / Math.max(1, liveLimit));
   const uploadPercent = Math.min(1, uploadUsed / Math.max(1, uploadLimit));
+
+  if (!active) return null;
 
   return (
     <>
@@ -3025,14 +4203,15 @@ export function VideoStudioScreen({
                   <Text style={styles.captureChoiceBadge}>PRIVATE FIRST</Text>
                 </View>
                 <Text style={styles.captureChoiceBody}>
-                  Save full-quality video to your Duna archive while your Watch
-                  scores, marks highlights, and checks the camera.
+                  Save full-quality video on this iPhone while your Watch
+                  scores, marks highlights, and checks the camera. Duna uploads
+                  when the connection you allow is available.
                 </Text>
               </View>
             </Pressable>
             <Pressable
               disabled={!isIos || !client || !canBroadcast}
-              onPress={openLive}
+              onPress={() => void openLive()}
               style={[
                 styles.captureChoiceCard,
                 styles.captureChoiceCardLive,
@@ -3072,6 +4251,57 @@ export function VideoStudioScreen({
             </Text>
           </Pressable>
         </View>
+
+        {preparedVideo && !detailsMode && (
+          <View style={styles.readyImportCard}>
+            <View style={styles.readyImportIcon}>
+              <Text style={styles.readyImportIconText}>✓</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.readyImportTitle}>Video ready to review</Text>
+              <Text style={styles.readyImportBody}>
+                Add optional court and player hints, then Duna uploads in the
+                background.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setDetailsMode("upload")}
+              style={styles.readyImportAction}
+            >
+              <Text style={styles.readyImportActionText}>Review</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {(offlineDrafts.length > 0 || offlineNotice) && (
+          <View style={styles.offlineQueueCard}>
+            <View style={styles.offlineQueueIcon}>
+              <Text style={styles.offlineQueueIconText}>⇅</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.offlineQueueTitle}>
+                {offlineDrafts.length > 0
+                  ? `${offlineDrafts.length} video${offlineDrafts.length === 1 ? "" : "s"} safely on this iPhone`
+                  : "Duna Cloud sync"}
+              </Text>
+              <Text style={styles.offlineQueueBody}>
+                {offlineNotice ??
+                  (networkPreferences.allowCellularUploads
+                    ? "Duna will use Wi‑Fi or cellular data to finish the upload."
+                    : "Duna will start uploading automatically on Wi‑Fi.")}
+              </Text>
+            </View>
+            {offlineDrafts.length > 0 && (
+              <Pressable
+                accessibilityLabel="Retry saved video uploads"
+                onPress={() => void flushOfflineUploads()}
+                style={styles.offlineQueueAction}
+              >
+                <Text style={styles.offlineQueueActionText}>Sync now</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {!!error && (
           <View style={styles.errorCard}>
@@ -3211,10 +4441,11 @@ export function VideoStudioScreen({
           <VideoDetailsForm
             client={client}
             form={form}
+            importedVision={importedVision}
+            importedVisionLoading={samplingImportedFrames}
             mode={detailsMode}
-            onCancel={() => {
-              if (!uploading) setDetailsMode(undefined);
-            }}
+            onCreateMatch={onCreateMatch}
+            onCancel={() => setDetailsMode(undefined)}
             onChange={setForm}
             onContinue={() => {
               rememberCaptureDefaults(form);
@@ -3228,25 +4459,19 @@ export function VideoStudioScreen({
                 void upload();
               }
             }}
+            onEditImportedCourt={() => {
+              if (!importedVision) return;
+              setImportedCourtDraft(
+                importedVision.geometry ?? geometryFromGuidance(undefined),
+              );
+              setEditingImportedCourt(true);
+            }}
+            onIdentifyImportedPlayers={() =>
+              setIdentifyingImportedPlayers(true)
+            }
+            onImportedVisionChange={setImportedVision}
             preparedVideo={preparedVideo}
           />
-        )}
-        {uploading && (
-          <View style={styles.uploadOverlay}>
-            <ActivityIndicator color="#ffffff" size="large" />
-            <Text style={styles.uploadOverlayTitle}>Uploading to Duna</Text>
-            <Text style={styles.uploadOverlayBody}>
-              {Math.round(uploadProgress * 100)}% · Keep Duna open
-            </Text>
-            <View style={styles.uploadTrack}>
-              <View
-                style={[
-                  styles.uploadFill,
-                  { width: `${uploadProgress * 100}%` },
-                ]}
-              />
-            </View>
-          </View>
         )}
       </Modal>
 
@@ -3261,6 +4486,7 @@ export function VideoStudioScreen({
             form={form}
             key={captureMode}
             mode={captureMode}
+            networkPreferences={networkPreferences}
             onClose={() => {
               VideoCapture?.releasePreview();
               setCaptureMode(undefined);
@@ -3291,16 +4517,52 @@ export function VideoStudioScreen({
         />
       )}
 
-      {preparingVideo && (
-        <View style={styles.uploadOverlay}>
-          <ActivityIndicator color="#ffffff" size="large" />
-          <Text style={styles.uploadOverlayTitle}>Preparing your video</Text>
-          <Text style={styles.uploadOverlayBody}>
-            Duna is converting it to a reliable upload format. Long videos can
-            take a moment.
-          </Text>
-        </View>
-      )}
+      <PlayerPickerModal
+        maxSelected={8}
+        onChange={(players) =>
+          setImportedVision((current) =>
+            current ? { ...current, players } : current,
+          )
+        }
+        onClose={() => setIdentifyingImportedPlayers(false)}
+        palette={importedPlayerPalette}
+        selected={importedVision?.players ?? []}
+        title="Who appears in this video?"
+        visible={identifyingImportedPlayers}
+      />
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setEditingImportedCourt(false)}
+        visible={editingImportedCourt}
+      >
+        {importedVision && importedCourtDraft && (
+          <View style={styles.importedCalibrationScene}>
+            {frameForId(importedVision, importedVision.courtFrameId) && (
+              <Image
+                source={{
+                  uri: `data:image/jpeg;base64,${frameForId(importedVision, importedVision.courtFrameId)!.jpegBase64}`,
+                }}
+                style={styles.importedCalibrationImage}
+              />
+            )}
+            <CourtCalibrationEditor
+              automaticGeometry={geometryFromGuidance(undefined)}
+              geometry={importedCourtDraft}
+              onCancel={() => setEditingImportedCourt(false)}
+              onChange={setImportedCourtDraft}
+              onSave={() => {
+                setImportedVision((current) =>
+                  current
+                    ? { ...current, geometry: importedCourtDraft }
+                    : current,
+                );
+                setEditingImportedCourt(false);
+              }}
+            />
+          </View>
+        )}
+      </Modal>
     </>
   );
 }
@@ -3464,6 +4726,90 @@ const styles = StyleSheet.create({
   errorText: { color: palette.danger, flex: 1, fontSize: 12, lineHeight: 17 },
   textAction: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
   loader: { marginVertical: 10 },
+  offlineQueueAction: {
+    alignItems: "center",
+    borderColor: "rgba(61,102,114,0.28)",
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 11,
+  },
+  offlineQueueActionText: {
+    color: palette.aqua,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  offlineQueueBody: {
+    color: "#526d65",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  offlineQueueCard: {
+    alignItems: "center",
+    backgroundColor: "#edf4f0",
+    borderColor: "#b9d7c7",
+    borderRadius: 17,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 11,
+    padding: 13,
+  },
+  offlineQueueIcon: {
+    alignItems: "center",
+    backgroundColor: "#d5eadf",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  offlineQueueIconText: {
+    color: palette.positive,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  offlineQueueTitle: { color: palette.navy, fontSize: 13, fontWeight: "900" },
+  readyImportCard: {
+    alignItems: "center",
+    backgroundColor: "#eaf1f4",
+    borderColor: "#b9d0d8",
+    borderRadius: 17,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 11,
+    padding: 13,
+  },
+  readyImportIcon: {
+    alignItems: "center",
+    backgroundColor: "#d6e5e9",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  readyImportIconText: { color: palette.aqua, fontSize: 16, fontWeight: "900" },
+  readyImportTitle: { color: palette.navy, fontSize: 13, fontWeight: "900" },
+  readyImportBody: {
+    color: "#526d75",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  readyImportAction: {
+    alignItems: "center",
+    borderColor: "rgba(61,102,114,0.3)",
+    borderRadius: 11,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 38,
+    paddingHorizontal: 10,
+  },
+  readyImportActionText: {
+    color: palette.aqua,
+    fontSize: 11,
+    fontWeight: "900",
+  },
   usageCard: {
     backgroundColor: palette.depth,
     borderColor: palette.line,
@@ -3706,6 +5052,72 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   optionList: { gap: 7 },
+  scheduledAssociationSection: {
+    backgroundColor: "#edf4f0",
+    borderColor: "#c7ded2",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: 12,
+    padding: 12,
+  },
+  scheduledAssociationHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  scheduledAssociationEyebrow: {
+    color: palette.positive,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  scheduledAssociationTitle: {
+    color: palette.navy,
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  scheduledAssociationHint: {
+    color: palette.positive,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  scheduledAssociationCard: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderColor: "rgba(47,107,58,0.16)",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  scheduledAssociationDot: {
+    backgroundColor: palette.positive,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  matchEmptyState: { gap: 9 },
+  createMatchInlineButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: "rgba(61,102,114,0.35)",
+    borderRadius: 11,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
+  createMatchInlineText: {
+    color: palette.aqua,
+    fontSize: 11,
+    fontWeight: "900",
+  },
   option: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -3727,6 +5139,133 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  importedVideoNote: {
+    color: palette.warning,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  importedVisionCard: {
+    backgroundColor: "#eef4f2",
+    borderColor: "#bed7cf",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    padding: 15,
+  },
+  importedVisionHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  importedVisionMark: {
+    alignItems: "center",
+    backgroundColor: "#d5e7df",
+    borderRadius: 17,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  importedVisionMarkText: {
+    color: palette.positive,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  importedVisionEyebrow: {
+    color: palette.positive,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  importedVisionTitle: {
+    color: palette.navy,
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  importedVisionBody: { color: "#526d65", fontSize: 12, lineHeight: 17 },
+  importedVisionLoading: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.65)",
+    borderColor: "rgba(47,107,58,0.14)",
+    borderRadius: 13,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    minHeight: 58,
+    paddingHorizontal: 12,
+  },
+  importedVisionLoadingText: {
+    color: palette.aqua,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  importedVisionLabel: {
+    color: palette.navy,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+    marginTop: 2,
+  },
+  importedFrameRail: { gap: 9, paddingRight: 3 },
+  importedFrame: {
+    backgroundColor: "#ffffff",
+    borderColor: "#cbdad5",
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 110,
+    overflow: "hidden",
+    position: "relative",
+    width: 115,
+  },
+  importedFrameSelected: { borderColor: palette.aqua, borderWidth: 2 },
+  importedFrameImage: { height: 80, width: "100%" },
+  importedFrameTime: {
+    color: palette.navy,
+    fontSize: 10,
+    fontWeight: "800",
+    paddingHorizontal: 7,
+    paddingTop: 5,
+  },
+  importedFrameCheck: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 10,
+    height: 20,
+    justifyContent: "center",
+    position: "absolute",
+    right: 5,
+    top: 5,
+    width: 20,
+  },
+  importedFrameCheckText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
+  importedVisionAction: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderColor: "#c5d8d1",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  importedVisionActionText: {
+    color: palette.aqua,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  importedVisionActionArrow: {
+    color: palette.aqua,
+    fontSize: 22,
+    fontWeight: "500",
+  },
+  importedVisionUnavailable: {
+    color: palette.warning,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  importedVisionPrivacy: { color: "#60716d", fontSize: 10, lineHeight: 15 },
   toggleRow: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -3832,6 +5371,22 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     position: "absolute",
     right: "3%",
+  },
+  framingGuideLabel: {
+    alignSelf: "center",
+    backgroundColor: "rgba(3,8,11,0.68)",
+    borderColor: "rgba(212,183,124,0.58)",
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: "absolute",
+  },
+  framingGuideLabelText: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.9,
   },
   calibrationEditor: {
     bottom: 0,
@@ -4026,12 +5581,14 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     paddingHorizontal: 16,
   },
+  captureChromeLandscape: { paddingBottom: 12, paddingHorizontal: 22 },
   captureTop: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     paddingTop: 8,
   },
+  captureTopLandscape: { paddingTop: 2 },
   captureClose: {
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -4080,6 +5637,14 @@ const styles = StyleSheet.create({
     width: 8,
   },
   captureBottom: { alignItems: "center", gap: 12 },
+  captureBottomLandscape: {
+    alignItems: "flex-start",
+    alignSelf: "stretch",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "space-between",
+  },
   guidanceCard: {
     alignSelf: "stretch",
     backgroundColor: "rgba(4,10,13,0.78)",
@@ -4285,6 +5850,7 @@ const styles = StyleSheet.create({
     zIndex: 6,
   },
   visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
+  visionScoreboardLandscape: { bottom: 12, right: 22 },
   visionScoreHeader: {
     alignItems: "center",
     backgroundColor: "rgba(34,52,59,0.92)",
@@ -4493,6 +6059,7 @@ const styles = StyleSheet.create({
   },
   player: { height: "100%", width: "100%" },
   playerError: { color: "#f27878", padding: 20, textAlign: "center" },
+  playerDetailsScroll: { flex: 1 },
   playerInfo: { gap: 12, padding: 20 },
   playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
   playerTitle: {
@@ -4544,6 +6111,144 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
+  visionAnalysisCard: {
+    backgroundColor: "#10191b",
+    borderColor: "rgba(212,183,124,0.28)",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    padding: 15,
+  },
+  visionAnalysisHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+  },
+  visionAnalysisEyebrow: {
+    color: "#d4b77c",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  visionAnalysisTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
+  visionAnalysisStatus: {
+    color: "#a8d9bf",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    maxWidth: 88,
+    textAlign: "right",
+  },
+  visionAnalysisBody: { color: "#c7cfcb", fontSize: 11, lineHeight: 16 },
+  visionCourt: {
+    backgroundColor: "#1b2929",
+    borderColor: "rgba(255,255,255,0.3)",
+    borderRadius: 10,
+    borderWidth: 2,
+    height: 240,
+    overflow: "hidden",
+    position: "relative",
+  },
+  visionCourtNet: {
+    backgroundColor: "rgba(255,255,255,0.78)",
+    height: 2,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: "50%",
+    zIndex: 3,
+  },
+  visionHeatCell: {
+    alignItems: "center",
+    backgroundColor: "#54c5aa",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderWidth: 0.5,
+    justifyContent: "center",
+    position: "absolute",
+  },
+  visionHeatCellText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  visionCourtLabels: {
+    bottom: 7,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 9,
+    position: "absolute",
+    right: 9,
+  },
+  visionCourtLabel: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  visionCourtTapHint: {
+    alignSelf: "center",
+    backgroundColor: "rgba(3,9,12,0.7)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    position: "absolute",
+    top: "46%",
+  },
+  visionCourtTapText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.55,
+  },
+  visionMetricsRow: { flexDirection: "row", gap: 7 },
+  visionMetric: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 11,
+    flex: 1,
+    minHeight: 62,
+    paddingHorizontal: 7,
+    paddingVertical: 9,
+  },
+  visionMetricValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-Table",
+    fontSize: 19,
+    fontWeight: "800",
+  },
+  visionMetricLabel: {
+    color: "#b8c1be",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.52,
+    lineHeight: 11,
+    marginTop: 3,
+  },
+  visionReviewRail: {
+    backgroundColor: "rgba(212,183,124,0.1)",
+    borderColor: "rgba(212,183,124,0.22)",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+    padding: 10,
+  },
+  visionReviewTitle: {
+    color: "#d4b77c",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  visionReviewItem: { color: "#f2f5f3", fontSize: 10, lineHeight: 15 },
+  visionEvidenceNote: { color: "#aeb8b5", fontSize: 10, lineHeight: 15 },
+  visionAnalysisButton: {
+    alignItems: "center",
+    backgroundColor: "#d4b77c",
+    borderRadius: 13,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  visionAnalysisButtonText: {
+    color: "#111719",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  visionAnalysisNotice: { color: "#b9d9ca", fontSize: 10, lineHeight: 15 },
   uploadOverlay: {
     alignItems: "center",
     backgroundColor: "rgba(10,20,28,0.92)",
@@ -4571,6 +6276,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   uploadFill: { backgroundColor: "#d4b77c", height: 8 },
+  importedCalibrationScene: { backgroundColor: "#07151a", flex: 1 },
+  importedCalibrationImage: {
+    height: "100%",
+    opacity: 0.92,
+    resizeMode: "contain",
+    width: "100%",
+  },
   sheetBackdrop: {
     backgroundColor: "rgba(4,10,16,0.56)",
     flex: 1,

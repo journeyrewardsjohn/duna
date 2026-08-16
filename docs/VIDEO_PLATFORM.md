@@ -6,14 +6,14 @@ private Cloudflare R2 bucket.
 
 ## Product surfaces
 
-| Surface     | Capability                                                                                                                                                                                                 |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Duna iOS    | Go Live, guided camera setup, native Duna Vision recording, Watch scoring and moment tags, remote setup QR, live score overlay, library upload, playback, privacy controls, share links, and owner metrics |
-| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, haptics, and a low-frame-rate camera alignment check                                                                |
-| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay                                                                |
-| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video, and live angles                                                                                                                        |
-| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                                    |
-| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                           |
+| Surface     | Capability                                                                                                                                                                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duna iOS    | Go Live, guided camera setup, native Duna Vision recording, Watch scoring and review cues, visible-court marker verification, remote setup QR, live score overlay, library upload, playback, privacy controls, share links, and owner metrics |
+| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, a source-linked last-rally review cue, haptics, and a low-frame-rate camera alignment check                                                            |
+| Public web  | Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay; authenticated Duna Vision Studio reports                                                         |
+| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video/live angles, and a focused handoff to Player Studio for source-linked coaching review                                                                                      |
+| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                                                                       |
+| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                                                              |
 
 Android capture is intentionally unavailable in this release. Public playback
 continues to work on supported browsers and inside the app.
@@ -40,7 +40,7 @@ client analytics.
 
 1. iOS records an MP4 or converts a library selection to MP4 locally.
 2. The API creates a private R2 multipart upload.
-3. iOS sends 64 MiB parts directly to short-lived presigned URLs.
+3. iOS sends 16 MiB parts directly to short-lived presigned URLs.
 4. The API validates every part number, ETag, and size before completing the
    upload.
 5. Playback uses a short-lived signed R2 URL; the bucket does not need to be
@@ -180,18 +180,44 @@ two controllers from silently overwriting each other. The QR grants control of
 that Vision session only; it does not grant a Duna account or general match
 administration.
 
-### Score overlays and future computer vision
+### Score overlays and Duna Vision analysis
 
 If a video is linked to an officially scored match, the current match score is
 authoritative during a live stream. Recorded playback reconstructs the
 bottom-right score from timestamped Vision events. A live score is never
 replaced by an older Watch snapshot.
 
-Court geometry, camera height, event timestamps, and side-change tags establish
-the coordinate and time foundation for future player heatmaps, automatic side
-change detection, and other computer-vision outputs. Those inferred analytics
-are not part of this release and should be confidence-scored, reviewable, and
-stored separately from human-authored scoring events.
+Court geometry, camera height, event timestamps, and side-change tags also
+establish the coordinate and time foundation for Duna Vision analysis. The
+product keeps three layers separate:
+
+- **Timeline facts:** Watch and iPhone score, favorite, undo, side-change, and
+  review-cue events remain append-only and source-linked to the recording.
+- **Analysis observations:** `video_analysis_events` stores model proposals and
+  human-confirmed placements with recording-relative microsecond time,
+  confidence, calibrated court coordinates, model version, and source
+  provenance. A model never writes an official score.
+- **Human review:** `video_analysis_reviews` stores a coach/player decision or
+  correction separately from the original observation. A confirmed human
+  correction outranks a model result; reprocessing cannot silently overwrite it.
+
+Player Studio and the authenticated web Video Studio show only visible,
+calibrated landing points on a court map. Unknown, edge, and out-of-frame
+regions are not presented as zero activity. Each report names its calibration,
+coverage, source-video availability, score-timeline availability, and whether
+separate learning consent is present.
+
+Analysis runs are durable server records. The application may queue a run even
+when the external model worker is not configured, but it must remain visibly
+queued rather than claim that ML completed. The dedicated worker is the only
+component allowed to publish model observations; it writes derived artifacts
+under `video-analysis/{videoId}/` in private R2 and posts a validated callback
+to Duna Web. Heavy decode, inference, and model weights never run in Vercel.
+
+On Watch, the review surface is intentionally a compact last-rally cue with the
+latest alignment snapshot, score, and a `Flag for coaching review` action. It
+does not promise full video playback on the wrist; the paired iPhone or web
+Studio opens the source-linked replay and report.
 
 ### Private Health overlay
 
@@ -273,10 +299,10 @@ models.
 
 ## Release sequence
 
-1. Apply forward-only database migrations through
-   the latest checked-in migration. Migration `0045` adds Duna Vision sessions
-   and append-only timeline events; migration `0046` adds encrypted Duna Health
-   storage and sharing controls.
+1. Apply forward-only database migrations through the latest checked-in
+   migration. The Vision timeline and analysis run/event/review tables must be
+   present before deploying a client that can create a review cue or analysis
+   marker.
 2. Add R2 credentials to Duna Web. The existing sensitive Duna HQ values cannot
    be exported or copied by Vercel CLI.
    Add `GOOGLE_PLACES_API_KEY` to Duna Web as well; the mobile venue picker calls
@@ -293,7 +319,13 @@ models.
    and remote start/stop.
 7. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
    migration.
-8. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
+8. If model processing is enabled, configure the dedicated worker with scoped
+   R2 credentials plus `DUNA_ANALYSIS_WORKER_URL` and
+   `DUNA_ANALYSIS_WORKER_TOKEN`; verify a callback creates a versioned,
+   confidence-labeled observation and a private artifact under the correct
+   video prefix. A missing worker is a visible queued-analysis state, not a
+   completed analysis.
+9. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
    stream before production promotion.
 
 Mux marketplace terms, production credentials, database migration, App Store

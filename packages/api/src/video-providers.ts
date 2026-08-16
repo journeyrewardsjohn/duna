@@ -22,25 +22,62 @@ interface R2Configuration {
   readonly bucket: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
+  readonly endpoint: string;
+}
+
+function normalizedR2Endpoint(accountId: string): string {
+  const configured = (
+    process.env.CF_R2_S3_ENDPOINT ??
+    // `cf_rs_s3_endpoint` is the name presently configured in the Duna
+    // deployment. Keep this server-only alias while the canonical name rolls
+    // out; it is intentionally not exposed as a public client variable.
+    process.env.cf_rs_s3_endpoint
+  )?.trim();
+  const fallback = `https://${accountId}.r2.cloudflarestorage.com`;
+  if (!configured) return fallback;
+  try {
+    const endpoint = new URL(configured);
+    const allowedHost = endpoint.hostname.endsWith(".r2.cloudflarestorage.com");
+    return endpoint.protocol === "https:" && allowedHost
+      ? endpoint.origin
+      : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function r2Configuration(): R2Configuration | undefined {
   const accountId = (
     process.env.CLOUDFLARE_ACCOUNT_ID ??
     process.env.CF_ACCOUNT_ID ??
-    "c5005deb8c0826c72b6c2cd459dce623"
+    process.env.cloudflare_account_id ??
+    ""
   ).trim();
   const bucket = (process.env.R2_BUCKET_NAME ?? "duna").trim();
-  const accessKeyId = (process.env.CF_ACCESS_KEY_ID ?? "").trim();
+  const accessKeyId = (
+    process.env.CF_ACCESS_KEY_ID ??
+    process.env.cf_r2_access_key_id ??
+    ""
+  ).trim();
   const secretAccessKey = (
     process.env.CE_SECRET_ACCESS_KEY ??
     process.env.CF_SECRET_ACCESS_KEY ??
+    process.env.cf_r2_secret_access_key ??
     ""
   ).trim();
   if (!accountId || !bucket || !accessKeyId || !secretAccessKey) {
     return undefined;
   }
-  return { accountId, bucket, accessKeyId, secretAccessKey };
+  // Cloudflare account API tokens (including `cf_r2_account_token`) cannot
+  // replace S3 credentials here. Multipart uploads are signed strictly with a
+  // scoped R2 access key and secret.
+  return {
+    accountId,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    endpoint: normalizedR2Endpoint(accountId),
+  };
 }
 
 let r2Client: S3Client | undefined;
@@ -56,11 +93,11 @@ function getR2Client(): {
       "R2 video storage requires CLOUDFLARE_ACCOUNT_ID, CF_ACCESS_KEY_ID, and CE_SECRET_ACCESS_KEY.",
     );
   }
-  const identity = `${configuration.accountId}:${configuration.accessKeyId}`;
+  const identity = `${configuration.endpoint}:${configuration.bucket}:${configuration.accessKeyId}`;
   if (!r2Client || r2ClientIdentity !== identity) {
     r2Client = new S3Client({
       region: "auto",
-      endpoint: `https://${configuration.accountId}.r2.cloudflarestorage.com`,
+      endpoint: configuration.endpoint,
       credentials: {
         accessKeyId: configuration.accessKeyId,
         secretAccessKey: configuration.secretAccessKey,

@@ -49,6 +49,7 @@ import {
   type ProCalendarConnection,
   type ProPersonalCalendarEvent,
 } from "./pro-calendar-integration";
+import { dunaApiBaseUrl } from "./mobile-api";
 import { OperatorCreateScreen } from "./operator-create";
 import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
@@ -1001,6 +1002,7 @@ function TodayScreen({
     ? (workspace?.catalog.find((item) => item.id === topProduct.catalogItemId)
         ?.title ?? "Top product")
     : undefined;
+  const visionStudioUrl = `${dunaApiBaseUrl}/app/video`;
 
   const nextAction = justEndedEntry
     ? {
@@ -1123,6 +1125,36 @@ function TodayScreen({
         onScore={onScore}
         timezone={timezone}
       />
+
+      <View style={styles.visionCoachCard}>
+        <View style={styles.visionCoachMark}>
+          <Text style={styles.visionCoachMarkText}>◉</Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.visionCoachEyebrow}>DUNA VISION</Text>
+          <Text style={styles.visionCoachTitle}>
+            Bring the last rally into the coaching conversation.
+          </Text>
+          <Text style={styles.visionCoachBody}>
+            Apple Watch and Duna Player review cues open beside source video in
+            Player Studio. Court observations remain confidence-labeled and
+            reviewable—never silently turned into a score.
+          </Text>
+          <Pressable
+            accessibilityHint="Opens the paired Duna Player Studio in your browser"
+            accessibilityRole="link"
+            accessibilityLabel="Open Duna Vision Player Studio"
+            onPress={() => {
+              impactHaptic();
+              void Linking.openURL(visionStudioUrl).catch(() => undefined);
+            }}
+            style={styles.visionCoachAction}
+          >
+            <Text style={styles.visionCoachActionText}>Open Player Studio</Text>
+            <Text style={styles.visionCoachActionArrow}>→</Text>
+          </Pressable>
+        </View>
+      </View>
 
       {focusEntry && (
         <SessionArrivalBoard
@@ -5190,6 +5222,71 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       lineHeight: 15,
       marginTop: 5,
+    },
+    visionCoachCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.positiveRgb, 0.3),
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 12,
+      padding: 14,
+    },
+    visionCoachMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.13),
+      borderColor: rgba(colors.positiveRgb, 0.32),
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    visionCoachMarkText: {
+      color: colors.positive,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    visionCoachEyebrow: {
+      color: colors.positive,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.05,
+    },
+    visionCoachTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+      letterSpacing: -0.25,
+      lineHeight: 20,
+      marginTop: 4,
+    },
+    visionCoachBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
+    },
+    visionCoachAction: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 14,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 12,
+      minHeight: 50,
+      paddingHorizontal: 14,
+    },
+    visionCoachActionText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    visionCoachActionArrow: {
+      color: colors.onAccent,
+      fontSize: 17,
+      fontWeight: "700",
     },
     nowCard: {
       backgroundColor: colors.aquaDeep,

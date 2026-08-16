@@ -450,10 +450,17 @@ test("public event creation carries a clean starter into guided HQ", async ({
   });
   await expect(continueButton).toBeEnabled();
   await continueButton.click();
+  const expectedHqUrl = new URL(hqBaseUrl);
+  const acceptableHqHosts = new Set([expectedHqUrl.hostname]);
+  // A local dev server can resolve either loopback spelling while CI keeps the
+  // configured host. They are the same local Duna HQ destination.
+  if (expectedHqUrl.hostname === "127.0.0.1") {
+    acceptableHqHosts.add("localhost");
+  }
   await page.waitForURL((url) => {
-    const expectedOrigin = new URL(hqBaseUrl).origin;
     return (
-      url.origin === expectedOrigin &&
+      acceptableHqHosts.has(url.hostname) &&
+      url.port === expectedHqUrl.port &&
       url.pathname === "/events/create" &&
       url.searchParams.get("type") === "league"
     );
