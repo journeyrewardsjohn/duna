@@ -1,6 +1,6 @@
 {
-  "id": "2a2fd74b-c865-48fe-84f6-b18dfbd37c1b",
-  "prevId": "a84c0711-d4f5-4f75-bdfd-6231d88a4ed2",
+  "id": "3e11f540-6ce2-4041-bf28-d816f875c50d",
+  "prevId": "2a2fd74b-c865-48fe-84f6-b18dfbd37c1b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -28817,6 +28817,576 @@
       },
       "isRLSEnabled": false
     },
+    "public.video_analysis_events": {
+      "name": "video_analysis_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "video_id": {
+          "name": "video_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vision_session_id": {
+          "name": "vision_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'proposed'"
+        },
+        "session_time_us": {
+          "name": "session_time_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_us": {
+          "name": "duration_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "court_point": {
+          "name": "court_point",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_version": {
+          "name": "model_version",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_person_id": {
+          "name": "created_by_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supersedes_event_id": {
+          "name": "supersedes_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "video_analysis_event_video_time_idx": {
+          "name": "video_analysis_event_video_time_idx",
+          "columns": [
+            {
+              "expression": "video_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_time_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_analysis_event_run_time_idx": {
+          "name": "video_analysis_event_run_time_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_time_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_analysis_event_session_time_idx": {
+          "name": "video_analysis_event_session_time_idx",
+          "columns": [
+            {
+              "expression": "vision_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_time_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "video_analysis_events_run_id_video_analysis_runs_id_fk": {
+          "name": "video_analysis_events_run_id_video_analysis_runs_id_fk",
+          "tableFrom": "video_analysis_events",
+          "tableTo": "video_analysis_runs",
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "video_analysis_events_video_id_videos_id_fk": {
+          "name": "video_analysis_events_video_id_videos_id_fk",
+          "tableFrom": "video_analysis_events",
+          "tableTo": "videos",
+          "columnsFrom": ["video_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "video_analysis_events_vision_session_id_vision_sessions_id_fk": {
+          "name": "video_analysis_events_vision_session_id_vision_sessions_id_fk",
+          "tableFrom": "video_analysis_events",
+          "tableTo": "vision_sessions",
+          "columnsFrom": ["vision_session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "video_analysis_events_created_by_person_id_people_id_fk": {
+          "name": "video_analysis_events_created_by_person_id_people_id_fk",
+          "tableFrom": "video_analysis_events",
+          "tableTo": "people",
+          "columnsFrom": ["created_by_person_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "video_analysis_event_type_valid": {
+          "name": "video_analysis_event_type_valid",
+          "value": "\"video_analysis_events\".\"event_type\" IN ('rally-started', 'rally-ended', 'ball-contact', 'ball-landing', 'player-position', 'highlight', 'review-marker')"
+        },
+        "video_analysis_event_source_valid": {
+          "name": "video_analysis_event_source_valid",
+          "value": "\"video_analysis_events\".\"source\" IN ('model', 'human', 'watch', 'system')"
+        },
+        "video_analysis_event_state_valid": {
+          "name": "video_analysis_event_state_valid",
+          "value": "\"video_analysis_events\".\"state\" IN ('proposed', 'confirmed', 'corrected', 'rejected')"
+        },
+        "video_analysis_event_time_valid": {
+          "name": "video_analysis_event_time_valid",
+          "value": "\"video_analysis_events\".\"session_time_us\" BETWEEN 0 AND 43200000000"
+        },
+        "video_analysis_event_duration_valid": {
+          "name": "video_analysis_event_duration_valid",
+          "value": "\"video_analysis_events\".\"duration_us\" IS NULL OR \"video_analysis_events\".\"duration_us\" BETWEEN 0 AND 43200000000"
+        },
+        "video_analysis_event_confidence_valid": {
+          "name": "video_analysis_event_confidence_valid",
+          "value": "\"video_analysis_events\".\"confidence\" IS NULL OR \"video_analysis_events\".\"confidence\" BETWEEN 0 AND 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.video_analysis_reviews": {
+      "name": "video_analysis_reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "video_id": {
+          "name": "video_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reviewer_person_id": {
+          "name": "reviewer_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "correction": {
+          "name": "correction",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "varchar(600)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "video_analysis_review_event_reviewer_unique": {
+          "name": "video_analysis_review_event_reviewer_unique",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reviewer_person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_analysis_review_video_created_idx": {
+          "name": "video_analysis_review_video_created_idx",
+          "columns": [
+            {
+              "expression": "video_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "video_analysis_reviews_video_id_videos_id_fk": {
+          "name": "video_analysis_reviews_video_id_videos_id_fk",
+          "tableFrom": "video_analysis_reviews",
+          "tableTo": "videos",
+          "columnsFrom": ["video_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "video_analysis_reviews_event_id_video_analysis_events_id_fk": {
+          "name": "video_analysis_reviews_event_id_video_analysis_events_id_fk",
+          "tableFrom": "video_analysis_reviews",
+          "tableTo": "video_analysis_events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "video_analysis_reviews_reviewer_person_id_people_id_fk": {
+          "name": "video_analysis_reviews_reviewer_person_id_people_id_fk",
+          "tableFrom": "video_analysis_reviews",
+          "tableTo": "people",
+          "columnsFrom": ["reviewer_person_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "video_analysis_review_decision_valid": {
+          "name": "video_analysis_review_decision_valid",
+          "value": "\"video_analysis_reviews\".\"decision\" IN ('confirmed', 'corrected', 'rejected')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.video_analysis_runs": {
+      "name": "video_analysis_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "video_id": {
+          "name": "video_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vision_session_id": {
+          "name": "vision_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_by_person_id": {
+          "name": "requested_by_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "pipeline_version": {
+          "name": "pipeline_version",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_version": {
+          "name": "model_version",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "court_map": {
+          "name": "court_map",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coverage": {
+          "name": "coverage",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "artifact_r2_key": {
+          "name": "artifact_r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "video_analysis_run_video_created_idx": {
+          "name": "video_analysis_run_video_created_idx",
+          "columns": [
+            {
+              "expression": "video_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_analysis_run_status_created_idx": {
+          "name": "video_analysis_run_status_created_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "video_analysis_runs_video_id_videos_id_fk": {
+          "name": "video_analysis_runs_video_id_videos_id_fk",
+          "tableFrom": "video_analysis_runs",
+          "tableTo": "videos",
+          "columnsFrom": ["video_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "video_analysis_runs_vision_session_id_vision_sessions_id_fk": {
+          "name": "video_analysis_runs_vision_session_id_vision_sessions_id_fk",
+          "tableFrom": "video_analysis_runs",
+          "tableTo": "vision_sessions",
+          "columnsFrom": ["vision_session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "video_analysis_runs_requested_by_person_id_people_id_fk": {
+          "name": "video_analysis_runs_requested_by_person_id_people_id_fk",
+          "tableFrom": "video_analysis_runs",
+          "tableTo": "people",
+          "columnsFrom": ["requested_by_person_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "video_analysis_run_status_valid": {
+          "name": "video_analysis_run_status_valid",
+          "value": "\"video_analysis_runs\".\"status\" IN ('queued', 'processing', 'ready', 'needs-review', 'failed', 'cancelled')"
+        },
+        "video_analysis_run_completed_pair": {
+          "name": "video_analysis_run_completed_pair",
+          "value": "(\"video_analysis_runs\".\"status\" IN ('ready', 'needs-review', 'failed', 'cancelled') AND \"video_analysis_runs\".\"completed_at\" IS NOT NULL) OR (\"video_analysis_runs\".\"status\" NOT IN ('ready', 'needs-review', 'failed', 'cancelled'))"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.video_insight_feedback": {
       "name": "video_insight_feedback",
       "schema": "",
@@ -30713,7 +31283,7 @@
         },
         "vision_timeline_type_valid": {
           "name": "vision_timeline_type_valid",
-          "value": "\"vision_timeline_events\".\"type\" IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'set-ended', 'recording-stopped', 'calibration-updated')"
+          "value": "\"vision_timeline_events\".\"type\" IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'set-ended', 'recording-stopped', 'calibration-updated', 'review-marker')"
         },
         "vision_timeline_winner_valid": {
           "name": "vision_timeline_winner_valid",

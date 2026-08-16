@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
   fileURLToPath(
-    new URL("../drizzle/0071_solid_bushwacker.sql", import.meta.url),
+    new URL("../drizzle/0072_solid_bushwacker.sql", import.meta.url),
   ),
   "utf8",
 );

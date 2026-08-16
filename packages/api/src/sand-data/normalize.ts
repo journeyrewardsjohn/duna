@@ -151,6 +151,17 @@ export function matchMappingConfidence(input: {
   if (external === candidate) return 9_500;
   const externalParts = external.split(" ");
   const candidateParts = candidate.split(" ");
+  // Volleyball World occasionally publishes a two-part name as
+  // "Family, Given". Treat that exact reversal as the same identity without
+  // weakening the normal surname/initial fallback below.
+  if (
+    externalParts.length === 2 &&
+    candidateParts.length === 2 &&
+    externalParts[0] === candidateParts[1] &&
+    externalParts[1] === candidateParts[0]
+  ) {
+    return 9_500;
+  }
   const externalLast = externalParts.at(-1);
   const candidateLast = candidateParts.at(-1);
   if (

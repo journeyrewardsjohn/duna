@@ -470,7 +470,7 @@ import {
 import {
   approveImportedMatch,
   applyProfessionalEventResearch,
-  approveReadySandRatingMatches,
+  approveReadyImportedMatches,
   createRatingConfiguration,
   evaluateCurrentRating,
   importSandSource,
@@ -492,7 +492,6 @@ import {
   refreshAvpLeague,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
-  refreshSandRatingNetwork,
   refreshWorldRankings,
   researchProfessionalEvent,
   rejectImportedMatch,
@@ -509,6 +508,8 @@ import {
   saveProfessionalWatchOption,
   searchPublicPlayers,
   searchDunaPlayers,
+  smokeTestScraper,
+  updateScraperControl,
   removeProfessionalEventMedia,
   removeProfessionalWatchOption,
 } from "./sand-data/service";
@@ -589,10 +590,7 @@ async function attachEventWeather(
 const publicHttpUrlSchema = z.url().refine(
   (value) => {
     const url = new URL(value);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      !/(^|\.)sandrating\.com$/i.test(url.hostname)
-    );
+    return url.protocol === "https:" || url.protocol === "http:";
   },
   { message: "Use a public HTTP or HTTPS URL." },
 );
@@ -10683,13 +10681,102 @@ const adminRouter = router({
         },
       }),
     ),
-  sandData: adminProcedure.query(async () => {
+  sandData: superAdminProcedure.query(async () => {
     try {
       return await loadSandDataOverview();
     } catch (error) {
       return throwDomainError(error);
     }
   }),
+  updateScraperControl: superAdminProcedure
+    .input(
+      z.object({
+        source: z.enum([
+          "bvbinfo",
+          "volleyball-life",
+          "fivb-12ndr",
+          "volleyball-world",
+          "avp-league",
+        ]),
+        enabled: z.boolean(),
+        engine: z.enum(["auto", "native", "firecrawl"]),
+        minRequestIntervalMs: z.number().int().min(250).max(3_600_000),
+        maxRequestsPerHour: z.number().int().min(1).max(10_000),
+        linkedPlayerActiveRefreshHours: z
+          .number()
+          .int()
+          .min(1)
+          .max(720)
+          .optional(),
+        linkedPlayerIdleRefreshHours: z
+          .number()
+          .int()
+          .min(1)
+          .max(8_760)
+          .optional(),
+        activePlayerWindowDays: z.number().int().min(1).max(365).optional(),
+        activeEventRefreshMinutes: z
+          .number()
+          .int()
+          .min(5)
+          .max(10_080)
+          .optional(),
+        completedEventGraceHours: z.number().int().min(0).max(720).optional(),
+        liveTransportEnabled: z.boolean(),
+        liveRefreshSeconds: z.number().int().min(60).max(3_600).optional(),
+        liveRestFallbackSeconds: z.number().int().min(15).max(300).optional(),
+        firecrawlCacheTtlSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(604_800)
+          .optional(),
+        firecrawlChangeTracking: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await updateScraperControl({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  smokeTestScraper: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "superadmin-scraper-smoke-test",
+        capacity: 5,
+        refillPerMinute: 0.2,
+      }),
+    )
+    .input(
+      z.object({
+        source: z.enum([
+          "bvbinfo",
+          "volleyball-life",
+          "fivb-12ndr",
+          "volleyball-world",
+          "avp-league",
+        ]),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await smokeTestScraper({
+          ...input,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   playerIntelligence: superAdminProcedure
     .input(
       z
@@ -11049,37 +11136,10 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
-  refreshSandRatingNetwork: adminProcedure
+  approveReadyImportedMatches: adminProcedure
     .use(
       rateLimitMiddleware({
-        id: "admin-sandrating-network-refresh",
-        capacity: 2,
-        refillPerMinute: 0.1,
-      }),
-    )
-    .input(
-      z
-        .object({
-          maxDepth: z.number().int().min(1).max(4).default(4),
-          topPlayersPerGender: z.number().int().min(50).max(500).default(200),
-        })
-        .default({ maxDepth: 4, topPlayersPerGender: 200 }),
-    )
-    .mutation(async ({ input, ctx }) => {
-      try {
-        return await refreshSandRatingNetwork({
-          ...input,
-          actor: ctx.actor!,
-          now: ctx.now,
-        });
-      } catch (error) {
-        return throwDomainError(error);
-      }
-    }),
-  approveReadySandRatingMatches: adminProcedure
-    .use(
-      rateLimitMiddleware({
-        id: "admin-sandrating-backfill-approval",
+        id: "admin-imported-backfill-approval",
         capacity: 1,
         refillPerMinute: 0.05,
       }),
@@ -11092,7 +11152,7 @@ const adminRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        return await approveReadySandRatingMatches({
+        return await approveReadyImportedMatches({
           ...input,
           actor: ctx.actor!,
           requestId: ctx.requestId,

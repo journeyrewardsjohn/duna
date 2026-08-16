@@ -32,7 +32,6 @@ import {
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import {
-  approveSandRatingBackfillAction,
   approveSandMatchAction,
   evaluateRatingAction,
   importSandSourceAction,
@@ -40,7 +39,6 @@ import {
   mergeSandProfilesAction,
   previewSandProfilesAction,
   refreshFivbIndexAction,
-  refreshSandRatingNetworkAction,
   refreshWorldRankingsAction,
   removeProfessionalWatchOptionAction,
   reviewProfileClaimAction,
@@ -49,6 +47,8 @@ import {
   saveAvpRosterAssignmentAction,
   saveRatingConfigurationAction,
   saveProfessionalWatchOptionAction,
+  smokeTestScraperAction,
+  updateScraperControlAction,
   type SandActionState,
 } from "@/app/admin/sand-actions";
 import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
@@ -160,50 +160,244 @@ function RefreshRankingsForm() {
   );
 }
 
-function SandRatingNetworkForm() {
-  const [refreshState, refresh, refreshing] = useActionState(
-    refreshSandRatingNetworkAction,
+function ScraperControlCard({
+  control,
+}: {
+  readonly control: SandDataOverview["controls"][number];
+}) {
+  const [saveState, save, saving] = useActionState(
+    updateScraperControlAction,
     initialState,
   );
-  const [approvalState, approve, approving] = useActionState(
-    approveSandRatingBackfillAction,
+  const [smokeState, smoke, smoking] = useActionState(
+    smokeTestScraperAction,
     initialState,
   );
+  const playerCadence =
+    control.source === "volleyball-life" || control.source === "bvbinfo";
+  const fivbCadence = control.source === "fivb-12ndr";
+  const liveTransport = control.source === "volleyball-world";
+  const nativeOnly = control.source === "volleyball-life" || liveTransport;
   return (
-    <div className="sandrating-network-actions">
-      <form action={refresh} className="sand-mini-action">
-        <input
-          aria-label="Ranked players per division"
-          defaultValue={200}
-          max={500}
-          min={50}
-          name="topPlayersPerGender"
-          type="number"
-        />
-        <select aria-label="Network degrees" defaultValue="4" name="maxDepth">
-          <option value="3">3 degrees</option>
-          <option value="4">4 degrees</option>
-        </select>
-        <button disabled={refreshing}>
-          <RefreshCw className={refreshing ? "spin" : undefined} size={15} />
-          Stage Sand Rating network
+    <article className="hq-card scraper-control-card">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">SuperAdmin source policy</span>
+          <h3>{control.name}</h3>
+          <p>
+            {control.latestRun
+              ? `${control.latestRun.status} · ${new Intl.DateTimeFormat(
+                  "en-US",
+                  {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  },
+                ).format(new Date(control.latestRun.startedAt))}`
+              : "No importer run recorded yet"}
+          </p>
+        </div>
+        <Badge tone={control.enabled ? "positive" : "warning"}>
+          {control.enabled ? "enabled" : "paused"}
+        </Badge>
+      </header>
+      {liveTransport && (
+        <p className="scraper-transport-health">
+          Live transport: {control.liveHealth?.status ?? "idle"}
+          {control.liveHealth?.checkedAt
+            ? ` · checked ${new Intl.DateTimeFormat("en-US", {
+                timeStyle: "medium",
+              }).format(new Date(control.liveHealth.checkedAt))}`
+            : " · not checked yet"}
+          {control.liveHealth?.latencyMs !== undefined
+            ? ` · ${control.liveHealth.latencyMs} ms`
+            : ""}
+        </p>
+      )}
+      <form action={save} className="scraper-control-form">
+        <input name="source" type="hidden" value={control.source} />
+        <label className="scraper-toggle">
+          <input
+            defaultChecked={control.enabled}
+            name="enabled"
+            type="checkbox"
+          />
+          <span>Allow scheduled and manual requests</span>
+        </label>
+        <label>
+          <span>Request engine</span>
+          {nativeOnly ? (
+            <>
+              <input name="engine" type="hidden" value="native" />
+              <span className="scraper-control-static-value">
+                Native official API
+              </span>
+            </>
+          ) : (
+            <select defaultValue={control.engine} name="engine">
+              <option value="auto">Auto</option>
+              <option value="native">Native HTTP</option>
+              <option value="firecrawl">Firecrawl</option>
+            </select>
+          )}
+        </label>
+        <label>
+          <span>Minimum gap (ms)</span>
+          <input
+            defaultValue={control.minRequestIntervalMs}
+            min={250}
+            name="minRequestIntervalMs"
+            type="number"
+          />
+        </label>
+        <label>
+          <span>Maximum requests/hour</span>
+          <input
+            defaultValue={control.maxRequestsPerHour}
+            min={1}
+            name="maxRequestsPerHour"
+            type="number"
+          />
+        </label>
+        {playerCadence && (
+          <>
+            <label>
+              <span>Active linked player cadence (hours)</span>
+              <input
+                defaultValue={control.linkedPlayerActiveRefreshHours ?? ""}
+                min={1}
+                name="linkedPlayerActiveRefreshHours"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Inactive linked player cadence (hours)</span>
+              <input
+                defaultValue={control.linkedPlayerIdleRefreshHours ?? ""}
+                min={1}
+                name="linkedPlayerIdleRefreshHours"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Active player window (days)</span>
+              <input
+                defaultValue={control.activePlayerWindowDays ?? ""}
+                min={1}
+                name="activePlayerWindowDays"
+                type="number"
+              />
+            </label>
+          </>
+        )}
+        {fivbCadence && (
+          <>
+            <label>
+              <span>12ndr event-detail cadence (minutes)</span>
+              <input
+                defaultValue={control.activeEventRefreshMinutes ?? ""}
+                min={5}
+                name="activeEventRefreshMinutes"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Completed-event grace (hours)</span>
+              <input
+                defaultValue={control.completedEventGraceHours ?? ""}
+                min={0}
+                name="completedEventGraceHours"
+                type="number"
+              />
+            </label>
+          </>
+        )}
+        {liveTransport && (
+          <>
+            <label className="scraper-toggle">
+              <input
+                defaultChecked={control.liveTransportEnabled}
+                name="liveTransportEnabled"
+                type="checkbox"
+              />
+              <span>Enable Duna live refresh health checks</span>
+            </label>
+            <label>
+              <span>Official live refresh cadence (seconds)</span>
+              <input
+                defaultValue={control.liveRefreshSeconds ?? 60}
+                min={60}
+                name="liveRefreshSeconds"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>REST fallback cadence (seconds)</span>
+              <input
+                defaultValue={control.liveRestFallbackSeconds ?? 30}
+                min={15}
+                name="liveRestFallbackSeconds"
+                type="number"
+              />
+            </label>
+          </>
+        )}
+        {!liveTransport && (
+          <input name="liveTransportEnabled" type="hidden" value="false" />
+        )}
+        <label>
+          <span>Firecrawl cache max age (seconds)</span>
+          <input
+            defaultValue={control.firecrawlCacheTtlSeconds ?? ""}
+            min={0}
+            name="firecrawlCacheTtlSeconds"
+            type="number"
+          />
+        </label>
+        <label className="scraper-toggle">
+          <input
+            defaultChecked={control.firecrawlChangeTracking}
+            name="firecrawlChangeTracking"
+            type="checkbox"
+          />
+          <span>Request Firecrawl change tracking</span>
+        </label>
+        <button className="hq-button hq-button--primary" disabled={saving}>
+          {saving ? (
+            <LoaderCircle className="spin" size={16} />
+          ) : (
+            <ShieldCheck size={16} />
+          )}
+          Save guardrails
         </button>
-        <ActionFeedback state={refreshState} />
+        <ActionFeedback state={saveState} />
       </form>
-      <form action={approve} className="sand-mini-action">
-        <input name="limit" type="hidden" value="5000" />
-        <input
-          aria-label="Backfill approval basis"
-          name="reason"
-          placeholder="Partner authorization and evidence reviewed"
-          required
-        />
-        <button disabled={approving}>
-          <ShieldCheck size={15} /> Approve ready history + rebuild
+      <form action={smoke} className="sand-mini-action">
+        <input name="source" type="hidden" value={control.source} />
+        <button disabled={smoking || !control.enabled}>
+          {smoking ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : (
+            <Activity size={15} />
+          )}
+          Run smoke test
         </button>
-        <ActionFeedback state={approvalState} />
+        <ActionFeedback state={smokeState} />
       </form>
-    </div>
+    </article>
+  );
+}
+
+function ScraperControls({
+  controls,
+}: {
+  readonly controls: SandDataOverview["controls"];
+}) {
+  return (
+    <section className="scraper-control-grid">
+      {controls.map((control) => (
+        <ScraperControlCard control={control} key={control.source} />
+      ))}
+    </section>
   );
 }
 
@@ -533,7 +727,16 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
           <RefreshFivbForm />
           <RefreshRankingsForm />
         </div>
-        <SandRatingNetworkForm />
+      </section>
+
+      <section>
+        <header className="hq-section-heading">
+          <div>
+            <span className="hq-eyebrow">SuperAdmin</span>
+            <h2>Source policies and live transport health</h2>
+          </div>
+        </header>
+        <ScraperControls controls={data.controls} />
       </section>
 
       <BroadcastConfiguration events={data.events} />

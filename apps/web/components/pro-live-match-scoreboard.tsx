@@ -351,6 +351,10 @@ export function ProLiveMatchScoreboard({
   const terminalReconciled = useRef(false);
   const displayStatus = live?.status ?? match.status;
   const sets = useMemo(() => mergedSets(live, match.sets), [live, match.sets]);
+  const restPollingMs =
+    live?.pollingMs ??
+    initialLive?.pollingMs ??
+    volleyballWorldLiveFeedTiming.fallbackPollingMs;
 
   useEffect(() => {
     if (!initialLive?.matchNo || live?.status === "completed") return;
@@ -382,7 +386,7 @@ export function ProLiveMatchScoreboard({
       connection === "websocket"
         ? (initialLive.pollingMs ??
             volleyballWorldLiveFeedTiming.healthyPollingMs)
-        : volleyballWorldLiveFeedTiming.fallbackPollingMs,
+        : restPollingMs,
     );
     return () => {
       active = false;
@@ -393,6 +397,7 @@ export function ProLiveMatchScoreboard({
     initialLive?.matchNo,
     initialLive?.pollingMs,
     live?.status,
+    restPollingMs,
     match.id,
   ]);
 
@@ -585,7 +590,7 @@ export function ProLiveMatchScoreboard({
         : connection === "final"
           ? "Official final"
           : live
-            ? "Official fallback · 15 sec refresh"
+            ? `Official fallback · ${Math.round(restPollingMs / 1_000)} sec refresh`
             : "Official feed pending";
   const stats = live?.statistics;
 

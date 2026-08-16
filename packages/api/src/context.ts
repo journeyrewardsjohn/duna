@@ -8,9 +8,10 @@ import {
   organizationMemberships,
   organizations,
   people,
+  playerSourceConnections,
 } from "@duna/db";
 import { WorkOS, type User } from "@workos-inc/node";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
   createRemoteJWKSet,
   decodeJwt,
@@ -44,6 +45,10 @@ export interface ApiContext {
 }
 
 export const DUNA_ORGANIZATION_CONTEXT_COOKIE = "duna-organization-context";
+// Platform ownership is deliberately not environment-configurable. This keeps
+// the control plane from gaining a second SuperAdmin through a stale deploy
+// variable or an identity-provider metadata edit.
+const DUNA_SUPER_ADMIN_EMAIL = "john@beachelite.org";
 
 export function activeOrganizationIdFromCookie(
   cookieHeader: string | null | undefined,
@@ -400,12 +405,24 @@ async function resolveWorkOSActor(input: {
   }
   const database = getDatabase();
   const person = await resolveWorkOSPerson(input.user);
-  const configuredSuperAdmins = new Set(
-    (process.env.DUNA_SUPER_ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((email: string) => email.trim().toLowerCase())
-      .filter(Boolean),
-  );
+  // Activity is intentionally coarse: it makes linked profile refreshes more
+  // useful without turning every authenticated request into a write.
+  const now = new Date();
+  await database
+    .update(playerSourceConnections)
+    .set({ lastDunaActivityAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(playerSourceConnections.personId, person.id),
+        or(
+          isNull(playerSourceConnections.lastDunaActivityAt),
+          lte(
+            playerSourceConnections.lastDunaActivityAt,
+            new Date(now.getTime() - 60 * 60 * 1_000),
+          ),
+        ),
+      ),
+    );
   const configuredAdmins = new Set(
     (process.env.DUNA_ADMIN_EMAILS ?? "")
       .split(",")
@@ -415,8 +432,7 @@ async function resolveWorkOSActor(input: {
   const email = input.user.email.toLowerCase();
   const metadataRole = input.user.metadata.dunaRole;
   const platformRole =
-    metadataRole === "super-admin" ||
-    (email && configuredSuperAdmins.has(email))
+    email === DUNA_SUPER_ADMIN_EMAIL
       ? "super-admin"
       : metadataRole === "admin" || (email && configuredAdmins.has(email))
         ? "admin"
@@ -530,13 +546,20 @@ async function resolveWorkOSActor(input: {
   if (guardianshipRows.length > 0) roles.add("guardian");
   for (const membership of membershipRows) roles.add(membership.role);
   for (const platformRole of platformRoleRows) {
-    if (platformRole.role === "admin" || platformRole.role === "super-admin") {
+    if (
+      platformRole.role === "admin" ||
+      (platformRole.role === "super-admin" && email === DUNA_SUPER_ADMIN_EMAIL)
+    ) {
       roles.add(platformRole.role);
     }
   }
   const customScopes = [
     ...membershipRows.flatMap((membership) => membership.scopes),
-    ...platformRoleRows.flatMap((platformRole) => platformRole.scopes),
+    ...platformRoleRows.flatMap((platformRole) =>
+      platformRole.role === "super-admin" && email !== DUNA_SUPER_ADMIN_EMAIL
+        ? []
+        : platformRole.scopes,
+    ),
   ];
   return {
     personId: person.id,

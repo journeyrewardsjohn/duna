@@ -36,7 +36,7 @@ analysis stay on the iPhone/web Studio.
   analyze an authorized video without making it training data.
 
 The SQL source of truth is the forward migration in
-`packages/db/drizzle/0071_solid_bushwacker.sql`. Its tables are:
+`packages/db/drizzle/0072_solid_bushwacker.sql`. Its tables are:
 
 | Table                    | Responsibility                                                                   |
 | ------------------------ | -------------------------------------------------------------------------------- |
