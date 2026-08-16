@@ -84,7 +84,8 @@ export const staticPublicPages = [
     sections: [
       "Start or continue a Duna match from Apple Watch.",
       "Track rally scores, sets, serving side, and match state courtside.",
-      "Sync the verified result back to the Duna player record.",
+      "Check evidence-first Duna Vision framing on the paired iPhone and sync source-linked score events back to the Duna player record.",
+      "Completed scores and locally saved video can queue safely, then resume when the player’s allowed connection returns.",
     ],
   },
   {
@@ -102,7 +103,8 @@ export const staticPublicPages = [
     sections: [
       "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
       "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
-      "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, and operating reports without inferring unavailable financial data.",
+      "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, court maps, and operating reports without inferring unavailable financial data.",
+      "Duna Vision is controlled per recording: players can help improve Duna Vision with de-identified setup and geometry signals while full video remains private and reviewed before any training use.",
       "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
       "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
       "Current plans include a free Coach and Organizer plan plus paid Club, Facility, and Network plans. Live prices and eligibility are confirmed in Duna HQ.",

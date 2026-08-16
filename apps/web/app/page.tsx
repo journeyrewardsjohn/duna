@@ -448,8 +448,9 @@ export default async function HomePage() {
             </span>
             <h2 id="home-watch-heading">The match is on your wrist.</h2>
             <p>
-              Score every rally with one hand. Duna keeps the Watch, match,
-              camera, source video, and final record on one timeline.
+              Score every rally with one hand. Check live camera framing, flag
+              the last rally, and keep the Watch, match, source video, and final
+              record on one timeline.
             </p>
             <div className={styles.watchFeatures}>
               <div>
@@ -462,8 +463,9 @@ export default async function HomePage() {
               <div>
                 <Video aria-hidden />
                 <span>
-                  <strong>Keep the source connected</strong>
-                  Every point syncs to its Duna Vision moment.
+                  <strong>See the setup that matters</strong>
+                  The paired iPhone confirms real court evidence before it draws
+                  a court guide.
                 </span>
               </div>
               <div>
@@ -507,8 +509,9 @@ export default async function HomePage() {
             <p>
               Duna HQ puts the advanced work behind the scenes and gives your
               team one clear place to schedule, sell, communicate, and grow.
-              Permissioned Duna Vision review keeps coaching evidence beside the
-              player, not in a separate video silo.
+              Permissioned Duna Vision review, court maps, and source-linked
+              replays keep coaching evidence beside the player—not in a separate
+              video silo.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primaryAction} href="/run-your-club">

@@ -145,8 +145,9 @@ export function WatchMarketingPage() {
                 <em>On your wrist.</em>
               </h1>
               <p>
-                Keep score in motion. Sync every rally to Duna Vision. Flag the
-                moment worth seeing again—without stepping off the sand.
+                Keep score in motion. Check the paired iPhone’s camera framing,
+                sync every rally to Duna Vision, and flag the moment worth
+                seeing again—without stepping off the sand.
               </p>
               <div className={styles.heroActions}>
                 <Link className={styles.primaryButton} href="#score">
@@ -297,7 +298,9 @@ export function WatchMarketingPage() {
           <p>
             While Duna records or broadcasts live, Watch gestures become
             source-linked events. The scoreboard, playhead, score, and review
-            history stay in one evidence-backed timeline.
+            history stay in one evidence-backed timeline. The recording iPhone
+            keeps its controls legible in landscape and only draws a court guide
+            after it sees real court evidence.
           </p>
         </div>
 
@@ -471,25 +474,29 @@ export function WatchMarketingPage() {
 
           <div className={styles.checkinCopy} data-reveal>
             <span className={styles.eyebrow}>Live Check-In</span>
-            <h2>Know the camera sees the court.</h2>
+            <h2>Know the camera sees a real court.</h2>
             <p>
               Pull the Duna Vision view onto your wrist before the first serve.
-              Confirm the court is framed, see the latest setup score, and make
-              the adjustment without walking back to the phone.
+              A light framing guide helps find the net and sidelines; the court
+              guide appears only after Duna sees real court evidence. Confirm
+              the setup score and make the adjustment without walking back to
+              the phone.
             </p>
             <ul>
               <li>
                 <Camera aria-hidden />
                 <span>
                   <strong>A fresh camera preview</strong>
-                  Check the real Duna Vision view from the court.
+                  Check the real Duna Vision view, including the current
+                  evidence and framing score.
                 </span>
               </li>
               <li>
                 <Zap aria-hidden />
                 <span>
                   <strong>Simple setup guidance</strong>
-                  See whether framing is ready or needs one more adjustment.
+                  See whether Duna needs the net, sidelines, height, or one more
+                  adjustment.
                 </span>
               </li>
               <li>
@@ -533,8 +540,8 @@ export function WatchMarketingPage() {
             <WifiOff aria-hidden />
             <h3>Ready when the phone isn’t.</h3>
             <p>
-              Completed scores can queue safely and deliver when the iPhone
-              reconnects.
+              Completed scores and locally saved video can queue safely. Duna
+              resumes the work when the iPhone reaches the connection you allow.
             </p>
           </article>
           <article data-reveal>

@@ -354,6 +354,26 @@ private final class DunaVideoCaptureController: NSObject {
       currentDeviceOrientation = "portrait"
       return .portrait
     default:
+      // UIDevice frequently reports `.unknown` while the camera preview is
+      // first attaching. The active scene has the actual interface orientation
+      // and keeps preview/video metadata aligned when a player rotates during
+      // setup or an active recording.
+      if let sceneOrientation = activeView?.window?.windowScene?.interfaceOrientation {
+        switch sceneOrientation {
+        case .landscapeLeft:
+          currentDeviceOrientation = "landscape"
+          return .landscapeLeft
+        case .landscapeRight:
+          currentDeviceOrientation = "landscape"
+          return .landscapeRight
+        case .portraitUpsideDown:
+          currentDeviceOrientation = "portrait"
+          return .portraitUpsideDown
+        default:
+          currentDeviceOrientation = "portrait"
+          return .portrait
+        }
+      }
       return lockedCaptureOrientation ?? .portrait
     }
   }
@@ -532,20 +552,26 @@ private final class DunaVideoCaptureController: NSObject {
         CGPoint(x: $0.bottomLeft.x, y: 1 - $0.bottomLeft.y)
       ]
     }
-    // A Vision court observation is evidence. ARKit's projected court remains
-    // only an assisted starting pose because a real camera may be close enough
-    // that the near line falls behind the frame.
-    let projectedCorners = visionCorners ?? latestGroundCorners
-    let groundDetected = latestGroundCorners != nil || rectangle != nil
-    let courtDetected = rectangle.map {
-      $0.confidence >= 0.5 &&
-        $0.boundingBox.width * $0.boundingBox.height >= 0.045
+    // A generic Vision rectangle may be a chair, mirror, window, or indoor
+    // floor edge. Treat it as only a *candidate* until it has the footprint of
+    // a court and a plausible net line. This is intentionally conservative:
+    // no automatic court is better than a confidently wrong court.
+    let courtCandidate = rectangle.map {
+      let box = $0.boundingBox
+      let aspect = box.width / max(box.height, 0.001)
+      return $0.confidence >= 0.72 &&
+        box.width * box.height >= 0.1 &&
+        box.width >= 0.32 &&
+        aspect >= 0.5 && aspect <= 4.8 &&
+        box.minY < 0.68
     } ?? false
+    let groundDetected = latestGroundCorners != nil || courtCandidate
 
     let horizontalLandmarks = landmarks.filter {
       let box = $0.boundingBox
-      return box.width >= 0.22 && box.height <= 0.16 &&
-        box.width >= box.height * 2.4
+      return box.width >= 0.38 && box.height <= 0.13 &&
+        box.width >= box.height * 3.2 &&
+        box.midY >= 0.16 && box.midY <= 0.78
     }
     let netObservation = horizontalLandmarks.max {
       let left = $0.boundingBox
@@ -568,6 +594,15 @@ private final class DunaVideoCaptureController: NSObject {
       return [left, right]
     }
     let netDetected = netTopLine != nil
+    let courtDetected = courtCandidate && netDetected
+
+    // ARKit can correctly find a floor in a living room, car park, or sand but
+    // that is not evidence of a volleyball court. Keep it for horizon and
+    // tripod guidance only. A court candidate and a plausible net are both
+    // required before a projected court is ever emitted to the UI.
+    let projectedCorners = courtDetected
+      ? (visionCorners ?? latestGroundCorners)
+      : nil
 
     var antennaPoints: [CGPoint]?
     if let netTopLine {
@@ -617,14 +652,14 @@ private final class DunaVideoCaptureController: NSObject {
       score -= 32
       warnings.append("Tilt down slowly so Duna can find the sand")
     } else if !courtDetected && !netDetected {
-      score -= 18
+      score -= 30
       warnings.append(
-        "Court is partly out of view—mark the net or adjust visible lines"
+        "Find the net and both sidelines—Duna is keeping the court guide hidden until it sees real court evidence"
       )
     } else if !courtDetected {
       score -= 9
       warnings.append(
-        "Net found; off-screen boundary lines will not block recording"
+        "A net-like line is visible; include both sidelines before Duna draws a court"
       )
     }
 
@@ -732,26 +767,25 @@ private final class DunaVideoCaptureController: NSObject {
     let timestamp = ISO8601DateFormatter().string(from: Date())
     let confidence: Double = courtDetected
       ? (lidarAvailable ? 0.9 : 0.78)
-      : groundDetected && netDetected
-        ? (lidarAvailable ? 0.76 : 0.64)
-        : groundDetected
-          ? (lidarAvailable ? 0.62 : 0.5)
+      : netDetected
+        ? 0.42
+      : groundDetected
+          ? 0.22
         : 0.18
     if warnings.isEmpty {
       warnings.append("Court lock ready—fine-tune the net only if needed")
     }
     let stabilizedWarnings = stableWarnings(warnings)
-    let acceptableGeometry = courtDetected || netDetected ||
-      (groundDetected && visibleCorners >= 2)
+    let acceptableGeometry = courtDetected
     var payload: [String: Any] = [
       "qualityGrade": grade,
       "qualityScore": score,
       "confidence": confidence,
       "acceptable": score >= 67 && orientationMatches && acceptableGeometry,
       "warnings": stabilizedWarnings,
-      "projectionSource": visionCorners != nil
+      "projectionSource": courtDetected && visionCorners != nil
         ? "vision"
-        : latestGroundCorners != nil
+        : courtDetected && latestGroundCorners != nil
           ? (lidarAvailable ? "lidar" : "arkit")
           : "estimated",
       "lidarAvailable": lidarAvailable,

@@ -26,6 +26,7 @@ import {
   UsersRound,
   Video,
   WalletCards,
+  WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -94,10 +95,11 @@ const clubStories = [
     id: "club-growth",
     eyebrow: "Reports + court intelligence",
     title: "Turn operating truth—and court evidence—into the next full court.",
-    body: "Read utilization, revenue, retention, offer health, and permissioned Duna Vision review by court, coach, and program. Video observations stay source-linked and confidence-labeled, so staff can see what is measured, what was reviewed, and what still needs a human call.",
+    body: "Read utilization, revenue, retention, offer health, and permissioned Duna Vision review by court, coach, and program. Court maps, rallies, and video observations stay source-linked and confidence-labeled, so staff can see what is measured, what was reviewed, and what still needs a human call.",
     proof: [
       "Court, coach, and program reporting",
       "Consent-aware Duna Vision review",
+      "Visible-court maps with confidence",
       "Consent-aware campaigns",
       "Reviewable operational and coaching suggestions",
     ],
@@ -138,10 +140,11 @@ const coachStories = [
     id: "coach-performance",
     eyebrow: "Player care",
     title: "Coach the person, with the rally in context.",
-    body: "Keep Duna Vision video, source-linked rally review, private notes, participation, memberships, and player-shared HealthKit summaries together. Players control what health data is shared; verified guardians stay connected for minors.",
+    body: "Keep Duna Vision video, source-linked rally review, private notes, participation, memberships, and player-shared HealthKit summaries together. Recording can continue locally and sync when the player’s allowed connection returns. Players control what health data is shared; verified guardians stay connected for minors.",
     proof: [
       "Source-linked video and rally review",
       "Visible-court heatmaps with confidence",
+      "Offline capture with Wi‑Fi or cellular controls",
       "Permissioned health summaries",
       "Player and guardian context",
     ],
@@ -168,7 +171,12 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   [
     Video,
     "Duna Vision",
-    "Consent-aware capture, source-linked rallies, review cues, and private sharing",
+    "Per-recording consent, real-court framing, source-linked rallies, and private sharing",
+  ],
+  [
+    WifiOff,
+    "Offline field capture",
+    "Record locally and automatically resume upload when the allowed connection returns",
   ],
   [
     HeartPulse,
@@ -1025,7 +1033,8 @@ export function RunYourBusinessPage({
               <p>
                 One operating system for the independent coach with a packed
                 calendar and the club coordinating courts, staff, parents,
-                memberships, payments, Duna Vision review, and growth.
+                memberships, payments, Duna Vision review, offline field
+                capture, and growth.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryButton} href={hqHref}>
@@ -1123,8 +1132,8 @@ export function RunYourBusinessPage({
           <p>
             Duna Pro handles the live work while Duna HQ keeps the business
             organized. Start with your calendar and clients, then add products,
-            distribution, payments, Duna Vision review, and reporting without
-            rebuilding the foundation.
+            distribution, payments, Duna Vision review, offline field capture,
+            and reporting without rebuilding the foundation.
           </p>
         </div>
         <div

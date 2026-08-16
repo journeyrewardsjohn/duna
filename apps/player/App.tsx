@@ -26,6 +26,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
+import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import {
   createContext,
   useContext,
@@ -47,6 +48,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -137,6 +139,10 @@ import {
   type PolicyScrollMetrics,
 } from "./policy-review";
 import { ResultPlayIcon } from "./result-play-icon";
+import {
+  MobilePlacePicker,
+  type MobilePlaceSelection,
+} from "./components/mobile-place-picker";
 import {
   FellixText as Text,
   FellixTextInput as TextInput,
@@ -546,6 +552,14 @@ type HostedMatchSeed = {
   readonly localStartsAt: string;
   readonly localEndsAt: string;
   readonly durationMinutes: number;
+  readonly invitedPlayers?: readonly PersonSummary[];
+  readonly courtPaymentMode?: "full" | "split";
+};
+
+type CourtBookingRequest = {
+  readonly venueId: string;
+  readonly date: string;
+  readonly durationMinutes: number;
 };
 
 const tabs: readonly {
@@ -625,13 +639,32 @@ function closestWeather<
 }
 
 function PreviewBanner() {
-  const { mode } = usePlayerRuntime();
-  if (mode !== "preview") return null;
+  const { isOffline, lastSuccessfulSyncAt, mode } = usePlayerRuntime();
+  if (mode === "preview") {
+    return (
+      <View style={styles.previewBanner}>
+        <Text style={styles.previewBannerText}>
+          PREVIEW DATA · SIGN-IN, BOOKINGS, AND PAYMENTS ARE DISABLED
+        </Text>
+      </View>
+    );
+  }
+  if (!isOffline) return null;
   return (
-    <View style={styles.previewBanner}>
-      <Text style={styles.previewBannerText}>
-        PREVIEW DATA · SIGN-IN, BOOKINGS, AND PAYMENTS ARE DISABLED
+    <View style={styles.offlineModeBanner}>
+      <Text style={styles.offlineModeBannerText}>
+        OFFLINE MODE · RECORD AND BROWSE SAVED DATA. BOOKINGS AND PAYMENTS
+        RESUME WHEN YOU RECONNECT
       </Text>
+      {lastSuccessfulSyncAt && (
+        <Text style={styles.offlineModeBannerMeta}>
+          Last synced{" "}
+          {new Date(lastSuccessfulSyncAt).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </Text>
+      )}
     </View>
   );
 }
@@ -2004,7 +2037,7 @@ function HomeScreen({
         contentContainerStyle={styles.screenContent}
         showsVerticalScrollIndicator={false}
       >
-        <AppHeader eyebrow="YOUR DAY" />
+        <AppHeader />
         <LivePlayerRail palette={colors} />
         <View style={styles.homeWelcome}>
           <View style={styles.flex}>
@@ -2962,13 +2995,268 @@ function contactPhoneE164(value: string | undefined): string | undefined {
   return undefined;
 }
 
+function VenueFinderModal({
+  onClose,
+  onSelect,
+  visible,
+}: {
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly onSelect: (request: CourtBookingRequest) => void;
+}) {
+  const { venues } = usePlayerRuntime();
+  const [query, setQuery] = useState("");
+  const [origin, setOrigin] = useState<DiscoveryCoordinates>();
+  const [locationStatus, setLocationStatus] = useState<
+    "idle" | "finding" | "available" | "unavailable"
+  >("idle");
+  const [date, setDate] = useState(() => localDateValue(new Date()));
+  const [durationMinutes, setDurationMinutes] = useState(90);
+
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    setLocationStatus("finding");
+    void Location.requestForegroundPermissionsAsync()
+      .then(async (permission) => {
+        if (!active) return;
+        if (permission.status !== "granted") {
+          setLocationStatus("unavailable");
+          return;
+        }
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!active) return;
+        setOrigin({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setLocationStatus("available");
+      })
+      .catch(() => {
+        if (active) setLocationStatus("unavailable");
+      });
+    return () => {
+      active = false;
+    };
+  }, [visible]);
+
+  const days = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        addLocalDateDays(localDateValue(new Date()), index),
+      ),
+    [],
+  );
+  const options = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return (venues ?? [])
+      .filter((venue) => venue.courtCount > 0)
+      .filter(
+        (venue) =>
+          !normalized ||
+          [venue.name, venue.city, venue.region, ...venue.tags]
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(normalized),
+      )
+      .map((venue) => ({
+        venue,
+        distanceMiles: origin ? discoveryDistance(origin, venue) : undefined,
+      }))
+      .sort((left, right) => {
+        if (
+          left.distanceMiles !== undefined &&
+          right.distanceMiles !== undefined
+        ) {
+          return left.distanceMiles - right.distanceMiles;
+        }
+        if (left.distanceMiles !== undefined) return -1;
+        if (right.distanceMiles !== undefined) return 1;
+        return left.venue.name.localeCompare(right.venue.name);
+      });
+  }, [origin, query, venues]);
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.venueFinderSafe}>
+        <View style={styles.venueFinderHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.eyebrow}>LIVE COURT INVENTORY</Text>
+            <Text style={styles.venueFinderTitle}>Find a court.</Text>
+            <Text style={styles.venueFinderBody}>
+              Choose a Duna venue first. We’ll show only courts and open matches
+              available for the time you select.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Close venue search"
+            onPress={onClose}
+            style={styles.venueFinderClose}
+          >
+            <Text style={styles.venueFinderCloseText}>×</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.venueFinderContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.venueFinderLocationRow}>
+            <Text style={styles.venueFinderLocationIcon}>⌖</Text>
+            <View style={styles.flex}>
+              <Text style={styles.venueFinderLocationTitle}>
+                {locationStatus === "finding"
+                  ? "Finding nearby venues…"
+                  : locationStatus === "available"
+                    ? "Nearby venues first"
+                    : "Search Duna venues"}
+              </Text>
+              <Text style={styles.venueFinderLocationBody}>
+                {locationStatus === "available"
+                  ? "Your precise location stays on your device."
+                  : "Location is optional—search by city, beach, or club."}
+              </Text>
+            </View>
+          </View>
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setQuery}
+            placeholder="Search a venue, beach, or city"
+            placeholderTextColor={colors.muted}
+            style={styles.venueFinderSearch}
+            value={query}
+          />
+          <Text style={styles.venueFinderLabel}>WHEN</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalBleed}
+          >
+            <View style={styles.venueFinderDayRow}>
+              {days.map((value) => {
+                const selected = value === date;
+                const day = localDateAnchor(value);
+                return (
+                  <Pressable
+                    key={value}
+                    onPress={() => setDate(value)}
+                    style={[
+                      styles.venueFinderDay,
+                      selected && styles.venueFinderDayActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.venueFinderDayName,
+                        selected && styles.venueFinderDayTextActive,
+                      ]}
+                    >
+                      {day
+                        .toLocaleDateString("en-US", { weekday: "short" })
+                        .toUpperCase()}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.venueFinderDayNumber,
+                        selected && styles.venueFinderDayTextActive,
+                      ]}
+                    >
+                      {day.getDate()}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <View style={styles.venueFinderDurationRow}>
+            {[60, 90, 120].map((minutes) => (
+              <Pressable
+                key={minutes}
+                onPress={() => setDurationMinutes(minutes)}
+                style={[
+                  styles.venueFinderDuration,
+                  durationMinutes === minutes &&
+                    styles.venueFinderDurationActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.venueFinderDurationText,
+                    durationMinutes === minutes &&
+                      styles.venueFinderDurationTextActive,
+                  ]}
+                >
+                  {minutes} min
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.venueFinderLabel}>
+            {origin ? "NEARBY DUNA VENUES" : "DUNA VENUES"}
+          </Text>
+          <View style={styles.venueFinderResults}>
+            {options.map(({ distanceMiles, venue }) => (
+              <Pressable
+                key={venue.id}
+                onPress={() =>
+                  onSelect({ venueId: venue.id, date, durationMinutes })
+                }
+                style={styles.venueFinderResult}
+              >
+                <View style={styles.venueFinderResultMark}>
+                  <Text style={styles.venueFinderResultMarkText}>▦</Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.venueFinderResultTitle}>
+                    {venue.name}
+                  </Text>
+                  <Text style={styles.venueFinderResultMeta}>
+                    {venue.city}, {venue.region} · {venue.courtCount}{" "}
+                    {venue.courtCount === 1 ? "court" : "courts"}
+                    {distanceMiles !== undefined
+                      ? ` · ${distanceMiles < 10 ? distanceMiles.toFixed(1) : Math.round(distanceMiles)} mi`
+                      : ""}
+                  </Text>
+                </View>
+                <Text style={styles.venueFinderResultArrow}>›</Text>
+              </Pressable>
+            ))}
+            {options.length === 0 && (
+              <View style={styles.venueFinderEmpty}>
+                <Text style={styles.venueFinderEmptyTitle}>
+                  No Duna courts match that search.
+                </Text>
+                <Text style={styles.venueFinderEmptyBody}>
+                  Creating a match at a beach or venue outside Duna is still
+                  easy—use Create a Match from Play.
+                </Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function VenueBookingModal({
+  initialDate,
+  initialDurationMinutes,
   venueId,
   visible,
   onClose,
   onHostReady,
   onOpenMatch,
 }: {
+  readonly initialDate?: string;
+  readonly initialDurationMinutes?: number;
   readonly venueId?: string;
   readonly visible: boolean;
   readonly onClose: () => void;
@@ -2996,6 +3284,7 @@ function VenueBookingModal({
   );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
+  const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   const [contactOptions, setContactOptions] = useState<BookingParticipant[]>(
     [],
   );
@@ -3004,6 +3293,7 @@ function VenueBookingModal({
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [policyRead, setPolicyRead] = useState(false);
   const [policyReviewOpen, setPolicyReviewOpen] = useState(false);
+  const [timeSelectionCommitted, setTimeSelectionCommitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -3121,6 +3411,17 @@ function VenueBookingModal({
     (slot) => slot.localStartsAt === selectedLocalStart,
   );
   const selectedPlayWindow = selectedOpenMatches[0] ?? selectedStartSlots[0];
+  const selectedDunaPlayers = useMemo(() => {
+    const byId = new Map(
+      (people ?? demoPeople).map((person) => [person.id, person]),
+    );
+    return participants.flatMap((participant) => {
+      const person = participant.personId
+        ? byId.get(participant.personId)
+        : undefined;
+      return person ? [person] : [];
+    });
+  }, [participants, people]);
 
   useEffect(() => {
     if (
@@ -3162,6 +3463,12 @@ function VenueBookingModal({
   ]);
 
   useEffect(() => {
+    if (!visible) return;
+    if (initialDate && initialDate >= todayValue) setSelectedDate(initialDate);
+    if (initialDurationMinutes) setDurationMinutes(initialDurationMinutes);
+  }, [initialDate, initialDurationMinutes, todayValue, visible]);
+
+  useEffect(() => {
     if (!visible) {
       dateRailPositioned.current = false;
       setConfirmation(undefined);
@@ -3198,7 +3505,13 @@ function VenueBookingModal({
             ),
           ),
         ];
-        setDurationMinutes(options.includes(90) ? 90 : (options[0] ?? 60));
+        setDurationMinutes(
+          initialDurationMinutes && options.includes(initialDurationMinutes)
+            ? initialDurationMinutes
+            : options.includes(90)
+              ? 90
+              : (options[0] ?? 60),
+        );
       })
       .catch((reason) => {
         if (!cancelled) setError(displayError(reason));
@@ -3209,7 +3522,7 @@ function VenueBookingModal({
     return () => {
       cancelled = true;
     };
-  }, [courtClient, venueId, visible]);
+  }, [courtClient, initialDurationMinutes, venueId, visible]);
 
   useEffect(() => {
     if (!visible || !venueId || !courtClient || !inventory) return;
@@ -3219,6 +3532,7 @@ function VenueBookingModal({
     setAvailability(undefined);
     setSelectedSlot(undefined);
     setSelectedLocalStart(undefined);
+    setTimeSelectionCommitted(false);
     setPolicyAccepted(false);
     setPolicyRead(false);
     setPolicyReviewOpen(false);
@@ -3484,6 +3798,8 @@ function VenueBookingModal({
             localStartsAt: selectedSlot.localStartsAt,
             localEndsAt: selectedSlot.localEndsAt,
             durationMinutes,
+            invitedPlayers: selectedDunaPlayers,
+            courtPaymentMode: paymentMode,
           };
           onClose();
           onHostReady?.(seed);
@@ -3550,6 +3866,29 @@ function VenueBookingModal({
   }
 
   if (!visible) return null;
+  if (showPlayerPicker) {
+    return (
+      <PlayerPickerModal
+        excludedPersonIds={[dashboard?.player.id ?? demoPlayer.id]}
+        maxSelected={11}
+        onChange={(players) =>
+          setParticipants((current) => [
+            ...current.filter((participant) => !participant.personId),
+            ...players.map((person) => ({
+              personId: person.id,
+              name: person.displayName,
+            })),
+          ])
+        }
+        onClose={() => setShowPlayerPicker(false)}
+        palette={colors}
+        presentationStyle="pageSheet"
+        selected={selectedDunaPlayers}
+        title="Add players"
+        visible
+      />
+    );
+  }
   return (
     <Modal
       animationType="slide"
@@ -3833,86 +4172,114 @@ function VenueBookingModal({
                       <Text style={styles.bookingTimeSectionLabel}>
                         OPEN COURTS + MATCHES
                       </Text>
-                      <View style={styles.bookingTimeGrid}>
-                        {timeOptions.map((localStartsAt) => {
-                          const openMatches = (
-                            availability?.openMatches ?? []
-                          ).filter(
-                            (match) => match.localStartsAt === localStartsAt,
-                          );
-                          const slotCount = (availability?.slots ?? []).filter(
-                            (slot) => slot.localStartsAt === localStartsAt,
-                          ).length;
-                          const active = selectedLocalStart === localStartsAt;
-                          const players = openMatches
-                            .flatMap((match) => [
-                              match.host,
-                              ...match.attendees.filter(
-                                (player) => player.id !== match.host.id,
-                              ),
-                            ])
-                            .slice(0, 2);
-                          return (
-                            <Pressable
-                              accessibilityLabel={`${localSlotTime(localStartsAt)}, ${
-                                openMatches.length
-                                  ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
-                                  : `${slotCount} open court${slotCount === 1 ? "" : "s"}`
-                              }`}
-                              key={localStartsAt}
-                              onPress={() => {
-                                selectionHaptic();
-                                setSelectedLocalStart(localStartsAt);
-                              }}
-                              style={[
-                                styles.bookingTimeOption,
-                                openMatches.length > 0 &&
-                                  styles.bookingTimeOptionMatch,
-                                active && styles.bookingTimeOptionActive,
-                              ]}
-                            >
-                              <Text
+                      {timeSelectionCommitted && selectedLocalStart ? (
+                        <Pressable
+                          accessibilityLabel="Change selected court time"
+                          onPress={() => setTimeSelectionCommitted(false)}
+                          style={styles.bookingSelectedTime}
+                        >
+                          <View style={styles.flex}>
+                            <Text style={styles.bookingSelectedTimeLabel}>
+                              SELECTED TIME
+                            </Text>
+                            <Text style={styles.bookingSelectedTimeValue}>
+                              {localSlotTime(selectedLocalStart)} ·{" "}
+                              {durationMinutes} min
+                            </Text>
+                          </View>
+                          <Text style={styles.bookingSelectedTimeAction}>
+                            Change
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <View style={styles.bookingTimeGrid}>
+                          {timeOptions.map((localStartsAt) => {
+                            const openMatches = (
+                              availability?.openMatches ?? []
+                            ).filter(
+                              (match) => match.localStartsAt === localStartsAt,
+                            );
+                            const slotCount = (
+                              availability?.slots ?? []
+                            ).filter(
+                              (slot) => slot.localStartsAt === localStartsAt,
+                            ).length;
+                            const active = selectedLocalStart === localStartsAt;
+                            const players = openMatches
+                              .flatMap((match) => [
+                                match.host,
+                                ...match.attendees.filter(
+                                  (player) => player.id !== match.host.id,
+                                ),
+                              ])
+                              .slice(0, 2);
+                            return (
+                              <Pressable
+                                accessibilityLabel={`${localSlotTime(localStartsAt)}, ${
+                                  openMatches.length
+                                    ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                                    : `${slotCount} open court${slotCount === 1 ? "" : "s"}`
+                                }`}
+                                key={localStartsAt}
+                                onPress={() => {
+                                  selectionHaptic();
+                                  setSelectedLocalStart(localStartsAt);
+                                  setTimeSelectionCommitted(true);
+                                }}
                                 style={[
-                                  styles.bookingTimeOptionTime,
-                                  active && styles.bookingTimeOptionTimeActive,
+                                  styles.bookingTimeOption,
+                                  openMatches.length > 0 &&
+                                    styles.bookingTimeOptionMatch,
+                                  active && styles.bookingTimeOptionActive,
                                 ]}
                               >
-                                {localSlotTime(localStartsAt)}
-                              </Text>
-                              {players.length > 0 && (
-                                <View style={styles.bookingTimeRoster}>
-                                  {players.map((player, index) =>
-                                    player.avatarUrl ? (
-                                      <Image
-                                        key={`${player.id}-${index}`}
-                                        source={{ uri: player.avatarUrl }}
-                                        style={styles.bookingTimeAvatar}
-                                      />
-                                    ) : (
-                                      <Text
-                                        key={`${player.id}-${index}`}
-                                        style={styles.bookingTimeAvatarFallback}
-                                      >
-                                        {player.initials}
-                                      </Text>
-                                    ),
-                                  )}
-                                </View>
-                              )}
-                              <Text
-                                style={[
-                                  styles.bookingTimeOptionMeta,
-                                  active && styles.bookingTimeOptionMetaActive,
-                                ]}
-                              >
-                                {openMatches.length
-                                  ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
-                                  : `${slotCount} court${slotCount === 1 ? "" : "s"}`}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
+                                <Text
+                                  style={[
+                                    styles.bookingTimeOptionTime,
+                                    active &&
+                                      styles.bookingTimeOptionTimeActive,
+                                  ]}
+                                >
+                                  {localSlotTime(localStartsAt)}
+                                </Text>
+                                {players.length > 0 && (
+                                  <View style={styles.bookingTimeRoster}>
+                                    {players.map((player, index) =>
+                                      player.avatarUrl ? (
+                                        <Image
+                                          key={`${player.id}-${index}`}
+                                          source={{ uri: player.avatarUrl }}
+                                          style={styles.bookingTimeAvatar}
+                                        />
+                                      ) : (
+                                        <Text
+                                          key={`${player.id}-${index}`}
+                                          style={
+                                            styles.bookingTimeAvatarFallback
+                                          }
+                                        >
+                                          {player.initials}
+                                        </Text>
+                                      ),
+                                    )}
+                                  </View>
+                                )}
+                                <Text
+                                  style={[
+                                    styles.bookingTimeOptionMeta,
+                                    active &&
+                                      styles.bookingTimeOptionMetaActive,
+                                  ]}
+                                >
+                                  {openMatches.length
+                                    ? `${openMatches.length} open match${openMatches.length === 1 ? "" : "es"}`
+                                    : `${slotCount} court${slotCount === 1 ? "" : "s"}`}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
 
                       {selectedOpenMatches.length > 0 && (
                         <View style={styles.bookingOpenMatchSection}>
@@ -3926,6 +4293,12 @@ function VenueBookingModal({
                                 (player) => player.id !== match.host.id,
                               ),
                             ];
+                            const alreadyJoined = Boolean(
+                              dashboard?.player.id &&
+                              roster.some(
+                                (player) => player.id === dashboard.player.id,
+                              ),
+                            );
                             const matchMinutes = Math.round(
                               (Date.parse(match.endsAt) -
                                 Date.parse(match.startsAt)) /
@@ -4030,13 +4403,19 @@ function VenueBookingModal({
                                     {match.spotsRemaining === 1 ? "" : "s"} open
                                   </Text>
                                   <Pressable
+                                    disabled={alreadyJoined}
                                     onPress={() =>
                                       onOpenMatch?.(match.id, match.slug)
                                     }
-                                    style={styles.bookingOpenMatchJoin}
+                                    style={[
+                                      styles.bookingOpenMatchJoin,
+                                      alreadyJoined && styles.buttonDisabled,
+                                    ]}
                                   >
                                     <Text style={styles.payButtonText}>
-                                      Reserve a spot →
+                                      {alreadyJoined
+                                        ? "You’re already in"
+                                        : "Reserve a spot →"}
                                     </Text>
                                   </Pressable>
                                 </View>
@@ -4050,8 +4429,8 @@ function VenueBookingModal({
                         <View style={styles.bookingCreateMatchSection}>
                           <Text style={styles.bookingTimeSectionLabel}>
                             {selectedOpenMatches.length
-                              ? "OR CREATE YOUR OWN"
-                              : "CREATE YOUR OWN MATCH"}
+                              ? "OR RESERVE YOUR OWN COURT"
+                              : "RESERVE YOUR OWN COURT"}
                           </Text>
                           {selectedStartSlots.map((slot) => (
                             <View
@@ -4083,7 +4462,7 @@ function VenueBookingModal({
                                   style={styles.bookingHostButton}
                                 >
                                   <Text style={styles.bookingHostButtonText}>
-                                    Host match
+                                    Create a Match
                                   </Text>
                                 </Pressable>
                                 <Pressable
@@ -4091,7 +4470,7 @@ function VenueBookingModal({
                                   style={styles.bookingPrivateButton}
                                 >
                                   <Text style={styles.bookingPrivateButtonText}>
-                                    Book private
+                                    Reserve private
                                   </Text>
                                 </Pressable>
                               </View>
@@ -4198,7 +4577,8 @@ function VenueBookingModal({
                       </View>
                     </View>
                   )}
-                  {bookingIntent === "private" && (
+                  {(bookingIntent === "private" ||
+                    bookingIntent === "host") && (
                     <>
                       <View style={styles.purchaseKindRow}>
                         {(["full", "split"] as const).map((modeOption) => (
@@ -4228,64 +4608,113 @@ function VenueBookingModal({
                       <View style={styles.checkoutSection}>
                         <View style={styles.rowBetween}>
                           <View>
-                            <Text style={styles.rowTitle}>Add players</Text>
+                            <Text style={styles.rowTitle}>
+                              {bookingIntent === "host"
+                                ? "Add players to this match"
+                                : "Add players"}
+                            </Text>
                             <Text style={styles.rowMeta}>
-                              Frequent partners first. Invite any group size.
+                              Frequent partners first, then everyone on Duna.
                             </Text>
                           </View>
-                          <Pressable onPress={() => void importContacts()}>
-                            <Text style={styles.linkText}>Contacts</Text>
+                          <Pressable onPress={() => setShowPlayerPicker(true)}>
+                            <Text style={styles.linkText}>Choose players</Text>
                           </Pressable>
                         </View>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={styles.bookingPartnerScroll}
+                        <Pressable
+                          accessibilityLabel="Open player picker"
+                          onPress={() => setShowPlayerPicker(true)}
+                          style={styles.bookingPlayerPickerLaunch}
                         >
-                          <View style={styles.bookingPartnerRow}>
-                            {people?.slice(0, 6).map((person) => (
-                              <Pressable
-                                key={person.id}
-                                onPress={() =>
-                                  addParticipant({
-                                    personId: person.id,
-                                    name: person.displayName,
-                                  })
-                                }
-                                style={styles.bookingPartner}
-                              >
-                                <Text style={styles.bookingPartnerAvatar}>
-                                  {person.initials}
-                                </Text>
-                                <Text
-                                  numberOfLines={1}
-                                  style={styles.bookingPartnerName}
-                                >
-                                  {person.displayName.split(" ")[0]}
-                                </Text>
-                              </Pressable>
-                            ))}
-                            {contactOptions.map((contact) => (
-                              <Pressable
-                                key={contact.email ?? contact.phoneE164}
-                                onPress={() => addParticipant(contact)}
-                                style={styles.bookingPartner}
-                              >
-                                <Text style={styles.bookingPartnerAvatar}>
-                                  {(contact.name ?? "C")
-                                    .slice(0, 1)
-                                    .toUpperCase()}
-                                </Text>
-                                <Text
-                                  numberOfLines={1}
-                                  style={styles.bookingPartnerName}
-                                >
-                                  {contact.name ?? "Contact"}
-                                </Text>
-                              </Pressable>
-                            ))}
+                          <View style={styles.bookingPlayerPickerPlus}>
+                            <Text style={styles.bookingPlayerPickerPlusText}>
+                              ＋
+                            </Text>
                           </View>
-                        </ScrollView>
+                          <View style={styles.flex}>
+                            <Text style={styles.bookingPlayerPickerTitle}>
+                              {selectedDunaPlayers.length
+                                ? `${selectedDunaPlayers.length} Duna player${selectedDunaPlayers.length === 1 ? "" : "s"} selected`
+                                : "Choose Duna players"}
+                            </Text>
+                            <Text style={styles.bookingPlayerPickerBody}>
+                              Search, review Sand Rating and reliability, then
+                              add.
+                            </Text>
+                          </View>
+                          <Text style={styles.chevron}>›</Text>
+                        </Pressable>
+                        {selectedDunaPlayers.length > 0 && (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.bookingPartnerScroll}
+                          >
+                            <View style={styles.bookingPartnerRow}>
+                              {selectedDunaPlayers.map((person) => (
+                                <Pressable
+                                  key={person.id}
+                                  onPress={() => setShowPlayerPicker(true)}
+                                  style={styles.bookingPartner}
+                                >
+                                  {person.avatarUrl ? (
+                                    <Image
+                                      source={{ uri: person.avatarUrl }}
+                                      style={styles.bookingPartnerImage}
+                                    />
+                                  ) : (
+                                    <Text style={styles.bookingPartnerAvatar}>
+                                      {person.initials}
+                                    </Text>
+                                  )}
+                                  <Text
+                                    numberOfLines={1}
+                                    style={styles.bookingPartnerName}
+                                  >
+                                    {person.displayName.split(" ")[0]}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          </ScrollView>
+                        )}
+                        <Pressable
+                          onPress={() => void importContacts()}
+                          style={styles.bookingImportContact}
+                        >
+                          <Text style={styles.linkText}>
+                            Add someone outside Duna from Contacts
+                          </Text>
+                        </Pressable>
+                        {contactOptions.length > 0 && (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.bookingPartnerScroll}
+                          >
+                            <View style={styles.bookingPartnerRow}>
+                              {contactOptions.map((contact) => (
+                                <Pressable
+                                  key={contact.email ?? contact.phoneE164}
+                                  onPress={() => addParticipant(contact)}
+                                  style={styles.bookingPartner}
+                                >
+                                  <Text style={styles.bookingPartnerAvatar}>
+                                    {(contact.name ?? "C")
+                                      .slice(0, 1)
+                                      .toUpperCase()}
+                                  </Text>
+                                  <Text
+                                    numberOfLines={1}
+                                    style={styles.bookingPartnerName}
+                                  >
+                                    {contact.name ?? "Contact"}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          </ScrollView>
+                        )}
                         <View style={styles.bookingManualInvite}>
                           <TextInput
                             onChangeText={setManualName}
@@ -4387,7 +4816,9 @@ function VenueBookingModal({
                       {busy
                         ? "Opening secure checkout…"
                         : bookingIntent === "host"
-                          ? `Reserve court · ${formatMoney(totalMinor, "USD")}`
+                          ? paymentMode === "full"
+                            ? `Reserve full court · ${formatMoney(totalMinor, "USD")}`
+                            : `Reserve your share · ${formatMoney(shareMinor, "USD")}`
                           : `Continue · ${formatMoney(shareMinor, "USD")}`}
                     </Text>
                   </Pressable>
@@ -7644,9 +8075,11 @@ function PlayLauncherScreen({
 function PlansScreen({
   onBook,
   onOpenBooking,
+  onReserveCourtVenue,
 }: {
   readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
+  readonly onReserveCourtVenue: (request: CourtBookingRequest) => void;
 }) {
   const { dashboard } = usePlayerRuntime();
   const bookings = dashboard?.bookings ?? demoBookings;
@@ -7669,7 +8102,7 @@ function PlansScreen({
             onPress={() => setShowHost(true)}
             style={styles.scoreAction}
           >
-            <Text style={styles.scoreActionText}>＋ Host a match</Text>
+            <Text style={styles.scoreActionText}>＋ Create a Match</Text>
           </Pressable>
         </View>
         {hostedTitle && (
@@ -7816,14 +8249,14 @@ function PlansScreen({
           </View>
           <Text style={styles.sectionTitle}>Your court. Your people.</Text>
           <Text style={styles.bodyText}>
-            Host a match with a clear time, format, level, and price. Add your
-            partner now or leave spots open for nearby players.
+            Create a match with a clear time, format, level, and cost to join.
+            Add your partner now or leave spots open for nearby players.
           </Text>
           <Pressable
             onPress={() => setShowHost(true)}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Host a match</Text>
+            <Text style={styles.primaryButtonText}>Create a Match</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -7832,6 +8265,10 @@ function PlansScreen({
         onCreated={(title) => {
           setHostedTitle(title);
           setShowHost(false);
+        }}
+        onReserveCourtVenue={(request) => {
+          setShowHost(false);
+          onReserveCourtVenue(request);
         }}
         visible={showHost}
       />
@@ -10226,6 +10663,14 @@ function BookingModal({
                 ? ("nearby" as const)
                 : ("search" as const),
             sharedTeams: 0,
+            following: false,
+            followsYou: false,
+            reliability: {
+              label: "new" as const,
+              tracked: 0,
+              attended: 0,
+              noShows: 0,
+            },
             gender: "Not listed",
             eligible: true,
             eligibilityReasons: [],
@@ -11607,17 +12052,20 @@ function PickupModal({
   onClose,
   onCreated,
   initialCourtBooking,
+  onReserveCourtVenue,
 }: {
   readonly visible: boolean;
   readonly onClose: () => void;
   readonly onCreated: (title: string) => void;
   readonly initialCourtBooking?: HostedMatchSeed;
+  readonly onReserveCourtVenue?: (request: CourtBookingRequest) => void;
 }) {
-  const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
+  const { client, dashboard, mode, refresh } = usePlayerRuntime();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [venueName, setVenueName] = useState("");
   const [venueId, setVenueId] = useState<string>();
+  const [placeSelection, setPlaceSelection] = useState<MobilePlaceSelection>();
   const [courtBookingId, setCourtBookingId] = useState<string>();
   const [startsAt, setStartsAt] = useState(defaultPickupStart);
   const [durationMinutes, setDurationMinutes] = useState(90);
@@ -11635,6 +12083,7 @@ function PickupModal({
   const [ratingMinimum, setRatingMinimum] = useState("1.00");
   const [ratingMaximum, setRatingMaximum] = useState("8.00");
   const [cost, setCost] = useState("0");
+  const [costMode, setCostMode] = useState<"free" | "paid">("free");
   const [note, setNote] = useState("");
   const [recordMatches, setRecordMatches] = useState(true);
   const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
@@ -11683,6 +12132,10 @@ function PickupModal({
     setCourtBookingId(initialCourtBooking.courtBookingId);
     setStartsAt(initialCourtBooking.localStartsAt.slice(0, 16));
     setDurationMinutes(initialCourtBooking.durationMinutes);
+    setSelectedPlayers(initialCourtBooking.invitedPlayers ?? []);
+    setCapacity((current) =>
+      Math.max(current, (initialCourtBooking.invitedPlayers?.length ?? 0) + 1),
+    );
     setError(undefined);
   }, [initialCourtBooking, visible]);
 
@@ -11748,9 +12201,33 @@ function PickupModal({
     setCourtBookingId(undefined);
   }
 
+  function chooseDate(date: Date) {
+    const next = new Date(start);
+    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+    setStartsAt(localInputValue(next));
+    setCourtBookingId(undefined);
+  }
+
+  function chooseStartTime(date: Date) {
+    const next = new Date(start);
+    next.setHours(date.getHours(), date.getMinutes(), 0, 0);
+    setStartsAt(localInputValue(next));
+    setCourtBookingId(undefined);
+  }
+
+  function choosePlace(value: MobilePlaceSelection | undefined) {
+    setPlaceSelection(value);
+    setVenueName(value?.name ?? "");
+    setVenueId(value?.venueId);
+    setCourtBookingId(undefined);
+  }
+
   function close() {
     setError(undefined);
     setShowPlayerPicker(false);
+    setPlaceSelection(undefined);
+    setCostMode("free");
+    setCost("0");
     onClose();
   }
 
@@ -11765,6 +12242,12 @@ function PickupModal({
       (venueName.trim().length < 2 || !Number.isFinite(start.getTime()))
     ) {
       setError("Choose a valid place, day, and time.");
+      return;
+    }
+    if (step === 1 && venueId && !courtBookingId) {
+      setError(
+        "This is a Duna venue. Reserve a court first so every player sees a confirmed time and court.",
+      );
       return;
     }
     if (step === 1 && start.getTime() <= Date.now()) {
@@ -11840,6 +12323,9 @@ function PickupModal({
       setSelectedPlayers([]);
       setCourtBookingId(undefined);
       setVenueId(undefined);
+      setPlaceSelection(undefined);
+      setCostMode("free");
+      setCost("0");
     } catch (reason) {
       setError(displayError(reason));
     } finally {
@@ -11857,12 +12343,12 @@ function PickupModal({
       >
         {showPlayerPicker ? (
           <PlayerPickerModal
-            embedded
             excludedPersonIds={[host.id]}
             maxSelected={Math.max(1, capacity - 1)}
             onChange={setSelectedPlayers}
             onClose={() => setShowPlayerPicker(false)}
             palette={colors}
+            presentationStyle="pageSheet"
             selected={selectedPlayers}
             title="Add players"
             visible
@@ -11871,7 +12357,7 @@ function PickupModal({
           <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
             <View style={styles.hostFlowHeader}>
               <Pressable
-                accessibilityLabel="Close host match"
+                accessibilityLabel="Close create match"
                 onPress={close}
                 style={styles.hostFlowClose}
               >
@@ -12074,49 +12560,80 @@ function PickupModal({
                     </>
                   )}
                   <Text style={styles.hostFlowLabel}>PLACE</Text>
-                  <TextInput
-                    editable={!courtBookingId}
-                    onChangeText={(value) => {
-                      setVenueName(value);
-                      setVenueId(undefined);
-                      setCourtBookingId(undefined);
-                    }}
-                    placeholder="Venue, beach, or court"
-                    placeholderTextColor={colors.muted}
-                    style={styles.hostFlowInput}
-                    value={venueName}
-                  />
-                  {!courtBookingId && venues && venues.length > 0 && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.hostFlowHorizontal}
-                    >
-                      {venues.map((venue) => (
+                  {linkedCourtLocked ? (
+                    <View style={styles.hostFlowLockedPlace}>
+                      <Text style={styles.hostFlowLockedPlaceMark}>✓</Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.hostFlowLockedPlaceTitle}>
+                          {venueName}
+                        </Text>
+                        <Text style={styles.hostFlowLockedPlaceBody}>
+                          Confirmed court reservation · time stays locked
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      <MobilePlacePicker
+                        baseUrl={dunaWebUrl}
+                        description="Search Duna venues first, or choose any beach, club, or address with Google Places."
+                        label="Venue, beach, or court"
+                        lockedLabel={
+                          placeSelection?.venueId
+                            ? "DUNA VENUE · RESERVATION REQUIRED"
+                            : "LOCATION LOCKED · GOOGLE"
+                        }
+                        onChange={choosePlace}
+                        palette={colors}
+                        value={placeSelection}
+                      />
+                      {placeSelection?.latitude !== undefined &&
+                        placeSelection.longitude !== undefined && (
+                          <View style={styles.hostFlowPlaceMapPreview}>
+                            <View style={styles.hostFlowPlaceMapGrid} />
+                            <View style={styles.hostFlowPlaceMapPin}>
+                              <Text style={styles.hostFlowPlaceMapPinText}>
+                                ⌖
+                              </Text>
+                            </View>
+                            <View style={styles.hostFlowPlaceMapLabel}>
+                              <Text style={styles.hostFlowPlaceMapLabelText}>
+                                MAP READY ·{" "}
+                                {placeSelection.address ?? placeSelection.name}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                      {venueId && (
                         <Pressable
-                          key={venue.id}
+                          accessibilityLabel={`Reserve a court at ${venueName}`}
                           onPress={() => {
-                            setVenueId(venue.id);
-                            setVenueName(venue.name);
+                            if (!onReserveCourtVenue) return;
+                            close();
+                            onReserveCourtVenue({
+                              venueId,
+                              date: startsAt.slice(0, 10),
+                              durationMinutes,
+                            });
                           }}
-                          style={[
-                            styles.hostFlowVenueChip,
-                            venueId === venue.id &&
-                              styles.hostFlowVenueChipActive,
-                          ]}
+                          style={styles.hostFlowReserveVenue}
                         >
-                          <Text
-                            style={[
-                              styles.hostFlowVenueChipText,
-                              venueId === venue.id &&
-                                styles.hostFlowVenueChipTextActive,
-                            ]}
-                          >
-                            {venue.name}
+                          <View style={styles.flex}>
+                            <Text style={styles.hostFlowReserveVenueTitle}>
+                              Reserve a court at {venueName}
+                            </Text>
+                            <Text style={styles.hostFlowReserveVenueBody}>
+                              Duna venues use live availability, court
+                              selection, and secure payment before the match is
+                              published.
+                            </Text>
+                          </View>
+                          <Text style={styles.hostFlowReserveVenueArrow}>
+                            ›
                           </Text>
                         </Pressable>
-                      ))}
-                    </ScrollView>
+                      )}
+                    </>
                   )}
                   <Text style={styles.hostFlowLabel}>DAY</Text>
                   <ScrollView
@@ -12188,6 +12705,36 @@ function PickupModal({
                       </Pressable>
                     ))}
                   </View>
+                  {!linkedCourtLocked && !venueId && (
+                    <View style={styles.hostFlowDatePickerCard}>
+                      <Text style={styles.hostFlowDatePickerLabel}>
+                        ANY DATE + START TIME
+                      </Text>
+                      <Text style={styles.hostFlowDatePickerBody}>
+                        This is a non-Duna location, so you can choose any
+                        future date, time, and duration.
+                      </Text>
+                      <DateTimePicker
+                        accentColor={colors.aqua}
+                        display={Platform.OS === "ios" ? "inline" : "default"}
+                        minimumDate={new Date()}
+                        mode="date"
+                        onValueChange={(_event, date) => chooseDate(date)}
+                        presentation="inline"
+                        themeVariant="light"
+                        value={start}
+                      />
+                      <DateTimePicker
+                        accentColor={colors.aqua}
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        mode="time"
+                        onValueChange={(_event, date) => chooseStartTime(date)}
+                        presentation="inline"
+                        themeVariant="light"
+                        value={start}
+                      />
+                    </View>
+                  )}
                   <Text style={styles.hostFlowLabel}>DURATION</Text>
                   <View style={styles.hostFlowChipWrap}>
                     {[60, 90, 120].map((minutes) => (
@@ -12440,7 +12987,7 @@ function PickupModal({
                 <>
                   <Text style={styles.hostFlowTitle}>Access and details</Text>
                   <Text style={styles.hostFlowBody}>
-                    Set the level, price per place, and whether the match is
+                    Set the level, cost to join, and whether the match is
                     discoverable.
                   </Text>
                   <Text style={styles.hostFlowLabel}>VISIBILITY</Text>
@@ -12467,10 +13014,7 @@ function PickupModal({
                   </View>
                   {matchType === "competitive" && (
                     <>
-                      <Pressable
-                        onPress={() => setRatingEnabled((current) => !current)}
-                        style={styles.hostFlowToggle}
-                      >
+                      <View style={styles.hostFlowToggle}>
                         <View style={styles.flex}>
                           <Text style={styles.hostFlowToggleTitle}>
                             Sand Rating range
@@ -12479,10 +13023,17 @@ function PickupModal({
                             Keep the level clear for everyone.
                           </Text>
                         </View>
-                        <Pill tone={ratingEnabled ? "positive" : "neutral"}>
-                          {ratingEnabled ? "On" : "Open"}
-                        </Pill>
-                      </Pressable>
+                        <Switch
+                          accessibilityLabel="Toggle Sand Rating range"
+                          onValueChange={setRatingEnabled}
+                          thumbColor="#ffffff"
+                          trackColor={{
+                            false: rgba(colors.overlayRgb, 0.16),
+                            true: colors.aqua,
+                          }}
+                          value={ratingEnabled}
+                        />
+                      </View>
                       {ratingEnabled && (
                         <View style={styles.hostFlowInputRow}>
                           <TextInput
@@ -12505,18 +13056,67 @@ function PickupModal({
                       )}
                     </>
                   )}
-                  <Text style={styles.hostFlowLabel}>PRICE PER PLACE</Text>
-                  <View style={styles.hostFlowPriceInput}>
-                    <Text style={styles.hostFlowPricePrefix}>$</Text>
-                    <TextInput
-                      keyboardType="decimal-pad"
-                      onChangeText={setCost}
-                      placeholder="0"
-                      placeholderTextColor={colors.muted}
-                      style={styles.hostFlowPriceField}
-                      value={cost}
-                    />
+                  <Text style={styles.hostFlowLabel}>COST TO JOIN</Text>
+                  <View style={styles.hostFlowCostChoiceRow}>
+                    {(["free", "paid"] as const).map((option) => (
+                      <Pressable
+                        key={option}
+                        onPress={() => {
+                          setCostMode(option);
+                          setCost(
+                            option === "free"
+                              ? "0"
+                              : cost === "0"
+                                ? "10"
+                                : cost,
+                          );
+                        }}
+                        style={[
+                          styles.hostFlowCostChoice,
+                          costMode === option &&
+                            styles.hostFlowCostChoiceActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.hostFlowCostChoiceTitle,
+                            costMode === option &&
+                              styles.hostFlowCostChoiceTitleActive,
+                          ]}
+                        >
+                          {option === "free" ? "Free" : "Paid"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.hostFlowCostChoiceBody,
+                            costMode === option &&
+                              styles.hostFlowCostChoiceBodyActive,
+                          ]}
+                        >
+                          {option === "free"
+                            ? "No payment needed"
+                            : "Each player pays to join"}
+                        </Text>
+                      </Pressable>
+                    ))}
                   </View>
+                  {costMode === "paid" && (
+                    <View style={styles.hostFlowPriceInput}>
+                      <Text style={styles.hostFlowPricePrefix}>$</Text>
+                      <TextInput
+                        keyboardType="decimal-pad"
+                        onChangeText={(value) => {
+                          setCost(value);
+                          if (value !== "0") setCostMode("paid");
+                        }}
+                        placeholder="10.00"
+                        placeholderTextColor={colors.muted}
+                        style={styles.hostFlowPriceField}
+                        value={cost}
+                      />
+                      <Text style={styles.hostFlowPriceSuffix}>per player</Text>
+                    </View>
+                  )}
                   <Text style={styles.hostFlowLabel}>NOTE</Text>
                   <TextInput
                     multiline
@@ -12526,10 +13126,7 @@ function PickupModal({
                     style={[styles.hostFlowInput, styles.hostFlowTextarea]}
                     value={note}
                   />
-                  <Pressable
-                    onPress={() => setRecordMatches((current) => !current)}
-                    style={styles.hostFlowToggle}
-                  >
+                  <View style={styles.hostFlowToggle}>
                     <View style={styles.flex}>
                       <Text style={styles.hostFlowToggleTitle}>
                         Record results
@@ -12538,16 +13135,23 @@ function PickupModal({
                         Let confirmed players submit the final score.
                       </Text>
                     </View>
-                    <Pill tone={recordMatches ? "positive" : "neutral"}>
-                      {recordMatches ? "On" : "Off"}
-                    </Pill>
-                  </Pressable>
+                    <Switch
+                      accessibilityLabel="Toggle Record results"
+                      onValueChange={setRecordMatches}
+                      thumbColor="#ffffff"
+                      trackColor={{
+                        false: rgba(colors.overlayRgb, 0.16),
+                        true: colors.aqua,
+                      }}
+                      value={recordMatches}
+                    />
+                  </View>
                 </>
               )}
 
               {step === 4 && (
                 <>
-                  <Text style={styles.hostFlowTitle}>Ready to host?</Text>
+                  <Text style={styles.hostFlowTitle}>Ready to create?</Text>
                   <Text style={styles.hostFlowBody}>
                     Review the match exactly as players will see it.
                   </Text>
@@ -12594,7 +13198,7 @@ function PickupModal({
                       <View>
                         <Text style={styles.hostFlowReviewLabel}>PRICE</Text>
                         <Text style={styles.hostFlowReviewValue}>
-                          {Number(cost) > 0
+                          {costMode === "paid" && Number(cost) > 0
                             ? `$${Number(cost).toFixed(2)} / place`
                             : "Free"}
                         </Text>
@@ -12642,7 +13246,7 @@ function PickupModal({
                       ? "Sign in to publish"
                       : busy
                         ? "Publishing…"
-                        : "Publish hosted match"}
+                        : "Create match"}
                 </Text>
               </Pressable>
             </View>
@@ -12805,10 +13409,14 @@ function DunaApp() {
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string>();
+  const [courtFinderOpen, setCourtFinderOpen] = useState(false);
+  const [courtBookingRequest, setCourtBookingRequest] =
+    useState<CourtBookingRequest>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
   const [organizationVenueId, setOrganizationVenueId] = useState<string>();
   const [organizationHostSeed, setOrganizationHostSeed] =
     useState<HostedMatchSeed>();
+  const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
@@ -12925,6 +13533,10 @@ function DunaApp() {
       setTab("video");
       return;
     }
+    if (action === "book-court") {
+      setCourtFinderOpen(true);
+      return;
+    }
     setDiscoverIntent({ key: Date.now(), kind: action });
     setTab("discover");
   };
@@ -13016,9 +13628,14 @@ function DunaApp() {
                   <PlansScreen
                     onBook={setEventIndex}
                     onOpenBooking={setBookingId}
+                    onReserveCourtVenue={setCourtBookingRequest}
                   />
                 )}
-                {tab === "video" && <VideoStudioScreen runtime={runtime} />}
+                <VideoStudioScreen
+                  active={tab === "video"}
+                  onCreateMatch={() => setCreateMatchOpen(true)}
+                  runtime={runtime}
+                />
                 {tab === "wallet" && (
                   <WalletScreen onClose={() => setTab("you")} />
                 )}
@@ -13092,6 +13709,40 @@ function DunaApp() {
                 onUpdated={runtime.refresh}
                 visible={Boolean(selectedBooking)}
               />
+              <VenueFinderModal
+                onClose={() => setCourtFinderOpen(false)}
+                onSelect={(request) => {
+                  setCourtFinderOpen(false);
+                  setCourtBookingRequest(request);
+                }}
+                visible={courtFinderOpen}
+              />
+              <VenueBookingModal
+                initialDate={courtBookingRequest?.date}
+                initialDurationMinutes={courtBookingRequest?.durationMinutes}
+                onClose={() => setCourtBookingRequest(undefined)}
+                onHostReady={(seed) => {
+                  setCourtBookingRequest(undefined);
+                  setTimeout(() => setOrganizationHostSeed(seed), 280);
+                }}
+                onOpenMatch={(matchId, matchSlug) => {
+                  const index = (runtime.dashboard?.events ?? []).findIndex(
+                    (event) => event.id === matchId,
+                  );
+                  setCourtBookingRequest(undefined);
+                  setTimeout(() => {
+                    if (index >= 0) {
+                      setEventIndex(index);
+                      return;
+                    }
+                    void WebBrowser.openBrowserAsync(
+                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                    );
+                  }, 280);
+                }}
+                venueId={courtBookingRequest?.venueId}
+                visible={Boolean(courtBookingRequest)}
+              />
               <OrganizationExperienceModal
                 onClose={() => setOrganizationSlug(undefined)}
                 onOpenCoach={(coach) => {
@@ -13138,9 +13789,15 @@ function DunaApp() {
               />
               <PickupModal
                 initialCourtBooking={organizationHostSeed}
-                onClose={() => setOrganizationHostSeed(undefined)}
-                onCreated={() => setOrganizationHostSeed(undefined)}
-                visible={Boolean(organizationHostSeed)}
+                onClose={() => {
+                  setCreateMatchOpen(false);
+                  setOrganizationHostSeed(undefined);
+                }}
+                onCreated={() => {
+                  setCreateMatchOpen(false);
+                  setOrganizationHostSeed(undefined);
+                }}
+                visible={Boolean(organizationHostSeed) || createMatchOpen}
               />
               <CoachProfileModal
                 coach={organizationCoach}
@@ -13218,6 +13875,183 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
     },
     linkText: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
+    venueFinderSafe: { backgroundColor: colors.canvas, flex: 1 },
+    venueFinderHeader: {
+      alignItems: "flex-start",
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 14,
+      padding: 20,
+      paddingTop: 12,
+    },
+    venueFinderTitle: {
+      color: colors.bone,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1.1,
+      marginTop: 5,
+    },
+    venueFinderBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 6,
+      maxWidth: 300,
+    },
+    venueFinderClose: {
+      alignItems: "center",
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 22,
+      borderWidth: 1,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    venueFinderCloseText: { color: colors.bone, fontSize: 29, lineHeight: 32 },
+    venueFinderContent: { gap: 13, padding: 20, paddingBottom: 46 },
+    venueFinderLocationRow: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      padding: 13,
+    },
+    venueFinderLocationIcon: {
+      color: colors.aqua,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    venueFinderLocationTitle: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    venueFinderLocationBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    venueFinderSearch: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderWidth: 1,
+      color: colors.bone,
+      fontSize: 15,
+      minHeight: 54,
+      paddingHorizontal: 15,
+    },
+    venueFinderLabel: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.15,
+      marginTop: 6,
+    },
+    venueFinderDayRow: { flexDirection: "row", gap: 8, paddingRight: 20 },
+    venueFinderDay: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderWidth: 1,
+      height: 66,
+      justifyContent: "center",
+      width: 56,
+    },
+    venueFinderDayActive: {
+      backgroundColor: colors.aquaDeep,
+      borderColor: colors.aqua,
+    },
+    venueFinderDayName: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    venueFinderDayNumber: {
+      color: colors.bone,
+      fontFamily: "Archivo-Block",
+      fontSize: 20,
+      marginTop: 2,
+    },
+    venueFinderDayTextActive: { color: "#ffffff" },
+    venueFinderDurationRow: { flexDirection: "row", gap: 8 },
+    venueFinderDuration: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    venueFinderDurationActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    venueFinderDurationText: {
+      color: colors.bone,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    venueFinderDurationTextActive: { color: colors.onAccent },
+    venueFinderResults: { gap: 9 },
+    venueFinderResult: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 78,
+      padding: 13,
+    },
+    venueFinderResultMark: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 14,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    venueFinderResultMarkText: { color: colors.aqua, fontSize: 20 },
+    venueFinderResultTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    venueFinderResultMeta: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 4,
+    },
+    venueFinderResultArrow: { color: colors.aqua, fontSize: 25, marginLeft: 6 },
+    venueFinderEmpty: {
+      backgroundColor: rgba(colors.warningRgb, 0.07),
+      borderColor: rgba(colors.warningRgb, 0.2),
+      borderRadius: 17,
+      borderWidth: 1,
+      padding: 16,
+    },
+    venueFinderEmptyTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    venueFinderEmptyBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
+    },
     bookingVenueRow: {
       flexDirection: "row",
       gap: 10,
@@ -13999,6 +14833,11 @@ function createStyles(palette: Palette) {
       paddingRight: 26,
     },
     bookingPartner: { alignItems: "center", gap: 5, width: 60 },
+    bookingPartnerImage: {
+      borderRadius: 22,
+      height: 44,
+      width: 44,
+    },
     bookingPartnerAvatar: {
       backgroundColor: colors.navyLift,
       borderRadius: 22,
@@ -14016,6 +14855,77 @@ function createStyles(palette: Palette) {
       fontSize: 10,
       textAlign: "center",
       width: 58,
+    },
+    bookingSelectedTime: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderColor: rgba(colors.accentRgb, 0.28),
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 4,
+      padding: 14,
+    },
+    bookingSelectedTimeLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    bookingSelectedTimeValue: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    bookingSelectedTimeAction: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    bookingPlayerPickerLaunch: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderColor: rgba(colors.accentRgb, 0.25),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 14,
+      minHeight: 76,
+      padding: 13,
+    },
+    bookingPlayerPickerPlus: {
+      alignItems: "center",
+      borderColor: colors.aqua,
+      borderRadius: 23,
+      borderWidth: 1.5,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    bookingPlayerPickerPlusText: {
+      color: colors.aqua,
+      fontSize: 26,
+      lineHeight: 30,
+    },
+    bookingPlayerPickerTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    bookingPlayerPickerBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    bookingImportContact: {
+      alignSelf: "flex-start",
+      marginTop: 12,
+      minHeight: 34,
+      justifyContent: "center",
     },
     bookingManualInvite: {
       alignItems: "center",
@@ -14252,6 +15162,132 @@ function createStyles(palette: Palette) {
       color: colors.aqua,
       fontSize: 19,
       fontWeight: "900",
+    },
+    hostFlowLockedPlace: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.25),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 76,
+      padding: 14,
+    },
+    hostFlowLockedPlaceMark: {
+      color: colors.positive,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    hostFlowLockedPlaceTitle: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    hostFlowLockedPlaceBody: {
+      color: colors.muted,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    hostFlowPlaceMapPreview: {
+      backgroundColor: colors.navyLift,
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderRadius: 17,
+      borderWidth: 1,
+      height: 120,
+      marginTop: 10,
+      overflow: "hidden",
+      position: "relative",
+    },
+    hostFlowPlaceMapGrid: {
+      backgroundColor: rgba(colors.accentRgb, 0.06),
+      borderColor: rgba(colors.accentRgb, 0.16),
+      borderWidth: 1,
+      height: 188,
+      left: -28,
+      position: "absolute",
+      top: -35,
+      transform: [{ rotate: "-21deg" }],
+      width: 260,
+    },
+    hostFlowPlaceMapPin: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderColor: "#ffffff",
+      borderRadius: 22,
+      borderWidth: 3,
+      height: 44,
+      justifyContent: "center",
+      left: "47%",
+      position: "absolute",
+      top: 27,
+      width: 44,
+    },
+    hostFlowPlaceMapPinText: {
+      color: colors.onAccent,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    hostFlowPlaceMapLabel: {
+      backgroundColor: rgba(colors.inkRgb, 0.8),
+      bottom: 10,
+      left: 10,
+      maxWidth: "90%",
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      position: "absolute",
+    },
+    hostFlowPlaceMapLabelText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.55,
+    },
+    hostFlowReserveVenue: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.09),
+      borderColor: colors.aqua,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      marginTop: 10,
+      minHeight: 80,
+      padding: 14,
+    },
+    hostFlowReserveVenueTitle: {
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    hostFlowReserveVenueBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+    hostFlowReserveVenueArrow: { color: colors.aqua, fontSize: 25 },
+    hostFlowDatePickerCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 17,
+      overflow: "hidden",
+      paddingHorizontal: 12,
+      paddingTop: 14,
+    },
+    hostFlowDatePickerLabel: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    hostFlowDatePickerBody: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 5,
     },
     hostFlowCourtTitle: {
       color: colors.bone,
@@ -14536,6 +15572,39 @@ function createStyles(palette: Palette) {
       minHeight: 56,
       paddingHorizontal: 10,
     },
+    hostFlowPriceSuffix: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    hostFlowCostChoiceRow: { flexDirection: "row", gap: 10 },
+    hostFlowCostChoice: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 17,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 84,
+      padding: 13,
+    },
+    hostFlowCostChoiceActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: colors.aqua,
+      borderWidth: 2,
+    },
+    hostFlowCostChoiceTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    hostFlowCostChoiceTitleActive: { color: colors.aqua },
+    hostFlowCostChoiceBody: {
+      color: colors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 5,
+    },
+    hostFlowCostChoiceBodyActive: { color: colors.bone },
     hostFlowTextarea: {
       minHeight: 112,
       paddingTop: 15,
@@ -14661,6 +15730,27 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
+    },
+    offlineModeBanner: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderBottomColor: rgba(colors.accentRgb, 0.22),
+      borderBottomWidth: 1,
+      gap: 2,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+    },
+    offlineModeBannerText: {
+      color: colors.aqua,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.55,
+      textAlign: "center",
+    },
+    offlineModeBannerMeta: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700",
     },
     screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
     toggleRow: {

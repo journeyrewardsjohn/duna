@@ -2893,7 +2893,7 @@ const playerRouter = router({
         liveVisibility: z.enum(["public", "link-only"]),
         recordingVisibility: z.enum(["public", "private"]),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(false),
+        visionLearningConsent: z.boolean().default(true),
         courtCalibration: courtCalibrationSchema.optional(),
         idempotencyKey: z.string().uuid(),
       }),
@@ -3066,7 +3066,7 @@ const playerRouter = router({
         recordingVisibility: z.enum(["public", "private"]),
         publishedToProfile: z.boolean(),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(false),
+        visionLearningConsent: z.boolean().default(true),
         originalFileName: z.string().trim().min(1).max(255),
         mimeType: z.enum(["video/mp4", "video/quicktime"]),
         bytes: z

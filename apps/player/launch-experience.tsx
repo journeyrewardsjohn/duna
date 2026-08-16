@@ -38,7 +38,11 @@ function PlayerLaunchPlayback({
   const firedBeats = useRef(new Set<number>());
   const opacity = useRef(new Animated.Value(1)).current;
   const player = useVideoPlayer(playerLaunchVideo, (nextPlayer) => {
-    nextPlayer.loop = false;
+    // The launch film is deliberately allowed to loop while account data is
+    // resolving. A short playback is much less jarring than dropping back to a
+    // static, differently coloured native loading screen.
+    nextPlayer.loop = true;
+    nextPlayer.audioMixingMode = "doNotMix";
     nextPlayer.muted = !firstLaunch || Platform.OS === "web";
     nextPlayer.timeUpdateEventInterval = 0.05;
     nextPlayer.play();
@@ -83,9 +87,7 @@ function PlayerLaunchPlayback({
   }, [finish, firstLaunch, reduceMotion]);
 
   useEffect(() => {
-    const endSubscription = player.addListener("playToEnd", () => {
-      if (firstLaunch) finish();
-    });
+    const endSubscription = player.addListener("playToEnd", () => undefined);
     const timeSubscription = player.addListener(
       "timeUpdate",
       ({ currentTime }) => {
@@ -117,17 +119,14 @@ function PlayerLaunchPlayback({
     >
       {!reduceMotion && (
         <VideoView
-          contentFit="contain"
+          contentFit="cover"
           nativeControls={false}
           player={player}
           style={styles.video}
         />
       )}
       <View pointerEvents="none" style={styles.status}>
-        {firstLaunch && Platform.OS !== "web" && (
-          <Text style={styles.audio}>AUDIO + HAPTICS</Text>
-        )}
-        <Text style={styles.label}>WHAT’S HAPPENING</Text>
+        <Text style={styles.loadingTitle}>Loading Your World</Text>
         <Text style={styles.detail}>{loadingSteps[step]}</Text>
       </View>
     </Animated.View>
@@ -166,13 +165,6 @@ export function PlayerLaunchExperience({
 }
 
 const styles = StyleSheet.create({
-  audio: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
   detail: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 14,
@@ -180,16 +172,16 @@ const styles = StyleSheet.create({
     maxWidth: 310,
     textAlign: "center",
   },
-  label: {
-    color: "rgba(255,255,255,0.56)",
-    fontSize: 10,
+  loadingTitle: {
+    color: "#ffffff",
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 1.5,
+    letterSpacing: -0.45,
     marginBottom: 7,
   },
   screen: {
     alignItems: "center",
-    backgroundColor: "#FBCABB",
+    backgroundColor: "#06233D",
     bottom: 0,
     justifyContent: "center",
     left: 0,
@@ -205,5 +197,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 24,
   },
-  video: { aspectRatio: 960 / 852, maxHeight: "71%", width: "100%" },
+  video: { bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
 });

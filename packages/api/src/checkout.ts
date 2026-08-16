@@ -5,6 +5,7 @@ import {
   eventBlueprints,
   eventPolicyAcceptances,
   eventTypes,
+  follows,
   getDatabase,
   messages,
   orderItems,
@@ -40,6 +41,7 @@ import {
 } from "./commerce";
 import type { ApiActor } from "./context";
 import { evaluateDivisionCriteria } from "./division-eligibility";
+import { loadAttendanceReliability } from "./attendance-service";
 import { reconcileDivisionSelection } from "./event-operations-service";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
@@ -185,6 +187,17 @@ export interface TeammateSearchResult {
   readonly person: PersonSummary;
   readonly relationship: "recent-partner" | "connection" | "nearby" | "search";
   readonly sharedTeams: number;
+  readonly following: boolean;
+  readonly followsYou: boolean;
+  readonly lastActivityAt?: string;
+  readonly reliability: {
+    readonly score?: number;
+    readonly label:
+      "new" | "building" | "needs-context" | "reliable" | "highly-reliable";
+    readonly tracked: number;
+    readonly attended: number;
+    readonly noShows: number;
+  };
   readonly gender: string;
   readonly eligible: boolean;
   readonly eligibilityReasons: readonly string[];
@@ -265,12 +278,25 @@ export async function searchEventTeammates(input: {
       rating.confidence,
       rating.discipline,
       coalesce(partner.shared_teams, 0)::integer AS shared_teams,
-      partner.last_partnered_at
+      partner.last_partnered_at,
+      activity.last_activity_at
     FROM people candidate
     LEFT JOIN ratings rating
       ON rating.person_id = candidate.id
       AND rating.discipline = ${discipline}
     LEFT JOIN partner_stats partner ON partner.person_id = candidate.id
+    LEFT JOIN LATERAL (
+      SELECT max(last_activity_at) AS last_activity_at
+      FROM (
+        SELECT max(coalesce(recorded_at, updated_at, created_at)) AS last_activity_at
+        FROM activity_attendance
+        WHERE person_id = candidate.id
+        UNION ALL
+        SELECT max(coalesce(recorded_at, updated_at, created_at)) AS last_activity_at
+        FROM session_attendance
+        WHERE person_id = candidate.id
+      ) activity_times
+    ) activity ON true
     WHERE candidate.id <> ${input.actor.personId}::uuid
       AND candidate.status = 'active'
       AND candidate.profile_visibility = 'public'
@@ -311,7 +337,40 @@ export async function searchEventTeammates(input: {
     confidence: PersonSummary["rating"]["confidence"] | null;
     discipline: PersonSummary["rating"]["discipline"] | null;
     shared_teams: number;
+    last_activity_at: Date | string | null;
   };
+  const candidateIds = (rows.rows as unknown as SearchRow[]).map(
+    (row) => row.id,
+  );
+  const [reliability, followingRows, followerRows] = await Promise.all([
+    loadAttendanceReliability({ personIds: candidateIds }),
+    candidateIds.length
+      ? database
+          .select({ personId: follows.entityId })
+          .from(follows)
+          .where(
+            and(
+              eq(follows.followerPersonId, input.actor.personId),
+              eq(follows.entityType, "person"),
+              inArray(follows.entityId, candidateIds),
+            ),
+          )
+      : Promise.resolve([]),
+    candidateIds.length
+      ? database
+          .select({ personId: follows.followerPersonId })
+          .from(follows)
+          .where(
+            and(
+              eq(follows.entityType, "person"),
+              eq(follows.entityId, input.actor.personId),
+              inArray(follows.followerPersonId, candidateIds),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
+  const following = new Set(followingRows.map((row) => row.personId));
+  const followers = new Set(followerRows.map((row) => row.personId));
   return (rows.rows as unknown as SearchRow[]).map((row) => {
     const ratingDisplay = row.display ?? 1;
     const criteria = evaluateDivisionCriteria({
@@ -323,6 +382,11 @@ export async function searchEventTeammates(input: {
         rating: ratingDisplay,
       },
     });
+    const isFollowing = following.has(row.id);
+    const followsYou = followers.has(row.id);
+    const lastActivity = row.last_activity_at
+      ? new Date(row.last_activity_at)
+      : undefined;
     return {
       person: {
         id: row.id,
@@ -348,10 +412,24 @@ export async function searchEventTeammates(input: {
       relationship:
         row.shared_teams > 0
           ? "recent-partner"
-          : row.home_market && row.home_market === actor?.homeMarket
-            ? "nearby"
-            : "search",
+          : isFollowing || followsYou
+            ? "connection"
+            : row.home_market && row.home_market === actor?.homeMarket
+              ? "nearby"
+              : "search",
       sharedTeams: row.shared_teams,
+      following: isFollowing,
+      followsYou,
+      lastActivityAt:
+        lastActivity && Number.isFinite(lastActivity.getTime())
+          ? lastActivity.toISOString()
+          : undefined,
+      reliability: reliability.get(row.id) ?? {
+        label: "new",
+        tracked: 0,
+        attended: 0,
+        noShows: 0,
+      },
       gender: row.gender_category ?? "Not listed",
       eligible: criteria.eligible,
       eligibilityReasons: criteria.reasons,

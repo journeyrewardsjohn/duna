@@ -81,6 +81,32 @@ function firstName(name: string) {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
+function pickerRelationshipLabel(result: TeammateSearchResult) {
+  if (result.relationship === "recent-partner") return "Recent partner";
+  if (result.following && result.followsYou) return "Mutual follow";
+  if (result.following) return "You follow";
+  if (result.followsYou) return "Follows you";
+  if (result.relationship === "nearby") return "Nearby";
+  return "On Duna";
+}
+
+function pickerActivityLabel(lastActivityAt: string | undefined) {
+  if (!lastActivityAt) return "New to your circle";
+  const activity = new Date(lastActivityAt);
+  if (!Number.isFinite(activity.getTime())) return "Activity unavailable";
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - activity.getTime()) / 86_400_000),
+  );
+  if (days === 0) return "Active today";
+  if (days === 1) return "Active yesterday";
+  if (days < 7) return `Active ${days}d ago`;
+  return `Active ${activity.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
 function Avatar({
   person,
   palette,
@@ -822,10 +848,50 @@ export function PlayerPickerModal({
           person,
           relationship: "search" as const,
           sharedTeams: 0,
+          following: false,
+          followsYou: false,
+          reliability: {
+            label: "new" as const,
+            tracked: 0,
+            attended: 0,
+            noShows: 0,
+          },
           gender: "Not listed",
           eligible: true,
           eligibilityReasons: [],
         }));
+  const availableCandidates = candidates.filter(
+    (result) => !excluded.has(result.person.id),
+  );
+  const frequentCandidates = query.trim()
+    ? []
+    : availableCandidates
+        .filter(
+          (result) =>
+            result.relationship === "recent-partner" ||
+            result.relationship === "connection" ||
+            result.following ||
+            result.followsYou,
+        )
+        .slice(0, 8);
+  const frequentIds = new Set(
+    frequentCandidates.map((result) => result.person.id),
+  );
+  const visibleCandidates = query.trim()
+    ? availableCandidates
+    : availableCandidates.filter(
+        (result) => !frequentIds.has(result.person.id),
+      );
+
+  function toggleCandidate(result: TeammateSearchResult) {
+    const isSelected = selectedIds.has(result.person.id);
+    if (isSelected) {
+      onChange(selected.filter((person) => person.id !== result.person.id));
+      return;
+    }
+    if (!result.eligible || selected.length >= maxSelected) return;
+    onChange([...selected, result.person]);
+  }
 
   if (!visible) return null;
   if (profilePerson) {
@@ -902,117 +968,212 @@ export function PlayerPickerModal({
         contentContainerStyle={socialStyles.pickerContent}
         showsVerticalScrollIndicator={false}
       >
+        {frequentCandidates.length > 0 && (
+          <>
+            <View style={socialStyles.pickerSectionHeader}>
+              <Text
+                style={[
+                  socialStyles.pickerSectionLabel,
+                  { color: palette.muted },
+                ]}
+              >
+                YOUR PEOPLE
+              </Text>
+              <Text
+                style={[
+                  socialStyles.pickerSectionHint,
+                  { color: palette.muted },
+                ]}
+              >
+                Recent partners + follows
+              </Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={socialStyles.pickerPeopleRail}
+            >
+              <View style={socialStyles.pickerPeopleRow}>
+                {frequentCandidates.map((result) => {
+                  const isSelected = selectedIds.has(result.person.id);
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${isSelected ? "Remove" : "Add"} ${result.person.displayName}`}
+                      key={result.person.id}
+                      onPress={() => toggleCandidate(result)}
+                      style={socialStyles.pickerPerson}
+                    >
+                      <View
+                        style={[
+                          socialStyles.pickerPersonAvatar,
+                          isSelected && {
+                            borderColor: palette.aqua,
+                            borderWidth: 3,
+                          },
+                        ]}
+                      >
+                        <Avatar
+                          palette={palette}
+                          person={result.person}
+                          size={58}
+                        />
+                        <View
+                          style={[
+                            socialStyles.pickerPersonAddMark,
+                            {
+                              backgroundColor: isSelected
+                                ? palette.positive
+                                : palette.aqua,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              socialStyles.pickerPersonAddMarkText,
+                              { color: palette.onAccent },
+                            ]}
+                          >
+                            {isSelected ? "✓" : "+"}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          socialStyles.pickerPersonName,
+                          { color: palette.bone },
+                        ]}
+                      >
+                        {firstName(result.person.displayName)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </>
+        )}
         <Text
           style={[socialStyles.pickerSectionLabel, { color: palette.muted }]}
         >
-          {query.trim() ? "SEARCH RESULTS" : "RECOMMENDED FOR YOU"}
+          {query.trim() ? "SEARCH RESULTS" : "EVERYONE ON DUNA"}
         </Text>
-        {candidates
-          .filter((result) => !excluded.has(result.person.id))
-          .map((result) => {
-            const isSelected = selectedIds.has(result.person.id);
-            const disabled =
-              !result.eligible ||
-              (!isSelected && selected.length >= maxSelected);
-            return (
-              <View
-                key={result.person.id}
+        {visibleCandidates.map((result) => {
+          const isSelected = selectedIds.has(result.person.id);
+          const disabled =
+            !result.eligible || (!isSelected && selected.length >= maxSelected);
+          return (
+            <View
+              key={result.person.id}
+              style={[
+                socialStyles.playerRow,
+                {
+                  backgroundColor: palette.depth,
+                  borderColor: rgba(palette.overlayRgb, 0.08),
+                },
+              ]}
+            >
+              <Pressable
+                accessibilityLabel={`View ${result.person.displayName}'s profile`}
+                accessibilityRole="button"
+                onPress={() => setProfilePerson(result.person)}
+              >
+                <Avatar palette={palette} person={result.person} size={54} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel={`View ${result.person.displayName}'s profile`}
+                accessibilityRole="button"
+                onPress={() => setProfilePerson(result.person)}
+                style={socialStyles.flex}
+              >
+                <View style={socialStyles.playerNameLine}>
+                  <Text
+                    numberOfLines={1}
+                    style={[socialStyles.playerName, { color: palette.bone }]}
+                  >
+                    {result.person.displayName}
+                  </Text>
+                  {result.person.isProfessional && (
+                    <Text
+                      style={[socialStyles.rowPro, { color: palette.warning }]}
+                    >
+                      PRO
+                    </Text>
+                  )}
+                </View>
+                <Text
+                  numberOfLines={1}
+                  style={[socialStyles.playerMeta, { color: palette.muted }]}
+                >
+                  {result.person.homeMarket} ·{" "}
+                  {result.person.rating.display.toFixed(2)} Sand
+                </Text>
+                <View style={socialStyles.playerSignals}>
+                  <Text
+                    numberOfLines={1}
+                    style={[socialStyles.playerSignal, { color: palette.aqua }]}
+                  >
+                    {pickerRelationshipLabel(result)}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      socialStyles.playerSignal,
+                      { color: palette.muted },
+                    ]}
+                  >
+                    {result.reliability.score !== undefined
+                      ? `${result.reliability.score}% reliable`
+                      : result.reliability.label.replaceAll("-", " ")}
+                  </Text>
+                </View>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    socialStyles.playerActivity,
+                    { color: palette.muted },
+                  ]}
+                >
+                  {pickerActivityLabel(result.lastActivityAt)}
+                  {result.reliability.noShows > 0
+                    ? ` · ${result.reliability.noShows} no-show${result.reliability.noShows === 1 ? "" : "s"}`
+                    : ""}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel={`${isSelected ? "Remove" : "Add"} ${result.person.displayName}`}
+                accessibilityRole="button"
+                disabled={disabled}
+                onPress={() => toggleCandidate(result)}
                 style={[
-                  socialStyles.playerRow,
+                  socialStyles.addButton,
                   {
-                    backgroundColor: palette.depth,
-                    borderColor: rgba(palette.overlayRgb, 0.08),
+                    backgroundColor: isSelected ? palette.depth : palette.aqua,
+                    borderColor: palette.aqua,
+                    opacity: disabled ? 0.42 : 1,
                   },
                 ]}
               >
-                <Pressable
-                  accessibilityLabel={`View ${result.person.displayName}'s profile`}
-                  accessibilityRole="button"
-                  onPress={() => setProfilePerson(result.person)}
-                >
-                  <Avatar palette={palette} person={result.person} size={54} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel={`View ${result.person.displayName}'s profile`}
-                  accessibilityRole="button"
-                  onPress={() => setProfilePerson(result.person)}
-                  style={socialStyles.flex}
-                >
-                  <View style={socialStyles.playerNameLine}>
-                    <Text
-                      numberOfLines={1}
-                      style={[socialStyles.playerName, { color: palette.bone }]}
-                    >
-                      {result.person.displayName}
-                    </Text>
-                    {result.person.isProfessional && (
-                      <Text
-                        style={[
-                          socialStyles.rowPro,
-                          { color: palette.warning },
-                        ]}
-                      >
-                        PRO
-                      </Text>
-                    )}
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    style={[socialStyles.playerMeta, { color: palette.muted }]}
-                  >
-                    {result.person.homeMarket} ·{" "}
-                    {result.person.rating.display.toFixed(2)} Sand
-                  </Text>
-                  <Text
-                    style={[socialStyles.viewProfile, { color: palette.aqua }]}
-                  >
-                    View profile
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel={`${isSelected ? "Remove" : "Add"} ${result.person.displayName}`}
-                  accessibilityRole="button"
-                  disabled={disabled}
-                  onPress={() => {
-                    if (isSelected)
-                      onChange(
-                        selected.filter(
-                          (person) => person.id !== result.person.id,
-                        ),
-                      );
-                    else onChange([...selected, result.person]);
-                  }}
+                <Text
                   style={[
-                    socialStyles.addButton,
-                    {
-                      backgroundColor: isSelected
-                        ? palette.depth
-                        : palette.aqua,
-                      borderColor: palette.aqua,
-                      opacity: disabled ? 0.42 : 1,
-                    },
+                    socialStyles.addButtonText,
+                    { color: isSelected ? palette.aqua : palette.onAccent },
                   ]}
                 >
-                  <Text
-                    style={[
-                      socialStyles.addButtonText,
-                      { color: isSelected ? palette.aqua : palette.onAccent },
-                    ]}
-                  >
-                    {isSelected ? "Added" : "Add"}
-                  </Text>
-                </Pressable>
-                {!result.eligible && (
-                  <Text
-                    style={[socialStyles.ineligible, { color: palette.danger }]}
-                  >
-                    {result.eligibilityReasons[0] ?? "Not eligible"}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        {!busy && candidates.length === 0 && (
+                  {isSelected ? "Added" : "Add"}
+                </Text>
+              </Pressable>
+              {!result.eligible && (
+                <Text
+                  style={[socialStyles.ineligible, { color: palette.danger }]}
+                >
+                  {result.eligibilityReasons[0] ?? "Not eligible"}
+                </Text>
+              )}
+            </View>
+          );
+        })}
+        {!busy && visibleCandidates.length === 0 && (
           <Text style={[socialStyles.emptyText, { color: palette.muted }]}>
             No matching players found.
           </Text>
@@ -1360,6 +1521,31 @@ const socialStyles = StyleSheet.create({
     marginBottom: 2,
     marginTop: 4,
   },
+  pickerSectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  pickerSectionHint: { fontSize: 10, fontWeight: "700" },
+  pickerPeopleRail: { marginHorizontal: -2 },
+  pickerPeopleRow: { flexDirection: "row", gap: 12, paddingRight: 8 },
+  pickerPerson: { alignItems: "center", width: 64 },
+  pickerPersonAvatar: { position: "relative" },
+  pickerPersonAddMark: {
+    alignItems: "center",
+    borderColor: "#ffffff",
+    borderRadius: 11,
+    borderWidth: 2,
+    bottom: -1,
+    height: 22,
+    justifyContent: "center",
+    position: "absolute",
+    right: -3,
+    width: 22,
+  },
+  pickerPersonAddMarkText: { fontSize: 15, fontWeight: "900", lineHeight: 17 },
+  pickerPersonName: { fontSize: 10, fontWeight: "800", marginTop: 7 },
   pickerTitle: { fontSize: 25, fontWeight: "800", marginTop: 3 },
   playMark: {
     alignItems: "center",
@@ -1369,7 +1555,16 @@ const socialStyles = StyleSheet.create({
     width: 48,
   },
   playMarkText: { fontSize: 17, marginLeft: 3 },
+  playerActivity: { fontSize: 10, marginTop: 3 },
   playerMeta: { fontSize: 13, marginTop: 3 },
+  playerSignal: { fontSize: 10, fontWeight: "800" },
+  playerSignals: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 5,
+  },
   playerName: { flexShrink: 1, fontSize: 16, fontWeight: "800" },
   playerNameLine: { alignItems: "center", flexDirection: "row", gap: 7 },
   playerRow: {
@@ -1378,7 +1573,7 @@ const socialStyles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
-    minHeight: 88,
+    minHeight: 108,
     padding: 12,
     position: "relative",
   },
