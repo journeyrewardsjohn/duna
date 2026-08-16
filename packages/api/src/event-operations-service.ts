@@ -15,6 +15,7 @@ import {
   programs,
   ratings,
   ratingEvents,
+  rallyEvents,
   refundRecords,
   registrations,
   sessionOperations,
@@ -29,7 +30,10 @@ import {
   generatePoolPlay,
   generateRoundRobin,
   generateSingleElimination,
+  foldScore,
+  standardBeachFormat,
   type Bracket,
+  type ScoreEvent,
   type SeededTeam,
 } from "@duna/league-engine";
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
@@ -1090,6 +1094,7 @@ interface DivisionOperationsDetail {
     readonly id: string;
     readonly title: string;
     readonly kind: string;
+    readonly status: string;
     readonly startsAt: string;
     readonly timezone: string;
     readonly venueId?: string;
@@ -1101,6 +1106,7 @@ interface DivisionOperationsDetail {
     readonly teamSize: number;
     readonly capacity: number;
     readonly maximumTeams?: number;
+    readonly entryFeeMinor: number;
     readonly seeding: string;
     readonly tournamentFormat: string;
     readonly poolPlay?: DivisionSettings["poolPlay"];
@@ -1112,6 +1118,7 @@ interface DivisionOperationsDetail {
     readonly version: number;
     readonly format: string;
     readonly structure: Record<string, unknown>;
+    readonly liveAt?: string;
     readonly createdAt: string;
   };
   readonly matches: readonly {
@@ -1189,6 +1196,7 @@ export async function loadOperatorDivisionDetail(input: {
       id: record.session.id,
       title: record.session.title,
       kind: record.kind,
+      status: record.session.status,
       startsAt: record.session.startsAt.toISOString(),
       timezone: record.session.timezone,
       venueId: record.session.venueId ?? undefined,
@@ -1200,6 +1208,7 @@ export async function loadOperatorDivisionDetail(input: {
       teamSize: record.division.teamSize,
       capacity: record.division.capacity,
       maximumTeams: record.division.maximumTeams ?? undefined,
+      entryFeeMinor: record.division.entryFeeMinor,
       seeding: settings.seeding ?? "first-come",
       tournamentFormat: settings.tournamentFormat ?? "single-elimination",
       poolPlay: settings.poolPlay,
@@ -1212,6 +1221,7 @@ export async function loadOperatorDivisionDetail(input: {
           version: latestBracket.version,
           format: latestBracket.format,
           structure: latestBracket.structure,
+          liveAt: latestBracket.liveAt?.toISOString(),
           createdAt: latestBracket.createdAt.toISOString(),
         }
       : undefined,
@@ -1236,6 +1246,438 @@ export async function loadOperatorDivisionDetail(input: {
       };
     }),
     courts: courtRows,
+  };
+}
+
+type CompetitionBracketKind =
+  "winners" | "losers" | "final" | "pool" | "consolation";
+
+interface CompetitionStructureTeam {
+  readonly id: string;
+  readonly seed: number;
+  readonly name: string;
+}
+
+interface CompetitionStructureMatch {
+  readonly id: string;
+  readonly bracket: CompetitionBracketKind;
+  readonly round: number;
+  readonly position: number;
+  readonly label?: string;
+}
+
+function competitionStructure(value: Record<string, unknown>): {
+  readonly teams: readonly CompetitionStructureTeam[];
+  readonly matches: readonly CompetitionStructureMatch[];
+  readonly pools: Readonly<Record<string, readonly string[]>>;
+} {
+  const teams = Array.isArray(value.teams)
+    ? value.teams.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== "object") return [];
+        const team = candidate as Record<string, unknown>;
+        return typeof team.id === "string" &&
+          typeof team.seed === "number" &&
+          typeof team.name === "string"
+          ? [
+              {
+                id: team.id,
+                seed: team.seed,
+                name: team.name,
+              },
+            ]
+          : [];
+      })
+    : [];
+  const matches = Array.isArray(value.matches)
+    ? value.matches.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== "object") return [];
+        const match = candidate as Record<string, unknown>;
+        const bracket = match.bracket;
+        return typeof match.id === "string" &&
+          typeof match.round === "number" &&
+          typeof match.position === "number" &&
+          (bracket === "winners" ||
+            bracket === "losers" ||
+            bracket === "final" ||
+            bracket === "pool" ||
+            bracket === "consolation")
+          ? [
+              {
+                id: match.id,
+                bracket: bracket as CompetitionBracketKind,
+                round: match.round,
+                position: match.position,
+                ...(typeof match.label === "string"
+                  ? { label: match.label }
+                  : {}),
+              },
+            ]
+          : [];
+      })
+    : [];
+  const rawPools =
+    value.pools &&
+    typeof value.pools === "object" &&
+    !Array.isArray(value.pools)
+      ? (value.pools as Record<string, unknown>)
+      : {};
+  const pools = Object.fromEntries(
+    Object.entries(rawPools).flatMap(([key, teamIds]) =>
+      Array.isArray(teamIds) &&
+      teamIds.every((teamId) => typeof teamId === "string")
+        ? [[key, teamIds] as const]
+        : [],
+    ),
+  );
+  return { teams, matches, pools };
+}
+
+function competitionRoundLabel(input: {
+  readonly bracket: CompetitionBracketKind;
+  readonly round: number;
+  readonly label?: string;
+}): string {
+  if (input.label) return input.label;
+  const prefix =
+    input.bracket === "pool"
+      ? "Pool play"
+      : input.bracket === "winners"
+        ? "Championship"
+        : input.bracket === "losers"
+          ? "Contenders"
+          : input.bracket === "consolation"
+            ? "Consolation"
+            : "Finals";
+  return `${prefix} · round ${input.round}`;
+}
+
+/**
+ * The shared, read-only local tournament projection. Every competition
+ * surface consumes this representation; no client derives a bracket, pool,
+ * score, or player's next match from a separate event feed.
+ */
+export async function loadTournamentCompetitionSnapshot(input: {
+  readonly sessionId: string;
+  readonly personId?: string;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const session = await database.query.sessions.findFirst({
+    where: eq(sessions.id, input.sessionId),
+  });
+  if (!session) throw new Error("Tournament event was not found.");
+  const divisionRows = await database
+    .select()
+    .from(divisions)
+    .where(eq(divisions.sessionId, input.sessionId));
+  if (divisionRows.length === 0) {
+    return {
+      session: {
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        timezone: session.timezone,
+        updatedAt: session.updatedAt.toISOString(),
+      },
+      divisions: [],
+    };
+  }
+  const divisionIds = divisionRows.map((division) => division.id);
+  const bracketRows = await database
+    .select()
+    .from(brackets)
+    .where(inArray(brackets.divisionId, divisionIds))
+    .orderBy(desc(brackets.version));
+  const latestBracketByDivision = new Map<
+    string,
+    typeof brackets.$inferSelect
+  >();
+  for (const bracket of bracketRows) {
+    if (!latestBracketByDivision.has(bracket.divisionId)) {
+      latestBracketByDivision.set(bracket.divisionId, bracket);
+    }
+  }
+  const activeBrackets = [...latestBracketByDivision.values()];
+  const bracketIds = activeBrackets.map((bracket) => bracket.id);
+  const matchRows = bracketIds.length
+    ? await database
+        .select({ match: matches, courtName: courts.name })
+        .from(matches)
+        .leftJoin(courts, eq(matches.courtId, courts.id))
+        .where(inArray(matches.bracketId, bracketIds))
+        .orderBy(asc(matches.scheduledAt), asc(matches.createdAt))
+    : [];
+  const matchIds = matchRows.map((row) => row.match.id);
+  const rallyRows = matchIds.length
+    ? await database
+        .select({ matchId: rallyEvents.matchId, payload: rallyEvents.payload })
+        .from(rallyEvents)
+        .where(inArray(rallyEvents.matchId, matchIds))
+        .orderBy(asc(rallyEvents.sequence))
+    : [];
+  const rallyEventsByMatch = new Map<string, ScoreEvent[]>();
+  for (const row of rallyRows) {
+    const payload = row.payload as Partial<ScoreEvent>;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof payload.id === "string" &&
+      typeof payload.type === "string" &&
+      typeof payload.occurredAt === "string"
+    ) {
+      const values = rallyEventsByMatch.get(row.matchId) ?? [];
+      values.push(payload as ScoreEvent);
+      rallyEventsByMatch.set(row.matchId, values);
+    }
+  }
+  const allTeamIds = [
+    ...new Set(
+      matchRows.flatMap(({ match }) =>
+        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
+          Boolean(teamId),
+        ),
+      ),
+    ),
+  ];
+  const myTeamIds = input.personId
+    ? await database
+        .select({ teamId: teamMembers.teamId })
+        .from(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.personId, input.personId),
+            allTeamIds.length
+              ? inArray(teamMembers.teamId, allTeamIds)
+              : sql`false`,
+          ),
+        )
+        .then((rows) => new Set(rows.map((row) => row.teamId)))
+    : new Set<string>();
+  const rowsByBracket = new Map<string, typeof matchRows>();
+  for (const row of matchRows) {
+    if (!row.match.bracketId) continue;
+    const values = rowsByBracket.get(row.match.bracketId) ?? [];
+    values.push(row);
+    rowsByBracket.set(row.match.bracketId, values);
+  }
+  let myNextMatch:
+    | {
+        id: string;
+        logicalId: string;
+        bracket: CompetitionBracketKind;
+        round: number;
+        position: number;
+        label: string;
+        status: string;
+        teamA?: { id: string; name: string; seed?: number };
+        teamB?: { id: string; name: string; seed?: number };
+        winnerTeamId?: string;
+        courtName?: string;
+        scheduledAt?: string;
+        startedAt?: string;
+        completedAt?: string;
+        score?: {
+          status: "not-started" | "live" | "complete" | "forfeit";
+          sets: readonly [number, number][];
+        };
+      }
+    | undefined;
+  const result = activeBrackets.flatMap((bracket) => {
+    const structure = competitionStructure(bracket.structure);
+    const teamById = new Map(structure.teams.map((team) => [team.id, team]));
+    const matchByLogicalId = new Map(
+      (rowsByBracket.get(bracket.id) ?? []).map((row) => {
+        const format = row.match.format as Record<string, unknown>;
+        return [
+          typeof format.logicalId === "string"
+            ? format.logicalId
+            : row.match.id,
+          row,
+        ] as const;
+      }),
+    );
+    const competitionMatches = structure.matches.flatMap((definition) => {
+      const row = matchByLogicalId.get(definition.id);
+      if (!row) return [];
+      const scoreEvents = rallyEventsByMatch.get(row.match.id) ?? [];
+      let score:
+        | {
+            status: "not-started" | "live" | "complete" | "forfeit";
+            sets: readonly [number, number][];
+          }
+        | undefined;
+      if (scoreEvents.length > 0) {
+        try {
+          const folded = foldScore(scoreEvents, {
+            ...standardBeachFormat,
+            ...(row.match.format as Record<string, unknown>),
+          });
+          score = {
+            status: folded.status,
+            sets: folded.sets.map((set) => [set.a, set.b] as [number, number]),
+          };
+        } catch {
+          score = undefined;
+        }
+      }
+      const competitionMatch = {
+        id: row.match.id,
+        logicalId: definition.id,
+        bracket: definition.bracket,
+        round: definition.round,
+        position: definition.position,
+        label: competitionRoundLabel(definition),
+        status: row.match.status,
+        ...(row.match.teamAId && teamById.get(row.match.teamAId)
+          ? { teamA: teamById.get(row.match.teamAId)! }
+          : {}),
+        ...(row.match.teamBId && teamById.get(row.match.teamBId)
+          ? { teamB: teamById.get(row.match.teamBId)! }
+          : {}),
+        ...(row.match.winnerTeamId
+          ? { winnerTeamId: row.match.winnerTeamId }
+          : {}),
+        ...(row.courtName ? { courtName: row.courtName } : {}),
+        ...(row.match.scheduledAt
+          ? { scheduledAt: row.match.scheduledAt.toISOString() }
+          : {}),
+        ...(row.match.startedAt
+          ? { startedAt: row.match.startedAt.toISOString() }
+          : {}),
+        ...(row.match.completedAt
+          ? { completedAt: row.match.completedAt.toISOString() }
+          : {}),
+        ...(score ? { score } : {}),
+      };
+      const isMyMatch =
+        (row.match.teamAId && myTeamIds.has(row.match.teamAId)) ||
+        (row.match.teamBId && myTeamIds.has(row.match.teamBId));
+      if (
+        isMyMatch &&
+        !myNextMatch &&
+        ["scheduled", "live"].includes(row.match.status)
+      ) {
+        myNextMatch = competitionMatch;
+      }
+      return [competitionMatch];
+    });
+    const pools = Object.entries(structure.pools).map(([key, teamIds]) => {
+      const poolTeams = teamIds.flatMap((teamId) => {
+        const team = teamById.get(teamId);
+        return team ? [team] : [];
+      });
+      const poolMatches = competitionMatches.filter(
+        (match) =>
+          match.bracket === "pool" && match.logicalId.includes(`-pool-${key}-`),
+      );
+      const standings = new Map(
+        poolTeams.map((team) => [
+          team.id,
+          {
+            team,
+            wins: 0,
+            losses: 0,
+            setDifferential: 0,
+            pointDifferential: 0,
+          },
+        ]),
+      );
+      for (const match of poolMatches) {
+        if (!match.teamA || !match.teamB || !match.score) continue;
+        const left = standings.get(match.teamA.id);
+        const right = standings.get(match.teamB.id);
+        if (!left || !right) continue;
+        const pointDifference = match.score.sets.reduce(
+          (total, set) => total + set[0] - set[1],
+          0,
+        );
+        const setDifference = match.score.sets.reduce(
+          (total, set) => total + Math.sign(set[0] - set[1]),
+          0,
+        );
+        left.pointDifferential += pointDifference;
+        right.pointDifferential -= pointDifference;
+        left.setDifferential += setDifference;
+        right.setDifferential -= setDifference;
+        if (match.winnerTeamId === left.team.id) {
+          left.wins += 1;
+          right.losses += 1;
+        } else if (match.winnerTeamId === right.team.id) {
+          right.wins += 1;
+          left.losses += 1;
+        }
+      }
+      return {
+        key,
+        teams: poolTeams,
+        completedMatches: poolMatches.filter((match) =>
+          Boolean(match.completedAt || match.winnerTeamId),
+        ).length,
+        matchCount: poolMatches.length,
+        standings: [...standings.values()].sort(
+          (left, right) =>
+            right.wins - left.wins ||
+            right.setDifferential - left.setDifferential ||
+            right.pointDifferential - left.pointDifferential ||
+            left.team.seed - right.team.seed,
+        ),
+      };
+    });
+    const rounds = [
+      ...new Map(
+        competitionMatches
+          .sort(
+            (left, right) =>
+              left.bracket.localeCompare(right.bracket) ||
+              left.round - right.round ||
+              left.position - right.position,
+          )
+          .map((match) => {
+            const key = `${match.bracket}-${match.round}`;
+            return [
+              key,
+              {
+                key,
+                label: match.label,
+                bracket: match.bracket,
+                round: match.round,
+                matches: competitionMatches
+                  .filter(
+                    (candidate) =>
+                      candidate.bracket === match.bracket &&
+                      candidate.round === match.round,
+                  )
+                  .sort((left, right) => left.position - right.position),
+              },
+            ] as const;
+          }),
+      ).values(),
+    ];
+    return [
+      {
+        id: bracket.divisionId,
+        name:
+          divisionRows.find((division) => division.id === bracket.divisionId)
+            ?.name ?? "Division",
+        competitionVersion: bracket.version,
+        format: bracket.format,
+        ...(bracket.liveAt ? { liveAt: bracket.liveAt.toISOString() } : {}),
+        pools,
+        rounds,
+        matches: competitionMatches,
+      },
+    ];
+  });
+  return {
+    session: {
+      id: session.id,
+      title: session.title,
+      status: session.status,
+      timezone: session.timezone,
+      updatedAt: session.updatedAt.toISOString(),
+    },
+    divisions: result,
+    ...(myNextMatch ? { myNextMatch } : {}),
   };
 }
 
@@ -2270,6 +2712,292 @@ export async function persistDivisionBracket(
     entity: "bracket",
     status: `version-${version}`,
   };
+}
+
+/**
+ * Puts an already generated competition structure into the live operating
+ * state. Generating a bracket deliberately stays separate from this action:
+ * directors can inspect the field, pools and assignments before changing the
+ * public event state.
+ */
+export async function launchDivisionTournament(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const record = await loadDivisionRecord(organizationId, input.divisionId);
+  const current = await getDatabase().query.brackets.findFirst({
+    where: eq(brackets.divisionId, input.divisionId),
+    orderBy: [desc(brackets.version)],
+  });
+  if (!current) {
+    throw new Error(
+      "Build the pools or bracket before launching the tournament.",
+    );
+  }
+  if (
+    record.session.status === "cancelled" ||
+    record.session.status === "completed"
+  ) {
+    throw new Error("A cancelled or completed event cannot be launched.");
+  }
+  if (record.session.status === "live" && current.liveAt) {
+    return { id: current.id, entity: "bracket", status: "live" };
+  }
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    await transaction
+      .update(sessions)
+      .set({ status: "live", updatedAt: input.now })
+      .where(eq(sessions.id, record.session.id));
+    await transaction
+      .update(brackets)
+      .set({ liveAt: current.liveAt ?? input.now })
+      .where(eq(brackets.id, current.id));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "tournament.launched",
+      entityType: "bracket",
+      entityId: current.id,
+      beforeHash: stableHash({
+        sessionStatus: record.session.status,
+        bracketLiveAt: current.liveAt,
+      }),
+      afterHash: stableHash({
+        sessionStatus: "live",
+        bracketLiveAt: input.now,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: current.id, entity: "bracket", status: "live" };
+}
+
+/**
+ * Desk entries are intentionally represented as ordinary registrations and
+ * teams. A complimentary invitation and verified cash are not side channels:
+ * they are visible in the operational field, qualify normally, and leave an
+ * immutable director audit trail.
+ */
+export async function addManualDivisionEntry(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly playerIds: readonly string[];
+    readonly payment: "complimentary" | "cash";
+    readonly cashAmountMinor?: number;
+    readonly cashReference?: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const record = await loadDivisionRecord(organizationId, input.divisionId);
+  if (
+    record.session.status === "cancelled" ||
+    record.session.status === "completed"
+  ) {
+    throw new Error(
+      "Entries cannot be added to a cancelled or completed event.",
+    );
+  }
+  const playerIds = [...new Set(input.playerIds)];
+  if (playerIds.length !== record.division.teamSize) {
+    throw new Error(
+      `Choose exactly ${record.division.teamSize} players for this division.`,
+    );
+  }
+  if (
+    input.payment === "cash" &&
+    (!input.cashAmountMinor || input.cashAmountMinor <= 0)
+  ) {
+    throw new Error("Record the verified cash amount before adding this team.");
+  }
+  const fieldLimit =
+    record.division.maximumTeams ??
+    Math.floor(record.division.capacity / record.division.teamSize);
+  const confirmedCount = record.teams.filter(
+    (team) => team.selectionStatus === "confirmed",
+  ).length;
+  if (confirmedCount >= fieldLimit) {
+    throw new Error(
+      "This field is full. Expand the field before adding another team.",
+    );
+  }
+  const database = getTransactionalDatabase();
+  const playerRows = await database
+    .select({ id: people.id, displayName: people.displayName })
+    .from(people)
+    .where(inArray(people.id, playerIds));
+  if (playerRows.length !== playerIds.length) {
+    throw new Error("One or more selected players could not be found.");
+  }
+  const captain = playerRows.find((player) => player.id === playerIds[0]);
+  if (!captain) throw new Error("Choose a captain for this entry.");
+  const existingRegistration = await database
+    .select({ id: registrations.id })
+    .from(registrations)
+    .where(
+      and(
+        eq(registrations.sessionId, record.session.id),
+        eq(registrations.personId, captain.id),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (existingRegistration) {
+    throw new Error("That captain is already registered for this event.");
+  }
+  const alreadyAssigned = await database
+    .select({ personId: teamMembers.personId })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+    .innerJoin(teamEntries, eq(teamEntries.teamId, teams.id))
+    .innerJoin(registrations, eq(teamEntries.registrationId, registrations.id))
+    .where(
+      and(
+        eq(teams.divisionId, input.divisionId),
+        inArray(teamMembers.personId, playerIds),
+        inArray(registrations.status, [
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "checked-in",
+        ]),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (alreadyAssigned) {
+    throw new Error(
+      "One of those players is already assigned to this division.",
+    );
+  }
+
+  const paymentAmount = input.payment === "cash" ? input.cashAmountMinor! : 0;
+  const orderId = input.payment === "cash" ? crypto.randomUUID() : undefined;
+  const registrationId = crypto.randomUUID();
+  const teamId = crypto.randomUUID();
+  const teamEntryId = crypto.randomUUID();
+  const roster = playerIds.slice(1).map((personId) => {
+    const player = playerRows.find((candidate) => candidate.id === personId)!;
+    return {
+      personId,
+      displayName: player.displayName,
+      status: "claimed" as const,
+      paidAt: input.now.toISOString(),
+      ...(orderId ? { orderId } : {}),
+    };
+  });
+  const usedSeeds = new Set(
+    record.teams.flatMap((team) => (team.seed ? [team.seed] : [])),
+  );
+  const seed = nextAvailableSeed(usedSeeds);
+  const teamName = playerIds
+    .map(
+      (personId) =>
+        playerRows.find((player) => player.id === personId)!.displayName,
+    )
+    .join(" / ");
+  const nowPlusThirtyDays = new Date(
+    input.now.getTime() + 30 * 24 * 60 * 60_000,
+  );
+
+  await database.transaction(async (transaction) => {
+    if (orderId) {
+      await transaction.insert(orders).values({
+        id: orderId,
+        organizationId,
+        buyerPersonId: captain.id,
+        status: "paid",
+        currency: record.division.currency,
+        subtotalMinor: paymentAmount,
+        totalMinor: paymentAmount,
+        idempotencyKey: `cash-entry:${input.requestId}`,
+        updatedAt: input.now,
+      });
+    }
+    await transaction.insert(teams).values({
+      id: teamId,
+      divisionId: input.divisionId,
+      name: teamName,
+      seed,
+      status: "active",
+      updatedAt: input.now,
+    });
+    await transaction
+      .insert(teamMembers)
+      .values(
+        playerIds.map((personId) => ({ teamId, personId, role: "player" })),
+      );
+    await transaction.insert(registrations).values({
+      id: registrationId,
+      sessionId: record.session.id,
+      divisionId: input.divisionId,
+      personId: captain.id,
+      status: "confirmed",
+      eligibilityDecision: {
+        source: "operator-manual-entry",
+        payment: input.payment,
+        verifiedAt: input.now.toISOString(),
+      },
+      orderId,
+      overriddenByPersonId: input.actor.personId,
+      overrideReason: input.reason,
+      updatedAt: input.now,
+    });
+    await transaction.insert(teamEntries).values({
+      id: teamEntryId,
+      registrationId,
+      teamId,
+      payingPersonId: captain.id,
+      expectedTeamSize: record.division.teamSize,
+      paymentMode: "team",
+      roster,
+      status: "confirmed",
+      claimToken: crypto.randomUUID(),
+      claimExpiresAt: nowPlusThirtyDays,
+      rosterLockedAt: input.now,
+      seed,
+      selectionStatus: "confirmed",
+      selectionLocked: true,
+      selectionReason: input.reason,
+      selectedAt: input.now,
+      updatedAt: input.now,
+    });
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action:
+        input.payment === "cash"
+          ? "tournament.entry.cash_verified"
+          : "tournament.entry.complimentary_added",
+      entityType: "team-entry",
+      entityId: teamEntryId,
+      afterHash: stableHash({
+        teamId,
+        registrationId,
+        playerIds,
+        seed,
+        payment: input.payment,
+        paymentAmount,
+        cashReference: input.cashReference,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: teamEntryId, entity: "team-entry", status: "confirmed" };
 }
 
 export async function updateDivisionMatchSchedule(

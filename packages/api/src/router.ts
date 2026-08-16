@@ -127,6 +127,7 @@ import {
   ticketApprovalSummarySchema,
   ticketScanResultSchema,
   tournamentScheduleSchema,
+  tournamentCompetitionSnapshotSchema,
   venueSummarySchema,
   venueLayoutAssetSchema,
   venueLayoutCourtAssignmentPlanSchema,
@@ -281,9 +282,12 @@ import {
   updateOrganizationTheme,
 } from "./catalog-service";
 import {
+  addManualDivisionEntry,
   cancelEventWithRefunds,
   expandDivisionField,
+  launchDivisionTournament,
   loadOperatorDivisionDetail,
+  loadTournamentCompetitionSnapshot,
   persistDivisionBracket,
   reconcileDivisionSelection,
   reconcileRegistrationDivisionSelection,
@@ -1594,6 +1598,18 @@ const publicRouter = router({
       const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       return attachEventWeather(event, ctx.now);
+    }),
+  tournamentCompetition: publicProcedure
+    .input(z.object({ slug: z.string().min(1) }))
+    .output(tournamentCompetitionSnapshotSchema)
+    .query(async ({ input }) => {
+      const event = await getRepository().public.eventBySlug(input.slug);
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      try {
+        return await loadTournamentCompetitionSnapshot({ sessionId: event.id });
+      } catch (error) {
+        return throwDomainError(error);
+      }
     }),
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
@@ -3892,6 +3908,19 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  tournamentCompetition: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(tournamentCompetitionSnapshotSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTournamentCompetitionSnapshot({
+          sessionId: input.sessionId,
+          personId: ctx.actor!.personId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   admissionPasses: protectedProcedure
     .output(playerAdmissionPassesSchema)
     .query(({ ctx }) =>
@@ -7599,6 +7628,78 @@ const operatorRouter = router({
       loadOperatorDivisionDetail({
         organizationId: ctx.actor!.organizationId!,
         divisionId: input.divisionId,
+      }),
+    ),
+  addManualDivisionEntry: organizationProcedure("sessions:write")
+    .input(
+      z
+        .object({
+          divisionId: z.string().uuid(),
+          playerIds: z.array(z.string().uuid()).min(1).max(6),
+          payment: z.enum(["complimentary", "cash"]),
+          cashAmountMinor: z.number().int().positive().optional(),
+          cashReference: z.string().trim().max(160).optional(),
+          reason: z.string().trim().min(3).max(500),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .superRefine((value, ctx) => {
+          if (value.payment === "cash" && !value.cashAmountMinor) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["cashAmountMinor"],
+              message: "Record the verified cash amount.",
+            });
+          }
+        }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addManualDivisionEntry",
+        request: input,
+        ctx,
+        execute: () =>
+          addManualDivisionEntry({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            playerIds: input.playerIds,
+            payment: input.payment,
+            cashAmountMinor: input.cashAmountMinor,
+            cashReference: input.cashReference,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  launchDivisionTournament: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.launchDivisionTournament",
+        request: input,
+        ctx,
+        execute: () =>
+          launchDivisionTournament({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
   updateEventSession: organizationProcedure("sessions:write")

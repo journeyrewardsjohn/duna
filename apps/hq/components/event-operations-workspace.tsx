@@ -486,6 +486,7 @@ export function EventOperationsWorkspace({
   const [transcript, setTranscript] = useState("");
   const [visibility, setVisibility] = useState<"private" | "player">("private");
   const [usedVoice, setUsedVoice] = useState(false);
+  const [noteMode, setNoteMode] = useState<"voice" | "written">();
   const session = detail.session;
   const attended = detail.attendees.filter(
     (attendee) => attendee.attendanceStatus === "attended",
@@ -1079,13 +1080,87 @@ export function EventOperationsWorkspace({
                 type="hidden"
                 value={usedVoice ? "livekit-voice" : "typed"}
               />
-              <SessionNoteRecorder
-                configured={liveKitConfigured}
-                onChange={setTranscript}
-                onVoiceStarted={() => setUsedVoice(true)}
-                sessionId={session.id}
-                transcript={transcript}
-              />
+              {!noteMode ? (
+                <div
+                  className="event-note-choice"
+                  role="group"
+                  aria-label="Choose how to create a note"
+                >
+                  <button onClick={() => setNoteMode("voice")} type="button">
+                    <Mic aria-hidden size={20} />
+                    <span>
+                      <strong>Record a voice note</strong>
+                      <small>
+                        Talk it through. Duna turns it into an editable draft.
+                      </small>
+                    </span>
+                  </button>
+                  <button onClick={() => setNoteMode("written")} type="button">
+                    <FileText aria-hidden size={20} />
+                    <span>
+                      <strong>Write a note</strong>
+                      <small>
+                        Capture a clear thought without extra setup.
+                      </small>
+                    </span>
+                  </button>
+                </div>
+              ) : noteMode === "voice" ? (
+                <>
+                  <button
+                    className="event-note-change-mode"
+                    onClick={() => {
+                      setNoteMode(undefined);
+                      setUsedVoice(false);
+                      setTranscript("");
+                    }}
+                    type="button"
+                  >
+                    Choose a different note type
+                  </button>
+                  <SessionNoteRecorder
+                    configured={liveKitConfigured}
+                    onChange={setTranscript}
+                    onVoiceStarted={() => setUsedVoice(true)}
+                    sessionId={session.id}
+                    transcript={transcript}
+                  />
+                </>
+              ) : (
+                <div className="event-note-written">
+                  <div>
+                    <span aria-hidden>
+                      <FileText size={20} />
+                    </span>
+                    <span>
+                      <strong>Write it while it is fresh.</strong>
+                      <small>
+                        Save privately first. You can refine recipients and
+                        sharing after review.
+                      </small>
+                    </span>
+                    <button
+                      onClick={() => {
+                        setNoteMode(undefined);
+                        setTranscript("");
+                      }}
+                      type="button"
+                    >
+                      Change type
+                    </button>
+                  </div>
+                  <label>
+                    <span>Your note</span>
+                    <textarea
+                      name="transcript"
+                      onChange={(event) => setTranscript(event.target.value)}
+                      placeholder="What changed, what should be repeated, and what needs attention next time?"
+                      rows={7}
+                      value={transcript}
+                    />
+                  </label>
+                </div>
+              )}
               <div className="event-note-form-grid">
                 <label>
                   <span>Short title · optional</span>
