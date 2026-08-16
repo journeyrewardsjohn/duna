@@ -1009,7 +1009,8 @@ export function CheckoutPanel({
               </article>
               {teamSlots.map((slot) => {
                 const selectedPerson =
-                  slot.person ?? availableTeamPeopleById.get(slot.personId ?? "");
+                  slot.person ??
+                  availableTeamPeopleById.get(slot.personId ?? "");
                 return (
                   <article
                     className={`checkout-roster__member ${selectedPerson || slot.inviteTarget ? "filled" : "open"}`}
