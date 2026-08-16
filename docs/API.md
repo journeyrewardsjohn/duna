@@ -59,8 +59,8 @@ loss-weighted ensemble. “Champion” means the lowest Brier score for that run
 with log loss as the tie-breaker. It does not automatically activate a new live
 rating configuration.
 
-`admin.approveReadySandRatingMatches` is a separate evidence operation. It
-approves mapped partner history and rebuilds the canonical rating projection.
+`admin.approveReadyImportedMatches` is a separate evidence operation for
+mapped, Duna-owned import history. It rebuilds the canonical rating projection.
 Backtest publication never approves source evidence, and evidence approval does
 not silently promote a model.
 

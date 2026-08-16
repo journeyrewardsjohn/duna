@@ -15248,6 +15248,91 @@ body {
   padding: 0.55rem 0.72rem;
 }
 
+.scraper-control-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.scraper-control-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.scraper-control-card h3,
+.scraper-control-card p {
+  margin: 0;
+}
+
+.scraper-control-card .hq-card-heading p,
+.scraper-transport-health {
+  color: var(--color-bone-muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.scraper-control-form {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scraper-control-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.scraper-control-form label > span {
+  color: var(--color-bone-muted);
+  font-size: 0.625rem;
+  font-weight: 750;
+}
+
+.scraper-control-form input:not([type="checkbox"]),
+.scraper-control-form select {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: var(--color-bone);
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+}
+
+.scraper-control-form .scraper-toggle {
+  align-items: center;
+  flex-direction: row;
+  grid-column: 1 / -1;
+}
+
+.scraper-control-form .scraper-toggle > span {
+  color: var(--color-bone);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.scraper-control-static-value {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: var(--color-bone-muted) !important;
+  display: flex;
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+}
+
+.scraper-control-form > .hq-button,
+.scraper-control-form > .sand-action-feedback {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 620px) {
+  .scraper-control-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .spin {
   animation: duna-spin 0.8s linear infinite;
 }

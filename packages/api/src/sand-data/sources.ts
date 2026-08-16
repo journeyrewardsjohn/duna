@@ -140,6 +140,7 @@ export function discoverBvbInfoHistoryPages(html: string): readonly number[] {
 export async function importBvbInfoPlayer(
   playerId: string,
   onProgress?: SourceImportProgressHandler,
+  options: { readonly incremental?: boolean } = {},
 ): Promise<SourceImportResult> {
   const numericId = Number.parseInt(playerId, 10);
   if (!Number.isInteger(numericId) || numericId < 1) {
@@ -154,8 +155,11 @@ export async function importBvbInfoPlayer(
     timeoutMs: 90_000,
   });
   const pages = new Map<number, string>([[1, first.html]]);
-  for (const page of discoverBvbInfoHistoryPages(first.html))
-    pages.set(page, "");
+  if (!options.incremental) {
+    for (const page of discoverBvbInfoHistoryPages(first.html)) {
+      pages.set(page, "");
+    }
+  }
   const failedPages: number[] = [];
   for (const page of pages.keys()) {
     if (page === 1) continue;
@@ -373,10 +377,13 @@ export async function importBvbInfoPlayer(
       profilesFound: players.size,
     });
   }
-  const objectiveStatus =
-    failedPages.length === 0 &&
-    matches.length > 0 &&
-    matches.length === resultRows
+  const objectiveStatus = options.incremental
+    ? failedPages.length === 0
+      ? "met"
+      : "partial"
+    : failedPages.length === 0 &&
+        matches.length > 0 &&
+        matches.length === resultRows
       ? "met"
       : matches.length > 0
         ? "partial"
@@ -387,7 +394,9 @@ export async function importBvbInfoPlayer(
     raw: {
       ...player.raw,
       historyCoverage: {
-        objective: "complete-player-history",
+        objective: options.incremental
+          ? "current-player-history"
+          : "complete-player-history",
         status: objectiveStatus,
         expectedPages: pages.size,
         fetchedPages: [...pages.values()].filter(Boolean).length,
@@ -404,7 +413,9 @@ export async function importBvbInfoPlayer(
     players: [...players.values()],
     matches,
     checkpoint: {
-      objective: "complete-player-history",
+      objective: options.incremental
+        ? "current-player-history"
+        : "complete-player-history",
       objectiveStatus,
       expectedPages: pages.size,
       fetchedPages: [...pages.values()].filter(Boolean).length,
@@ -693,6 +704,7 @@ async function volleyballLifeMatchFeed(
 export async function importVolleyballLifePlayer(
   playerId: string,
   onProgress?: SourceImportProgressHandler,
+  options: { readonly incremental?: boolean } = {},
 ): Promise<SourceImportResult> {
   const numericId = Number.parseInt(playerId, 10);
   if (!Number.isInteger(numericId) || numericId < 1) {
@@ -806,7 +818,7 @@ export async function importVolleyballLifePlayer(
     profile,
     finishes,
   );
-  const tournamentIds = [
+  const allTournamentIds = [
     ...new Set(
       tournamentFinishes.flatMap((finish) => {
         const tournamentId = numberValue(finish.id);
@@ -814,6 +826,11 @@ export async function importVolleyballLifePlayer(
       }),
     ),
   ];
+  // Routine profile refreshes inspect the newest tournament references only.
+  // A full connection import still preserves the complete historical pull.
+  const tournamentIds = options.incremental
+    ? allTournamentIds.slice(0, 12)
+    : allTournamentIds;
   await onProgress?.({
     phase: "profile-found",
     current: 0,
@@ -856,8 +873,11 @@ export async function importVolleyballLifePlayer(
           Math.round((parsedFeed.matches.length / externalMatchCount) * 10_000),
         )
       : undefined;
-  const objectiveStatus =
-    feed.failedTournamentIds.length > 0 || finishCoverageBps < 9_500
+  const objectiveStatus = options.incremental
+    ? feed.failedTournamentIds.length > 0
+      ? "partial"
+      : "met"
+    : feed.failedTournamentIds.length > 0 || finishCoverageBps < 9_500
       ? parsedFeed.matches.length > 0
         ? "partial"
         : "degraded"
@@ -873,9 +893,12 @@ export async function importVolleyballLifePlayer(
             ...player.raw,
             finishes: { ...finishes, tournaments: tournamentFinishes },
             historyCoverage: {
-              objective: "complete-player-history",
+              objective: options.incremental
+                ? "current-player-history"
+                : "complete-player-history",
               status: objectiveStatus,
-              tournamentFinishes: tournamentIds.length,
+              tournamentFinishes: allTournamentIds.length,
+              requestedTournamentFinishes: tournamentIds.length,
               feedEvents: returnedTournamentIds.size,
               matchBearingTournaments: matchBearingTournaments.size,
               parsedMatches: parsedFeed.matches.length,
@@ -901,7 +924,9 @@ export async function importVolleyballLifePlayer(
     players,
     matches: parsedFeed.matches,
     checkpoint: {
-      objective: "complete-player-history",
+      objective: options.incremental
+        ? "current-player-history"
+        : "complete-player-history",
       objectiveStatus,
       tournaments: tournamentIds.length,
       matchFeedEvents: returnedTournamentIds.size,

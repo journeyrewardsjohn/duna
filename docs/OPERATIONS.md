@@ -213,24 +213,17 @@ authoritative fallback when Wallet signing is unavailable.
 
 ## Partner match-history backfill
 
-Duna HQ’s Sand Data panel can stage a complete SandRating network snapshot.
-The default run takes the top 200 distinct men and women, retains a 25-player
-buffer per division for identity deduplication, and expands their match graph
-to four degrees. Player and match data are downloaded through sequential,
-one-second-spaced bulk API requests; graph traversal then runs locally so it
-does not multiply traffic against the partner service. Email fields are never
-persisted.
+Duna does not refresh SandRating.com. Its historical records are retained in a
+Duna-owned legacy archive and are never used as an upstream lookup.
 
-Imports remain evidence-first: partner IDs and confirmed cross-source IDs are
-linked automatically, uncertain identities stay in the mapping queue, and new
-source identities become unclaimed profile pages. A super administrator must
-use **Approve ready history + rebuild** before complete, decisive, mapped
-matches enter the chronological Sand Rating projection. Ambiguous identities,
-duplicates, incomplete scores, and invalid rosters remain staged for review.
-
-The same snapshot can be refreshed through the authorized sand cron endpoint
-with `mode=sandrating`. Scheduled refreshes stage changes only; they never
-approve new rating evidence automatically.
+Imports remain evidence-first: only enabled sources may be fetched, linked
+player profiles use active/idle cadences, FIVB event-detail pages stop after
+their completed-event grace window, and Firecrawl sources use the configured
+cache age and change tracking. SuperAdmin can inspect and change those policies
+in HQ. Official Volleyball World live transport is separate from scraping: its
+WebSocket feed and REST fallback record freshness, latency, and failure state
+in the same control plane. Complete, decisive, mapped matches still require an
+explicit approval before entering the chronological Duna Sand Rating projection.
 
 ## Rating backtests and agent access
 

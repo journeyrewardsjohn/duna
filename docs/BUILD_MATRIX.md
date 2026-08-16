@@ -54,8 +54,8 @@ it is not a production-complete claim.
   promotion (staging AuthKit is connected to the live Duna surfaces)
 - Inngest event/signing keys
 - Provider authorization, retention terms, and credentials for any new player
-  dataset beyond the operator-authorized SandRating, VolleyballLife, BVBInfo,
-  and FIVB feeds
+  dataset beyond the operator-authorized VolleyballLife, BVBInfo, FIVB, and AVP
+  feeds
 - Wallet, minors, privacy, escheatment, and tax counsel review
 - Apple Tap to Pay development and distribution entitlements
 - App Store and Play Store organization enrollment and review

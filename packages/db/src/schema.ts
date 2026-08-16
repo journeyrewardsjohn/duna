@@ -807,6 +807,10 @@ export const playerSourceConnections = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    lastDunaActivityAt: timestamp("last_duna_activity_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -4366,6 +4370,81 @@ export const importSources = pgTable("import_sources", {
   createdAt,
   updatedAt,
 });
+
+// Source policy is separate from imported evidence: pausing an upstream must
+// never remove already-proven match history or official live snapshots.
+export const scraperControls = pgTable(
+  "scraper_controls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: varchar("source", { length: 64 }).notNull().unique(),
+    enabled: boolean("enabled").notNull().default(true),
+    engine: varchar("engine", { length: 16 }).notNull().default("auto"),
+    minRequestIntervalMs: integer("min_request_interval_ms")
+      .notNull()
+      .default(3_000),
+    maxRequestsPerHour: integer("max_requests_per_hour").notNull().default(120),
+    linkedPlayerActiveRefreshHours: integer(
+      "linked_player_active_refresh_hours",
+    ),
+    linkedPlayerIdleRefreshHours: integer("linked_player_idle_refresh_hours"),
+    activePlayerWindowDays: integer("active_player_window_days"),
+    activeEventRefreshMinutes: integer("active_event_refresh_minutes"),
+    completedEventGraceHours: integer("completed_event_grace_hours"),
+    liveTransportEnabled: boolean("live_transport_enabled")
+      .notNull()
+      .default(true),
+    liveRefreshSeconds: integer("live_refresh_seconds"),
+    liveRestFallbackSeconds: integer("live_rest_fallback_seconds"),
+    liveHealthStatus: varchar("live_health_status", { length: 16 }),
+    liveHealthCheckedAt: timestamp("live_health_checked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    liveHealthLatencyMs: integer("live_health_latency_ms"),
+    liveHealthDetail: jsonb("live_health_detail")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    firecrawlCacheTtlSeconds: integer("firecrawl_cache_ttl_seconds"),
+    firecrawlChangeTracking: boolean("firecrawl_change_tracking")
+      .notNull()
+      .default(false),
+    updatedByPersonId: uuid("updated_by_person_id").references(() => people.id),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "scraper_control_engine_valid",
+      sql`${table.engine} IN ('auto', 'native', 'firecrawl')`,
+    ),
+    check(
+      "scraper_control_min_interval_valid",
+      sql`${table.minRequestIntervalMs} BETWEEN 250 AND 3600000`,
+    ),
+    check(
+      "scraper_control_max_requests_valid",
+      sql`${table.maxRequestsPerHour} BETWEEN 1 AND 10000`,
+    ),
+    check(
+      "scraper_control_player_cadence_valid",
+      sql`(${table.linkedPlayerActiveRefreshHours} IS NULL OR ${table.linkedPlayerActiveRefreshHours} BETWEEN 1 AND 720) AND (${table.linkedPlayerIdleRefreshHours} IS NULL OR ${table.linkedPlayerIdleRefreshHours} BETWEEN 1 AND 8760) AND (${table.activePlayerWindowDays} IS NULL OR ${table.activePlayerWindowDays} BETWEEN 1 AND 365)`,
+    ),
+    check(
+      "scraper_control_event_cadence_valid",
+      sql`(${table.activeEventRefreshMinutes} IS NULL OR ${table.activeEventRefreshMinutes} BETWEEN 5 AND 10080) AND (${table.completedEventGraceHours} IS NULL OR ${table.completedEventGraceHours} BETWEEN 0 AND 720)`,
+    ),
+    check(
+      "scraper_control_live_transport_valid",
+      sql`(${table.liveRefreshSeconds} IS NULL OR ${table.liveRefreshSeconds} BETWEEN 60 AND 3600) AND (${table.liveRestFallbackSeconds} IS NULL OR ${table.liveRestFallbackSeconds} BETWEEN 15 AND 300) AND (${table.liveHealthStatus} IS NULL OR ${table.liveHealthStatus} IN ('idle', 'healthy', 'degraded', 'unavailable', 'paused')) AND (${table.liveHealthLatencyMs} IS NULL OR ${table.liveHealthLatencyMs} >= 0)`,
+    ),
+    check(
+      "scraper_control_cache_ttl_valid",
+      sql`${table.firecrawlCacheTtlSeconds} IS NULL OR ${table.firecrawlCacheTtlSeconds} BETWEEN 0 AND 604800`,
+    ),
+  ],
+);
 
 export const importLinks = pgTable(
   "import_links",

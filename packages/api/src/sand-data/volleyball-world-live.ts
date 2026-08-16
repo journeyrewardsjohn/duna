@@ -873,7 +873,7 @@ export interface VolleyballWorldStoredMatch {
   readonly teamB?: VolleyballWorldTeam;
   readonly statistics?: VolleyballWorldMatchStatistics;
   readonly syncedAt: string;
-  readonly pollingMs: 15_000 | 30_000;
+  readonly pollingMs: number;
 }
 
 export function parseStoredVolleyballWorldMatch(
@@ -1054,7 +1054,7 @@ export function parseStoredVolleyballWorldMatch(
       ? { statistics: { team: teamStats, players: playerStats } }
       : {}),
     syncedAt,
-    pollingMs: status === "live" ? 15_000 : 30_000,
+    pollingMs: 30_000,
   };
 }
 
@@ -1445,10 +1445,6 @@ export function storedVolleyballWorldMatch(input: {
     ...(input.teamB ? { teamB: input.teamB } : {}),
     ...(input.statistics ? { statistics: input.statistics } : {}),
     syncedAt: input.syncedAt.toISOString(),
-    pollingMs:
-      (current?.status ??
-        (input.scheduled.winnerSide ? "completed" : "scheduled")) === "live"
-        ? 15_000
-        : 30_000,
+    pollingMs: 30_000,
   };
 }

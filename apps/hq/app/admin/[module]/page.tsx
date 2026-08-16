@@ -145,7 +145,10 @@ export default async function AdminModulePage({
     .catch((error: unknown) => {
       if (
         error instanceof Error &&
-        error.message === "Platform administration access required"
+        [
+          "Platform administration access required",
+          "Super Admin access required",
+        ].includes(error.message)
       ) {
         return undefined;
       }
