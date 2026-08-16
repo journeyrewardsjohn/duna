@@ -238,6 +238,21 @@ async function dispatchAnalysisRun(input: {
   readonly video: typeof videos.$inferSelect;
   readonly court: VideoAnalysisReport["court"];
   readonly visionSessionId?: string;
+  /**
+   * Player-confirmed imported-video setup. The worker receives this alongside
+   * the source object so it need not invent a court, net, or roster hint.
+   */
+  readonly visionSetup?: {
+    readonly settings: (typeof visionSessions.$inferSelect)["settings"];
+    readonly previewJpegBase64?: string;
+    readonly previewCapturedAt?: string;
+    readonly timeline: readonly {
+      readonly type: string;
+      readonly elapsedMs: number;
+      readonly label?: string;
+      readonly payload?: Record<string, unknown>;
+    }[];
+  };
   readonly now: Date;
 }): Promise<void> {
   const worker = workerConfiguration();
@@ -258,6 +273,7 @@ async function dispatchAnalysisRun(input: {
         muxAssetId: input.video.muxAssetId ?? undefined,
         visionSessionId: input.visionSessionId,
         court: input.court,
+        visionSetup: input.visionSetup,
         callbackPath: "/api/video/analysis",
       }),
       signal: controller.signal,
@@ -468,6 +484,18 @@ export async function requestVideoAnalysis(input: {
   const session = await database.query.visionSessions.findFirst({
     where: eq(visionSessions.videoId, video.id),
   });
+  const setupTimeline = session
+    ? await database
+        .select({
+          type: visionTimelineEvents.type,
+          elapsedMs: visionTimelineEvents.elapsedMs,
+          label: visionTimelineEvents.label,
+          payload: visionTimelineEvents.payload,
+        })
+        .from(visionTimelineEvents)
+        .where(eq(visionTimelineEvents.sessionId, session.id))
+        .orderBy(asc(visionTimelineEvents.elapsedMs))
+    : [];
   const { court } = asCourtDimensions({ video, session });
   const id = randomUUID();
   const coverage = {
@@ -503,6 +531,19 @@ export async function requestVideoAnalysis(input: {
     video,
     court,
     visionSessionId: session?.id,
+    visionSetup: session
+      ? {
+          settings: session.settings,
+          previewJpegBase64: session.previewJpegBase64 ?? undefined,
+          previewCapturedAt: session.previewCapturedAt?.toISOString(),
+          timeline: setupTimeline.map((event) => ({
+            type: event.type,
+            elapsedMs: event.elapsedMs,
+            label: event.label ?? undefined,
+            payload: event.payload ?? undefined,
+          })),
+        }
+      : undefined,
     now: input.now,
   });
   const created = await database.query.videoAnalysisRuns.findFirst({

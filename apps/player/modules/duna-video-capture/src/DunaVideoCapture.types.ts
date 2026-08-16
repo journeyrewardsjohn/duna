@@ -75,6 +75,19 @@ export interface PreparedVideo {
   readonly durationSeconds: number;
 }
 
+/**
+ * A deliberately small, on-device-selected still from an imported recording.
+ * These are candidates for the player to confirm, never a claim that Duna has
+ * already found a valid court or identified a person.
+ */
+export interface VideoFrameSample {
+  readonly id: string;
+  readonly timestampSeconds: number;
+  readonly jpegBase64: string;
+  readonly courtScore: number;
+  readonly playerCount: number;
+}
+
 export interface DunaVideoCaptureViewProps {
   readonly style?: StyleProp<ViewStyle>;
   readonly audioEnabled: boolean;

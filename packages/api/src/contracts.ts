@@ -1196,7 +1196,9 @@ export const courtCalibrationSchema = z.object({
   calibratedAt: z.iso.datetime(),
 });
 export const visionSessionSettingsSchema = z.object({
-  captureMode: z.enum(["record", "live"]).optional(),
+  // Upload sessions retain the same calibrated event graph as Duna-recorded
+  // footage, but disclose that the player supplied setup after the fact.
+  captureMode: z.enum(["record", "live", "upload"]).optional(),
   courtWidthMeters: z.number().positive().max(30),
   courtLengthMeters: z.number().positive().max(40),
   netHeightMeters: z.number().positive().max(4),

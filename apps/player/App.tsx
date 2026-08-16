@@ -37,6 +37,7 @@ import {
 } from "react";
 import {
   AccessibilityInfo,
+  ActivityIndicator,
   Animated,
   AppState,
   Easing,
@@ -79,7 +80,7 @@ import {
   subscribeToWatchScoreDraft,
   type WatchScoreDraft,
 } from "./watch-scoring";
-import { VideoStudioScreen } from "./video-studio";
+import { VideoStudioScreen, type VideoTransferStatus } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import { LiveActivitiesPrompt } from "./live-activities-prompt";
@@ -13316,6 +13317,61 @@ function TabBar({
   );
 }
 
+function VideoTransferBanner({
+  onPress,
+  status,
+}: {
+  readonly onPress: () => void;
+  readonly status: VideoTransferStatus;
+}) {
+  const progress = Math.max(0, Math.min(1, status.progress ?? 0));
+  const active =
+    status.stage === "importing" ||
+    status.stage === "uploading" ||
+    status.stage === "processing";
+  return (
+    <Pressable
+      accessibilityLabel={`${status.title}. ${status.detail}. Open video uploads.`}
+      onPress={onPress}
+      style={styles.videoTransferBanner}
+    >
+      <View style={styles.videoTransferMark}>
+        {active ? (
+          <ActivityIndicator color={colors.aqua} size="small" />
+        ) : (
+          <Text style={styles.videoTransferMarkText}>
+            {status.stage === "complete" ? "✓" : "⇅"}
+          </Text>
+        )}
+      </View>
+      <View style={styles.videoTransferCopy}>
+        <View style={styles.videoTransferHeading}>
+          <Text style={styles.videoTransferTitle}>{status.title}</Text>
+          {status.progress !== undefined && (
+            <Text style={styles.videoTransferPercent}>
+              {Math.round(progress * 100)}%
+            </Text>
+          )}
+        </View>
+        <Text numberOfLines={2} style={styles.videoTransferDetail}>
+          {status.detail}
+        </Text>
+        {status.progress !== undefined && (
+          <View style={styles.videoTransferTrack}>
+            <View
+              style={[
+                styles.videoTransferFill,
+                { width: `${progress * 100}%` },
+              ]}
+            />
+          </View>
+        )}
+      </View>
+      <Text style={styles.videoTransferOpen}>View ›</Text>
+    </Pressable>
+  );
+}
+
 function WatchScoreInbox({
   onReview,
 }: {
@@ -13421,6 +13477,7 @@ function DunaApp() {
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
   const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
+  const [videoTransfer, setVideoTransfer] = useState<VideoTransferStatus>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
     readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
@@ -13437,6 +13494,21 @@ function DunaApp() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!videoTransfer) return;
+    if (
+      videoTransfer.stage !== "complete" &&
+      videoTransfer.stage !== "processing"
+    ) {
+      return;
+    }
+    const timeout = setTimeout(
+      () => setVideoTransfer(undefined),
+      videoTransfer.stage === "complete" ? 7_500 : 11_000,
+    );
+    return () => clearTimeout(timeout);
+  }, [videoTransfer]);
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
@@ -13463,7 +13535,13 @@ function DunaApp() {
       const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
       if (!match) return;
       setEventIndex(null);
-      setTab(match[1] === "upcoming" ? "home" : "discover");
+      setTab(
+        match[1] === "upload"
+          ? "video"
+          : match[1] === "upcoming"
+            ? "home"
+            : "discover",
+      );
     };
     void Linking.getInitialURL().then(openLiveActivity);
     const subscription = Linking.addEventListener("url", ({ url }) =>
@@ -13634,6 +13712,7 @@ function DunaApp() {
                 <VideoStudioScreen
                   active={tab === "video"}
                   onCreateMatch={() => setCreateMatchOpen(true)}
+                  onTransferStatus={setVideoTransfer}
                   runtime={runtime}
                 />
                 {tab === "wallet" && (
@@ -13689,6 +13768,12 @@ function DunaApp() {
                   />
                 )}
               </Animated.View>
+              {videoTransfer && (
+                <VideoTransferBanner
+                  onPress={() => setTab("video")}
+                  status={videoTransfer}
+                />
+              )}
               {tab !== "messages" && <TabBar active={tab} onChange={setTab} />}
               <BookingModal
                 eventIndex={eventIndex}
@@ -13846,6 +13931,67 @@ function createStyles(palette: Palette) {
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
     animatedScreen: { flex: 1 },
+    videoTransferBanner: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.14),
+      borderRadius: 18,
+      borderWidth: 1,
+      bottom: 94,
+      elevation: 12,
+      flexDirection: "row",
+      gap: 10,
+      left: 16,
+      padding: 12,
+      position: "absolute",
+      right: 16,
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 7 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      zIndex: 80,
+    },
+    videoTransferMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderRadius: 17,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    videoTransferMarkText: {
+      color: colors.aqua,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    videoTransferCopy: { flex: 1, gap: 2, minWidth: 0 },
+    videoTransferHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    videoTransferTitle: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    videoTransferPercent: {
+      color: colors.aqua,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    videoTransferDetail: { color: colors.muted, fontSize: 10, lineHeight: 14 },
+    videoTransferTrack: {
+      backgroundColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: 2,
+      height: 4,
+      marginTop: 4,
+      overflow: "hidden",
+    },
+    videoTransferFill: { backgroundColor: colors.aqua, height: 4 },
+    videoTransferOpen: { color: colors.aqua, fontSize: 10, fontWeight: "900" },
     buttonDisabled: { opacity: 0.45 },
     flex: { flex: 1, minWidth: 0 },
     formError: {

@@ -241,6 +241,12 @@ describe("Duna Video contracts", () => {
       overlayScoreboard: true,
       cameraHeightMeters: 2.1,
     });
+    expect(
+      visionSessionSettingsSchema.parse({
+        ...settings,
+        captureMode: "upload",
+      }).captureMode,
+    ).toBe("upload");
     const partial = visionSessionSettingsSchema.parse({
       ...settings,
       nearLineVisible: false,

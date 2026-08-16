@@ -3462,7 +3462,7 @@ export const visionSessions = pgTable(
     }).notNull(),
     settings: jsonb("settings")
       .$type<{
-        readonly captureMode?: "record" | "live";
+        readonly captureMode?: "record" | "live" | "upload";
         readonly courtWidthMeters: number;
         readonly courtLengthMeters: number;
         readonly netHeightMeters: number;

@@ -6,7 +6,8 @@ export type LiveActivityPushToken = {
   readonly activityId: string;
   readonly pushToken: string;
   readonly subjectId: string;
-  readonly kind: DunaLiveActivityProps["kind"];
+  /** Upload progress is device-local and deliberately has no remote push. */
+  readonly kind: Exclude<DunaLiveActivityProps["kind"], "upload">;
 };
 
 type StartOptions = {
@@ -36,6 +37,7 @@ export async function startDunaLiveActivity(
   await rememberLiveActivityOptIn();
 
   const reportToken = (activityId: string, pushToken: string) => {
+    if (props.kind === "upload") return;
     options.onPushToken?.({
       activityId,
       pushToken,

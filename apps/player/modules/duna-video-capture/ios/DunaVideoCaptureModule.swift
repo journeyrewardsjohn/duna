@@ -1140,6 +1140,120 @@ public final class DunaVideoCaptureView: ExpoView {
   }
 }
 
+/**
+ * Imported videos do not have the live AR calibration available during a
+ * Duna recording. This selector looks across the recording on-device and
+ * returns compact stills that are useful for a player to confirm a court and
+ * the people in it. Rectangle and human observations only rank candidates;
+ * they never create court geometry or identity on their own.
+ */
+private enum DunaImportedVideoFrameSampler {
+  private static func jpegBase64(from image: CGImage) -> String? {
+    let source = UIImage(cgImage: image)
+    let longestEdge = max(source.size.width, source.size.height)
+    let targetSize: CGSize
+    if longestEdge > 480 {
+      let scale = 480 / longestEdge
+      targetSize = CGSize(
+        width: max(1, floor(source.size.width * scale)),
+        height: max(1, floor(source.size.height * scale))
+      )
+    } else {
+      targetSize = source.size
+    }
+    let renderer = UIGraphicsImageRenderer(size: targetSize)
+    let resized = renderer.image { _ in
+      source.draw(in: CGRect(origin: .zero, size: targetSize))
+    }
+    var quality: CGFloat = 0.46
+    var data = resized.jpegData(compressionQuality: quality)
+    // The API accepts a 280 KB base64 field. Keep room for base64 expansion
+    // and malformed source images without retaining a large second video copy.
+    while let current = data, current.count > 175_000, quality > 0.2 {
+      quality -= 0.08
+      data = resized.jpegData(compressionQuality: quality)
+    }
+    return data?.base64EncodedString()
+  }
+
+  private static func observations(for image: CGImage) -> (
+    courtScore: Double,
+    playerCount: Int
+  ) {
+    let rectangles = VNDetectRectanglesRequest()
+    rectangles.maximumObservations = 6
+    rectangles.minimumConfidence = 0.3
+    rectangles.minimumSize = 0.08
+    let humans = VNDetectHumanRectanglesRequest()
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    do {
+      try handler.perform([rectangles, humans])
+    } catch {
+      return (0, 0)
+    }
+    let rectangleConfidence = rectangles.results?
+      .map { Double($0.confidence) }
+      .max() ?? 0
+    return (rectangleConfidence, humans.results?.count ?? 0)
+  }
+
+  static func samples(source: URL, maximumFrames: Int) -> [[String: Any]] {
+    let maximumFrames = min(20, max(10, maximumFrames))
+    let asset = AVURLAsset(url: source)
+    let duration = CMTimeGetSeconds(asset.duration)
+    guard duration.isFinite, duration > 0 else { return [] }
+
+    // Scan more moments than we present so the filmstrip favors views with a
+    // court-like plane and visible people, including moments minutes into a
+    // long recording rather than only its opening setup.
+    let candidateCount = min(40, max(20, maximumFrames * 2))
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: 480, height: 480)
+    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.45, preferredTimescale: 600)
+    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.45, preferredTimescale: 600)
+
+    var candidates: [[String: Any]] = []
+    let edgeMargin = min(0.08, duration / 4)
+    for index in 0..<candidateCount {
+      let fraction = (Double(index) + 0.5) / Double(candidateCount)
+      let seconds = max(
+        edgeMargin,
+        min(duration - edgeMargin, duration * fraction)
+      )
+      var actual = CMTime.zero
+      guard let image = try? generator.copyCGImage(
+        at: CMTime(seconds: seconds, preferredTimescale: 600),
+        actualTime: &actual
+      ), let jpegBase64 = jpegBase64(from: image) else {
+        continue
+      }
+      let result = observations(for: image)
+      candidates.append([
+        "id": UUID().uuidString,
+        "timestampSeconds": max(0, CMTimeGetSeconds(actual)),
+        "jpegBase64": jpegBase64,
+        "courtScore": result.courtScore,
+        "playerCount": result.playerCount
+      ])
+    }
+
+    let ranked = candidates.sorted { left, right in
+      let leftScore = (left["courtScore"] as? Double ?? 0) * 4 +
+        Double(left["playerCount"] as? Int ?? 0) * 0.35
+      let rightScore = (right["courtScore"] as? Double ?? 0) * 4 +
+        Double(right["playerCount"] as? Int ?? 0) * 0.35
+      return leftScore > rightScore
+    }
+    // Chronological presentation helps a player recognize the point in the
+    // game while preserving the CV-ranked candidate set.
+    return ranked.prefix(maximumFrames).sorted {
+      ($0["timestampSeconds"] as? Double ?? 0) <
+        ($1["timestampSeconds"] as? Double ?? 0)
+    }
+  }
+}
+
 private final class DunaVideoPicker: NSObject, PHPickerViewControllerDelegate {
   private let promise: Promise
   private weak var picker: PHPickerViewController?
@@ -1319,6 +1433,15 @@ public final class DunaVideoCaptureModule: Module {
       pickerDelegate = delegate
       parent.present(picker, animated: true)
     }.runOnQueue(.main)
+
+    AsyncFunction("sampleVideoFrames") {
+      (fileUri: String, maximumFrames: Int) -> [[String: Any]] in
+      let source = URL(string: fileUri) ?? URL(fileURLWithPath: fileUri)
+      return DunaImportedVideoFrameSampler.samples(
+        source: source,
+        maximumFrames: maximumFrames
+      )
+    }
 
     AsyncFunction("uploadPart") {
       (
