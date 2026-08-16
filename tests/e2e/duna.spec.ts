@@ -457,16 +457,14 @@ test("public event creation carries a clean starter into guided HQ", async ({
   if (expectedHqUrl.hostname === "127.0.0.1") {
     acceptableHqHosts.add("localhost");
   }
-  await page.waitForURL(
-    (url) => {
-      return (
-        acceptableHqHosts.has(url.hostname) &&
-        url.port === expectedHqUrl.port &&
-        url.pathname === "/events/create" &&
-        url.searchParams.get("type") === "league"
-      );
-    },
-  );
+  await page.waitForURL((url) => {
+    return (
+      acceptableHqHosts.has(url.hostname) &&
+      url.port === expectedHqUrl.port &&
+      url.pathname === "/events/create" &&
+      url.searchParams.get("type") === "league"
+    );
+  });
   await expect(
     page.getByRole("heading", {
       name: "Create something players remember.",
