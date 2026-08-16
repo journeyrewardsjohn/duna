@@ -5173,7 +5173,7 @@ const styles = StyleSheet.create({
   },
   importedVisionEyebrow: {
     color: palette.positive,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
@@ -5202,7 +5202,7 @@ const styles = StyleSheet.create({
   },
   importedVisionLabel: {
     color: palette.navy,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.9,
     marginTop: 2,
@@ -5222,7 +5222,7 @@ const styles = StyleSheet.create({
   importedFrameImage: { height: 80, width: "100%" },
   importedFrameTime: {
     color: palette.navy,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     paddingHorizontal: 7,
     paddingTop: 5,
