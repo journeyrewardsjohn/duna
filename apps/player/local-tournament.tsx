@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: "#667085",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.1,
   },
@@ -285,14 +285,14 @@ const styles = StyleSheet.create({
   },
   liveChipText: {
     color: "#166B4A",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
   nextCard: { backgroundColor: "#122B4D", borderRadius: 18, padding: 16 },
   nextEyebrow: {
     color: "#7FE4C1",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     fontWeight: "700",
   },
-  poolNote: { color: "#667085", fontSize: 11, lineHeight: 15, marginTop: 8 },
+  poolNote: { color: "#667085", fontSize: 12, lineHeight: 15, marginTop: 8 },
   bracket: { gap: 10 },
   match: {
     backgroundColor: "#FFFFFF",
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   },
   matchStatus: {
     color: "#667085",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2F6",
     borderRadius: 10,
     color: "#667085",
-    fontSize: 11,
+    fontSize: 12,
     fontVariant: ["tabular-nums"],
     fontWeight: "800",
     overflow: "hidden",

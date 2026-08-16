@@ -2706,7 +2706,7 @@
   color: var(--color-bone-muted);
   display: inline-flex;
   font-family: var(--font-archivo);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2879,7 +2879,7 @@
 .tournament-desk__match-status {
   color: var(--color-bone-muted);
   font-family: var(--font-archivo);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2913,7 +2913,7 @@
   border-radius: 999px;
   color: var(--color-bone-muted);
   font-family: var(--font-archivo);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   padding: 0.2rem 0.35rem;
 }

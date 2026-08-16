@@ -55,6 +55,8 @@ import { SessionArrivalBoard } from "./session-arrival-board";
 import { SessionNotesScreen } from "./session-notes";
 import { TicketScannerScreen } from "./ticket-scanner";
 import { ProMessagingScreen } from "./messaging-screen";
+import { CoachVideoScreen } from "./coach-video";
+import { TournamentControl } from "./tournament-control";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import {
   ProRuntimeProvider,
@@ -4292,12 +4294,16 @@ function MoreScreen({
   onGetPaid,
   onMessages,
   onPeople,
+  onTournament,
+  onVideo,
 }: {
   readonly onCalendar: () => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
   readonly onMessages: () => void;
   readonly onPeople: () => void;
+  readonly onTournament: () => void;
+  readonly onVideo: () => void;
 }) {
   const { dashboard, signOut, workspace } = useProRuntime();
   const [selectedMenu, setSelectedMenu] = useState<string>();
@@ -4314,6 +4320,7 @@ function MoreScreen({
         "Calendar",
         "Products + services",
         "Events + leagues",
+        "Coach video",
         "Messages",
         "Reports",
       ],
@@ -4431,7 +4438,11 @@ function MoreScreen({
       ].includes(item)
     ) {
       onCreate();
-    } else if (["Events + leagues", "Venues + courts"].includes(item)) {
+    } else if (item === "Events + leagues") {
+      onTournament();
+    } else if (item === "Coach video") {
+      onVideo();
+    } else if (item === "Venues + courts") {
       onCalendar();
     } else if (["Money + tax", "Coach payroll support"].includes(item)) {
       onGetPaid();
@@ -4448,15 +4459,19 @@ function MoreScreen({
         "Retail + inventory",
       ].includes(selectedMenu)
       ? "Create natively"
-      : ["Events + leagues", "Venues + courts"].includes(selectedMenu)
-        ? "Open schedule"
-        : ["Money + tax", "Coach payroll support"].includes(selectedMenu)
-          ? "Open Get Paid"
-          : ["Messages", "Team + roles", "Policies + waivers"].includes(
-                selectedMenu,
-              )
-            ? "Open People"
-            : undefined
+      : selectedMenu === "Events + leagues"
+        ? "Open tournament desk"
+        : selectedMenu === "Coach video"
+          ? "Open video"
+          : selectedMenu === "Venues + courts"
+            ? "Open schedule"
+            : ["Money + tax", "Coach payroll support"].includes(selectedMenu)
+              ? "Open Get Paid"
+              : ["Messages", "Team + roles", "Policies + waivers"].includes(
+                    selectedMenu,
+                  )
+                ? "Open People"
+                : undefined
     : undefined;
   return (
     <>
@@ -4661,7 +4676,13 @@ function ProApp() {
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<
-    "create" | "get-paid" | "messages" | "scan" | "score"
+    | "create"
+    | "get-paid"
+    | "messages"
+    | "scan"
+    | "score"
+    | "tournament"
+    | "video"
   >();
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
@@ -4906,6 +4927,41 @@ function ProApp() {
             />
           </View>
         </SafeAreaView>
+      ) : surface === "tournament" ? (
+        <TournamentControl
+          onClose={() => setSurface(undefined)}
+          onScore={openScore}
+          palette={{
+            canvas: colors.canvas,
+            surface: colors.depth,
+            surfaceAlt: colors.navyLift,
+            ink: colors.bone,
+            muted: colors.muted,
+            accent: colors.aqua,
+            onAccent: colors.onAccent,
+            positive: colors.positive,
+            warning: colors.warning,
+            danger: colors.danger,
+            border: rgba(colors.overlayRgb, 0.12),
+          }}
+        />
+      ) : surface === "video" ? (
+        <CoachVideoScreen
+          onClose={() => setSurface(undefined)}
+          palette={{
+            canvas: colors.canvas,
+            surface: colors.depth,
+            surfaceAlt: colors.navyLift,
+            ink: colors.bone,
+            muted: colors.muted,
+            accent: colors.aqua,
+            onAccent: colors.onAccent,
+            positive: colors.positive,
+            warning: colors.warning,
+            danger: colors.danger,
+            border: rgba(colors.overlayRgb, 0.12),
+          }}
+        />
       ) : (
         <SafeAreaView edges={["top"]} style={styles.safe}>
           <StatusBar style={theme === "dark" ? "light" : "dark"} />
@@ -4980,6 +5036,8 @@ function ProApp() {
                     setSurface("messages");
                   }}
                   onPeople={() => setTab("people")}
+                  onTournament={() => setSurface("tournament")}
+                  onVideo={() => setSurface("video")}
                 />
               )}
             </Animated.View>
