@@ -42,6 +42,12 @@ interface TeamSlot {
   readonly index: number;
   readonly mode: "duna" | "invite";
   readonly personId?: string;
+  /**
+   * Keep the selected person with the slot. Search results are intentionally
+   * refreshed as the query changes, so the roster must not depend on the
+   * current result set to render an already-selected teammate.
+   */
+  readonly person?: PersonSummary;
   readonly inviteTarget: string;
 }
 
@@ -477,6 +483,12 @@ export function CheckoutPanel({
     .filter((personId): personId is string => Boolean(personId));
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const remotePeople = remoteTeammates?.map((result) => result.person);
+  const availableTeamPeopleById = new Map(
+    [...searchablePlayers, ...(remotePeople ?? [])].map((person) => [
+      person.id,
+      person,
+    ]),
+  );
   const suggestedPlayers = (
     remotePeople && remotePeople.length > 0 ? remotePeople : searchablePlayers
   )
@@ -511,6 +523,9 @@ export function CheckoutPanel({
     updateTeamSlot(openSlot.index, {
       mode: "duna",
       personId,
+      person:
+        availableTeamPeopleById.get(personId) ??
+        searchablePlayers.find((candidate) => candidate.id === personId),
       inviteTarget: "",
     });
     setTeamSearch("");
@@ -525,6 +540,7 @@ export function CheckoutPanel({
     updateTeamSlot(openSlot.index, {
       mode: "invite",
       personId: undefined,
+      person: undefined,
       inviteTarget: target,
     });
     setInviteTarget("");
@@ -992,9 +1008,8 @@ export function CheckoutPanel({
                 <Check aria-hidden size={18} />
               </article>
               {teamSlots.map((slot) => {
-                const selectedPerson = searchablePlayers.find(
-                  (candidate) => candidate.id === slot.personId,
-                );
+                const selectedPerson =
+                  slot.person ?? availableTeamPeopleById.get(slot.personId ?? "");
                 return (
                   <article
                     className={`checkout-roster__member ${selectedPerson || slot.inviteTarget ? "filled" : "open"}`}
@@ -1031,6 +1046,7 @@ export function CheckoutPanel({
                           updateTeamSlot(slot.index, {
                             mode: "duna",
                             personId: undefined,
+                            person: undefined,
                             inviteTarget: "",
                           })
                         }
@@ -1477,9 +1493,9 @@ export function CheckoutPanel({
                 teamClaimToken: initialTeamClaimToken,
                 teamRoster: organizingTeam
                   ? teamSlots.map((slot) => {
-                      const person = searchablePlayers.find(
-                        (candidate) => candidate.id === slot.personId,
-                      );
+                      const person =
+                        slot.person ??
+                        availableTeamPeopleById.get(slot.personId ?? "");
                       return {
                         personId:
                           slot.mode === "duna" ? slot.personId : undefined,
