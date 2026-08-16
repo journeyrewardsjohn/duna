@@ -8757,7 +8757,7 @@ button {
 .tournament-launch-control small,
 .division-manual-entry summary small {
   color: var(--color-bone-muted);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -8772,7 +8772,7 @@ button {
 
 .tournament-launch-control p {
   color: var(--color-bone-muted);
-  font-size: 0.675rem;
+  font-size: 0.75rem;
   line-height: 1.45;
   margin: 0.25rem 0 0;
   max-width: 690px;
@@ -8792,7 +8792,7 @@ button {
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
   gap: 0.38rem;
   justify-content: center;
@@ -9007,7 +9007,7 @@ button {
 .division-manual-entry legend,
 .division-manual-entry label > span {
   color: var(--color-bone-muted);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 760;
 }
 
@@ -9024,7 +9024,7 @@ button {
 
 .division-manual-entry fieldset small {
   color: var(--color-bone-muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   grid-column: 2 / -1;
   line-height: 1.35;
 }
@@ -9057,7 +9057,7 @@ button {
   align-items: center;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.675rem;
+  font-size: 0.75rem;
   gap: 0.45rem;
 }
 
@@ -9526,7 +9526,7 @@ button {
 .event-note-choice small,
 .event-note-written small {
   color: var(--color-bone-muted);
-  font-size: 0.665rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -9537,7 +9537,7 @@ button {
   color: var(--color-aqua);
   cursor: pointer;
   font: inherit;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 800;
   padding: 0;
 }
@@ -9581,7 +9581,7 @@ button {
 
 .event-note-written > label > span {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 760;
 }
 
@@ -13468,7 +13468,7 @@ body {
 
 .event-choice-tiles > p {
   color: var(--color-bone-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.4;
   margin: -0.1rem 0 0;
 }
@@ -13511,7 +13511,7 @@ body {
 
 .event-choice-tiles button small {
   color: var(--color-bone-muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
