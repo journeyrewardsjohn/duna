@@ -1,0 +1,152 @@
+.page,
+.detail {
+  margin: 0 auto;
+  max-width: 90rem;
+  width: 100%;
+}
+
+.page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.hero {
+  background: var(--text-1);
+  border-radius: 1.5rem;
+  color: var(--surface-1);
+  padding: clamp(1.35rem, 4vw, 2.7rem);
+}
+
+.hero > span,
+.archive > header > div > span {
+  color: var(--signal);
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.hero h1,
+.archive h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  margin: 0.5rem 0 0;
+}
+
+.hero h1 {
+  font-size: clamp(2.35rem, 5vw, 4.5rem);
+  line-height: 0.94;
+}
+.hero p {
+  color: color-mix(in srgb, var(--surface-1) 78%, transparent);
+  line-height: 1.55;
+  max-width: 53ch;
+}
+
+.captureLink {
+  align-items: center;
+  background: var(--signal);
+  border-radius: 0.8rem;
+  color: var(--signal-text);
+  display: inline-flex;
+  font-size: 0.87rem;
+  font-weight: 800;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+
+.archive,
+.processing {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-small);
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.archive > header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+}
+.archive h2 {
+  font-size: 1.4rem;
+}
+
+.videoGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  margin-top: 1rem;
+}
+
+.videoGrid a {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 1rem;
+  color: var(--text-1);
+  display: grid;
+  gap: 0.35rem;
+  min-height: 10rem;
+  padding: 1rem;
+}
+
+.videoGrid a:hover {
+  border-color: var(--signal-text);
+}
+.videoGrid strong {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+.videoGrid small,
+.videoGrid em,
+.empty,
+.processing p {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.videoGrid em {
+  font-style: normal;
+  margin-top: auto;
+}
+.videoStatus {
+  color: var(--signal-text);
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.empty {
+  margin: 1rem 0 0;
+}
+
+.detail {
+  padding-bottom: 1.5rem;
+}
+.back {
+  align-items: center;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.83rem;
+  font-weight: 750;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+  min-height: 3rem;
+}
+.processing {
+  margin-top: 1rem;
+}
+.processing strong {
+  color: var(--text-1);
+}
+
+@media (max-width: 720px) {
+  .videoGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -92,13 +92,14 @@ const clubStories = [
   },
   {
     id: "club-growth",
-    eyebrow: "Reports + demand",
-    title: "Turn operating truth into the next full court.",
-    body: "Read utilization, revenue, retention, and offer health by court, coach, and program. Build consent-aware journeys and review every Duna AI suggestion before anything changes.",
+    eyebrow: "Reports + court intelligence",
+    title: "Turn operating truth—and court evidence—into the next full court.",
+    body: "Read utilization, revenue, retention, offer health, and permissioned Duna Vision review by court, coach, and program. Video observations stay source-linked and confidence-labeled, so staff can see what is measured, what was reviewed, and what still needs a human call.",
     proof: [
       "Court, coach, and program reporting",
+      "Consent-aware Duna Vision review",
       "Consent-aware campaigns",
-      "Reviewable operational suggestions",
+      "Reviewable operational and coaching suggestions",
     ],
   },
 ] as const;
@@ -136,10 +137,11 @@ const coachStories = [
   {
     id: "coach-performance",
     eyebrow: "Player care",
-    title: "Coach the person, not just the hour.",
-    body: "Keep videos, private notes, participation, memberships, and player-shared HealthKit summaries together. Players control what health data is shared; verified guardians stay connected for minors.",
+    title: "Coach the person, with the rally in context.",
+    body: "Keep Duna Vision video, source-linked rally review, private notes, participation, memberships, and player-shared HealthKit summaries together. Players control what health data is shared; verified guardians stay connected for minors.",
     proof: [
-      "Video capture and private sharing",
+      "Source-linked video and rally review",
+      "Visible-court heatmaps with confidence",
       "Permissioned health summaries",
       "Player and guardian context",
     ],
@@ -163,7 +165,11 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
     "Audiences, triggers, consent, and reviewable sends",
   ],
   [BarChart3, "Reports", "Utilization, retention, revenue, and offer health"],
-  [Video, "Video", "Live capture, uploads, private links, and player sharing"],
+  [
+    Video,
+    "Duna Vision",
+    "Consent-aware capture, source-linked rallies, review cues, and private sharing",
+  ],
   [
     HeartPulse,
     "Health sharing",
@@ -811,8 +817,8 @@ function CoachDeviceStage() {
               <article>
                 <Video />
                 <span>
-                  <strong>12 videos</strong>
-                  <small>3 shared this month</small>
+                  <strong>Rally review</strong>
+                  <small>Source-linked Vision cues</small>
                 </span>
               </article>
               <article>
@@ -854,7 +860,7 @@ function CoachDeviceStage() {
                 <Video />
                 <span>
                   <strong>Serve receive</strong>
-                  <small>Today · private with Jordan</small>
+                  <small>Today · verified review cue</small>
                 </span>
               </span>
             </div>
@@ -1019,7 +1025,7 @@ export function RunYourBusinessPage({
               <p>
                 One operating system for the independent coach with a packed
                 calendar and the club coordinating courts, staff, parents,
-                memberships, payments, video, and growth.
+                memberships, payments, Duna Vision review, and growth.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryButton} href={hqHref}>
@@ -1117,8 +1123,8 @@ export function RunYourBusinessPage({
           <p>
             Duna Pro handles the live work while Duna HQ keeps the business
             organized. Start with your calendar and clients, then add products,
-            distribution, payments, video, and reporting without rebuilding the
-            foundation.
+            distribution, payments, Duna Vision review, and reporting without
+            rebuilding the foundation.
           </p>
         </div>
         <div

@@ -580,6 +580,167 @@
   margin-top: 3cqw;
 }
 
+.reviewScreen {
+  display: grid;
+  gap: 3cqw;
+  grid-template-rows: auto 1fr auto auto auto;
+  height: 100%;
+  padding: 5cqw;
+}
+
+.reviewHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.reviewHeader span,
+.reviewHandoff {
+  color: rgb(255 255 255 / 52%);
+  font-size: 2.25cqw;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.reviewHeader strong {
+  color: var(--duna-lime);
+  font-size: 3.2cqw;
+  font-variant-numeric: tabular-nums;
+}
+
+.reviewPreview {
+  background:
+    linear-gradient(180deg, rgb(7 11 10 / 8%), rgb(0 0 0 / 66%)),
+    url("/media/duna-hero-poster.webp") 63% center / cover;
+  border: 0.5cqw solid rgb(255 255 255 / 28%);
+  border-radius: 5cqw;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.reviewPreview > span {
+  align-items: center;
+  background: #ff9e2f;
+  border-radius: 50%;
+  box-shadow: 0 1cqw 3cqw rgb(0 0 0 / 42%);
+  color: #201406;
+  display: flex;
+  height: 9cqw;
+  justify-content: center;
+  position: absolute;
+  right: 3cqw;
+  top: 3cqw;
+  width: 9cqw;
+}
+
+.reviewPreview > span svg {
+  fill: currentColor;
+  height: 4.1cqw;
+  stroke-width: 2.8;
+  width: 4.1cqw;
+}
+
+.reviewCourt {
+  border: 0.45cqw solid rgb(102 237 136 / 86%);
+  inset: 13% 16% 10%;
+  position: absolute;
+}
+
+.reviewCourt::before,
+.reviewCourt::after {
+  background: rgb(102 237 136 / 82%);
+  content: "";
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.reviewCourt::before {
+  height: 0.35cqw;
+  top: 50%;
+}
+
+.reviewCourt::after {
+  bottom: 0;
+  top: 0;
+  width: 0.35cqw;
+  left: 50%;
+}
+
+.reviewCourt i {
+  background: #fff6b0;
+  border: 0.35cqw solid #ff9e2f;
+  border-radius: 50%;
+  box-shadow: 0 0 2cqw #ff9e2f;
+  height: 2.4cqw;
+  position: absolute;
+  width: 2.4cqw;
+}
+
+.reviewCourt i:nth-child(1) {
+  left: 26%;
+  top: 28%;
+}
+
+.reviewCourt i:nth-child(2) {
+  right: 24%;
+  top: 39%;
+}
+
+.reviewCourt i:nth-child(3) {
+  bottom: 20%;
+  left: 53%;
+}
+
+.reviewLabel {
+  display: grid;
+  gap: 0.8cqw;
+}
+
+.reviewLabel strong {
+  font-size: 3.5cqw;
+  letter-spacing: -0.02em;
+}
+
+.reviewLabel small {
+  color: rgb(255 255 255 / 58%);
+  font-size: 2.45cqw;
+  font-variant-numeric: tabular-nums;
+}
+
+.reviewStatus {
+  align-items: center;
+  background: rgb(255 158 47 / 16%);
+  border: 0.35cqw solid rgb(255 158 47 / 36%);
+  border-radius: 999px;
+  color: #ffd29b;
+  display: flex;
+  font-size: 2.35cqw;
+  font-weight: 800;
+  gap: 1.5cqw;
+  padding: 1.8cqw 2.3cqw;
+}
+
+.reviewStatus svg:first-child {
+  fill: currentColor;
+  height: 2.7cqw;
+  width: 2.7cqw;
+}
+
+.reviewStatus svg:last-child {
+  color: var(--duna-lime);
+  height: 3cqw;
+  margin-left: auto;
+  stroke-width: 3;
+  width: 3cqw;
+}
+
+.reviewHandoff {
+  color: var(--duna-lime);
+  justify-self: center;
+}
+
 @keyframes vision-pulse {
   0%,
   100% {

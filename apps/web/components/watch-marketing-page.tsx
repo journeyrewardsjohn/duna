@@ -123,7 +123,7 @@ export function WatchMarketingPage() {
         <div>
           <Link href="#score">Scorekeeping</Link>
           <Link href="#vision">Duna Vision</Link>
-          <Link href="#highlights">Highlights</Link>
+          <Link href="#highlights">Review cues</Link>
           <Link href="#check-in">Live Check-In</Link>
         </div>
         <Link className={styles.productCta} href="/sign-up">
@@ -145,7 +145,7 @@ export function WatchMarketingPage() {
                 <em>On your wrist.</em>
               </h1>
               <p>
-                Keep score in motion. Sync every rally to Duna Vision. Save the
+                Keep score in motion. Sync every rally to Duna Vision. Flag the
                 moment worth seeing again—without stepping off the sand.
               </p>
               <div className={styles.heroActions}>
@@ -296,8 +296,8 @@ export function WatchMarketingPage() {
           </h2>
           <p>
             While Duna records or broadcasts live, Watch gestures become
-            timestamped events. The scoreboard, the playhead, and the match
-            history stay in one timeline.
+            source-linked events. The scoreboard, playhead, score, and review
+            history stay in one evidence-backed timeline.
           </p>
         </div>
 
@@ -355,18 +355,18 @@ export function WatchMarketingPage() {
         <div className={`${styles.shell} ${styles.syncProof}`}>
           <article data-reveal>
             <Video aria-hidden />
-            <h3>Frame-accurate context</h3>
+            <h3>Source-linked context</h3>
             <p>
-              Each scoring event carries its place in the recording, so review
-              opens with the match already mapped.
+              Each scoring event carries its place in the recording, so the
+              paired iPhone opens the relevant rally instead of a blank reel.
             </p>
           </article>
           <article data-reveal>
             <Radio aria-hidden />
-            <h3>Live means live</h3>
+            <h3>One cue, not a tiny editor</h3>
             <p>
-              Score changes can travel with the broadcast while the rally is
-              still happening.
+              Flag the last rally for coaching review from Watch; full playback,
+              analysis, and trimming stay comfortably on the paired iPhone.
             </p>
           </article>
           <article data-reveal>
@@ -386,28 +386,29 @@ export function WatchMarketingPage() {
         id="highlights"
       >
         <div className={styles.sectionHeading} data-reveal>
-          <span className={styles.eyebrow}>Highlights</span>
+          <span className={styles.eyebrow}>Review cues</span>
           <h2>Save the point. Not the thought.</h2>
           <p>
-            When the rally is worth another look, swipe right or tap the star.
-            Duna marks the exact moment for the edit waiting after the match.
+            When a rally deserves another look, flag it from Watch. Duna keeps
+            the timestamp, score, and source video together for the review
+            waiting after the match.
           </p>
         </div>
 
         <div className={`${styles.shell} ${styles.highlightGrid}`}>
           <article className={styles.highlightHeroCard} data-reveal>
             <div>
-              <span className={styles.cardKicker}>One tap highlight</span>
-              <h3>Your best point, already found.</h3>
+              <span className={styles.cardKicker}>Last-rally review cue</span>
+              <h3>A tiny decision with full context.</h3>
               <p>
-                Favorite moments land directly on the Duna Vision timeline—no
-                scrubbing through an hour of footage to find one rally.
+                Watch confirms the cue, then the paired iPhone opens the
+                source-linked rally with the score and Duna Vision analysis.
               </p>
             </div>
             <DunaWatchDevice
               className={styles.highlightWatch}
-              label="Moment saved confirmation on Duna for Apple Watch"
-              screen="highlight"
+              label="Source-linked last-rally review cue on Duna for Apple Watch"
+              screen="review"
             />
           </article>
 
@@ -420,9 +421,12 @@ export function WatchMarketingPage() {
               <small>Moment 03 · 00:12:48</small>
             </div>
             <div>
-              <span className={styles.cardKicker}>Ready to edit</span>
-              <h3>The cut starts here.</h3>
-              <p>Open the saved rally, trim it, and share it from Duna.</p>
+              <span className={styles.cardKicker}>Ready to analyze</span>
+              <h3>The cut—and the coaching—starts here.</h3>
+              <p>
+                Open the saved rally, see its verified context, trim the clip,
+                and share it from Duna.
+              </p>
             </div>
           </article>
 
@@ -541,7 +545,10 @@ export function WatchMarketingPage() {
           <article data-reveal>
             <Star aria-hidden />
             <h3>Every moment has context.</h3>
-            <p>Highlights keep the score and elapsed match time attached.</p>
+            <p>
+              Highlights and review cues keep score, elapsed time, and source
+              video attached.
+            </p>
           </article>
         </div>
       </section>

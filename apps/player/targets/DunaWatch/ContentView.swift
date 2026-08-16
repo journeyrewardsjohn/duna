@@ -6,6 +6,7 @@ private let dunaOrange = Color(red: 1.0, green: 0.63, blue: 0.12)
 struct ContentView: View {
   @EnvironmentObject private var scoring: WatchScoringStore
   @State private var showCamera = false
+  @State private var showReview = false
   @State private var showControls = false
   @State private var actionLabel: String?
 
@@ -53,6 +54,10 @@ struct ContentView: View {
       CameraPreviewView()
         .environmentObject(scoring)
     }
+    .sheet(isPresented: $showReview) {
+      LastRallyReviewView()
+        .environmentObject(scoring)
+    }
     .sheet(isPresented: $showControls) {
       MatchControlsView()
         .environmentObject(scoring)
@@ -67,6 +72,14 @@ struct ContentView: View {
         compact: compact
       ) {
         showCamera = true
+      }
+
+      roundButton(
+        symbol: "film.stack.fill",
+        label: "Review the last rally cue",
+        compact: compact
+      ) {
+        showReview = true
       }
 
       Spacer(minLength: 2)
@@ -419,6 +432,84 @@ private struct CameraPreviewView: View {
         .multilineTextAlignment(.center)
     }
     .padding(.horizontal, 4)
+  }
+}
+
+private struct LastRallyReviewView: View {
+  @Environment(\.dismiss) private var dismiss
+  @EnvironmentObject private var scoring: WatchScoringStore
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 9) {
+        HStack {
+          Text("Last rally")
+            .font(.headline)
+          Spacer()
+          Button("Done") { dismiss() }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+        }
+
+        ZStack {
+          RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(Color.white.opacity(0.06))
+          if let image = scoring.previewImage {
+            Image(uiImage: image)
+              .resizable()
+              .scaledToFill()
+              .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+          } else {
+            VStack(spacing: 5) {
+              Image(systemName: "film")
+                .font(.title3)
+              Text("Open Duna Vision on iPhone")
+                .font(.caption2.weight(.semibold))
+                .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(.secondary)
+          }
+        }
+        .frame(height: 96)
+
+        Text(scoring.lastRallyLabel)
+          .font(.subheadline.weight(.bold))
+        Text(
+          scoring.lastRallyElapsedSeconds.map {
+            "Marked at \($0 / 60)m \($0 % 60)s"
+          } ?? "Score the next rally to create a review cue."
+        )
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+
+        Button {
+          scoring.flagLastRallyForReview()
+          dismiss()
+        } label: {
+          Label("Flag for coaching review", systemImage: "flag.fill")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(dunaOrange)
+        .disabled(!scoring.isVisionActive || scoring.lastRallyElapsedSeconds == nil)
+
+        Button {
+          scoring.favoriteMoment()
+          dismiss()
+        } label: {
+          Label("Save as highlight", systemImage: "star.fill")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!scoring.isVisionActive || scoring.lastRallyElapsedSeconds == nil)
+
+        Text("This is a courtside cue. Open the paired iPhone for source-linked playback and the full Duna Vision report.")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+      .padding(.horizontal, 5)
+      .padding(.bottom, 8)
+    }
   }
 }
 

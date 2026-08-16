@@ -1,7 +1,7 @@
-import { Camera, Check, Settings, Star, Undo2 } from "lucide-react";
+import { Camera, Check, Flag, Settings, Star, Undo2 } from "lucide-react";
 import styles from "./duna-watch-device.module.css";
 
-type WatchScreen = "camera" | "highlight" | "score";
+type WatchScreen = "camera" | "highlight" | "review" | "score";
 
 interface DunaWatchDeviceProps {
   readonly className?: string;
@@ -118,6 +118,37 @@ function HighlightScreen() {
   );
 }
 
+function ReviewScreen() {
+  return (
+    <div className={styles.reviewScreen}>
+      <div className={styles.reviewHeader}>
+        <span>REVIEW CUE</span>
+        <strong>18:42</strong>
+      </div>
+      <div className={styles.reviewPreview}>
+        <div className={styles.reviewCourt}>
+          <i />
+          <i />
+          <i />
+        </div>
+        <span>
+          <Flag aria-hidden />
+        </span>
+      </div>
+      <div className={styles.reviewLabel}>
+        <strong>Point · Side A</strong>
+        <small>17–14 · 00:18:42</small>
+      </div>
+      <div className={styles.reviewStatus}>
+        <Flag aria-hidden />
+        <span>Flagged for review</span>
+        <Check aria-hidden />
+      </div>
+      <small className={styles.reviewHandoff}>OPEN PAIRED IPHONE</small>
+    </div>
+  );
+}
+
 export function DunaWatchDevice({
   className,
   label = "Duna scorekeeping app on Apple Watch",
@@ -143,6 +174,7 @@ export function DunaWatchDevice({
           {screen === "score" && <ScoreScreen motion={motion} />}
           {screen === "camera" && <CameraScreen />}
           {screen === "highlight" && <HighlightScreen />}
+          {screen === "review" && <ReviewScreen />}
         </div>
       </div>
     </div>

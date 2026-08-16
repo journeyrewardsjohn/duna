@@ -1,0 +1,270 @@
+.report {
+  display: grid;
+  gap: 1.25rem;
+  margin: 1.5rem auto 0;
+  max-width: 90rem;
+}
+
+.header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.eyebrow,
+.kicker {
+  color: var(--signal-text);
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.header h1,
+.courtCard h2,
+.evidenceCard h2,
+.timelineGrid h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+  margin: 0.35rem 0 0;
+}
+
+.header h1 {
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 0.96;
+}
+
+.header p {
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0.8rem 0 0;
+  max-width: 56ch;
+}
+
+.metrics {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metrics article,
+.courtCard,
+.evidenceCard,
+.timelineGrid article {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-small);
+}
+
+.metrics article {
+  display: grid;
+  gap: 0.28rem;
+  min-height: 7rem;
+  padding: 1rem;
+}
+
+.metrics span {
+  color: var(--text-2);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.grid,
+.timelineGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.85fr);
+}
+
+.courtCard,
+.evidenceCard,
+.timelineGrid article {
+  padding: 1.1rem;
+}
+
+.courtCard > header,
+.evidenceCard > header,
+.timelineGrid article > header {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.courtCard h2,
+.evidenceCard h2,
+.timelineGrid h2 {
+  font-size: 1.2rem;
+}
+
+.court {
+  aspect-ratio: 1.8 / 1;
+  background:
+    linear-gradient(90deg, rgb(var(--accent-rgb) / 8%) 1px, transparent 1px),
+    linear-gradient(rgb(var(--accent-rgb) / 8%) 1px, transparent 1px),
+    var(--surface-2);
+  background-size: 25% 12.5%;
+  border: 2px solid var(--text-1);
+  border-radius: 0.8rem;
+  margin-top: 1rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.net {
+  background: var(--text-1);
+  height: 2px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  z-index: 3;
+}
+
+.heatCell {
+  align-items: center;
+  border: 1px solid rgb(var(--accent-rgb) / 12%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: absolute;
+}
+
+.heatCell b {
+  font-family: var(--font-numeric);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatCell small {
+  font-size: 0.625rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.heatLight {
+  background: rgb(var(--accent-rgb) / 20%);
+}
+.heatMedium {
+  background: rgb(var(--accent-rgb) / 42%);
+}
+.heatStrong {
+  background: var(--signal);
+  color: var(--signal-text);
+}
+
+.opponentLabel,
+.playerLabel {
+  color: var(--text-2);
+  font-size: 0.625rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  position: absolute;
+  right: 0.6rem;
+  text-transform: uppercase;
+}
+
+.opponentLabel {
+  top: 0.55rem;
+}
+.playerLabel {
+  bottom: 0.55rem;
+}
+
+.summary {
+  color: var(--text-1);
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0.85rem 0 0;
+}
+
+.caption,
+.evidenceCard > p,
+.empty {
+  color: var(--text-2);
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.caption {
+  margin: 0.35rem 0 0;
+}
+
+.evidenceCard ul {
+  display: grid;
+  gap: 0.7rem;
+  list-style: none;
+  margin: 1.15rem 0;
+  padding: 0;
+}
+
+.evidenceCard li {
+  align-items: start;
+  color: var(--text-1);
+  display: flex;
+  font-size: 0.84rem;
+  font-weight: 650;
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.evidenceCard li svg {
+  color: var(--signal-text);
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.timelineGrid article > header {
+  justify-content: start;
+}
+
+.timelineGrid ol {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.timelineGrid li {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.65rem;
+  padding-top: 0.55rem;
+}
+
+.timelineGrid li span {
+  display: grid;
+  gap: 0.1rem;
+}
+.timelineGrid li strong {
+  color: var(--text-1);
+  font-size: 0.84rem;
+}
+.timelineGrid li small {
+  color: var(--text-2);
+  font-size: 0.71rem;
+}
+.empty {
+  margin: 1rem 0 0;
+}
+
+@media (max-width: 760px) {
+  .header,
+  .grid,
+  .timelineGrid {
+    grid-template-columns: 1fr;
+  }
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

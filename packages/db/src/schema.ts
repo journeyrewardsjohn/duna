@@ -3584,7 +3584,7 @@ export const visionTimelineEvents = pgTable(
     ),
     check(
       "vision_timeline_type_valid",
-      sql`${table.type} IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'set-ended', 'recording-stopped', 'calibration-updated')`,
+      sql`${table.type} IN ('recording-started', 'rally-won', 'favorite', 'undo', 'side-change', 'set-ended', 'recording-stopped', 'calibration-updated', 'review-marker')`,
     ),
     check(
       "vision_timeline_winner_valid",
@@ -3742,6 +3742,179 @@ export const videoInsightFeedback = pgTable(
     ),
     index("video_insight_feedback_created_idx").on(table.createdAt),
     check("video_insight_feedback_vote_valid", sql`${table.vote} IN (-1, 1)`),
+  ],
+);
+
+// Duna Vision analysis is evidence-first. A run contains calibration and
+// pipeline provenance; events are immutable observations; reviews are separate
+// human decisions so a model result is never silently rewritten as fact.
+export const videoAnalysisRuns = pgTable(
+  "video_analysis_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    visionSessionId: uuid("vision_session_id").references(
+      () => visionSessions.id,
+      { onDelete: "set null" },
+    ),
+    requestedByPersonId: uuid("requested_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    pipelineVersion: varchar("pipeline_version", { length: 80 }).notNull(),
+    modelVersion: varchar("model_version", { length: 80 }),
+    courtMap: jsonb("court_map").$type<{
+      readonly widthMeters: number;
+      readonly lengthMeters: number;
+      readonly coordinateFrame: "canonical-court";
+      readonly calibrationSource: "vision" | "manual" | "unknown";
+      readonly calibrationQualityScore?: number;
+    }>(),
+    coverage: jsonb("coverage").$type<{
+      readonly sampledDurationUs?: number;
+      readonly usableDurationUs?: number;
+      readonly sourceVideoAvailable: boolean;
+      readonly scoreTimelineAvailable: boolean;
+    }>(),
+    artifactR2Key: text("artifact_r2_key"),
+    failureCode: varchar("failure_code", { length: 80 }),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("video_analysis_run_video_created_idx").on(
+      table.videoId,
+      table.createdAt,
+    ),
+    index("video_analysis_run_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "video_analysis_run_status_valid",
+      sql`${table.status} IN ('queued', 'processing', 'ready', 'needs-review', 'failed', 'cancelled')`,
+    ),
+    check(
+      "video_analysis_run_completed_pair",
+      sql`(${table.status} IN ('ready', 'needs-review', 'failed', 'cancelled') AND ${table.completedAt} IS NOT NULL) OR (${table.status} NOT IN ('ready', 'needs-review', 'failed', 'cancelled'))`,
+    ),
+  ],
+);
+
+export const videoAnalysisEvents = pgTable(
+  "video_analysis_events",
+  {
+    id: uuid("id").primaryKey(),
+    runId: uuid("run_id").references(() => videoAnalysisRuns.id, {
+      onDelete: "cascade",
+    }),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    visionSessionId: uuid("vision_session_id").references(
+      () => visionSessions.id,
+      { onDelete: "set null" },
+    ),
+    eventType: varchar("event_type", { length: 32 }).notNull(),
+    source: varchar("source", { length: 16 }).notNull(),
+    state: varchar("state", { length: 16 }).notNull().default("proposed"),
+    sessionTimeUs: bigint("session_time_us", { mode: "number" }).notNull(),
+    durationUs: bigint("duration_us", { mode: "number" }),
+    confidence: doublePrecision("confidence"),
+    courtPoint: jsonb("court_point").$type<{
+      readonly xMeters: number;
+      readonly yMeters: number;
+      readonly observed: "visible" | "edge" | "out-of-frame";
+    }>(),
+    payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+    modelVersion: varchar("model_version", { length: 80 }),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    supersedesEventId: uuid("supersedes_event_id"),
+    createdAt,
+  },
+  (table) => [
+    index("video_analysis_event_video_time_idx").on(
+      table.videoId,
+      table.sessionTimeUs,
+    ),
+    index("video_analysis_event_run_time_idx").on(
+      table.runId,
+      table.sessionTimeUs,
+    ),
+    index("video_analysis_event_session_time_idx").on(
+      table.visionSessionId,
+      table.sessionTimeUs,
+    ),
+    check(
+      "video_analysis_event_type_valid",
+      sql`${table.eventType} IN ('rally-started', 'rally-ended', 'ball-contact', 'ball-landing', 'player-position', 'highlight', 'review-marker')`,
+    ),
+    check(
+      "video_analysis_event_source_valid",
+      sql`${table.source} IN ('model', 'human', 'watch', 'system')`,
+    ),
+    check(
+      "video_analysis_event_state_valid",
+      sql`${table.state} IN ('proposed', 'confirmed', 'corrected', 'rejected')`,
+    ),
+    check(
+      "video_analysis_event_time_valid",
+      sql`${table.sessionTimeUs} BETWEEN 0 AND 43200000000`,
+    ),
+    check(
+      "video_analysis_event_duration_valid",
+      sql`${table.durationUs} IS NULL OR ${table.durationUs} BETWEEN 0 AND 43200000000`,
+    ),
+    check(
+      "video_analysis_event_confidence_valid",
+      sql`${table.confidence} IS NULL OR ${table.confidence} BETWEEN 0 AND 1`,
+    ),
+  ],
+);
+
+export const videoAnalysisReviews = pgTable(
+  "video_analysis_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => videoAnalysisEvents.id, { onDelete: "cascade" }),
+    reviewerPersonId: uuid("reviewer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    decision: varchar("decision", { length: 16 }).notNull(),
+    correction: jsonb("correction").$type<Record<string, unknown>>(),
+    note: varchar("note", { length: 600 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("video_analysis_review_event_reviewer_unique").on(
+      table.eventId,
+      table.reviewerPersonId,
+    ),
+    index("video_analysis_review_video_created_idx").on(
+      table.videoId,
+      table.createdAt,
+    ),
+    check(
+      "video_analysis_review_decision_valid",
+      sql`${table.decision} IN ('confirmed', 'corrected', 'rejected')`,
+    ),
   ],
 );
 

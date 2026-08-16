@@ -448,8 +448,8 @@ export default async function HomePage() {
             </span>
             <h2 id="home-watch-heading">The match is on your wrist.</h2>
             <p>
-              Score every rally with one hand. Duna keeps the watch, match,
-              camera, and final record on the same timeline.
+              Score every rally with one hand. Duna keeps the Watch, match,
+              camera, source video, and final record on one timeline.
             </p>
             <div className={styles.watchFeatures}>
               <div>
@@ -462,15 +462,15 @@ export default async function HomePage() {
               <div>
                 <Video aria-hidden />
                 <span>
-                  <strong>Stay frame-accurate</strong>
-                  Every point syncs to Duna Vision.
+                  <strong>Keep the source connected</strong>
+                  Every point syncs to its Duna Vision moment.
                 </span>
               </div>
               <div>
                 <Star aria-hidden />
                 <span>
-                  <strong>Save the rally</strong>
-                  Mark a highlight without leaving court.
+                  <strong>Flag the last rally</strong>
+                  Send a coaching-review cue without leaving court.
                 </span>
               </div>
             </div>
@@ -483,8 +483,8 @@ export default async function HomePage() {
             <div aria-hidden className={styles.watchRings} />
             <DunaWatchDevice
               className={styles.watchDevice}
-              label="Duna scorekeeping on Apple Watch"
-              motion
+              label="Duna source-linked last-rally review cue on Apple Watch"
+              screen="review"
             />
             <div className={styles.watchStatus}>
               <i />
@@ -507,6 +507,8 @@ export default async function HomePage() {
             <p>
               Duna HQ puts the advanced work behind the scenes and gives your
               team one clear place to schedule, sell, communicate, and grow.
+              Permissioned Duna Vision review keeps coaching evidence beside the
+              player, not in a separate video silo.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primaryAction} href="/run-your-club">

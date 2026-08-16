@@ -7,6 +7,7 @@ import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   CalendarDays,
   Compass,
+  Clapperboard,
   House,
   HeartPulse,
   Menu,
@@ -28,6 +29,7 @@ const navigation = [
   { label: "Discover", href: "/discover", icon: Compass },
   { label: "Play", href: "/app/play", icon: CalendarDays },
   { label: "Matches", href: "/app/matches", icon: Trophy },
+  { label: "Video", href: "/app/video", icon: Clapperboard },
   { label: "Health", href: "/app/health", icon: HeartPulse },
   { label: "Wallet", href: "/app/wallet", icon: WalletCards },
 ] as const;

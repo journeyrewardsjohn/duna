@@ -33,8 +33,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var previewPartial = false
   @Published var previewCapturedAt: Date?
   @Published var sideChangeDue = false
+  @Published var lastRallyLabel = "No rally marked yet"
+  @Published var lastRallyElapsedSeconds: Int?
 
   private var recordingStartedAt: Date?
+  private var lastRallyEventID: String?
   private var pointHistory: [WatchPointHistory] = []
   private var setsToWin = 2
   private var maximumSets = 3
@@ -102,6 +105,9 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
         beforeServing: beforeServing
       )
     )
+    lastRallyEventID = eventID
+    lastRallyElapsedSeconds = elapsedSeconds()
+    lastRallyLabel = side == "A" ? "Point · \(teamA)" : "Point · \(teamB)"
     sideChangeDue = shouldSwitchSides()
     sentNotice = side == "A" ? "Point · \(teamA)" : "Point · \(teamB)"
     emitVisionEvent(
@@ -151,6 +157,27 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       eventID: eventID,
       eventType: "favorite",
       label: "Favorite moment"
+    )
+    WKInterfaceDevice.current().play(.success)
+  }
+
+  func flagLastRallyForReview() {
+    guard isVisionActive else {
+      sentNotice = "Start Duna Vision on iPhone"
+      WKInterfaceDevice.current().play(.failure)
+      return
+    }
+    guard let lastRallyEventID else {
+      sentNotice = "Score a rally first"
+      WKInterfaceDevice.current().play(.failure)
+      return
+    }
+    sentNotice = "Rally flagged for review"
+    emitVisionEvent(
+      eventID: UUID().uuidString,
+      eventType: "review-marker",
+      label: "Watch asked to review this rally",
+      eventPayload: ["targetRallyId": lastRallyEventID]
     )
     WKInterfaceDevice.current().play(.success)
   }
@@ -205,6 +232,9 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     pointHistory = []
     favoriteEventIDs = []
     sideChangeDue = false
+    lastRallyEventID = nil
+    lastRallyElapsedSeconds = nil
+    lastRallyLabel = "No rally marked yet"
   }
 
   func elapsedSeconds(at date: Date = Date()) -> Int {
@@ -236,7 +266,8 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     eventType: String,
     winnerSide: String? = nil,
     targetEventID: String? = nil,
-    label: String? = nil
+    label: String? = nil,
+    eventPayload: [String: Any]? = nil
   ) {
     guard let sessionID else { return }
     let now = Date()
@@ -254,6 +285,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     if let winnerSide { payload["winnerSide"] = winnerSide }
     if let targetEventID { payload["targetEventId"] = targetEventID }
     if let label { payload["label"] = label }
+    if let eventPayload { payload["payload"] = eventPayload }
     send(payload)
   }
 
@@ -431,6 +463,9 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       favoriteEventIDs = []
       sets = [WatchSetScore()]
       serving = nil
+      lastRallyEventID = nil
+      lastRallyElapsedSeconds = nil
+      lastRallyLabel = "No rally marked yet"
       videoID = nil
       matchID = nil
     }

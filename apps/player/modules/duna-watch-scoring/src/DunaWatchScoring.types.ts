@@ -43,7 +43,12 @@ export type WatchVisionEvent = {
   readonly sessionId: string;
   readonly source: "apple-watch";
   readonly eventType:
-    "rally-won" | "favorite" | "undo" | "side-change" | "set-ended";
+    | "rally-won"
+    | "favorite"
+    | "undo"
+    | "side-change"
+    | "set-ended"
+    | "review-marker";
   readonly matchId?: string;
   readonly winnerSide?: "A" | "B";
   readonly targetEventId?: string;
@@ -51,6 +56,7 @@ export type WatchVisionEvent = {
   readonly occurredAt: string;
   readonly score: WatchScoreSnapshot;
   readonly label?: string;
+  readonly payload?: Readonly<Record<string, unknown>>;
 };
 
 export type WatchVisionContext = {

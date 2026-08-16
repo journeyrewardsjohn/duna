@@ -4,6 +4,8 @@ import {
   courtCalibrationSchema,
   dunaPlusEntitlementSchema,
   videoPlaybackSchema,
+  videoAnalysisMarkerInputSchema,
+  videoAnalysisWorkerResultSchema,
   videoAssociationOptionSchema,
   videoUsageSchema,
   visionSessionSettingsSchema,
@@ -68,6 +70,53 @@ describe("Duna Video contracts", () => {
       plan: "premium-plus",
       label: "Complimentary Premium+",
     });
+  });
+
+  it("accepts the deployed server-only R2 aliases without treating an account token as S3 credentials", () => {
+    vi.stubEnv("cloudflare_account_id", "example-account");
+    vi.stubEnv("cf_r2_access_key_id", "r2-access-key");
+    vi.stubEnv("cf_r2_secret_access_key", "r2-secret-key");
+    vi.stubEnv(
+      "cf_rs_s3_endpoint",
+      "https://example-account.r2.cloudflarestorage.com",
+    );
+    vi.stubEnv("cf_r2_account_token", "account-api-token-only");
+
+    expect(isR2VideoConfigured()).toBe(true);
+  });
+
+  it("keeps model callbacks bounded and treats needs-review as a completed analysis state", () => {
+    const videoId = crypto.randomUUID();
+    expect(
+      videoAnalysisWorkerResultSchema.parse({
+        runId: crypto.randomUUID(),
+        status: "needs-review",
+        modelVersion: "duna-ball-v1",
+        coverage: {
+          sampledDurationUs: 900_000_000,
+          usableDurationUs: 720_000_000,
+          sourceVideoAvailable: true,
+          scoreTimelineAvailable: true,
+        },
+        events: [
+          {
+            id: crypto.randomUUID(),
+            eventType: "ball-landing",
+            sessionTimeUs: 84_000_000,
+            confidence: 0.82,
+            courtPoint: { xMeters: 3.4, yMeters: 12.1, observed: "visible" },
+          },
+        ],
+      }),
+    ).toMatchObject({ status: "needs-review" });
+    expect(() =>
+      videoAnalysisMarkerInputSchema.parse({
+        videoId,
+        sessionTimeUs: 0,
+        eventType: "ball-landing",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toThrow();
   });
 
   it("carries match venue and camera defaults into the mobile setup", () => {
@@ -325,6 +374,7 @@ describe("Duna Video provider readiness", () => {
   });
 
   it("accepts the supplied R2 S3 credential names and fixed part size", () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "example-account");
     vi.stubEnv("CF_ACCESS_KEY_ID", "r2-access-key");
     vi.stubEnv("CE_SECRET_ACCESS_KEY", "r2-secret-key");
     expect(isR2VideoConfigured()).toBe(true);

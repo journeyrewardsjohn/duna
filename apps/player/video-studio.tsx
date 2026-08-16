@@ -86,6 +86,9 @@ type LiveVideoSession = Awaited<
 type VideoPlayback = Awaited<
   ReturnType<DunaApiClient["public"]["videoPlayback"]["query"]>
 >;
+type VideoAnalysisReport = Awaited<
+  ReturnType<DunaApiClient["player"]["videoAnalysisReport"]["query"]>
+>;
 type VisionSessionAccess = Awaited<
   ReturnType<DunaApiClient["player"]["createVisionSession"]["mutate"]>
 >;
@@ -1887,6 +1890,7 @@ function CaptureExperience({
         occurredAt: event.occurredAt,
         score: event.score,
         label: event.label,
+        payload: event.payload,
       }));
       await client.player.appendVisionTimelineEvents.mutate({
         sessionId,
@@ -2476,6 +2480,253 @@ function CaptureExperience({
 type VideoComponentProps = ComponentProps<typeof Video>;
 const MuxVideo = muxReactNativeVideo<VideoComponentProps>(Video);
 
+function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
+  if (!report?.run) return "READY FOR EVIDENCE";
+  switch (report.run.status) {
+    case "queued":
+      return "ANALYSIS QUEUED";
+    case "processing":
+      return "ANALYSIS IN PROGRESS";
+    case "ready":
+      return "MODEL EVIDENCE READY";
+    case "needs-review":
+      return "COACH REVIEW NEEDED";
+    case "failed":
+      return "ANALYSIS NEEDS RETRY";
+    default:
+      return "ANALYSIS CANCELLED";
+  }
+}
+
+function VisionAnalysisCard({
+  client,
+  playbackSeconds,
+  videoId,
+}: {
+  readonly client: DunaApiClient;
+  readonly playbackSeconds: number;
+  readonly videoId: string;
+}) {
+  const [report, setReport] = useState<VideoAnalysisReport>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const [courtSize, setCourtSize] = useState({ width: 0, height: 0 });
+
+  const loadReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      setReport(await client.player.videoAnalysisReport.query({ videoId }));
+      setNotice(undefined);
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setLoading(false);
+    }
+  }, [client, videoId]);
+
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
+
+  const requestAnalysis = async () => {
+    setBusy(true);
+    try {
+      const run = await client.player.requestVideoAnalysis.mutate({
+        videoId,
+        idempotencyKey: idempotencyKey(),
+      });
+      setNotice(
+        run.status === "queued"
+          ? "Analysis is queued. Watch score and your court tags are already available below."
+          : "Duna Vision is processing the available evidence.",
+      );
+      await loadReport();
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markLanding = async (x: number, y: number) => {
+    if (!report || courtSize.width <= 0 || courtSize.height <= 0 || busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = await client.player.createVideoAnalysisMarker.mutate({
+        videoId,
+        sessionTimeUs: Math.max(0, Math.floor(playbackSeconds * 1_000_000)),
+        eventType: "ball-landing",
+        courtPoint: {
+          xMeters: Math.max(
+            0,
+            Math.min(
+              report.court.widthMeters,
+              (x / courtSize.width) * report.court.widthMeters,
+            ),
+          ),
+          yMeters: Math.max(
+            0,
+            Math.min(
+              report.court.lengthMeters,
+              (y / courtSize.height) * report.court.lengthMeters,
+            ),
+          ),
+          observed: "visible",
+        },
+        label: `Coach-confirmed landing at ${formatClock(playbackSeconds)}`,
+        idempotencyKey: idempotencyKey(),
+      });
+      setReport(next);
+      setNotice(`Verified landing saved at ${formatClock(playbackSeconds)}.`);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const maxHeat = Math.max(
+    1,
+    ...(report?.heatmap.cells.map((cell) => cell.count) ?? [1]),
+  );
+
+  return (
+    <View style={styles.visionAnalysisCard}>
+      <View style={styles.visionAnalysisHeader}>
+        <View style={styles.flex}>
+          <Text style={styles.visionAnalysisEyebrow}>DUNA VISION REPORT</Text>
+          <Text style={styles.visionAnalysisTitle}>Evidence, not guesses.</Text>
+        </View>
+        <Text style={styles.visionAnalysisStatus}>
+          {analysisStatusLabel(report)}
+        </Text>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={palette.aqua} />
+      ) : report ? (
+        <>
+          <Text style={styles.visionAnalysisBody}>
+            {report.heatmap.summary}
+          </Text>
+          <Pressable
+            accessibilityHint="Places a verified ball landing at the current playback time."
+            accessibilityLabel={`Court heatmap. ${report.heatmap.summary}. Double tap to mark the ball landing at ${formatClock(playbackSeconds)}.`}
+            disabled={busy}
+            onLayout={(event) => {
+              const { height, width } = event.nativeEvent.layout;
+              setCourtSize({ width, height });
+            }}
+            onPress={(event) =>
+              void markLanding(
+                event.nativeEvent.locationX,
+                event.nativeEvent.locationY,
+              )
+            }
+            style={styles.visionCourt}
+          >
+            <View style={styles.visionCourtNet} />
+            {report.heatmap.cells.map((cell) => (
+              <View
+                key={`${cell.column}-${cell.row}`}
+                pointerEvents="none"
+                style={[
+                  styles.visionHeatCell,
+                  {
+                    left: `${(cell.column / report.heatmap.columns) * 100}%`,
+                    top: `${(cell.row / report.heatmap.rows) * 100}%`,
+                    width: `${100 / report.heatmap.columns}%`,
+                    height: `${100 / report.heatmap.rows}%`,
+                    opacity: Math.min(
+                      0.86,
+                      0.22 + (cell.count / maxHeat) * 0.64,
+                    ),
+                  },
+                ]}
+              >
+                <Text style={styles.visionHeatCellText}>{cell.count}</Text>
+              </View>
+            ))}
+            <View pointerEvents="none" style={styles.visionCourtLabels}>
+              <Text style={styles.visionCourtLabel}>OPPONENT</Text>
+              <Text style={styles.visionCourtLabel}>YOUR SIDE</Text>
+            </View>
+            <View pointerEvents="none" style={styles.visionCourtTapHint}>
+              <Text style={styles.visionCourtTapText}>
+                TAP TO VERIFY A LANDING · {formatClock(playbackSeconds)}
+              </Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.visionMetricsRow}>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.score.scoredRallies}
+              </Text>
+              <Text style={styles.visionMetricLabel}>SCORED RALLIES</Text>
+            </View>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.heatmap.observedCount}
+              </Text>
+              <Text style={styles.visionMetricLabel}>VISIBLE LANDINGS</Text>
+            </View>
+            <View style={styles.visionMetric}>
+              <Text style={styles.visionMetricValue}>
+                {report.highlights.length}
+              </Text>
+              <Text style={styles.visionMetricLabel}>SAVED MOMENTS</Text>
+            </View>
+          </View>
+
+          {report.reviewQueue.length > 0 && (
+            <View style={styles.visionReviewRail}>
+              <Text style={styles.visionReviewTitle}>COURTSIDE REVIEW</Text>
+              {report.reviewQueue.slice(0, 3).map((item) => (
+                <Text key={item.id} style={styles.visionReviewItem}>
+                  {formatClock(item.sessionTimeUs / 1_000_000)} · {item.label}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.visionEvidenceNote}>
+            {report.evidence.disclaimer}
+          </Text>
+          <Pressable
+            disabled={busy}
+            onPress={() => void requestAnalysis()}
+            style={[styles.visionAnalysisButton, busy && styles.disabled]}
+          >
+            <Text style={styles.visionAnalysisButtonText}>
+              {busy
+                ? "Working…"
+                : report.run
+                  ? "Refresh analysis status"
+                  : "Analyze available evidence"}
+            </Text>
+          </Pressable>
+        </>
+      ) : (
+        <Pressable
+          disabled={busy}
+          onPress={() => void requestAnalysis()}
+          style={[styles.visionAnalysisButton, busy && styles.disabled]}
+        >
+          <Text style={styles.visionAnalysisButtonText}>
+            {busy ? "Starting…" : "Start Duna Vision analysis"}
+          </Text>
+        </Pressable>
+      )}
+      {!!notice && <Text style={styles.visionAnalysisNotice}>{notice}</Text>}
+    </View>
+  );
+}
+
 export function VideoPlayerModal({
   client,
   metric,
@@ -2638,7 +2889,11 @@ export function VideoPlayerModal({
             </View>
           )}
         </View>
-        <View style={styles.playerInfo}>
+        <ScrollView
+          contentContainerStyle={styles.playerInfo}
+          showsVerticalScrollIndicator={false}
+          style={styles.playerDetailsScroll}
+        >
           <View style={styles.playerKickerRow}>
             {video.status === "live" && <View style={styles.liveDot} />}
             <Text style={styles.playerPrivacy}>
@@ -2686,7 +2941,14 @@ export function VideoPlayerModal({
               </View>
             </View>
           )}
-        </View>
+          {playback?.isOwner && (
+            <VisionAnalysisCard
+              client={client}
+              playbackSeconds={playbackSeconds}
+              videoId={video.id}
+            />
+          )}
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
@@ -4493,6 +4755,7 @@ const styles = StyleSheet.create({
   },
   player: { height: "100%", width: "100%" },
   playerError: { color: "#f27878", padding: 20, textAlign: "center" },
+  playerDetailsScroll: { flex: 1 },
   playerInfo: { gap: 12, padding: 20 },
   playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
   playerTitle: {
@@ -4544,6 +4807,144 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
+  visionAnalysisCard: {
+    backgroundColor: "#10191b",
+    borderColor: "rgba(212,183,124,0.28)",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    padding: 15,
+  },
+  visionAnalysisHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+  },
+  visionAnalysisEyebrow: {
+    color: "#d4b77c",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  visionAnalysisTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
+  visionAnalysisStatus: {
+    color: "#a8d9bf",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    maxWidth: 88,
+    textAlign: "right",
+  },
+  visionAnalysisBody: { color: "#c7cfcb", fontSize: 11, lineHeight: 16 },
+  visionCourt: {
+    backgroundColor: "#1b2929",
+    borderColor: "rgba(255,255,255,0.3)",
+    borderRadius: 10,
+    borderWidth: 2,
+    height: 240,
+    overflow: "hidden",
+    position: "relative",
+  },
+  visionCourtNet: {
+    backgroundColor: "rgba(255,255,255,0.78)",
+    height: 2,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: "50%",
+    zIndex: 3,
+  },
+  visionHeatCell: {
+    alignItems: "center",
+    backgroundColor: "#54c5aa",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderWidth: 0.5,
+    justifyContent: "center",
+    position: "absolute",
+  },
+  visionHeatCellText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  visionCourtLabels: {
+    bottom: 7,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 9,
+    position: "absolute",
+    right: 9,
+  },
+  visionCourtLabel: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  visionCourtTapHint: {
+    alignSelf: "center",
+    backgroundColor: "rgba(3,9,12,0.7)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    position: "absolute",
+    top: "46%",
+  },
+  visionCourtTapText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.55,
+  },
+  visionMetricsRow: { flexDirection: "row", gap: 7 },
+  visionMetric: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 11,
+    flex: 1,
+    minHeight: 62,
+    paddingHorizontal: 7,
+    paddingVertical: 9,
+  },
+  visionMetricValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-Table",
+    fontSize: 19,
+    fontWeight: "800",
+  },
+  visionMetricLabel: {
+    color: "#b8c1be",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.52,
+    lineHeight: 11,
+    marginTop: 3,
+  },
+  visionReviewRail: {
+    backgroundColor: "rgba(212,183,124,0.1)",
+    borderColor: "rgba(212,183,124,0.22)",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+    padding: 10,
+  },
+  visionReviewTitle: {
+    color: "#d4b77c",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  visionReviewItem: { color: "#f2f5f3", fontSize: 10, lineHeight: 15 },
+  visionEvidenceNote: { color: "#aeb8b5", fontSize: 10, lineHeight: 15 },
+  visionAnalysisButton: {
+    alignItems: "center",
+    backgroundColor: "#d4b77c",
+    borderRadius: 13,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  visionAnalysisButtonText: {
+    color: "#111719",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  visionAnalysisNotice: { color: "#b9d9ca", fontSize: 10, lineHeight: 15 },
   uploadOverlay: {
     alignItems: "center",
     backgroundColor: "rgba(10,20,28,0.92)",
