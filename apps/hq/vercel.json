@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @duna/db migrate && pnpm build",
+  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm --filter @duna/db migrate; fi && pnpm build",
   "crons": [
     {
       "path": "/api/cron/event-operations",
