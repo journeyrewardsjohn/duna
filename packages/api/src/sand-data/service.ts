@@ -65,7 +65,19 @@ import {
 } from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import { avpExternalPlayerId, importAvpLeague } from "./avp";
-import { importSandRatingNetwork } from "./sandrating";
+import {
+  assertLiveTransportEnabled,
+  assertScraperEnabled,
+  controlBySource,
+  linkedPlayerRefreshAt,
+  loadScraperControl,
+  loadScraperControls,
+  recordLiveTransportHealth,
+  saveScraperControl,
+  type ManagedScraperSource,
+  type ScraperControl,
+  type ScraperEnginePreference,
+} from "./scraper-controls";
 import {
   crossSourceMatchFingerprint,
   matchMappingConfidence,
@@ -83,11 +95,7 @@ import {
   type PlayerMergeFieldValue,
   type PlayerMergePlan,
 } from "./profile-merge";
-import {
-  connectRankingIdentities,
-  dedupeWorldRankingRows,
-  type RankingIdentityRow,
-} from "./rankings";
+import { dedupeWorldRankingRows } from "./rankings";
 import {
   createProfessionalEventResearchProposal,
   parseProfessionalEventResearchProposal,
@@ -317,7 +325,6 @@ const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
   bvbinfo: "BVBInfo",
   "fivb-12ndr": "FIVB via fivb.12ndr",
-  sandrating: "Sand Rating",
   "volleyball-life": "VolleyballLife",
   "volleyball-world": "Volleyball World Rankings",
 };
@@ -328,7 +335,6 @@ const sandSourcePriority: Readonly<Record<string, number>> = {
   "volleyball-world": 2,
   bvbinfo: 3,
   "volleyball-life": 4,
-  sandrating: 5,
 };
 
 export class SandDataServiceError extends Error {
@@ -424,11 +430,17 @@ export function mergeProfessionalEventPayload(input: {
 
 export interface FivbRefreshCandidate {
   readonly externalEventId: string;
-  readonly name?: string;
-  readonly category?: string | null;
   readonly live: boolean;
   readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly status?: "upcoming" | "live" | "completed" | string;
   readonly rawPayload: unknown;
+}
+
+export interface FivbRefreshPolicy {
+  readonly now: Date;
+  readonly activeEventRefreshMinutes: number;
+  readonly completedEventGraceHours: number;
 }
 
 function detailSyncedAt(candidate: FivbRefreshCandidate): string {
@@ -439,8 +451,35 @@ function detailSyncedAt(candidate: FivbRefreshCandidate): string {
 export function selectFivbRefreshCandidates(
   rows: readonly FivbRefreshCandidate[],
   limit: number,
+  policy: FivbRefreshPolicy = {
+    now: new Date(),
+    activeEventRefreshMinutes: 120,
+    completedEventGraceHours: 48,
+  },
 ): readonly FivbRefreshCandidate[] {
-  return [...rows]
+  const completedCutoff = new Date(
+    policy.now.getTime() - policy.completedEventGraceHours * 60 * 60 * 1_000,
+  )
+    .toISOString()
+    .slice(0, 10);
+  const isDue = (candidate: FivbRefreshCandidate) => {
+    if (
+      candidate.status === "completed" &&
+      candidate.endsOn &&
+      candidate.endsOn < completedCutoff
+    ) {
+      return false;
+    }
+    if (!hasTournamentDetail(unknownRecord(candidate.rawPayload))) return true;
+    const synced = Date.parse(detailSyncedAt(candidate));
+    if (Number.isNaN(synced)) return true;
+    const cadenceMinutes = candidate.live
+      ? policy.activeEventRefreshMinutes
+      : Math.max(360, policy.activeEventRefreshMinutes * 12);
+    return policy.now.getTime() - synced >= cadenceMinutes * 60 * 1_000;
+  };
+  return rows
+    .filter(isDue)
     .sort((left, right) => {
       if (left.live !== right.live) return left.live ? -1 : 1;
       const leftDetail = hasTournamentDetail(unknownRecord(left.rawPayload));
@@ -492,9 +531,7 @@ export function shouldCreateUnclaimedSourceProfile(input: {
   return (
     input.isProfessional === true &&
     hasFullName &&
-    ["bvbinfo", "volleyball-life", "fivb-12ndr", "sandrating"].includes(
-      input.source,
-    ) &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr"].includes(input.source) &&
     (input.bestCandidateScoreBps ?? 10_000) < 8_500
   );
 }
@@ -508,10 +545,17 @@ export function shouldAutoLinkProfessionalSource(input: {
   readonly tied: boolean;
   readonly isProfessional: boolean;
 }): boolean {
+  if (
+    input.source === "volleyball-world" &&
+    input.isProfessional &&
+    !input.tied &&
+    input.scoreBps === 9_500 &&
+    normalizePersonName(input.externalName).split(" ").length >= 2
+  ) {
+    return true;
+  }
   return (
-    ["bvbinfo", "volleyball-life", "fivb-12ndr", "sandrating"].includes(
-      input.source,
-    ) &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr"].includes(input.source) &&
     input.isProfessional &&
     !input.tied &&
     input.scoreBps === 9_500 &&
@@ -599,33 +643,6 @@ function storedCountryCode(value: string | undefined): string | undefined {
   return code && /^[A-Z]{2,3}$/.test(code) ? code : undefined;
 }
 
-type PartnerIdentityReference = {
-  readonly source: "bvbinfo" | "volleyball-life";
-  readonly externalPersonId: string;
-};
-
-function partnerIdentityReferences(
-  raw: Readonly<Record<string, unknown>>,
-): readonly PartnerIdentityReference[] {
-  const references: PartnerIdentityReference[] = [];
-  const bvbInfoUrl = optionalSnapshotString(raw.bvbInfoUrl);
-  const bvbInfoId = bvbInfoUrl?.match(/[?&]id=0*(\d+)/i)?.[1];
-  if (bvbInfoId) {
-    references.push({ source: "bvbinfo", externalPersonId: bvbInfoId });
-  }
-  const volleyballLifeUrl = optionalSnapshotString(raw.volleyballLifeUrl);
-  const volleyballLifeId = volleyballLifeUrl?.match(
-    /\/(?:player|playerprofile)\/0*(\d+)/i,
-  )?.[1];
-  if (volleyballLifeId) {
-    references.push({
-      source: "volleyball-life",
-      externalPersonId: volleyballLifeId,
-    });
-  }
-  return references;
-}
-
 async function persistExternalPlayers(input: {
   readonly source: SandDataSource;
   readonly sourceId: string;
@@ -637,54 +654,38 @@ async function persistExternalPlayers(input: {
   readonly suggested: number;
 }> {
   const database = getDatabase();
-  const [personRows, existingLinks, historicalProfiles, partnerIdentityLinks] =
-    await Promise.all([
-      database
-        .select({
-          id: people.id,
-          displayName: people.displayName,
-          handle: people.handle,
-          profileClaimStatus: people.profileClaimStatus,
-          isProfessional: people.isProfessional,
-          genderCategory: people.genderCategory,
-        })
-        .from(people)
-        .where(ne(people.status, "deleted")),
-      database
-        .select()
-        .from(importLinks)
-        .where(eq(importLinks.sourceId, input.sourceId)),
-      database
-        .select({
-          normalizedName: externalPlayerProfiles.normalizedName,
-          personId: externalPlayerProfiles.personId,
-        })
-        .from(externalPlayerProfiles)
-        .innerJoin(people, eq(externalPlayerProfiles.personId, people.id))
-        .where(
-          and(
-            eq(externalPlayerProfiles.sourceId, input.sourceId),
-            eq(externalPlayerProfiles.mappingState, "linked"),
-            ne(people.status, "deleted"),
-            sql`${externalPlayerProfiles.personId} IS NOT NULL`,
-          ),
+  const [personRows, existingLinks, historicalProfiles] = await Promise.all([
+    database
+      .select({
+        id: people.id,
+        displayName: people.displayName,
+        handle: people.handle,
+        profileClaimStatus: people.profileClaimStatus,
+        isProfessional: people.isProfessional,
+        genderCategory: people.genderCategory,
+      })
+      .from(people)
+      .where(ne(people.status, "deleted")),
+    database
+      .select()
+      .from(importLinks)
+      .where(eq(importLinks.sourceId, input.sourceId)),
+    database
+      .select({
+        normalizedName: externalPlayerProfiles.normalizedName,
+        personId: externalPlayerProfiles.personId,
+      })
+      .from(externalPlayerProfiles)
+      .innerJoin(people, eq(externalPlayerProfiles.personId, people.id))
+      .where(
+        and(
+          eq(externalPlayerProfiles.sourceId, input.sourceId),
+          eq(externalPlayerProfiles.mappingState, "linked"),
+          ne(people.status, "deleted"),
+          sql`${externalPlayerProfiles.personId} IS NOT NULL`,
         ),
-      database
-        .select({
-          source: importSources.slug,
-          externalPersonId: importLinks.externalPersonId,
-          personId: importLinks.personId,
-        })
-        .from(importLinks)
-        .innerJoin(importSources, eq(importLinks.sourceId, importSources.id))
-        .where(
-          and(
-            inArray(importSources.slug, ["bvbinfo", "volleyball-life"]),
-            eq(importLinks.resolutionState, "linked"),
-            sql`${importLinks.personId} IS NOT NULL`,
-          ),
-        ),
-    ]);
+      ),
+  ]);
   const reusableHistoricalProfiles = historicalProfiles.flatMap((profile) =>
     profile.personId
       ? [
@@ -697,13 +698,6 @@ async function persistExternalPlayers(input: {
   );
   const linkByExternalId = new Map(
     existingLinks.map((link) => [link.externalPersonId, link] as const),
-  );
-  const partnerPersonByExternalId = new Map(
-    partnerIdentityLinks.flatMap((link) =>
-      link.personId
-        ? [[`${link.source}:${link.externalPersonId}`, link.personId] as const]
-        : [],
-    ),
   );
   let inserted = 0;
   let linked = 0;
@@ -728,67 +722,7 @@ async function persistExternalPlayers(input: {
     let evidence: Record<string, unknown> = personId
       ? { method: "existing-source-id" }
       : {};
-    let partnerIdentityConflict = false;
-
-    if (
-      personId &&
-      input.source === "sandrating" &&
-      external.raw.rankingStub === true &&
-      external.genderCategory
-    ) {
-      const existingPerson = personRows.find(
-        (candidate) => candidate.id === personId,
-      );
-      if (
-        existingPerson?.profileClaimStatus === "unclaimed" &&
-        existingPerson.genderCategory &&
-        existingPerson.genderCategory !== external.genderCategory
-      ) {
-        personId = undefined;
-        mappingState = "unresolved";
-        mappingScoreBps = undefined;
-        evidence = {
-          method: "detached-cross-division-ranking-stub",
-          previousPersonId: existingPerson.id,
-          previousGenderCategory: existingPerson.genderCategory,
-          incomingGenderCategory: external.genderCategory,
-        };
-      }
-    }
-
-    if (!personId && input.source === "sandrating") {
-      const references = partnerIdentityReferences(external.raw);
-      const partnerPersonIds = new Set(
-        references.flatMap((reference) => {
-          const candidate = partnerPersonByExternalId.get(
-            `${reference.source}:${reference.externalPersonId}`,
-          );
-          return candidate ? [candidate] : [];
-        }),
-      );
-      if (partnerPersonIds.size === 1) {
-        personId = [...partnerPersonIds][0];
-        mappingState = "linked";
-        mappingScoreBps = 9_980;
-        evidence = {
-          method: "partner-source-id",
-          references,
-        };
-      } else if (partnerPersonIds.size > 1) {
-        partnerIdentityConflict = true;
-        evidence = {
-          method: "conflicting-partner-source-ids",
-          references,
-          candidatePersonIds: [...partnerPersonIds],
-        };
-      }
-    }
-
-    if (
-      !personId &&
-      !partnerIdentityConflict &&
-      external.raw.rankingStub !== true
-    ) {
+    if (!personId) {
       const historicalPersonId = inferHistoricalPersonId({
         displayName: external.displayName,
         previous: reusableHistoricalProfiles,
@@ -804,7 +738,7 @@ async function persistExternalPlayers(input: {
       }
     }
 
-    if (!personId && !partnerIdentityConflict) {
+    if (!personId) {
       const candidates = personRows
         .map((candidate) => ({
           candidate,
@@ -821,8 +755,6 @@ async function persistExternalPlayers(input: {
         best &&
         candidates.filter((candidate) => candidate.score === best.score)
           .length > 1;
-      const createClaimableRankingSeed =
-        input.source === "sandrating" && external.raw.rankingSeed === true;
       const createUnclaimedSourceProfile = shouldCreateUnclaimedSourceProfile({
         source: input.source,
         displayName: external.displayName,
@@ -853,33 +785,7 @@ async function persistExternalPlayers(input: {
           source: input.source,
         };
         linked += 1;
-      } else if (
-        best &&
-        !tied &&
-        input.source === "sandrating" &&
-        best.score === 9_500 &&
-        best.candidate.profileClaimStatus === "unclaimed" &&
-        external.raw.rankingStub !== true &&
-        (!external.genderCategory ||
-          !best.candidate.genderCategory ||
-          external.genderCategory === best.candidate.genderCategory)
-      ) {
-        personId = best.candidate.id;
-        mappingState = "linked";
-        mappingScoreBps = 9_700;
-        evidence = {
-          method: "partner-exact-name-unclaimed",
-          candidatePersonId: best.candidate.id,
-          candidateHandle: best.candidate.handle,
-          candidateDisplayName: best.candidate.displayName,
-        };
-        linked += 1;
-      } else if (
-        best &&
-        !tied &&
-        !createClaimableRankingSeed &&
-        !createUnclaimedSourceProfile
-      ) {
+      } else if (best && !tied && !createUnclaimedSourceProfile) {
         mappingState = "suggested";
         mappingScoreBps = best.score;
         evidence = {
@@ -889,11 +795,7 @@ async function persistExternalPlayers(input: {
           candidateDisplayName: best.candidate.displayName,
         };
         suggested += 1;
-      } else if (
-        tied &&
-        !createClaimableRankingSeed &&
-        !createUnclaimedSourceProfile
-      ) {
+      } else if (tied && !createUnclaimedSourceProfile) {
         evidence = {
           method: "ambiguous-name",
           candidates: candidates.slice(0, 5).map(({ candidate, score }) => ({
@@ -903,7 +805,7 @@ async function persistExternalPlayers(input: {
             scoreBps: score,
           })),
         };
-      } else if (createClaimableRankingSeed || createUnclaimedSourceProfile) {
+      } else if (createUnclaimedSourceProfile) {
         const handle = safeExternalHandle(
           input.source,
           external.externalPersonId,
@@ -932,19 +834,7 @@ async function persistExternalPlayers(input: {
         if (personId) {
           mappingState = "linked";
           mappingScoreBps = 10_000;
-          evidence = createClaimableRankingSeed
-            ? {
-                method: "created-unclaimed-ranking-seed",
-                reviewCandidates: candidates
-                  .slice(0, 5)
-                  .map(({ candidate, score }) => ({
-                    personId: candidate.id,
-                    displayName: candidate.displayName,
-                    handle: candidate.handle,
-                    scoreBps: score,
-                  })),
-              }
-            : { method: "created-unclaimed-source-profile" };
+          evidence = { method: "created-unclaimed-source-profile" };
           personRows.push({
             id: personId,
             displayName: external.displayName,
@@ -1666,23 +1556,25 @@ async function executeImport(input: {
 }) {
   requireDatabase();
   const database = getDatabase();
+  const control = await assertScraperEnabled(input.source);
   const source = await ensureSource(input.source);
+  const engine =
+    input.source === "volleyball-life" || input.source === "volleyball-world"
+      ? "native"
+      : control.engine === "auto"
+        ? input.source === "avp-league" ||
+          process.env.FIRECRAWL_API_KEY ||
+          process.env.FIRECRAWL_API
+          ? "firecrawl"
+          : "native"
+        : control.engine;
   const [run] = await database
     .insert(sandIngestionRuns)
     .values({
       sourceId: source.id,
       mode: input.mode,
       requestedExternalId: input.requestedExternalId,
-      engine:
-        input.source === "avp-league"
-          ? "firecrawl"
-          : input.source === "volleyball-life" ||
-              input.source === "sandrating" ||
-              input.source === "volleyball-world"
-            ? "native"
-            : process.env.FIRECRAWL_API_KEY || process.env.FIRECRAWL_API
-              ? "firecrawl"
-              : "native",
+      engine,
       createdByPersonId: input.actor?.personId,
       startedAt: input.now,
       createdAt: input.now,
@@ -1801,6 +1693,8 @@ async function executeImport(input: {
 export function importSandSource(input: {
   readonly source: "bvbinfo" | "volleyball-life" | "fivb-12ndr" | "avp-league";
   readonly externalId: string;
+  /** Routine linked-profile syncs request only current or recently changed history. */
+  readonly incremental?: boolean;
   readonly actor?: ApiActor;
   readonly now?: Date;
   readonly onProgress?: (
@@ -1811,22 +1705,27 @@ export function importSandSource(input: {
   if (input.source === "bvbinfo") {
     return executeImport({
       source: input.source,
-      mode: "player",
+      mode: input.incremental ? "player-refresh" : "player",
       requestedExternalId: input.externalId,
       actor: input.actor,
       now,
-      loader: () => importBvbInfoPlayer(input.externalId, input.onProgress),
+      loader: () =>
+        importBvbInfoPlayer(input.externalId, input.onProgress, {
+          incremental: input.incremental,
+        }),
     });
   }
   if (input.source === "volleyball-life") {
     return executeImport({
       source: input.source,
-      mode: "player",
+      mode: input.incremental ? "player-refresh" : "player",
       requestedExternalId: input.externalId,
       actor: input.actor,
       now,
       loader: () =>
-        importVolleyballLifePlayer(input.externalId, input.onProgress),
+        importVolleyballLifePlayer(input.externalId, input.onProgress, {
+          incremental: input.incremental,
+        }),
     });
   }
   if (input.source === "avp-league") {
@@ -1880,35 +1779,6 @@ export function refreshWorldRankings(input: {
   });
 }
 
-export function refreshSandRatingNetwork(input: {
-  readonly maxDepth?: number;
-  readonly topPlayersPerGender?: number;
-  readonly actor?: ApiActor;
-  readonly now?: Date;
-  readonly onProgress?: (
-    progress: SourceImportProgress,
-  ) => void | Promise<void>;
-}) {
-  const now = input.now ?? new Date();
-  const maxDepth = Math.min(4, Math.max(1, Math.floor(input.maxDepth ?? 4)));
-  const topPlayersPerGender = Math.min(
-    500,
-    Math.max(1, Math.floor(input.topPlayersPerGender ?? 200)),
-  );
-  return executeImport({
-    source: "sandrating",
-    mode: "network-snapshot",
-    requestedExternalId: `top-${topPlayersPerGender}:depth-${maxDepth}`,
-    actor: input.actor,
-    now,
-    loader: () =>
-      importSandRatingNetwork(
-        { maxDepth, topPlayersPerGender },
-        input.onProgress,
-      ),
-  });
-}
-
 export async function refreshFivbEventIndex(input: {
   readonly season?: number;
   readonly actor?: ApiActor;
@@ -1916,6 +1786,7 @@ export async function refreshFivbEventIndex(input: {
 }) {
   requireDatabase();
   const now = input.now ?? new Date();
+  await assertScraperEnabled("fivb-12ndr");
   const source = await ensureSource("fivb-12ndr");
   const events = await listFivbEvents(input.season);
   await persistProfessionalEvents({
@@ -2662,32 +2533,34 @@ export async function refreshActiveFivbEvents(input: {
 }) {
   requireDatabase();
   const now = input.now ?? new Date();
+  const control = await assertScraperEnabled("fivb-12ndr");
   const source = await ensureSource("fivb-12ndr");
   const rows = await getDatabase()
     .select({
       externalEventId: professionalEvents.externalEventId,
-      name: professionalEvents.name,
-      category: professionalEvents.category,
       live: professionalEvents.live,
       startsOn: professionalEvents.startsOn,
+      endsOn: professionalEvents.endsOn,
+      status: professionalEvents.status,
       rawPayload: professionalEvents.rawPayload,
     })
     .from(professionalEvents)
     .where(
       and(
         eq(professionalEvents.sourceId, source.id),
-        inArray(professionalEvents.status, ["live", "upcoming"]),
+        inArray(professionalEvents.status, ["live", "upcoming", "completed"]),
       ),
     )
     .limit(250);
-  const candidates = selectFivbRefreshCandidates(rows, input.limit ?? 4);
+  const candidates = selectFivbRefreshCandidates(rows, input.limit ?? 4, {
+    now,
+    activeEventRefreshMinutes: control.activeEventRefreshMinutes ?? 120,
+    completedEventGraceHours: control.completedEventGraceHours ?? 48,
+  });
   const results: {
     readonly externalEventId: string;
     readonly status: "succeeded" | "failed";
     readonly message?: string;
-    readonly officialLive?: Awaited<
-      ReturnType<typeof refreshVolleyballWorldEvent>
-    >;
   }[] = [];
   for (const row of candidates) {
     try {
@@ -2696,25 +2569,9 @@ export async function refreshActiveFivbEvents(input: {
         externalId: row.externalEventId,
         now,
       });
-      const officialLive = isVolleyballWorldEliteEvent({
-        name: row.name ?? "",
-        category: row.category,
-      })
-        ? await refreshVolleyballWorldEvent({
-            externalEventId: row.externalEventId,
-            now,
-          }).catch(() => undefined)
-        : undefined;
       results.push({
         externalEventId: row.externalEventId,
         status: "succeeded",
-        ...(officialLive ? { officialLive } : {}),
-        ...(!officialLive
-          ? {
-              message:
-                "The tournament refreshed, but no official live feed was matched yet.",
-            }
-          : {}),
       });
     } catch (error) {
       results.push({
@@ -2737,6 +2594,7 @@ export async function refreshActiveVolleyballWorldEvents(input: {
 }) {
   requireDatabase();
   const now = input.now ?? new Date();
+  const control = await assertLiveTransportEnabled();
   const source = await ensureSource("fivb-12ndr");
   const rows = await getDatabase()
     .select({
@@ -2755,6 +2613,14 @@ export async function refreshActiveVolleyballWorldEvents(input: {
       ),
     )
     .limit(250);
+  const liveRefreshMs = (control.liveRefreshSeconds ?? 60) * 1_000;
+  const upcomingRefreshMs = Math.max(15 * 60 * 1_000, liveRefreshMs * 15);
+  const transportSyncedAt = (rawPayload: unknown) => {
+    const value = unknownRecord(
+      unknownRecord(rawPayload).volleyballWorld,
+    ).syncedAt;
+    return typeof value === "string" ? Date.parse(value) : Number.NaN;
+  };
   const candidates = [...rows]
     .filter((row) =>
       isVolleyballWorldEliteEvent({
@@ -2762,6 +2628,12 @@ export async function refreshActiveVolleyballWorldEvents(input: {
         category: row.category,
       }),
     )
+    .filter((row) => {
+      const synced = transportSyncedAt(row.rawPayload);
+      if (Number.isNaN(synced)) return true;
+      const cadence = row.live ? liveRefreshMs : upcomingRefreshMs;
+      return now.getTime() - synced >= cadence;
+    })
     .sort(
       (left, right) =>
         Number(right.live) - Number(left.live) ||
@@ -2770,6 +2642,7 @@ export async function refreshActiveVolleyballWorldEvents(input: {
         ),
     )
     .slice(0, Math.min(8, Math.max(1, input.limit ?? 4)));
+  const startedAt = Date.now();
   const results = [];
   for (const candidate of candidates) {
     try {
@@ -2789,10 +2662,162 @@ export async function refreshActiveVolleyballWorldEvents(input: {
       });
     }
   }
+  const succeeded = results.filter(
+    (result) => result.status === "succeeded",
+  ).length;
+  const failed = results.length - succeeded;
+  await recordLiveTransportHealth({
+    status:
+      results.length === 0
+        ? "idle"
+        : failed === 0
+          ? "healthy"
+          : succeeded > 0
+            ? "degraded"
+            : "unavailable",
+    latencyMs: results.length > 0 ? Date.now() - startedAt : undefined,
+    detail: {
+      candidates: candidates.length,
+      attempted: results.length,
+      succeeded,
+      failed,
+      cadenceSeconds: control.liveRefreshSeconds ?? 60,
+      restFallbackSeconds: control.liveRestFallbackSeconds ?? 30,
+    },
+    now,
+  });
   return {
     attempted: results.length,
-    succeeded: results.filter((result) => result.status === "succeeded").length,
+    succeeded,
     results,
+  };
+}
+
+export async function updateScraperControl(input: {
+  readonly actor: ApiActor;
+  readonly source: ManagedScraperSource;
+  readonly enabled: boolean;
+  readonly engine: ScraperEnginePreference;
+  readonly minRequestIntervalMs: number;
+  readonly maxRequestsPerHour: number;
+  readonly linkedPlayerActiveRefreshHours?: number;
+  readonly linkedPlayerIdleRefreshHours?: number;
+  readonly activePlayerWindowDays?: number;
+  readonly activeEventRefreshMinutes?: number;
+  readonly completedEventGraceHours?: number;
+  readonly liveTransportEnabled: boolean;
+  readonly liveRefreshSeconds?: number;
+  readonly liveRestFallbackSeconds?: number;
+  readonly firecrawlCacheTtlSeconds?: number;
+  readonly firecrawlChangeTracking: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now?: Date;
+}): Promise<ScraperControl> {
+  requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only SuperAdmin can change upstream scraper policy.",
+    );
+  }
+  const now = input.now ?? new Date();
+  const before = await loadScraperControl(input.source);
+  const nativeOnly =
+    input.source === "volleyball-life" || input.source === "volleyball-world";
+  const isLiveTransport = input.source === "volleyball-world";
+  const control = await saveScraperControl({
+    ...input,
+    engine: nativeOnly ? "native" : input.engine,
+    liveTransportEnabled: isLiveTransport && input.liveTransportEnabled,
+    liveRefreshSeconds: isLiveTransport ? input.liveRefreshSeconds : undefined,
+    liveRestFallbackSeconds: isLiveTransport
+      ? input.liveRestFallbackSeconds
+      : undefined,
+    now,
+    updatedByPersonId: input.actor.personId,
+  });
+  await getDatabase()
+    .insert(auditLog)
+    .values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "sand-data.scraper-control.updated",
+      entityType: "scraper-control",
+      entityId: input.source,
+      beforeHash: stableHash(before),
+      afterHash: stableHash(control),
+      reason: `Updated disciplined ${sourceNames[input.source]} scraper policy.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: now,
+    });
+  return control;
+}
+
+export async function smokeTestScraper(input: {
+  readonly actor: ApiActor;
+  readonly source: ManagedScraperSource;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  if (!input.actor.roles.includes("super-admin")) {
+    throw new SandDataServiceError(
+      "SUPER_ADMIN_REQUIRED",
+      "Only SuperAdmin can run a scraper smoke test.",
+    );
+  }
+  const now = input.now ?? new Date();
+  await assertScraperEnabled(input.source);
+  if (input.source === "fivb-12ndr") {
+    const result = await refreshFivbEventIndex({ actor: input.actor, now });
+    return {
+      source: input.source,
+      message: `${result.events} FIVB events indexed.`,
+    };
+  }
+  if (input.source === "volleyball-world") {
+    const result = await refreshActiveVolleyballWorldEvents({ limit: 1, now });
+    return {
+      source: input.source,
+      message:
+        result.attempted > 0
+          ? `${result.succeeded}/${result.attempted} official live event transport checks completed.`
+          : "No active official live event needed a refresh; transport is idle.",
+    };
+  }
+  if (input.source === "avp-league") {
+    const result = await refreshAvpLeague({ actor: input.actor, now });
+    return {
+      source: input.source,
+      message: `${result.counters.events} AVP events verified.`,
+    };
+  }
+  const connection =
+    await getDatabase().query.playerSourceConnections.findFirst({
+      where: and(
+        eq(playerSourceConnections.source, input.source),
+        eq(playerSourceConnections.status, "linked"),
+        eq(playerSourceConnections.verificationStatus, "confirmed"),
+      ),
+      orderBy: asc(playerSourceConnections.lastSyncedAt),
+    });
+  if (!connection) {
+    throw new SandDataServiceError(
+      "SOURCE_UNAVAILABLE",
+      `Link and confirm one ${sourceNames[input.source]} player profile before running its smoke test.`,
+    );
+  }
+  const result = await importSandSource({
+    source: input.source,
+    externalId: connection.externalPersonId,
+    incremental: true,
+    actor: input.actor,
+    now,
+  });
+  return {
+    source: input.source,
+    message: `${result.counters.players} profile(s) and ${result.counters.matches} matches verified.`,
   };
 }
 
@@ -2894,6 +2919,7 @@ export async function loadSandDataOverview() {
   const database = getDatabase();
   const [
     sources,
+    controls,
     runs,
     mappingRows,
     linkedMappingRows,
@@ -2909,6 +2935,7 @@ export async function loadSandDataOverview() {
     professionalMatchRows,
   ] = await Promise.all([
     database.select().from(importSources).orderBy(asc(importSources.name)),
+    loadScraperControls(),
     database
       .select()
       .from(sandIngestionRuns)
@@ -3213,6 +3240,27 @@ export async function loadSandDataOverview() {
       licenseStatus: source.licenseStatus,
       latestImportedAt: source.latestImportedAt?.toISOString(),
     })),
+    controls: controls.map((control) => {
+      const source = sources.find(
+        (candidate) => candidate.slug === control.source,
+      );
+      const latestRun = source
+        ? runs.find((run) => run.sourceId === source.id)
+        : undefined;
+      return {
+        ...control,
+        name: sourceNames[control.source],
+        latestRun: latestRun
+          ? {
+              status: latestRun.status,
+              engine: latestRun.engine,
+              startedAt: latestRun.startedAt.toISOString(),
+              completedAt: latestRun.completedAt?.toISOString(),
+              errorMessage: latestRun.errorMessage ?? undefined,
+            }
+          : undefined,
+      };
+    }),
     runs: runs.map((run) => ({
       id: run.id,
       source: sourceById.get(run.sourceId)?.name ?? "Unknown source",
@@ -3696,7 +3744,6 @@ export async function approveImportedMatch(input: {
   const professional =
     source?.slug === "bvbinfo" ||
     source?.slug === "fivb-12ndr" ||
-    source?.slug === "sandrating" ||
     source?.slug === "avp-league";
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
@@ -3805,12 +3852,12 @@ export async function approveImportedMatch(input: {
   };
 }
 
-export async function approveReadySandRatingMatches(input: {
+export async function approveReadyImportedMatches(input: {
   readonly actor: ApiActor;
   readonly reason: string;
   readonly requestId: string;
   readonly ipAddress?: string;
-  readonly source?: "sandrating" | "bvbinfo";
+  readonly source?: "bvbinfo";
   readonly subjectPersonId?: string;
   readonly limit?: number;
   readonly now?: Date;
@@ -3824,7 +3871,7 @@ export async function approveReadySandRatingMatches(input: {
   }
   const now = input.now ?? new Date();
   const database = getDatabase();
-  const sourceSlug = input.source ?? "sandrating";
+  const sourceSlug = input.source ?? "bvbinfo";
   const source = await database.query.importSources.findFirst({
     where: eq(importSources.slug, sourceSlug),
   });
@@ -4030,7 +4077,7 @@ export async function approveReadySandRatingMatches(input: {
   };
 }
 
-export async function repairApprovedSandRatingMatchDates(input: {
+export async function repairApprovedLegacyMatchDates(input: {
   readonly actor: ApiActor;
   readonly reason: string;
   readonly requestId: string;
@@ -4047,12 +4094,12 @@ export async function repairApprovedSandRatingMatchDates(input: {
   const now = input.now ?? new Date();
   const database = getDatabase();
   const source = await database.query.importSources.findFirst({
-    where: eq(importSources.slug, "sandrating"),
+    where: eq(importSources.slug, "duna-legacy-archive"),
   });
   if (!source) {
     throw new SandDataServiceError(
       "SOURCE_UNAVAILABLE",
-      "Import a Sand Rating network snapshot before repairing match dates.",
+      "No migrated Duna legacy match archive is available to repair.",
     );
   }
   const candidates = await database
@@ -4137,7 +4184,7 @@ export async function repairApprovedSandRatingMatchDates(input: {
   await database.insert(auditLog).values({
     actorPersonId: input.actor.personId,
     actorType: "person",
-    action: "sand-data.sandrating-dates.repaired",
+    action: "sand-data.legacy-dates.repaired",
     entityType: "import-source",
     entityId: source.id,
     afterHash: stableHash({ repaired: repairs.length, replay }),
@@ -5608,16 +5655,10 @@ export async function loadPublicWorldRankings() {
   const genders = ["men", "women"] as const;
   const limitPerGender = 200;
   const fetchBufferPerGender = 500;
-  const [worldRankingSource, sandRatingSource] = await Promise.all([
-    database.query.importSources.findFirst({
-      where: eq(importSources.slug, "volleyball-world"),
-      columns: { id: true },
-    }),
-    database.query.importSources.findFirst({
-      where: eq(importSources.slug, "sandrating"),
-      columns: { id: true },
-    }),
-  ]);
+  const worldRankingSource = await database.query.importSources.findFirst({
+    where: eq(importSources.slug, "volleyball-world"),
+    columns: { id: true },
+  });
   const latestDates = Object.fromEntries(
     await Promise.all(
       genders.map(async (genderCategory) => {
@@ -5689,68 +5730,7 @@ export async function loadPublicWorldRankings() {
       }),
     ).then((rows) => rows.flat()),
   );
-  const identityBridgeRows = sandRatingSource
-    ? dedupeWorldRankingRows(
-        await Promise.all(
-          genders.map(async (genderCategory) => {
-            const [latest] = await database
-              .select({ rankingDate: worldRankings.rankingDate })
-              .from(worldRankings)
-              .where(
-                and(
-                  eq(worldRankings.sourceId, sandRatingSource.id),
-                  eq(worldRankings.genderCategory, genderCategory),
-                ),
-              )
-              .orderBy(desc(worldRankings.rankingDate))
-              .limit(1);
-            if (!latest?.rankingDate) return [];
-            return database
-              .select({
-                rankingId: worldRankings.id,
-                genderCategory: worldRankings.genderCategory,
-                rankingDate: worldRankings.rankingDate,
-                rank: worldRankings.rank,
-                previousRank: worldRankings.previousRank,
-                points: worldRankings.points,
-                externalPersonId: worldRankings.externalPersonId,
-                displayName: worldRankings.displayName,
-                countryCode: worldRankings.countryCode,
-                personId: worldRankings.personId,
-                handle: people.handle,
-                homeMarket: people.homeMarket,
-                profileClaimStatus: people.profileClaimStatus,
-                avatarUrl: people.avatarUrl,
-                profileVisibility: people.profileVisibility,
-                personStatus: people.status,
-                isMinor: people.isMinor,
-                sandRating: ratings.display,
-                ratedMatches: ratings.ratedMatches,
-                rawPayload: worldRankings.rawPayload,
-              })
-              .from(worldRankings)
-              .leftJoin(people, eq(worldRankings.personId, people.id))
-              .leftJoin(
-                ratings,
-                and(
-                  eq(ratings.personId, worldRankings.personId),
-                  eq(ratings.discipline, "beach-2s"),
-                ),
-              )
-              .where(
-                and(
-                  eq(worldRankings.sourceId, sandRatingSource.id),
-                  eq(worldRankings.genderCategory, genderCategory),
-                  eq(worldRankings.rankingDate, latest.rankingDate),
-                ),
-              )
-              .orderBy(asc(worldRankings.rank))
-              .limit(fetchBufferPerGender);
-          }),
-        ).then((rows) => rows.flat()),
-      )
-    : [];
-  const worldRows = connectRankingIdentities(sourceRows, identityBridgeRows);
+  const worldRows = sourceRows;
   const worldRankByPerson = new Map(
     worldRows.flatMap((row) =>
       row.personId
@@ -5922,67 +5902,7 @@ export async function loadPublicWorldRankingPlayer(identifier: string) {
     .limit(1);
   if (!row) return undefined;
 
-  const sandRatingSource = await database.query.importSources.findFirst({
-    where: eq(importSources.slug, "sandrating"),
-    columns: { id: true },
-  });
-  let identityBridgeRows: RankingIdentityRow[] = [];
-  if (sandRatingSource) {
-    const [latest] = await database
-      .select({ rankingDate: worldRankings.rankingDate })
-      .from(worldRankings)
-      .where(
-        and(
-          eq(worldRankings.sourceId, sandRatingSource.id),
-          eq(worldRankings.genderCategory, row.genderCategory),
-        ),
-      )
-      .orderBy(desc(worldRankings.rankingDate))
-      .limit(1);
-    if (latest?.rankingDate) {
-      identityBridgeRows = await database
-        .select({
-          rankingDate: worldRankings.rankingDate,
-          genderCategory: worldRankings.genderCategory,
-          rank: worldRankings.rank,
-          points: worldRankings.points,
-          externalPersonId: worldRankings.externalPersonId,
-          displayName: worldRankings.displayName,
-          countryCode: worldRankings.countryCode,
-          personId: worldRankings.personId,
-          handle: people.handle,
-          homeMarket: people.homeMarket,
-          profileClaimStatus: people.profileClaimStatus,
-          avatarUrl: people.avatarUrl,
-          profileVisibility: people.profileVisibility,
-          personStatus: people.status,
-          isMinor: people.isMinor,
-          sandRating: ratings.display,
-          ratedMatches: ratings.ratedMatches,
-          rawPayload: worldRankings.rawPayload,
-        })
-        .from(worldRankings)
-        .leftJoin(people, eq(worldRankings.personId, people.id))
-        .leftJoin(
-          ratings,
-          and(
-            eq(ratings.personId, worldRankings.personId),
-            eq(ratings.discipline, "beach-2s"),
-          ),
-        )
-        .where(
-          and(
-            eq(worldRankings.sourceId, sandRatingSource.id),
-            eq(worldRankings.genderCategory, row.genderCategory),
-            eq(worldRankings.rankingDate, latest.rankingDate),
-          ),
-        )
-        .orderBy(asc(worldRankings.rank))
-        .limit(500);
-    }
-  }
-  const connected =
-    connectRankingIdentities([row], identityBridgeRows)[0] ?? row;
+  const connected = row;
   const raw = unknownRecord(row.rawPayload);
   const sourcePlayerOne = optionalSnapshotString(raw.player1Name);
   const sourcePlayerTwo = optionalSnapshotString(raw.player2Name);
@@ -9872,7 +9792,6 @@ async function loadProfessionalHeadToHead(
     "volleyball-world": 2,
     bvbinfo: 3,
     "volleyball-life": 4,
-    sandrating: 5,
   };
   candidates.sort(
     (a, b) =>
@@ -9995,6 +9914,8 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
   const binding = event
     ? parseVolleyballWorldBinding(event.rawPayload)
     : undefined;
+  const control = await loadScraperControl("volleyball-world");
+  if (!control.enabled || !control.liveTransportEnabled) return stored;
   const current = await fetchVolleyballWorldLiveMatch(stored.matchNo).catch(
     () => undefined,
   );
@@ -10025,8 +9946,7 @@ export async function loadPublicProfessionalMatchLive(matchId: string) {
     ...(current.liveStreamUrl ? { liveStreamUrl: current.liveStreamUrl } : {}),
     ...(statistics ? { statistics } : {}),
     syncedAt: now.toISOString(),
-    pollingMs:
-      current.status === "live" ? (15_000 as const) : (30_000 as const),
+    pollingMs: (control.liveRestFallbackSeconds ?? 30) * 1_000,
   } satisfies VolleyballWorldStoredMatch;
   const sets = reconciled.sets.map((set) => ({ a: set.a, b: set.b }));
   const winnerSide = officialMatchWinner(reconciled);
@@ -10605,10 +10525,10 @@ export async function loadPublicPlayerPerformance(personId: string) {
     sources: externalRows.map((source) => ({
       id: source.id,
       source:
-        source.sourceSlug === "sandrating"
+        source.sourceSlug === "duna-legacy-archive"
           ? "Duna match archive"
           : source.source,
-      ...(source.sourceSlug === "sandrating" || !source.profileUrl
+      ...(source.sourceSlug === "duna-legacy-archive" || !source.profileUrl
         ? {}
         : { profileUrl: source.profileUrl }),
       externalRating: source.externalRating ?? undefined,
@@ -11119,6 +11039,7 @@ export async function queuePlayerSourceConnection(input: {
       matchesFound: 0,
       profilesFound: 0,
       lastError: null,
+      lastDunaActivityAt: input.now,
       createdAt: input.now,
       updatedAt: input.now,
     })
@@ -11140,6 +11061,7 @@ export async function queuePlayerSourceConnection(input: {
         matchesFound: 0,
         profilesFound: 0,
         lastError: null,
+        lastDunaActivityAt: input.now,
         updatedAt: input.now,
       },
     });
@@ -11656,6 +11578,7 @@ export async function processPlayerSourceConnection(
     const imported = await importSandSource({
       source,
       externalId,
+      incremental: connection.lastSyncedAt !== null,
       actor,
       now,
       onProgress: async (progress) => {
@@ -11672,6 +11595,7 @@ export async function processPlayerSourceConnection(
           .where(eq(playerSourceConnections.id, connection.id));
       },
     });
+    const sourceControl = await loadScraperControl(source);
     await database
       .update(playerSourceConnections)
       .set({
@@ -11802,7 +11726,14 @@ export async function processPlayerSourceConnection(
         status: "linked",
         profileSnapshot,
         lastProfileFetchedAt: now,
-        nextRefreshAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1_000),
+        nextRefreshAt: linkedPlayerRefreshAt({
+          control: sourceControl,
+          lastDunaActivityAt: connection.lastDunaActivityAt,
+          lastSyncedAt: now,
+          lastProfileFetchedAt: now,
+          createdAt: connection.createdAt,
+          now,
+        }),
         progressPhase: "complete",
         progressCurrent: 3,
         progressTotal: 3,
@@ -11950,20 +11881,37 @@ export async function queueDuePlayerSourceRefreshes(
   requireDatabase();
   const database = getDatabase();
   const now = input.now ?? new Date();
-  const due = await database
+  const controls = await controlBySource();
+  const candidates = await database
     .select()
     .from(playerSourceConnections)
     .where(
       and(
         eq(playerSourceConnections.status, "linked"),
         eq(playerSourceConnections.verificationStatus, "confirmed"),
-        lte(playerSourceConnections.nextRefreshAt, now),
       ),
     )
-    .orderBy(asc(playerSourceConnections.nextRefreshAt))
-    .limit(Math.min(100, Math.max(1, input.limit ?? 25)));
+    .orderBy(asc(playerSourceConnections.lastSyncedAt))
+    .limit(500);
+  const due = candidates
+    .filter((connection) => {
+      const control = controls.get(connection.source as ManagedScraperSource);
+      if (!control?.enabled) return false;
+      return (
+        linkedPlayerRefreshAt({
+          control,
+          lastDunaActivityAt: connection.lastDunaActivityAt,
+          lastSyncedAt: connection.lastSyncedAt,
+          lastProfileFetchedAt: connection.lastProfileFetchedAt,
+          createdAt: connection.createdAt,
+          now,
+        }).getTime() <= now.getTime()
+      );
+    })
+    .slice(0, Math.min(100, Math.max(1, input.limit ?? 25)));
   let queued = 0;
   for (const connection of due) {
+    const control = controls.get(connection.source as ManagedScraperSource)!;
     const dateKey = now.toISOString().slice(0, 10);
     const inserted = await database
       .insert(workflowJobs)
@@ -11994,6 +11942,14 @@ export async function queueDuePlayerSourceRefreshes(
         progressPhase: "scheduled-refresh",
         progressCurrent: 0,
         progressTotal: 3,
+        nextRefreshAt: linkedPlayerRefreshAt({
+          control,
+          lastDunaActivityAt: connection.lastDunaActivityAt,
+          lastSyncedAt: now,
+          lastProfileFetchedAt: connection.lastProfileFetchedAt,
+          createdAt: connection.createdAt,
+          now,
+        }),
         updatedAt: now,
       })
       .where(eq(playerSourceConnections.id, connection.id));

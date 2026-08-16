@@ -101,46 +101,129 @@ export async function refreshWorldRankingsAction(
   }
 }
 
-export async function refreshSandRatingNetworkAction(
+const scraperSources = new Set([
+  "bvbinfo",
+  "volleyball-life",
+  "fivb-12ndr",
+  "volleyball-world",
+  "avp-league",
+]);
+
+function optionalPositiveInteger(
+  formData: FormData,
+  key: string,
+): number | undefined {
+  const value = String(formData.get(key) ?? "").trim();
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+export async function updateScraperControlAction(
   _previous: SandActionState,
   formData: FormData,
 ): Promise<SandActionState> {
-  const maxDepth = Number.parseInt(String(formData.get("maxDepth") ?? "4"), 10);
-  const topPlayersPerGender = Number.parseInt(
-    String(formData.get("topPlayersPerGender") ?? "200"),
-    10,
+  const source = String(formData.get("source") ?? "");
+  const engine = String(formData.get("engine") ?? "");
+  const minRequestIntervalMs = optionalPositiveInteger(
+    formData,
+    "minRequestIntervalMs",
+  );
+  const maxRequestsPerHour = optionalPositiveInteger(
+    formData,
+    "maxRequestsPerHour",
   );
   if (
-    !Number.isInteger(maxDepth) ||
-    maxDepth < 1 ||
-    maxDepth > 4 ||
-    !Number.isInteger(topPlayersPerGender) ||
-    topPlayersPerGender < 50 ||
-    topPlayersPerGender > 500
+    !scraperSources.has(source) ||
+    !["auto", "native", "firecrawl"].includes(engine) ||
+    minRequestIntervalMs === undefined ||
+    minRequestIntervalMs < 250 ||
+    maxRequestsPerHour === undefined ||
+    maxRequestsPerHour < 1
   ) {
-    return {
-      status: "error",
-      message:
-        "Choose 1–4 graph degrees and 50–500 ranked players per division.",
-    };
+    return { status: "error", message: "Enter valid scraper guardrails." };
   }
   try {
     const caller = await getServerCaller();
-    const result = await caller.admin.refreshSandRatingNetwork({
-      maxDepth,
-      topPlayersPerGender,
+    const result = await caller.admin.updateScraperControl({
+      source: source as
+        | "bvbinfo"
+        | "volleyball-life"
+        | "fivb-12ndr"
+        | "volleyball-world"
+        | "avp-league",
+      enabled: formData.get("enabled") === "on",
+      engine: engine as "auto" | "native" | "firecrawl",
+      minRequestIntervalMs,
+      maxRequestsPerHour,
+      linkedPlayerActiveRefreshHours: optionalPositiveInteger(
+        formData,
+        "linkedPlayerActiveRefreshHours",
+      ),
+      linkedPlayerIdleRefreshHours: optionalPositiveInteger(
+        formData,
+        "linkedPlayerIdleRefreshHours",
+      ),
+      activePlayerWindowDays: optionalPositiveInteger(
+        formData,
+        "activePlayerWindowDays",
+      ),
+      activeEventRefreshMinutes: optionalPositiveInteger(
+        formData,
+        "activeEventRefreshMinutes",
+      ),
+      completedEventGraceHours: optionalPositiveInteger(
+        formData,
+        "completedEventGraceHours",
+      ),
+      liveTransportEnabled: formData.get("liveTransportEnabled") === "on",
+      liveRefreshSeconds: optionalPositiveInteger(
+        formData,
+        "liveRefreshSeconds",
+      ),
+      liveRestFallbackSeconds: optionalPositiveInteger(
+        formData,
+        "liveRestFallbackSeconds",
+      ),
+      firecrawlCacheTtlSeconds: optionalPositiveInteger(
+        formData,
+        "firecrawlCacheTtlSeconds",
+      ),
+      firecrawlChangeTracking: formData.get("firecrawlChangeTracking") === "on",
     });
     refreshSandAdmin();
-    return {
-      status: "success",
-      message: `Sand Rating network staged: ${result.counters.players} profiles and ${result.counters.matches} matches across ${maxDepth} degrees.`,
-    };
+    return { status: "success", message: `${result.source} guardrails saved.` };
   } catch (error) {
-    return failure(error, "The Sand Rating network could not be refreshed.");
+    return failure(error, "The scraper policy could not be saved.");
   }
 }
 
-export async function approveSandRatingBackfillAction(
+export async function smokeTestScraperAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const source = String(formData.get("source") ?? "");
+  if (!scraperSources.has(source)) {
+    return { status: "error", message: "Choose a supported source." };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.smokeTestScraper({
+      source: source as
+        | "bvbinfo"
+        | "volleyball-life"
+        | "fivb-12ndr"
+        | "volleyball-world"
+        | "avp-league",
+    });
+    refreshSandAdmin();
+    return { status: "success", message: result.message };
+  } catch (error) {
+    return failure(error, "The scraper smoke test could not be completed.");
+  }
+}
+
+export async function approveImportedBackfillAction(
   _previous: SandActionState,
   formData: FormData,
 ): Promise<SandActionState> {
@@ -154,7 +237,7 @@ export async function approveSandRatingBackfillAction(
   }
   try {
     const caller = await getServerCaller();
-    const result = await caller.admin.approveReadySandRatingMatches({
+    const result = await caller.admin.approveReadyImportedMatches({
       limit: Math.min(5_000, limit),
       reason,
     });

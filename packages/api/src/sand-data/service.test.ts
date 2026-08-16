@@ -58,7 +58,7 @@ describe("FIVB event detail refresh", () => {
           sets: [{ number: 1, a: 21, b: 16 }],
           hasLineup: true,
           syncedAt: "2026-08-06T19:03:22.743Z",
-          pollingMs: 15_000,
+          pollingMs: 30_000,
         },
       },
     };
@@ -149,6 +149,36 @@ describe("FIVB event detail refresh", () => {
       "LIVE",
       "MONTREAL",
     ]);
+  });
+
+  it("stops refreshing completed 12ndr event pages after the grace window", () => {
+    const selected = selectFivbRefreshCandidates(
+      [
+        {
+          externalEventId: "ARCHIVE",
+          live: false,
+          startsOn: "2026-07-01",
+          endsOn: "2026-07-05",
+          status: "completed",
+          rawPayload: { detailLevel: "tournament" },
+        },
+        {
+          externalEventId: "RECENT",
+          live: false,
+          startsOn: "2026-08-13",
+          endsOn: "2026-08-15",
+          status: "completed",
+          rawPayload: { detailLevel: "tournament" },
+        },
+      ],
+      4,
+      {
+        now: new Date("2026-08-16T12:00:00.000Z"),
+        activeEventRefreshMinutes: 120,
+        completedEventGraceHours: 48,
+      },
+    );
+    expect(selected.map((event) => event.externalEventId)).toEqual(["RECENT"]);
   });
 
   it("limits historical box-score backfill to completed Elite events in the selected year", () => {
@@ -475,6 +505,17 @@ describe("source identity inference", () => {
         externalName: "Taylor Crabb",
         candidateName: "Taylor Crabb",
         candidateClaimStatus: "unclaimed",
+        scoreBps: 9_500,
+        tied: false,
+        isProfessional: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoLinkProfessionalSource({
+        source: "volleyball-world",
+        externalName: "Crabb, Taylor",
+        candidateName: "Taylor Crabb",
+        candidateClaimStatus: "claimed",
         scoreBps: 9_500,
         tied: false,
         isProfessional: true,

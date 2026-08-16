@@ -6,7 +6,6 @@ import {
   refreshEliteVolleyballWorldHistory,
   refreshFivbEventIndex,
   refreshRankedPlayerHistories,
-  refreshSandRatingNetwork,
   refreshWorldRankings,
   researchRankedPlayers,
   researchUpcomingProfessionalEvents,
@@ -64,14 +63,6 @@ export async function GET(request: Request) {
         dispatchPlayerFollowNotifications({ limit: 50 }),
       ]);
       return NextResponse.json({ histories, research, notifications });
-    }
-    if (mode === "sandrating") {
-      return NextResponse.json(
-        await refreshSandRatingNetwork({
-          maxDepth: 4,
-          topPlayersPerGender: 200,
-        }),
-      );
     }
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (error) {

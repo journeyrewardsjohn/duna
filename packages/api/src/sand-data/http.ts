@@ -1,17 +1,15 @@
 import { Firecrawl, type ScrapeOptions } from "@mendable/firecrawl-js";
-import { SandDataUpstreamError, type SandDataSource } from "./types";
+import {
+  assertScraperEnabled,
+  type ManagedScraperSource,
+  type ScraperControl,
+} from "./scraper-controls";
+import { SandDataUpstreamError } from "./types";
 
 type ScrapeEngine = "firecrawl" | "native";
 
-const sourceSpacingMs: Readonly<Record<SandDataSource, number>> = {
-  "avp-league": 3_000,
-  bvbinfo: 2_000,
-  "fivb-12ndr": 3_000,
-  sandrating: 1_000,
-  "volleyball-life": 1_000,
-  "volleyball-world": 1_000,
-};
-const nextRequestAt = new Map<SandDataSource, number>();
+const nextRequestAt = new Map<ManagedScraperSource, number>();
+const requestTimes = new Map<ManagedScraperSource, number[]>();
 let firecrawl: Firecrawl | undefined;
 
 function firecrawlKey(): string | undefined {
@@ -22,11 +20,10 @@ function firecrawlKey(): string | undefined {
   );
 }
 
-export function scrapeEngine(source: SandDataSource): ScrapeEngine {
+export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
   if (source === "avp-league") return "firecrawl";
   if (
     source === "volleyball-life" ||
-    source === "sandrating" ||
     source === "volleyball-world" ||
     process.env.SAND_SCRAPER_ENGINE === "native"
   ) {
@@ -35,13 +32,46 @@ export function scrapeEngine(source: SandDataSource): ScrapeEngine {
   return firecrawlKey() ? "firecrawl" : "native";
 }
 
-async function acquireSourceSlot(source: SandDataSource): Promise<void> {
-  const now = Date.now();
-  const next = nextRequestAt.get(source) ?? now;
-  if (next > now) {
-    await new Promise((resolve) => setTimeout(resolve, next - now));
+function resolveScrapeEngine(
+  source: ManagedScraperSource,
+  control: ScraperControl,
+): ScrapeEngine {
+  if (source === "volleyball-life" || source === "volleyball-world") {
+    return "native";
   }
-  nextRequestAt.set(source, Date.now() + sourceSpacingMs[source]);
+  if (control.engine === "native" || control.engine === "firecrawl") {
+    return control.engine;
+  }
+  return scrapeEngine(source);
+}
+
+async function acquireSourceSlot(
+  source: ManagedScraperSource,
+  control: ScraperControl,
+): Promise<void> {
+  for (;;) {
+    const now = Date.now();
+    const next = nextRequestAt.get(source) ?? now;
+    const times = requestTimes.get(source) ?? [];
+    while (times.length > 0 && now - times[0]! >= 60 * 60 * 1_000) {
+      times.shift();
+    }
+    const oldest = times[0];
+    const hourlyWait =
+      times.length >= control.maxRequestsPerHour && oldest !== undefined
+        ? 60 * 60 * 1_000 - (now - oldest) + 25
+        : 0;
+    const spacingWait = Math.max(0, next - now);
+    const waitMs = Math.max(hourlyWait, spacingWait);
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+    times.push(now);
+    requestTimes.set(source, times);
+    nextRequestAt.set(source, now + control.minRequestIntervalMs);
+    return;
+  }
 }
 
 function isRetryable(error: unknown): boolean {
@@ -56,13 +86,14 @@ function isRetryable(error: unknown): boolean {
 }
 
 async function withRetry<T>(
-  source: SandDataSource,
+  source: ManagedScraperSource,
+  control: ScraperControl,
   action: () => Promise<T>,
 ): Promise<T> {
   let latest: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      await acquireSourceSlot(source);
+      await acquireSourceSlot(source, control);
       return await action();
     } catch (error) {
       latest = error;
@@ -74,7 +105,7 @@ async function withRetry<T>(
   throw latest;
 }
 
-function firecrawlClient(source: SandDataSource): Firecrawl {
+function firecrawlClient(source: ManagedScraperSource): Firecrawl {
   const apiKey = firecrawlKey();
   if (!apiKey) {
     throw new SandDataUpstreamError(
@@ -99,7 +130,7 @@ const nativeHeaders = {
 };
 
 export async function scrapeHtml(
-  source: SandDataSource,
+  source: ManagedScraperSource,
   url: string,
   options: {
     readonly waitForMs?: number;
@@ -107,17 +138,31 @@ export async function scrapeHtml(
     readonly proxy?: ScrapeOptions["proxy"];
   } = {},
 ): Promise<{ readonly html: string; readonly engine: ScrapeEngine }> {
-  const engine = scrapeEngine(source);
+  const control = await assertScraperEnabled(source);
+  const engine = resolveScrapeEngine(source, control);
   try {
     if (engine === "firecrawl") {
-      const document = await withRetry(source, () =>
+      const formats: NonNullable<ScrapeOptions["formats"]> = [
+        "html",
+        "rawHtml",
+        ...(control.firecrawlChangeTracking
+          ? [{ type: "changeTracking" as const, modes: ["git-diff" as const] }]
+          : []),
+      ];
+      const document = await withRetry(source, control, () =>
         firecrawlClient(source).scrape(url, {
-          formats: ["html", "rawHtml"],
+          formats,
           onlyMainContent: false,
           waitFor: options.waitForMs,
           timeout: options.timeoutMs ?? 60_000,
           proxy: options.proxy,
           blockAds: true,
+          ...(control.firecrawlCacheTtlSeconds !== undefined
+            ? {
+                maxAge: control.firecrawlCacheTtlSeconds * 1_000,
+                storeInCache: true,
+              }
+            : {}),
         }),
       );
       const html =
@@ -134,7 +179,7 @@ export async function scrapeHtml(
       return { html, engine };
     }
 
-    const html = await withRetry(source, async () => {
+    const html = await withRetry(source, control, async () => {
       const controller = new AbortController();
       const timer = setTimeout(
         () => controller.abort(),
@@ -165,7 +210,7 @@ export async function scrapeHtml(
 }
 
 export async function scrapeJson<T>(
-  source: SandDataSource,
+  source: ManagedScraperSource,
   url: string,
   options: {
     readonly method?: "GET" | "POST";
@@ -175,7 +220,8 @@ export async function scrapeJson<T>(
   } = {},
 ): Promise<T> {
   try {
-    return await withRetry(source, async () => {
+    const control = await assertScraperEnabled(source);
+    return await withRetry(source, control, async () => {
       const controller = new AbortController();
       const timer = setTimeout(
         () => controller.abort(),

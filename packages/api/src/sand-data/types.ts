@@ -2,7 +2,6 @@ export type SandDataSource =
   | "volleyball-life"
   | "bvbinfo"
   | "fivb-12ndr"
-  | "sandrating"
   | "volleyball-world"
   | "avp-league";
 

@@ -7,7 +7,7 @@ export const volleyballWorldLiveFeedTiming = {
   heartbeatMs: 20_000,
   responseGraceMs: 6_000,
   matchStaleMs: 45_000,
-  fallbackPollingMs: 15_000,
+  fallbackPollingMs: 30_000,
   healthyPollingMs: 30_000,
   maxReconnectAttempts: 5,
   maximumReconnectDelayMs: 15_000,

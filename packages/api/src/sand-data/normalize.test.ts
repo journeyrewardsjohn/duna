@@ -74,6 +74,13 @@ describe("sand data normalization", () => {
     expect(
       matchMappingConfidence({
         externalIdMatched: false,
+        externalName: "Crabb, Taylor",
+        candidateName: "Taylor Crabb",
+      }),
+    ).toBe(9_500);
+    expect(
+      matchMappingConfidence({
+        externalIdMatched: false,
         externalName: "A. Smith",
         candidateName: "Ana Smith",
       }),
