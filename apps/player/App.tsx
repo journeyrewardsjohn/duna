@@ -12344,12 +12344,12 @@ function PickupModal({
       >
         {showPlayerPicker ? (
           <PlayerPickerModal
+            embedded
             excludedPersonIds={[host.id]}
             maxSelected={Math.max(1, capacity - 1)}
             onChange={setSelectedPlayers}
             onClose={() => setShowPlayerPicker(false)}
             palette={colors}
-            presentationStyle="pageSheet"
             selected={selectedPlayers}
             title="Add players"
             visible
