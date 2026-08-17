@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, LoaderCircle, MapPin } from "lucide-react";
+import { Input } from "@duna/ui";
 import { useEffect, useRef, useState } from "react";
 
 interface PlaceSuggestion {
@@ -147,27 +148,29 @@ export function PlaceSearch({
     <div className="event-field--full place-search">
       <label>
         <span>{label}</span>
-        <span className="place-search__input">
-          <MapPin aria-hidden size={16} />
-          <input
-            aria-describedby={error ? "place-search-error" : undefined}
-            aria-invalid={Boolean(error) || Boolean(validationMessage)}
-            autoComplete="off"
-            onChange={(event) => {
-              setSelected(false);
-              setError("");
-              onAddress(event.target.value);
-            }}
-            placeholder={placeholder}
-            ref={input}
-            required={required}
-            value={value}
-          />
-          {(loading || resolving) && (
-            <LoaderCircle aria-hidden className="spin" size={16} />
-          )}
-          {selected && <Check aria-hidden size={16} />}
-        </span>
+        <Input
+          aria-describedby={error ? "place-search-error" : undefined}
+          aria-invalid={Boolean(error) || Boolean(validationMessage)}
+          autoComplete="off"
+          endAdornment={
+            loading || resolving ? (
+              <LoaderCircle aria-hidden className="spin" size={16} />
+            ) : selected ? (
+              <Check aria-hidden size={16} />
+            ) : undefined
+          }
+          groupClassName="place-search__input"
+          onChange={(event) => {
+            setSelected(false);
+            setError("");
+            onAddress(event.target.value);
+          }}
+          placeholder={placeholder}
+          ref={input}
+          required={required}
+          startAdornment={<MapPin aria-hidden size={16} />}
+          value={value}
+        />
       </label>
       {suggestions.length > 0 && (
         <span className="place-search__results">

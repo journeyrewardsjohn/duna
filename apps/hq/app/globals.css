@@ -5405,7 +5405,11 @@ button {
 
 .operator-private-link {
   align-items: center;
-  background: linear-gradient(120deg, rgb(var(--accent-rgb) / 12%), rgb(var(--overlay-rgb) / 3%));
+  background: linear-gradient(
+    120deg,
+    rgb(var(--accent-rgb) / 12%),
+    rgb(var(--overlay-rgb) / 3%)
+  );
   border: 1px solid rgb(var(--accent-rgb) / 28%);
   border-radius: 12px;
   display: grid;
@@ -20508,24 +20512,6 @@ body {
   margin-top: 0.8rem;
   padding: 0.7rem;
 }
-.team-blackouts__form label {
-  display: grid;
-  flex: 1;
-  gap: 0.28rem;
-}
-.team-blackouts__form label > span {
-  color: var(--color-bone-muted);
-  font-size: 0.65rem;
-  font-weight: 800;
-}
-.team-blackouts__form em {
-  font-style: normal;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-.team-blackouts__form input {
-  min-height: 39px;
-}
 .team-blackouts__form .hq-button {
   min-height: 39px;
 }
@@ -20556,76 +20542,96 @@ body {
   margin-left: auto;
 }
 
-/* Duna-owned calendar and time fields; native browser pickers are intentionally
- * not used for availability because the scheduling context needs more room. */
-.duna-date-picker,
-.duna-time-picker {
+/* Duna-owned schedule controls combine date and time in one decision surface,
+ * rather than sending people through unrelated browser-style pickers. */
+.duna-date-time-picker {
   display: grid;
   gap: 0.34rem;
   min-width: 0;
   position: relative;
 }
 
-.duna-date-picker > span,
-.duna-time-picker > span {
+.duna-date-time-picker__label {
   color: var(--color-bone-muted);
-  font-size: max(0.65rem, 10px);
+  font-size: max(0.67rem, 11px);
   font-weight: 800;
 }
 
-.duna-picker-trigger {
+.duna-date-time-picker__trigger {
   align-items: center;
   background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--color-ink);
-  display: flex;
+  display: grid;
   font: inherit;
-  font-size: max(0.7rem, 11px);
-  font-weight: 750;
-  gap: 0.5rem;
-  justify-content: flex-start;
-  min-height: 42px;
-  padding: 0.55rem 0.62rem;
+  font-size: max(0.72rem, 12px);
+  font-weight: 730;
+  gap: 0.48rem;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 0.88fr);
+  min-height: 46px;
+  padding: 0.45rem 0.65rem;
   text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
   width: 100%;
 }
 
-.duna-picker-trigger:hover,
-.duna-picker-trigger[aria-expanded="true"] {
-  border-color: rgb(var(--accent-rgb) / 48%);
+.duna-date-time-picker__trigger > span {
+  align-items: center;
+  display: flex;
+  gap: 0.42rem;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.duna-picker-trigger:focus-visible,
-.duna-picker-popover button:focus-visible,
-.duna-time-popover button:focus-visible {
-  box-shadow: var(--focus);
-  outline: none;
+.duna-date-time-picker__trigger > span:last-child {
+  color: var(--color-bone-muted);
 }
 
-.duna-picker-trigger svg {
+.duna-date-time-picker__trigger > i {
+  background: var(--color-line);
+  height: 1.2rem;
+}
+
+.duna-date-time-picker__trigger svg {
   color: var(--color-aqua);
   flex: 0 0 auto;
 }
 
-.duna-picker-popover,
-.duna-time-popover {
+.duna-date-time-picker__trigger:hover,
+.duna-date-time-picker__trigger[aria-expanded="true"] {
+  border-color: rgb(var(--accent-rgb) / 48%);
+}
+
+.duna-date-time-picker__trigger:focus-visible,
+.duna-date-time-picker__popover button:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.duna-date-time-picker__popover {
   background: var(--color-surface);
   border: 1px solid var(--color-line);
+  border-radius: 16px;
   box-shadow: 0 18px 38px rgb(29 35 29 / 16%);
+  display: grid;
+  grid-template-columns: minmax(235px, 1fr) minmax(132px, 0.52fr);
+  left: 0;
+  overflow: hidden;
   position: absolute;
   top: calc(100% + 0.48rem);
+  width: min(444px, calc(100vw - 2.5rem));
   z-index: 15;
 }
 
-.duna-picker-popover {
-  border-radius: 14px;
+.duna-date-time-picker__calendar {
   min-width: 0;
-  padding: 0.72rem;
-  width: min(292px, calc(100vw - 2.5rem));
+  padding: 0.78rem;
 }
 
-.duna-picker-popover header {
+.duna-date-time-picker__calendar header {
   align-items: center;
   display: grid;
   gap: 0.35rem;
@@ -20633,13 +20639,13 @@ body {
   margin-bottom: 0.55rem;
 }
 
-.duna-picker-popover header strong {
-  font-size: max(0.76rem, 12px);
+.duna-date-time-picker__calendar header strong {
+  font-size: max(0.78rem, 12px);
   text-align: center;
 }
 
-.duna-picker-popover header button,
-.duna-picker-popover footer button {
+.duna-date-time-picker__calendar header button,
+.duna-date-time-picker__calendar footer button {
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -20647,7 +20653,7 @@ body {
   font: inherit;
 }
 
-.duna-picker-popover header button {
+.duna-date-time-picker__calendar header button {
   align-items: center;
   display: inline-flex;
   height: 32px;
@@ -20656,104 +20662,125 @@ body {
   width: 32px;
 }
 
-.duna-picker-popover header button:hover,
-.duna-picker-popover footer button:hover {
+.duna-date-time-picker__calendar header button:hover,
+.duna-date-time-picker__calendar footer button:hover {
   background: var(--color-canvas-soft);
 }
 
-.duna-picker-weekdays,
-.duna-picker-days {
+.duna-date-time-picker__weekdays,
+.duna-date-time-picker__days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
-.duna-picker-weekdays {
+.duna-date-time-picker__weekdays {
   color: var(--color-bone-muted);
-  font-size: max(0.61rem, 10px);
+  font-size: max(0.62rem, 10px);
   font-weight: 800;
   letter-spacing: 0.04em;
-  margin-bottom: 0.28rem;
+  margin-bottom: 0.3rem;
   text-align: center;
   text-transform: uppercase;
 }
 
-.duna-picker-days {
+.duna-date-time-picker__days {
   gap: 0.18rem;
 }
 
-.duna-picker-days span,
-.duna-picker-days button {
+.duna-date-time-picker__days span,
+.duna-date-time-picker__days button {
   aspect-ratio: 1;
 }
 
-.duna-picker-days button {
+.duna-date-time-picker__days button {
   background: transparent;
   border: 0;
   border-radius: 8px;
   color: var(--color-ink);
   font: inherit;
-  font-size: max(0.68rem, 11px);
+  font-size: max(0.7rem, 11px);
   min-width: 0;
 }
 
-.duna-picker-days button:hover {
+.duna-date-time-picker__days button:hover {
   background: var(--color-canvas-soft);
 }
 
-.duna-picker-days button[aria-pressed="true"] {
+.duna-date-time-picker__days button[aria-pressed="true"] {
   background: var(--color-aqua);
   color: white;
   font-weight: 850;
 }
 
-.duna-picker-days button:disabled {
+.duna-date-time-picker__days button:disabled {
   color: rgb(71 69 64 / 32%);
   cursor: not-allowed;
 }
 
-.duna-picker-popover footer {
+.duna-date-time-picker__calendar footer {
   display: flex;
   justify-content: space-between;
   margin-top: 0.52rem;
   padding-top: 0.52rem;
 }
 
-.duna-picker-popover footer button {
+.duna-date-time-picker__calendar footer button {
   color: var(--color-aqua);
-  font-size: max(0.66rem, 10px);
+  font-size: max(0.67rem, 11px);
   font-weight: 800;
   min-height: 30px;
   padding: 0 0.48rem;
 }
 
-.duna-time-popover {
-  border-radius: 14px;
+.duna-date-time-picker__times {
+  border-left: 1px solid var(--color-line);
   display: grid;
-  gap: 0.18rem;
-  grid-template-columns: repeat(2, minmax(92px, 1fr));
-  max-height: 252px;
-  overflow-y: auto;
-  padding: 0.45rem;
-  width: 228px;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0.78rem 0.55rem 0.55rem;
 }
 
-.duna-time-popover button {
+.duna-date-time-picker__times > span {
+  color: var(--color-bone-muted);
+  font-size: max(0.63rem, 10px);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0 0.35rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.duna-date-time-picker__times > div {
+  display: grid;
+  gap: 0.14rem;
+  max-height: 248px;
+  overflow-y: auto;
+  padding: 0.12rem;
+}
+
+.duna-date-time-picker__times button {
   background: transparent;
   border: 0;
   border-radius: 8px;
   color: var(--color-bone);
   font: inherit;
-  font-size: max(0.68rem, 11px);
-  min-height: 34px;
+  font-size: max(0.69rem, 11px);
+  font-weight: 650;
+  min-height: 32px;
   padding: 0 0.45rem;
   text-align: left;
 }
 
-.duna-time-popover button:hover,
-.duna-time-popover button[aria-pressed="true"] {
+.duna-date-time-picker__times button:hover,
+.duna-date-time-picker__times button[aria-pressed="true"] {
   background: var(--color-canvas-soft);
   color: var(--color-ink);
   font-weight: 850;
+}
+
+.duna-date-time-picker__times button:disabled {
+  color: var(--color-bone-muted);
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .team-availability-calendar {
@@ -20840,9 +20867,7 @@ body {
   align-items: end;
   display: grid;
   gap: 0.55rem;
-  grid-template-columns:
-    minmax(145px, 1.25fr) minmax(116px, 0.9fr) auto minmax(145px, 1.25fr)
-    minmax(116px, 0.9fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr) auto;
 }
 
 .team-blackouts__form .hq-button {
@@ -20858,8 +20883,7 @@ body {
   margin-bottom: 0.78rem;
 }
 
-.team-blackouts__form > :nth-child(4) .duna-picker-popover,
-.team-blackouts__form > :nth-child(5) .duna-time-popover {
+.team-blackouts__form > :nth-child(3) .duna-date-time-picker__popover {
   left: auto;
   right: 0;
 }
@@ -21828,9 +21852,7 @@ body {
   }
 
   .team-blackouts__form {
-    grid-template-columns:
-      minmax(150px, 1fr) minmax(125px, 0.8fr) auto minmax(150px, 1fr)
-      minmax(125px, 0.8fr);
+    grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
   }
 
   .team-blackouts__form .hq-button {
@@ -21883,7 +21905,7 @@ body {
 
   .team-blackouts__form {
     align-items: stretch;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .team-blackouts__through {
@@ -21893,6 +21915,19 @@ body {
   .team-blackouts__form .hq-button {
     grid-column: 1 / -1;
     justify-self: stretch;
+  }
+
+  .duna-date-time-picker__popover {
+    grid-template-columns: minmax(0, 1fr) 118px;
+    width: min(390px, calc(100vw - 2rem));
+  }
+
+  .duna-date-time-picker__calendar {
+    padding: 0.62rem;
+  }
+
+  .duna-date-time-picker__times {
+    padding-inline: 0.4rem;
   }
 
   .team-calendar-months {

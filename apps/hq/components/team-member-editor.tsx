@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { Badge } from "@duna/ui";
+import { Badge, Field, Input, Select } from "@duna/ui";
 import {
   CalendarDays,
   Check,
@@ -18,7 +18,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { AddressEntry } from "./place-address-fields";
-import { DunaDatePicker, DunaTimePicker } from "./duna-date-time-picker";
+import { DunaDateTimePicker } from "./duna-date-time-picker";
 
 type StaffProfile = OperatorWorkspace["staff"][number];
 
@@ -328,10 +328,16 @@ export function TeamMemberEditor({
             <ShieldCheck aria-hidden size={22} />
           </header>
           <div className="operator-form-grid operator-form-grid--two">
-            <label className="operator-field--wide">
-              <span>Public display name</span>
-              <input
+            <Field
+              className="operator-field--wide"
+              htmlFor="team-display-name"
+              hint="This is the name players see on coach profiles, services, and schedules."
+              label="Public display name"
+              required
+            >
+              <Input
                 defaultValue={person.displayName}
+                id="team-display-name"
                 maxLength={80}
                 minLength={2}
                 name="displayName"
@@ -339,42 +345,44 @@ export function TeamMemberEditor({
                 required
                 type="text"
               />
-              <small>
-                This is the name players see on coach profiles, services, and
-                schedules.
-              </small>
-            </label>
-            <label>
-              <span>Role</span>
-              <select defaultValue={person.role} name="role">
+            </Field>
+            <Field htmlFor="team-role" label="Role">
+              <Select defaultValue={person.role} id="team-role" name="role">
                 <option value="coach">Coach</option>
                 <option value="director">Director</option>
                 <option value="manager">Manager</option>
                 <option value="front-desk">Front desk</option>
                 <option value="accountant">Accountant</option>
-              </select>
-            </label>
-            <label>
-              <span>Worker classification</span>
-              <select
+              </Select>
+            </Field>
+            <Field
+              htmlFor="team-worker-classification"
+              label="Worker classification"
+            >
+              <Select
                 defaultValue={person.workerClassification}
+                id="team-worker-classification"
                 name="workerClassification"
               >
                 <option value="not-set">Not set yet</option>
                 <option value="1099-contractor">1099 contractor</option>
                 <option value="w2-employee">W-2 employee</option>
-              </select>
-            </label>
-            <label className="operator-field--wide">
-              <span>Status</span>
-              <select
+              </Select>
+            </Field>
+            <Field
+              className="operator-field--wide"
+              htmlFor="team-status"
+              label="Status"
+            >
+              <Select
                 defaultValue={person.active ? "true" : "false"}
+                id="team-status"
                 name="active"
               >
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>
-              </select>
-            </label>
+              </Select>
+            </Field>
           </div>
         </section>
 
@@ -390,9 +398,13 @@ export function TeamMemberEditor({
             </div>
           </header>
           <div className="operator-form-grid operator-form-grid--two">
-            <label className="operator-field--wide">
-              <span>Compensation model</span>
-              <select
+            <Field
+              className="operator-field--wide"
+              htmlFor="team-compensation-model"
+              label="Compensation model"
+            >
+              <Select
+                id="team-compensation-model"
                 name="compensationModel"
                 onChange={(event) =>
                   setCompensationModel(
@@ -407,18 +419,18 @@ export function TeamMemberEditor({
                 <option value="hourly-plus-profit-share">
                   Hourly + profit share
                 </option>
-              </select>
-            </label>
+              </Select>
+            </Field>
             {(compensationModel === "hourly" ||
               compensationModel === "hourly-plus-profit-share") && (
-              <label>
-                <span>Hourly rate</span>
-                <input
+              <Field htmlFor="team-hourly-rate" label="Hourly rate" required>
+                <Input
                   defaultValue={
                     person.hourlyRateMinor === undefined
                       ? ""
                       : (person.hourlyRateMinor / 100).toFixed(2)
                   }
+                  id="team-hourly-rate"
                   inputMode="decimal"
                   min="0"
                   name="hourlyRate"
@@ -426,18 +438,22 @@ export function TeamMemberEditor({
                   step="0.01"
                   type="number"
                 />
-              </label>
+              </Field>
             )}
             {(compensationModel === "profit-share" ||
               compensationModel === "hourly-plus-profit-share") && (
-              <label>
-                <span>Profit share · %</span>
-                <input
+              <Field
+                htmlFor="team-profit-share"
+                label="Profit share · %"
+                required
+              >
+                <Input
                   defaultValue={
                     person.profitShareBps === undefined
                       ? ""
                       : (person.profitShareBps / 100).toFixed(2)
                   }
+                  id="team-profit-share"
                   inputMode="decimal"
                   max="100"
                   min="0"
@@ -446,27 +462,27 @@ export function TeamMemberEditor({
                   step="0.01"
                   type="number"
                 />
-              </label>
+              </Field>
             )}
-            <label>
-              <span>Income goal</span>
-              <input
+            <Field htmlFor="team-income-goal" label="Income goal">
+              <Input
                 defaultValue={
                   person.incomeGoalMinor === undefined
                     ? ""
                     : (person.incomeGoalMinor / 100).toFixed(2)
                 }
+                id="team-income-goal"
                 inputMode="decimal"
                 min="0"
                 name="incomeGoal"
                 step="0.01"
                 type="number"
               />
-            </label>
-            <label>
-              <span>Goal period</span>
-              <select
+            </Field>
+            <Field htmlFor="team-goal-period" label="Goal period">
+              <Select
                 defaultValue={person.incomeGoalPeriod ?? ""}
+                id="team-goal-period"
                 name="incomeGoalPeriod"
               >
                 <option value="">No period</option>
@@ -474,8 +490,8 @@ export function TeamMemberEditor({
                 <option value="month">Monthly</option>
                 <option value="quarter">Quarterly</option>
                 <option value="year">Annual</option>
-              </select>
-            </label>
+              </Select>
+            </Field>
           </div>
         </section>
 
@@ -638,29 +654,28 @@ export function TeamMemberEditor({
               <Badge tone="neutral">{blackouts.length} saved</Badge>
             </header>
             <div className="team-blackouts__form">
-              <DunaDatePicker
-                label="Starts on"
-                onChange={setBlackoutStart}
-                value={blackoutStart}
-              />
-              <DunaTimePicker
-                label="Start time"
-                onChange={setBlackoutStartTime}
-                value={blackoutStartTime}
+              <DunaDateTimePicker
+                label="From"
+                onChange={(value) => {
+                  setBlackoutStart(value.date);
+                  setBlackoutStartTime(value.time);
+                }}
+                value={{ date: blackoutStart, time: blackoutStartTime }}
               />
               <span aria-hidden className="team-blackouts__through">
                 to
               </span>
-              <DunaDatePicker
-                label="Ends on"
-                min={blackoutStart || undefined}
-                onChange={setBlackoutEnd}
-                value={blackoutEnd}
-              />
-              <DunaTimePicker
-                label="End time"
-                onChange={setBlackoutEndTime}
-                value={blackoutEndTime}
+              <DunaDateTimePicker
+                label="Through · optional"
+                minDate={blackoutStart || undefined}
+                minTime={
+                  blackoutEnd === blackoutStart ? blackoutStartTime : undefined
+                }
+                onChange={(value) => {
+                  setBlackoutEnd(value.date);
+                  setBlackoutEndTime(value.time);
+                }}
+                value={{ date: blackoutEnd, time: blackoutEndTime }}
               />
               <button
                 className="hq-button hq-button--secondary"
