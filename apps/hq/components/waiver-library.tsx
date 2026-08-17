@@ -5,11 +5,15 @@ import { Badge } from "@duna/ui";
 import {
   Check,
   CircleAlert,
+  Eye,
   FileText,
   FileUp,
   LockKeyhole,
+  Monitor,
   Plus,
   ShieldCheck,
+  Smartphone,
+  X,
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import { createWaiverAction, type OperatorActionState } from "@/app/actions";
@@ -22,6 +26,8 @@ type SectionDraft = {
   readonly markdown: string;
   readonly acknowledgementRequired: boolean;
 };
+
+type LibraryWaiver = WaiverWorkspace["documents"][number];
 
 function sectionId(value: string, index: number, usedIds: ReadonlySet<string>) {
   const base =
@@ -39,6 +45,181 @@ function sectionId(value: string, index: number, usedIds: ReadonlySet<string>) {
     suffix += 1;
   }
   return id;
+}
+
+function WaiverTextPreview({ markdown }: { readonly markdown: string }) {
+  const paragraphs = markdown
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  return (
+    <div className="waiver-signing-preview__document-copy">
+      {paragraphs.map((paragraph, index) =>
+        /^#{1,3}\s/.test(paragraph) ? (
+          <h5 key={`${paragraph.slice(0, 24)}-${index}`}>
+            {paragraph.replace(/^#{1,3}\s*/, "")}
+          </h5>
+        ) : (
+          <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>
+        ),
+      )}
+    </div>
+  );
+}
+
+function WaiverSigningPreview({
+  waiver,
+  onClose,
+}: {
+  readonly waiver: LibraryWaiver;
+  readonly onClose: () => void;
+}) {
+  const [reviewed, setReviewed] = useState(false);
+  const requiredSections = waiver.keySections.filter(
+    (section) => section.acknowledgementRequired,
+  );
+  const acknowledgementSummary = requiredSections.length
+    ? `${requiredSections.length} specific acknowledgement${
+        requiredSections.length === 1 ? "" : "s"
+      } required`
+    : "No separate section acknowledgements";
+
+  return (
+    <section className="hq-card waiver-signing-preview" aria-label="Waiver signing preview">
+      <header className="waiver-signing-preview__header">
+        <div>
+          <span className="hq-eyebrow">Signer experience</span>
+          <h3>Preview the required signing flow</h3>
+          <p>
+            This uses the saved document and signing rules. It is a safe preview
+            only—no signature or record is created here.
+          </p>
+        </div>
+        <button
+          aria-label="Close signing preview"
+          className="waiver-signing-preview__close"
+          onClick={onClose}
+          type="button"
+        >
+          <X aria-hidden size={17} />
+        </button>
+      </header>
+      <div className="waiver-signing-preview__toolbar">
+        <span>
+          <ShieldCheck aria-hidden size={16} /> {acknowledgementSummary}
+        </span>
+        <button
+          className="hq-button hq-button--secondary"
+          onClick={() => setReviewed((value) => !value)}
+          type="button"
+        >
+          {reviewed ? "Preview locked state" : "Preview after reading"}
+        </button>
+      </div>
+      <div className="waiver-signing-preview__surfaces">
+        <article className="waiver-signing-preview__surface waiver-signing-preview__surface--web">
+          <header>
+            <span><Monitor aria-hidden size={15} /> Duna web</span>
+            <small>Checkout requirement</small>
+          </header>
+          <div className="waiver-signing-preview__web-frame">
+            <div className="waiver-signing-preview__web-topbar">
+              <span>Duna</span>
+              <small>Secure checkout</small>
+            </div>
+            <div className="waiver-signing-preview__web-panel">
+              <div className="waiver-signing-preview__panel-heading">
+                <ShieldCheck aria-hidden size={20} />
+                <div>
+                  <span>REQUIRED BEFORE CHECKOUT</span>
+                  <h4>Review and sign the waiver</h4>
+                  <p>
+                    The complete document is shown below and this version is
+                    retained with the signature.
+                  </p>
+                </div>
+              </div>
+              <div className="waiver-signing-preview__reader">
+                <WaiverTextPreview markdown={waiver.markdown ?? ""} />
+              </div>
+              <p className="waiver-signing-preview__status">
+                {reviewed
+                  ? "Full document reviewed. You can now acknowledge and sign."
+                  : "Scroll to the end of the full waiver to unlock acknowledgement."}
+              </p>
+              <div className="waiver-signing-preview__checks">
+                {requiredSections.map((section) => (
+                  <label key={section.id}>
+                    <input disabled={!reviewed} type="checkbox" />
+                    I specifically acknowledge: {section.title}
+                  </label>
+                ))}
+                <label>
+                  <input disabled={!reviewed} type="checkbox" />
+                  I have reviewed the full waiver and affirmatively agree to it.
+                </label>
+              </div>
+              {waiver.requiresSignature && (
+                <label className="waiver-signing-preview__name">
+                  Type your full legal name to sign
+                  <input disabled={!reviewed} placeholder="Full legal name" />
+                </label>
+              )}
+              <button disabled type="button">
+                {waiver.requiresSignature ? "Sign waiver" : "Record acknowledgement"}
+              </button>
+            </div>
+          </div>
+        </article>
+        <article className="waiver-signing-preview__surface waiver-signing-preview__surface--app">
+          <header>
+            <span><Smartphone aria-hidden size={15} /> Duna Player app</span>
+            <small>Mobile sheet</small>
+          </header>
+          <div className="waiver-signing-preview__phone">
+            <div className="waiver-signing-preview__phone-notch" />
+            <div className="waiver-signing-preview__app-header">
+              <div>
+                <span>REQUIRED WAIVER</span>
+                <h4>{waiver.title}</h4>
+              </div>
+              <X aria-hidden size={16} />
+            </div>
+            <div className="waiver-signing-preview__app-body">
+              <p className="waiver-signing-preview__app-intro">
+                Review the complete waiver below. Duna unlocks the acknowledgement controls after you reach the end.
+              </p>
+              <div className="waiver-signing-preview__app-reader">
+                <WaiverTextPreview markdown={waiver.markdown ?? ""} />
+              </div>
+              <p className="waiver-signing-preview__status">
+                {reviewed
+                  ? "Full document reviewed. You can now acknowledge and sign."
+                  : "Scroll to the bottom to continue."}
+              </p>
+              <div className="waiver-signing-preview__app-checks">
+                {requiredSections.slice(0, 2).map((section) => (
+                  <p key={section.id}>
+                    <i aria-hidden /> I specifically acknowledge: {section.title}
+                  </p>
+                ))}
+                <p><i aria-hidden /> I have reviewed the full waiver and affirmatively agree to it.</p>
+              </div>
+              {waiver.requiresSignature && (
+                <div className="waiver-signing-preview__app-name">
+                  <span>Type your full legal name to sign</span>
+                  <em>Full legal name</em>
+                </div>
+              )}
+              <button disabled type="button">
+                {waiver.requiresSignature ? "Sign waiver" : "Record acknowledgement"}
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
 }
 
 export function WaiverLibrary({
@@ -67,6 +248,7 @@ export function WaiverLibrary({
   const [appliesToMembers, setAppliesToMembers] = useState(false);
   const [appliesToBookings, setAppliesToBookings] = useState(false);
   const [sections, setSections] = useState<readonly SectionDraft[]>([]);
+  const [previewedWaiver, setPreviewedWaiver] = useState<LibraryWaiver>();
   const { serializedSections, sectionErrors } = useMemo(() => {
     const usedIds = new Set<string>();
     const errors = new Map<number, string>();
@@ -220,10 +402,10 @@ export function WaiverLibrary({
                 {waiver.status}
               </Badge>
             </header>
-            <p>
-              Version {waiver.version ?? "—"} · signature valid for{" "}
-              {waiver.signatureValidityDays} days
-            </p>
+            <div className="waiver-library__record-meta">
+              <span>Version {waiver.version ?? "—"}</span>
+              <span>Valid for {waiver.signatureValidityDays} days</span>
+            </div>
             <small>
               {waiver.requiresParentForMinors
                 ? "Parent or guardian signature required for minors."
@@ -233,20 +415,33 @@ export function WaiverLibrary({
                 : ""}
             </small>
             <footer>
-              {waiver.assignments.length > 0
-                ? waiver.assignments.map((assignment) => (
-                    <Badge key={assignment.id} tone="neutral">
-                      {assignment.scope.replaceAll("-", " ")}
-                    </Badge>
-                  ))
-                : "Library only"}
-              <button onClick={() => beginRevision(waiver)} type="button">
-                Create revision
-              </button>
+              <span className="waiver-library__record-assignments">
+                {waiver.assignments.length > 0
+                  ? waiver.assignments.map((assignment) => (
+                      <Badge key={assignment.id} tone="neutral">
+                        {assignment.scope.replaceAll("-", " ")}
+                      </Badge>
+                    ))
+                  : <Badge tone="neutral">Library only</Badge>}
+              </span>
+              <span className="waiver-library__record-actions">
+                <button onClick={() => setPreviewedWaiver(waiver)} type="button">
+                  <Eye aria-hidden size={15} /> Preview signing
+                </button>
+                <button onClick={() => beginRevision(waiver)} type="button">
+                  <FileText aria-hidden size={15} /> Create revision
+                </button>
+              </span>
             </footer>
           </article>
         ))}
       </div>
+      {previewedWaiver && (
+        <WaiverSigningPreview
+          onClose={() => setPreviewedWaiver(undefined)}
+          waiver={previewedWaiver}
+        />
+      )}
 
       {creating && (
         <form
