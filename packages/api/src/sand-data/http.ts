@@ -23,6 +23,7 @@ function firecrawlKey(): string | undefined {
 export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
   if (source === "avp-league") return "firecrawl";
   if (
+    source === "avp-tournaments" ||
     source === "volleyball-life" ||
     source === "volleyball-world" ||
     process.env.SAND_SCRAPER_ENGINE === "native"
@@ -36,7 +37,11 @@ function resolveScrapeEngine(
   source: ManagedScraperSource,
   control: ScraperControl,
 ): ScrapeEngine {
-  if (source === "volleyball-life" || source === "volleyball-world") {
+  if (
+    source === "avp-tournaments" ||
+    source === "volleyball-life" ||
+    source === "volleyball-world"
+  ) {
     return "native";
   }
   if (control.engine === "native" || control.engine === "firecrawl") {

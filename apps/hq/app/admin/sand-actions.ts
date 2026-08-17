@@ -38,9 +38,13 @@ export async function importSandSourceAction(
   const source = String(formData.get("source") ?? "");
   const externalId = String(formData.get("externalId") ?? "").trim();
   if (
-    !["bvbinfo", "volleyball-life", "fivb-12ndr", "avp-league"].includes(
-      source,
-    ) ||
+    ![
+      "bvbinfo",
+      "volleyball-life",
+      "fivb-12ndr",
+      "avp-league",
+      "avp-tournaments",
+    ].includes(source) ||
     !externalId
   ) {
     return {
@@ -52,7 +56,11 @@ export async function importSandSourceAction(
     const caller = await getServerCaller();
     const result = await caller.admin.importSandSource({
       source: source as
-        "bvbinfo" | "volleyball-life" | "fivb-12ndr" | "avp-league",
+        | "bvbinfo"
+        | "volleyball-life"
+        | "fivb-12ndr"
+        | "avp-league"
+        | "avp-tournaments",
       externalId,
     });
     refreshSandAdmin();
@@ -107,6 +115,7 @@ const scraperSources = new Set([
   "fivb-12ndr",
   "volleyball-world",
   "avp-league",
+  "avp-tournaments",
 ]);
 
 function optionalPositiveInteger(
@@ -151,7 +160,8 @@ export async function updateScraperControlAction(
         | "volleyball-life"
         | "fivb-12ndr"
         | "volleyball-world"
-        | "avp-league",
+        | "avp-league"
+        | "avp-tournaments",
       enabled: formData.get("enabled") === "on",
       engine: engine as "auto" | "native" | "firecrawl",
       minRequestIntervalMs,
@@ -214,7 +224,8 @@ export async function smokeTestScraperAction(
         | "volleyball-life"
         | "fivb-12ndr"
         | "volleyball-world"
-        | "avp-league",
+        | "avp-league"
+        | "avp-tournaments",
     });
     refreshSandAdmin();
     return { status: "success", message: result.message };
@@ -270,6 +281,28 @@ export async function refreshAvpLeagueAction(
     };
   } catch (error) {
     return failure(error, "The AVP League season could not be refreshed.");
+  }
+}
+
+export async function refreshAvpTournamentsAction(
+  _previous: SandActionState,
+  formData: FormData,
+): Promise<SandActionState> {
+  const seasonValue = String(formData.get("season") ?? "").trim();
+  const season = seasonValue ? Number.parseInt(seasonValue, 10) : undefined;
+  if (season !== undefined && !Number.isInteger(season)) {
+    return { status: "error", message: "Enter a valid AVP season." };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.refreshAvpTournaments({ season });
+    refreshSandAdmin();
+    return {
+      status: "success",
+      message: `AVP tournaments ${season ?? "current"} refreshed: ${result.counters.events} divisions and ${result.counters.matches} matches processed.`,
+    };
+  } catch (error) {
+    return failure(error, "AVP tournament brackets could not be refreshed.");
   }
 }
 

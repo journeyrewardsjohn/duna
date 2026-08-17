@@ -99,6 +99,7 @@ function SourceImportForm() {
           <option value="bvbinfo">BVBInfo player</option>
           <option value="fivb-12ndr">FIVB event</option>
           <option value="avp-league">AVP League season</option>
+          <option value="avp-tournaments">AVP tournament season</option>
         </select>
       </label>
       <label>

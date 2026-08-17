@@ -66,6 +66,7 @@ import {
 } from "../match-service";
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import { avpExternalPlayerId, importAvpLeague } from "./avp";
+import { importAvpTournaments } from "./avp-tournaments";
 import {
   assertLiveTransportEnabled,
   assertScraperEnabled,
@@ -324,6 +325,7 @@ async function buildMatchResultNarratives(
 
 const sourceNames: Readonly<Record<SandDataSource, string>> = {
   "avp-league": "AVP League",
+  "avp-tournaments": "AVP Tournaments",
   bvbinfo: "BVBInfo",
   "fivb-12ndr": "FIVB via fivb.12ndr",
   "volleyball-life": "VolleyballLife",
@@ -333,9 +335,10 @@ const sourceNames: Readonly<Record<SandDataSource, string>> = {
 const sandSourcePriority: Readonly<Record<string, number>> = {
   "fivb-12ndr": 0,
   "avp-league": 1,
-  "volleyball-world": 2,
-  bvbinfo: 3,
-  "volleyball-life": 4,
+  "avp-tournaments": 2,
+  "volleyball-world": 3,
+  bvbinfo: 4,
+  "volleyball-life": 5,
 };
 
 export class SandDataServiceError extends Error {
@@ -564,7 +567,9 @@ export function shouldCreateUnclaimedSourceProfile(input: {
   return (
     input.isProfessional === true &&
     hasFullName &&
-    ["bvbinfo", "volleyball-life", "fivb-12ndr"].includes(input.source) &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr", "avp-tournaments"].includes(
+      input.source,
+    ) &&
     (input.bestCandidateScoreBps ?? 10_000) < 8_500
   );
 }
@@ -588,7 +593,9 @@ export function shouldAutoLinkProfessionalSource(input: {
     return true;
   }
   return (
-    ["bvbinfo", "volleyball-life", "fivb-12ndr"].includes(input.source) &&
+    ["bvbinfo", "volleyball-life", "fivb-12ndr", "avp-tournaments"].includes(
+      input.source,
+    ) &&
     input.isProfessional &&
     !input.tied &&
     input.scoreBps === 9_500 &&
@@ -1592,7 +1599,9 @@ async function executeImport(input: {
   const control = await assertScraperEnabled(input.source);
   const source = await ensureSource(input.source);
   const engine =
-    input.source === "volleyball-life" || input.source === "volleyball-world"
+    input.source === "avp-tournaments" ||
+    input.source === "volleyball-life" ||
+    input.source === "volleyball-world"
       ? "native"
       : control.engine === "auto"
         ? input.source === "avp-league" ||
@@ -1687,7 +1696,11 @@ async function executeImport(input: {
         createdAt: input.now,
       }),
     ]);
-    if (input.source === "fivb-12ndr" || input.source === "avp-league") {
+    if (
+      input.source === "fivb-12ndr" ||
+      input.source === "avp-league" ||
+      input.source === "avp-tournaments"
+    ) {
       const externalEventIds = [
         ...new Set(
           result.matches.flatMap((match) =>
@@ -1724,7 +1737,12 @@ async function executeImport(input: {
 }
 
 export function importSandSource(input: {
-  readonly source: "bvbinfo" | "volleyball-life" | "fivb-12ndr" | "avp-league";
+  readonly source:
+    | "bvbinfo"
+    | "volleyball-life"
+    | "fivb-12ndr"
+    | "avp-league"
+    | "avp-tournaments";
   readonly externalId: string;
   /** Routine linked-profile syncs request only current or recently changed history. */
   readonly incremental?: boolean;
@@ -1775,6 +1793,20 @@ export function importSandSource(input: {
         ),
     });
   }
+  if (input.source === "avp-tournaments") {
+    const parsedSeason = Number.parseInt(input.externalId, 10);
+    return executeImport({
+      source: input.source,
+      mode: "season",
+      requestedExternalId: input.externalId,
+      actor: input.actor,
+      now,
+      loader: () =>
+        importAvpTournaments(
+          Number.isInteger(parsedSeason) ? parsedSeason : undefined,
+        ),
+    });
+  }
   return executeImport({
     source: input.source,
     mode: "event",
@@ -1792,6 +1824,19 @@ export function refreshAvpLeague(input: {
 }) {
   return importSandSource({
     source: "avp-league",
+    externalId: String(input.season ?? new Date().getUTCFullYear()),
+    actor: input.actor,
+    now: input.now,
+  });
+}
+
+export function refreshAvpTournaments(input: {
+  readonly season?: number;
+  readonly actor?: ApiActor;
+  readonly now?: Date;
+}) {
+  return importSandSource({
+    source: "avp-tournaments",
     externalId: String(input.season ?? new Date().getUTCFullYear()),
     actor: input.actor,
     now: input.now,
@@ -2826,6 +2871,13 @@ export async function smokeTestScraper(input: {
       message: `${result.counters.events} AVP events verified.`,
     };
   }
+  if (input.source === "avp-tournaments") {
+    const result = await refreshAvpTournaments({ actor: input.actor, now });
+    return {
+      source: input.source,
+      message: `${result.counters.events} AVP tournament divisions verified.`,
+    };
+  }
   const connection =
     await getDatabase().query.playerSourceConnections.findFirst({
       where: and(
@@ -3154,7 +3206,11 @@ export async function loadSandDataOverview() {
       .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
       .where(
         and(
-          inArray(importSources.slug, ["fivb-12ndr", "avp-league"]),
+          inArray(importSources.slug, [
+            "fivb-12ndr",
+            "avp-league",
+            "avp-tournaments",
+          ]),
           sql`${importedMatches.externalEventId} IS NOT NULL`,
         ),
       )
@@ -6048,7 +6104,13 @@ export async function loadPublicProCoverage(now = new Date()) {
       })
       .from(importedMatches)
       .innerJoin(importSources, eq(importedMatches.sourceId, importSources.id))
-      .where(inArray(importSources.slug, ["fivb-12ndr", "avp-league"]))
+      .where(
+        inArray(importSources.slug, [
+          "fivb-12ndr",
+          "avp-league",
+          "avp-tournaments",
+        ]),
+      )
       .orderBy(desc(importedMatches.playedAt))
       .limit(2_000),
     database
@@ -6247,7 +6309,8 @@ export async function loadPublicProCoverage(now = new Date()) {
           : {}),
         lastSyncedAt: event.lastSyncedAt.toISOString(),
         source:
-          event.sourceSlug === "avp-league"
+          event.sourceSlug === "avp-league" ||
+          event.sourceSlug === "avp-tournaments"
             ? ("avp" as const)
             : ("fivb" as const),
         tour: professionalTour(event.sourceSlug, event.effective.category),
@@ -6327,11 +6390,15 @@ function slugSegment(value: string): string {
 }
 
 export function professionalSource(sourceSlug: string): "fivb" | "avp" {
-  return sourceSlug === "avp-league" ? "avp" : "fivb";
+  return sourceSlug === "avp-league" || sourceSlug === "avp-tournaments"
+    ? "avp"
+    : "fivb";
 }
 
 export function professionalTour(sourceSlug: string, category?: string | null) {
-  if (sourceSlug === "avp-league") return "avp" as const;
+  if (sourceSlug === "avp-league" || sourceSlug === "avp-tournaments") {
+    return "avp" as const;
+  }
   const normalized = category?.toLowerCase() ?? "";
   if (normalized.includes("elite")) return "elite" as const;
   if (normalized.includes("challeng")) return "challenger" as const;
@@ -8511,6 +8578,12 @@ function bracketRound(roundLabel: string):
   }
   if (/(?:qualification|qualifier|lucky loser)/i.test(normalized)) {
     return { key: slugSegment(roundLabel), label: roundLabel, order: 1 };
+  }
+  // AVP exposes a complete double-elimination topology. Its loser-bracket and
+  // first-round labels do not always correspond to a standard FIVB round, so
+  // keep those official labels visible instead of dropping their matches.
+  if (/(?:main draw|bracket|round)/i.test(normalized)) {
+    return { key: slugSegment(roundLabel), label: roundLabel, order: 0 };
   }
   return undefined;
 }

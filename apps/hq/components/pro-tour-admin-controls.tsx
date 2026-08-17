@@ -34,6 +34,7 @@ import {
   applyProfessionalEventResearchAction,
   linkSandPlayerAction,
   refreshAvpLeagueAction,
+  refreshAvpTournamentsAction,
   refreshFivbIndexAction,
   removeProfessionalEventMediaAction,
   removeProfessionalWatchOptionAction,
@@ -227,6 +228,30 @@ function AvpRefreshForm({ season }: { readonly season: number }) {
   );
 }
 
+function AvpTournamentRefreshForm({ season }: { readonly season: number }) {
+  const [state, action, pending] = useActionState(
+    refreshAvpTournamentsAction,
+    initialState,
+  );
+  return (
+    <form action={action} className="pro-admin-sync-form">
+      <label>
+        <span>AVP tournament season</span>
+        <input defaultValue={season} name="season" type="number" />
+      </label>
+      <button className="hq-button hq-button--primary" disabled={pending}>
+        {pending ? (
+          <LoaderCircle className="spin" size={16} />
+        ) : (
+          <RefreshCw size={16} />
+        )}
+        Refresh draws + live scores
+      </button>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
 function ProfessionalSyncControls({
   currentAvpSeason,
   data,
@@ -238,6 +263,9 @@ function ProfessionalSyncControls({
     (source) => source.slug === "fivb-12ndr",
   );
   const avpSource = data.sources.find((source) => source.slug === "avp-league");
+  const avpTournamentSource = data.sources.find(
+    (source) => source.slug === "avp-tournaments",
+  );
   return (
     <section className="hq-card pro-admin-sync" id="source-sync">
       <header className="hq-card-heading">
@@ -277,6 +305,20 @@ function ProfessionalSyncControls({
             </small>
           </div>
           <AvpRefreshForm season={currentAvpSeason} />
+        </article>
+        <article>
+          <span className="pro-admin-source-mark pro-admin-source-mark--avp">
+            AVP
+          </span>
+          <div>
+            <strong>AVP Tournaments</strong>
+            <small>
+              {avpTournamentSource?.latestImportedAt
+                ? `Last import ${syncedLabel(avpTournamentSource.latestImportedAt)}`
+                : "No completed import"}
+            </small>
+          </div>
+          <AvpTournamentRefreshForm season={currentAvpSeason} />
         </article>
       </div>
     </section>
@@ -320,7 +362,7 @@ function EventFilters({
         >
           <option value="all">All tours</option>
           <option value="fivb">FIVB</option>
-          <option value="avp">AVP League</option>
+          <option value="avp">AVP</option>
         </select>
       </label>
       <label>

@@ -15,6 +15,10 @@
       "schedule": "15 */2 * * *"
     },
     {
+      "path": "/api/cron/sand?mode=avp-tournaments",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/sand?mode=elite-stats",
       "schedule": "17 * * * *"
     }
