@@ -10,18 +10,33 @@ const shellSource = readFileSync(
   new URL("./operator-shell.tsx", import.meta.url),
   "utf8",
 );
+const organizationSwitcherSource = readFileSync(
+  new URL("./organization-switcher.tsx", import.meta.url),
+  "utf8",
+);
 const styles = readFileSync(
   new URL("../app/design-v3.css", import.meta.url),
   "utf8",
 );
 
 describe("HQ account menu", () => {
-  it("keeps personal, organization, workspace, and sign-out actions together", () => {
+  it("keeps personal, organization, and sign-out actions together", () => {
     expect(authSource).toContain('href="/account"');
     expect(authSource).toContain('href="/settings"');
-    expect(authSource).toContain('href="/onboarding"');
     expect(authSource).toContain("returnTo: new URL(");
-    expect(shellSource).toContain("organizationName={organization.name}");
+    expect(shellSource).toContain("showOrganization={false}");
+  });
+
+  it("switches organizations directly from the primary header control", () => {
+    expect(shellSource).toContain("<OrganizationSwitcher");
+    expect(organizationSwitcherSource).toContain("switchWorkspaceAction");
+    expect(organizationSwitcherSource).toContain('name="organizationId"');
+    expect(organizationSwitcherSource).toContain(
+      'href="/onboarding?mode=create"',
+    );
+    expect(organizationSwitcherSource).toContain(
+      'aria-label="Switch organization"',
+    );
   });
 
   it("preserves keyboard, focus, and dismissal behavior", () => {

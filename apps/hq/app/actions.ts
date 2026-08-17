@@ -3,6 +3,7 @@
 import type { VenueLayoutAsset, VenueLayoutGeometry } from "@duna/api";
 import { venueWallTimeToUtc } from "@duna/api";
 import { normalizeClubColor } from "@duna/ui";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerCaller } from "@/lib/api";
@@ -2424,14 +2425,27 @@ export async function createMarketingCampaignAction(
 }
 
 async function hqOrigin(): Promise<string> {
-  const configured = process.env.NEXT_PUBLIC_HQ_URL?.trim();
-  if (configured) return new URL(configured).origin;
   const incoming = await headers();
   const protocol = incoming.get("x-forwarded-proto") ?? "https";
   const host =
     incoming.get("x-forwarded-host") ??
     incoming.get("host") ??
     "localhost:3001";
+  const normalizedHost = (host.split(",")[0]?.trim().toLowerCase() ?? host)
+    .replace(/:443$/, "")
+    .replace(/:80$/, "");
+  // Stripe needs to return to the same trusted HQ domain that opened the
+  // onboarding flow. Falling back to a deployment URL loses the active WorkOS
+  // organization cookie when a person uses hq.duna.coach.
+  if (
+    normalizedHost === "hq.duna.coach" ||
+    normalizedHost === "localhost:3001" ||
+    normalizedHost === "127.0.0.1:3001"
+  ) {
+    return `${protocol}://${normalizedHost}`;
+  }
+  const configured = process.env.NEXT_PUBLIC_HQ_URL?.trim();
+  if (configured) return new URL(configured).origin;
   return `${protocol}://${host}`;
 }
 
@@ -2443,10 +2457,19 @@ export async function startStripeOnboardingAction(
   void _formData;
   try {
     const caller = await getServerCaller();
+    const auth = await withAuth();
+    if (!auth.organizationId) {
+      throw new Error("Choose an organization before connecting Stripe.");
+    }
     const origin = await hqOrigin();
+    const stripeReturn = new URL("/stripe/return", origin);
+    stripeReturn.searchParams.set("organizationId", auth.organizationId);
+    stripeReturn.searchParams.set("result", "return");
+    const stripeRefresh = new URL(stripeReturn);
+    stripeRefresh.searchParams.set("result", "refresh");
     const onboarding = await caller.operator.startStripeOnboarding({
-      refreshUrl: `${origin}/payments?stripe=refresh`,
-      returnUrl: `${origin}/payments?stripe=return`,
+      refreshUrl: stripeRefresh.toString(),
+      returnUrl: stripeReturn.toString(),
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();

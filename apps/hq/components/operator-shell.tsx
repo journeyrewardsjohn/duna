@@ -2,13 +2,15 @@ import type { OrganizationSummary } from "@duna/core";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, ChevronDown, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { Bell, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
+import { loadWorkspaceOptions } from "@/lib/workspace-options";
 import { operatorModules, type OperatorModule } from "./navigation";
 import { AuthControls } from "./auth-controls";
+import { OrganizationSwitcher } from "./organization-switcher";
 
-export function OperatorShell({
+export async function OperatorShell({
   active,
   children,
   immersive = false,
@@ -23,12 +25,7 @@ export function OperatorShell({
   readonly messageDraftCount?: number;
   readonly messageUnreadCount?: number;
 }) {
-  const initials = organization.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  const workspaces = await loadWorkspaceOptions();
   return (
     <div className={`hq-shell${immersive ? " hq-shell--immersive" : ""}`}>
       <aside className="hq-sidebar">
@@ -74,14 +71,12 @@ export function OperatorShell({
       </aside>
       <div className="hq-workspace">
         <header className="hq-topbar">
-          <Link className="organization-switcher" href="/settings">
-            <span>{initials}</span>
-            <span>
-              <strong>{organization.name}</strong>
-              <small>{organization.plan.replaceAll("-", " ")} plan</small>
-            </span>
-            <ChevronDown aria-hidden size={15} />
-          </Link>
+          <OrganizationSwitcher
+            currentOrganizationId={workspaces.currentOrganizationId}
+            name={organization.name}
+            plan={organization.plan}
+            workspaces={workspaces.organizations}
+          />
           <label className="hq-search">
             <Search aria-hidden size={17} />
             <input
@@ -102,6 +97,7 @@ export function OperatorShell({
             <AuthControls
               configured={isWorkOSAuthKitConfigured()}
               organizationName={organization.name}
+              showOrganization={false}
             />
           </div>
         </header>
