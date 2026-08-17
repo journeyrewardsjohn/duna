@@ -1,10 +1,7 @@
 "use client";
 
 import type { WaiverWorkspace } from "@duna/api";
-import {
-  parseMarkdown,
-  type MarkdownInline,
-} from "@duna/core";
+import { parseMarkdown, type MarkdownInline } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   Check,
@@ -58,32 +55,30 @@ function PreviewInlineMarkdown({
   readonly nodes: readonly MarkdownInline[];
   readonly keyPrefix: string;
 }): ReactNode[] {
-  return (
-    nodes.map((node, index) => {
-      const key = `${keyPrefix}-${index}`;
-      if (node.type === "text") return node.value;
-      if (node.type === "code") return <code key={key}>{node.value}</code>;
-      if (node.type === "strong") {
-        return (
-          <strong key={key}>
-            <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
-          </strong>
-        );
-      }
-      if (node.type === "emphasis") {
-        return (
-          <em key={key}>
-            <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
-          </em>
-        );
-      }
+  return nodes.map((node, index) => {
+    const key = `${keyPrefix}-${index}`;
+    if (node.type === "text") return node.value;
+    if (node.type === "code") return <code key={key}>{node.value}</code>;
+    if (node.type === "strong") {
       return (
-        <a href={node.href} key={key} rel="noreferrer" target="_blank">
+        <strong key={key}>
           <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
-        </a>
+        </strong>
       );
-    })
-  );
+    }
+    if (node.type === "emphasis") {
+      return (
+        <em key={key}>
+          <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
+        </em>
+      );
+    }
+    return (
+      <a href={node.href} key={key} rel="noreferrer" target="_blank">
+        <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
+      </a>
+    );
+  });
 }
 
 function WaiverTextPreview({ markdown }: { readonly markdown: string }) {
@@ -107,7 +102,11 @@ function WaiverTextPreview({ markdown }: { readonly markdown: string }) {
               />
             </li>
           ));
-          return block.ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>;
+          return block.ordered ? (
+            <ol key={key}>{items}</ol>
+          ) : (
+            <ul key={key}>{items}</ul>
+          );
         }
         if (block.type === "quote") {
           return (
@@ -145,7 +144,10 @@ function WaiverSigningPreview({
     : "No separate section acknowledgements";
 
   return (
-    <section className="hq-card waiver-signing-preview" aria-label="Waiver signing preview">
+    <section
+      className="hq-card waiver-signing-preview"
+      aria-label="Waiver signing preview"
+    >
       <header className="waiver-signing-preview__header">
         <div>
           <span className="hq-eyebrow">Signer experience</span>
@@ -179,7 +181,9 @@ function WaiverSigningPreview({
       <div className="waiver-signing-preview__surfaces">
         <article className="waiver-signing-preview__surface waiver-signing-preview__surface--web">
           <header>
-            <span><Monitor aria-hidden size={15} /> Duna web</span>
+            <span>
+              <Monitor aria-hidden size={15} /> Duna web
+            </span>
             <small>Checkout requirement</small>
           </header>
           <div className="waiver-signing-preview__web-frame">
@@ -210,13 +214,13 @@ function WaiverSigningPreview({
               <div className="waiver-signing-preview__checks">
                 {requiredSections.map((section) => (
                   <label key={section.id}>
-                    <input disabled={!reviewed} type="checkbox" />
-                    I specifically acknowledge: {section.title}
+                    <input disabled={!reviewed} type="checkbox" />I specifically
+                    acknowledge: {section.title}
                   </label>
                 ))}
                 <label>
-                  <input disabled={!reviewed} type="checkbox" />
-                  I have reviewed the full waiver and affirmatively agree to it.
+                  <input disabled={!reviewed} type="checkbox" />I have reviewed
+                  the full waiver and affirmatively agree to it.
                 </label>
               </div>
               {waiver.requiresSignature && (
@@ -226,14 +230,18 @@ function WaiverSigningPreview({
                 </label>
               )}
               <button disabled type="button">
-                {waiver.requiresSignature ? "Sign waiver" : "Record acknowledgement"}
+                {waiver.requiresSignature
+                  ? "Sign waiver"
+                  : "Record acknowledgement"}
               </button>
             </div>
           </div>
         </article>
         <article className="waiver-signing-preview__surface waiver-signing-preview__surface--app">
           <header>
-            <span><Smartphone aria-hidden size={15} /> Duna Player app</span>
+            <span>
+              <Smartphone aria-hidden size={15} /> Duna Player app
+            </span>
             <small>Mobile sheet</small>
           </header>
           <div className="waiver-signing-preview__phone">
@@ -247,7 +255,8 @@ function WaiverSigningPreview({
             </div>
             <div className="waiver-signing-preview__app-body">
               <p className="waiver-signing-preview__app-intro">
-                Review the complete waiver below. Duna unlocks the acknowledgement controls after you reach the end.
+                Review the complete waiver below. Duna unlocks the
+                acknowledgement controls after you reach the end.
               </p>
               <div className="waiver-signing-preview__app-reader">
                 <WaiverTextPreview markdown={waiver.markdown ?? ""} />
@@ -260,10 +269,14 @@ function WaiverSigningPreview({
               <div className="waiver-signing-preview__app-checks">
                 {requiredSections.slice(0, 2).map((section) => (
                   <p key={section.id}>
-                    <i aria-hidden /> I specifically acknowledge: {section.title}
+                    <i aria-hidden /> I specifically acknowledge:{" "}
+                    {section.title}
                   </p>
                 ))}
-                <p><i aria-hidden /> I have reviewed the full waiver and affirmatively agree to it.</p>
+                <p>
+                  <i aria-hidden /> I have reviewed the full waiver and
+                  affirmatively agree to it.
+                </p>
               </div>
               {waiver.requiresSignature && (
                 <div className="waiver-signing-preview__app-name">
@@ -272,7 +285,9 @@ function WaiverSigningPreview({
                 </div>
               )}
               <button disabled type="button">
-                {waiver.requiresSignature ? "Sign waiver" : "Record acknowledgement"}
+                {waiver.requiresSignature
+                  ? "Sign waiver"
+                  : "Record acknowledgement"}
               </button>
             </div>
           </div>
@@ -347,7 +362,9 @@ export function WaiverLibrary({
         : markdown.trim().length > 100_000
           ? "The full waiver text is limited to 100,000 characters. Split a supporting document from the waiver before saving."
           : undefined;
-  const hasDraftErrors = Boolean(titleError || documentError || sectionErrors.size);
+  const hasDraftErrors = Boolean(
+    titleError || documentError || sectionErrors.size,
+  );
 
   const beginRevision = (waiver: WaiverWorkspace["documents"][number]) => {
     setRevisionOf(waiver.id);
@@ -476,16 +493,21 @@ export function WaiverLibrary({
             </small>
             <footer>
               <span className="waiver-library__record-assignments">
-                {waiver.assignments.length > 0
-                  ? waiver.assignments.map((assignment) => (
-                      <Badge key={assignment.id} tone="neutral">
-                        {assignment.scope.replaceAll("-", " ")}
-                      </Badge>
-                    ))
-                  : <Badge tone="neutral">Library only</Badge>}
+                {waiver.assignments.length > 0 ? (
+                  waiver.assignments.map((assignment) => (
+                    <Badge key={assignment.id} tone="neutral">
+                      {assignment.scope.replaceAll("-", " ")}
+                    </Badge>
+                  ))
+                ) : (
+                  <Badge tone="neutral">Library only</Badge>
+                )}
               </span>
               <span className="waiver-library__record-actions">
-                <button onClick={() => setPreviewedWaiver(waiver)} type="button">
+                <button
+                  onClick={() => setPreviewedWaiver(waiver)}
+                  type="button"
+                >
                   <Eye aria-hidden size={15} /> Preview signing
                 </button>
                 <button onClick={() => beginRevision(waiver)} type="button">

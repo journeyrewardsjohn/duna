@@ -13,14 +13,13 @@ import { createStaffInvitation } from "./operator-service";
 import { resolveWorkOSCredentials } from "./workos-environment";
 
 export type OrganizationAccessRole =
-  | "director"
-  | "manager"
-  | "coach"
-  | "front-desk"
-  | "accountant";
+  "director" | "manager" | "coach" | "front-desk" | "accountant";
 
 export class OrganizationAccessError extends Error {
-  constructor(readonly code: "NOT_FOUND" | "CONFIGURATION" | "WORKOS", message: string) {
+  constructor(
+    readonly code: "NOT_FOUND" | "CONFIGURATION" | "WORKOS",
+    message: string,
+  ) {
     super(message);
     this.name = "OrganizationAccessError";
   }
@@ -110,12 +109,14 @@ async function synchronizeWorkOSMembership(input: {
     const workos = new WorkOS(credentials.apiKey, {
       appInfo: { name: "duna", version: "0.1.0" },
     });
-    const memberships = await workos.userManagement.listOrganizationMemberships({
-      organizationId: input.workosOrganizationId,
-      userId: input.workosUserId,
-      statuses: ["active", "inactive"],
-      limit: 10,
-    });
+    const memberships = await workos.userManagement.listOrganizationMemberships(
+      {
+        organizationId: input.workosOrganizationId,
+        userId: input.workosUserId,
+        statuses: ["active", "inactive"],
+        limit: 10,
+      },
+    );
     const membership = memberships.data.find(
       (candidate) => candidate.userId === input.workosUserId,
     );
@@ -170,7 +171,10 @@ export async function grantOrganizationAccess(input: {
     where: eq(organizations.id, input.organizationId),
   });
   if (!organization) {
-    throw new OrganizationAccessError("NOT_FOUND", "Organization was not found.");
+    throw new OrganizationAccessError(
+      "NOT_FOUND",
+      "Organization was not found.",
+    );
   }
   const email = input.email.trim().toLowerCase();
   const person = await database.query.people.findFirst({

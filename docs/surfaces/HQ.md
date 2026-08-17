@@ -114,13 +114,13 @@ Accountants. The service rechecks this rule, the organization boundary, and
 the role target server-side; hiding a role in HQ is never the authorization
 boundary.
 
-| Role | HQ access |
-| --- | --- |
-| Director | Organization ownership, financial configuration, ordinary operational settings, and team administration. More than one Director may exist through the ownership workflow. |
-| Manager | Operational settings and team invitations, but no Director creation or financial configuration. |
-| Coach | Read-only organization schedule, events, and catalog context; may take a payment at point of service. |
-| Front Desk | Registrations, schedules, event creation, leagues, tournaments, check-ins, and point-of-service payment collection. |
-| Accountant | Read-only access to money reports and financial records. |
+| Role       | HQ access                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Director   | Organization ownership, financial configuration, ordinary operational settings, and team administration. More than one Director may exist through the ownership workflow. |
+| Manager    | Operational settings and team invitations, but no Director creation or financial configuration.                                                                           |
+| Coach      | Read-only organization schedule, events, and catalog context; may take a payment at point of service.                                                                     |
+| Front Desk | Registrations, schedules, event creation, leagues, tournaments, check-ins, and point-of-service payment collection.                                                       |
+| Accountant | Read-only access to money reports and financial records.                                                                                                                  |
 
 Point-of-service collection uses the separate `payments:collect` capability.
 It deliberately does not grant `payments:write`, which protects Stripe,

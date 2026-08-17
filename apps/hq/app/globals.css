@@ -31315,7 +31315,7 @@ body {
 
 .waiver-library > .settings-section__heading h2 {
   font-size: clamp(2rem, 3vw, 3.25rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   margin-bottom: 0.45rem;
 }
 
@@ -31439,7 +31439,7 @@ body {
 .waiver-signing-preview__header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.7rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0.15rem 0 0;
 }
 
@@ -31553,7 +31553,7 @@ body {
 .waiver-signing-preview__web-topbar small {
   color: #6f6a60;
   font-family: var(--font-body);
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   font-weight: 700;
 }
 
@@ -31580,7 +31580,7 @@ body {
 .waiver-signing-preview__app-header span {
   color: #6a665e;
   display: block;
-  font-size: 0.53rem;
+  font-size: 0.625rem;
   font-weight: 900;
   letter-spacing: 0.09em;
 }
@@ -31687,7 +31687,7 @@ body {
 
 .waiver-signing-preview__status {
   color: #777066;
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   line-height: 1.4;
   margin: 0;
 }
@@ -31714,7 +31714,7 @@ body {
 .waiver-signing-preview__name {
   color: #3c382f;
   display: grid;
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   font-weight: 700;
   gap: 0.25rem;
 }
@@ -31723,7 +31723,7 @@ body {
   background: #fffdf9;
   border: 1px solid #ded6c9;
   border-radius: 7px;
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   min-height: 30px;
   padding: 0 0.5rem;
 }
@@ -31788,7 +31788,7 @@ body {
 
 .waiver-signing-preview__app-intro {
   color: #706b62;
-  font-size: 0.61rem;
+  font-size: 0.625rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -31803,7 +31803,7 @@ body {
 }
 
 .waiver-signing-preview__app-reader .waiver-signing-preview__document-copy {
-  font-size: 0.58rem;
+  font-size: 0.625rem;
 }
 
 .waiver-signing-preview__app-reader .waiver-signing-preview__document-copy p {
@@ -31819,7 +31819,7 @@ body {
   align-items: flex-start;
   color: #332f28;
   display: flex;
-  font-size: 0.58rem;
+  font-size: 0.625rem;
   gap: 0.36rem;
   line-height: 1.35;
   margin: 0;
@@ -31838,7 +31838,7 @@ body {
 .waiver-signing-preview__app-name {
   color: #3c382f;
   display: grid;
-  font-size: 0.58rem;
+  font-size: 0.625rem;
   font-weight: 700;
   gap: 0.25rem;
 }
@@ -31848,7 +31848,7 @@ body {
   border: 1px solid #ded6c9;
   border-radius: 7px;
   color: #aaa398;
-  font-size: 0.58rem;
+  font-size: 0.625rem;
   font-style: normal;
   font-weight: 400;
   padding: 0.48rem 0.5rem;
@@ -31884,7 +31884,7 @@ body {
 .waiver-builder__header h3 {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 2vw, 1.85rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
