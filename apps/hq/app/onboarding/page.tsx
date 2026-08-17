@@ -85,9 +85,10 @@ async function chooseWorkspace(formData: FormData) {
 export default async function OrganizationOnboardingPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ error?: string }>;
+  readonly searchParams: Promise<{ error?: string; mode?: string }>;
 }) {
   const query = await searchParams;
+  const createOnly = query.mode === "create";
   const configured = isWorkOSAuthKitConfigured();
   const auth = configured ? await withAuth() : undefined;
   const memberships =
@@ -127,11 +128,15 @@ export default async function OrganizationOnboardingPage({
         </header>
         <div>
           <span className="hq-eyebrow">Your operating workspace</span>
-          <h1>Bring your business into Duna.</h1>
+          <h1>
+            {createOnly
+              ? "Create a new organization."
+              : "Bring your business into Duna."}
+          </h1>
           <p>
-            Choose an existing workspace or start a separate business with the
-            plan that fits today. One administrator can manage multiple
-            organizations without mixing members, money, or settings.
+            {createOnly
+              ? "Start a separate business without mixing members, money, or settings with your current organization."
+              : "Choose an existing workspace or start a separate business with the plan that fits today. One administrator can manage multiple organizations without mixing members, money, or settings."}
           </p>
         </div>
 
@@ -142,7 +147,7 @@ export default async function OrganizationOnboardingPage({
                 {error}
               </p>
             )}
-            {organizations.length > 0 && (
+            {!createOnly && organizations.length > 0 && (
               <div className="workspace-choice-list">
                 <span className="hq-eyebrow">Your workspaces</span>
                 {organizations.map((organization) => (
