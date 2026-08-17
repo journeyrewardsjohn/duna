@@ -3342,7 +3342,9 @@ export async function updateStaffProfile(input: {
   }[];
   readonly blackoutDates: readonly {
     readonly startsOn: string;
+    readonly startsAt: string;
     readonly endsOn?: string;
+    readonly endsAt: string;
   }[];
   readonly incomeGoalMinor?: number;
   readonly incomeGoalPeriod?: "week" | "month" | "quarter" | "year";
@@ -3381,9 +3383,13 @@ export async function updateStaffProfile(input: {
     input.blackoutDates.some(
       (block) =>
         !/^\d{4}-\d{2}-\d{2}$/.test(block.startsOn) ||
+        !/^\d{2}:\d{2}$/.test(block.startsAt) ||
         (block.endsOn !== undefined &&
           (!/^\d{4}-\d{2}-\d{2}$/.test(block.endsOn) ||
-            block.endsOn < block.startsOn)),
+            block.endsOn < block.startsOn)) ||
+        !/^\d{2}:\d{2}$/.test(block.endsAt) ||
+        ((block.endsOn === undefined || block.endsOn === block.startsOn) &&
+          block.endsAt <= block.startsAt),
     )
   ) {
     throw new OperatorServiceError(
@@ -3479,7 +3485,9 @@ export async function updateStaffProfile(input: {
       ...input.blackoutDates.map((block) => ({
         kind: "blackout",
         startsOn: block.startsOn,
+        startsAt: block.startsAt,
         ...(block.endsOn ? { endsOn: block.endsOn } : {}),
+        endsAt: block.endsAt,
       })),
     ],
     incomeGoalMinor: input.incomeGoalMinor,
