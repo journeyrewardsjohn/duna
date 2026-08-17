@@ -38,7 +38,30 @@ export default async function OperatorModulePage({
   const [dashboard, workspace, ticketApprovals, matches] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
-    caller.operator.pendingTicketApprovals(),
+    (async () => {
+      if (
+        module !== "events" &&
+        module !== "leagues" &&
+        module !== "payments"
+      ) {
+        return [];
+      }
+      try {
+        return await caller.operator.pendingTicketApprovals();
+      } catch (error) {
+        // Event and league operators without payment authority can still use
+        // their module; the payment queue remains default-deny and hidden.
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "FORBIDDEN"
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    })(),
     process.env.DATABASE_URL
       ? caller.operator.scorableMatches()
       : Promise.resolve([]),
