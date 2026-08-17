@@ -118,7 +118,9 @@ describe("tRPC contract surface", () => {
     const coach = createCaller(
       createApiContext({ actor: createDemoActor(["coach"]) }),
     );
-    await expect(coach.operator.eventMediaUploadContext()).rejects.toMatchObject({
+    await expect(
+      coach.operator.eventMediaUploadContext(),
+    ).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
 

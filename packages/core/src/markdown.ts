@@ -55,7 +55,7 @@ export function parseMarkdownInline(value: string): readonly MarkdownInline[] {
     buffer = "";
   };
 
-  for (let index = 0; index < value.length; ) {
+  for (let index = 0; index < value.length;) {
     if (value[index] === "\\" && index + 1 < value.length) {
       buffer += value[index + 1];
       index += 2;
@@ -120,7 +120,10 @@ function isBlockStart(line: string) {
 }
 
 export function parseMarkdown(value: string): readonly MarkdownBlock[] {
-  const lines = value.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+  const lines = value
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .split("\n");
   const blocks: MarkdownBlock[] = [];
   let index = 0;
 
@@ -168,7 +171,11 @@ export function parseMarkdown(value: string): readonly MarkdownBlock[] {
         listItems.push([...parseMarkdownInline(item[1] ?? "")]);
         index += 1;
       }
-      blocks.push({ type: "list", ordered: Boolean(ordered), items: listItems });
+      blocks.push({
+        type: "list",
+        ordered: Boolean(ordered),
+        items: listItems,
+      });
       continue;
     }
     const paragraph = [line];

@@ -175,7 +175,9 @@ function waiverSections(formData: FormData): WaiverSectionDraft[] {
   try {
     sections = JSON.parse(serializedSections);
   } catch {
-    throw new Error("Duna could not read the highlighted sections. Remove and add the affected section again.");
+    throw new Error(
+      "Duna could not read the highlighted sections. Remove and add the affected section again.",
+    );
   }
   if (!Array.isArray(sections)) {
     throw new Error("The highlighted sections could not be read.");
@@ -185,7 +187,9 @@ function waiverSections(formData: FormData): WaiverSectionDraft[] {
   }
   return sections.map((section, index) => {
     if (!section || typeof section !== "object") {
-      throw new Error(`Key section ${index + 1} is invalid. Remove it and add it again.`);
+      throw new Error(
+        `Key section ${index + 1} is invalid. Remove it and add it again.`,
+      );
     }
     const candidate = section as Record<string, unknown>;
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
@@ -194,7 +198,9 @@ function waiverSections(formData: FormData): WaiverSectionDraft[] {
     const markdown =
       typeof candidate.markdown === "string" ? candidate.markdown.trim() : "";
     if (!id || id.length > 80) {
-      throw new Error(`Key section ${index + 1} needs a valid section identifier.`);
+      throw new Error(
+        `Key section ${index + 1} needs a valid section identifier.`,
+      );
     }
     if (!title || title.length > 160) {
       throw new Error(
@@ -207,7 +213,9 @@ function waiverSections(formData: FormData): WaiverSectionDraft[] {
       );
     }
     if (typeof candidate.acknowledgementRequired !== "boolean") {
-      throw new Error(`Key section ${index + 1} acknowledgement setting is invalid.`);
+      throw new Error(
+        `Key section ${index + 1} acknowledgement setting is invalid.`,
+      );
     }
     return {
       id,

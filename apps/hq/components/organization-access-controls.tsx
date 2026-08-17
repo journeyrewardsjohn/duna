@@ -34,7 +34,9 @@ export function OrganizationAccessControls({
           <div>
             <span className="hq-eyebrow">Super Admin only</span>
             <h2>Organization access</h2>
-            <p>Only the Duna Super Admin can grant cross-organization access.</p>
+            <p>
+              Only the Duna Super Admin can grant cross-organization access.
+            </p>
           </div>
           <ShieldCheck aria-hidden size={20} />
         </header>
@@ -50,7 +52,8 @@ export function OrganizationAccessControls({
           <h2>Add an existing user or create a secure invitation.</h2>
           <p>
             Existing Duna users are added immediately. Linked WorkOS users are
-            synchronized with the same role; new people receive a private claim link.
+            synchronized with the same role; new people receive a private claim
+            link.
           </p>
         </div>
         <UserPlus aria-hidden size={20} />
@@ -60,7 +63,12 @@ export function OrganizationAccessControls({
         <div className="operator-form-grid operator-form-grid--two">
           <label>
             <span>Email</span>
-            <input name="email" type="email" placeholder="teammate@club.com" required />
+            <input
+              name="email"
+              type="email"
+              placeholder="teammate@club.com"
+              required
+            />
           </label>
           <label>
             <span>Role</span>
@@ -112,7 +120,11 @@ export function OrganizationAccessControls({
               <p>This role-specific link expires after 7 days.</p>
             </div>
             <div className="operator-private-link__controls">
-              <input readOnly aria-label="Private claim link" value={state.privateClaimLink} />
+              <input
+                readOnly
+                aria-label="Private claim link"
+                value={state.privateClaimLink}
+              />
               <button
                 className="hq-button hq-button--secondary hq-button--compact"
                 onClick={() => {
@@ -132,7 +144,11 @@ export function OrganizationAccessControls({
             className={`operator-action-notice operator-action-notice--${state.status}`}
             role={state.status === "error" ? "alert" : "status"}
           >
-            {state.status === "success" ? <Check aria-hidden size={15} /> : <CircleAlert aria-hidden size={15} />}
+            {state.status === "success" ? (
+              <Check aria-hidden size={15} />
+            ) : (
+              <CircleAlert aria-hidden size={15} />
+            )}
             {state.message}
           </p>
         )}

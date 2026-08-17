@@ -930,7 +930,7 @@ function PolicyReviewModal({
         >
           <NativeMarkdownContent
             color={colors.bone}
-            linkColor={colors.lime}
+            linkColor={colors.signal}
             markdown={policy.markdown}
           />
           <View style={styles.policyReviewEnd}>

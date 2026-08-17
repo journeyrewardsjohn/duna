@@ -1,7 +1,4 @@
-import {
-  parseMarkdown,
-  type MarkdownInline,
-} from "@duna/core";
+import { parseMarkdown, type MarkdownInline } from "@duna/core";
 import type { ReactNode } from "react";
 
 function InlineMarkdown({
@@ -49,7 +46,9 @@ export function MarkdownContent({
       {parseMarkdown(children).map((block, index) => {
         const key = `block-${index}`;
         if (block.type === "heading") {
-          const content = <InlineMarkdown keyPrefix={key} nodes={block.children} />;
+          const content = (
+            <InlineMarkdown keyPrefix={key} nodes={block.children} />
+          );
           if (block.level === 1) return <h2 key={key}>{content}</h2>;
           return <h3 key={key}>{content}</h3>;
         }
@@ -59,7 +58,11 @@ export function MarkdownContent({
               <InlineMarkdown keyPrefix={`${key}-${itemIndex}`} nodes={item} />
             </li>
           ));
-          return block.ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>;
+          return block.ordered ? (
+            <ol key={key}>{items}</ol>
+          ) : (
+            <ul key={key}>{items}</ul>
+          );
         }
         if (block.type === "quote") {
           return (

@@ -3,6 +3,7 @@ import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
+import * as ScreenOrientation from "expo-screen-orientation";
 import {
   useCallback,
   useEffect,
@@ -59,6 +60,7 @@ import {
 } from "./watch-scoring";
 import {
   edgeVisibility,
+  courtCalibrationChecklist,
   geometryFromGuidance,
   geometrySettings,
   interpolatePoint,
@@ -1849,6 +1851,9 @@ function CaptureExperience({
   >("preview");
   const [session, setSession] = useState<LiveVideoSession>();
   const [recording, setRecording] = useState(false);
+  const [orientationLockState, setOrientationLockState] = useState<
+    "locking" | "ready" | "unavailable"
+  >("locking");
   const [reviewing, setReviewing] = useState(false);
   const [recordingVisibility, setRecordingVisibility] =
     useState<RecordingVisibility>(form.recordingVisibility);
@@ -1896,6 +1901,38 @@ function CaptureExperience({
   elapsedRef.current = elapsedSeconds;
   permissionRef.current = permissionsReady;
   busyRef.current = busy;
+
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      setOrientationLockState("unavailable");
+      return;
+    }
+    let active = true;
+    let previousLock: ScreenOrientation.OrientationLock | undefined;
+    const requestedLock =
+      form.orientation === "landscape"
+        ? ScreenOrientation.OrientationLock.LANDSCAPE
+        : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+    void (async () => {
+      try {
+        previousLock = await ScreenOrientation.getOrientationLockAsync();
+        await ScreenOrientation.lockAsync(requestedLock);
+        if (active) setOrientationLockState("ready");
+      } catch {
+        // The physical-orientation guidance remains useful on an older build
+        // or a platform which declines a runtime orientation lock.
+        if (active) setOrientationLockState("unavailable");
+      }
+    })();
+    return () => {
+      active = false;
+      if (previousLock !== undefined) {
+        void ScreenOrientation.lockAsync(previousLock).catch(() => undefined);
+      } else {
+        void ScreenOrientation.unlockAsync().catch(() => undefined);
+      }
+    };
+  }, [form.orientation]);
 
   const updateSessionState = useCallback((next: VisionSession) => {
     sessionRef.current = next;
@@ -2597,41 +2634,58 @@ function CaptureExperience({
 
   const isActive =
     recording || streamState === "connecting" || streamState === "live";
+  const calibrationChecklist = courtCalibrationChecklist(
+    guidance,
+    form.orientation,
+  );
+  const activeCalibrationStep = calibrationChecklist.find(
+    (step) => step.active,
+  );
   return (
     <View style={styles.captureRoot}>
-      <DunaVideoCaptureView
-        audioEnabled={form.hasAudio}
-        courtLengthMeters={visionSettings.courtLengthMeters}
-        courtWidthMeters={visionSettings.courtWidthMeters}
-        netHeightMeters={visionSettings.netHeightMeters}
-        preferredOrientation={form.orientation}
-        onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
-        onGuidance={(event) => {
-          const next = event.nativeEvent;
-          const detected = geometryFromGuidance(next);
-          guidanceRef.current = next;
-          setGuidance(next);
-          setAutomaticGeometry(detected);
-          if (!manualCalibrationRef.current && !calibrationDraft) {
-            geometryRef.current = detected;
-            setCourtGeometry(detected);
+      {orientationLockState === "locking" ? (
+        <View style={styles.orientationLoading}>
+          <ActivityIndicator color={palette.sand} />
+          <Text style={styles.orientationLoadingText}>
+            Opening {form.orientation} recorder…
+          </Text>
+        </View>
+      ) : (
+        <DunaVideoCaptureView
+          audioEnabled={form.hasAudio}
+          courtLengthMeters={visionSettings.courtLengthMeters}
+          courtWidthMeters={visionSettings.courtWidthMeters}
+          netHeightMeters={visionSettings.netHeightMeters}
+          preferredOrientation={form.orientation}
+          onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
+          onGuidance={(event) => {
+            const next = event.nativeEvent;
+            const detected = geometryFromGuidance(next);
+            guidanceRef.current = next;
+            setGuidance(next);
+            setAutomaticGeometry(detected);
+            if (!manualCalibrationRef.current && !calibrationDraft) {
+              geometryRef.current = detected;
+              setCourtGeometry(detected);
+            }
+          }}
+          onPreview={(event) =>
+            uploadPreview(
+              event.nativeEvent.jpegBase64,
+              event.nativeEvent.capturedAt,
+            )
           }
-        }}
-        onPreview={(event) =>
-          uploadPreview(
-            event.nativeEvent.jpegBase64,
-            event.nativeEvent.capturedAt,
-          )
-        }
-        onStreamState={(event) => {
-          const next = event.nativeEvent.state;
-          setStreamState(next);
-          if (next === "connecting" || next === "live")
-            activeRef.current = true;
-          if (next === "stopped" && mode === "live") activeRef.current = false;
-        }}
-        style={StyleSheet.absoluteFill}
-      />
+          onStreamState={(event) => {
+            const next = event.nativeEvent.state;
+            setStreamState(next);
+            if (next === "connecting" || next === "live")
+              activeRef.current = true;
+            if (next === "stopped" && mode === "live")
+              activeRef.current = false;
+          }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <CourtOverlay geometry={courtGeometry} guidance={guidance} />
       {visionSettings.overlayScoreboard && (matchId || isActive) && (
         <VisionScoreboard
@@ -2701,8 +2755,8 @@ function CaptureExperience({
                       Rotate to {form.orientation}
                     </Text>
                     <Text style={styles.orientationWarningBody}>
-                      You chose {form.orientation} video. Duna will keep
-                      checking before capture begins.
+                      Duna has opened this recorder in {form.orientation}. Turn
+                      your phone sideways before you begin.
                     </Text>
                   </View>
                 </View>
@@ -2724,7 +2778,7 @@ function CaptureExperience({
               </View>
               <Text style={styles.guidanceWarning}>
                 {guidance?.orientationMatches === false
-                  ? `Turn your phone to ${form.orientation}; every control will rotate with the camera.`
+                  ? `Turn your phone to ${form.orientation}; the recorder is already set for it.`
                   : guidance?.courtDetected || guidance?.netDetected
                     ? (guidance?.warnings[0] ??
                       "Court evidence found. Keep the net and sidelines in frame for stronger analysis.")
@@ -2739,6 +2793,48 @@ function CaptureExperience({
                     ? "Ground found, not a court yet. Keep the net near the horizon and include both sidelines."
                     : "Point toward the court and move slowly so Duna can find the sand and net."}
               </Text>
+              <View style={styles.calibrationGuide}>
+                <View style={styles.calibrationGuideHeader}>
+                  <Text style={styles.calibrationGuideEyebrow}>
+                    CALIBRATION GUIDE
+                  </Text>
+                  <Text style={styles.calibrationGuideState}>
+                    {orientationLockState === "locking"
+                      ? "SETTING ORIENTATION"
+                      : orientationLockState === "ready"
+                        ? `${form.orientation.toUpperCase()} LOCKED`
+                        : "FOLLOW PHONE ROTATION"}
+                  </Text>
+                </View>
+                <Text style={styles.calibrationGuidePrompt}>
+                  {activeCalibrationStep
+                    ? activeCalibrationStep.detail
+                    : "Court setup is complete. Lock the guide or refine any landmark below."}
+                </Text>
+                <View style={styles.calibrationGuideSteps}>
+                  {calibrationChecklist.map((step) => (
+                    <View key={step.id} style={styles.calibrationGuideStep}>
+                      <Text
+                        style={[
+                          styles.calibrationGuideMark,
+                          step.complete && styles.calibrationGuideMarkDone,
+                          step.active && styles.calibrationGuideMarkActive,
+                        ]}
+                      >
+                        {step.complete ? "✓" : step.active ? "→" : "○"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.calibrationGuideStepText,
+                          step.active && styles.calibrationGuideStepTextActive,
+                        ]}
+                      >
+                        {step.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
               <View style={styles.guidanceSignals}>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
@@ -2976,10 +3072,14 @@ function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
 function VisionAnalysisCard({
   client,
   playbackSeconds,
+  teamA,
+  teamB,
   videoId,
 }: {
   readonly client: DunaApiClient;
   readonly playbackSeconds: number;
+  readonly teamA: string;
+  readonly teamB: string;
   readonly videoId: string;
 }) {
   const [report, setReport] = useState<VideoAnalysisReport>();
@@ -3064,10 +3164,50 @@ function VisionAnalysisCard({
     }
   };
 
+  const reviewObservation = async (
+    eventId: string,
+    decision: "confirmed" | "rejected",
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const next = await client.player.reviewVideoAnalysisEvent.mutate({
+        videoId,
+        eventId,
+        decision,
+        note:
+          decision === "confirmed"
+            ? "Confirmed in Duna Player video review."
+            : "Rejected in Duna Player video review.",
+        idempotencyKey: idempotencyKey(),
+      });
+      setReport(next);
+      setNotice(
+        decision === "confirmed"
+          ? "Observation confirmed and promoted into the report."
+          : "Observation removed from report totals.",
+      );
+      void Haptics.notificationAsync(
+        decision === "confirmed"
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Warning,
+      );
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const maxHeat = Math.max(
     1,
     ...(report?.heatmap.cells.map((cell) => cell.count) ?? [1]),
   );
+  const sideLabel = (side: "a" | "b" | "unknown") =>
+    side === "a" ? teamA : side === "b" ? teamB : "Unattributed";
+  // A newly built Player can briefly talk to the previous API deployment
+  // while production rolls forward. Keep playback safe during that window.
+  const performance = report?.performance;
 
   return (
     <View style={styles.visionAnalysisCard}>
@@ -3158,13 +3298,151 @@ function VisionAnalysisCard({
             </View>
           </View>
 
+          {performance && (
+            <View style={styles.visionPerformanceCard}>
+              <View style={styles.visionPerformanceHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.visionPerformanceEyebrow}>
+                    VOLLEYBALL INTELLIGENCE
+                  </Text>
+                  <Text style={styles.visionPerformanceTitle}>
+                    Rally and contact profile
+                  </Text>
+                </View>
+                <Text style={styles.visionPerformanceCoverage}>
+                  {performance.attributedContacts}/
+                  {performance.contactObservations} ATTRIBUTED
+                </Text>
+              </View>
+              <Text style={styles.visionPerformanceSummary}>
+                {performance.summary}
+              </Text>
+              {performance.contactObservations > 0 ? (
+                <>
+                  <View style={styles.visionPerformanceMetrics}>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.averageRallySeconds === undefined
+                          ? "—"
+                          : `${performance.averageRallySeconds}s`}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        AVG RALLY
+                      </Text>
+                    </View>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.averageContactsPerRally ?? "—"}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        CONTACTS / RALLY
+                      </Text>
+                    </View>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.maxAttackSpeedKph ??
+                          performance.maxServeSpeedKph ??
+                          "—"}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        TOP SPEED KPH
+                      </Text>
+                    </View>
+                  </View>
+                  {performance.sides
+                    .filter((side) => side.side !== "unknown")
+                    .map((side) => (
+                      <View key={side.side} style={styles.visionSideRow}>
+                        <View style={styles.flex}>
+                          <Text numberOfLines={1} style={styles.visionSideName}>
+                            {sideLabel(side.side)}
+                          </Text>
+                          <Text style={styles.visionSideDetail}>
+                            {side.kills}/{side.attacks} kills · {side.aces}/
+                            {side.serves} aces · {side.blocks} blocks ·{" "}
+                            {side.digs} digs
+                          </Text>
+                        </View>
+                        <View style={styles.visionSideEfficiency}>
+                          <Text style={styles.visionSideEfficiencyValue}>
+                            {side.attackEfficiency === undefined
+                              ? "—"
+                              : `${Math.round(side.attackEfficiency * 100)}%`}
+                          </Text>
+                          <Text style={styles.visionSideEfficiencyLabel}>
+                            ATTACK EFF.
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                </>
+              ) : (
+                <Text style={styles.visionPerformanceEmpty}>
+                  Typed serve, pass, set, attack, block, and dig observations
+                  will appear here when the analysis worker has real evidence.
+                  Duna will not turn an unavailable contact into a zero.
+                </Text>
+              )}
+              {performance.needsReview > 0 && (
+                <Text style={styles.visionPerformanceReview}>
+                  {performance.needsReview} lower-confidence model{" "}
+                  {performance.needsReview === 1
+                    ? "observation is"
+                    : "observations are"}{" "}
+                  held for review and excluded from these totals.
+                </Text>
+              )}
+            </View>
+          )}
+
           {report.reviewQueue.length > 0 && (
             <View style={styles.visionReviewRail}>
               <Text style={styles.visionReviewTitle}>COURTSIDE REVIEW</Text>
               {report.reviewQueue.slice(0, 3).map((item) => (
-                <Text key={item.id} style={styles.visionReviewItem}>
-                  {formatClock(item.sessionTimeUs / 1_000_000)} · {item.label}
-                </Text>
+                <View key={item.id} style={styles.visionReviewItem}>
+                  <View style={styles.flex}>
+                    <Text style={styles.visionReviewItemTitle}>
+                      {formatClock(item.sessionTimeUs / 1_000_000)} ·{" "}
+                      {item.label}
+                    </Text>
+                    <Text style={styles.visionReviewItemMeta}>
+                      {item.contactKind?.toUpperCase() ??
+                        item.eventType?.replaceAll("-", " ").toUpperCase() ??
+                        item.source.toUpperCase()}
+                      {item.confidence === undefined
+                        ? ""
+                        : ` · ${Math.round(item.confidence * 100)}% confidence`}
+                    </Text>
+                  </View>
+                  {item.reviewable && (
+                    <View style={styles.visionReviewActions}>
+                      <Pressable
+                        accessibilityLabel={`Reject ${item.label}`}
+                        disabled={busy}
+                        onPress={() =>
+                          void reviewObservation(item.id, "rejected")
+                        }
+                        style={styles.visionReviewReject}
+                      >
+                        <Text style={styles.visionReviewRejectText}>
+                          Reject
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Confirm ${item.label}`}
+                        disabled={busy}
+                        onPress={() =>
+                          void reviewObservation(item.id, "confirmed")
+                        }
+                        style={styles.visionReviewConfirm}
+                      >
+                        <Text style={styles.visionReviewConfirmText}>
+                          Confirm
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
               ))}
             </View>
           )}
@@ -3174,7 +3452,13 @@ function VisionAnalysisCard({
           </Text>
           <Pressable
             disabled={busy}
-            onPress={() => void requestAnalysis()}
+            onPress={() =>
+              void (report.run &&
+              report.run.status !== "failed" &&
+              report.run.status !== "cancelled"
+                ? loadReport()
+                : requestAnalysis())
+            }
             style={[styles.visionAnalysisButton, busy && styles.disabled]}
           >
             <Text style={styles.visionAnalysisButtonText}>
@@ -3420,6 +3704,8 @@ export function VideoPlayerModal({
             <VisionAnalysisCard
               client={client}
               playbackSeconds={playbackSeconds}
+              teamA={playback.vision?.settings.teamA ?? fallbackTeams.teamA}
+              teamB={playback.vision?.settings.teamB ?? fallbackTeams.teamB}
               videoId={video.id}
             />
           )}
@@ -5372,6 +5658,17 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
   captureRoot: { backgroundColor: "#050708", flex: 1 },
+  orientationLoading: {
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+    justifyContent: "center",
+  },
+  orientationLoadingText: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   dynamicCourtLine: {
     borderTopWidth: 2,
     height: 2,
@@ -5712,6 +6009,61 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
   },
+  calibrationGuide: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 7,
+    marginTop: 3,
+    padding: 10,
+  },
+  calibrationGuideHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calibrationGuideEyebrow: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+  },
+  calibrationGuideState: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  calibrationGuidePrompt: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  calibrationGuideSteps: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  calibrationGuideStep: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  calibrationGuideMark: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  calibrationGuideMarkDone: { color: palette.positive },
+  calibrationGuideMarkActive: { color: palette.sand },
+  calibrationGuideStepText: {
+    color: "rgba(255,255,255,0.64)",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  calibrationGuideStepTextActive: { color: "#ffffff" },
   guidanceSignals: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -6231,6 +6583,101 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     marginTop: 3,
   },
+  visionPerformanceCard: {
+    backgroundColor: "rgba(84,197,170,0.07)",
+    borderColor: "rgba(84,197,170,0.2)",
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  visionPerformanceHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+  },
+  visionPerformanceEyebrow: {
+    color: "#a8d9bf",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  visionPerformanceTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  visionPerformanceCoverage: {
+    color: "#b8c1be",
+    fontFamily: "Archivo-Chip",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  visionPerformanceSummary: {
+    color: "#c7cfcb",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  visionPerformanceMetrics: { flexDirection: "row", gap: 7 },
+  visionPerformanceMetric: {
+    backgroundColor: "rgba(255,255,255,0.055)",
+    borderRadius: 10,
+    flex: 1,
+    minHeight: 58,
+    padding: 8,
+  },
+  visionPerformanceValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-Table",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  visionPerformanceLabel: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 12,
+    marginTop: 3,
+  },
+  visionSideRow: {
+    alignItems: "center",
+    borderTopColor: "rgba(255,255,255,0.1)",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 9,
+  },
+  visionSideName: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+  visionSideDetail: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  visionSideEfficiency: { alignItems: "flex-end" },
+  visionSideEfficiencyValue: {
+    color: "#a8d9bf",
+    fontFamily: "Archivo-Table",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  visionSideEfficiencyLabel: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  visionPerformanceEmpty: {
+    color: "#aeb8b5",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  visionPerformanceReview: {
+    color: "#d4b77c",
+    fontSize: 10,
+    lineHeight: 15,
+  },
   visionReviewRail: {
     backgroundColor: "rgba(212,183,124,0.1)",
     borderColor: "rgba(212,183,124,0.22)",
@@ -6245,7 +6692,49 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.8,
   },
-  visionReviewItem: { color: "#f2f5f3", fontSize: 10, lineHeight: 15 },
+  visionReviewItem: {
+    alignItems: "center",
+    borderTopColor: "rgba(212,183,124,0.16)",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 8,
+  },
+  visionReviewItemTitle: { color: "#f2f5f3", fontSize: 11, lineHeight: 15 },
+  visionReviewItemMeta: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  visionReviewActions: { flexDirection: "row", gap: 6 },
+  visionReviewReject: {
+    alignItems: "center",
+    borderColor: "rgba(255,255,255,0.24)",
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
+  visionReviewRejectText: {
+    color: "#d2d7d5",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  visionReviewConfirm: {
+    alignItems: "center",
+    backgroundColor: "#a8d9bf",
+    borderRadius: 10,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
+  visionReviewConfirmText: {
+    color: "#111719",
+    fontSize: 10,
+    fontWeight: "900",
+  },
   visionEvidenceNote: { color: "#aeb8b5", fontSize: 10, lineHeight: 15 },
   visionAnalysisButton: {
     alignItems: "center",

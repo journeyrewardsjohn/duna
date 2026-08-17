@@ -1321,6 +1321,36 @@ export const videoAnalysisEventTypeSchema = z.enum([
   "highlight",
   "review-marker",
 ]);
+export const volleyballSideSchema = z.enum(["a", "b", "unknown"]);
+export const volleyballContactKindSchema = z.enum([
+  "serve",
+  "reception",
+  "set",
+  "attack",
+  "block",
+  "dig",
+  "free-ball",
+]);
+export const volleyballContactOutcomeSchema = z.enum([
+  "in-play",
+  "ace",
+  "kill",
+  "error",
+  "blocked",
+  "positive",
+  "negative",
+]);
+export const videoAnalysisEventPayloadSchema = z
+  .object({
+    label: z.string().trim().min(1).max(160).optional(),
+    rallyId: z.string().uuid().optional(),
+    contactKind: volleyballContactKindSchema.optional(),
+    outcome: volleyballContactOutcomeSchema.optional(),
+    side: volleyballSideSchema.optional(),
+    playerId: z.string().uuid().optional(),
+    speedKph: z.number().finite().min(0).max(180).optional(),
+  })
+  .passthrough();
 export const videoAnalysisEventStateSchema = z.enum([
   "proposed",
   "confirmed",
@@ -1387,7 +1417,7 @@ export const videoAnalysisEventSchema = z.object({
   durationUs: z.number().int().min(0).max(43_200_000_000).optional(),
   confidence: z.number().finite().min(0).max(1).optional(),
   courtPoint: videoAnalysisCourtPointSchema.optional(),
-  payload: z.record(z.string(), z.unknown()),
+  payload: videoAnalysisEventPayloadSchema,
   modelVersion: z.string().optional(),
   createdAt: z.iso.datetime(),
 });
@@ -1426,6 +1456,38 @@ export const videoAnalysisReportSchema = z.object({
     favoriteMoments: z.number().int().nonnegative(),
     lastSnapshot: visionScoreSnapshotSchema.optional(),
   }),
+  performance: z.object({
+    summary: z.string(),
+    rallyCount: z.number().int().nonnegative(),
+    averageRallySeconds: z.number().finite().nonnegative().optional(),
+    longestRallySeconds: z.number().finite().nonnegative().optional(),
+    averageContactsPerRally: z.number().finite().nonnegative().optional(),
+    contactObservations: z.number().int().nonnegative(),
+    attributedContacts: z.number().int().nonnegative(),
+    verifiedObservations: z.number().int().nonnegative(),
+    needsReview: z.number().int().nonnegative(),
+    maxServeSpeedKph: z.number().finite().nonnegative().optional(),
+    maxAttackSpeedKph: z.number().finite().nonnegative().optional(),
+    sides: z
+      .array(
+        z.object({
+          side: volleyballSideSchema,
+          serves: z.number().int().nonnegative(),
+          aces: z.number().int().nonnegative(),
+          serviceErrors: z.number().int().nonnegative(),
+          receptions: z.number().int().nonnegative(),
+          sets: z.number().int().nonnegative(),
+          attacks: z.number().int().nonnegative(),
+          kills: z.number().int().nonnegative(),
+          attackErrors: z.number().int().nonnegative(),
+          blocks: z.number().int().nonnegative(),
+          digs: z.number().int().nonnegative(),
+          attackEfficiency: z.number().finite().min(-1).max(1).optional(),
+          aceRate: z.number().finite().min(0).max(1).optional(),
+        }),
+      )
+      .readonly(),
+  }),
   highlights: z
     .array(
       z.object({
@@ -1445,6 +1507,10 @@ export const videoAnalysisReportSchema = z.object({
         sessionTimeUs: z.number().int().nonnegative(),
         label: z.string(),
         source: videoAnalysisSourceSchema,
+        reviewable: z.boolean(),
+        eventType: videoAnalysisEventTypeSchema.optional(),
+        contactKind: volleyballContactKindSchema.optional(),
+        confidence: z.number().finite().min(0).max(1).optional(),
       }),
     )
     .readonly(),
@@ -1473,15 +1539,25 @@ export const videoAnalysisMarkerInputSchema = z
       });
     }
   });
-export const videoAnalysisWorkerEventSchema = z.object({
-  id: z.string().uuid(),
-  eventType: videoAnalysisEventTypeSchema,
-  sessionTimeUs: z.number().int().min(0).max(43_200_000_000),
-  durationUs: z.number().int().min(0).max(43_200_000_000).optional(),
-  confidence: z.number().finite().min(0).max(1).optional(),
-  courtPoint: videoAnalysisCourtPointSchema.optional(),
-  payload: z.record(z.string(), z.unknown()).default({}),
-});
+export const videoAnalysisWorkerEventSchema = z
+  .object({
+    id: z.string().uuid(),
+    eventType: videoAnalysisEventTypeSchema,
+    sessionTimeUs: z.number().int().min(0).max(43_200_000_000),
+    durationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+    confidence: z.number().finite().min(0).max(1).optional(),
+    courtPoint: videoAnalysisCourtPointSchema.optional(),
+    payload: videoAnalysisEventPayloadSchema.default({}),
+  })
+  .superRefine((event, context) => {
+    if (event.eventType === "ball-contact" && !event.payload.contactKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["payload", "contactKind"],
+        message: "A ball contact needs a volleyball contact kind.",
+      });
+    }
+  });
 export const videoAnalysisWorkerResultSchema = z.object({
   runId: z.string().uuid(),
   status: z.enum(["ready", "needs-review", "failed"]),

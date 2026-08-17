@@ -8971,12 +8971,7 @@ const operatorRouter = router({
             .string()
             .regex(/^\+[1-9]\d{7,14}$/)
             .optional(),
-          role: z.enum([
-            "coach",
-            "manager",
-            "front-desk",
-            "accountant",
-          ]),
+          role: z.enum(["coach", "manager", "front-desk", "accountant"]),
           workerClassification: z.enum(["1099-contractor", "w2-employee"]),
           preferredChannel: z.enum(["email", "sms"]).optional(),
           deliveryMode: z.enum(["send", "link-only"]).default("send"),
@@ -11821,7 +11816,13 @@ const adminRouter = router({
         organizationId: z.string().uuid(),
         email: z.email(),
         displayName: z.string().trim().min(2).max(120).optional(),
-        role: z.enum(["director", "manager", "coach", "front-desk", "accountant"]),
+        role: z.enum([
+          "director",
+          "manager",
+          "coach",
+          "front-desk",
+          "accountant",
+        ]),
         workerClassification: z.enum(["1099-contractor", "w2-employee"]),
         deliveryMode: z.enum(["send", "link-only"]),
         idempotencyKey: z.string().uuid(),

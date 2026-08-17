@@ -604,7 +604,9 @@ function TeamMemberComposer({
                   setDeliveryMode(event.target.value as "send" | "link-only")
                 }
               >
-                <option value="link-only">Private claim link — recommended</option>
+                <option value="link-only">
+                  Private claim link — recommended
+                </option>
                 <option value="send">Send it from Duna</option>
               </select>
             </label>
@@ -650,10 +652,17 @@ function TeamMemberComposer({
               <div>
                 <span className="hq-eyebrow">Private claim link</span>
                 <strong>Ready to share</strong>
-                <p>Anyone with this link can claim this specific team role for the next 7 days.</p>
+                <p>
+                  Anyone with this link can claim this specific team role for
+                  the next 7 days.
+                </p>
               </div>
               <div className="operator-private-link__controls">
-                <input aria-label="Private team invitation link" readOnly value={state.privateClaimLink} />
+                <input
+                  aria-label="Private team invitation link"
+                  readOnly
+                  value={state.privateClaimLink}
+                />
                 <button
                   type="button"
                   className="hq-button hq-button--secondary hq-button--compact"

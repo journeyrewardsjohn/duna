@@ -35,6 +35,17 @@ export interface SavedCourtGeometry {
   readonly calibrationMode?: "automatic" | "assisted" | "manual";
 }
 
+export type CourtCalibrationStepId =
+  "orientation" | "ground" | "net" | "court" | "coverage";
+
+export interface CourtCalibrationStep {
+  readonly id: CourtCalibrationStepId;
+  readonly label: string;
+  readonly detail: string;
+  readonly complete: boolean;
+  readonly active: boolean;
+}
+
 export const fallbackCourtCorners = [
   { x: 0.33, y: 0.26 },
   { x: 0.67, y: 0.26 },
@@ -281,4 +292,67 @@ export function toggleAntennas(
 
 export function visibleCornerCount(geometry: CourtGeometry): number {
   return geometry.corners.filter(isCapturePointVisible).length;
+}
+
+/**
+ * Turns the deliberately advisory native guidance into a stable, ordered
+ * setup checklist. A capture is never blocked by these steps: the list tells
+ * the player exactly what Vision still needs before it can be most useful.
+ */
+export function courtCalibrationChecklist(
+  guidance: CaptureGuidance | undefined,
+  preferredOrientation: "landscape" | "portrait",
+): readonly CourtCalibrationStep[] {
+  const visibleCorners = guidance?.visibleCornerCount ?? 0;
+  const candidates: readonly Omit<CourtCalibrationStep, "active">[] = [
+    {
+      id: "orientation",
+      label: `Hold the phone ${preferredOrientation}`,
+      detail:
+        guidance?.orientationMatches === false
+          ? `Rotate the iPhone ${preferredOrientation} before you start.`
+          : "Screen and camera orientation are aligned.",
+      complete: guidance?.orientationMatches !== false,
+    },
+    {
+      id: "ground",
+      label: "Find the sand plane",
+      detail: guidance?.groundPlaneDetected
+        ? guidance.lidarAvailable
+          ? "LiDAR has a stable ground plane."
+          : "AR has a stable ground plane."
+        : "Tilt down slowly until Duna can see the sand in front of the court.",
+      complete: guidance?.groundPlaneDetected === true,
+    },
+    {
+      id: "net",
+      label: "Put the net in frame",
+      detail: guidance?.netDetected
+        ? "Net evidence found. Keep the tape visible."
+        : "Center the net near the horizon; do not point only at the sand.",
+      complete: guidance?.netDetected === true,
+    },
+    {
+      id: "court",
+      label: "Show both sidelines",
+      detail: guidance?.courtDetected
+        ? "Duna can now draw a court guide from real court evidence."
+        : "Open the frame until both sidelines meet the net.",
+      complete: guidance?.courtDetected === true,
+    },
+    {
+      id: "coverage",
+      label: "Bring in the court corners",
+      detail:
+        guidance?.courtDetected && visibleCorners >= 4
+          ? "Full-court framing is ready for stronger analysis."
+          : `${visibleCorners} of 4 corners are visible. You can still record with a partial court.`,
+      complete: Boolean(guidance?.courtDetected && visibleCorners >= 4),
+    },
+  ];
+  const activeIndex = candidates.findIndex((step) => !step.complete);
+  return candidates.map((step, index) => ({
+    ...step,
+    active: activeIndex === index,
+  }));
 }
