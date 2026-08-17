@@ -140,6 +140,7 @@ import {
   type PolicyScrollMetrics,
 } from "./policy-review";
 import { ResultPlayIcon } from "./result-play-icon";
+import { NativeMarkdownContent } from "./markdown-content";
 import {
   MobilePlacePicker,
   type MobilePlaceSelection,
@@ -927,7 +928,11 @@ function PolicyReviewModal({
           showsVerticalScrollIndicator
           style={styles.policyReviewScroll}
         >
-          <Text style={styles.policyReviewDocument}>{policy.markdown}</Text>
+          <NativeMarkdownContent
+            color={colors.bone}
+            linkColor={colors.lime}
+            markdown={policy.markdown}
+          />
           <View style={styles.policyReviewEnd}>
             <Text style={styles.policyReviewEndMark}>✓</Text>
             <Text style={styles.policyReviewEndText}>End of {policy.kind}</Text>

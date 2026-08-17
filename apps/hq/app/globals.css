@@ -31617,15 +31617,72 @@ body {
   line-height: 1.48;
 }
 
-.waiver-signing-preview__document-copy h5 {
+.waiver-signing-preview__document-copy h2,
+.waiver-signing-preview__document-copy h3 {
   color: #202018;
-  font-size: 0.68rem;
-  margin: 0.2rem 0 0.35rem;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.waiver-signing-preview__document-copy h2 {
+  font-size: 0.85rem;
+  line-height: 1.25;
+  margin: 0.25rem 0 0.45rem;
+}
+
+.waiver-signing-preview__document-copy h3 {
+  font-size: 0.72rem;
+  line-height: 1.3;
+  margin: 0.2rem 0 0.38rem;
 }
 
 .waiver-signing-preview__document-copy p {
   margin: 0 0 0.55rem;
   white-space: pre-line;
+}
+
+.waiver-signing-preview__document-copy ul,
+.waiver-signing-preview__document-copy ol {
+  margin: 0 0 0.55rem;
+  padding-left: 1.15rem;
+}
+
+.waiver-signing-preview__document-copy li + li {
+  margin-top: 0.18rem;
+}
+
+.waiver-signing-preview__document-copy strong {
+  font-weight: 850;
+}
+
+.waiver-signing-preview__document-copy em {
+  font-style: italic;
+}
+
+.waiver-signing-preview__document-copy a {
+  color: #35551a;
+  text-decoration: underline;
+}
+
+.waiver-signing-preview__document-copy code {
+  background: #eee7da;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0.08em 0.22em;
+}
+
+.waiver-signing-preview__document-copy blockquote {
+  border-left: 2px solid #9bb86b;
+  font-style: italic;
+  margin: 0 0 0.55rem;
+  padding-left: 0.55rem;
+}
+
+.waiver-signing-preview__document-copy hr {
+  border: 0;
+  border-top: 1px solid #ddd4c5;
+  margin: 0.55rem 0;
 }
 
 .waiver-signing-preview__status {

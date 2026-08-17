@@ -30,6 +30,7 @@ import { useMapboxToken } from "./discovery-map";
 import { DunaNumericText, FellixText as Text } from "./fellix-text";
 import type { DunaApiClient } from "./mobile-api";
 import { dunaWebUrl } from "./mobile-api";
+import { NativeMarkdownContent } from "./markdown-content";
 import { presentNativePayment } from "./native-payments";
 import { usePlayerRuntime } from "./runtime";
 
@@ -1473,7 +1474,11 @@ export function OrganizationExperienceModal({
                 Review the complete waiver below. Duna will only unlock the
                 acknowledgement controls after you reach the end.
               </Text>
-              <Text style={styles.waiverText}>{currentWaiver?.markdown}</Text>
+              <NativeMarkdownContent
+                color={themeTokens.text1}
+                linkColor={primary}
+                markdown={currentWaiver?.markdown ?? ""}
+              />
               <Text style={styles.waiverStatus}>
                 {waiverScrolled
                   ? "Full document reviewed. You can now acknowledge and sign."
@@ -2059,7 +2064,6 @@ function createStyles(token: ResolvedDunaTokens) {
       lineHeight: 19,
       marginTop: 18,
     },
-    waiverText: { color: token.text1, fontSize: 15, lineHeight: 23 },
     venueFallback: { alignItems: "center", justifyContent: "center" },
     venueFallbackText: { fontSize: 30 },
     venueMeta: {

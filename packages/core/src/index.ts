@@ -22,3 +22,4 @@ export * from "./trust";
 export * from "./wallet";
 export * from "./wallet-pass";
 export * from "./member-credential";
+export * from "./markdown";

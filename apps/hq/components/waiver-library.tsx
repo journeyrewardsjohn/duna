@@ -1,6 +1,10 @@
 "use client";
 
 import type { WaiverWorkspace } from "@duna/api";
+import {
+  parseMarkdown,
+  type MarkdownInline,
+} from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   Check,
@@ -15,7 +19,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
-import { useActionState, useMemo, useState } from "react";
+import { type ReactNode, useActionState, useMemo, useState } from "react";
 import { createWaiverAction, type OperatorActionState } from "@/app/actions";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
@@ -47,22 +51,78 @@ function sectionId(value: string, index: number, usedIds: ReadonlySet<string>) {
   return id;
 }
 
+function PreviewInlineMarkdown({
+  nodes,
+  keyPrefix,
+}: {
+  readonly nodes: readonly MarkdownInline[];
+  readonly keyPrefix: string;
+}): ReactNode[] {
+  return (
+    nodes.map((node, index) => {
+      const key = `${keyPrefix}-${index}`;
+      if (node.type === "text") return node.value;
+      if (node.type === "code") return <code key={key}>{node.value}</code>;
+      if (node.type === "strong") {
+        return (
+          <strong key={key}>
+            <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
+          </strong>
+        );
+      }
+      if (node.type === "emphasis") {
+        return (
+          <em key={key}>
+            <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
+          </em>
+        );
+      }
+      return (
+        <a href={node.href} key={key} rel="noreferrer" target="_blank">
+          <PreviewInlineMarkdown keyPrefix={key} nodes={node.children} />
+        </a>
+      );
+    })
+  );
+}
+
 function WaiverTextPreview({ markdown }: { readonly markdown: string }) {
-  const paragraphs = markdown
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
   return (
     <div className="waiver-signing-preview__document-copy">
-      {paragraphs.map((paragraph, index) =>
-        /^#{1,3}\s/.test(paragraph) ? (
-          <h5 key={`${paragraph.slice(0, 24)}-${index}`}>
-            {paragraph.replace(/^#{1,3}\s*/, "")}
-          </h5>
-        ) : (
-          <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>
-        ),
-      )}
+      {parseMarkdown(markdown).map((block, index) => {
+        const key = `preview-block-${index}`;
+        if (block.type === "heading") {
+          const content = (
+            <PreviewInlineMarkdown keyPrefix={key} nodes={block.children} />
+          );
+          if (block.level === 1) return <h2 key={key}>{content}</h2>;
+          return <h3 key={key}>{content}</h3>;
+        }
+        if (block.type === "list") {
+          const items = block.items.map((item, itemIndex) => (
+            <li key={`${key}-${itemIndex}`}>
+              <PreviewInlineMarkdown
+                keyPrefix={`${key}-${itemIndex}`}
+                nodes={item}
+              />
+            </li>
+          ));
+          return block.ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>;
+        }
+        if (block.type === "quote") {
+          return (
+            <blockquote key={key}>
+              <PreviewInlineMarkdown keyPrefix={key} nodes={block.children} />
+            </blockquote>
+          );
+        }
+        if (block.type === "rule") return <hr key={key} />;
+        return (
+          <p key={key}>
+            <PreviewInlineMarkdown keyPrefix={key} nodes={block.children} />
+          </p>
+        );
+      })}
     </div>
   );
 }
