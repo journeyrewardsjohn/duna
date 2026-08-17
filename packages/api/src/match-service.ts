@@ -51,6 +51,7 @@ import {
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import { publishMatchLiveActivity } from "./live-activities";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import { sendTransactionalEmail } from "./resend";
 import { sendTemplateSms } from "./sent";
 
@@ -190,16 +191,10 @@ function requireDatabase(): void {
   }
 }
 
-function matchInvitationOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_WEB_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://duna.coach"
-  ).replace(/\/$/, "");
-}
-
 function matchInvitationUrl(inviteToken: string): string {
-  return `${matchInvitationOrigin()}/join/match/${encodeURIComponent(inviteToken)}`;
+  return canonicalPublicWebUrl(
+    `/join/match/${encodeURIComponent(inviteToken)}`,
+  );
 }
 
 function provisionalHandle(input: {

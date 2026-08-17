@@ -75,6 +75,7 @@ import {
   createConnectOnboarding,
   retrieveConnectAccountReadiness,
 } from "./payments";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import { isResendConfigured, sendTransactionalEmail } from "./resend";
 import { isSentConfigured, sendTemplateSms } from "./sent";
 import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
@@ -472,31 +473,19 @@ async function uniquePersonHandle(value: string): Promise<string> {
 }
 
 function playerInvitationUrl(inviteToken: string): string {
-  const origin =
-    process.env.NEXT_PUBLIC_WEB_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://duna.coach";
-  return `${origin.replace(/\/$/, "")}/join/organization/${encodeURIComponent(inviteToken)}`;
+  return canonicalPublicWebUrl(
+    `/join/organization/${encodeURIComponent(inviteToken)}`,
+  );
 }
 
 function staffInvitationUrl(inviteToken: string): string {
-  const origin =
-    process.env.NEXT_PUBLIC_WEB_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://duna.coach";
-  return `${origin.replace(/\/$/, "")}/join/team/${encodeURIComponent(inviteToken)}`;
+  return canonicalPublicWebUrl(`/join/team/${encodeURIComponent(inviteToken)}`);
 }
 
 type OrganizationStaffRole =
-  | "coach"
-  | "director"
-  | "manager"
-  | "front-desk"
-  | "accountant";
+  "coach" | "director" | "manager" | "front-desk" | "accountant";
 
-function scopesForOrganizationStaffRole(
-  role: OrganizationStaffRole,
-): string[] {
+function scopesForOrganizationStaffRole(role: OrganizationStaffRole): string[] {
   switch (role) {
     case "director":
       return [
@@ -3016,12 +3005,7 @@ export async function createStaffInvitation(input: {
   readonly invitedName: string;
   readonly invitedEmail?: string;
   readonly invitedPhoneE164?: string;
-  readonly role:
-    | "coach"
-    | "director"
-    | "manager"
-    | "front-desk"
-    | "accountant";
+  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
   readonly deliveryMode?: "send" | "link-only";
@@ -3047,14 +3031,16 @@ export async function createStaffInvitation(input: {
     );
   }
   const database = getDatabase();
-  const actorProfile = await database.query.organizationStaffProfiles.findFirst({
-    where: and(
-      eq(organizationStaffProfiles.organizationId, organizationId),
-      eq(organizationStaffProfiles.personId, input.actor.personId),
-      eq(organizationStaffProfiles.active, true),
-    ),
-    columns: { staffRole: true },
-  });
+  const actorProfile = await database.query.organizationStaffProfiles.findFirst(
+    {
+      where: and(
+        eq(organizationStaffProfiles.organizationId, organizationId),
+        eq(organizationStaffProfiles.personId, input.actor.personId),
+        eq(organizationStaffProfiles.active, true),
+      ),
+      columns: { staffRole: true },
+    },
+  );
   const canInviteTeam =
     input.allowDirector ||
     input.actor.roles.includes("owner") ||
@@ -3540,16 +3526,19 @@ export async function updateStaffProfile(input: {
       "This team member is not connected to the organization.",
     );
   }
-  const actorProfile = await database.query.organizationStaffProfiles.findFirst({
-    where: and(
-      eq(organizationStaffProfiles.organizationId, organizationId),
-      eq(organizationStaffProfiles.personId, input.actor.personId),
-      eq(organizationStaffProfiles.active, true),
-    ),
-    columns: { staffRole: true },
-  });
+  const actorProfile = await database.query.organizationStaffProfiles.findFirst(
+    {
+      where: and(
+        eq(organizationStaffProfiles.organizationId, organizationId),
+        eq(organizationStaffProfiles.personId, input.actor.personId),
+        eq(organizationStaffProfiles.active, true),
+      ),
+      columns: { staffRole: true },
+    },
+  );
   const actorIsDirector =
-    input.actor.roles.includes("owner") || actorProfile?.staffRole === "director";
+    input.actor.roles.includes("owner") ||
+    actorProfile?.staffRole === "director";
   const actorCanManageTeam =
     actorIsDirector ||
     input.actor.roles.includes("manager") ||

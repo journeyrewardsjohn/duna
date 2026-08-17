@@ -33,6 +33,7 @@ import {
 } from "@duna/pricing";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import {
   evaluatePickupParticipant,
   evaluateRegistrationForSession,
@@ -1077,10 +1078,10 @@ async function deliverTeamInvitations(input: {
   readonly now: Date;
 }) {
   const database = getDatabase();
-  const invitationUrl = new URL(
+  const invitationUrl = canonicalPublicWebUrl(
     `/app/team/claim/${input.claimToken}`,
     input.applicationOrigin,
-  ).toString();
+  );
   const deliveredRoster = await Promise.all(
     input.roster.map(async (member, index) => {
       if (member.deliveryStatus === "sent") {
