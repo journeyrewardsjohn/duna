@@ -1,7 +1,6 @@
 "use client";
 
 import { CalendarDays, Layers3 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   CalendarDatePicker,
   type CalendarMarker,
@@ -9,24 +8,18 @@ import {
 
 export function ProScheduleCalendar({
   markers,
+  onDateChange,
+  onReset,
   selectedDate,
-  selectedTour,
   trackedEventCount,
 }: {
   readonly markers: readonly CalendarMarker[];
+  readonly onDateChange: (date: string) => void;
+  readonly onReset: () => void;
   readonly selectedDate?: string;
-  readonly selectedTour: "all" | "elite" | "challenger" | "futures" | "avp";
   readonly trackedEventCount: number;
 }) {
-  const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
-  const href = (date?: string) => {
-    const params = new URLSearchParams();
-    if (selectedTour !== "all") params.set("tour", selectedTour);
-    if (date) params.set("date", date);
-    const query = params.toString();
-    return query ? `/pro?${query}` : "/pro";
-  };
   return (
     <section className="pro-schedule-calendar">
       <header>
@@ -42,7 +35,7 @@ export function ProScheduleCalendar({
         <button
           aria-current={!selectedDate ? "page" : undefined}
           className="pro-schedule-calendar__all"
-          onClick={() => router.push(href())}
+          onClick={onReset}
           type="button"
         >
           <Layers3 aria-hidden size={16} />
@@ -53,7 +46,7 @@ export function ProScheduleCalendar({
           calendarTitle="Find a day on tour"
           className="pro-schedule-calendar__picker"
           markers={markers}
-          onChange={(nextDate) => router.push(href(nextDate))}
+          onChange={onDateChange}
           selectionActive={Boolean(selectedDate)}
           value={selectedDate ?? today}
         />
