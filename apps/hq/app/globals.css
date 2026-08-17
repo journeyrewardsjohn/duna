@@ -19725,6 +19725,10 @@ body {
   line-height: 1.45;
 }
 
+.operator-field-helper--error {
+  color: var(--color-danger);
+}
+
 .member-price-comparison {
   align-items: center;
   background: rgb(var(--positive-rgb) / 9%);

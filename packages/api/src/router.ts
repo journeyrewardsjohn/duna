@@ -6960,7 +6960,7 @@ const operatorRouter = router({
             z.object({
               id: z.string().trim().min(1).max(80),
               title: z.string().trim().min(1).max(160),
-              markdown: z.string().trim().min(1).max(20_000),
+              markdown: z.string().trim().min(1).max(100_000),
               acknowledgementRequired: z.boolean(),
             }),
           )

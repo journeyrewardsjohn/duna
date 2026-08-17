@@ -4147,7 +4147,7 @@ export const organizationWalletSummarySchema = z.object({
 export const waiverSectionSchema = z.object({
   id: z.string().min(1).max(80),
   title: z.string().min(1).max(160),
-  markdown: z.string().min(1).max(20_000),
+  markdown: z.string().min(1).max(100_000),
   acknowledgementRequired: z.boolean(),
 });
 

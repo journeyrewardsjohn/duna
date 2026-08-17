@@ -115,6 +115,7 @@ function friendlyErrorMessage(error: unknown): string {
   try {
     const issues = JSON.parse(message) as readonly {
       readonly path?: readonly (string | number)[];
+      readonly message?: string;
     }[];
     if (Array.isArray(issues)) {
       const fields = new Set(
@@ -129,12 +130,92 @@ function friendlyErrorMessage(error: unknown): string {
       ) {
         return "Choose a complete Google address, or enter the city, state or region, and postal code manually.";
       }
+      const firstIssue = issues[0];
+      const path = firstIssue?.path ?? [];
+      const fieldName = path[0];
+      const fieldLabel =
+        fieldName === "keySections"
+          ? `Key section ${typeof path[1] === "number" ? path[1] + 1 : ""}${
+              path[2] === "title"
+                ? " title"
+                : path[2] === "markdown"
+                  ? " text"
+                  : ""
+            }`.trim()
+          : fieldName === "markdown"
+            ? "Full waiver text"
+            : fieldName === "signatureValidityDays"
+              ? "Signature validity"
+              : fieldName === "playerAcknowledgementMinimumAge"
+                ? "Player acknowledgement age"
+                : fieldName === "title"
+                  ? "Library name"
+                  : undefined;
+      if (fieldLabel && firstIssue?.message) {
+        return `${fieldLabel}: ${firstIssue.message}`;
+      }
       return "Some required information is missing or invalid. Review the form and try again.";
     }
   } catch {
     // Non-validation errors already carry a useful, user-facing message.
   }
   return message;
+}
+
+type WaiverSectionDraft = {
+  readonly id: string;
+  readonly title: string;
+  readonly markdown: string;
+  readonly acknowledgementRequired: boolean;
+};
+
+function waiverSections(formData: FormData): WaiverSectionDraft[] {
+  const serializedSections = optionalField(formData, "keySections") || "[]";
+  let sections: unknown;
+  try {
+    sections = JSON.parse(serializedSections);
+  } catch {
+    throw new Error("Duna could not read the highlighted sections. Remove and add the affected section again.");
+  }
+  if (!Array.isArray(sections)) {
+    throw new Error("The highlighted sections could not be read.");
+  }
+  if (sections.length > 20) {
+    throw new Error("A waiver can include up to 20 highlighted sections.");
+  }
+  return sections.map((section, index) => {
+    if (!section || typeof section !== "object") {
+      throw new Error(`Key section ${index + 1} is invalid. Remove it and add it again.`);
+    }
+    const candidate = section as Record<string, unknown>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    const title =
+      typeof candidate.title === "string" ? candidate.title.trim() : "";
+    const markdown =
+      typeof candidate.markdown === "string" ? candidate.markdown.trim() : "";
+    if (!id || id.length > 80) {
+      throw new Error(`Key section ${index + 1} needs a valid section identifier.`);
+    }
+    if (!title || title.length > 160) {
+      throw new Error(
+        `Key section ${index + 1} needs a title of 160 characters or fewer.`,
+      );
+    }
+    if (!markdown || markdown.length > 100_000) {
+      throw new Error(
+        `Key section ${index + 1} needs text between 1 and 100,000 characters.`,
+      );
+    }
+    if (typeof candidate.acknowledgementRequired !== "boolean") {
+      throw new Error(`Key section ${index + 1} acknowledgement setting is invalid.`);
+    }
+    return {
+      id,
+      title,
+      markdown,
+      acknowledgementRequired: candidate.acknowledgementRequired,
+    };
+  });
 }
 
 function errorState(error: unknown): OperatorActionState {
@@ -275,11 +356,7 @@ export async function createWaiverAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
-    const serializedSections = optionalField(formData, "keySections") || "[]";
-    const sections = JSON.parse(serializedSections) as unknown;
-    if (!Array.isArray(sections)) {
-      throw new Error("The waiver sections could not be read.");
-    }
+    const sections = waiverSections(formData);
     const playerAcknowledgementAge = optionalNumberField(
       formData,
       "playerAcknowledgementMinimumAge",
@@ -304,12 +381,7 @@ export async function createWaiverAction(
       requiresParentForMinors:
         field(formData, "requiresParentForMinors") !== "false",
       playerAcknowledgementMinimumAge: playerAcknowledgementAge,
-      keySections: sections as {
-        id: string;
-        title: string;
-        markdown: string;
-        acknowledgementRequired: boolean;
-      }[],
+      keySections: sections,
       appliesToMembers: field(formData, "appliesToMembers") === "true",
       appliesToBookings: field(formData, "appliesToBookings") === "true",
       idempotencyKey: crypto.randomUUID(),

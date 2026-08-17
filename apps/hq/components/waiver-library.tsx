@@ -23,14 +23,22 @@ type SectionDraft = {
   readonly acknowledgementRequired: boolean;
 };
 
-function sectionId(title: string, index: number) {
-  return (
-    title
+function sectionId(value: string, index: number, usedIds: ReadonlySet<string>) {
+  const base =
+    value
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || `section-${index + 1}`
-  );
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 70) || `section-${index + 1}`;
+  let id = base;
+  let suffix = 2;
+  while (usedIds.has(id)) {
+    const suffixText = `-${suffix}`;
+    id = `${base.slice(0, 80 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  }
+  return id;
 }
 
 export function WaiverLibrary({
@@ -59,16 +67,45 @@ export function WaiverLibrary({
   const [appliesToMembers, setAppliesToMembers] = useState(false);
   const [appliesToBookings, setAppliesToBookings] = useState(false);
   const [sections, setSections] = useState<readonly SectionDraft[]>([]);
-  const serializedSections = useMemo(
-    () =>
-      JSON.stringify(
-        sections.map((section, index) => ({
-          ...section,
-          id: sectionId(section.id || section.title, index),
-        })),
-      ),
-    [sections],
-  );
+  const { serializedSections, sectionErrors } = useMemo(() => {
+    const usedIds = new Set<string>();
+    const errors = new Map<number, string>();
+    const normalized = sections.map((section, index) => {
+      const id = sectionId(section.id || section.title, index, usedIds);
+      usedIds.add(id);
+      const sectionTitle = section.title.trim();
+      const sectionText = section.markdown.trim();
+      if (!sectionTitle) {
+        errors.set(index, "Add a short section title.");
+      } else if (sectionTitle.length > 160) {
+        errors.set(index, "Keep the title to 160 characters or fewer.");
+      } else if (!sectionText) {
+        errors.set(index, "Add the exact text for this highlighted section.");
+      } else if (sectionText.length > 100_000) {
+        errors.set(index, "Keep this section to 100,000 characters or fewer.");
+      }
+      return { ...section, id };
+    });
+    return {
+      serializedSections: JSON.stringify(normalized),
+      sectionErrors: errors,
+    };
+  }, [sections]);
+  const titleError =
+    title.trim().length === 0
+      ? "Add a library name."
+      : title.trim().length > 180
+        ? "Keep the library name to 180 characters or fewer."
+        : undefined;
+  const documentError =
+    markdown.trim().length === 0
+      ? "Add the complete waiver text."
+      : markdown.trim().length < 20
+        ? "The full waiver text needs at least 20 characters."
+        : markdown.trim().length > 100_000
+          ? "The full waiver text is limited to 100,000 characters. Split a supporting document from the waiver before saving."
+          : undefined;
+  const hasDraftErrors = Boolean(titleError || documentError || sectionErrors.size);
 
   const beginRevision = (waiver: WaiverWorkspace["documents"][number]) => {
     setRevisionOf(waiver.id);
@@ -273,6 +310,11 @@ export function WaiverLibrary({
                 required
                 value={title}
               />
+              {titleError && (
+                <small className="operator-field-helper operator-field-helper--error">
+                  {titleError}
+                </small>
+              )}
             </label>
             <label className="waiver-builder__import">
               <span>
@@ -319,6 +361,11 @@ export function WaiverLibrary({
               rows={14}
               value={markdown}
             />
+            {documentError && (
+              <small className="operator-field-helper operator-field-helper--error">
+                {documentError}
+              </small>
+            )}
           </label>
           <div className="event-form-grid event-form-grid--two waiver-builder__duration">
             <label>
@@ -461,6 +508,11 @@ export function WaiverLibrary({
                   rows={4}
                   value={section.markdown}
                 />
+                {sectionErrors.get(index) && (
+                  <small className="operator-field-helper operator-field-helper--error">
+                    {sectionErrors.get(index)}
+                  </small>
+                )}
                 <label>
                   <input
                     checked={section.acknowledgementRequired}
@@ -506,7 +558,7 @@ export function WaiverLibrary({
             </button>
             <button
               className="hq-button hq-button--primary"
-              disabled={pending}
+              disabled={pending || hasDraftErrors}
               type="submit"
             >
               {pending
