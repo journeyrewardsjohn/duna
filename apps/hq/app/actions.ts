@@ -12,6 +12,7 @@ export interface OperatorActionState {
   readonly message: string;
   readonly onboardingUrl?: string;
   readonly entityId?: string;
+  readonly privateClaimLink?: string;
   readonly scheduleProposal?: {
     readonly summary: string;
     readonly blocks: readonly {
@@ -102,8 +103,9 @@ function result(
   message: string,
   onboardingUrl?: string,
   entityId?: string,
+  privateClaimLink?: string,
 ): OperatorActionState {
-  return { status, message, onboardingUrl, entityId };
+  return { status, message, onboardingUrl, entityId, privateClaimLink };
 }
 
 function friendlyErrorMessage(error: unknown): string {
@@ -1411,7 +1413,6 @@ export async function createStaffInvitationAction(
     const role = field(formData, "role");
     if (
       role !== "coach" &&
-      role !== "director" &&
       role !== "manager" &&
       role !== "front-desk" &&
       role !== "accountant"
@@ -1456,12 +1457,13 @@ export async function createStaffInvitationAction(
     return result(
       "success",
       deliveryMode === "link-only"
-        ? "Private claim link created. Copy it from pending team access."
+        ? "Private claim link is ready to share."
         : created.status === "sent"
           ? "Team invitation sent."
           : "Team invitation created. Delivery will resume when the selected provider is ready.",
       undefined,
       created.id,
+      created.privateClaimLink,
     );
   } catch (error) {
     return errorState(error);

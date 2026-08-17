@@ -1216,7 +1216,8 @@ function throwDomainError(error: unknown): never {
       error.code === "ORGANIZATION_NOT_FOUND" ||
       error.code === "RECIPIENT_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "RESOURCE_WRONG_ORGANIZATION" ||
+        : error.code === "FORBIDDEN" ||
+            error.code === "RESOURCE_WRONG_ORGANIZATION" ||
             error.code === "RECIPIENT_NOT_ELIGIBLE"
           ? "FORBIDDEN"
           : error.code === "DATABASE_REQUIRED"
@@ -7016,7 +7017,7 @@ const operatorRouter = router({
         return throwDomainError(error);
       }
     }),
-  terminalConnectionToken: organizationProcedure("payments:write")
+  terminalConnectionToken: organizationProcedure("payments:collect")
     .use(
       rateLimitMiddleware({
         id: "operator-terminal-token",
@@ -7041,7 +7042,7 @@ const operatorRouter = router({
         return throwDomainError(error);
       }
     }),
-  startPaymentCollection: organizationProcedure("payments:write")
+  startPaymentCollection: organizationProcedure("payments:collect")
     .use(
       rateLimitMiddleware({
         id: "operator-payment-start",
@@ -7098,7 +7099,7 @@ const operatorRouter = router({
         return throwDomainError(error);
       }
     }),
-  recordPaymentEvent: organizationProcedure("payments:write")
+  recordPaymentEvent: organizationProcedure("payments:collect")
     .use(
       rateLimitMiddleware({
         id: "operator-payment-event",
@@ -7153,7 +7154,7 @@ const operatorRouter = router({
         return throwDomainError(error);
       }
     }),
-  finalizePaymentCollection: organizationProcedure("payments:write")
+  finalizePaymentCollection: organizationProcedure("payments:collect")
     .use(
       rateLimitMiddleware({
         id: "operator-payment-finalize",
@@ -8956,7 +8957,6 @@ const operatorRouter = router({
             .optional(),
           role: z.enum([
             "coach",
-            "director",
             "manager",
             "front-desk",
             "accountant",

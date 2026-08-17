@@ -4399,6 +4399,8 @@ export const operatorMutationResultSchema = z.object({
     "match",
   ]),
   status: z.string(),
+  /** A short-lived, authenticated-only handoff returned for staff invites. */
+  privateClaimLink: z.url().optional(),
 });
 
 export const playerInvitationSchema = z.object({

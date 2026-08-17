@@ -99,6 +99,33 @@ action for the same server-owned object.
 - **Venue layout:** draft, preview, publish, and court creation are distinct
   states; preview must remain non-mutating.
 
+## Team invitations and organization roles
+
+The Team invitation flow makes a private claim link the primary handoff. It is
+created without an email address or phone number, returned to the authorized
+inviter immediately, and appears in Pending team access for the seven-day
+claim window. Email and SMS are optional delivery channels for that same
+claim link; a delivery failure never prevents the inviter from copying it.
+
+Director access is ownership-controlled, not an inviteable staff role. This
+keeps a staff-management link from creating a new organization owner. Existing
+Directors and Managers may invite Coaches, Managers, Front Desk, and
+Accountants. The service rechecks this rule, the organization boundary, and
+the role target server-side; hiding a role in HQ is never the authorization
+boundary.
+
+| Role | HQ access |
+| --- | --- |
+| Director | Organization ownership, financial configuration, ordinary operational settings, and team administration. More than one Director may exist through the ownership workflow. |
+| Manager | Operational settings and team invitations, but no Director creation or financial configuration. |
+| Coach | Read-only organization schedule, events, and catalog context; may take a payment at point of service. |
+| Front Desk | Registrations, schedules, event creation, leagues, tournaments, check-ins, and point-of-service payment collection. |
+| Accountant | Read-only access to money reports and financial records. |
+
+Point-of-service collection uses the separate `payments:collect` capability.
+It deliberately does not grant `payments:write`, which protects Stripe,
+commerce, refunds, pricing, and other financial configuration routes.
+
 ## Local development
 
 ```bash

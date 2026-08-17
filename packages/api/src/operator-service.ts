@@ -238,7 +238,8 @@ export class OperatorServiceError extends Error {
       | "DELIVERY_DESTINATION_MISSING"
       | "INVITATION_NOT_FOUND"
       | "INVITATION_EXPIRED"
-      | "INVITATION_ALREADY_CLAIMED",
+      | "INVITATION_ALREADY_CLAIMED"
+      | "FORBIDDEN",
     message: string,
   ) {
     super(message);
@@ -484,6 +485,78 @@ function staffInvitationUrl(inviteToken: string): string {
     process.env.NEXT_PUBLIC_APP_URL ??
     "https://duna.coach";
   return `${origin.replace(/\/$/, "")}/join/team/${encodeURIComponent(inviteToken)}`;
+}
+
+type OrganizationStaffRole =
+  | "coach"
+  | "director"
+  | "manager"
+  | "front-desk"
+  | "accountant";
+
+function scopesForOrganizationStaffRole(
+  role: OrganizationStaffRole,
+): string[] {
+  switch (role) {
+    case "director":
+      return [
+        "members:read",
+        "members:write",
+        "sessions:read",
+        "sessions:write",
+        "matches:read",
+        "matches:write",
+        "matches:score",
+        "payments:read",
+        "payments:write",
+        "payments:collect",
+        "tickets:scan",
+        "messages:read",
+        "messages:write",
+        "messages:propose",
+        "reports:read",
+      ];
+    case "manager":
+      return [
+        "members:read",
+        "members:write",
+        "sessions:read",
+        "sessions:write",
+        "matches:read",
+        "matches:write",
+        "matches:score",
+        "tickets:scan",
+        "messages:read",
+        "messages:write",
+        "messages:propose",
+        "reports:read",
+      ];
+    case "front-desk":
+      return [
+        "members:read",
+        "sessions:read",
+        "sessions:write",
+        "bookings:write",
+        "payments:collect",
+        "tickets:scan",
+        "messages:read",
+        "messages:write",
+      ];
+    case "accountant":
+      return ["sessions:read", "payments:read", "reports:read"];
+    case "coach":
+      return [
+        "members:read",
+        "sessions:read",
+        "matches:read",
+        "matches:write",
+        "matches:score",
+        "payments:collect",
+        "messages:read",
+        "messages:write",
+        "messages:propose",
+      ];
+  }
 }
 
 async function organizationRow(organizationId: string) {
@@ -2943,7 +3016,7 @@ export async function createStaffInvitation(input: {
   readonly invitedName: string;
   readonly invitedEmail?: string;
   readonly invitedPhoneE164?: string;
-  readonly role: "coach" | "director" | "manager" | "front-desk" | "accountant";
+  readonly role: "coach" | "manager" | "front-desk" | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
   readonly deliveryMode?: "send" | "link-only";
@@ -2960,6 +3033,26 @@ export async function createStaffInvitation(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const actorProfile = await database.query.organizationStaffProfiles.findFirst({
+    where: and(
+      eq(organizationStaffProfiles.organizationId, organizationId),
+      eq(organizationStaffProfiles.personId, input.actor.personId),
+      eq(organizationStaffProfiles.active, true),
+    ),
+    columns: { staffRole: true },
+  });
+  const canInviteTeam =
+    input.actor.roles.includes("owner") ||
+    input.actor.roles.includes("manager") ||
+    actorProfile?.staffRole === "director" ||
+    actorProfile?.staffRole === "manager";
+  if (!canInviteTeam) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only Directors and Managers can invite team members.",
+    );
+  }
   const organization = await organizationRow(organizationId);
   const invitedName = input.invitedName.trim();
   const invitedEmail = input.invitedEmail?.trim().toLowerCase() || undefined;
@@ -2991,7 +3084,6 @@ export async function createStaffInvitation(input: {
     "",
   );
   const expiresAt = new Date(input.now.getTime() + 7 * 24 * 60 * 60_000);
-  const database = getDatabase();
   await database.batch([
     database.insert(organizationStaffInvitations).values({
       id,
@@ -3107,6 +3199,7 @@ export async function createStaffInvitation(input: {
     id,
     entity: "staff-invitation",
     status: delivery.sent ? "sent" : "invite-created",
+    privateClaimLink: inviteUrl,
   };
 }
 
@@ -3242,18 +3335,7 @@ export async function claimStaffInvitation(input: {
         organizationId: invitation.organizationId,
         personId: input.actor.personId,
         role: membershipRole,
-        scopes:
-          membershipRole === "coach"
-            ? ["sessions:read", "sessions:write", "members:read"]
-            : membershipRole === "accountant"
-              ? ["reports:read", "payments:read"]
-              : [
-                  "sessions:read",
-                  "sessions:write",
-                  "members:read",
-                  "members:write",
-                  "reports:read",
-                ],
+        scopes: scopesForOrganizationStaffRole(staffRole),
         active: true,
       })
       .onConflictDoUpdate({
@@ -3444,18 +3526,45 @@ export async function updateStaffProfile(input: {
       "This team member is not connected to the organization.",
     );
   }
-  const scopes =
-    input.role === "coach"
-      ? ["sessions:read", "sessions:write", "members:read"]
-      : input.role === "accountant"
-        ? ["reports:read", "payments:read"]
-        : [
-            "sessions:read",
-            "sessions:write",
-            "members:read",
-            "members:write",
-            "reports:read",
-          ];
+  const actorProfile = await database.query.organizationStaffProfiles.findFirst({
+    where: and(
+      eq(organizationStaffProfiles.organizationId, organizationId),
+      eq(organizationStaffProfiles.personId, input.actor.personId),
+      eq(organizationStaffProfiles.active, true),
+    ),
+    columns: { staffRole: true },
+  });
+  const actorIsDirector =
+    input.actor.roles.includes("owner") || actorProfile?.staffRole === "director";
+  const actorCanManageTeam =
+    actorIsDirector ||
+    input.actor.roles.includes("manager") ||
+    actorProfile?.staffRole === "manager";
+  if (!actorCanManageTeam) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only Directors and Managers can update team access.",
+    );
+  }
+  if (current.staffRole === "director" && !actorIsDirector) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only a Director can update another Director's access.",
+    );
+  }
+  if (input.role === "director" && current.staffRole !== "director") {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Director access is ownership-controlled and cannot be created from team management.",
+    );
+  }
+  if (input.role === "director" && !actorIsDirector) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only a Director can update Director access.",
+    );
+  }
+  const scopes = scopesForOrganizationStaffRole(input.role);
   const membershipRole = input.role === "director" ? "manager" : input.role;
   const values = {
     staffRole: input.role,

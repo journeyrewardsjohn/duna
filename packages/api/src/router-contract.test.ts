@@ -114,12 +114,12 @@ describe("tRPC contract surface", () => {
     });
   });
 
-  it("limits event media upload authorization to event-writing staff", async () => {
+  it("keeps coaches read-only for organization event media", async () => {
     const coach = createCaller(
       createApiContext({ actor: createDemoActor(["coach"]) }),
     );
-    await expect(coach.operator.eventMediaUploadContext()).resolves.toEqual({
-      organizationId: expect.any(String),
+    await expect(coach.operator.eventMediaUploadContext()).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
 
     const accountant = createCaller(
@@ -151,7 +151,7 @@ describe("tRPC contract surface", () => {
 
   it("keeps calendar schedule changes behind sessions-write access", async () => {
     const caller = createCaller(
-      createApiContext({ actor: createDemoActor(["front-desk"]) }),
+      createApiContext({ actor: createDemoActor(["coach"]) }),
     );
 
     await expect(

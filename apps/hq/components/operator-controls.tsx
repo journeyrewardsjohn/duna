@@ -527,23 +527,29 @@ function TeamMemberComposer({
   readonly workspace: OperatorWorkspace;
 }) {
   const [deliveryMode, setDeliveryMode] = useState<"send" | "link-only">(
-    "send",
+    "link-only",
   );
   const [copiedInvitationId, setCopiedInvitationId] = useState<string>();
   const [state, action, pending] = useActionState(
     createStaffInvitationAction,
     initialOperatorActionState,
   );
+  const copyPrivateLink = () => {
+    if (!state.privateClaimLink) return;
+    void navigator.clipboard
+      .writeText(state.privateClaimLink)
+      .then(() => setCopiedInvitationId("new-link"));
+  };
   return (
     <div className="operator-controls-grid operator-people-controls">
       <section className="hq-card operator-control-card">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Team · invite</span>
-            <h2>Invite a coach or operator.</h2>
+            <h2>Share secure team access.</h2>
             <p>
-              Set the role and worker classification once. They claim their own
-              identity and complete their address, availability, and goals.
+              Create a private claim link first, then send it however you want.
+              Or let Duna deliver it by email or SMS.
             </p>
           </div>
           <UserPlus aria-hidden size={24} />
@@ -558,24 +564,27 @@ function TeamMemberComposer({
               <span>Role</span>
               <select name="role" defaultValue="coach">
                 <option value="coach">Coach</option>
-                <option value="director">Director</option>
                 <option value="manager">Manager</option>
                 <option value="front-desk">Front desk</option>
                 <option value="accountant">Accountant</option>
               </select>
             </label>
-            <label>
-              <span>Email</span>
-              <input name="invitedEmail" type="email" />
-            </label>
-            <label>
-              <span>Mobile · E.164</span>
-              <input
-                name="invitedPhoneE164"
-                inputMode="tel"
-                placeholder="+17045550123"
-              />
-            </label>
+            {deliveryMode === "send" && (
+              <>
+                <label>
+                  <span>Email</span>
+                  <input name="invitedEmail" type="email" />
+                </label>
+                <label>
+                  <span>Mobile · E.164</span>
+                  <input
+                    name="invitedPhoneE164"
+                    inputMode="tel"
+                    placeholder="+17045550123"
+                  />
+                </label>
+              </>
+            )}
             <label>
               <span>Worker classification</span>
               <select
@@ -587,7 +596,7 @@ function TeamMemberComposer({
               </select>
             </label>
             <label>
-              <span>Share access</span>
+              <span>How should they receive it?</span>
               <select
                 name="deliveryMode"
                 value={deliveryMode}
@@ -595,18 +604,30 @@ function TeamMemberComposer({
                   setDeliveryMode(event.target.value as "send" | "link-only")
                 }
               >
-                <option value="send">Send invitation now</option>
-                <option value="link-only">Create private claim link</option>
+                <option value="link-only">Private claim link — recommended</option>
+                <option value="send">Send it from Duna</option>
               </select>
             </label>
             {deliveryMode === "send" && (
-              <label>
-                <span>Send by</span>
-                <select name="preferredChannel" defaultValue="email">
-                  <option value="email">Email · Resend</option>
-                  <option value="sms">SMS · Sent.dm</option>
-                </select>
-              </label>
+              <>
+                <label>
+                  <span>Send by</span>
+                  <select name="preferredChannel" defaultValue="email">
+                    <option value="email">Email · Resend</option>
+                    <option value="sms">SMS · Sent.dm</option>
+                  </select>
+                </label>
+                <p className="operator-form-hint operator-field--wide">
+                  Add an email address or mobile number above to send this
+                  invitation. A private link is also created for your records.
+                </p>
+              </>
+            )}
+            {deliveryMode === "link-only" && (
+              <p className="operator-form-hint operator-field--wide">
+                No email or mobile number needed. The private link is ready to
+                copy as soon as you create it and expires after 7 days.
+              </p>
             )}
           </div>
           <div className="operator-legal-boundary">
@@ -624,11 +645,30 @@ function TeamMemberComposer({
               The recipient will see both before accepting.
             </span>
           </label>
+          {state.privateClaimLink && (
+            <div className="operator-private-link" role="status">
+              <div>
+                <span className="hq-eyebrow">Private claim link</span>
+                <strong>Ready to share</strong>
+                <p>Anyone with this link can claim this specific team role for the next 7 days.</p>
+              </div>
+              <div className="operator-private-link__controls">
+                <input aria-label="Private team invitation link" readOnly value={state.privateClaimLink} />
+                <button
+                  type="button"
+                  className="hq-button hq-button--secondary hq-button--compact"
+                  onClick={copyPrivateLink}
+                >
+                  {copiedInvitationId === "new-link" ? "Copied" : "Copy link"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="operator-form-footer">
             <ActionNotice state={state} />
             <SubmitButton pending={pending}>
               {deliveryMode === "link-only"
-                ? "Create claim link"
+                ? "Create private link"
                 : "Send team invitation"}
             </SubmitButton>
           </div>

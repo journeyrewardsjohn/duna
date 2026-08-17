@@ -5396,6 +5396,56 @@ button {
   flex: 0 0 auto;
 }
 
+.operator-form-hint {
+  color: var(--color-bone-muted);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  margin: -0.1rem 0 0;
+}
+
+.operator-private-link {
+  align-items: center;
+  background: linear-gradient(120deg, rgb(var(--accent-rgb) / 12%), rgb(var(--overlay-rgb) / 3%));
+  border: 1px solid rgb(var(--accent-rgb) / 28%);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 1.2fr);
+  padding: 0.85rem;
+}
+
+.operator-private-link strong,
+.operator-private-link p {
+  display: block;
+}
+
+.operator-private-link strong {
+  font-size: 0.8rem;
+  margin-top: 0.12rem;
+}
+
+.operator-private-link p {
+  color: var(--color-bone-muted);
+  font-size: 0.64rem;
+  line-height: 1.4;
+  margin: 0.2rem 0 0;
+}
+
+.operator-private-link__controls {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.operator-private-link__controls input {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .operator-action-notice {
   align-items: flex-start;
   display: flex;
