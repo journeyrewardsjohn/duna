@@ -31029,3 +31029,445 @@ body {
     justify-content: center;
   }
 }
+
+/* Waiver library: the document is the work, so the builder keeps it calm,
+   spacious, and visibly separate from signing configuration. */
+.waiver-library {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.waiver-library > .settings-section__heading {
+  align-items: end;
+  margin-bottom: 0;
+}
+
+.waiver-library > .settings-section__heading h2 {
+  font-size: clamp(2rem, 3vw, 3.25rem);
+  letter-spacing: -0.05em;
+  margin-bottom: 0.45rem;
+}
+
+.waiver-library > .settings-section__heading p {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  max-width: 68ch;
+}
+
+.waiver-library__records {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.waiver-library__record {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 205px;
+  padding: 1.15rem;
+}
+
+.waiver-library__record > header,
+.waiver-library__record > footer {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+  justify-content: space-between;
+}
+
+.waiver-library__record > header > span {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.waiver-library__record > header svg {
+  color: var(--hq-core);
+}
+
+.waiver-library__record strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+}
+
+.waiver-library__record p,
+.waiver-library__record small {
+  color: var(--text-2);
+  font-size: 0.73rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.waiver-library__record footer {
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.waiver-library__record footer button,
+.waiver-library__sections > header button {
+  background: transparent;
+  border: 0;
+  color: var(--hq-core);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.35rem 0;
+}
+
+.waiver-builder {
+  overflow: hidden;
+  padding: 0;
+}
+
+.waiver-builder__header {
+  align-items: flex-start;
+  background: linear-gradient(120deg, var(--hq-tint), transparent 58%);
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: clamp(1.2rem, 2vw, 1.8rem) clamp(1.15rem, 2.4vw, 2.3rem);
+}
+
+.waiver-builder__header > span:first-child {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid color-mix(in srgb, var(--hq-core) 25%, var(--hairline));
+  border-radius: 13px;
+  color: var(--hq-core);
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.waiver-builder__header h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.waiver-builder__header p {
+  color: var(--text-2);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0.35rem 0 0;
+  max-width: 58ch;
+}
+
+.waiver-builder__steps {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.64rem;
+  font-weight: 800;
+  gap: 0.28rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.waiver-builder__steps span {
+  color: var(--text-3);
+}
+
+.waiver-builder__steps .is-current {
+  color: var(--hq-core);
+}
+
+.waiver-builder__identity,
+.waiver-builder__document,
+.waiver-builder__duration,
+.waiver-builder__rules,
+.waiver-builder__sections,
+.waiver-builder > .operator-action-notice {
+  margin-inline: clamp(1.15rem, 2.4vw, 2.3rem);
+}
+
+.waiver-builder__identity {
+  align-items: stretch;
+  margin-top: clamp(1.25rem, 2.6vw, 2rem);
+}
+
+.waiver-builder__identity > label > span,
+.waiver-builder__duration > label > span {
+  color: var(--text-2);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.waiver-builder__import {
+  background: var(--color-canvas-soft);
+  border: 1px dashed color-mix(in srgb, var(--hq-core) 30%, var(--hairline));
+  border-radius: 14px;
+  justify-content: center;
+  padding: 0.7rem 0.8rem;
+}
+
+.waiver-builder__import > span {
+  align-items: center;
+  color: var(--hq-core) !important;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.waiver-builder__import input {
+  background: transparent !important;
+  border: 0 !important;
+  min-height: auto !important;
+  padding: 0.15rem 0 !important;
+}
+
+.waiver-builder__import input::file-selector-button {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  margin-right: 0.55rem;
+  padding: 0.42rem 0.58rem;
+}
+
+.waiver-builder__import small {
+  align-self: auto !important;
+  font-size: 0.67rem !important;
+  line-height: 1.45;
+}
+
+.waiver-builder__document {
+  display: grid;
+  gap: 0.7rem;
+  margin-block: 1.35rem;
+}
+
+.waiver-builder__document > span {
+  align-items: baseline;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.waiver-builder__document strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+}
+
+.waiver-builder__document small {
+  color: var(--text-3);
+  font-size: 0.68rem;
+}
+
+.waiver-builder__document textarea {
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  min-height: 430px;
+  padding: 1.1rem 1.2rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.waiver-builder__document textarea:focus {
+  border-color: var(--hq-core);
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.waiver-builder__duration {
+  margin-bottom: 1.35rem;
+}
+
+.waiver-builder__duration input,
+.waiver-builder__duration select {
+  background: var(--color-canvas-soft) !important;
+  border-color: var(--hairline) !important;
+}
+
+.waiver-builder__rules {
+  border-block: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-block: 1.35rem;
+}
+
+.waiver-builder__rules-heading {
+  grid-column: 1 / -1;
+}
+
+.waiver-builder__rules-heading > span {
+  align-items: center;
+  display: flex;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  gap: 0.45rem;
+  letter-spacing: -0.025em;
+}
+
+.waiver-builder__rules-heading svg {
+  color: var(--hq-core);
+}
+
+.waiver-builder__rules-heading p {
+  color: var(--text-2);
+  font-size: 0.73rem;
+  margin: 0.3rem 0 0;
+}
+
+.waiver-builder__rules > label {
+  align-items: flex-start;
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  color: var(--text-1);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 0.65rem;
+  line-height: 1.45;
+  min-height: 78px;
+  padding: 0.85rem;
+}
+
+.waiver-builder__rules > label.is-selected {
+  background: color-mix(in srgb, var(--hq-tint) 70%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--hq-core) 42%, var(--hairline));
+}
+
+.waiver-builder__rules input {
+  accent-color: var(--hq-core);
+  flex: 0 0 auto;
+  height: 17px;
+  margin: 0.05rem 0 0;
+  width: 17px;
+}
+
+.waiver-builder__sections {
+  display: grid;
+  gap: 0.8rem;
+  padding-block: 1.45rem 1.8rem;
+}
+
+.waiver-builder__sections > header {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.waiver-builder__sections h4 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.waiver-builder__sections p {
+  color: var(--text-2);
+  font-size: 0.73rem;
+  line-height: 1.5;
+  margin: 0.3rem 0 0;
+  max-width: 70ch;
+}
+
+.waiver-library__section {
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(190px, 0.35fr) minmax(0, 1fr);
+  padding: 0.85rem;
+}
+
+.waiver-library__section input,
+.waiver-library__section textarea {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  color: var(--text-1);
+  min-width: 0;
+  padding: 0.7rem;
+}
+
+.waiver-library__section textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.waiver-library__section > label {
+  align-items: center;
+  color: var(--text-2);
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+}
+
+.waiver-library__section > label input {
+  accent-color: var(--hq-core);
+  height: 16px;
+  padding: 0;
+  width: 16px;
+}
+
+.waiver-builder__footer {
+  align-items: center;
+  background: var(--surface-1);
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  padding: 1rem clamp(1.15rem, 2.4vw, 2.3rem);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+@media (max-width: 760px) {
+  .waiver-builder__header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .waiver-builder__steps {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+  }
+
+  .waiver-builder__identity,
+  .waiver-builder__duration,
+  .waiver-builder__rules,
+  .waiver-library__section {
+    grid-template-columns: 1fr;
+  }
+
+  .waiver-builder__document textarea {
+    min-height: 330px;
+  }
+
+  .waiver-library__section > label {
+    grid-column: auto;
+  }
+
+  .waiver-builder__footer {
+    justify-content: stretch;
+  }
+
+  .waiver-builder__footer .hq-button {
+    flex: 1;
+    justify-content: center;
+  }
+}

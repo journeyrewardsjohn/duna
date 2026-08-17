@@ -2,7 +2,15 @@
 
 import type { WaiverWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
-import { Check, CircleAlert, FileText, Plus, ShieldCheck } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  FileText,
+  FileUp,
+  LockKeyhole,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import { createWaiverAction, type OperatorActionState } from "@/app/actions";
 
@@ -204,26 +212,32 @@ export function WaiverLibrary({
       </div>
 
       {creating && (
-        <form action={action} className="hq-card waiver-library__editor">
+        <form
+          action={action}
+          className="hq-card waiver-library__editor waiver-builder"
+        >
           <input
             name="waiverDocumentId"
             type="hidden"
             value={revisionOf ?? ""}
           />
-          <header>
+          <header className="waiver-builder__header">
             <span>
               <FileText aria-hidden size={19} />
             </span>
             <div>
               <h3>
-                {revisionOf
-                  ? "Create a new immutable revision"
-                  : "Build a defensible signing flow"}
+                {revisionOf ? "Publish a new revision" : "Create a waiver"}
               </h3>
               <p>
-                Show the complete text inline, capture a typed legal name, and
-                make selected sections explicit acknowledgements.
+                Import the legal text first, then set the audience and the proof
+                Duna will keep for every signature.
               </p>
+            </div>
+            <div className="waiver-builder__steps" aria-label="Builder steps">
+              <span className="is-current">1. Document</span>
+              <span>2. Signing rules</span>
+              <span>3. Safeguards</span>
             </div>
           </header>
           <input name="sourceFilename" type="hidden" value={sourceFilename} />
@@ -249,7 +263,7 @@ export function WaiverLibrary({
             type="hidden"
             value={appliesToBookings ? "true" : "false"}
           />
-          <div className="event-form-grid event-form-grid--two">
+          <div className="event-form-grid event-form-grid--two waiver-builder__identity">
             <label>
               <span>Library name</span>
               <input
@@ -260,8 +274,10 @@ export function WaiverLibrary({
                 value={title}
               />
             </label>
-            <label>
-              <span>Import source</span>
+            <label className="waiver-builder__import">
+              <span>
+                <FileUp aria-hidden size={16} /> Import a document
+              </span>
               <input
                 accept=".md,.markdown,.txt,.pdf,.docx"
                 onChange={(event) =>
@@ -270,8 +286,8 @@ export function WaiverLibrary({
                 type="file"
               />
               <small className="operator-field-helper">
-                PDF, DOCX, Markdown, and text are extracted into a reviewable
-                draft. AI proposes key sections but never rewrites legal text.
+                PDF, DOCX, Markdown, or text. Duna extracts the source into a
+                reviewable draft and proposes key sections for your review.
               </small>
             </label>
           </div>
@@ -290,8 +306,11 @@ export function WaiverLibrary({
               {importMessage}
             </p>
           )}
-          <label>
-            <span>Full waiver text (Markdown)</span>
+          <label className="waiver-builder__document">
+            <span>
+              <strong>Full waiver text</strong>
+              <small>Markdown supported · this exact text is versioned</small>
+            </span>
             <textarea
               name="markdown"
               onChange={(event) => setMarkdown(event.target.value)}
@@ -301,7 +320,7 @@ export function WaiverLibrary({
               value={markdown}
             />
           </label>
-          <div className="event-form-grid event-form-grid--two">
+          <div className="event-form-grid event-form-grid--two waiver-builder__duration">
             <label>
               <span>Signature validity</span>
               <input
@@ -335,8 +354,16 @@ export function WaiverLibrary({
               </select>
             </label>
           </div>
-          <div className="waiver-library__toggles">
-            <label>
+          <div className="waiver-library__toggles waiver-builder__rules">
+            <div className="waiver-builder__rules-heading">
+              <span>
+                <LockKeyhole aria-hidden size={17} /> Signing safeguards
+              </span>
+              <p>
+                Choose how Duna proves consent and when this release is needed.
+              </p>
+            </div>
+            <label className={requiresSignature ? "is-selected" : undefined}>
               <input
                 checked={requiresSignature}
                 onChange={(event) => setRequiresSignature(event.target.checked)}
@@ -344,7 +371,9 @@ export function WaiverLibrary({
               />
               Require a checkbox plus typed full legal name as the signature
             </label>
-            <label>
+            <label
+              className={requiresParentForMinors ? "is-selected" : undefined}
+            >
               <input
                 checked={requiresParentForMinors}
                 onChange={(event) =>
@@ -355,7 +384,7 @@ export function WaiverLibrary({
               Require a verified parent or guardian to sign for every player
               under 18
             </label>
-            <label>
+            <label className={appliesToMembers ? "is-selected" : undefined}>
               <input
                 checked={appliesToMembers}
                 onChange={(event) => setAppliesToMembers(event.target.checked)}
@@ -363,7 +392,7 @@ export function WaiverLibrary({
               />
               Require for all club members
             </label>
-            <label>
+            <label className={appliesToBookings ? "is-selected" : undefined}>
               <input
                 checked={appliesToBookings}
                 onChange={(event) => setAppliesToBookings(event.target.checked)}
@@ -372,13 +401,13 @@ export function WaiverLibrary({
               Require for anyone booking or registering
             </label>
           </div>
-          <div className="waiver-library__sections">
+          <div className="waiver-library__sections waiver-builder__sections">
             <header>
               <div>
-                <h4>Key-section acknowledgements</h4>
+                <h4>Highlight key sections</h4>
                 <p>
-                  Use this for assumption of risk, release, indemnity,
-                  arbitration, or a class-action waiver.
+                  Add the provisions that deserve a separate affirmative tap,
+                  such as release, indemnity, arbitration, or class action.
                 </p>
               </div>
               <button
@@ -467,7 +496,7 @@ export function WaiverLibrary({
               {state.message}
             </p>
           )}
-          <footer>
+          <footer className="waiver-builder__footer">
             <button
               className="hq-button hq-button--secondary"
               onClick={() => setCreating(false)}

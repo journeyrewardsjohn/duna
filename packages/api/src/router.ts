@@ -6908,7 +6908,11 @@ const operatorRouter = router({
     ),
   waiverWorkspace: organizationProcedure("sessions:read")
     .output(waiverWorkspaceSchema)
-    .query(({ ctx }) => loadWaiverWorkspace(ctx.actor!.organizationId!)),
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? { documents: [] }
+        : loadWaiverWorkspace(ctx.actor!.organizationId!),
+    ),
   createWaiver: organizationProcedure("sessions:write")
     .use(
       rateLimitMiddleware({
