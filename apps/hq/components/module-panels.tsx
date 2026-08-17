@@ -31,6 +31,7 @@ import type { OperatorModule } from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { EventHistoryWorkspace } from "./event-history-workspace";
 import { PeopleWorkspace } from "./people-workspace";
+import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 import { VenueMatchOperations } from "./venue-match-operations";
@@ -794,146 +795,7 @@ function VenuePortfolioPanel({
 }
 
 function TeamPanel({ workspace }: { readonly workspace: OperatorWorkspace }) {
-  return (
-    <div className="people-workspace">
-      <section className="people-summary-strip">
-        {[
-          {
-            label: "Active team",
-            count: workspace.staff.filter((person) => person.active).length,
-          },
-          {
-            label: "Coaches",
-            count: workspace.staff.filter((person) => person.role === "coach")
-              .length,
-          },
-          {
-            label: "Upcoming sessions",
-            count: workspace.staff.reduce(
-              (sum, person) => sum + person.upcomingSessions,
-              0,
-            ),
-          },
-          {
-            label: "Pending invites",
-            count: workspace.staffInvitations.filter(
-              (invitation) => invitation.status === "pending",
-            ).length,
-          },
-        ].map((group) => (
-          <article className="hq-card" key={group.label}>
-            <span className="hq-eyebrow">{group.label}</span>
-            <Numeric>{group.count}</Numeric>
-            <small>connected organization record</small>
-          </article>
-        ))}
-      </section>
-      <section className="hq-card connected-table">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Team performance</span>
-            <h2>{workspace.staff.length} team members</h2>
-            <p>
-              Availability and personal details stay with each person. Role,
-              worker classification, and compensation policy stay controlled by
-              the organization.
-            </p>
-          </div>
-        </header>
-        <div className="team-member-grid">
-          {workspace.staff.map((person) => (
-            <article key={person.id}>
-              <header>
-                <span className="avatar">
-                  {person.avatarUrl ? (
-                    <img alt="" src={person.avatarUrl} />
-                  ) : (
-                    person.displayName
-                      .split(/\s+/)
-                      .slice(0, 2)
-                      .map((part) => part[0])
-                      .join("")
-                      .toUpperCase()
-                  )}
-                </span>
-                <span>
-                  <strong>{person.displayName}</strong>
-                  <small>
-                    {person.role.replaceAll("-", " ")} ·{" "}
-                    {person.workerClassification.replaceAll("-", " ")}
-                  </small>
-                </span>
-                <Badge tone={person.active ? "positive" : "neutral"}>
-                  {person.active ? "active" : "inactive"}
-                </Badge>
-              </header>
-              <dl>
-                <div>
-                  <dt>Sessions · 30d</dt>
-                  <dd>{person.sessionsRun30d}</dd>
-                </div>
-                <div>
-                  <dt>Upcoming</dt>
-                  <dd>{person.upcomingSessions}</dd>
-                </div>
-                <div>
-                  <dt>Compensation</dt>
-                  <dd>
-                    {person.compensationModel === "not-set"
-                      ? "Not set"
-                      : person.compensationModel.replaceAll("-", " ")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Goal</dt>
-                  <dd>
-                    {person.incomeGoalMinor !== undefined
-                      ? `${formatMoney(
-                          person.incomeGoalMinor,
-                          person.currency,
-                        )} / ${person.incomeGoalPeriod ?? "period"}`
-                      : "Not set"}
-                  </dd>
-                </div>
-              </dl>
-              <footer>
-                <Badge tone={person.addressComplete ? "positive" : "warning"}>
-                  {person.addressComplete
-                    ? "profile complete"
-                    : "address needed"}
-                </Badge>
-                <small>
-                  Payroll is coming soon. Compensation tracking begins with
-                  posted, reviewable organization records.
-                </small>
-                <Link
-                  className="hq-button hq-button--secondary"
-                  href={`/team/${person.personId}`}
-                >
-                  Manage profile <ArrowRight aria-hidden size={15} />
-                </Link>
-              </footer>
-            </article>
-          ))}
-          {workspace.staff.length === 0 && (
-            <div className="hq-empty">
-              <strong>Build your first team.</strong>
-              <span>
-                Invite a coach or operator. They will complete their own
-                address, availability, and goals after accepting.
-              </span>
-              <Link
-                className="hq-button hq-button--primary"
-                href="/team/invite"
-              >
-                Invite the first team member
-              </Link>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+  return <TeamWorkspace workspace={workspace} />;
 }
 
 function PaymentsPanel({

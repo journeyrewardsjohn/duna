@@ -3340,6 +3340,10 @@ export async function updateStaffProfile(input: {
     readonly startsAt: string;
     readonly endsAt: string;
   }[];
+  readonly blackoutDates: readonly {
+    readonly startsOn: string;
+    readonly endsOn?: string;
+  }[];
   readonly incomeGoalMinor?: number;
   readonly incomeGoalPeriod?: "week" | "month" | "quarter" | "year";
   readonly active: boolean;
@@ -3371,6 +3375,20 @@ export async function updateStaffProfile(input: {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
       "Add the hourly rate for this compensation model.",
+    );
+  }
+  if (
+    input.blackoutDates.some(
+      (block) =>
+        !/^\d{4}-\d{2}-\d{2}$/.test(block.startsOn) ||
+        (block.endsOn !== undefined &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(block.endsOn) ||
+            block.endsOn < block.startsOn)),
+    )
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Every blackout needs a valid date or date range.",
     );
   }
   if (
@@ -3456,7 +3474,14 @@ export async function updateStaffProfile(input: {
     googlePlaceId: input.googlePlaceId?.trim() || null,
     latitude: input.latitude,
     longitude: input.longitude,
-    availability: input.availability,
+    availability: [
+      ...input.availability,
+      ...input.blackoutDates.map((block) => ({
+        kind: "blackout",
+        startsOn: block.startsOn,
+        ...(block.endsOn ? { endsOn: block.endsOn } : {}),
+      })),
+    ],
     incomeGoalMinor: input.incomeGoalMinor,
     incomeGoalPeriod: input.incomeGoalPeriod,
     active: input.active,
