@@ -535,6 +535,7 @@ import {
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
   refreshAvpLeague,
+  refreshAvpTournaments,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
@@ -11424,6 +11425,7 @@ const adminRouter = router({
           "fivb-12ndr",
           "volleyball-world",
           "avp-league",
+          "avp-tournaments",
         ]),
         enabled: z.boolean(),
         engine: z.enum(["auto", "native", "firecrawl"]),
@@ -11490,6 +11492,7 @@ const adminRouter = router({
           "fivb-12ndr",
           "volleyball-world",
           "avp-league",
+          "avp-tournaments",
         ]),
       }),
     )
@@ -11799,6 +11802,7 @@ const adminRouter = router({
           "volleyball-life",
           "fivb-12ndr",
           "avp-league",
+          "avp-tournaments",
         ]),
         externalId: z.string().trim().min(1).max(400),
       }),
@@ -11908,6 +11912,32 @@ const adminRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         return await refreshAvpLeague({
+          season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshAvpTournaments: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-avp-tournaments-refresh",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z
+        .object({
+          season: z.number().int().min(2000).max(2100).optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshAvpTournaments({
           season: input?.season,
           actor: ctx.actor!,
           now: ctx.now,

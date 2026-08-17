@@ -81,7 +81,7 @@ export async function generateMetadata({
     (proEvent
       ? professionalOgImageUrl({
           title: proEvent.name,
-          eyebrow: `${proEvent.source === "avp" ? "AVP League" : "Beach Pro Tour"} · ${proEvent.genderCategory}`,
+          eyebrow: `${proEvent.source === "avp" ? "AVP" : "Beach Pro Tour"} · ${proEvent.genderCategory}`,
           detail: [proEvent.category, proEvent.location, proEvent.startsOn]
             .filter(Boolean)
             .join(" · "),

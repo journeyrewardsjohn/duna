@@ -8,7 +8,10 @@ export type ProfessionalStatusFilter =
 export function professionalEventTour(
   event: ProfessionalEvent,
 ): Exclude<ProfessionalTourFilter, "all"> {
-  return event.sourceSlug === "avp-league" ? "avp" : "fivb";
+  return event.sourceSlug === "avp-league" ||
+    event.sourceSlug === "avp-tournaments"
+    ? "avp"
+    : "fivb";
 }
 
 export function professionalEventDivisionLabel(

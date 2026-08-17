@@ -1,6 +1,7 @@
 import {
   dispatchPlayerFollowNotifications,
   refreshAvpLeague,
+  refreshAvpTournaments,
   refreshActiveFivbEvents,
   refreshActiveVolleyballWorldEvents,
   refreshEliteVolleyballWorldHistory,
@@ -50,6 +51,9 @@ export async function GET(request: Request) {
     }
     if (mode === "avp") {
       return NextResponse.json(await refreshAvpLeague({}));
+    }
+    if (mode === "avp-tournaments") {
+      return NextResponse.json(await refreshAvpTournaments({}));
     }
     if (mode === "research") {
       return NextResponse.json(

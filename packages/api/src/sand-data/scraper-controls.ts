@@ -44,6 +44,21 @@ const defaults: Readonly<Record<ManagedScraperSource, ScraperControl>> = {
     firecrawlCacheTtlSeconds: 3_600,
     firecrawlChangeTracking: true,
   },
+  "avp-tournaments": {
+    source: "avp-tournaments",
+    enabled: true,
+    // AVP exposes this feed as JSON with permissive CORS; rendering the
+    // bracket page adds no data and needlessly spends scraping capacity.
+    engine: "native",
+    minRequestIntervalMs: 750,
+    maxRequestsPerHour: 120,
+    activeEventRefreshMinutes: 5,
+    completedEventGraceHours: 48,
+    liveTransportEnabled: true,
+    liveRefreshSeconds: 60,
+    liveRestFallbackSeconds: 15,
+    firecrawlChangeTracking: false,
+  },
   bvbinfo: {
     source: "bvbinfo",
     enabled: true,

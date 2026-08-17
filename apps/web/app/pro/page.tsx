@@ -25,7 +25,8 @@ import {
 const proTourSocialImage = professionalOgImageUrl({
   title: "The world’s game, in one live view.",
   eyebrow: "Professional beach volleyball",
-  detail: "Beach Pro Tour · AVP League · live scores · Sand Rating",
+  detail:
+    "Beach Pro Tour · AVP Tournaments + League · live scores · Sand Rating",
 });
 
 export const metadata: Metadata = {
@@ -345,9 +346,9 @@ export default async function ProTourPage({
           </Badge>
           <h1>The world&apos;s game, in one live view.</h1>
           <p>
-            FIVB Elite, Challenger, and Futures events plus the AVP League. Duna
-            connects every event to player identities, match history, and Sand
-            Rating predictions.
+            FIVB Elite, Challenger, and Futures events plus AVP tournaments and
+            the AVP League. Duna connects every event to player identities,
+            match history, and Sand Rating predictions.
           </p>
         </div>
         <div className="pro-tour-hero__stat">
