@@ -1,19 +1,18 @@
-import type { PredictionMarketView, PublicProCoverage } from "@duna/api";
+import type { PredictionMarketView } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
-import { Activity, Globe2, Radio } from "lucide-react";
+import { Globe2, Radio } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import type { Metadata } from "next";
-import { ProScheduleCalendar } from "@/components/pro-schedule-calendar";
-import { ProEventCard } from "@/components/pro-event-card";
 import {
   ProPlayerDiscovery,
   type ProDiscoveryPlayer,
 } from "@/components/pro-player-discovery";
-import { ProfessionalMatchCard } from "@/components/professional-match-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { TourBrandMark, type TourBrand } from "@/components/tour-brand-mark";
+import {
+  ProTourBrowser,
+  type ProTourFilter,
+} from "@/components/pro-tour-browser";
 import { getServerCaller } from "@/lib/api";
 import { instantIsoDay, parseIsoDay } from "@/lib/date-filter";
 import {
@@ -61,98 +60,6 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-type ProEvent = PublicProCoverage["events"][number];
-type TourFilter = "all" | "elite" | "challenger" | "futures" | "avp";
-
-const tourFilters: readonly {
-  readonly value: TourFilter;
-  readonly label: string;
-  readonly brand?: TourBrand;
-}[] = [
-  { value: "all", label: "All tours" },
-  { value: "elite", label: "Elite", brand: "fivb" },
-  { value: "challenger", label: "Challenger", brand: "fivb" },
-  { value: "futures", label: "Futures", brand: "fivb" },
-  { value: "avp", label: "AVP", brand: "avp" },
-];
-
-function isoDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function currentWeek(now = new Date()): {
-  readonly start: string;
-  readonly end: string;
-} {
-  const start = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const mondayOffset = (start.getUTCDay() + 6) % 7;
-  start.setUTCDate(start.getUTCDate() - mondayOffset);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  return { start: isoDay(start), end: isoDay(end) };
-}
-
-function overlaps(
-  event: ProEvent,
-  window: { readonly start: string; readonly end: string },
-): boolean {
-  const starts = event.startsOn ?? event.endsOn;
-  const ends = event.endsOn ?? event.startsOn;
-  return Boolean(
-    starts && ends && starts <= window.end && ends >= window.start,
-  );
-}
-
-function eventDays(event: ProEvent): readonly string[] {
-  const start = event.startsOn ?? event.endsOn;
-  const end = event.endsOn ?? event.startsOn;
-  if (!start || !end) return [];
-  const cursor = new Date(`${start}T12:00:00Z`);
-  const last = new Date(`${end}T12:00:00Z`);
-  const days: string[] = [];
-  while (cursor <= last && days.length < 32) {
-    days.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return days;
-}
-
-function EventShelf({
-  eyebrow,
-  title,
-  events,
-  live = false,
-}: {
-  readonly eyebrow: string;
-  readonly title: string;
-  readonly events: readonly ProEvent[];
-  readonly live?: boolean;
-}) {
-  if (events.length === 0) return null;
-  return (
-    <section
-      className={
-        live ? "pro-event-section pro-event-section--live" : "pro-event-section"
-      }
-    >
-      <header>
-        <div>
-          <span className="page-eyebrow">{eyebrow}</span>
-          <h2>{title}</h2>
-        </div>
-        <Badge tone={live ? "danger" : "neutral"}>{events.length}</Badge>
-      </header>
-      <div className="pro-event-grid">
-        {events.map((event) => (
-          <ProEventCard event={event} key={event.id} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default async function ProTourPage({
   searchParams,
 }: {
@@ -165,22 +72,16 @@ export default async function ProTourPage({
     searchParams,
     getServerCaller(),
   ]);
-  const selectedTour: TourFilter = tourFilters.some(
-    (filter) => filter.value === tour,
-  )
-    ? (tour as TourFilter)
+  const selectedTour: ProTourFilter = [
+    "all",
+    "elite",
+    "challenger",
+    "futures",
+    "avp",
+  ].includes(tour ?? "")
+    ? (tour as ProTourFilter)
     : "all";
   const selectedDate = parseIsoDay(date);
-  const proHref = (
-    nextTour: TourFilter,
-    nextDate: string | null | undefined = selectedDate,
-  ) => {
-    const params = new URLSearchParams();
-    if (nextTour !== "all") params.set("tour", nextTour);
-    if (nextDate) params.set("date", nextDate);
-    const query = params.toString();
-    return query ? `/pro?${query}` : "/pro";
-  };
   const [coverage, rankings] = await Promise.all([
     caller.public.proCoverage().catch(() => undefined),
     caller.public.worldRankings().catch(() => undefined),
@@ -204,29 +105,8 @@ export default async function ProTourPage({
         : [],
     );
   const proPlayers = [...playersFor("men"), ...playersFor("women")];
-  const tourEvents =
-    coverage?.events.filter(
-      (event) => selectedTour === "all" || event.tour === selectedTour,
-    ) ?? [];
-  const filteredEvents = selectedDate
-    ? tourEvents.filter((event) =>
-        overlaps(event, { start: selectedDate, end: selectedDate }),
-      )
-    : tourEvents;
-  const liveEvents = filteredEvents.filter((event) => event.live);
-  const week = currentWeek();
-  const thisWeekEvents = filteredEvents.filter(
-    (event) =>
-      !event.live && event.status !== "completed" && overlaps(event, week),
-  );
-  const comingEvents = filteredEvents
-    .filter(
-      (event) =>
-        event.status === "upcoming" &&
-        !thisWeekEvents.some((candidate) => candidate.id === event.id),
-    )
-    .slice(0, 18);
-  const filteredMatches =
+  const liveCount = coverage?.events.filter((event) => event.live).length ?? 0;
+  const initialMatches =
     coverage?.matches
       .filter(
         (match) =>
@@ -238,48 +118,12 @@ export default async function ProTourPage({
       .slice(0, 20) ?? [];
   const matchMarkets = await caller.public
     .proMatchPredictionMarkets({
-      matches: filteredMatches.flatMap((match) => {
+      matches: initialMatches.flatMap((match) => {
         const eventSlug = match.canonicalPath?.split("/")[2];
         return eventSlug ? [{ eventSlug, matchId: match.id }] : [];
       }),
     })
     .catch((): Record<string, PredictionMarketView> => ({}));
-  const selectedTourLabel =
-    tourFilters.find((filter) => filter.value === selectedTour)?.label ??
-    "selected tour";
-  const scheduleMarkers = [
-    ...tourEvents.flatMap((event) =>
-      eventDays(event).map((day) => ({
-        date: day,
-        id: `event-${event.id}-${day}`,
-        label: event.name,
-        tone: "event" as const,
-      })),
-    ),
-    ...(coverage?.matches ?? [])
-      .filter((match) => selectedTour === "all" || match.tour === selectedTour)
-      .flatMap((match) => {
-        if (!match.playedAt) return [];
-        const date = instantIsoDay(match.playedAt);
-        if (!date) return [];
-        return [
-          {
-            date,
-            id: `match-${match.id}`,
-            label: match.title,
-            tone: "booking" as const,
-          },
-        ];
-      }),
-  ];
-  const selectedDateLabel = selectedDate
-    ? new Intl.DateTimeFormat("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(new Date(`${selectedDate}T12:00:00Z`))
-    : undefined;
   const featuredPlayers = proPlayers.filter((player) => player.worldRank <= 8);
   const structuredData = {
     "@context": "https://schema.org",
@@ -334,11 +178,11 @@ export default async function ProTourPage({
       />
       <section className="pro-tour-hero" data-zone="athletic">
         <div>
-          <Badge tone={liveEvents.length ? "danger" : "neutral"}>
+          <Badge tone={liveCount ? "danger" : "neutral"}>
             <Radio aria-hidden size={12} />
-            {liveEvents.length ? (
+            {liveCount ? (
               <>
-                <Numeric tier="chip">{liveEvents.length}</Numeric> live now
+                <Numeric tier="chip">{liveCount}</Numeric> live now
               </>
             ) : (
               "Pro tour"
@@ -369,111 +213,14 @@ export default async function ProTourPage({
       </section>
 
       <section className="pro-tour-content">
-        <ProScheduleCalendar
-          markers={scheduleMarkers}
-          selectedDate={selectedDate}
-          selectedTour={selectedTour}
-          trackedEventCount={tourEvents.length}
+        <ProTourBrowser
+          coverage={coverage}
+          initialDate={selectedDate}
+          initialTour={selectedTour}
+          predictionMarkets={matchMarkets}
         />
-        <nav
-          aria-label="Filter professional tours"
-          className="pro-tour-filters"
-        >
-          {tourFilters.map((filter) => (
-            <Link
-              aria-current={selectedTour === filter.value ? "page" : undefined}
-              href={proHref(filter.value)}
-              key={filter.value}
-            >
-              {filter.brand ? (
-                <TourBrandMark brand={filter.brand} compact decorative />
-              ) : (
-                <Globe2 aria-hidden size={15} />
-              )}
-              {filter.label}
-            </Link>
-          ))}
-        </nav>
-
-        {selectedDate ? (
-          <EventShelf
-            eyebrow={selectedTourLabel}
-            events={filteredEvents}
-            live={liveEvents.length > 0}
-            title={`Events on ${selectedDateLabel}`}
-          />
-        ) : (
-          <>
-            <EventShelf
-              eyebrow="Updating frequently"
-              events={liveEvents}
-              live
-              title="Live now"
-            />
-            <EventShelf
-              eyebrow={`${week.start} – ${week.end}`}
-              events={thisWeekEvents}
-              title="Events this week"
-            />
-            <EventShelf
-              eyebrow="On the calendar"
-              events={comingEvents}
-              title="Coming up"
-            />
-          </>
-        )}
-        {filteredEvents.length === 0 && (
-          <p className="profile-empty">
-            {selectedDate
-              ? `No ${selectedTour === "all" ? "professional" : selectedTourLabel} events are scheduled on ${selectedDateLabel}.`
-              : selectedTour === "all"
-                ? "No professional events are currently indexed."
-                : `No ${selectedTourLabel} events are currently indexed.`}
-          </p>
-        )}
 
         {proPlayers.length > 0 && <ProPlayerDiscovery players={proPlayers} />}
-
-        <section className="pro-live-results" id="latest-match-updates">
-          <header>
-            <div>
-              <span className="page-eyebrow">Live reporting</span>
-              <h2>Latest match updates</h2>
-            </div>
-            <Activity aria-hidden size={22} />
-          </header>
-          <div>
-            {filteredMatches.length === 0 ? (
-              <p className="profile-empty">
-                No match updates are available for this tour yet.
-              </p>
-            ) : (
-              filteredMatches.map((match) => (
-                <ProfessionalMatchCard
-                  context={match.title}
-                  href={match.canonicalPath ?? "/pro"}
-                  key={match.id}
-                  playedAt={match.playedAt}
-                  predictionMarket={matchMarkets[match.id]}
-                  roundLabel={match.roundLabel ?? match.title}
-                  sets={match.sets}
-                  source={match.source ?? "fivb"}
-                  status={
-                    match.status ??
-                    (match.winnerSide ? "completed" : "scheduled")
-                  }
-                  teamA={match.teamA}
-                  teamB={match.teamB}
-                  winnerSide={
-                    match.winnerSide === "A" || match.winnerSide === "B"
-                      ? match.winnerSide
-                      : undefined
-                  }
-                />
-              ))
-            )}
-          </div>
-        </section>
 
         <section className="world-ranking-section">
           <header>
@@ -512,7 +259,7 @@ export default async function ProTourPage({
                             </Numeric>
                           </>
                         ) : (
-                          "new"
+                          "No prior snapshot"
                         )}
                       </span>
                     </article>

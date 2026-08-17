@@ -3538,9 +3538,9 @@ body {
 .pro-player-team-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(8.75rem, 0.36fr) minmax(0, 1fr);
+  grid-template-columns: minmax(7.25rem, 0.28fr) minmax(0, 1fr);
   min-width: 0;
-  min-height: 17rem;
+  min-height: 14.25rem;
   overflow: hidden;
   color: var(--text-1);
   border: 1px solid var(--hairline);
@@ -3559,9 +3559,10 @@ body {
 .pro-player-team-card__rank {
   position: relative;
   display: grid;
-  align-content: space-between;
+  align-content: start;
+  gap: 0.35rem;
   min-width: 0;
-  padding: 1rem 0.6rem 0.4rem 1rem;
+  padding: 1rem;
   overflow: hidden;
   border-right: 1px solid var(--hairline);
   background: var(--surface-2);
@@ -3580,10 +3581,17 @@ body {
 
 .pro-player-team-card__rank .duna-numeric {
   position: relative;
-  left: -0.08em;
+  left: -0.06em;
   color: color-mix(in srgb, var(--text-1) 88%, var(--gold));
-  font-size: clamp(7.5rem, 10vw, 10rem);
-  line-height: 0.72;
+  font-size: clamp(4.25rem, 6vw, 6.5rem);
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+}
+
+.pro-player-team-card__rank small {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .pro-player-team-card__identity {
@@ -3591,6 +3599,14 @@ body {
   gap: 1rem;
   min-width: 0;
   padding: 1.1rem;
+}
+
+.pro-player-team-card__label {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .pro-player-team-card__players {
@@ -3649,7 +3665,7 @@ body {
 
 .pro-player-team-card dl {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin: auto 0 0;
   padding: 0.8rem 0;
   border-block: 1px solid var(--hairline);
@@ -4152,22 +4168,21 @@ body {
   }
 
   .pro-player-team-card {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(6.5rem, 0.28fr) minmax(0, 1fr);
   }
 
   .pro-player-team-card__rank {
-    min-height: 7rem;
     padding: 1rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--hairline);
+    border-right: 1px solid var(--hairline);
+    border-bottom: 0;
   }
 
   .pro-player-team-card__rank .duna-numeric {
-    position: absolute;
-    right: -0.04em;
-    bottom: -0.18em;
-    left: auto;
-    font-size: 7.5rem;
+    position: relative;
+    right: auto;
+    bottom: auto;
+    left: -0.06em;
+    font-size: clamp(3.75rem, 18vw, 5.25rem);
   }
 
   .pro-player-team-card__identity {
@@ -4175,7 +4190,7 @@ body {
   }
 
   .pro-player-team-card dl {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.7rem;
   }
 

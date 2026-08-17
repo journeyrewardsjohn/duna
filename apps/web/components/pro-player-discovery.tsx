@@ -46,7 +46,7 @@ export function ProPlayerDiscovery({
   const [gender, setGender] = useState<"men" | "women">("men");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase());
-  const topTeams = useMemo(() => {
+  const rankGroups = useMemo(() => {
     const grouped = new Map<string, ProDiscoveryPlayer[]>();
     for (const player of players
       .filter((candidate) => candidate.gender === gender)
@@ -58,7 +58,7 @@ export function ProPlayerDiscovery({
       const key = `${player.worldRank}:${player.points}`;
       grouped.set(key, [...(grouped.get(key) ?? []), player]);
     }
-    return [...grouped.values()].map((team) => team.slice(0, 2)).slice(0, 8);
+    return [...grouped.values()].map((group) => group.slice(0, 2)).slice(0, 8);
   }, [gender, players]);
   const searchResults = useMemo(() => {
     if (!deferredQuery) return [];
@@ -111,23 +111,24 @@ export function ProPlayerDiscovery({
         </Link>
       </div>
       <div className="pro-player-discovery__grid">
-        {topTeams.map((team) => {
-          const lead = team[0]!;
-          const teamRating = team
-            .map((player) => player.sandRating)
-            .filter((rating): rating is number => rating !== undefined);
+        {rankGroups.map((group) => {
+          const lead = group[0]!;
           return (
             <article
               className="pro-player-team-card"
               key={`${lead.gender}-${lead.worldRank}-${lead.points}`}
             >
               <div className="pro-player-team-card__rank">
-                <span>World rank</span>
+                <span>World</span>
                 <Numeric tier="monument">#{lead.worldRank}</Numeric>
+                <small>Official rank</small>
               </div>
               <div className="pro-player-team-card__identity">
+                <span className="pro-player-team-card__label">
+                  {group.length === 2 ? "Ranked players" : "Ranked player"}
+                </span>
                 <div className="pro-player-team-card__players">
-                  {team.map((player) => (
+                  {group.map((player) => (
                     <Link
                       aria-label={`View ${player.displayName}'s player profile`}
                       className="pro-player-team-card__player"
@@ -157,25 +158,10 @@ export function ProPlayerDiscovery({
                 </div>
                 <dl>
                   <div>
-                    <dt>Tour points</dt>
+                    <dt>Official points</dt>
                     <dd>
                       <Numeric tier="block">
                         {lead.points.toLocaleString("en-US")}
-                      </Numeric>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Team rating</dt>
-                    <dd>
-                      <Numeric tier="block">
-                        {teamRating.length
-                          ? (
-                              teamRating.reduce(
-                                (sum, rating) => sum + rating,
-                                0,
-                              ) / teamRating.length
-                            ).toFixed(2)
-                          : "—"}
                       </Numeric>
                     </dd>
                   </div>
@@ -184,7 +170,7 @@ export function ProPlayerDiscovery({
                   className="pro-player-team-card__open"
                   href={lead.publicPath}
                 >
-                  {team.length === 2 ? "Two player profiles" : "Player profile"}
+                  View player
                   <ArrowRight aria-hidden size={14} />
                 </Link>
               </div>
