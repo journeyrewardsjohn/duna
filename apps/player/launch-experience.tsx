@@ -10,7 +10,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 const launchSeenKey = "duna.launch-experience.v2";
 const playerDurationMs = 5_042;

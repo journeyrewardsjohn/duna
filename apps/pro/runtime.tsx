@@ -24,7 +24,7 @@ import {
   type UploadedProductImage,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   registerMessagingNotifications,
   unregisterMessagingNotifications,
@@ -360,7 +360,7 @@ const runtimeStyles = StyleSheet.create({
     backgroundColor: "rgba(247,200,107,.12)",
     borderRadius: 6,
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     overflow: "hidden",

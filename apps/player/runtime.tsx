@@ -35,7 +35,7 @@ import {
   type UploadedPlayerMedia,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   registerMessagingNotifications,
   unregisterMessagingNotifications,
@@ -808,7 +808,7 @@ const runtimeStyles = StyleSheet.create({
   },
   entryBenefitLabel: {
     color: "#dfe5e4",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.5,
   },
@@ -875,7 +875,7 @@ const runtimeStyles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.3,
     overflow: "hidden",
@@ -884,7 +884,7 @@ const runtimeStyles = StyleSheet.create({
   },
   entryFootnote: {
     color: "rgba(255,255,255,0.55)",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     marginTop: 12,
     textAlign: "center",

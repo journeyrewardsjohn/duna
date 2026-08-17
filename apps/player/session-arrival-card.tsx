@@ -10,7 +10,7 @@ import {
   type LiveActivityPushToken,
 } from "./live-activities";
 import type { DunaApiClient } from "./mobile-api";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 type ArrivalSignal = Awaited<
   ReturnType<DunaApiClient["player"]["publishSessionArrival"]["mutate"]>
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   liveMarkText: { color: "#b5ccd3", fontSize: 18, fontWeight: "900" },
   eyebrow: {
     color: "#b5ccd3",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     height: 9,
     width: 9,
   },
-  body: { color: "#a9b4b8", fontSize: 11, lineHeight: 17, marginTop: 14 },
+  body: { color: "#a9b4b8", fontSize: 12, lineHeight: 17, marginTop: 14 },
   metrics: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,.06)",
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   metric: { alignItems: "center", flex: 1 },
-  metricLabel: { color: "#b5ccd3", fontSize: 10, fontWeight: "900" },
+  metricLabel: { color: "#b5ccd3", fontSize: 12, fontWeight: "900" },
   metricValue: {
     color: "#ffffff",
     fontFamily: "Archivo-Table",
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   },
   metricSmall: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     marginTop: 6,
   },
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   buttonTextStop: { color: "#ffffff" },
   message: {
     color: "#a9b4b8",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 9,
     textAlign: "center",
@@ -557,13 +557,13 @@ const styles = StyleSheet.create({
   },
   compactMarkText: { fontSize: 18, fontWeight: "800" },
   compactEyebrow: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: "500",
     letterSpacing: 1.2,
   },
   compactTitle: { fontSize: 16, fontWeight: "600", marginTop: 2 },
   compactDetail: { fontSize: 14.5, lineHeight: 19, marginTop: 1 },
-  compactAction: { fontSize: 11.5, fontWeight: "700", paddingHorizontal: 4 },
+  compactAction: { fontSize: 12, fontWeight: "700", paddingHorizontal: 4 },
   compactMessage: {
     fontSize: 13,
     lineHeight: 18,

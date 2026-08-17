@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "export": "expo export --platform all --output-dir dist",
-    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts fellix-text.tsx get-paid.tsx index.js live-activities.ts messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts operator-create.tsx pro-calendar-integration.ts runtime.tsx session-arrival-board.tsx session-notes.tsx ticket-scanner.tsx",
+    "lint": "eslint App.tsx DunaProLiveActivity.tsx arrival-location-task.ts satoshi-text.tsx get-paid.tsx index.js live-activities.ts messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts operator-create.tsx pro-calendar-integration.ts runtime.tsx session-arrival-board.tsx session-notes.tsx ticket-scanner.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },

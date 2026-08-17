@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "../fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "../satoshi-text";
 import type { MobileSocialPalette } from "../player-social";
 
 interface PlaceSuggestion {
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   },
   lockedLabel: {
     color: "#2f6b3a",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
     marginTop: 6,
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   resultPressed: { backgroundColor: "#f5f7fa" },
   powered: {
     color: "#8b96a7",
-    fontSize: 10,
+    fontSize: 12,
     paddingHorizontal: 14,
     paddingVertical: 9,
     textAlign: "right",

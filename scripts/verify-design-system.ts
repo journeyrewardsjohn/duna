@@ -49,18 +49,16 @@ const requiredFiles = [
   "packages/ui/src/brand.test.ts",
 ];
 
-const archivoInstanceFiles = [
-  "Archivo-Score.ttf",
-  "Archivo-Monument.ttf",
-  "Archivo-Hero.ttf",
-  "Archivo-Block.ttf",
-  "Archivo-Table.ttf",
-  "Archivo-Chip.ttf",
-  "Archivo-Wordmark.ttf",
+const satoshiFiles = [
+  "Satoshi-Light.ttf",
+  "Satoshi-Regular.ttf",
+  "Satoshi-Medium.ttf",
+  "Satoshi-Bold.ttf",
+  "Satoshi-Black.ttf",
 ] as const;
 
 for (const app of ["player", "pro"] as const) {
-  for (const fontFile of archivoInstanceFiles) {
+  for (const fontFile of satoshiFiles) {
     requiredFiles.push(`apps/${app}/assets/fonts/${fontFile}`);
   }
 }
@@ -205,9 +203,11 @@ for (const [file, content] of [
     violations.push(`${file} must reference the authoritative font guide`);
   }
 }
-if (!fontGuide.includes("Duna ships exactly two brand typefaces")) {
+if (
+  !fontGuide.includes("Duna uses **Satoshi** for every product word and number")
+) {
   violations.push(
-    "docs/design/duna-font-usage-guide.md must preserve the two-family rule",
+    "docs/design/duna-font-usage-guide.md must preserve the Satoshi system",
   );
 }
 if (/Fraunces|Figtree|JetBrains Mono/i.test(fontGuide)) {
@@ -221,16 +221,16 @@ const sharedTypographyCss = readFileSync(
   "utf8",
 );
 for (const contract of [
-  '--font-display: "Fellix", sans-serif',
-  '--font-body: "Fellix", sans-serif',
+  '--font-display: "Satoshi", "Helvetica Neue", Arial, sans-serif',
+  '--font-body: "Satoshi", "Helvetica Neue", Arial, sans-serif',
   "--font-heading: var(--font-display)",
   "--font-ui: var(--font-body)",
   "--font-sans: var(--font-body)",
-  '--font-data: "Archivo Variable", "Archivo", "Fellix", sans-serif',
+  '--font-data: "Satoshi", "Helvetica Neue", Arial, sans-serif',
 ] as const) {
   if (!sharedTypographyCss.includes(contract)) {
     violations.push(
-      `packages/ui/src/styles.css must preserve the two-family contract ${contract}`,
+      `packages/ui/src/styles.css must preserve the Satoshi contract ${contract}`,
     );
   }
 }
@@ -239,14 +239,14 @@ const typographyTokens = readFileSync(
   "utf8",
 );
 for (const contract of [
-  'display: "Fellix"',
-  'body: "Fellix"',
-  'data: "Archivo"',
-  'mono: "Archivo"',
+  'display: "Satoshi"',
+  'body: "Satoshi"',
+  'data: "Satoshi"',
+  'mono: "Satoshi"',
 ] as const) {
   if (!typographyTokens.includes(contract)) {
     violations.push(
-      `packages/ui/src/tokens.ts must preserve the two-family contract ${contract}`,
+      `packages/ui/src/tokens.ts must preserve the Satoshi contract ${contract}`,
     );
   }
 }
@@ -257,9 +257,8 @@ for (const app of ["web", "hq"] as const) {
   };
   for (const dependency of Object.keys(manifest.dependencies ?? {})) {
     if (
-      (dependency.startsWith("@fontsource") ||
-        dependency.startsWith("@expo-google-fonts")) &&
-      dependency !== "@fontsource-variable/archivo"
+      dependency.startsWith("@fontsource") ||
+      dependency.startsWith("@expo-google-fonts")
     ) {
       violations.push(
         `apps/${app}/package.json loads a third product family through ${dependency}`,
@@ -273,11 +272,14 @@ for (const app of ["web", "hq"] as const) {
   for (const match of layoutSource.matchAll(
     /import ["']([^"']*fontsource[^"']*)["']/g,
   )) {
-    if (match[1] !== "@fontsource-variable/archivo") {
-      violations.push(
-        `apps/${app}/app/layout.tsx loads a third product family through ${match[1]}`,
-      );
-    }
+    violations.push(
+      `apps/${app}/app/layout.tsx must load Satoshi through Fontshare, not ${match[1]}`,
+    );
+  }
+  if (!layoutSource.includes("api.fontshare.com/v2/css?f[]=satoshi@1,2")) {
+    violations.push(
+      `apps/${app}/app/layout.tsx must load Satoshi from Fontshare`,
+    );
   }
 }
 for (const contract of ["--signal-text: #52630f", "--signal-text: #c9e265"]) {
@@ -288,20 +290,20 @@ for (const contract of ["--signal-text: #52630f", "--signal-text: #c9e265"]) {
   }
 }
 const numericTierContracts = [
-  [".duna-numeric--score", '"wdth" 64', '"wght" 900'],
-  [".duna-numeric--monument", '"wdth" 122', '"wght" 900'],
-  [".duna-numeric--hero", '"wdth" 108', '"wght" 800'],
-  [".duna-numeric--block", '"wdth" 94', '"wght" 800'],
-  [".duna-numeric--table", '"wdth" 78', '"wght" 700'],
-  [".duna-numeric--chip", '"wdth" 78', '"wght" 700'],
+  [".duna-numeric--score", '"wght" 900'],
+  [".duna-numeric--monument", '"wght" 900'],
+  [".duna-numeric--hero", '"wght" 800'],
+  [".duna-numeric--block", '"wght" 800'],
+  [".duna-numeric--table", '"wght" 700'],
+  [".duna-numeric--chip", '"wght" 700'],
 ] as const;
-for (const [selector, width, weight] of numericTierContracts) {
+for (const [selector, weight] of numericTierContracts) {
   const selectorStart = sharedTypographyCss.indexOf(selector);
   const ruleEnd = sharedTypographyCss.indexOf("}", selectorStart);
   const rule = sharedTypographyCss.slice(selectorStart, ruleEnd);
-  if (selectorStart < 0 || !rule.includes(width) || !rule.includes(weight)) {
+  if (selectorStart < 0 || !rule.includes(weight)) {
     violations.push(
-      `packages/ui/src/styles.css must preserve ${selector} at ${width} / ${weight}`,
+      `packages/ui/src/styles.css must preserve ${selector} at ${weight}`,
     );
   }
 }
@@ -428,7 +430,7 @@ for (const [contract, message] of [
   ],
   [
     ".campaign-operator__metric--hero strong .duna-numeric {",
-    "operator hero values must preserve an explicit Archivo tier",
+    "operator hero values must preserve an explicit Satoshi numeric tier",
   ],
   [
     ".rating-orbit--compact .rating-orbit__content > .duna-numeric {",
@@ -561,12 +563,12 @@ for (const app of ["player", "pro"] as const) {
     );
   }
 
-  const fontLoaderPath = join(root, "apps", app, "fellix-text.tsx");
+  const fontLoaderPath = join(root, "apps", app, "satoshi-text.tsx");
   const fontLoader = readFileSync(fontLoaderPath, "utf8");
-  for (const fontFile of archivoInstanceFiles) {
+  for (const fontFile of satoshiFiles) {
     if (!fontLoader.includes(`./assets/fonts/${fontFile}`)) {
       violations.push(
-        `apps/${app}/fellix-text.tsx must load the local ${fontFile} instance`,
+        `apps/${app}/satoshi-text.tsx must load the local ${fontFile} face`,
       );
     }
     const instancePath = join(root, "apps", app, "assets/fonts", fontFile);
@@ -584,7 +586,7 @@ for (const app of ["player", "pro"] as const) {
   ]) {
     if (fontLoader.includes(forbiddenFont)) {
       violations.push(
-        `apps/${app}/fellix-text.tsx must not load ${forbiddenFont}`,
+        `apps/${app}/satoshi-text.tsx must not load ${forbiddenFont}`,
       );
     }
   }
@@ -595,7 +597,7 @@ for (const app of ["player", "pro"] as const) {
   );
   if (packageManifest.includes("@expo-google-fonts/archivo")) {
     violations.push(
-      `apps/${app}/package.json must use the six bundled Archivo instances`,
+      `apps/${app}/package.json must use the bundled Satoshi faces`,
     );
   }
 }
@@ -644,9 +646,9 @@ for (const file of designSources) {
   }
   if (
     /\.(?:woff2?|ttf|otf)$/i.test(fileLabel) &&
-    !/(?:Fellix|Archivo)/i.test(fileLabel)
+    !/(?:Satoshi|Fellix|Archivo)/i.test(fileLabel)
   ) {
-    violations.push(`${fileLabel} is not an approved Fellix or Archivo asset`);
+    violations.push(`${fileLabel} is not an approved Duna font asset`);
   }
   if (extname(file) === ".css") {
     const lines = readFileSync(file, "utf8").split("\n");
@@ -694,7 +696,7 @@ for (const file of designSources) {
   const source = readFileSync(file, "utf8");
   if (/<Numeric\b[^>]*>\s*[A-Za-z][^<{]*<\/Numeric>/s.test(source)) {
     violations.push(
-      `${fileLabel} wraps a literal word in Numeric; Archivo is numerals only`,
+      `${fileLabel} wraps a literal word in Numeric; numeric treatment is values only`,
     );
   }
   const lines = readFileSync(file, "utf8").split("\n");
@@ -719,7 +721,7 @@ for (const file of designSources) {
 
     if (/fontStretch\s*:/.test(line)) {
       violations.push(
-        `${fileLabel}:${index + 1} uses fontStretch; use a named Archivo tier`,
+        `${fileLabel}:${index + 1} uses fontStretch; use a named Satoshi weight`,
       );
     }
 
@@ -801,5 +803,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: Fellix and Archivo are the only Duna families, six precise Archivo tiers, local app instances, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
+  "Design system verified: Satoshi is the Duna system family, local app faces, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
 );

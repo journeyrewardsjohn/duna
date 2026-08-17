@@ -28,9 +28,9 @@ import {
 } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { createProMessagingOutbox } from "./messaging-outbox";
 import {
   messagingNotificationsEnabled,
@@ -1167,7 +1167,7 @@ function createStyles(palette: ProMessagingPalette) {
     closeButtonText: { color: palette.text, fontSize: 34, lineHeight: 36 },
     eyebrow: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -1213,7 +1213,7 @@ function createStyles(palette: ProMessagingPalette) {
     },
     notificationBody: {
       color: palette.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 2,
     },
@@ -1228,7 +1228,7 @@ function createStyles(palette: ProMessagingPalette) {
     },
     notificationButtonText: {
       color: palette.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     inboxList: { gap: 8, padding: 14, paddingBottom: 34 },
@@ -1270,7 +1270,7 @@ function createStyles(palette: ProMessagingPalette) {
       lineHeight: 17,
       marginTop: 4,
     },
-    timeText: { color: palette.muted, fontSize: 10, marginLeft: 6 },
+    timeText: { color: palette.muted, fontSize: 12, marginLeft: 6 },
     rowMeta: {
       alignItems: "center",
       flexDirection: "row",
@@ -1280,10 +1280,10 @@ function createStyles(palette: ProMessagingPalette) {
     contextLabel: {
       color: palette.accent,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
-    safetyLabel: { color: palette.positive, fontSize: 10, fontWeight: "900" },
+    safetyLabel: { color: palette.positive, fontSize: 12, fontWeight: "900" },
     unreadBadge: {
       alignItems: "center",
       backgroundColor: palette.accent,
@@ -1293,7 +1293,7 @@ function createStyles(palette: ProMessagingPalette) {
       minWidth: 20,
       paddingHorizontal: 5,
     },
-    unreadText: { color: palette.onAccent, fontSize: 10, fontWeight: "900" },
+    unreadText: { color: palette.onAccent, fontSize: 12, fontWeight: "900" },
     offlineBanner: {
       backgroundColor: palette.surfaceAlt,
       borderColor: palette.warning,
@@ -1305,10 +1305,10 @@ function createStyles(palette: ProMessagingPalette) {
       justifyContent: "center",
       paddingHorizontal: 12,
     },
-    offlineText: { color: palette.warning, fontSize: 11, fontWeight: "800" },
+    offlineText: { color: palette.warning, fontSize: 12, fontWeight: "800" },
     errorText: {
       color: palette.danger,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       paddingHorizontal: 20,
       paddingTop: 10,
@@ -1376,7 +1376,7 @@ function createStyles(palette: ProMessagingPalette) {
     },
     threadMarkText: { color: palette.accent, fontSize: 15, fontWeight: "900" },
     threadTitle: { color: palette.text, fontSize: 15, fontWeight: "900" },
-    threadMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    threadMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     safetyBanner: {
       alignItems: "center",
       backgroundColor: palette.surface,
@@ -1388,7 +1388,7 @@ function createStyles(palette: ProMessagingPalette) {
       paddingVertical: 10,
     },
     safetyIcon: { color: palette.positive, fontSize: 13, fontWeight: "900" },
-    safetyText: { color: palette.muted, flex: 1, fontSize: 10, lineHeight: 15 },
+    safetyText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
     messages: {
       flexGrow: 1,
       gap: 14,
@@ -1400,7 +1400,7 @@ function createStyles(palette: ProMessagingPalette) {
     messageWrapMine: { alignSelf: "flex-end" },
     senderName: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginBottom: 4,
       marginLeft: 8,
@@ -1423,10 +1423,10 @@ function createStyles(palette: ProMessagingPalette) {
     messageBody: { color: palette.text, fontSize: 14, lineHeight: 20 },
     messageBodyMine: { color: palette.onAccent },
     messageMeta: { alignItems: "center", flexDirection: "row", gap: 8 },
-    messageTime: { color: palette.muted, fontSize: 10 },
+    messageTime: { color: palette.muted, fontSize: 12 },
     messageTimeMine: { color: palette.onAccent, opacity: 0.72 },
-    screeningText: { color: palette.warning, fontSize: 10, fontWeight: "800" },
-    heldText: { color: palette.danger, fontSize: 10, fontWeight: "800" },
+    screeningText: { color: palette.warning, fontSize: 12, fontWeight: "800" },
+    heldText: { color: palette.danger, fontSize: 12, fontWeight: "800" },
     widget: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -1438,7 +1438,7 @@ function createStyles(palette: ProMessagingPalette) {
     },
     widgetEyebrow: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -1448,7 +1448,7 @@ function createStyles(palette: ProMessagingPalette) {
       fontWeight: "900",
       lineHeight: 18,
     },
-    widgetBody: { color: palette.muted, fontSize: 11, lineHeight: 16 },
+    widgetBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
     widgetAmount: { color: palette.text, fontSize: 24, fontWeight: "900" },
     widgetScore: { color: palette.text, fontSize: 15, fontWeight: "900" },
     composer: {
@@ -1493,7 +1493,7 @@ function createStyles(palette: ProMessagingPalette) {
       borderTopWidth: 1,
       padding: 16,
     },
-    readOnlyText: { color: palette.muted, fontSize: 11, textAlign: "center" },
+    readOnlyText: { color: palette.muted, fontSize: 12, textAlign: "center" },
     threadEmpty: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
@@ -1546,13 +1546,13 @@ function createStyles(palette: ProMessagingPalette) {
     policyTitle: { color: palette.text, fontSize: 13, fontWeight: "900" },
     policyBody: {
       color: palette.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 4,
     },
     fieldLabel: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
       marginTop: 8,
@@ -1584,7 +1584,7 @@ function createStyles(palette: ProMessagingPalette) {
     audienceTitle: { color: palette.text, fontSize: 13, fontWeight: "900" },
     audienceMeta: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
@@ -1611,7 +1611,7 @@ function createStyles(palette: ProMessagingPalette) {
     },
     personMarkText: { color: palette.accent, fontSize: 13, fontWeight: "900" },
     personName: { color: palette.text, fontSize: 12, fontWeight: "900" },
-    personMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    personMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     personCheck: {
       color: palette.positive,
       fontSize: 15,

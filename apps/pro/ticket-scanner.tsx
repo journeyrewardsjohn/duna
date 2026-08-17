@@ -17,7 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import { useProRuntime } from "./runtime";
 
 type ScannerMode = "player-check-in" | "fan-ticket";
@@ -693,7 +693,7 @@ function createStyles(palette: ScannerPalette) {
     closeText: { color: palette.text, fontSize: 25, lineHeight: 28 },
     eyebrow: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -724,7 +724,7 @@ function createStyles(palette: ScannerPalette) {
     modeActive: { borderColor: palette.accent },
     modeText: { color: palette.muted, fontSize: 13, fontWeight: "900" },
     modeTextActive: { color: palette.accent },
-    modeMeta: { color: palette.muted, fontSize: 10, marginTop: 4 },
+    modeMeta: { color: palette.muted, fontSize: 12, marginTop: 4 },
     cameraShell: {
       alignItems: "center",
       backgroundColor: palette.surface,
@@ -789,7 +789,7 @@ function createStyles(palette: ScannerPalette) {
     resultTitle: { color: palette.onAccent, fontSize: 15, fontWeight: "900" },
     resultBody: {
       color: palette.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 2,
     },
@@ -799,7 +799,7 @@ function createStyles(palette: ScannerPalette) {
       borderWidth: 1,
       padding: 9,
     },
-    nextText: { color: palette.onAccent, fontSize: 11, fontWeight: "900" },
+    nextText: { color: palette.onAccent, fontSize: 12, fontWeight: "900" },
     selection: {
       backgroundColor: palette.surface,
       borderColor: palette.accent,
@@ -815,7 +815,7 @@ function createStyles(palette: ScannerPalette) {
     },
     selectionMeta: {
       color: palette.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
     },
     selectionOption: {
@@ -849,7 +849,7 @@ function createStyles(palette: ScannerPalette) {
     },
     sectionLabel: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -889,10 +889,10 @@ function createStyles(palette: ScannerPalette) {
       borderWidth: 1,
       padding: 9,
     },
-    syncText: { color: palette.warning, fontSize: 11, fontWeight: "900" },
+    syncText: { color: palette.warning, fontSize: 12, fontWeight: "900" },
     metrics: { flexDirection: "row", gap: 8 },
     metricValue: { color: palette.text, fontSize: 24, fontWeight: "900" },
-    metricLabel: { color: palette.muted, fontSize: 10, marginTop: 2 },
+    metricLabel: { color: palette.muted, fontSize: 12, marginTop: 2 },
     ledger: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -913,7 +913,7 @@ function createStyles(palette: ScannerPalette) {
     warningText: { color: palette.warning },
     dangerText: { color: palette.danger },
     ledgerRowTitle: { color: palette.text, fontSize: 13, fontWeight: "900" },
-    ledgerRowMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    ledgerRowMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     empty: { color: palette.muted, fontSize: 12, lineHeight: 18, padding: 15 },
   });
 }

@@ -526,6 +526,13 @@
       "when": 1786984206532,
       "tag": "0074_old_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1787010489161,
+      "tag": "0075_grey_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }

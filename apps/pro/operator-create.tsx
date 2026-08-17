@@ -13,9 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { useProRuntime } from "./runtime";
 
 type CreateKind = "session" | "service" | "good" | "plan";
@@ -1051,7 +1051,7 @@ const styles = StyleSheet.create({
   hub: { padding: 20, paddingBottom: 60 },
   hubEyebrow: {
     color: "#3d6672",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
     marginTop: 14,
@@ -1114,7 +1114,7 @@ const styles = StyleSheet.create({
   progressOn: { backgroundColor: "#3d6672" },
   stepEyebrow: {
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     marginTop: 26,
@@ -1182,7 +1182,7 @@ const styles = StyleSheet.create({
   },
   toggleOn: { backgroundColor: "#f2f8f5", borderColor: "#71a48c" },
   toggleTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
-  toggleBody: { color: "#766f61", fontSize: 11, lineHeight: 16, marginTop: 4 },
+  toggleBody: { color: "#766f61", fontSize: 12, lineHeight: 16, marginTop: 4 },
   switchTrack: {
     backgroundColor: "#cfd5dc",
     borderRadius: 14,
@@ -1275,7 +1275,7 @@ const styles = StyleSheet.create({
   reviewCard: { backgroundColor: "#22343b", borderRadius: 24, padding: 20 },
   reviewEyebrow: {
     color: "#e7c37f",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -1302,7 +1302,7 @@ const styles = StyleSheet.create({
   },
   draftPillText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
   },
@@ -1352,7 +1352,7 @@ const styles = StyleSheet.create({
   successIconText: { color: "#2f6b3a", fontSize: 40, fontWeight: "900" },
   successEyebrow: {
     color: "#2f6b3a",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginTop: 24,

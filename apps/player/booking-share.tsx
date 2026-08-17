@@ -5,7 +5,7 @@ import {
   buildBookingShareMessage,
   type ShareableBookingDetails,
 } from "./booking-share-message";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 export { buildBookingShareMessage } from "./booking-share-message";
 export type { ShareableBookingDetails } from "./booking-share-message";
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     color: "#78858a",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
     width: 92,
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   shareText: { color: "#203740", fontSize: 16, fontWeight: "900" },
   status: {
     color: "#2f7445",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginTop: 20,

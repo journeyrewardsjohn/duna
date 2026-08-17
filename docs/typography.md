@@ -1,14 +1,15 @@
 # Duna typography
 
-- Fellix is the only family for words: display headings, body copy, controls,
-  labels, metadata, and native app text.
-- Archivo is the numeral engine for scores, ranks, ratings, points, counts,
-  dates, times, deltas, percentages, seeds, prices, availability, and the Duna
-  wordmark. Use the six tiers in the authoritative font guide.
-- Duna-owned surfaces ship no third brand family and no serif.
-- Product body text must never render below 15px; mobile inputs must remain at
-  least 16px. Run `pnpm verify:readable-type` before shipping type changes.
-
-The Fellix font files in this repository are proprietary licensed assets supplied
-by Journey Rewards Inc. They must not be copied into public source distributions
-or reused outside the licensed Duna product.
+- Satoshi is Duna's core typeface for display headings, body copy, controls,
+  labels, metadata, numeric data, and native app text.
+- Use 300 for editorial display phrases, 400/500 for reading and controls, 700
+  for actions and section headings, and 900 for compact metrics or emphatic
+  moments. Numeric UI uses `font-variant-numeric: tabular-nums` when values
+  update or align.
+- Product text must never render below 12px (0.75rem). Treat 12px as compact
+  metadata only; use at least 14px for controls and form labels and 16px for
+  reading copy and input text. Run `pnpm verify:readable-type` before shipping
+  typography changes.
+- Web and HQ load Satoshi from the official Fontshare API. Player and Pro bundle
+  the official static faces through Expo Font for reliable offline use. Do not
+  redistribute the webfont files outside the Duna build pipeline.

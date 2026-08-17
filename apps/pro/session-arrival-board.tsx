@@ -8,7 +8,7 @@ import {
 import { startDunaProLiveActivity } from "./live-activities";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 type ArrivalBoard = Awaited<
   ReturnType<DunaApiClient["operator"]["sessionArrivalBoard"]["query"]>
@@ -462,12 +462,12 @@ const styles = StyleSheet.create({
   markText: { color: "#b5ccd3", fontSize: 18, fontWeight: "900" },
   eyebrow: {
     color: "#b5ccd3",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
   title: { color: "#ffffff", fontSize: 16, fontWeight: "900", marginTop: 3 },
-  summary: { color: "#a9b4b8", fontSize: 10, marginTop: 3 },
+  summary: { color: "#a9b4b8", fontSize: 12, marginTop: 3 },
   pulse: { backgroundColor: "#77d89b", borderRadius: 5, height: 9, width: 9 },
   list: {
     backgroundColor: "rgba(255,255,255,.05)",
@@ -493,20 +493,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 34,
   },
-  avatarText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  avatarText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   name: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   meta: {
     color: "#a9b4b8",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 3,
     textTransform: "capitalize",
   },
   etaBlock: { alignItems: "flex-end" },
   eta: { fontSize: 12, fontWeight: "900" },
-  etaLabel: { color: "#8da0b2", fontSize: 10, fontWeight: "900", marginTop: 2 },
+  etaLabel: { color: "#8da0b2", fontSize: 12, fontWeight: "900", marginTop: 2 },
   empty: { padding: 16 },
   emptyTitle: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  emptyBody: { color: "#a9b4b8", fontSize: 10, lineHeight: 14, marginTop: 4 },
+  emptyBody: { color: "#a9b4b8", fontSize: 12, lineHeight: 14, marginTop: 4 },
   button: {
     alignItems: "center",
     backgroundColor: "#b5ccd3",
@@ -517,18 +517,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   buttonStop: { backgroundColor: "rgba(255,255,255,.1)" },
-  buttonText: { color: "#141a1e", fontSize: 11, fontWeight: "900" },
+  buttonText: { color: "#141a1e", fontSize: 12, fontWeight: "900" },
   buttonTextStop: { color: "#ffffff" },
   privacy: {
     color: "#8da0b2",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 9,
     textAlign: "center",
   },
   message: {
     color: "#a9b4b8",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 7,
     textAlign: "center",

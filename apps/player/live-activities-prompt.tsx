@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { environmentalColors, resolveDunaTokens } from "@duna/ui/tokens";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   hasLiveActivityOptIn,
   liveActivityHomeMode,
@@ -285,13 +285,13 @@ const styles = StyleSheet.create({
   },
   liveCardBrand: {
     color: liveTokens.gold,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1.1,
   },
   liveCardFooter: {
     color: liveTokens.text2,
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 9,
   },
   liveCardHeader: {
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   },
   liveCardStatus: {
     color: liveTokens.text1,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 0.8,
   },
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   },
   lockScreenCaption: {
     color: liveTokens.text2,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1.3,
     marginTop: 12,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   },
   lockScreenDate: {
     color: liveTokens.text1,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   lockScreenPreview: {

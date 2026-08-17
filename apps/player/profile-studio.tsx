@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import type { DunaApiClient, UploadedPlayerMedia } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 
@@ -891,7 +891,7 @@ const styles = StyleSheet.create({
     width: "48.3%",
   },
   addPhotoIcon: { color: palette.marine, fontSize: 30 },
-  addPhotoMeta: { color: palette.muted, fontSize: 11, marginTop: 4 },
+  addPhotoMeta: { color: palette.muted, fontSize: 12, marginTop: 4 },
   addPhotoText: { color: palette.marine, fontSize: 15, fontWeight: "800" },
   approveArtwork: {
     alignItems: "center",
@@ -973,14 +973,14 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: palette.marine,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
   field: { gap: 7 },
   fieldLabel: {
     color: palette.marine,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -1047,7 +1047,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  photoQuality: { color: palette.aqua, fontSize: 10, fontWeight: "900" },
+  photoQuality: { color: palette.aqua, fontSize: 12, fontWeight: "900" },
   photoQualityBad: { color: palette.coral },
   primary: {
     alignItems: "center",

@@ -65,10 +65,10 @@ import {
 } from "./runtime";
 import { ProLaunchExperience } from "./launch-experience";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-  useFellixFonts,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+  useSatoshiFonts,
+} from "./satoshi-text";
 
 // Metro requires static module references so the full Duna mark ships natively.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -4992,7 +4992,7 @@ function ProApp() {
 }
 
 export default function App() {
-  const [fontsLoaded, fontError] = useFellixFonts();
+  const [fontsLoaded, fontError] = useSatoshiFonts();
   const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
@@ -5033,7 +5033,7 @@ function createStyles(palette: Palette) {
     flex: { flex: 1, minWidth: 0 },
     formError: {
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 12,
     },
@@ -5062,7 +5062,7 @@ function createStyles(palette: Palette) {
     },
     previewBannerText: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
@@ -5070,7 +5070,7 @@ function createStyles(palette: Palette) {
     scorerError: {
       backgroundColor: rgba(colors.dangerRgb, 0.12),
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 11,
       paddingHorizontal: 10,
       paddingVertical: 6,
@@ -5084,7 +5084,7 @@ function createStyles(palette: Palette) {
       marginTop: 18,
       padding: 13,
     },
-    signOutText: { color: colors.danger, fontSize: 10, fontWeight: "800" },
+    signOutText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
     content: { paddingBottom: 116, paddingHorizontal: 18 },
     todayContent: { paddingBottom: 132, paddingHorizontal: 18 },
     venueMatchesSection: { marginTop: 24 },
@@ -5130,13 +5130,13 @@ function createStyles(palette: Palette) {
     },
     venueMatchTime: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
     venueMatchContext: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 6,
     },
@@ -5169,20 +5169,20 @@ function createStyles(palette: Palette) {
     venueMatchAvatarOverlap: { marginLeft: -13 },
     venueMatchAvatarText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     venueMatchTeamName: { color: colors.bone, fontSize: 12, fontWeight: "900" },
     venueMatchTeamMeta: {
       color: colors.muted,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     venueMatchVersus: {
       color: colors.muted,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       position: "absolute",
       right: 2,
@@ -5202,7 +5202,7 @@ function createStyles(palette: Palette) {
     venueMatchActionLive: { backgroundColor: colors.flare },
     venueMatchActionText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     venueMatchesEmpty: {
@@ -5219,7 +5219,7 @@ function createStyles(palette: Palette) {
     },
     venueMatchesEmptyBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 5,
     },
@@ -5250,7 +5250,7 @@ function createStyles(palette: Palette) {
     },
     visionCoachEyebrow: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.05,
     },
@@ -5264,7 +5264,7 @@ function createStyles(palette: Palette) {
     },
     visionCoachBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 5,
     },
@@ -5280,7 +5280,7 @@ function createStyles(palette: Palette) {
     },
     visionCoachActionText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     visionCoachActionArrow: {
@@ -5312,13 +5312,13 @@ function createStyles(palette: Palette) {
     },
     nowCardEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
     nowCardWeather: {
       color: rgba("255,255,255", 0.68),
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     nowCardTitle: {
@@ -5360,7 +5360,7 @@ function createStyles(palette: Palette) {
     },
     nowCardPrimaryText: {
       color: colors.aquaDeep,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     nowCardSecondary: {
@@ -5375,12 +5375,12 @@ function createStyles(palette: Palette) {
     },
     nowCardSecondaryText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     nowCardTrust: {
       color: rgba("255,255,255", 0.5),
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 12,
       marginTop: 11,
     },
@@ -5460,7 +5460,7 @@ function createStyles(palette: Palette) {
     },
     todayJobMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     businessPulse: {
@@ -5491,13 +5491,13 @@ function createStyles(palette: Palette) {
     },
     businessMetricLabel: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       marginTop: 7,
     },
     businessMetricChange: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
@@ -5509,7 +5509,7 @@ function createStyles(palette: Palette) {
     },
     businessMetricEmptyBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
@@ -5530,12 +5530,12 @@ function createStyles(palette: Palette) {
     },
     businessInsightTitle: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     businessInsightBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -5559,12 +5559,12 @@ function createStyles(palette: Palette) {
     todayScheduleTime: { width: 60 },
     todayScheduleTimeMain: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     todayScheduleDuration: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     todayScheduleLine: {
@@ -5581,13 +5581,13 @@ function createStyles(palette: Palette) {
     },
     todayScheduleMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 12,
       marginTop: 3,
     },
     todayScheduleState: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -5600,7 +5600,7 @@ function createStyles(palette: Palette) {
     },
     todayEmptyBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 5,
       textAlign: "center",
     },
@@ -5638,12 +5638,12 @@ function createStyles(palette: Palette) {
     },
     todaySignalTitle: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     todaySignalBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 12,
       marginTop: 4,
     },
@@ -5657,7 +5657,7 @@ function createStyles(palette: Palette) {
     },
     dayRecapEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -5670,7 +5670,7 @@ function createStyles(palette: Palette) {
     },
     dayRecapBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 5,
     },
@@ -5685,7 +5685,7 @@ function createStyles(palette: Palette) {
     },
     dayRecapButtonText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarContent: { paddingBottom: 138, paddingHorizontal: 18 },
@@ -5715,7 +5715,7 @@ function createStyles(palette: Palette) {
     },
     calendarBlockButtonText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarNewButton: {
@@ -5728,7 +5728,7 @@ function createStyles(palette: Palette) {
     },
     calendarNewButtonText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarScanButton: {
@@ -5741,12 +5741,12 @@ function createStyles(palette: Palette) {
     },
     calendarScanButtonText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarTimezone: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       maxWidth: 130,
       textAlign: "right",
     },
@@ -5776,7 +5776,7 @@ function createStyles(palette: Palette) {
     },
     calendarConnectionEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -5788,13 +5788,13 @@ function createStyles(palette: Palette) {
     },
     calendarConnectionBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
     calendarConnectionNotice: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -5810,7 +5810,7 @@ function createStyles(palette: Palette) {
     },
     calendarConnectionButtonText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarDayBleed: {
@@ -5841,7 +5841,7 @@ function createStyles(palette: Palette) {
     },
     calendarDayWeekday: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       textTransform: "uppercase",
     },
@@ -5855,7 +5855,7 @@ function createStyles(palette: Palette) {
     },
     calendarDayMonth: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     calendarDayTextActive: { color: colors.onAccent },
@@ -5878,7 +5878,7 @@ function createStyles(palette: Palette) {
     },
     calendarFilterText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     calendarFilterTextActive: { color: colors.aqua },
@@ -5912,12 +5912,12 @@ function createStyles(palette: Palette) {
     calendarPersonalTime: { width: 58 },
     calendarPersonalTimeMain: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarPersonalTimeEnd: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     calendarPersonalAccent: {
@@ -5933,7 +5933,7 @@ function createStyles(palette: Palette) {
     },
     calendarPersonalMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
@@ -5947,7 +5947,7 @@ function createStyles(palette: Palette) {
     },
     calendarPersonalEmptyText: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarAgendaHeading: {
@@ -5983,7 +5983,7 @@ function createStyles(palette: Palette) {
     },
     calendarEmptyBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 6,
       maxWidth: 310,
@@ -6006,7 +6006,7 @@ function createStyles(palette: Palette) {
     },
     calendarEmptySecondaryText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarEmptyPrimary: {
@@ -6019,7 +6019,7 @@ function createStyles(palette: Palette) {
     },
     calendarEmptyPrimaryText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarAgendaCard: {
@@ -6049,7 +6049,7 @@ function createStyles(palette: Palette) {
     },
     calendarAgendaTimeEnd: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     calendarAgendaAccent: {
@@ -6065,13 +6065,13 @@ function createStyles(palette: Palette) {
     },
     calendarAgendaKind: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
     calendarAgendaWeather: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarAgendaName: {
@@ -6083,7 +6083,7 @@ function createStyles(palette: Palette) {
     },
     calendarAgendaMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -6106,12 +6106,12 @@ function createStyles(palette: Palette) {
     calendarAvatarOverlap: { marginLeft: -7 },
     calendarAvatarText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarAvatarMore: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginLeft: 5,
     },
@@ -6134,7 +6134,7 @@ function createStyles(palette: Palette) {
     },
     calendarNotificationBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -6183,7 +6183,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
       textTransform: "uppercase",
@@ -6206,13 +6206,13 @@ function createStyles(palette: Palette) {
     },
     calendarFeedbackText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       lineHeight: 15,
     },
     calendarFieldLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
       marginBottom: 8,
@@ -6235,7 +6235,7 @@ function createStyles(palette: Palette) {
     },
     calendarChoiceText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarChoiceTextActive: { color: colors.aqua },
@@ -6259,7 +6259,7 @@ function createStyles(palette: Palette) {
     },
     calendarOptionText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarOptionTextActive: { color: colors.onAccent },
@@ -6280,7 +6280,7 @@ function createStyles(palette: Palette) {
       borderRadius: 14,
       borderWidth: 1,
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 10,
       minHeight: 86,
@@ -6289,7 +6289,7 @@ function createStyles(palette: Palette) {
     },
     calendarTimezoneNote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 12,
     },
@@ -6412,7 +6412,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetSummaryLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.7,
       textTransform: "uppercase",
@@ -6447,7 +6447,7 @@ function createStyles(palette: Palette) {
     },
     calendarRosterEmpty: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       padding: 14,
     },
@@ -6470,17 +6470,17 @@ function createStyles(palette: Palette) {
     },
     calendarRosterAvatarText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarRosterName: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarRosterMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 2,
     },
     calendarRosterActions: {
@@ -6498,7 +6498,7 @@ function createStyles(palette: Palette) {
     },
     calendarCheckInButtonText: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarRemoveButton: {
@@ -6510,7 +6510,7 @@ function createStyles(palette: Palette) {
     },
     calendarRemoveButtonText: {
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     calendarPeopleOptions: {
@@ -6537,19 +6537,19 @@ function createStyles(palette: Palette) {
     },
     calendarPersonOptionAvatarText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarPersonOptionName: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 7,
       maxWidth: 94,
     },
     calendarPersonOptionAdd: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       marginTop: 7,
     },
@@ -6573,17 +6573,17 @@ function createStyles(palette: Palette) {
     },
     calendarEquipmentOptionTitle: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarEquipmentOptionMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 5,
     },
     calendarEquipmentOptionAction: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       marginTop: 15,
     },
@@ -6601,12 +6601,12 @@ function createStyles(palette: Palette) {
     calendarConnectedUpdateIcon: { color: colors.aqua, fontSize: 19 },
     calendarConnectedUpdateTitle: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarConnectedUpdateBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -6634,7 +6634,7 @@ function createStyles(palette: Palette) {
     },
     calendarDangerButtonText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarSheetFooter: {
@@ -6658,7 +6658,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetSecondaryText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     calendarSheetPrimary: {
@@ -6671,7 +6671,7 @@ function createStyles(palette: Palette) {
     },
     calendarSheetPrimaryText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
@@ -6680,7 +6680,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
       overflow: "hidden",
@@ -6697,7 +6697,7 @@ function createStyles(palette: Palette) {
     headerShell: { marginBottom: 20 },
     headerContext: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 1,
       marginTop: 5,
     },
@@ -6737,7 +6737,7 @@ function createStyles(palette: Palette) {
       position: "relative",
       width: 38,
     },
-    profileText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
+    profileText: { color: colors.bone, fontSize: 12, fontWeight: "900" },
     dot: {
       backgroundColor: colors.flare,
       borderColor: colors.ink,
@@ -6777,7 +6777,7 @@ function createStyles(palette: Palette) {
     },
     watchBrandText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -6786,12 +6786,12 @@ function createStyles(palette: Palette) {
     watchMetricValue: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     watchMetricLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,
       marginTop: 3,
@@ -6870,13 +6870,13 @@ function createStyles(palette: Palette) {
     },
     organizationSheetRole: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 3,
       textTransform: "capitalize",
     },
     organizationSheetState: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     organizationSheetEmpty: { padding: 16 },
@@ -6906,7 +6906,7 @@ function createStyles(palette: Palette) {
     },
     eyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.1,
     },
@@ -6931,10 +6931,10 @@ function createStyles(palette: Palette) {
     },
     primaryActionText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
-    subhead: { color: colors.muted, fontSize: 10, marginTop: 8 },
+    subhead: { color: colors.muted, fontSize: 12, marginTop: 8 },
     subheadStrong: { color: colors.bone, fontWeight: "700" },
     weatherOperationsCard: {
       alignItems: "center",
@@ -6950,7 +6950,7 @@ function createStyles(palette: Palette) {
     weatherOperationsIcon: { fontSize: 26 },
     weatherOperationsUpdated: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       textAlign: "right",
     },
     createEventCard: {
@@ -6991,7 +6991,7 @@ function createStyles(palette: Palette) {
     },
     createEventPrimaryText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     createEventSecondary: {
@@ -7005,7 +7005,7 @@ function createStyles(palette: Palette) {
     },
     createEventSecondaryText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     metricGrid: {
@@ -7023,7 +7023,7 @@ function createStyles(palette: Palette) {
       padding: 12,
       width: "48.7%",
     },
-    metricLabel: { color: colors.muted, fontSize: 10, letterSpacing: 0.8 },
+    metricLabel: { color: colors.muted, fontSize: 12, letterSpacing: 0.8 },
     metricValue: {
       color: colors.bone,
       fontFamily: "Archivo-Block",
@@ -7034,11 +7034,11 @@ function createStyles(palette: Palette) {
     },
     positiveText: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 5,
     },
-    metaText: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    metaText: { color: colors.muted, fontSize: 12, marginTop: 3 },
     meter: {
       backgroundColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 3,
@@ -7057,7 +7057,7 @@ function createStyles(palette: Palette) {
     },
     pillText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -7075,7 +7075,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 4,
     },
-    linkText: { color: colors.warning, fontSize: 10, fontWeight: "700" },
+    linkText: { color: colors.warning, fontSize: 12, fontWeight: "700" },
     scheduleCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -7093,16 +7093,16 @@ function createStyles(palette: Palette) {
       padding: 9,
     },
     timeBlock: { width: 32 },
-    timeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
-    timeSuffix: { color: colors.muted, fontSize: 10 },
+    timeMain: { color: colors.bone, fontSize: 12, fontWeight: "700" },
+    timeSuffix: { color: colors.muted, fontSize: 12 },
     scheduleWeather: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 4,
     },
     statusLine: { borderRadius: 2, height: 35, width: 3 },
-    rowTitle: { color: colors.bone, fontSize: 10, fontWeight: "700" },
+    rowTitle: { color: colors.bone, fontSize: 12, fontWeight: "700" },
     rosterCount: { alignItems: "flex-end" },
     chevron: { color: colors.muted, fontSize: 19 },
     attentionCard: {
@@ -7163,7 +7163,7 @@ function createStyles(palette: Palette) {
     },
     aiBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 12,
       marginBottom: 9,
       marginTop: 4,
@@ -7180,7 +7180,7 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 12,
     },
     searchIcon: { color: colors.muted, fontSize: 18 },
-    searchInput: { color: colors.bone, flex: 1, fontSize: 10, height: 44 },
+    searchInput: { color: colors.bone, flex: 1, fontSize: 12, height: 44 },
     filterBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     filterRow: {
       flexDirection: "row",
@@ -7200,7 +7200,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.warning,
       borderColor: colors.warning,
     },
-    filterText: { color: colors.muted, fontSize: 10 },
+    filterText: { color: colors.muted, fontSize: 12 },
     filterTextActive: { color: colors.onAccent, fontWeight: "800" },
     peopleSummary: {
       backgroundColor: colors.navy,
@@ -7237,10 +7237,10 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    personAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
+    personAvatarText: { color: colors.bone, fontSize: 12, fontWeight: "900" },
     personRelationshipMeta: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 5,
     },
@@ -7248,7 +7248,7 @@ function createStyles(palette: Palette) {
     ratingNumber: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     peopleModalSafe: { backgroundColor: colors.canvas, flex: 1 },
@@ -7302,7 +7302,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 13,
     },
-    peopleProfileMeta: { color: colors.muted, fontSize: 11, marginTop: 4 },
+    peopleProfileMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     peopleProfilePills: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -7335,19 +7335,19 @@ function createStyles(palette: Palette) {
     },
     peopleProfileCardBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 5,
     },
     peopleProfileReason: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 6,
     },
     peopleProfileActions: { flexDirection: "row", gap: 8, marginTop: 12 },
     peopleProfileActionHint: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 8,
       textAlign: "center",
@@ -7360,7 +7360,7 @@ function createStyles(palette: Palette) {
     },
     peopleProfileEmailText: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     peopleProfilePrimary: {
@@ -7373,7 +7373,7 @@ function createStyles(palette: Palette) {
     },
     peopleProfilePrimaryText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     peopleProfileSecondary: {
@@ -7387,7 +7387,7 @@ function createStyles(palette: Palette) {
     },
     peopleProfileSecondaryText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     peopleInviteContent: { padding: 18, paddingBottom: 42 },
@@ -7439,7 +7439,7 @@ function createStyles(palette: Palette) {
     },
     peopleInviteFeedback: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginBottom: 10,
     },
@@ -7487,7 +7487,7 @@ function createStyles(palette: Palette) {
     scorerExitIconExpanded: { fontSize: 32, lineHeight: 33 },
     scorerExitText: { color: colors.bone, fontSize: 13, fontWeight: "800" },
     scorerExitTextExpanded: { fontSize: 16 },
-    scorerExitMeta: { color: colors.muted, fontSize: 10, marginTop: 1 },
+    scorerExitMeta: { color: colors.muted, fontSize: 12, marginTop: 1 },
     scorerExitMetaExpanded: { fontSize: 12 },
     matchPickerExit: { alignSelf: "flex-start", marginBottom: 12 },
     scorerIdentity: { flex: 1, minWidth: 0 },
@@ -7520,8 +7520,8 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 11,
       paddingVertical: 8,
     },
-    syncIcon: { color: colors.positive, fontSize: 11 },
-    syncText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+    syncIcon: { color: colors.positive, fontSize: 12 },
+    syncText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     scorerFormat: {
       alignItems: "center",
       flexDirection: "row",
@@ -7545,7 +7545,7 @@ function createStyles(palette: Palette) {
     },
     segmentButtonExpanded: { paddingHorizontal: 16, paddingVertical: 8 },
     segmentActive: { backgroundColor: colors.aqua },
-    segmentText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+    segmentText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     segmentTextExpanded: { fontSize: 14 },
     segmentTextActive: { color: colors.onAccent },
     scoreNotice: {
@@ -7592,7 +7592,7 @@ function createStyles(palette: Palette) {
     },
     serveText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       letterSpacing: 0.7,
     },
@@ -7614,7 +7614,7 @@ function createStyles(palette: Palette) {
       height: 48,
       width: 48,
     },
-    scoreAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "900" },
+    scoreAvatarText: { color: colors.bone, fontSize: 12, fontWeight: "900" },
     scoreAvatarTextExpanded: { fontSize: 13 },
     teamName: {
       color: colors.bone,
@@ -7640,7 +7640,7 @@ function createStyles(palette: Palette) {
     },
     tapHint: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       letterSpacing: 0.5,
     },
@@ -7661,7 +7661,7 @@ function createStyles(palette: Palette) {
       width: 34,
       zIndex: 3,
     },
-    versusText: { color: colors.muted, fontSize: 10, fontWeight: "800" },
+    versusText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
     scorerBottom: {
       alignItems: "center",
       borderTopColor: rgba(colors.overlayRgb, 0.07),
@@ -7688,7 +7688,7 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
     },
     syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
-    syncSummaryText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+    syncSummaryText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     sets: { flexDirection: "row", gap: 4 },
     setBox: {
       backgroundColor: rgba(colors.overlayRgb, 0.04),
@@ -7697,7 +7697,7 @@ function createStyles(palette: Palette) {
       paddingVertical: 6,
     },
     setBoxActive: { backgroundColor: rgba(colors.accentRgb, 0.09) },
-    setLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+    setLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     setScore: {
       color: colors.bone,
       fontFamily: "Archivo-Table",
@@ -7722,13 +7722,13 @@ function createStyles(palette: Palette) {
     },
     brandSmall: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
     balanceLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 1,
       marginTop: 34,
     },
@@ -7745,7 +7745,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.overlayRgb, 0.06),
       borderRadius: 16,
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       overflow: "hidden",
       paddingHorizontal: 10,
@@ -7779,7 +7779,7 @@ function createStyles(palette: Palette) {
     transactionAmount: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     boundaryNote: {
@@ -7813,11 +7813,11 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 42,
     },
-    orgAvatarText: { color: colors.onAccent, fontSize: 11, fontWeight: "900" },
+    orgAvatarText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     orgName: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     menuEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1,
       marginBottom: 7,
@@ -7844,7 +7844,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.08),
       borderRadius: 8,
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       height: 30,
       lineHeight: 30,
@@ -7890,7 +7890,7 @@ function createStyles(palette: Palette) {
     },
     moreDetailMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -7926,7 +7926,7 @@ function createStyles(palette: Palette) {
       position: "relative",
     },
     tabIcon: { color: colors.muted, fontSize: 17 },
-    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
     tabActive: { color: colors.warning },
     tabIndicator: {
       backgroundColor: colors.warning,
