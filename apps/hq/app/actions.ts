@@ -1459,6 +1459,13 @@ export async function updateStaffProfileAction(
           endsAt: string;
         }[])
       : [];
+    const blackoutDatesValue = field(formData, "blackoutDates");
+    const blackoutDates = blackoutDatesValue
+      ? (JSON.parse(blackoutDatesValue) as {
+          startsOn: string;
+          endsOn?: string;
+        }[])
+      : [];
     const caller = await getServerCaller();
     const updated = await caller.operator.updateStaffProfile({
       personId: field(formData, "personId"),
@@ -1483,6 +1490,7 @@ export async function updateStaffProfileAction(
       latitude: optionalNumberField(formData, "latitude"),
       longitude: optionalNumberField(formData, "longitude"),
       availability,
+      blackoutDates,
       incomeGoalMinor: optionalMoneyMinor(formData, "incomeGoal"),
       incomeGoalPeriod,
       active: field(formData, "active") === "true",

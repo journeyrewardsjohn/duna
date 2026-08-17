@@ -27,7 +27,7 @@ export default async function TeamMemberPage({
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <TeamMemberEditor person={person} />
+      <TeamMemberEditor person={person} workspace={workspace} />
     </OperatorShell>
   );
 }

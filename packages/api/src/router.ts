@@ -8912,6 +8912,14 @@ const operatorRouter = router({
             }),
           )
           .max(28),
+        blackoutDates: z
+          .array(
+            z.object({
+              startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+              endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+            }),
+          )
+          .max(52),
         incomeGoalMinor: z.number().int().nonnegative().optional(),
         incomeGoalPeriod: z
           .enum(["week", "month", "quarter", "year"])
