@@ -3,6 +3,7 @@ import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
+import * as ScreenOrientation from "expo-screen-orientation";
 import {
   useCallback,
   useEffect,
@@ -59,6 +60,7 @@ import {
 } from "./watch-scoring";
 import {
   edgeVisibility,
+  courtCalibrationChecklist,
   geometryFromGuidance,
   geometrySettings,
   interpolatePoint,
@@ -1849,6 +1851,9 @@ function CaptureExperience({
   >("preview");
   const [session, setSession] = useState<LiveVideoSession>();
   const [recording, setRecording] = useState(false);
+  const [orientationLockState, setOrientationLockState] = useState<
+    "locking" | "ready" | "unavailable"
+  >("locking");
   const [reviewing, setReviewing] = useState(false);
   const [recordingVisibility, setRecordingVisibility] =
     useState<RecordingVisibility>(form.recordingVisibility);
@@ -1896,6 +1901,38 @@ function CaptureExperience({
   elapsedRef.current = elapsedSeconds;
   permissionRef.current = permissionsReady;
   busyRef.current = busy;
+
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      setOrientationLockState("unavailable");
+      return;
+    }
+    let active = true;
+    let previousLock: ScreenOrientation.OrientationLock | undefined;
+    const requestedLock =
+      form.orientation === "landscape"
+        ? ScreenOrientation.OrientationLock.LANDSCAPE
+        : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+    void (async () => {
+      try {
+        previousLock = await ScreenOrientation.getOrientationLockAsync();
+        await ScreenOrientation.lockAsync(requestedLock);
+        if (active) setOrientationLockState("ready");
+      } catch {
+        // The physical-orientation guidance remains useful on an older build
+        // or a platform which declines a runtime orientation lock.
+        if (active) setOrientationLockState("unavailable");
+      }
+    })();
+    return () => {
+      active = false;
+      if (previousLock !== undefined) {
+        void ScreenOrientation.lockAsync(previousLock).catch(() => undefined);
+      } else {
+        void ScreenOrientation.unlockAsync().catch(() => undefined);
+      }
+    };
+  }, [form.orientation]);
 
   const updateSessionState = useCallback((next: VisionSession) => {
     sessionRef.current = next;
@@ -2597,41 +2634,58 @@ function CaptureExperience({
 
   const isActive =
     recording || streamState === "connecting" || streamState === "live";
+  const calibrationChecklist = courtCalibrationChecklist(
+    guidance,
+    form.orientation,
+  );
+  const activeCalibrationStep = calibrationChecklist.find(
+    (step) => step.active,
+  );
   return (
     <View style={styles.captureRoot}>
-      <DunaVideoCaptureView
-        audioEnabled={form.hasAudio}
-        courtLengthMeters={visionSettings.courtLengthMeters}
-        courtWidthMeters={visionSettings.courtWidthMeters}
-        netHeightMeters={visionSettings.netHeightMeters}
-        preferredOrientation={form.orientation}
-        onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
-        onGuidance={(event) => {
-          const next = event.nativeEvent;
-          const detected = geometryFromGuidance(next);
-          guidanceRef.current = next;
-          setGuidance(next);
-          setAutomaticGeometry(detected);
-          if (!manualCalibrationRef.current && !calibrationDraft) {
-            geometryRef.current = detected;
-            setCourtGeometry(detected);
+      {orientationLockState === "locking" ? (
+        <View style={styles.orientationLoading}>
+          <ActivityIndicator color={palette.sand} />
+          <Text style={styles.orientationLoadingText}>
+            Opening {form.orientation} recorder…
+          </Text>
+        </View>
+      ) : (
+        <DunaVideoCaptureView
+          audioEnabled={form.hasAudio}
+          courtLengthMeters={visionSettings.courtLengthMeters}
+          courtWidthMeters={visionSettings.courtWidthMeters}
+          netHeightMeters={visionSettings.netHeightMeters}
+          preferredOrientation={form.orientation}
+          onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
+          onGuidance={(event) => {
+            const next = event.nativeEvent;
+            const detected = geometryFromGuidance(next);
+            guidanceRef.current = next;
+            setGuidance(next);
+            setAutomaticGeometry(detected);
+            if (!manualCalibrationRef.current && !calibrationDraft) {
+              geometryRef.current = detected;
+              setCourtGeometry(detected);
+            }
+          }}
+          onPreview={(event) =>
+            uploadPreview(
+              event.nativeEvent.jpegBase64,
+              event.nativeEvent.capturedAt,
+            )
           }
-        }}
-        onPreview={(event) =>
-          uploadPreview(
-            event.nativeEvent.jpegBase64,
-            event.nativeEvent.capturedAt,
-          )
-        }
-        onStreamState={(event) => {
-          const next = event.nativeEvent.state;
-          setStreamState(next);
-          if (next === "connecting" || next === "live")
-            activeRef.current = true;
-          if (next === "stopped" && mode === "live") activeRef.current = false;
-        }}
-        style={StyleSheet.absoluteFill}
-      />
+          onStreamState={(event) => {
+            const next = event.nativeEvent.state;
+            setStreamState(next);
+            if (next === "connecting" || next === "live")
+              activeRef.current = true;
+            if (next === "stopped" && mode === "live")
+              activeRef.current = false;
+          }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <CourtOverlay geometry={courtGeometry} guidance={guidance} />
       {visionSettings.overlayScoreboard && (matchId || isActive) && (
         <VisionScoreboard
@@ -2701,8 +2755,8 @@ function CaptureExperience({
                       Rotate to {form.orientation}
                     </Text>
                     <Text style={styles.orientationWarningBody}>
-                      You chose {form.orientation} video. Duna will keep
-                      checking before capture begins.
+                      Duna has opened this recorder in {form.orientation}. Turn
+                      your phone sideways before you begin.
                     </Text>
                   </View>
                 </View>
@@ -2724,7 +2778,7 @@ function CaptureExperience({
               </View>
               <Text style={styles.guidanceWarning}>
                 {guidance?.orientationMatches === false
-                  ? `Turn your phone to ${form.orientation}; every control will rotate with the camera.`
+                  ? `Turn your phone to ${form.orientation}; the recorder is already set for it.`
                   : guidance?.courtDetected || guidance?.netDetected
                     ? (guidance?.warnings[0] ??
                       "Court evidence found. Keep the net and sidelines in frame for stronger analysis.")
@@ -2739,6 +2793,48 @@ function CaptureExperience({
                     ? "Ground found, not a court yet. Keep the net near the horizon and include both sidelines."
                     : "Point toward the court and move slowly so Duna can find the sand and net."}
               </Text>
+              <View style={styles.calibrationGuide}>
+                <View style={styles.calibrationGuideHeader}>
+                  <Text style={styles.calibrationGuideEyebrow}>
+                    CALIBRATION GUIDE
+                  </Text>
+                  <Text style={styles.calibrationGuideState}>
+                    {orientationLockState === "locking"
+                      ? "SETTING ORIENTATION"
+                      : orientationLockState === "ready"
+                        ? `${form.orientation.toUpperCase()} LOCKED`
+                        : "FOLLOW PHONE ROTATION"}
+                  </Text>
+                </View>
+                <Text style={styles.calibrationGuidePrompt}>
+                  {activeCalibrationStep
+                    ? activeCalibrationStep.detail
+                    : "Court setup is complete. Lock the guide or refine any landmark below."}
+                </Text>
+                <View style={styles.calibrationGuideSteps}>
+                  {calibrationChecklist.map((step) => (
+                    <View key={step.id} style={styles.calibrationGuideStep}>
+                      <Text
+                        style={[
+                          styles.calibrationGuideMark,
+                          step.complete && styles.calibrationGuideMarkDone,
+                          step.active && styles.calibrationGuideMarkActive,
+                        ]}
+                      >
+                        {step.complete ? "✓" : step.active ? "→" : "○"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.calibrationGuideStepText,
+                          step.active && styles.calibrationGuideStepTextActive,
+                        ]}
+                      >
+                        {step.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
               <View style={styles.guidanceSignals}>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
@@ -5372,6 +5468,17 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
   captureRoot: { backgroundColor: "#050708", flex: 1 },
+  orientationLoading: {
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+    justifyContent: "center",
+  },
+  orientationLoadingText: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   dynamicCourtLine: {
     borderTopWidth: 2,
     height: 2,
@@ -5712,6 +5819,61 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
   },
+  calibrationGuide: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 7,
+    marginTop: 3,
+    padding: 10,
+  },
+  calibrationGuideHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calibrationGuideEyebrow: {
+    color: palette.sand,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+  },
+  calibrationGuideState: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  calibrationGuidePrompt: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  calibrationGuideSteps: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  calibrationGuideStep: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  calibrationGuideMark: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  calibrationGuideMarkDone: { color: palette.positive },
+  calibrationGuideMarkActive: { color: palette.sand },
+  calibrationGuideStepText: {
+    color: "rgba(255,255,255,0.64)",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  calibrationGuideStepTextActive: { color: "#ffffff" },
   guidanceSignals: {
     flexDirection: "row",
     flexWrap: "wrap",

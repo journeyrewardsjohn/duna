@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  courtCalibrationChecklist,
   deriveNetLine,
   edgeVisibility,
   geometryFromGuidance,
@@ -67,5 +68,34 @@ describe("court calibration geometry", () => {
     });
     geometry = moveAntennaAnchor(geometry, 0, { x: 0.2, y: 0.12 });
     expect(geometry.antennaPoints![0]).toEqual({ x: 0.2, y: 0.12 });
+  });
+
+  it("walks the player through each missing calibration signal", () => {
+    const initial = courtCalibrationChecklist(undefined, "landscape");
+    expect(initial.find((step) => step.active)?.id).toBe("ground");
+
+    const framed = courtCalibrationChecklist(
+      {
+        acceptable: false,
+        calibratedAt: "2026-08-17T12:00:00.000Z",
+        confidence: 0.8,
+        courtDetected: true,
+        groundPlaneDetected: true,
+        lidarAvailable: true,
+        netDetected: true,
+        orientationMatches: true,
+        preferredOrientation: "landscape",
+        qualityGrade: "good",
+        qualityScore: 72,
+        visibleCornerCount: 3,
+        warnings: [],
+      },
+      "landscape",
+    );
+
+    expect(framed.find((step) => step.active)?.id).toBe("coverage");
+    expect(framed.find((step) => step.id === "ground")?.detail).toContain(
+      "LiDAR",
+    );
   });
 });
