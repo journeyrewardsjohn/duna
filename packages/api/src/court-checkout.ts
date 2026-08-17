@@ -38,6 +38,7 @@ import type {
   CourtCheckoutStatus,
 } from "./contracts";
 import { stableHash } from "./canonical";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import { assertSubjectAuthority, createCourtHold } from "./commerce";
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
@@ -1127,7 +1128,10 @@ async function sendBookingInviteSms(input: {
                 style: "currency",
                 currency: input.currency,
               }).format(participant.shareAmountMinor / 100),
-              invite_url: `${input.applicationOrigin}/app/booking-invite/${participant.inviteToken}`,
+              invite_url: canonicalPublicWebUrl(
+                `/app/booking-invite/${participant.inviteToken}`,
+                input.applicationOrigin,
+              ),
             },
           });
         } catch {

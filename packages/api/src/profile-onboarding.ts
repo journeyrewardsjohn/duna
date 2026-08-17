@@ -10,6 +10,7 @@ import {
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { stableHash } from "./canonical";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import type { ApiActor } from "./context";
 import {
   GUARDIAN_CONSENT_DISCLOSURE,
@@ -612,7 +613,10 @@ export async function createGuardianInvitation(input: {
   return {
     invitationId: invitation.id,
     minorId: subject.id,
-    inviteUrl: `${input.applicationOrigin.replace(/\/$/, "")}/join/guardian/${token}`,
+    inviteUrl: canonicalPublicWebUrl(
+      `/join/guardian/${token}`,
+      input.applicationOrigin,
+    ),
     expiresAt: expiresAt.toISOString(),
   };
 }
