@@ -3072,10 +3072,14 @@ function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
 function VisionAnalysisCard({
   client,
   playbackSeconds,
+  teamA,
+  teamB,
   videoId,
 }: {
   readonly client: DunaApiClient;
   readonly playbackSeconds: number;
+  readonly teamA: string;
+  readonly teamB: string;
   readonly videoId: string;
 }) {
   const [report, setReport] = useState<VideoAnalysisReport>();
@@ -3160,10 +3164,50 @@ function VisionAnalysisCard({
     }
   };
 
+  const reviewObservation = async (
+    eventId: string,
+    decision: "confirmed" | "rejected",
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const next = await client.player.reviewVideoAnalysisEvent.mutate({
+        videoId,
+        eventId,
+        decision,
+        note:
+          decision === "confirmed"
+            ? "Confirmed in Duna Player video review."
+            : "Rejected in Duna Player video review.",
+        idempotencyKey: idempotencyKey(),
+      });
+      setReport(next);
+      setNotice(
+        decision === "confirmed"
+          ? "Observation confirmed and promoted into the report."
+          : "Observation removed from report totals.",
+      );
+      void Haptics.notificationAsync(
+        decision === "confirmed"
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Warning,
+      );
+    } catch (reason) {
+      setNotice(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const maxHeat = Math.max(
     1,
     ...(report?.heatmap.cells.map((cell) => cell.count) ?? [1]),
   );
+  const sideLabel = (side: "a" | "b" | "unknown") =>
+    side === "a" ? teamA : side === "b" ? teamB : "Unattributed";
+  // A newly built Player can briefly talk to the previous API deployment
+  // while production rolls forward. Keep playback safe during that window.
+  const performance = report?.performance;
 
   return (
     <View style={styles.visionAnalysisCard}>
@@ -3254,13 +3298,151 @@ function VisionAnalysisCard({
             </View>
           </View>
 
+          {performance && (
+            <View style={styles.visionPerformanceCard}>
+              <View style={styles.visionPerformanceHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.visionPerformanceEyebrow}>
+                    VOLLEYBALL INTELLIGENCE
+                  </Text>
+                  <Text style={styles.visionPerformanceTitle}>
+                    Rally and contact profile
+                  </Text>
+                </View>
+                <Text style={styles.visionPerformanceCoverage}>
+                  {performance.attributedContacts}/
+                  {performance.contactObservations} ATTRIBUTED
+                </Text>
+              </View>
+              <Text style={styles.visionPerformanceSummary}>
+                {performance.summary}
+              </Text>
+              {performance.contactObservations > 0 ? (
+                <>
+                  <View style={styles.visionPerformanceMetrics}>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.averageRallySeconds === undefined
+                          ? "—"
+                          : `${performance.averageRallySeconds}s`}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        AVG RALLY
+                      </Text>
+                    </View>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.averageContactsPerRally ?? "—"}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        CONTACTS / RALLY
+                      </Text>
+                    </View>
+                    <View style={styles.visionPerformanceMetric}>
+                      <Text style={styles.visionPerformanceValue}>
+                        {performance.maxAttackSpeedKph ??
+                          performance.maxServeSpeedKph ??
+                          "—"}
+                      </Text>
+                      <Text style={styles.visionPerformanceLabel}>
+                        TOP SPEED KPH
+                      </Text>
+                    </View>
+                  </View>
+                  {performance.sides
+                    .filter((side) => side.side !== "unknown")
+                    .map((side) => (
+                      <View key={side.side} style={styles.visionSideRow}>
+                        <View style={styles.flex}>
+                          <Text numberOfLines={1} style={styles.visionSideName}>
+                            {sideLabel(side.side)}
+                          </Text>
+                          <Text style={styles.visionSideDetail}>
+                            {side.kills}/{side.attacks} kills · {side.aces}/
+                            {side.serves} aces · {side.blocks} blocks ·{" "}
+                            {side.digs} digs
+                          </Text>
+                        </View>
+                        <View style={styles.visionSideEfficiency}>
+                          <Text style={styles.visionSideEfficiencyValue}>
+                            {side.attackEfficiency === undefined
+                              ? "—"
+                              : `${Math.round(side.attackEfficiency * 100)}%`}
+                          </Text>
+                          <Text style={styles.visionSideEfficiencyLabel}>
+                            ATTACK EFF.
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                </>
+              ) : (
+                <Text style={styles.visionPerformanceEmpty}>
+                  Typed serve, pass, set, attack, block, and dig observations
+                  will appear here when the analysis worker has real evidence.
+                  Duna will not turn an unavailable contact into a zero.
+                </Text>
+              )}
+              {performance.needsReview > 0 && (
+                <Text style={styles.visionPerformanceReview}>
+                  {performance.needsReview} lower-confidence model{" "}
+                  {performance.needsReview === 1
+                    ? "observation is"
+                    : "observations are"}{" "}
+                  held for review and excluded from these totals.
+                </Text>
+              )}
+            </View>
+          )}
+
           {report.reviewQueue.length > 0 && (
             <View style={styles.visionReviewRail}>
               <Text style={styles.visionReviewTitle}>COURTSIDE REVIEW</Text>
               {report.reviewQueue.slice(0, 3).map((item) => (
-                <Text key={item.id} style={styles.visionReviewItem}>
-                  {formatClock(item.sessionTimeUs / 1_000_000)} · {item.label}
-                </Text>
+                <View key={item.id} style={styles.visionReviewItem}>
+                  <View style={styles.flex}>
+                    <Text style={styles.visionReviewItemTitle}>
+                      {formatClock(item.sessionTimeUs / 1_000_000)} ·{" "}
+                      {item.label}
+                    </Text>
+                    <Text style={styles.visionReviewItemMeta}>
+                      {item.contactKind?.toUpperCase() ??
+                        item.eventType?.replaceAll("-", " ").toUpperCase() ??
+                        item.source.toUpperCase()}
+                      {item.confidence === undefined
+                        ? ""
+                        : ` · ${Math.round(item.confidence * 100)}% confidence`}
+                    </Text>
+                  </View>
+                  {item.reviewable && (
+                    <View style={styles.visionReviewActions}>
+                      <Pressable
+                        accessibilityLabel={`Reject ${item.label}`}
+                        disabled={busy}
+                        onPress={() =>
+                          void reviewObservation(item.id, "rejected")
+                        }
+                        style={styles.visionReviewReject}
+                      >
+                        <Text style={styles.visionReviewRejectText}>
+                          Reject
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Confirm ${item.label}`}
+                        disabled={busy}
+                        onPress={() =>
+                          void reviewObservation(item.id, "confirmed")
+                        }
+                        style={styles.visionReviewConfirm}
+                      >
+                        <Text style={styles.visionReviewConfirmText}>
+                          Confirm
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
               ))}
             </View>
           )}
@@ -3270,7 +3452,13 @@ function VisionAnalysisCard({
           </Text>
           <Pressable
             disabled={busy}
-            onPress={() => void requestAnalysis()}
+            onPress={() =>
+              void (report.run &&
+              report.run.status !== "failed" &&
+              report.run.status !== "cancelled"
+                ? loadReport()
+                : requestAnalysis())
+            }
             style={[styles.visionAnalysisButton, busy && styles.disabled]}
           >
             <Text style={styles.visionAnalysisButtonText}>
@@ -3516,6 +3704,8 @@ export function VideoPlayerModal({
             <VisionAnalysisCard
               client={client}
               playbackSeconds={playbackSeconds}
+              teamA={playback.vision?.settings.teamA ?? fallbackTeams.teamA}
+              teamB={playback.vision?.settings.teamB ?? fallbackTeams.teamB}
               videoId={video.id}
             />
           )}
@@ -5841,7 +6031,7 @@ const styles = StyleSheet.create({
   },
   calibrationGuideState: {
     color: "rgba(255,255,255,0.62)",
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.6,
   },
@@ -6393,6 +6583,101 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     marginTop: 3,
   },
+  visionPerformanceCard: {
+    backgroundColor: "rgba(84,197,170,0.07)",
+    borderColor: "rgba(84,197,170,0.2)",
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  visionPerformanceHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+  },
+  visionPerformanceEyebrow: {
+    color: "#a8d9bf",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  visionPerformanceTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  visionPerformanceCoverage: {
+    color: "#b8c1be",
+    fontFamily: "Archivo-Chip",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  visionPerformanceSummary: {
+    color: "#c7cfcb",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  visionPerformanceMetrics: { flexDirection: "row", gap: 7 },
+  visionPerformanceMetric: {
+    backgroundColor: "rgba(255,255,255,0.055)",
+    borderRadius: 10,
+    flex: 1,
+    minHeight: 58,
+    padding: 8,
+  },
+  visionPerformanceValue: {
+    color: "#ffffff",
+    fontFamily: "Archivo-Table",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  visionPerformanceLabel: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 12,
+    marginTop: 3,
+  },
+  visionSideRow: {
+    alignItems: "center",
+    borderTopColor: "rgba(255,255,255,0.1)",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 9,
+  },
+  visionSideName: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+  visionSideDetail: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  visionSideEfficiency: { alignItems: "flex-end" },
+  visionSideEfficiencyValue: {
+    color: "#a8d9bf",
+    fontFamily: "Archivo-Table",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  visionSideEfficiencyLabel: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  visionPerformanceEmpty: {
+    color: "#aeb8b5",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  visionPerformanceReview: {
+    color: "#d4b77c",
+    fontSize: 10,
+    lineHeight: 15,
+  },
   visionReviewRail: {
     backgroundColor: "rgba(212,183,124,0.1)",
     borderColor: "rgba(212,183,124,0.22)",
@@ -6407,7 +6692,49 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.8,
   },
-  visionReviewItem: { color: "#f2f5f3", fontSize: 10, lineHeight: 15 },
+  visionReviewItem: {
+    alignItems: "center",
+    borderTopColor: "rgba(212,183,124,0.16)",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 8,
+  },
+  visionReviewItemTitle: { color: "#f2f5f3", fontSize: 11, lineHeight: 15 },
+  visionReviewItemMeta: {
+    color: "#aeb8b5",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  visionReviewActions: { flexDirection: "row", gap: 6 },
+  visionReviewReject: {
+    alignItems: "center",
+    borderColor: "rgba(255,255,255,0.24)",
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
+  visionReviewRejectText: {
+    color: "#d2d7d5",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  visionReviewConfirm: {
+    alignItems: "center",
+    backgroundColor: "#a8d9bf",
+    borderRadius: 10,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
+  visionReviewConfirmText: {
+    color: "#111719",
+    fontSize: 10,
+    fontWeight: "900",
+  },
   visionEvidenceNote: { color: "#aeb8b5", fontSize: 10, lineHeight: 15 },
   visionAnalysisButton: {
     alignItems: "center",

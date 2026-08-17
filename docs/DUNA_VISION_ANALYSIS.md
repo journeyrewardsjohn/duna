@@ -20,6 +20,33 @@ The smallest user-facing loop is intentionally simple:
 The Watch is a courtside cue surface, not a video editor. Full playback and
 analysis stay on the iPhone/web Studio.
 
+## Volleyball intelligence contract
+
+Duna's event graph is volleyball-native rather than a generic collection of
+timestamps. A model or human may classify a `ball-contact` as `serve`,
+`reception`, `set`, `attack`, `block`, `dig`, or `free-ball`, with an optional
+side, player, outcome, rally identifier, and measured speed. Supported outcomes
+are `in-play`, `ace`, `kill`, `error`, `blocked`, `positive`, and `negative`.
+
+The report derives rally duration, contacts per rally, serve/ace counts,
+attack/kill/error counts, blocks, digs, attack efficiency, and evidence-backed
+top speeds from those typed observations. These rules are strict:
+
+- Model observations below `0.5` confidence remain review evidence but do not
+  enter performance totals.
+- Model observations below `0.7` confidence enter the Player review queue.
+- A player or coach confirmation promotes an observation to human-verified;
+  rejection removes it from report totals without deleting the source.
+- Only the latest model run contributes model totals. Human observations remain
+  durable across model versions, preventing a rerun from double-counting old
+  inference.
+- Missing contacts, speeds, and rallies render as unavailable. They never
+  become zero-performance claims.
+
+This taxonomy is the stable worker/product boundary. Model teams may improve
+tracking, identity, and classification independently while the Player app and
+analytics API retain one explainable contract.
+
 ## Data invariants
 
 - All analysis event time uses recording-relative **microseconds** and is
@@ -70,8 +97,9 @@ worker receives a small reference command, not media bytes:
 
 The worker must authenticate its callback with the same bearer token and send a
 `videoAnalysisWorkerResultSchema` payload. Successful model observations need
-stable UUIDs, a model version, a bounded microsecond timestamp, and calibrated
-coordinates only where the point was visibly observed. Derived manifests,
+stable UUIDs, a model version, a bounded microsecond timestamp, typed
+volleyball payloads for ball contacts, and calibrated coordinates only where
+the point was visibly observed. Derived manifests,
 tracks, or parquet files may be written only below:
 
 ```text

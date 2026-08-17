@@ -106,6 +106,19 @@ describe("Duna Video contracts", () => {
             confidence: 0.82,
             courtPoint: { xMeters: 3.4, yMeters: 12.1, observed: "visible" },
           },
+          {
+            id: crypto.randomUUID(),
+            eventType: "ball-contact",
+            sessionTimeUs: 82_000_000,
+            confidence: 0.91,
+            payload: {
+              rallyId: crypto.randomUUID(),
+              contactKind: "attack",
+              outcome: "kill",
+              side: "a",
+              speedKph: 73.2,
+            },
+          },
         ],
       }),
     ).toMatchObject({ status: "needs-review" });
@@ -115,6 +128,21 @@ describe("Duna Video contracts", () => {
         sessionTimeUs: 0,
         eventType: "ball-landing",
         idempotencyKey: crypto.randomUUID(),
+      }),
+    ).toThrow();
+    expect(() =>
+      videoAnalysisWorkerResultSchema.parse({
+        runId: crypto.randomUUID(),
+        status: "needs-review",
+        events: [
+          {
+            id: crypto.randomUUID(),
+            eventType: "ball-contact",
+            sessionTimeUs: 82_000_000,
+            confidence: 0.9,
+            payload: { outcome: "kill" },
+          },
+        ],
       }),
     ).toThrow();
   });

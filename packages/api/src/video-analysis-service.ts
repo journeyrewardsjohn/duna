@@ -12,6 +12,7 @@ import {
 import {
   STANDARD_BEACH_COURT,
   buildCourtHeatmap,
+  buildVolleyballPerformance,
   confidenceBand,
   type CourtDimensions,
 } from "@duna/core";
@@ -360,18 +361,27 @@ export async function loadVideoAnalysisReport(input: {
       reviewByEvent.set(review.eventId, review);
     }
   }
-  const resolvedEvents = events.map((row) => {
-    const review = reviewByEvent.get(row.id);
-    const correction = review?.correction as
-      { readonly courtPoint?: typeof row.courtPoint } | undefined;
-    return {
-      event: serializeEvent(row),
-      courtPoint: correction?.courtPoint ?? row.courtPoint,
-      rejected: row.state === "rejected" || review?.decision === "rejected",
-      source:
-        review?.decision === "corrected" ? "human" : analysisSource(row.source),
-    } as const;
-  });
+  const latestRun = runs[0];
+  const resolvedEvents = events
+    .filter(
+      (row) =>
+        row.source !== "model" || !latestRun || row.runId === latestRun.id,
+    )
+    .map((row) => {
+      const review = reviewByEvent.get(row.id);
+      const correction = review?.correction as
+        { readonly courtPoint?: typeof row.courtPoint } | undefined;
+      return {
+        event: serializeEvent(row),
+        courtPoint: correction?.courtPoint ?? row.courtPoint,
+        rejected: row.state === "rejected" || review?.decision === "rejected",
+        reviewed: Boolean(review),
+        source:
+          review?.decision === "confirmed" || review?.decision === "corrected"
+            ? "human"
+            : analysisSource(row.source),
+      } as const;
+    });
   const heatmap = buildCourtHeatmap({
     court: dimensions,
     observations: resolvedEvents
@@ -387,6 +397,18 @@ export async function loadVideoAnalysisReport(input: {
         source: entry.source as "human" | "model" | "watch" | "system",
       })),
   });
+  const performance = buildVolleyballPerformance(
+    resolvedEvents
+      .filter((entry) => !entry.rejected)
+      .map((entry) => ({
+        eventType: entry.event.eventType,
+        sessionTimeUs: entry.event.sessionTimeUs,
+        durationUs: entry.event.durationUs,
+        confidence: entry.event.confidence,
+        source: entry.source,
+        payload: entry.event.payload,
+      })),
+  );
   const undone = new Set(
     timeline
       .filter((event) => event.type === "undo" && event.targetEventId)
@@ -419,6 +441,7 @@ export async function loadVideoAnalysisReport(input: {
           event.source === "apple-watch"
             ? ("watch" as const)
             : ("system" as const),
+        reviewable: false,
       })),
     ...resolvedEvents
       .filter(
@@ -429,6 +452,34 @@ export async function loadVideoAnalysisReport(input: {
         sessionTimeUs: entry.event.sessionTimeUs,
         label: String(entry.event.payload.label ?? "Review this rally"),
         source: entry.source as "human" | "model" | "watch" | "system",
+        reviewable: entry.event.source === "model",
+        eventType: entry.event.eventType,
+        contactKind: entry.event.payload.contactKind,
+        confidence: entry.event.confidence,
+      })),
+    ...resolvedEvents
+      .filter(
+        (entry) =>
+          !entry.rejected &&
+          !entry.reviewed &&
+          entry.source === "model" &&
+          (entry.event.confidence === undefined ||
+            entry.event.confidence < 0.7) &&
+          entry.event.eventType !== "review-marker",
+      )
+      .slice(0, 50)
+      .map((entry) => ({
+        id: entry.event.id,
+        sessionTimeUs: entry.event.sessionTimeUs,
+        label:
+          entry.event.eventType === "ball-contact"
+            ? `Review ${entry.event.payload.contactKind ?? "volleyball contact"}${entry.event.payload.outcome ? ` · ${entry.event.payload.outcome}` : ""}`
+            : `Review ${entry.event.eventType.replaceAll("-", " ")}`,
+        source: "model" as const,
+        reviewable: true,
+        eventType: entry.event.eventType,
+        contactKind: entry.event.payload.contactKind,
+        confidence: entry.event.confidence,
       })),
   ].sort((left, right) => left.sessionTimeUs - right.sessionTimeUs);
 
@@ -443,6 +494,7 @@ export async function loadVideoAnalysisReport(input: {
         .length,
       lastSnapshot: latestScore(timeline),
     },
+    performance,
     highlights: [
       ...liveTimelineHighlights(timeline),
       ...persistedHighlights,
