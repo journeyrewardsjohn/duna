@@ -40,6 +40,7 @@ import type { AdminModule } from "./navigation";
 import { FeatureFlagControls } from "./feature-flag-controls";
 import { GuardianReviewCard } from "./guardian-review-card";
 import { OrganizationCommissionControls } from "./organization-commission-controls";
+import { OrganizationAccessControls } from "./organization-access-controls";
 import {
   PlayerMappingPanel,
   RatingsLabPanel,
@@ -440,6 +441,11 @@ export function AdminOrganizationDetailView({
       <OrganizationCommissionControls
         billing={detail.billing}
         canManage={detail.canManageCommission}
+      />
+
+      <OrganizationAccessControls
+        canManage={detail.canManageCommission}
+        organizationId={organization.id}
       />
 
       <section className="admin-org-data-grid">

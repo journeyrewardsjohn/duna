@@ -1470,6 +1470,60 @@ export async function createStaffInvitationAction(
   }
 }
 
+export async function grantOrganizationAccessAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const role = field(formData, "role");
+    if (
+      role !== "director" &&
+      role !== "manager" &&
+      role !== "coach" &&
+      role !== "front-desk" &&
+      role !== "accountant"
+    ) {
+      throw new Error("Choose a valid organization role.");
+    }
+    const workerClassification = field(formData, "workerClassification");
+    if (
+      workerClassification !== "1099-contractor" &&
+      workerClassification !== "w2-employee"
+    ) {
+      throw new Error("Choose 1099 contractor or W-2 employee.");
+    }
+    const deliveryMode = field(formData, "deliveryMode") || "link-only";
+    if (deliveryMode !== "link-only" && deliveryMode !== "send") {
+      throw new Error("Choose a valid invitation delivery method.");
+    }
+    const caller = await getServerCaller();
+    const granted = await caller.admin.grantOrganizationAccess({
+      organizationId: field(formData, "organizationId"),
+      email: field(formData, "email"),
+      displayName: optionalField(formData, "displayName"),
+      role,
+      workerClassification,
+      deliveryMode,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin");
+    revalidatePath(`/admin/organizations/${field(formData, "organizationId")}`);
+    return result(
+      "success",
+      granted.status === "granted"
+        ? granted.workosSync === "synced"
+          ? "Access granted and WorkOS membership synchronized."
+          : "Access granted in Duna. WorkOS will link when this user and organization are connected."
+        : "Invitation created. Share the private claim link below.",
+      undefined,
+      granted.id,
+      granted.privateClaimLink,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function updateStaffProfileAction(
   _previous: OperatorActionState,
   formData: FormData,

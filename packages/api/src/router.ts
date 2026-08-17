@@ -219,6 +219,10 @@ import {
   updateOrganizationCommissionOverride,
 } from "./organization-billing";
 import {
+  grantOrganizationAccess,
+  OrganizationAccessError,
+} from "./organization-access-service";
+import {
   CommerceError,
   createCourtHold,
   registerForSession,
@@ -1229,6 +1233,18 @@ function throwDomainError(error: unknown): never {
               ? "BAD_REQUEST"
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof OrganizationAccessError) {
+    throw new TRPCError({
+      code:
+        error.code === "NOT_FOUND"
+          ? "NOT_FOUND"
+          : error.code === "CONFIGURATION"
+            ? "PRECONDITION_FAILED"
+            : "BAD_GATEWAY",
+      message: error.message,
+      cause: error,
+    });
   }
   if (error instanceof PlayerOrganizationError) {
     const code =
@@ -11789,6 +11805,56 @@ const adminRouter = router({
             ipAddress: ctx.ipAddress,
             now: ctx.now,
           }),
+      }),
+    ),
+  grantOrganizationAccess: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-organization-access-grant",
+        capacity: 40,
+        refillPerMinute: 10,
+        scope: "actor",
+      }),
+    )
+    .input(
+      z.object({
+        organizationId: z.string().uuid(),
+        email: z.email(),
+        displayName: z.string().trim().min(2).max(120).optional(),
+        role: z.enum(["director", "manager", "coach", "front-desk", "accountant"]),
+        workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+        deliveryMode: z.enum(["send", "link-only"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        entity: z.enum(["staff-profile", "staff-invitation"]),
+        status: z.enum(["granted", "invite-created"]),
+        privateClaimLink: z.url().optional(),
+        workosSync: z.enum(["synced", "not-linked"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.grantOrganizationAccess",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await grantOrganizationAccess({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
       }),
     ),
   players: adminProcedure

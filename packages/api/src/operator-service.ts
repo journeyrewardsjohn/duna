@@ -3016,10 +3016,17 @@ export async function createStaffInvitation(input: {
   readonly invitedName: string;
   readonly invitedEmail?: string;
   readonly invitedPhoneE164?: string;
-  readonly role: "coach" | "manager" | "front-desk" | "accountant";
+  readonly role:
+    | "coach"
+    | "director"
+    | "manager"
+    | "front-desk"
+    | "accountant";
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
   readonly deliveryMode?: "send" | "link-only";
+  /** Only the Super Admin organization-access workflow may invite Directors. */
+  readonly allowDirector?: boolean;
   readonly confirmed: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -3033,6 +3040,12 @@ export async function createStaffInvitation(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
+  if (input.role === "director" && !input.allowDirector) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Director access is ownership-controlled and cannot be created from team management.",
+    );
+  }
   const database = getDatabase();
   const actorProfile = await database.query.organizationStaffProfiles.findFirst({
     where: and(
@@ -3043,6 +3056,7 @@ export async function createStaffInvitation(input: {
     columns: { staffRole: true },
   });
   const canInviteTeam =
+    input.allowDirector ||
     input.actor.roles.includes("owner") ||
     input.actor.roles.includes("manager") ||
     actorProfile?.staffRole === "director" ||
@@ -3328,7 +3342,7 @@ export async function claimStaffInvitation(input: {
       invitation.role === "accountant"
         ? invitation.role
         : "coach";
-    const membershipRole = staffRole === "director" ? "manager" : staffRole;
+    const membershipRole = staffRole === "director" ? "owner" : staffRole;
     await transaction
       .insert(organizationMemberships)
       .values({
@@ -3565,7 +3579,7 @@ export async function updateStaffProfile(input: {
     );
   }
   const scopes = scopesForOrganizationStaffRole(input.role);
-  const membershipRole = input.role === "director" ? "manager" : input.role;
+  const membershipRole = input.role === "director" ? "owner" : input.role;
   const values = {
     staffRole: input.role,
     workerClassification: input.workerClassification,

@@ -126,6 +126,21 @@ Point-of-service collection uses the separate `payments:collect` capability.
 It deliberately does not grant `payments:write`, which protects Stripe,
 commerce, refunds, pricing, and other financial configuration routes.
 
+### Super Admin organization access
+
+The organization detail screen in Super Admin can grant an existing Duna user
+access by email, or create a private-link/email invitation for someone who has
+not joined Duna yet. It is the only UI that can assign **Director**, which
+creates an active `owner` membership plus the `director` staff profile and
+allows multiple organization owners.
+
+For a person and organization already linked to WorkOS, the grant updates the
+matching WorkOS organization membership in the same operation (`director`
+maps to the WorkOS `owner` role). If either side has not been linked yet, Duna
+records the role and returns `not-linked` rather than falsely claiming a WorkOS
+sync. Production must set `DATABASE_URL`, `WORKOS_API_KEY`, and
+`WORKOS_CLIENT_ID` for a linked grant to be actionable.
+
 ## Local development
 
 ```bash
