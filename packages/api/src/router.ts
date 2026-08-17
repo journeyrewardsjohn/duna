@@ -8916,7 +8916,10 @@ const operatorRouter = router({
           .array(
             z.object({
               startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-              endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+              endsOn: z
+                .string()
+                .regex(/^\d{4}-\d{2}-\d{2}$/)
+                .optional(),
             }),
           )
           .max(52),

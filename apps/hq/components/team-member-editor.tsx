@@ -55,9 +55,13 @@ function displayDate(value: string): string {
   }).format(new Date(`${value}T12:00:00`));
 }
 
-function dateIsBlackout(value: string, blackouts: readonly BlackoutDate[]): boolean {
+function dateIsBlackout(
+  value: string,
+  blackouts: readonly BlackoutDate[],
+): boolean {
   return blackouts.some(
-    (block) => value >= block.startsOn && value <= (block.endsOn ?? block.startsOn),
+    (block) =>
+      value >= block.startsOn && value <= (block.endsOn ?? block.startsOn),
   );
 }
 
@@ -78,7 +82,9 @@ function normalizeAvailability(
   });
 }
 
-function normalizeBlackouts(value: StaffProfile["availability"]): BlackoutDate[] {
+function normalizeBlackouts(
+  value: StaffProfile["availability"],
+): BlackoutDate[] {
   return value.flatMap((entry) => {
     const startsOn = typeof entry.startsOn === "string" ? entry.startsOn : "";
     const endsOn = typeof entry.endsOn === "string" ? entry.endsOn : undefined;
@@ -145,27 +151,49 @@ export function TeamMemberEditor({
     if (!blackoutStart || (blackoutEnd && blackoutEnd < blackoutStart)) return;
     setBlackouts((current) => [
       ...current,
-      { startsOn: blackoutStart, ...(blackoutEnd ? { endsOn: blackoutEnd } : {}) },
+      {
+        startsOn: blackoutStart,
+        ...(blackoutEnd ? { endsOn: blackoutEnd } : {}),
+      },
     ]);
     setBlackoutStart("");
     setBlackoutEnd("");
   }
 
   const monthDays = useMemo(() => {
-    const start = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
-    const end = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
-    const leading = Array.from({ length: start.getDay() }, () => undefined as Date | undefined);
-    const days = Array.from({ length: end.getDate() }, (_, index) => new Date(start.getFullYear(), start.getMonth(), index + 1));
+    const start = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      1,
+    );
+    const end = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth() + 1,
+      0,
+    );
+    const leading = Array.from(
+      { length: start.getDay() },
+      () => undefined as Date | undefined,
+    );
+    const days = Array.from(
+      { length: end.getDate() },
+      (_, index) => new Date(start.getFullYear(), start.getMonth(), index + 1),
+    );
     return [...leading, ...days];
   }, [calendarMonth]);
   const activeCoaches = workspace.staff.filter(
-    (candidate) => candidate.active && candidate.role === "coach" && candidate.personId !== person.personId,
+    (candidate) =>
+      candidate.active &&
+      candidate.role === "coach" &&
+      candidate.personId !== person.personId,
   );
 
   function coverageTone(date: Date): "quiet" | "balanced" | "needed" {
     const weekday = date.getDay();
     const covered = activeCoaches.filter((coach) =>
-      normalizeAvailability(coach.availability).some((block) => block.weekday === weekday),
+      normalizeAvailability(coach.availability).some(
+        (block) => block.weekday === weekday,
+      ),
     ).length;
     if (covered === 0) return "needed";
     if (covered === 1) return "balanced";
@@ -180,7 +208,11 @@ export function TeamMemberEditor({
         type="hidden"
         value={JSON.stringify(availability)}
       />
-      <input name="blackoutDates" type="hidden" value={JSON.stringify(blackouts)} />
+      <input
+        name="blackoutDates"
+        type="hidden"
+        value={JSON.stringify(blackouts)}
+      />
 
       <section className="hq-card team-member-editor__hero">
         <div>
@@ -219,11 +251,30 @@ export function TeamMemberEditor({
         </div>
       </section>
 
-      <section className="team-profile-performance" aria-label="Team member performance">
-        <article><small>Sessions · 30 days</small><strong>{person.sessionsRun30d}</strong><span>{person.upcomingSessions} upcoming on the schedule</span></article>
-        <article><small>Earnings · MTD</small><strong>—</strong><span>Posted earnings will appear here</span></article>
-        <article><small>Earnings · YTD</small><strong>—</strong><span>Payroll tracking is not connected</span></article>
-        <article><small>Earnings · TTM</small><strong>—</strong><span>Set compensation to prepare reporting</span></article>
+      <section
+        className="team-profile-performance"
+        aria-label="Team member performance"
+      >
+        <article>
+          <small>Sessions · 30 days</small>
+          <strong>{person.sessionsRun30d}</strong>
+          <span>{person.upcomingSessions} upcoming on the schedule</span>
+        </article>
+        <article>
+          <small>Earnings · MTD</small>
+          <strong>—</strong>
+          <span>Posted earnings will appear here</span>
+        </article>
+        <article>
+          <small>Earnings · YTD</small>
+          <strong>—</strong>
+          <span>Payroll tracking is not connected</span>
+        </article>
+        <article>
+          <small>Earnings · TTM</small>
+          <strong>—</strong>
+          <span>Set compensation to prepare reporting</span>
+        </article>
       </section>
 
       <div className="team-member-editor__grid">
@@ -405,70 +456,247 @@ export function TeamMemberEditor({
           </header>
           <div className="team-availability-calendar">
             <header>
-              <div><span className="team-calendar-icon"><CalendarDays aria-hidden size={17} /></span><span><strong>{new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(calendarMonth)}</strong><small>Coverage is based on other active coaches’ recurring availability.</small></span></div>
-              <span className="team-calendar-controls"><button aria-label="Previous month" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} type="button"><ChevronLeft aria-hidden size={17} /></button><button aria-label="Next month" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} type="button"><ChevronRight aria-hidden size={17} /></button></span>
+              <div>
+                <span className="team-calendar-icon">
+                  <CalendarDays aria-hidden size={17} />
+                </span>
+                <span>
+                  <strong>
+                    {new Intl.DateTimeFormat("en-US", {
+                      month: "long",
+                      year: "numeric",
+                    }).format(calendarMonth)}
+                  </strong>
+                  <small>
+                    Coverage is based on other active coaches’ recurring
+                    availability.
+                  </small>
+                </span>
+              </div>
+              <span className="team-calendar-controls">
+                <button
+                  aria-label="Previous month"
+                  onClick={() =>
+                    setCalendarMonth(
+                      (current) =>
+                        new Date(
+                          current.getFullYear(),
+                          current.getMonth() - 1,
+                          1,
+                        ),
+                    )
+                  }
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden size={17} />
+                </button>
+                <button
+                  aria-label="Next month"
+                  onClick={() =>
+                    setCalendarMonth(
+                      (current) =>
+                        new Date(
+                          current.getFullYear(),
+                          current.getMonth() + 1,
+                          1,
+                        ),
+                    )
+                  }
+                  type="button"
+                >
+                  <ChevronRight aria-hidden size={17} />
+                </button>
+              </span>
             </header>
-            <div className="team-calendar-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
+            <div className="team-calendar-weekdays">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
             <div className="team-calendar-grid">
               {monthDays.map((date, index) => {
-                if (!date) return <span className="team-calendar-blank" key={`blank-${index}`} />;
+                if (!date)
+                  return (
+                    <span
+                      className="team-calendar-blank"
+                      key={`blank-${index}`}
+                    />
+                  );
                 const dateKey = localDateKey(date);
                 const blackout = dateIsBlackout(dateKey, blackouts);
                 const tone = coverageTone(date);
-                return <button className={`team-calendar-day team-calendar-day--${tone}${blackout ? " team-calendar-day--blackout" : ""}`} key={dateKey} onClick={() => blackout ? setBlackouts((current) => current.filter((block) => !(dateKey >= block.startsOn && dateKey <= (block.endsOn ?? block.startsOn)))) : setBlackouts((current) => [...current, { startsOn: dateKey }])} title={blackout ? "Remove blackout" : "Add blackout"} type="button"><span>{date.getDate()}</span>{blackout ? <X aria-hidden size={13} /> : <i />}</button>;
+                return (
+                  <button
+                    className={`team-calendar-day team-calendar-day--${tone}${blackout ? " team-calendar-day--blackout" : ""}`}
+                    key={dateKey}
+                    onClick={() =>
+                      blackout
+                        ? setBlackouts((current) =>
+                            current.filter(
+                              (block) =>
+                                !(
+                                  dateKey >= block.startsOn &&
+                                  dateKey <= (block.endsOn ?? block.startsOn)
+                                ),
+                            ),
+                          )
+                        : setBlackouts((current) => [
+                            ...current,
+                            { startsOn: dateKey },
+                          ])
+                    }
+                    title={blackout ? "Remove blackout" : "Add blackout"}
+                    type="button"
+                  >
+                    <span>{date.getDate()}</span>
+                    {blackout ? <X aria-hidden size={13} /> : <i />}
+                  </button>
+                );
               })}
             </div>
-            <footer><span><i className="team-calendar-legend__quiet" />Well covered</span><span><i className="team-calendar-legend__balanced" />Balanced</span><span><i className="team-calendar-legend__needed" />Coverage needed</span><span><i className="team-calendar-legend__blackout" />Blackout</span></footer>
+            <footer>
+              <span>
+                <i className="team-calendar-legend__quiet" />
+                Well covered
+              </span>
+              <span>
+                <i className="team-calendar-legend__balanced" />
+                Balanced
+              </span>
+              <span>
+                <i className="team-calendar-legend__needed" />
+                Coverage needed
+              </span>
+              <span>
+                <i className="team-calendar-legend__blackout" />
+                Blackout
+              </span>
+            </footer>
           </div>
           <section className="team-blackouts">
-            <header><div><span className="hq-eyebrow">Blackout dates</span><h3>Protect dates they cannot cover</h3><p>Add a single date or a date range. Click a calendar day for a quick one-day blackout.</p></div><Badge tone="neutral">{blackouts.length} saved</Badge></header>
-            <div className="team-blackouts__form"><label><span>From</span><input onChange={(event) => setBlackoutStart(event.target.value)} type="date" value={blackoutStart} /></label><label><span>Through <em>optional</em></span><input min={blackoutStart || undefined} onChange={(event) => setBlackoutEnd(event.target.value)} type="date" value={blackoutEnd} /></label><button className="hq-button hq-button--secondary" disabled={!blackoutStart || Boolean(blackoutEnd && blackoutEnd < blackoutStart)} onClick={addBlackout} type="button"><Plus aria-hidden size={16} /> Add blackout</button></div>
-            {blackouts.length > 0 && <div className="team-blackouts__list">{blackouts.map((blackout, index) => <article key={`${blackout.startsOn}-${index}`}><span><small>{blackout.endsOn ? "Date range" : "One day"}</small><strong>{displayDate(blackout.startsOn)}{blackout.endsOn ? ` – ${displayDate(blackout.endsOn)}` : ""}</strong></span><button aria-label={`Remove blackout starting ${displayDate(blackout.startsOn)}`} onClick={() => setBlackouts((current) => current.filter((_, candidateIndex) => candidateIndex !== index))} type="button"><X aria-hidden size={15} /></button></article>)}</div>}
+            <header>
+              <div>
+                <span className="hq-eyebrow">Blackout dates</span>
+                <h3>Protect dates they cannot cover</h3>
+                <p>
+                  Add a single date or a date range. Click a calendar day for a
+                  quick one-day blackout.
+                </p>
+              </div>
+              <Badge tone="neutral">{blackouts.length} saved</Badge>
+            </header>
+            <div className="team-blackouts__form">
+              <label>
+                <span>From</span>
+                <input
+                  onChange={(event) => setBlackoutStart(event.target.value)}
+                  type="date"
+                  value={blackoutStart}
+                />
+              </label>
+              <label>
+                <span>
+                  Through <em>optional</em>
+                </span>
+                <input
+                  min={blackoutStart || undefined}
+                  onChange={(event) => setBlackoutEnd(event.target.value)}
+                  type="date"
+                  value={blackoutEnd}
+                />
+              </label>
+              <button
+                className="hq-button hq-button--secondary"
+                disabled={
+                  !blackoutStart ||
+                  Boolean(blackoutEnd && blackoutEnd < blackoutStart)
+                }
+                onClick={addBlackout}
+                type="button"
+              >
+                <Plus aria-hidden size={16} /> Add blackout
+              </button>
+            </div>
+            {blackouts.length > 0 && (
+              <div className="team-blackouts__list">
+                {blackouts.map((blackout, index) => (
+                  <article key={`${blackout.startsOn}-${index}`}>
+                    <span>
+                      <small>
+                        {blackout.endsOn ? "Date range" : "One day"}
+                      </small>
+                      <strong>
+                        {displayDate(blackout.startsOn)}
+                        {blackout.endsOn
+                          ? ` – ${displayDate(blackout.endsOn)}`
+                          : ""}
+                      </strong>
+                    </span>
+                    <button
+                      aria-label={`Remove blackout starting ${displayDate(blackout.startsOn)}`}
+                      onClick={() =>
+                        setBlackouts((current) =>
+                          current.filter(
+                            (_, candidateIndex) => candidateIndex !== index,
+                          ),
+                        )
+                      }
+                      type="button"
+                    >
+                      <X aria-hidden size={15} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
           <section className="team-recurring-availability">
-            <header><span className="hq-eyebrow">Recurring rhythm</span><h3>Usual weekly availability</h3></header>
-          <div className="team-availability">
-            {days.map((day, weekday) => {
-              const block = availabilityByDay.get(weekday);
-              return (
-                <div className="team-availability__day" key={day}>
-                  <label className="team-availability__toggle">
-                    <input
-                      checked={Boolean(block)}
-                      onChange={(event) =>
-                        toggleDay(weekday, event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <strong>{day}</strong>
-                  </label>
-                  {block ? (
-                    <span className="team-availability__times">
+            <header>
+              <span className="hq-eyebrow">Recurring rhythm</span>
+              <h3>Usual weekly availability</h3>
+            </header>
+            <div className="team-availability">
+              {days.map((day, weekday) => {
+                const block = availabilityByDay.get(weekday);
+                return (
+                  <div className="team-availability__day" key={day}>
+                    <label className="team-availability__toggle">
                       <input
-                        aria-label={`${day} start`}
+                        checked={Boolean(block)}
                         onChange={(event) =>
-                          updateDay(weekday, "startsAt", event.target.value)
+                          toggleDay(weekday, event.target.checked)
                         }
-                        type="time"
-                        value={block.startsAt}
+                        type="checkbox"
                       />
-                      <small>to</small>
-                      <input
-                        aria-label={`${day} end`}
-                        onChange={(event) =>
-                          updateDay(weekday, "endsAt", event.target.value)
-                        }
-                        type="time"
-                        value={block.endsAt}
-                      />
-                    </span>
-                  ) : (
-                    <small>Unavailable</small>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                      <strong>{day}</strong>
+                    </label>
+                    {block ? (
+                      <span className="team-availability__times">
+                        <input
+                          aria-label={`${day} start`}
+                          onChange={(event) =>
+                            updateDay(weekday, "startsAt", event.target.value)
+                          }
+                          type="time"
+                          value={block.startsAt}
+                        />
+                        <small>to</small>
+                        <input
+                          aria-label={`${day} end`}
+                          onChange={(event) =>
+                            updateDay(weekday, "endsAt", event.target.value)
+                          }
+                          type="time"
+                          value={block.endsAt}
+                        />
+                      </span>
+                    ) : (
+                      <small>Unavailable</small>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         </section>
 
