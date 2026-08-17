@@ -7,7 +7,8 @@ import {
   Pencil,
   TriangleAlert,
 } from "lucide-react";
-import { useState } from "react";
+import { Field, Input } from "@duna/ui";
+import { useId, useState } from "react";
 import {
   addressCountryName,
   addressLocalityLine,
@@ -62,6 +63,7 @@ export function AddressEntry({
   const [view, setView] = useState<AddressView>(
     initiallySelected ? "selected" : "editing",
   );
+  const fieldId = useId();
   const [manual, setManual] = useState(false);
   const [error, setError] = useState("");
 
@@ -269,16 +271,20 @@ export function AddressEntry({
           />
 
           {showAddressLine2 && (
-            <label className="address-entry__line-two">
-              <span>Address line 2</span>
-              <input
+            <Field
+              className="address-entry__line-two"
+              htmlFor={`${fieldId}-line-two`}
+              label="Address line 2"
+            >
+              <Input
+                id={`${fieldId}-line-two`}
                 onChange={(event) =>
                   updateManual("addressLine2", event.target.value)
                 }
                 placeholder="Suite, unit, or building"
                 value={address.addressLine2 ?? ""}
               />
-            </label>
+            </Field>
           )}
 
           <div className="address-entry__manual-choice">
@@ -325,39 +331,42 @@ export function AddressEntry({
             <div className="address-entry__manual">
               {structuredFields && (
                 <div className="address-entry__manual-grid">
-                  <label>
-                    <span>City</span>
-                    <input
+                  <Field htmlFor={`${fieldId}-locality`} label="City">
+                    <Input
+                      id={`${fieldId}-locality`}
                       onChange={(event) =>
                         updateManual("locality", event.target.value)
                       }
                       required={required}
                       value={address.locality ?? ""}
                     />
-                  </label>
-                  <label>
-                    <span>State or region</span>
-                    <input
+                  </Field>
+                  <Field htmlFor={`${fieldId}-region`} label="State or region">
+                    <Input
+                      id={`${fieldId}-region`}
                       onChange={(event) =>
                         updateManual("administrativeArea", event.target.value)
                       }
                       required={required}
                       value={address.administrativeArea ?? ""}
                     />
-                  </label>
-                  <label>
-                    <span>Postal code</span>
-                    <input
+                  </Field>
+                  <Field htmlFor={`${fieldId}-postal-code`} label="Postal code">
+                    <Input
+                      id={`${fieldId}-postal-code`}
                       onChange={(event) =>
                         updateManual("postalCode", event.target.value)
                       }
                       required={required}
                       value={address.postalCode ?? ""}
                     />
-                  </label>
-                  <label>
-                    <span>Country or territory code</span>
-                    <input
+                  </Field>
+                  <Field
+                    htmlFor={`${fieldId}-country-code`}
+                    label="Country or territory code"
+                  >
+                    <Input
+                      id={`${fieldId}-country-code`}
                       maxLength={2}
                       onChange={(event) =>
                         updateManual("countryCode", event.target.value)
@@ -366,7 +375,7 @@ export function AddressEntry({
                       required={required}
                       value={address.countryCode ?? "US"}
                     />
-                  </label>
+                  </Field>
                 </div>
               )}
               <button

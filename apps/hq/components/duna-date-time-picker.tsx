@@ -34,20 +34,32 @@ const timeOptions = [
   "23:59",
 ];
 
-export function DunaDatePicker({
+export interface DateTimeValue {
+  readonly date: string;
+  readonly time: string;
+}
+
+/**
+ * A composed date-and-time field for schedule exceptions. It deliberately
+ * keeps date and time in one popover, matching the actual decision someone is
+ * making instead of splitting it across two browser-style pickers.
+ */
+export function DunaDateTimePicker({
   label,
-  min,
+  minDate,
+  minTime,
   onChange,
   value,
 }: {
   readonly label: string;
-  readonly min?: string;
-  readonly onChange: (value: string) => void;
-  readonly value: string;
+  readonly minDate?: string;
+  readonly minTime?: string;
+  readonly onChange: (value: DateTimeValue) => void;
+  readonly value: DateTimeValue;
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => {
-    const parsed = value ? new Date(`${value}T12:00:00`) : new Date();
+    const parsed = value.date ? new Date(`${value.date}T12:00:00`) : new Date();
     return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
   });
   const days = useMemo(() => {
@@ -66,156 +78,150 @@ export function DunaDatePicker({
     ];
   }, [month]);
 
-  return (
-    <div className="duna-date-picker">
-      <span>{label}</span>
-      <button
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label={label}
-        className="duna-picker-trigger"
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <CalendarDays aria-hidden size={18} />
-        {dateLabel(value)}
-      </button>
-      {open && (
-        <div
-          className="duna-picker-popover"
-          role="dialog"
-          aria-label={`${label} calendar`}
-        >
-          <header>
-            <button
-              aria-label="Previous month"
-              onClick={() =>
-                setMonth(
-                  (current) =>
-                    new Date(current.getFullYear(), current.getMonth() - 1, 1),
-                )
-              }
-              type="button"
-            >
-              <ChevronLeft aria-hidden size={18} />
-            </button>
-            <strong>
-              {new Intl.DateTimeFormat("en-US", {
-                month: "long",
-                year: "numeric",
-              }).format(month)}
-            </strong>
-            <button
-              aria-label="Next month"
-              onClick={() =>
-                setMonth(
-                  (current) =>
-                    new Date(current.getFullYear(), current.getMonth() + 1, 1),
-                )
-              }
-              type="button"
-            >
-              <ChevronRight aria-hidden size={18} />
-            </button>
-          </header>
-          <div className="duna-picker-weekdays">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="duna-picker-days">
-            {days.map((date, index) => {
-              if (!date) return <span key={`blank-${index}`} />;
-              const key = dateKey(date);
-              const disabled = Boolean(min && key < min);
-              return (
-                <button
-                  aria-pressed={key === value}
-                  disabled={disabled}
-                  key={key}
-                  onClick={() => {
-                    onChange(key);
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  {date.getDate()}
-                </button>
-              );
-            })}
-          </div>
-          <footer>
-            <button
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-              type="button"
-            >
-              Clear
-            </button>
-            <button
-              onClick={() => {
-                const today = dateKey(new Date());
-                const nextValue = min && today < min ? min : today;
-                onChange(nextValue);
-                setMonth(new Date(`${nextValue}T12:00:00`));
-                setOpen(false);
-              }}
-              type="button"
-            >
-              Today
-            </button>
-          </footer>
-        </div>
-      )}
-    </div>
-  );
-}
+  function chooseDate(date: string) {
+    onChange({ ...value, date });
+  }
 
-export function DunaTimePicker({
-  label,
-  onChange,
-  value,
-}: {
-  readonly label: string;
-  readonly onChange: (value: string) => void;
-  readonly value: string;
-}) {
-  const [open, setOpen] = useState(false);
+  function chooseTime(time: string) {
+    onChange({ ...value, time });
+    setOpen(false);
+  }
+
   return (
-    <div className="duna-time-picker">
-      <span>{label}</span>
+    <div className="duna-date-time-picker">
+      <span className="duna-date-time-picker__label">{label}</span>
       <button
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={label}
-        className="duna-picker-trigger"
+        className="duna-date-time-picker__trigger"
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        <Clock3 aria-hidden size={18} />
-        {timeLabel(value)}
+        <span>
+          <CalendarDays aria-hidden size={17} />
+          {dateLabel(value.date)}
+        </span>
+        <i aria-hidden />
+        <span>
+          <Clock3 aria-hidden size={17} />
+          {timeLabel(value.time)}
+        </span>
       </button>
       {open && (
         <div
-          className="duna-time-popover"
+          aria-label={`${label} date and time`}
+          className="duna-date-time-picker__popover"
           role="dialog"
-          aria-label={`${label} time`}
         >
-          {timeOptions.map((time) => (
-            <button
-              aria-pressed={time === value}
-              key={time}
-              onClick={() => {
-                onChange(time);
-                setOpen(false);
-              }}
-              type="button"
-            >
-              {timeLabel(time)}
-            </button>
-          ))}
+          <section className="duna-date-time-picker__calendar">
+            <header>
+              <button
+                aria-label="Previous month"
+                onClick={() =>
+                  setMonth(
+                    (current) =>
+                      new Date(
+                        current.getFullYear(),
+                        current.getMonth() - 1,
+                        1,
+                      ),
+                  )
+                }
+                type="button"
+              >
+                <ChevronLeft aria-hidden size={18} />
+              </button>
+              <strong>
+                {new Intl.DateTimeFormat("en-US", {
+                  month: "long",
+                  year: "numeric",
+                }).format(month)}
+              </strong>
+              <button
+                aria-label="Next month"
+                onClick={() =>
+                  setMonth(
+                    (current) =>
+                      new Date(
+                        current.getFullYear(),
+                        current.getMonth() + 1,
+                        1,
+                      ),
+                  )
+                }
+                type="button"
+              >
+                <ChevronRight aria-hidden size={18} />
+              </button>
+            </header>
+            <div className="duna-date-time-picker__weekdays">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div className="duna-date-time-picker__days">
+              {days.map((date, index) => {
+                if (!date) return <span key={`blank-${index}`} />;
+                const nextDate = dateKey(date);
+                const disabled = Boolean(minDate && nextDate < minDate);
+                return (
+                  <button
+                    aria-pressed={nextDate === value.date}
+                    disabled={disabled}
+                    key={nextDate}
+                    onClick={() => chooseDate(nextDate)}
+                    type="button"
+                  >
+                    {date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+            <footer>
+              <button
+                onClick={() => {
+                  onChange({ ...value, date: "" });
+                  setOpen(false);
+                }}
+                type="button"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => {
+                  const today = dateKey(new Date());
+                  const nextDate = minDate && today < minDate ? minDate : today;
+                  chooseDate(nextDate);
+                  setMonth(new Date(`${nextDate}T12:00:00`));
+                }}
+                type="button"
+              >
+                Today
+              </button>
+            </footer>
+          </section>
+          <section className="duna-date-time-picker__times">
+            <span>Time</span>
+            <div>
+              {timeOptions.map((time) => {
+                const disabled = Boolean(
+                  minTime && value.date === minDate && time <= minTime,
+                );
+                return (
+                  <button
+                    aria-pressed={time === value.time}
+                    disabled={disabled}
+                    key={time}
+                    onClick={() => chooseTime(time)}
+                    type="button"
+                  >
+                    {timeLabel(time)}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
     </div>

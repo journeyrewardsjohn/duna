@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, LoaderCircle, MapPin } from "lucide-react";
+import { Input } from "@duna/ui";
 import { useEffect, useRef, useState } from "react";
 
 interface PlaceSuggestion {
@@ -76,22 +77,26 @@ export function PlaceSearch({
 
   return (
     <div className="consumer-place-search">
-      <span className="consumer-place-search__input">
-        <MapPin aria-hidden size={18} />
-        <input
-          autoComplete="off"
-          id={id}
-          onChange={(event) => {
-            setSelected(false);
-            onValue(event.target.value);
-            onPlace({});
-          }}
-          placeholder="Search a venue or address"
-          value={value}
-        />
-        {loading && <LoaderCircle className="spin" size={16} />}
-        {selected && <Check size={16} />}
-      </span>
+      <Input
+        autoComplete="off"
+        endAdornment={
+          loading ? (
+            <LoaderCircle aria-hidden className="spin" size={16} />
+          ) : selected ? (
+            <Check aria-hidden size={16} />
+          ) : undefined
+        }
+        groupClassName="consumer-place-search__input"
+        id={id}
+        onChange={(event) => {
+          setSelected(false);
+          onValue(event.target.value);
+          onPlace({});
+        }}
+        placeholder="Search a venue or address"
+        startAdornment={<MapPin aria-hidden size={18} />}
+        value={value}
+      />
       {suggestions.length > 0 && (
         <span className="consumer-place-search__results">
           {suggestions.map((suggestion) => (
