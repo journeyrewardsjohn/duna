@@ -18,6 +18,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { AddressEntry } from "./place-address-fields";
+import { DunaDatePicker, DunaTimePicker } from "./duna-date-time-picker";
 
 type StaffProfile = OperatorWorkspace["staff"][number];
 
@@ -29,7 +30,9 @@ interface AvailabilityBlock {
 
 interface BlackoutDate {
   readonly startsOn: string;
+  readonly startsAt: string;
   readonly endsOn?: string;
+  readonly endsAt: string;
 }
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
@@ -53,6 +56,15 @@ function displayDate(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function displayTime(value: string): string {
+  const [hours, minutes] = value.split(":").map(Number);
+  const time = new Date(2026, 0, 1, hours, minutes);
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(time);
 }
 
 function dateIsBlackout(
@@ -88,8 +100,16 @@ function normalizeBlackouts(
   return value.flatMap((entry) => {
     const startsOn = typeof entry.startsOn === "string" ? entry.startsOn : "";
     const endsOn = typeof entry.endsOn === "string" ? entry.endsOn : undefined;
+    const startsAt =
+      typeof entry.startsAt === "string" && /^\d{2}:\d{2}$/.test(entry.startsAt)
+        ? entry.startsAt
+        : "00:00";
+    const endsAt =
+      typeof entry.endsAt === "string" && /^\d{2}:\d{2}$/.test(entry.endsAt)
+        ? entry.endsAt
+        : "23:59";
     return entry.kind === "blackout" && /^\d{4}-\d{2}-\d{2}$/.test(startsOn)
-      ? [{ startsOn, ...(endsOn ? { endsOn } : {}) }]
+      ? [{ startsOn, startsAt, endsAt, ...(endsOn ? { endsOn } : {}) }]
       : [];
   });
 }
@@ -116,6 +136,8 @@ export function TeamMemberEditor({
   );
   const [blackoutStart, setBlackoutStart] = useState("");
   const [blackoutEnd, setBlackoutEnd] = useState("");
+  const [blackoutStartTime, setBlackoutStartTime] = useState("09:00");
+  const [blackoutEndTime, setBlackoutEndTime] = useState("17:00");
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -148,11 +170,18 @@ export function TeamMemberEditor({
   }
 
   function addBlackout() {
-    if (!blackoutStart || (blackoutEnd && blackoutEnd < blackoutStart)) return;
+    if (
+      !blackoutStart ||
+      (blackoutEnd && blackoutEnd < blackoutStart) ||
+      (blackoutEnd === blackoutStart && blackoutEndTime <= blackoutStartTime)
+    )
+      return;
     setBlackouts((current) => [
       ...current,
       {
         startsOn: blackoutStart,
+        startsAt: blackoutStartTime,
+        endsAt: blackoutEndTime,
         ...(blackoutEnd ? { endsOn: blackoutEnd } : {}),
       },
     ]);
@@ -160,27 +189,35 @@ export function TeamMemberEditor({
     setBlackoutEnd("");
   }
 
-  const monthDays = useMemo(() => {
-    const start = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1,
-    );
-    const end = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth() + 1,
-      0,
-    );
-    const leading = Array.from(
-      { length: start.getDay() },
-      () => undefined as Date | undefined,
-    );
-    const days = Array.from(
-      { length: end.getDate() },
-      (_, index) => new Date(start.getFullYear(), start.getMonth(), index + 1),
-    );
-    return [...leading, ...days];
-  }, [calendarMonth]);
+  const months = useMemo(
+    () =>
+      Array.from({ length: 4 }, (_, offset) => {
+        const start = new Date(
+          calendarMonth.getFullYear(),
+          calendarMonth.getMonth() + offset,
+          1,
+        );
+        const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+        return {
+          label: new Intl.DateTimeFormat("en-US", {
+            month: "long",
+            year: "numeric",
+          }).format(start),
+          days: [
+            ...Array.from(
+              { length: start.getDay() },
+              () => undefined as Date | undefined,
+            ),
+            ...Array.from(
+              { length: end.getDate() },
+              (_, index) =>
+                new Date(start.getFullYear(), start.getMonth(), index + 1),
+            ),
+          ],
+        };
+      }),
+    [calendarMonth],
+  );
   const activeCoaches = workspace.staff.filter(
     (candidate) =>
       candidate.active &&
@@ -461,27 +498,23 @@ export function TeamMemberEditor({
                   <CalendarDays aria-hidden size={17} />
                 </span>
                 <span>
-                  <strong>
-                    {new Intl.DateTimeFormat("en-US", {
-                      month: "long",
-                      year: "numeric",
-                    }).format(calendarMonth)}
-                  </strong>
+                  <strong>Plan the next four months</strong>
                   <small>
-                    Coverage is based on other active coaches’ recurring
-                    availability.
+                    Coverage is based on the other active coaches’ recurring
+                    availability. Select a day to reserve it as an all-day
+                    blackout.
                   </small>
                 </span>
               </div>
               <span className="team-calendar-controls">
                 <button
-                  aria-label="Previous month"
+                  aria-label="Previous four months"
                   onClick={() =>
                     setCalendarMonth(
                       (current) =>
                         new Date(
                           current.getFullYear(),
-                          current.getMonth() - 1,
+                          current.getMonth() - 4,
                           1,
                         ),
                     )
@@ -491,13 +524,13 @@ export function TeamMemberEditor({
                   <ChevronLeft aria-hidden size={17} />
                 </button>
                 <button
-                  aria-label="Next month"
+                  aria-label="Next four months"
                   onClick={() =>
                     setCalendarMonth(
                       (current) =>
                         new Date(
                           current.getFullYear(),
-                          current.getMonth() + 1,
+                          current.getMonth() + 4,
                           1,
                         ),
                     )
@@ -508,51 +541,70 @@ export function TeamMemberEditor({
                 </button>
               </span>
             </header>
-            <div className="team-calendar-weekdays">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <span key={day}>{day}</span>
+            <div className="team-calendar-months">
+              {months.map((month) => (
+                <section className="team-calendar-month" key={month.label}>
+                  <h3>{month.label}</h3>
+                  <div className="team-calendar-weekdays">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                      (day) => (
+                        <span key={day}>{day}</span>
+                      ),
+                    )}
+                  </div>
+                  <div className="team-calendar-grid">
+                    {month.days.map((date, index) => {
+                      if (!date) {
+                        return (
+                          <span
+                            className="team-calendar-blank"
+                            key={`${month.label}-blank-${index}`}
+                          />
+                        );
+                      }
+                      const dateKey = localDateKey(date);
+                      const blackout = dateIsBlackout(dateKey, blackouts);
+                      const tone = coverageTone(date);
+                      return (
+                        <button
+                          className={`team-calendar-day team-calendar-day--${tone}${blackout ? " team-calendar-day--blackout" : ""}`}
+                          key={dateKey}
+                          onClick={() =>
+                            blackout
+                              ? setBlackouts((current) =>
+                                  current.filter(
+                                    (block) =>
+                                      !(
+                                        dateKey >= block.startsOn &&
+                                        dateKey <=
+                                          (block.endsOn ?? block.startsOn)
+                                      ),
+                                  ),
+                                )
+                              : setBlackouts((current) => [
+                                  ...current,
+                                  {
+                                    startsOn: dateKey,
+                                    startsAt: "00:00",
+                                    endsAt: "23:59",
+                                  },
+                                ])
+                          }
+                          title={
+                            blackout
+                              ? "Remove all-day blackout"
+                              : "Add all-day blackout"
+                          }
+                          type="button"
+                        >
+                          <span>{date.getDate()}</span>
+                          {blackout ? <X aria-hidden size={13} /> : <i />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
               ))}
-            </div>
-            <div className="team-calendar-grid">
-              {monthDays.map((date, index) => {
-                if (!date)
-                  return (
-                    <span
-                      className="team-calendar-blank"
-                      key={`blank-${index}`}
-                    />
-                  );
-                const dateKey = localDateKey(date);
-                const blackout = dateIsBlackout(dateKey, blackouts);
-                const tone = coverageTone(date);
-                return (
-                  <button
-                    className={`team-calendar-day team-calendar-day--${tone}${blackout ? " team-calendar-day--blackout" : ""}`}
-                    key={dateKey}
-                    onClick={() =>
-                      blackout
-                        ? setBlackouts((current) =>
-                            current.filter(
-                              (block) =>
-                                !(
-                                  dateKey >= block.startsOn &&
-                                  dateKey <= (block.endsOn ?? block.startsOn)
-                                ),
-                            ),
-                          )
-                        : setBlackouts((current) => [
-                            ...current,
-                            { startsOn: dateKey },
-                          ])
-                    }
-                    title={blackout ? "Remove blackout" : "Add blackout"}
-                    type="button"
-                  >
-                    <span>{date.getDate()}</span>
-                    {blackout ? <X aria-hidden size={13} /> : <i />}
-                  </button>
-                );
-              })}
             </div>
             <footer>
               <span>
@@ -579,37 +631,46 @@ export function TeamMemberEditor({
                 <span className="hq-eyebrow">Blackout dates</span>
                 <h3>Protect dates they cannot cover</h3>
                 <p>
-                  Add a single date or a date range. Click a calendar day for a
-                  quick one-day blackout.
+                  Add a single date or a date range, with the precise time it
+                  applies. Click a calendar day for a quick all-day blackout.
                 </p>
               </div>
               <Badge tone="neutral">{blackouts.length} saved</Badge>
             </header>
             <div className="team-blackouts__form">
-              <label>
-                <span>From</span>
-                <input
-                  onChange={(event) => setBlackoutStart(event.target.value)}
-                  type="date"
-                  value={blackoutStart}
-                />
-              </label>
-              <label>
-                <span>
-                  Through <em>optional</em>
-                </span>
-                <input
-                  min={blackoutStart || undefined}
-                  onChange={(event) => setBlackoutEnd(event.target.value)}
-                  type="date"
-                  value={blackoutEnd}
-                />
-              </label>
+              <DunaDatePicker
+                label="Starts on"
+                onChange={setBlackoutStart}
+                value={blackoutStart}
+              />
+              <DunaTimePicker
+                label="Start time"
+                onChange={setBlackoutStartTime}
+                value={blackoutStartTime}
+              />
+              <span aria-hidden className="team-blackouts__through">
+                to
+              </span>
+              <DunaDatePicker
+                label="Ends on"
+                min={blackoutStart || undefined}
+                onChange={setBlackoutEnd}
+                value={blackoutEnd}
+              />
+              <DunaTimePicker
+                label="End time"
+                onChange={setBlackoutEndTime}
+                value={blackoutEndTime}
+              />
               <button
                 className="hq-button hq-button--secondary"
                 disabled={
                   !blackoutStart ||
-                  Boolean(blackoutEnd && blackoutEnd < blackoutStart)
+                  Boolean(
+                    (blackoutEnd && blackoutEnd < blackoutStart) ||
+                    (blackoutEnd === blackoutStart &&
+                      blackoutEndTime <= blackoutStartTime),
+                  )
                 }
                 onClick={addBlackout}
                 type="button"
@@ -631,6 +692,10 @@ export function TeamMemberEditor({
                           ? ` – ${displayDate(blackout.endsOn)}`
                           : ""}
                       </strong>
+                      <small className="team-blackouts__times">
+                        {displayTime(blackout.startsAt)} –{" "}
+                        {displayTime(blackout.endsAt)}
+                      </small>
                     </span>
                     <button
                       aria-label={`Remove blackout starting ${displayDate(blackout.startsOn)}`}

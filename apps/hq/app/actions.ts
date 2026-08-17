@@ -1520,7 +1520,9 @@ export async function updateStaffProfileAction(
     const blackoutDates = blackoutDatesValue
       ? (JSON.parse(blackoutDatesValue) as {
           startsOn: string;
+          startsAt: string;
           endsOn?: string;
+          endsAt: string;
         }[])
       : [];
     const caller = await getServerCaller();

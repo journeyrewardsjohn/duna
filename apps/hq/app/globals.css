@@ -20505,6 +20505,329 @@ body {
 .team-blackouts__list button {
   margin-left: auto;
 }
+
+/* Duna-owned calendar and time fields; native browser pickers are intentionally
+ * not used for availability because the scheduling context needs more room. */
+.duna-date-picker,
+.duna-time-picker {
+  display: grid;
+  gap: 0.34rem;
+  min-width: 0;
+  position: relative;
+}
+
+.duna-date-picker > span,
+.duna-time-picker > span {
+  color: var(--color-bone-muted);
+  font-size: max(0.65rem, 10px);
+  font-weight: 800;
+}
+
+.duna-picker-trigger {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  color: var(--color-ink);
+  display: flex;
+  font: inherit;
+  font-size: max(0.7rem, 11px);
+  font-weight: 750;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  min-height: 42px;
+  padding: 0.55rem 0.62rem;
+  text-align: left;
+  width: 100%;
+}
+
+.duna-picker-trigger:hover,
+.duna-picker-trigger[aria-expanded="true"] {
+  border-color: rgb(var(--accent-rgb) / 48%);
+}
+
+.duna-picker-trigger:focus-visible,
+.duna-picker-popover button:focus-visible,
+.duna-time-popover button:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.duna-picker-trigger svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.duna-picker-popover,
+.duna-time-popover {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 18px 38px rgb(29 35 29 / 16%);
+  position: absolute;
+  top: calc(100% + 0.48rem);
+  z-index: 15;
+}
+
+.duna-picker-popover {
+  border-radius: 14px;
+  min-width: 0;
+  padding: 0.72rem;
+  width: min(292px, calc(100vw - 2.5rem));
+}
+
+.duna-picker-popover header {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  margin-bottom: 0.55rem;
+}
+
+.duna-picker-popover header strong {
+  font-size: max(0.76rem, 12px);
+  text-align: center;
+}
+
+.duna-picker-popover header button,
+.duna-picker-popover footer button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.duna-picker-popover header button {
+  align-items: center;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.duna-picker-popover header button:hover,
+.duna-picker-popover footer button:hover {
+  background: var(--color-canvas-soft);
+}
+
+.duna-picker-weekdays,
+.duna-picker-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.duna-picker-weekdays {
+  color: var(--color-bone-muted);
+  font-size: max(0.61rem, 10px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.28rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.duna-picker-days {
+  gap: 0.18rem;
+}
+
+.duna-picker-days span,
+.duna-picker-days button {
+  aspect-ratio: 1;
+}
+
+.duna-picker-days button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: max(0.68rem, 11px);
+  min-width: 0;
+}
+
+.duna-picker-days button:hover {
+  background: var(--color-canvas-soft);
+}
+
+.duna-picker-days button[aria-pressed="true"] {
+  background: var(--color-aqua);
+  color: white;
+  font-weight: 850;
+}
+
+.duna-picker-days button:disabled {
+  color: rgb(71 69 64 / 32%);
+  cursor: not-allowed;
+}
+
+.duna-picker-popover footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.52rem;
+  padding-top: 0.52rem;
+}
+
+.duna-picker-popover footer button {
+  color: var(--color-aqua);
+  font-size: max(0.66rem, 10px);
+  font-weight: 800;
+  min-height: 30px;
+  padding: 0 0.48rem;
+}
+
+.duna-time-popover {
+  border-radius: 14px;
+  display: grid;
+  gap: 0.18rem;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  max-height: 252px;
+  overflow-y: auto;
+  padding: 0.45rem;
+  width: 228px;
+}
+
+.duna-time-popover button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-bone);
+  font: inherit;
+  font-size: max(0.68rem, 11px);
+  min-height: 34px;
+  padding: 0 0.45rem;
+  text-align: left;
+}
+
+.duna-time-popover button:hover,
+.duna-time-popover button[aria-pressed="true"] {
+  background: var(--color-canvas-soft);
+  color: var(--color-ink);
+  font-weight: 850;
+}
+
+.team-availability-calendar {
+  padding: clamp(0.9rem, 1.7vw, 1.25rem);
+}
+
+.team-availability-calendar > header {
+  align-items: flex-start;
+}
+
+.team-availability-calendar > header strong {
+  font-size: max(0.8rem, 12px);
+}
+
+.team-availability-calendar > header small {
+  font-size: max(0.66rem, 10px);
+  line-height: 1.45;
+  max-width: 610px;
+}
+
+.team-calendar-months {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: clamp(0.85rem, 1.6vw, 1.3rem);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.95rem;
+  padding-top: 0.95rem;
+}
+
+.team-calendar-month {
+  min-width: 0;
+}
+
+.team-calendar-month h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.25vw, 1.25rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  margin: 0;
+  text-align: center;
+}
+
+.team-calendar-weekdays {
+  font-size: max(0.625rem, 10px);
+  margin-top: 0.64rem;
+}
+
+.team-calendar-grid {
+  gap: clamp(0.18rem, 0.45vw, 0.32rem);
+}
+
+.team-calendar-day,
+.team-calendar-blank {
+  aspect-ratio: 1;
+  border-radius: clamp(6px, 0.7vw, 9px);
+}
+
+.team-calendar-day {
+  align-items: center;
+  font-size: max(0.66rem, 10px);
+  justify-content: center;
+  padding: 0.16rem;
+}
+
+.team-calendar-day i {
+  bottom: 0.2rem;
+  height: 4px;
+  margin: 0;
+  position: absolute;
+  right: 0.2rem;
+  width: 4px;
+}
+
+.team-calendar-day--blackout {
+  background: #203b59;
+  box-shadow: 0 0 0 2px rgb(32 59 89 / 16%);
+}
+
+.team-availability-calendar footer {
+  margin-top: 0.95rem;
+}
+
+.team-blackouts__form {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns:
+    minmax(145px, 1.25fr) minmax(116px, 0.9fr) auto minmax(145px, 1.25fr)
+    minmax(116px, 0.9fr) auto;
+}
+
+.team-blackouts__form .hq-button {
+  align-self: end;
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.team-blackouts__through {
+  align-self: end;
+  color: var(--color-bone-muted);
+  font-size: max(0.68rem, 11px);
+  margin-bottom: 0.78rem;
+}
+
+.team-blackouts__form > :nth-child(4) .duna-picker-popover,
+.team-blackouts__form > :nth-child(5) .duna-time-popover {
+  left: auto;
+  right: 0;
+}
+
+.team-blackouts__list article {
+  align-items: flex-start;
+  min-width: 212px;
+}
+
+.team-blackouts__list strong {
+  font-size: max(0.68rem, 11px);
+}
+
+.team-blackouts__times {
+  color: var(--color-bone-muted);
+  font-size: max(0.64rem, 10px);
+  font-weight: 700;
+}
 .team-recurring-availability > header {
   align-items: end;
   justify-content: flex-start;
@@ -21450,6 +21773,21 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .team-calendar-months {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-blackouts__form {
+    grid-template-columns:
+      minmax(150px, 1fr) minmax(125px, 0.8fr) auto minmax(150px, 1fr)
+      minmax(125px, 0.8fr);
+  }
+
+  .team-blackouts__form .hq-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .team-member-editor__wide {
     grid-column: auto;
   }
@@ -21488,10 +21826,27 @@ body {
 
   .team-directory__header,
   .team-directory__tools,
-  .team-blackouts > header,
-  .team-blackouts__form {
+  .team-blackouts > header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .team-blackouts__form {
+    align-items: stretch;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .team-blackouts__through {
+    display: none;
+  }
+
+  .team-blackouts__form .hq-button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .team-calendar-months {
+    grid-template-columns: 1fr;
   }
 
   .team-directory__header .hq-button {
