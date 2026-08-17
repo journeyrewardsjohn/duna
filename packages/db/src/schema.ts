@@ -707,6 +707,194 @@ export const guardianInvitations = pgTable(
   ],
 );
 
+// Club-scoped waiver library. A document is the stable library entry; every
+// editable release is captured as an immutable version before it can be shown
+// to a player or guardian for acceptance.
+export const waiverDocuments = pgTable(
+  "waiver_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    slug: varchar("slug", { length: 120 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
+    currentVersionId: uuid("current_version_id"),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    archivedAt: timestamp("archived_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("waiver_document_org_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("waiver_document_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "waiver_document_status_valid",
+      sql`${table.status} IN ('draft', 'active', 'archived')`,
+    ),
+  ],
+);
+
+export const waiverVersions = pgTable(
+  "waiver_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    waiverDocumentId: uuid("waiver_document_id")
+      .notNull()
+      .references(() => waiverDocuments.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    title: text("title").notNull(),
+    markdown: text("markdown").notNull(),
+    contentHash: varchar("content_hash", { length: 128 }).notNull(),
+    sourceFilename: text("source_filename"),
+    sourceMimeType: varchar("source_mime_type", { length: 120 }),
+    requiresSignature: boolean("requires_signature").notNull().default(true),
+    signatureValidityDays: integer("signature_validity_days")
+      .notNull()
+      .default(365),
+    requiresParentForMinors: boolean("requires_parent_for_minors")
+      .notNull()
+      .default(true),
+    playerAcknowledgementMinimumAge: integer(
+      "player_acknowledgement_minimum_age",
+    ),
+    keySections: jsonb("key_sections")
+      .notNull()
+      .$type<
+        readonly {
+          id: string;
+          title: string;
+          markdown: string;
+          acknowledgementRequired: boolean;
+        }[]
+      >()
+      .default([]),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("waiver_version_document_version_unique").on(
+      table.waiverDocumentId,
+      table.version,
+    ),
+    index("waiver_version_content_hash_idx").on(table.contentHash),
+    check(
+      "waiver_version_validity_days_valid",
+      sql`${table.signatureValidityDays} BETWEEN 1 AND 3650`,
+    ),
+    check(
+      "waiver_version_player_ack_age_valid",
+      sql`${table.playerAcknowledgementMinimumAge} IS NULL OR ${table.playerAcknowledgementMinimumAge} BETWEEN 13 AND 17`,
+    ),
+  ],
+);
+
+export const waiverAssignments = pgTable(
+  "waiver_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    waiverDocumentId: uuid("waiver_document_id")
+      .notNull()
+      .references(() => waiverDocuments.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id").references(() => catalogItems.id, {
+      onDelete: "cascade",
+    }),
+    scope: varchar("scope", { length: 24 }).notNull(),
+    required: boolean("required").notNull().default(true),
+    createdAt,
+  },
+  (table) => [
+    index("waiver_assignment_org_scope_idx").on(
+      table.organizationId,
+      table.scope,
+    ),
+    uniqueIndex("waiver_assignment_catalog_document_unique")
+      .on(table.catalogItemId, table.waiverDocumentId)
+      .where(sql`${table.catalogItemId} IS NOT NULL`),
+    uniqueIndex("waiver_assignment_global_document_unique")
+      .on(table.organizationId, table.scope, table.waiverDocumentId)
+      .where(sql`${table.catalogItemId} IS NULL`),
+    check(
+      "waiver_assignment_scope_valid",
+      sql`${table.scope} IN ('all-members', 'booking', 'catalog-item')`,
+    ),
+    check(
+      "waiver_assignment_target_valid",
+      sql`(${table.scope} = 'catalog-item') = (${table.catalogItemId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const waiverExecutions = pgTable(
+  "waiver_executions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    waiverDocumentId: uuid("waiver_document_id")
+      .notNull()
+      .references(() => waiverDocuments.id, { onDelete: "restrict" }),
+    waiverVersionId: uuid("waiver_version_id")
+      .notNull()
+      .references(() => waiverVersions.id, { onDelete: "restrict" }),
+    subjectPersonId: uuid("subject_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    signerPersonId: uuid("signer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    signerRole: varchar("signer_role", { length: 16 }).notNull(),
+    relationship: varchar("relationship", { length: 80 }),
+    typedLegalName: text("typed_legal_name").notNull(),
+    signatureMethod: varchar("signature_method", { length: 24 })
+      .notNull()
+      .default("typed-name-clickwrap"),
+    displayedInline: boolean("displayed_inline").notNull().default(true),
+    scrolledToEnd: boolean("scrolled_to_end").notNull().default(false),
+    acknowledgedSectionIds: jsonb("acknowledged_section_ids")
+      .notNull()
+      .$type<readonly string[]>()
+      .default([]),
+    contentHash: varchar("content_hash", { length: 128 }).notNull(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+  },
+  (table) => [
+    index("waiver_execution_subject_validity_idx").on(
+      table.organizationId,
+      table.subjectPersonId,
+      table.expiresAt,
+    ),
+    index("waiver_execution_document_subject_idx").on(
+      table.waiverDocumentId,
+      table.subjectPersonId,
+      table.occurredAt,
+    ),
+    check(
+      "waiver_execution_signer_role_valid",
+      sql`${table.signerRole} IN ('adult-player', 'parent-or-guardian', 'player-acknowledgement')`,
+    ),
+  ],
+);
+
 export const identityVerificationSessions = pgTable(
   "identity_verification_sessions",
   {

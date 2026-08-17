@@ -512,6 +512,20 @@
       "when": 1786900037985,
       "tag": "0072_solid_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1786984072707,
+      "tag": "0073_legal_mephisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1786984206532,
+      "tag": "0074_old_zombie",
+      "breakpoints": true
     }
   ]
 }

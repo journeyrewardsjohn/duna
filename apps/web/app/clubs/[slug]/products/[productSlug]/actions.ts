@@ -74,6 +74,35 @@ export async function catalogOfferEligibilityAction(catalogItemId: string) {
   }
 }
 
+export async function executeWaiverAction(input: {
+  readonly organizationId: string;
+  readonly waiverDocumentId: string;
+  readonly subjectPersonId: string;
+  readonly typedLegalName?: string;
+  readonly acknowledgedSectionIds: readonly string[];
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.executeWaiver({
+      ...input,
+      acknowledgedSectionIds: [...input.acknowledgedSectionIds],
+      displayedInline: true,
+      scrolledToEnd: true,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The waiver signature could not be recorded.",
+    };
+  }
+}
+
 export async function catalogCheckoutStatusAction(checkoutSessionId: string) {
   try {
     const caller = await getServerCaller();

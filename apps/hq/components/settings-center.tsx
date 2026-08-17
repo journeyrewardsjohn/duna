@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { ORGANIZATION_PLAN_IDS, ORGANIZATION_PLANS } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
@@ -41,9 +41,10 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { AddressEntry } from "./place-address-fields";
+import { WaiverLibrary } from "./waiver-library";
 
 export type SettingsSection =
-  "overview" | "business" | "brand" | "money" | "operations";
+  "overview" | "business" | "brand" | "money" | "operations" | "waivers";
 
 const initialActionState: OperatorActionState = {
   status: "idle",
@@ -99,6 +100,12 @@ const navigation: readonly {
     label: "Operations",
     detail: "Locations, team, account",
     icon: MapPinned,
+  },
+  {
+    section: "waivers",
+    label: "Waivers & releases",
+    detail: "Signatures and records",
+    icon: ShieldCheck,
   },
 ];
 
@@ -199,9 +206,11 @@ function SummaryCard({
 export function SettingsCenter({
   initialSection = "overview",
   workspace,
+  waivers,
 }: {
   readonly initialSection?: SettingsSection;
   readonly workspace: OperatorWorkspace;
+  readonly waivers: WaiverWorkspace;
 }) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [profileState, profileAction, profilePending] = useActionState(
@@ -995,6 +1004,7 @@ export function SettingsCenter({
             </div>
           </section>
         )}
+        {section === "waivers" && <WaiverLibrary waivers={waivers} />}
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ const settingsSections = new Set<SettingsSection>([
   "brand",
   "money",
   "operations",
+  "waivers",
 ]);
 
 export default async function SettingsPage({
@@ -23,10 +24,11 @@ export default async function SettingsPage({
   readonly searchParams: Promise<{ section?: string }>;
 }) {
   const caller = await getServerCaller();
-  const [{ section }, dashboard, workspace] = await Promise.all([
+  const [{ section }, dashboard, workspace, waivers] = await Promise.all([
     searchParams,
     caller.operator.dashboard(),
     caller.operator.workspace(),
+    caller.operator.waiverWorkspace(),
   ]);
   const initialSection = settingsSections.has(section as SettingsSection)
     ? (section as SettingsSection)
@@ -49,7 +51,11 @@ export default async function SettingsPage({
             </p>
           </div>
         </header>
-        <SettingsCenter initialSection={initialSection} workspace={workspace} />
+        <SettingsCenter
+          initialSection={initialSection}
+          workspace={workspace}
+          waivers={waivers}
+        />
       </main>
     </OperatorShell>
   );

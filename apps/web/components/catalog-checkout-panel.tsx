@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublicCatalogItem } from "@duna/api";
+import type { PublicCatalogItem, WaiverRequirement } from "@duna/api";
 import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
 import {
   Banknote,
@@ -11,12 +11,14 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   catalogOfferEligibilityAction,
   catalogCheckoutStatusAction,
   startCatalogCheckoutAction,
 } from "@/app/clubs/[slug]/products/[productSlug]/actions";
+import { WaiverSignaturePanel } from "./waiver-signature-panel";
 
 function money(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat("en-US", {
@@ -37,9 +39,12 @@ export function CatalogCheckoutPanel({
   initialMembershipCheckoutSessionId,
   initialNotice,
   membershipOffers,
+  itemWaiverRequirements,
+  membershipWaiverRequirements = [],
 }: {
   readonly item: PublicCatalogItem;
   readonly organization: {
+    readonly id: string;
     readonly slug: string;
     readonly name: string;
     readonly currency: string;
@@ -54,7 +59,10 @@ export function CatalogCheckoutPanel({
   readonly initialMembershipCheckoutSessionId?: string;
   readonly initialNotice?: string;
   readonly membershipOffers: readonly PublicCatalogItem[];
+  readonly itemWaiverRequirements: readonly WaiverRequirement[];
+  readonly membershipWaiverRequirements?: readonly WaiverRequirement[];
 }) {
+  const router = useRouter();
   const [variantId, setVariantId] = useState(item.variants[0]?.id ?? "");
   const [paymentMethod, setPaymentMethod] = useState<
     "card" | "cash" | "credit"
@@ -138,14 +146,16 @@ export function CatalogCheckoutPanel({
     available &&
     (!requiresMembership || memberActive) &&
     (paymentMethod !== "card" || organization.paymentsReady) &&
-    (paymentMethod !== "credit" || walletCredits >= creditTotal);
+    (paymentMethod !== "credit" || walletCredits >= creditTotal) &&
+    itemWaiverRequirements.every((requirement) => requirement.complete);
   const membershipStep = requiresMembership && !memberActive;
   const canStartMembership = Boolean(
     addMembership &&
     membershipOffer &&
     membershipVariant &&
     membershipPrice &&
-    organization.paymentsReady,
+    organization.paymentsReady &&
+    membershipWaiverRequirements.every((requirement) => requirement.complete),
   );
 
   useEffect(() => {
@@ -309,6 +319,20 @@ export function CatalogCheckoutPanel({
             </small>
           </span>
         </div>
+      )}
+      {(membershipStep
+        ? membershipWaiverRequirements
+        : itemWaiverRequirements
+      ).some((requirement) => !requirement.complete) && (
+        <WaiverSignaturePanel
+          onSigned={() => router.refresh()}
+          organizationId={organization.id}
+          requirements={
+            membershipStep
+              ? membershipWaiverRequirements
+              : itemWaiverRequirements
+          }
+        />
       )}
       {item.variants.length > 1 && (
         <label>

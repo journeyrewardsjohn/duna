@@ -44,6 +44,12 @@ Native identity uses `packages/mobile-auth`:
   iOS/Android encrypted SecureStore;
 - server-side code exchange and refresh at Duna Web `/api/auth/mobile/*`.
 
+When a club requires a waiver, the Player purchase journey renders the full
+version in-app, requires reaching the end, acknowledgements, and a typed name
+when configured. A minor’s guardian signature is verified server-side before
+checkout can continue. The complete contract is in
+[`../WAIVERS_AND_RELEASES.md`](../WAIVERS_AND_RELEASES.md).
+
 Messaging uses the shared cursor engine plus a native SQLite outbox. Neon is
 the message source of truth; push notifications and Upstash SSE only prompt a
 faster gap-fill.

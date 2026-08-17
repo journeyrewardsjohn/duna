@@ -41104,6 +41104,103 @@ button.selected > .choice-radio {
   margin: 0.2rem 0 0;
 }
 
+.waiver-signature-panel {
+  background: color-mix(
+    in srgb,
+    var(--color-canvas) 92%,
+    var(--catalog-sand, #e9dfc9)
+  );
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.85rem;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.waiver-signature-panel > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.7rem;
+}
+
+.waiver-signature-panel > header > svg {
+  color: var(--catalog-primary, var(--color-ink));
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.waiver-signature-panel header span,
+.waiver-signature-panel header p,
+.waiver-signature-panel__scroll-status {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+
+.waiver-signature-panel h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.waiver-signature-panel__reader {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  max-height: 280px;
+  overflow: auto;
+  padding: 0.9rem;
+}
+
+.waiver-signature-panel__reader h2,
+.waiver-signature-panel__reader h3 {
+  font-size: 0.9rem;
+}
+
+.waiver-signature-panel__acknowledgements {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.waiver-signature-panel__acknowledgements label {
+  align-items: flex-start;
+  display: flex;
+  font-size: 0.82rem;
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.waiver-signature-panel__name {
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
+
+.waiver-signature-panel__name input {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  min-height: 40px;
+  padding: 0 0.7rem;
+}
+
+.waiver-signature-panel > button {
+  background: var(--catalog-primary, var(--color-ink));
+  border: 0;
+  border-radius: 8px;
+  color: white;
+  font-weight: 700;
+  min-height: 42px;
+}
+
+.waiver-signature-panel > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 980px) {
   .prediction-portfolio-hero,
   .prediction-portfolio-grid,

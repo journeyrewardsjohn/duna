@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { productMediaForKind } from "@duna/core";
 import { Badge } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
@@ -429,8 +429,10 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
 }
 
 export function GuidedProductBuilder({
+  waivers,
   workspace,
 }: {
+  readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
   const searchParams = useSearchParams();
@@ -498,6 +500,8 @@ export function GuidedProductBuilder({
   const [includedCatalogItemIds, setIncludedCatalogItemIds] = useState<
     readonly string[]
   >([]);
+  const [membershipWaiverDocumentIds, setMembershipWaiverDocumentIds] =
+    useState<readonly string[]>([]);
 
   const [trackInventory, setTrackInventory] = useState(true);
   const [sellEnabled, setSellEnabled] = useState(true);
@@ -902,6 +906,7 @@ export function GuidedProductBuilder({
                       ? membershipBookingLimit
                       : undefined,
                   includedCatalogItemIds,
+                  waiverDocumentIds: membershipWaiverDocumentIds,
                   benefits: parsedBenefits,
                 },
               }
@@ -1883,6 +1888,66 @@ export function GuidedProductBuilder({
                         value={benefits}
                       />
                     </label>
+                  </div>
+                  <div className="membership-inclusion-picker">
+                    <span>Required waivers &amp; releases</span>
+                    <small>
+                      Members must complete these releases before the membership
+                      becomes active. For minors, Duna routes the required
+                      signature to a verified parent or guardian.
+                    </small>
+                    {waivers?.documents.some(
+                      (waiver) =>
+                        waiver.status === "active" && waiver.versionId,
+                    ) ? (
+                      <div>
+                        {waivers.documents
+                          .filter(
+                            (waiver) =>
+                              waiver.status === "active" && waiver.versionId,
+                          )
+                          .map((waiver) => {
+                            const checked =
+                              membershipWaiverDocumentIds.includes(waiver.id);
+                            return (
+                              <label
+                                className={checked ? "active" : undefined}
+                                key={waiver.id}
+                              >
+                                <input
+                                  checked={checked}
+                                  onChange={(event) =>
+                                    setMembershipWaiverDocumentIds((current) =>
+                                      event.target.checked
+                                        ? [...current, waiver.id]
+                                        : current.filter(
+                                            (id) => id !== waiver.id,
+                                          ),
+                                    )
+                                  }
+                                  type="checkbox"
+                                />
+                                <span>
+                                  <strong>{waiver.title}</strong>
+                                  <small>
+                                    Version {waiver.version} · valid{" "}
+                                    {waiver.signatureValidityDays} days
+                                  </small>
+                                </span>
+                                <Check aria-hidden size={15} />
+                              </label>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <p>
+                        No active waiver yet.{" "}
+                        <Link href="/settings?section=waivers">
+                          Create one in Settings
+                        </Link>{" "}
+                        before publishing this membership.
+                      </p>
+                    )}
                   </div>
                 </>
               )}

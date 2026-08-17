@@ -256,6 +256,10 @@ export const eventPolicySchema = z.object({
   markdown: z.string(),
   required: z.boolean(),
   requireFullScroll: z.boolean(),
+  /** Immutable library version that supplied this rendered waiver snapshot. */
+  waiverDocumentId: z.string().uuid().optional(),
+  waiverVersionId: z.string().uuid().optional(),
+  waiverContentHash: z.string().min(16).max(160).optional(),
 });
 export const eventDraftSmartRulesSchema = z.object({
   waitlistEnabled: z.boolean(),
@@ -4140,6 +4144,74 @@ export const organizationWalletSummarySchema = z.object({
   membershipManageable: z.boolean().optional(),
 });
 
+export const waiverSectionSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().min(1).max(160),
+  markdown: z.string().min(1).max(20_000),
+  acknowledgementRequired: z.boolean(),
+});
+
+export const waiverWorkspaceSchema = z.object({
+  documents: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        status: z.enum(["draft", "active", "archived"]),
+        versionId: z.string().uuid().optional(),
+        version: z.number().int().positive().optional(),
+        markdown: z.string().optional(),
+        contentHash: z.string().optional(),
+        sourceFilename: z.string().optional(),
+        requiresSignature: z.boolean(),
+        signatureValidityDays: z.number().int().positive(),
+        requiresParentForMinors: z.boolean(),
+        playerAcknowledgementMinimumAge: z
+          .number()
+          .int()
+          .min(13)
+          .max(17)
+          .optional(),
+        keySections: z.array(waiverSectionSchema).readonly(),
+        assignments: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              scope: z.enum(["all-members", "booking", "catalog-item"]),
+              catalogItemId: z.string().uuid().optional(),
+              required: z.boolean(),
+            }),
+          )
+          .readonly(),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+});
+
+export const waiverRequirementSchema = z.object({
+  documentId: z.string().uuid(),
+  versionId: z.string().uuid(),
+  title: z.string(),
+  markdown: z.string(),
+  contentHash: z.string(),
+  requiresSignature: z.boolean(),
+  signatureValidityDays: z.number().int().positive(),
+  keySections: z.array(waiverSectionSchema).readonly(),
+  subjectPersonId: z.string().uuid(),
+  requiredSigners: z
+    .array(
+      z.enum(["adult-player", "parent-or-guardian", "player-acknowledgement"]),
+    )
+    .readonly(),
+  completedSigners: z
+    .array(
+      z.enum(["adult-player", "parent-or-guardian", "player-acknowledgement"]),
+    )
+    .readonly(),
+  complete: z.boolean(),
+});
+
 export const operatorWorkspaceSchema = z.object({
   organization: z.object({
     id: z.string().uuid(),
@@ -4388,6 +4460,8 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type WaiverWorkspace = z.infer<typeof waiverWorkspaceSchema>;
+export type WaiverRequirement = z.infer<typeof waiverRequirementSchema>;
 export type VenueLayout = z.infer<typeof venueLayoutSchema>;
 export type VenueLayoutAsset = z.infer<typeof venueLayoutAssetSchema>;
 export type VenueLayoutGeometry = z.infer<typeof venueLayoutGeometrySchema>;

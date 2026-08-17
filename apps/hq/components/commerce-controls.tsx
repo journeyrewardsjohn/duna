@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { Badge, normalizeClubColor } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -1592,15 +1592,18 @@ function CatalogStatusControls({
 
 export function ProductCatalogControls({
   focused = false,
+  waivers,
   workspace,
 }: {
   readonly focused?: boolean;
+  readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
-  if (focused) return <GuidedProductBuilder workspace={workspace} />;
+  if (focused)
+    return <GuidedProductBuilder waivers={waivers} workspace={workspace} />;
   return (
     <div className="commerce-controls">
-      <GuidedProductBuilder workspace={workspace} />
+      <GuidedProductBuilder waivers={waivers} workspace={workspace} />
       <CatalogStatusControls workspace={workspace} />
       <div className="operator-controls-grid">
         <InventoryComposer workspace={workspace} />

@@ -54,6 +54,7 @@ import {
   sessionAttendance,
   sessions,
   venues,
+  waiverDocuments,
   messages,
 } from "@duna/db";
 import {
@@ -2680,6 +2681,17 @@ export async function createCatalogItem(
         (value): value is string => typeof value === "string",
       )
     : [];
+  const configuredWaiverDocumentIds = Array.isArray(
+    membershipConfiguration?.waiverDocumentIds,
+  )
+    ? [
+        ...new Set(
+          membershipConfiguration.waiverDocumentIds.filter(
+            (value): value is string => typeof value === "string",
+          ),
+        ),
+      ]
+    : [];
   if (
     membershipConfiguration &&
     (!Number.isSafeInteger(membershipCredits) ||
@@ -2708,6 +2720,26 @@ export async function createCatalogItem(
     if (includedItems.length !== new Set(configuredIncludedItemIds).size) {
       throw new Error(
         "Every included membership offer must be an event or service from this organization.",
+      );
+    }
+  }
+  if (configuredWaiverDocumentIds.length > 20) {
+    throw new Error("A membership can require up to 20 waiver documents.");
+  }
+  if (configuredWaiverDocumentIds.length > 0) {
+    const waiverRows = await database
+      .select({ id: waiverDocuments.id })
+      .from(waiverDocuments)
+      .where(
+        and(
+          eq(waiverDocuments.organizationId, organizationId),
+          eq(waiverDocuments.status, "active"),
+          inArray(waiverDocuments.id, configuredWaiverDocumentIds),
+        ),
+      );
+    if (waiverRows.length !== configuredWaiverDocumentIds.length) {
+      throw new Error(
+        "Every required membership waiver must be an active waiver from this organization.",
       );
     }
   }
@@ -2837,6 +2869,16 @@ export async function createCatalogItem(
       requiredCoachCount: requestedRequiredCoachCount,
       customerCoachSelection:
         input.configuration.customerCoachSelection !== false,
+    };
+  }
+  if (membershipConfiguration) {
+    normalizedConfiguration = {
+      ...normalizedConfiguration,
+      membership: {
+        ...membershipConfiguration,
+        includedCatalogItemIds: [...new Set(configuredIncludedItemIds)],
+        waiverDocumentIds: configuredWaiverDocumentIds,
+      },
     };
   }
   const coordinates = variantMatrix(input.options);

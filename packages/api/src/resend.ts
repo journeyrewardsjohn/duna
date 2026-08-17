@@ -25,6 +25,11 @@ export async function sendTransactionalEmail(input: {
   readonly text: string;
   readonly idempotencyKey: string;
   readonly replyTo?: string;
+  readonly attachments?: readonly {
+    readonly filename: string;
+    /** Base64 content, as required by Resend's email attachment API. */
+    readonly content: string;
+  }[];
 }): Promise<TransactionalEmailResult> {
   const key = apiKey();
   const from = fromAddress();
@@ -47,6 +52,7 @@ export async function sendTransactionalEmail(input: {
       to: [input.to],
       subject: input.subject,
       text: input.text,
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.replyTo ? { reply_to: input.replyTo } : {}),
     }),
     signal: AbortSignal.timeout(12_000),

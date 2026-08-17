@@ -267,6 +267,63 @@ export async function createCatalogItemAction(
   }
 }
 
+export async function createWaiverAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const serializedSections = optionalField(formData, "keySections") || "[]";
+    const sections = JSON.parse(serializedSections) as unknown;
+    if (!Array.isArray(sections)) {
+      throw new Error("The waiver sections could not be read.");
+    }
+    const playerAcknowledgementAge = optionalNumberField(
+      formData,
+      "playerAcknowledgementMinimumAge",
+    );
+    if (
+      playerAcknowledgementAge !== undefined &&
+      (playerAcknowledgementAge < 13 || playerAcknowledgementAge > 17)
+    ) {
+      throw new Error(
+        "Player acknowledgement can start from age 13 through 17.",
+      );
+    }
+    const caller = await getServerCaller();
+    const created = await caller.operator.createWaiver({
+      waiverDocumentId: optionalField(formData, "waiverDocumentId"),
+      title: field(formData, "title"),
+      markdown: field(formData, "markdown"),
+      sourceFilename: optionalField(formData, "sourceFilename"),
+      sourceMimeType: optionalField(formData, "sourceMimeType"),
+      requiresSignature: field(formData, "requiresSignature") !== "false",
+      signatureValidityDays: numberField(formData, "signatureValidityDays"),
+      requiresParentForMinors:
+        field(formData, "requiresParentForMinors") !== "false",
+      playerAcknowledgementMinimumAge: playerAcknowledgementAge,
+      keySections: sections as {
+        id: string;
+        title: string;
+        markdown: string;
+        acknowledgementRequired: boolean;
+      }[],
+      appliesToMembers: field(formData, "appliesToMembers") === "true",
+      appliesToBookings: field(formData, "appliesToBookings") === "true",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/settings");
+    revalidatePath("/products");
+    return result(
+      "success",
+      "Waiver saved in the club library.",
+      undefined,
+      created.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function createInventoryStockAction(
   _previous: OperatorActionState,
   formData: FormData,

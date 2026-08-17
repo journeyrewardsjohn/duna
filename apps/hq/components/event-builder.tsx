@@ -1,6 +1,10 @@
 "use client";
 
-import type { EventDraftEditor, OperatorWorkspace } from "@duna/api";
+import type {
+  EventDraftEditor,
+  OperatorWorkspace,
+  WaiverWorkspace,
+} from "@duna/api";
 import {
   defaultEventMedia,
   eventMediaForKind,
@@ -124,6 +128,9 @@ interface PolicyDraft {
   readonly markdown: string;
   readonly required: boolean;
   readonly requireFullScroll: boolean;
+  readonly waiverDocumentId?: string;
+  readonly waiverVersionId?: string;
+  readonly waiverContentHash?: string;
 }
 
 interface RecurringDay {
@@ -598,6 +605,7 @@ export function EventBuilder({
   initialSummary = "",
   initialVenueName,
   initialStartsAt,
+  waivers,
   workspace,
 }: {
   readonly initialDraft?: EventDraftEditor;
@@ -606,6 +614,7 @@ export function EventBuilder({
   readonly initialSummary?: string;
   readonly initialVenueName?: string;
   readonly initialStartsAt?: string;
+  readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
   const [state, action, pending] = useActionState(
@@ -962,6 +971,9 @@ export function EventBuilder({
         required: policy.required,
         requireFullScroll:
           policy.kind === "waiver" ? true : policy.requireFullScroll,
+        waiverDocumentId: policy.waiverDocumentId,
+        waiverVersionId: policy.waiverVersionId,
+        waiverContentHash: policy.waiverContentHash,
       })),
       smartRules: {
         waitlistEnabled,
@@ -2446,6 +2458,34 @@ export function EventBuilder({
                 >
                   <ShieldCheck aria-hidden size={17} /> Add waiver
                 </button>
+                {waivers?.documents
+                  .filter(
+                    (waiver) => waiver.status === "active" && waiver.markdown,
+                  )
+                  .map((waiver) => (
+                    <button
+                      key={waiver.id}
+                      onClick={() =>
+                        setPolicies((currentPolicies) => [
+                          ...currentPolicies,
+                          {
+                            id: uid("library-waiver"),
+                            kind: "waiver",
+                            title: waiver.title,
+                            markdown: waiver.markdown ?? "",
+                            required: true,
+                            requireFullScroll: true,
+                            waiverDocumentId: waiver.id,
+                            waiverVersionId: waiver.versionId,
+                            waiverContentHash: waiver.contentHash,
+                          },
+                        ])
+                      }
+                      type="button"
+                    >
+                      <ShieldCheck aria-hidden size={17} /> Add {waiver.title}
+                    </button>
+                  ))}
               </div>
               <div className="policy-editor-list">
                 {policies.map((policy) => (

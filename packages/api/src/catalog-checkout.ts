@@ -45,6 +45,7 @@ import {
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
+import { loadWaiverRequirements } from "./waiver-service";
 import {
   createCatalogCheckoutSession,
   createCatalogNativePayment,
@@ -62,6 +63,7 @@ export class CatalogCheckoutError extends Error {
       | "PRICE_UNAVAILABLE"
       | "INSUFFICIENT_CREDITS"
       | "INVENTORY_UNAVAILABLE"
+      | "WAIVER_REQUIRED"
       | "CHECKOUT_UNAVAILABLE",
     message: string,
   ) {
@@ -471,6 +473,18 @@ export async function startCatalogCheckout(input: {
     throw new CatalogCheckoutError(
       "CATALOG_ITEM_UNAVAILABLE",
       "Plans must be purchased one at a time.",
+    );
+  }
+  const waiverRequirements = await loadWaiverRequirements({
+    actor: input.actor,
+    organizationId: row.organization.id,
+    catalogItemId: row.item.id,
+    now: input.now,
+  });
+  if (waiverRequirements.some((requirement) => !requirement.complete)) {
+    throw new CatalogCheckoutError(
+      "WAIVER_REQUIRED",
+      "Review and complete the required waiver before checkout.",
     );
   }
   const isMember = await hasOrganizationMembership(

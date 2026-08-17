@@ -80,6 +80,11 @@ Core truth rules:
 - audit evidence is committed with the mutation;
 - migrations are forward-only.
 
+Waiver versions and executions are organization-scoped evidence records. The
+API resolves requirements and verifies guardianship and expiry centrally;
+clients never decide that a waiver is complete. See
+[`../WAIVERS_AND_RELEASES.md`](../WAIVERS_AND_RELEASES.md).
+
 ## Durable side effects
 
 Webhook handlers verify signatures, persist/deduplicate the raw provider event,

@@ -47,6 +47,7 @@ import { hasActiveDunaPlusMembership } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import { sendTransactionalEmail } from "./resend";
 import { sendTemplateSms } from "./sent";
+import { loadWaiverRequirements } from "./waiver-service";
 import {
   createEventCheckoutSession,
   createEventPaymentIntent,
@@ -494,6 +495,9 @@ export interface CheckoutPolicy {
   readonly markdown: string;
   readonly required: boolean;
   readonly requireFullScroll: boolean;
+  readonly waiverDocumentId?: string;
+  readonly waiverVersionId?: string;
+  readonly waiverContentHash?: string;
 }
 
 function checkoutPolicy(
@@ -519,6 +523,18 @@ function checkoutPolicy(
     markdown: value.markdown,
     required: value.required,
     requireFullScroll: value.requireFullScroll,
+    waiverDocumentId:
+      typeof value.waiverDocumentId === "string"
+        ? value.waiverDocumentId
+        : undefined,
+    waiverVersionId:
+      typeof value.waiverVersionId === "string"
+        ? value.waiverVersionId
+        : undefined,
+    waiverContentHash:
+      typeof value.waiverContentHash === "string"
+        ? value.waiverContentHash
+        : undefined,
   };
 }
 
@@ -533,7 +549,10 @@ async function loadCheckoutPolicies(
     .map(checkoutPolicy)
     .filter((policy): policy is CheckoutPolicy => Boolean(policy));
   return ticketPurchase
-    ? policies.filter((policy) => policy.kind !== "waiver")
+    ? policies.filter(
+        (policy) =>
+          policy.kind !== "waiver" || Boolean(policy.waiverDocumentId),
+      )
     : policies;
 }
 
@@ -1244,6 +1263,29 @@ export async function startEventCheckout(input: {
     input.sessionId,
     Boolean(event.ticketTypeId),
   );
+  const linkedWaiverIds = policies
+    .filter(
+      (policy) =>
+        policy.kind === "waiver" &&
+        policy.required &&
+        Boolean(policy.waiverDocumentId),
+    )
+    .map((policy) => policy.waiverDocumentId!);
+  if (linkedWaiverIds.length && event.organization) {
+    const requirements = await loadWaiverRequirements({
+      actor: input.actor,
+      organizationId: event.organization.id,
+      subjectPersonId,
+      waiverDocumentIds: linkedWaiverIds,
+      now: input.now,
+    });
+    if (requirements.some((requirement) => !requirement.complete)) {
+      throw new CheckoutError(
+        "EVENT_NOT_CHECKOUT_ELIGIBLE",
+        "Complete the required club waiver before event checkout.",
+      );
+    }
+  }
   const acceptedPolicies = validatePolicyAcceptances({
     policies,
     acceptedPolicyIds: input.acceptedPolicyIds ?? [],

@@ -21,6 +21,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,6 +45,9 @@ type Coach = Awaited<
 type Eligibility = Awaited<
   ReturnType<DunaApiClient["player"]["catalogOfferEligibility"]["query"]>
 >;
+type WaiverRequirement = Awaited<
+  ReturnType<DunaApiClient["player"]["waiverRequirements"]["query"]>
+>[number];
 
 function readableText(background: string) {
   const value = background.replace("#", "");
@@ -331,6 +335,16 @@ export function OrganizationExperienceModal({
   const [eligibility, setEligibility] = useState<Eligibility>();
   const [addMembership, setAddMembership] = useState(true);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [waiverRequirements, setWaiverRequirements] = useState<
+    readonly WaiverRequirement[]
+  >([]);
+  const [waiverVisible, setWaiverVisible] = useState(false);
+  const [waiverScrolled, setWaiverScrolled] = useState(false);
+  const [waiverAccepted, setWaiverAccepted] = useState(false);
+  const [waiverName, setWaiverName] = useState("");
+  const [waiverAcknowledgements, setWaiverAcknowledgements] = useState<
+    readonly string[]
+  >([]);
 
   useEffect(() => {
     if (!slug || !publicClient) return;
@@ -455,6 +469,19 @@ export function OrganizationExperienceModal({
     if (!client || !storefront) {
       throw new Error("Sign in to purchase from this club.");
     }
+    const requirements = await client.player.waiverRequirements.query({
+      organizationId: storefront.organizationId,
+      catalogItemId: item.id,
+    });
+    if (requirements.some((requirement) => !requirement.complete)) {
+      setWaiverRequirements(requirements);
+      setWaiverScrolled(false);
+      setWaiverAccepted(false);
+      setWaiverName("");
+      setWaiverAcknowledgements([]);
+      setWaiverVisible(true);
+      return false;
+    }
     const variant =
       item.variants.find((candidate) => candidate.id === selectedVariantId) ??
       item.variants[0];
@@ -550,6 +577,66 @@ export function OrganizationExperienceModal({
       Alert.alert(
         "Purchase could not finish",
         reason instanceof Error ? reason.message : "Please try again.",
+      );
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
+
+  const currentWaiver = waiverRequirements.find(
+    (requirement) => !requirement.complete,
+  );
+  const requiredWaiverSections =
+    currentWaiver?.keySections.filter(
+      (section) => section.acknowledgementRequired,
+    ) ?? [];
+  const canSignWaiver =
+    Boolean(currentWaiver) &&
+    waiverScrolled &&
+    waiverAccepted &&
+    requiredWaiverSections.every((section) =>
+      waiverAcknowledgements.includes(section.id),
+    ) &&
+    (!currentWaiver?.requiresSignature || waiverName.trim().length >= 3);
+
+  async function signWaiver() {
+    if (!client || !storefront || !currentWaiver || !canSignWaiver) return;
+    setCheckoutBusy(true);
+    try {
+      await client.player.executeWaiver.mutate({
+        organizationId: storefront.organizationId,
+        waiverDocumentId: currentWaiver.documentId,
+        subjectPersonId: currentWaiver.subjectPersonId,
+        typedLegalName: currentWaiver.requiresSignature
+          ? waiverName
+          : undefined,
+        acknowledgedSectionIds: [...waiverAcknowledgements],
+        displayedInline: true,
+        scrolledToEnd: true,
+        confirmed: true,
+        idempotencyKey: Crypto.randomUUID(),
+      });
+      const refreshed = await client.player.waiverRequirements.query({
+        organizationId: storefront.organizationId,
+        catalogItemId: selectedItem?.id,
+      });
+      setWaiverRequirements(refreshed);
+      if (refreshed.every((requirement) => requirement.complete)) {
+        setWaiverVisible(false);
+        Alert.alert(
+          "Waiver recorded",
+          "Your acknowledgement has been saved to the club record.",
+        );
+      } else {
+        Alert.alert(
+          "Another signer is needed",
+          "Duna recorded this acknowledgement. A linked parent, guardian, or player still needs to complete the remaining required signature.",
+        );
+      }
+    } catch (reason) {
+      Alert.alert(
+        "Waiver could not be signed",
+        reason instanceof Error ? reason.message : "Try again in a moment.",
       );
     } finally {
       setCheckoutBusy(false);
@@ -1344,6 +1431,148 @@ export function OrganizationExperienceModal({
             </View>
           </ScrollView>
         )}
+        <Modal
+          animationType="slide"
+          onRequestClose={() => setWaiverVisible(false)}
+          presentationStyle="pageSheet"
+          visible={waiverVisible}
+        >
+          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+            <View style={styles.header}>
+              <View style={styles.flex}>
+                <Text style={styles.headerEyebrow}>REQUIRED WAIVER</Text>
+                <Text style={styles.headerTitle}>
+                  {currentWaiver?.title ?? "Waiver"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close waiver"
+                onPress={() => setWaiverVisible(false)}
+                style={styles.iconButton}
+              >
+                <CloseIcon color={themeTokens.text1} />
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.waiverPage}
+              onScroll={(event) => {
+                const { contentOffset, contentSize, layoutMeasurement } =
+                  event.nativeEvent;
+                if (
+                  contentSize.height -
+                    contentOffset.y -
+                    layoutMeasurement.height <
+                  10
+                ) {
+                  setWaiverScrolled(true);
+                }
+              }}
+              scrollEventThrottle={16}
+            >
+              <Text style={styles.waiverIntro}>
+                Review the complete waiver below. Duna will only unlock the
+                acknowledgement controls after you reach the end.
+              </Text>
+              <Text style={styles.waiverText}>{currentWaiver?.markdown}</Text>
+              <Text style={styles.waiverStatus}>
+                {waiverScrolled
+                  ? "Full document reviewed. You can now acknowledge and sign."
+                  : "Scroll to the bottom to continue."}
+              </Text>
+              {requiredWaiverSections.map((section) => {
+                const checked = waiverAcknowledgements.includes(section.id);
+                return (
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked, disabled: !waiverScrolled }}
+                    disabled={!waiverScrolled}
+                    key={section.id}
+                    onPress={() =>
+                      setWaiverAcknowledgements((current) =>
+                        checked
+                          ? current.filter((id) => id !== section.id)
+                          : [...current, section.id],
+                      )
+                    }
+                    style={styles.waiverAcknowledgement}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        checked && {
+                          backgroundColor: primary,
+                          borderColor: primary,
+                        },
+                      ]}
+                    >
+                      {checked ? <CheckIcon color={onPrimary} /> : null}
+                    </View>
+                    <Text style={styles.waiverAcknowledgementText}>
+                      I specifically acknowledge: {section.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{
+                  checked: waiverAccepted,
+                  disabled: !waiverScrolled,
+                }}
+                disabled={!waiverScrolled}
+                onPress={() => setWaiverAccepted((value) => !value)}
+                style={styles.waiverAcknowledgement}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    waiverAccepted && {
+                      backgroundColor: primary,
+                      borderColor: primary,
+                    },
+                  ]}
+                >
+                  {waiverAccepted ? <CheckIcon color={onPrimary} /> : null}
+                </View>
+                <Text style={styles.waiverAcknowledgementText}>
+                  I have reviewed the full waiver and affirmatively agree to it.
+                </Text>
+              </Pressable>
+              {currentWaiver?.requiresSignature ? (
+                <View style={styles.waiverNameGroup}>
+                  <Text style={styles.waiverNameLabel}>
+                    Type your full legal name to sign
+                  </Text>
+                  <TextInput
+                    editable={waiverScrolled}
+                    onChangeText={setWaiverName}
+                    placeholder="Full legal name"
+                    placeholderTextColor={themeTokens.text3}
+                    style={styles.waiverNameInput}
+                    value={waiverName}
+                  />
+                </View>
+              ) : null}
+              <Pressable
+                disabled={!canSignWaiver || checkoutBusy}
+                onPress={() => void signWaiver()}
+                style={[
+                  styles.buyButton,
+                  { backgroundColor: primary },
+                  (!canSignWaiver || checkoutBusy) && styles.disabled,
+                ]}
+              >
+                {checkoutBusy ? (
+                  <ActivityIndicator color={onPrimary} />
+                ) : (
+                  <Text style={[styles.buyButtonText, { color: onPrimary }]}>
+                    Sign waiver
+                  </Text>
+                )}
+              </Pressable>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
       </SafeAreaView>
     </Modal>
   );
@@ -1791,6 +2020,46 @@ function createStyles(token: ResolvedDunaTokens) {
       minHeight: 100,
       padding: 12,
     },
+    waiverAcknowledgement: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 14,
+    },
+    waiverAcknowledgementText: {
+      color: token.text1,
+      flex: 1,
+      fontSize: 15,
+      lineHeight: 21,
+    },
+    waiverIntro: {
+      color: token.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: 18,
+    },
+    waiverNameGroup: { marginTop: 18 },
+    waiverNameInput: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairlineStrong,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: token.text1,
+      fontSize: 16,
+      marginTop: 7,
+      minHeight: 46,
+      paddingHorizontal: 12,
+    },
+    waiverNameLabel: { color: token.text1, fontSize: 14, fontWeight: "700" },
+    waiverPage: { padding: 20, paddingBottom: 42 },
+    waiverStatus: {
+      color: token.text2,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
+      marginTop: 18,
+    },
+    waiverText: { color: token.text1, fontSize: 15, lineHeight: 23 },
     venueFallback: { alignItems: "center", justifyContent: "center" },
     venueFallbackText: { fontSize: 30 },
     venueMeta: {

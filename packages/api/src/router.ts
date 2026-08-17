@@ -123,6 +123,8 @@ import {
   venueLayoutCourtAssignmentPlanSchema,
   venueLayoutGeometrySchema,
   venueLayoutWorkspaceSchema,
+  waiverWorkspaceSchema,
+  waiverRequirementSchema,
   courtCalibrationSchema,
   dunaPlusGrantSchema,
   liveVideoSessionSchema,
@@ -300,6 +302,12 @@ import {
   IdempotencyConflictError,
   IdempotencyInProgressError,
 } from "./idempotency";
+import {
+  createWaiver,
+  executeWaiver,
+  loadWaiverRequirements,
+  loadWaiverWorkspace,
+} from "./waiver-service";
 import {
   addDependent,
   checkOwnHandleAvailability,
@@ -782,6 +790,9 @@ const eventDraftPolicySchema = z.object({
   markdown: z.string().trim().min(1).max(50_000),
   required: z.boolean(),
   requireFullScroll: z.boolean(),
+  waiverDocumentId: z.string().uuid().optional(),
+  waiverVersionId: z.string().uuid().optional(),
+  waiverContentHash: z.string().min(16).max(160).optional(),
 });
 
 const leagueRecurrenceInputSchema = z.object({
@@ -4033,6 +4044,61 @@ const playerRouter = router({
         ? []
         : loadPlayerOrganizationWallets(ctx.actor!.personId, ctx.now),
     ),
+  executeWaiver: protectedProcedure
+    .use(requireScope("bookings:write"))
+    .input(
+      z.object({
+        organizationId: z.string().uuid(),
+        waiverDocumentId: z.string().uuid(),
+        subjectPersonId: z.string().uuid(),
+        typedLegalName: z.string().trim().max(240).optional(),
+        acknowledgedSectionIds: z.array(z.string().min(1).max(80)).max(20),
+        displayedInline: z.literal(true),
+        scrolledToEnd: z.literal(true),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        executionId: z.string().uuid(),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.executeWaiver",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await executeWaiver({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  waiverRequirements: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string().uuid(),
+        catalogItemId: z.string().uuid().optional(),
+        subjectPersonId: z.string().uuid().optional(),
+      }),
+    )
+    .output(z.array(waiverRequirementSchema).readonly())
+    .query(({ input, ctx }) =>
+      loadWaiverRequirements({ actor: ctx.actor!, ...input, now: ctx.now }),
+    ),
   familyWallets: protectedProcedure
     .output(
       z
@@ -6839,6 +6905,71 @@ const operatorRouter = router({
       ctx.actor!.isDemo && !process.env.DATABASE_URL
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
+    ),
+  waiverWorkspace: organizationProcedure("sessions:read")
+    .output(waiverWorkspaceSchema)
+    .query(({ ctx }) => loadWaiverWorkspace(ctx.actor!.organizationId!)),
+  createWaiver: organizationProcedure("sessions:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-waiver-create",
+        capacity: 12,
+        refillPerMinute: 4,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        waiverDocumentId: z.string().uuid().optional(),
+        title: z.string().trim().min(2).max(180),
+        markdown: z.string().trim().min(20).max(100_000),
+        sourceFilename: z.string().trim().max(255).optional(),
+        sourceMimeType: z.string().trim().max(120).optional(),
+        requiresSignature: z.boolean(),
+        signatureValidityDays: z.number().int().min(1).max(3650),
+        requiresParentForMinors: z.boolean(),
+        playerAcknowledgementMinimumAge: z
+          .number()
+          .int()
+          .min(13)
+          .max(17)
+          .optional(),
+        keySections: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              title: z.string().trim().min(1).max(160),
+              markdown: z.string().trim().min(1).max(20_000),
+              acknowledgementRequired: z.boolean(),
+            }),
+          )
+          .max(20),
+        appliesToMembers: z.boolean(),
+        appliesToBookings: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string().uuid(), versionId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createWaiver",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createWaiver({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
     ),
   venueLayoutWorkspace: organizationProcedure("sessions:read")
     .input(z.object({ venueId: z.string().uuid() }))

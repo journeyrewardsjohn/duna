@@ -1,0 +1,2 @@
+ALTER TABLE "waiver_executions" ADD COLUMN "displayed_inline" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "waiver_executions" ADD COLUMN "scrolled_to_end" boolean DEFAULT false NOT NULL;

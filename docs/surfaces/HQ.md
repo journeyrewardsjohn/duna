@@ -91,6 +91,9 @@ action for the same server-owned object.
   explicit publish procedure succeeds.
 - **People/minors:** guardian, consent, role, and scope checks are re-evaluated
   server-side.
+- **Waivers & releases:** Settings owns the club-scoped library and immutable
+  revisions. Imported files are review drafts; only reviewed text is published.
+  See [`../WAIVERS_AND_RELEASES.md`](../WAIVERS_AND_RELEASES.md).
 - **AI:** Duna AI produces proposals; publishing, messaging, pricing, and money
   require a fresh human confirmation.
 - **Venue layout:** draft, preview, publish, and court creation are distinct

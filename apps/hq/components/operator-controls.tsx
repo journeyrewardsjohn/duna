@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
@@ -2952,10 +2952,12 @@ function FacilitiesControls({
 export function OperatorControls({
   focusedCreate = false,
   module,
+  waivers,
   workspace,
 }: {
   readonly focusedCreate?: boolean;
   readonly module: OperatorModule;
+  readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
   if (module === "marketing") {
@@ -2983,7 +2985,11 @@ export function OperatorControls({
   }
   if (module === "products") {
     return (
-      <ProductCatalogControls focused={focusedCreate} workspace={workspace} />
+      <ProductCatalogControls
+        focused={focusedCreate}
+        waivers={waivers}
+        workspace={workspace}
+      />
     );
   }
   if (module === "payments") {

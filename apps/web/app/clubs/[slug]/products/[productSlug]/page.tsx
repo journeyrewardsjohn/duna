@@ -129,6 +129,23 @@ export default async function CatalogProductPage({
     (candidate) =>
       candidate.type === "plan" && candidate.subtype === "membership",
   );
+  const [itemWaiverRequirements, membershipWaiverRequirements] =
+    await Promise.all([
+      caller.player
+        .waiverRequirements({
+          organizationId: storefront.organizationId,
+          catalogItemId: item.id,
+        })
+        .catch(() => []),
+      membershipOffers[0]
+        ? caller.player
+            .waiverRequirements({
+              organizationId: storefront.organizationId,
+              catalogItemId: membershipOffers[0].id,
+            })
+            .catch(() => [])
+        : Promise.resolve([]),
+    ]);
   const canonicalPath = `/clubs/${slug}/products/${productSlug}`;
   const pageUrl = absolutePublicUrl(canonicalPath);
   const offers = item.variants.flatMap((variant) =>
@@ -299,6 +316,7 @@ export default async function CatalogProductPage({
             }
             item={item}
             organization={{
+              id: storefront.organizationId,
               slug,
               name: storefront.name,
               currency: storefront.currency,
@@ -307,6 +325,8 @@ export default async function CatalogProductPage({
             isMember={isMember}
             membershipIncluded={offerEligibility.included}
             membershipOffers={membershipOffers}
+            itemWaiverRequirements={itemWaiverRequirements}
+            membershipWaiverRequirements={membershipWaiverRequirements}
             membershipRemainingBookings={offerEligibility.remainingBookings}
             dunaServiceFeeWaived={playerSettings?.dunaPlus.active ?? false}
             walletCredits={walletCredits}

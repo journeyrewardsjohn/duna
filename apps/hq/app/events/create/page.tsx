@@ -29,12 +29,13 @@ export default async function CreateEventPage({
     )
       ? draft
       : undefined;
-  const [dashboard, workspace, eventDraft] = await Promise.all([
+  const [dashboard, workspace, eventDraft, waivers] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     draftId
       ? caller.operator.eventDraft({ sessionId: draftId })
       : Promise.resolve(undefined),
+    caller.operator.waiverWorkspace(),
   ]);
 
   return (
@@ -54,6 +55,7 @@ export default async function CreateEventPage({
         initialSummary={summary?.slice(0, 180)}
         initialTitle={title?.slice(0, 140)}
         initialVenueName={venue?.slice(0, 180)}
+        waivers={waivers}
         workspace={workspace}
       />
     </OperatorShell>

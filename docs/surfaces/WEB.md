@@ -113,6 +113,11 @@ Avoid putting business truth in a server action or component. The page should
 translate a typed procedure result into a view; shared policy stays in the API
 or pure domain package.
 
+Waiver signing is an inline, scroll-gated, typed-name flow. Checkout is only a
+projection of server-owned waiver requirements; it cannot activate a membership
+or purchase an event without a durable execution. See
+[`../WAIVERS_AND_RELEASES.md`](../WAIVERS_AND_RELEASES.md).
+
 ## Local development
 
 ```bash

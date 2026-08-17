@@ -17,9 +17,12 @@ export async function OperatorCreatePage({
   readonly description: string;
 }) {
   const caller = await getServerCaller();
-  const [dashboard, workspace] = await Promise.all([
+  const [dashboard, workspace, waivers] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
+    module === "products"
+      ? caller.operator.waiverWorkspace()
+      : Promise.resolve(undefined),
   ]);
   const moduleLabel = module === "members" ? "people" : module;
   return (
@@ -48,6 +51,7 @@ export async function OperatorCreatePage({
           <OperatorControls
             focusedCreate
             module={module}
+            waivers={waivers}
             workspace={workspace}
           />
         </section>

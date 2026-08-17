@@ -39,6 +39,8 @@ provider operations, and time-sensitive release evidence.
 - [`HEALTH_PRIVACY.md`](HEALTH_PRIVACY.md) — HealthKit storage, sharing, and
   deletion boundary.
 - [`PREDICTION_CREDITS.md`](PREDICTION_CREDITS.md) — play-credit market boundary.
+- [`WAIVERS_AND_RELEASES.md`](WAIVERS_AND_RELEASES.md) — club-scoped waiver
+  library, execution evidence, guardian consent, enforcement, and release checks.
 - [`VOLLEYBALL_WORLD_LIVE.md`](VOLLEYBALL_WORLD_LIVE.md) — live professional data.
 - [`MEMBERSHIP_PRICING.md`](MEMBERSHIP_PRICING.md) and
   [`ORGANIZATION_PRICING.md`](ORGANIZATION_PRICING.md) — commercial contracts.
