@@ -16,6 +16,54 @@
 
 /* Venue layout studio */
 body[data-zone="operator"] {
+  /*
+   * Operator work happens on quiet neutral planes. The page recedes a step so
+   * that cards, calendars, menus, and form controls can all use a true white
+   * working surface rather than the retired sand fill.
+   */
+  --ground: #f5f7fa;
+  --ground-warm: #f2f5f8;
+  --ground-cool: #e8eef4;
+  --surface-1: #ffffff;
+  --surface-2: #f2f5f8;
+  --surface-3: #ffffff;
+  --hairline: rgb(23 33 43 / 10%);
+  --hairline-strong: rgb(23 33 43 / 18%);
+  --edge-light: rgb(255 255 255 / 72%);
+  --scrim: rgb(13 20 28 / 46%);
+  --text-1: #17212b;
+  --text-2: #4b5968;
+  --text-3: #718091;
+  --dissolve: var(--ground);
+  --btn-primary-bg: var(--hq-deep);
+  --btn-primary-fg: #ffffff;
+  --btn-primary-hover: var(--hq-ink);
+  --btn-ghost-border: rgb(23 33 43 / 20%);
+  --focus-ring: var(--hq-core);
+  --glass-fill: rgb(255 255 255 / 82%);
+  --glass-border: rgb(23 33 43 / 10%);
+  --performance-ground: #17212b;
+  --overlay-rgb: 23 33 43;
+  --text-rgb: 23 33 43;
+  --muted-rgb: 75 89 104;
+  --accent-rgb: 23 33 43;
+  --color-ink: var(--text-1);
+  --color-depth: var(--surface-1);
+  --color-navy: var(--ground-cool);
+  --color-navy-lift: var(--surface-2);
+  --color-sand-light: var(--surface-2);
+  --color-aqua: var(--hq-deep);
+  --color-aqua-deep: var(--hq-ink);
+  --color-canvas: var(--ground);
+  --color-canvas-soft: var(--surface-2);
+  --color-surface: var(--surface-1);
+  --color-surface-raised: var(--surface-3);
+  --color-line: var(--hairline);
+  --color-line-strong: var(--hairline-strong);
+  --ink-rgb: 23 33 43;
+  --depth-rgb: 255 255 255;
+  --shadow-small: 0 10px 30px rgb(23 33 43 / 5%);
+  --shadow-large: 0 24px 70px rgb(23 33 43 / 9%);
   --layout-sand-core: #e0b84f;
   --layout-ticketed-core: #9e79d3;
   --layout-amenity-core: #7ebf8a;
@@ -29,6 +77,58 @@ body[data-zone="operator"] {
 }
 
 html[data-theme="dark"] body[data-zone="operator"] {
+  --ground: #111820;
+  --ground-warm: #161e28;
+  --ground-cool: #1b2835;
+  --surface-1: #19222d;
+  --surface-2: #222d39;
+  --surface-3: #2a3643;
+  --hairline: rgb(225 235 246 / 11%);
+  --hairline-strong: rgb(225 235 246 / 20%);
+  --edge-light: rgb(225 235 246 / 6%);
+  --scrim: rgb(5 9 14 / 68%);
+  --text-1: #f2f6fb;
+  --text-2: #c3ceda;
+  --text-3: #94a2b1;
+  --hq-tint: #263523;
+  --hq-core: #b4cd81;
+  --hq-ink: #e4f1cf;
+  --hq-deep: #152315;
+  --hq-text-on-deep: #f4fae9;
+  --hq-text-on-deep-muted: rgb(244 250 233 / 72%);
+  --hq-action-on-deep: #c7e39b;
+  --hq-line-on-deep: rgb(244 250 233 / 13%);
+  --hq-surface-on-deep: rgb(244 250 233 / 8%);
+  --dissolve: var(--ground);
+  --btn-primary-bg: #eef4fb;
+  --btn-primary-fg: #111820;
+  --btn-primary-hover: #ffffff;
+  --btn-ghost-border: rgb(242 246 251 / 24%);
+  --focus-ring: var(--hq-core);
+  --glass-fill: rgb(25 34 45 / 84%);
+  --glass-border: rgb(225 235 246 / 11%);
+  --performance-ground: #0d131a;
+  --overlay-rgb: 242 246 251;
+  --text-rgb: 242 246 251;
+  --muted-rgb: 195 206 218;
+  --accent-rgb: 242 246 251;
+  --color-ink: var(--text-1);
+  --color-depth: var(--surface-1);
+  --color-navy: var(--ground-cool);
+  --color-navy-lift: var(--surface-2);
+  --color-sand-light: var(--surface-2);
+  --color-aqua: var(--hq-core);
+  --color-aqua-deep: var(--hq-ink);
+  --color-canvas: var(--ground);
+  --color-canvas-soft: var(--surface-2);
+  --color-surface: var(--surface-1);
+  --color-surface-raised: var(--surface-3);
+  --color-line: var(--hairline);
+  --color-line-strong: var(--hairline-strong);
+  --ink-rgb: 242 246 251;
+  --depth-rgb: 25 34 45;
+  --shadow-small: 0 12px 34px rgb(0 0 0 / 20%);
+  --shadow-large: 0 26px 74px rgb(0 0 0 / 30%);
   --layout-sand-core: #c79d36;
   --layout-ticketed-core: #8461b4;
   --layout-amenity-core: #579565;
@@ -5743,4 +5843,29 @@ body[data-zone="operator"] :is(h1, h2, h3) {
   .court-schedule-days > section > div > article > select {
     grid-column: 1 / -2;
   }
+}
+
+/*
+ * A white working surface over a slightly cooler page canvas gives dense HQ
+ * screens depth without making each module feel like a tinted container.
+ * Calendar demand colors remain semantic exceptions, not component fills.
+ */
+body[data-zone="operator"] .hq-sidebar {
+  background: var(--surface-1);
+  box-shadow: 10px 0 32px rgb(var(--ink-rgb) / 3%);
+}
+
+body[data-zone="operator"] .hq-topbar {
+  background: color-mix(in srgb, var(--surface-1) 92%, var(--ground));
+}
+
+body[data-zone="operator"]
+  :is(.schedule-calendar, .team-availability-calendar) {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  box-shadow: var(--shadow-small);
+}
+
+body[data-zone="operator"] :is(.schedule-dropzone, .team-blackouts__form) {
+  background: var(--surface-2);
 }
