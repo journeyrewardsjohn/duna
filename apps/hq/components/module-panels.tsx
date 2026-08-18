@@ -35,6 +35,7 @@ import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 import { VenueMatchOperations } from "./venue-match-operations";
+import { DunaAiWorkspace } from "./duna-ai-workspace";
 
 const moduleCopy: Record<
   Exclude<OperatorModule, "overview" | "messages">,
@@ -108,7 +109,7 @@ const moduleCopy: Record<
     eyebrow: "Governed assistance",
     title: "Duna AI",
     description:
-      "Read-only grounded signals today; every future write remains proposed and auditable.",
+      "Context-aware answers with permission checks, governed proposals, and fresh approval for consequential actions.",
   },
   settings: {
     eyebrow: "Tenant configuration",
@@ -1040,31 +1041,30 @@ function AiPanel({ dashboard }: { readonly dashboard: OperatorDashboard }) {
     (event) => event.spotsRemaining <= Math.max(2, event.capacity * 0.1),
   );
   return (
-    <section className="hq-card module-feature-card">
-      <Bot size={26} />
-      <span className="hq-eyebrow">Grounded read-only analysis</span>
-      <h2>Connected operational signals</h2>
-      <ul className="module-signal-list">
-        <li>
-          {dashboard.events.length} published events are visible to this
-          organization.
-        </li>
-        <li>
-          {atRisk.length === 0
-            ? "No published inventory is inside the near-capacity threshold."
-            : `${atRisk.length} published events are near capacity.`}
-        </li>
-        <li>
-          Payment account state is {dashboard.organization.stripeStatus}; no
-          unavailable processor economics are inferred.
-        </li>
-      </ul>
-      <p>
-        Model-generated recommendations remain off until an approved gateway key
-        and evaluation policy are connected.
-      </p>
-      <Badge>Read-only</Badge>
-    </section>
+    <div className="duna-ai-panel">
+      <DunaAiWorkspace />
+      <section className="hq-card module-feature-card duna-ai-panel__signals">
+        <Bot size={26} />
+        <span className="hq-eyebrow">Connected operating signals</span>
+        <h2>{dashboard.organization.name} right now</h2>
+        <ul className="module-signal-list">
+          <li>
+            {dashboard.events.length} published events are visible in this
+            organization.
+          </li>
+          <li>
+            {atRisk.length === 0
+              ? "No published inventory is inside the near-capacity threshold."
+              : `${atRisk.length} published events are near capacity.`}
+          </li>
+          <li>
+            Payment account state is {dashboard.organization.stripeStatus}; Duna
+            AI does not infer unavailable processor economics.
+          </li>
+        </ul>
+        <Badge>Permission-aware</Badge>
+      </section>
+    </div>
   );
 }
 

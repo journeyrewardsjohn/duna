@@ -32659,6 +32659,316 @@ a {
   text-align: center;
 }
 
+.ask-duna__turn {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ask-duna__card {
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 13px;
+  color: inherit;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem 0.75rem;
+  position: relative;
+  text-decoration: none;
+}
+
+.ask-duna__card > span {
+  color: var(--color-aqua);
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ask-duna__card > strong {
+  color: #fff;
+  font-size: 0.78rem;
+}
+
+.ask-duna__card > p {
+  color: rgb(255 255 255 / 69%);
+  font-size: 0.7rem;
+  line-height: 1.42;
+  margin: 0;
+}
+
+.ask-duna__card > svg {
+  color: var(--color-aqua);
+  position: absolute;
+  right: 0.65rem;
+  top: 0.65rem;
+}
+
+.ask-duna__card--approval {
+  border-color: rgb(117 229 205 / 38%);
+}
+
+.ask-duna__card--approval button {
+  align-items: center;
+  background: var(--color-aqua);
+  border: 0;
+  border-radius: 9px;
+  color: var(--color-ink);
+  display: inline-flex;
+  font-size: 0.69rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  margin-top: 0.35rem;
+  min-height: 32px;
+}
+
+.ask-duna__card--approval ul {
+  color: rgb(255 255 255 / 76%);
+  display: grid;
+  font-size: 0.68rem;
+  gap: 0.28rem;
+  line-height: 1.4;
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}
+
+.ask-duna__card--warning {
+  border-color: rgb(243 188 93 / 48%);
+}
+
+.ask-duna__card--danger {
+  border-color: rgb(242 119 119 / 52%);
+}
+
+.ask-duna__card--positive {
+  border-color: rgb(117 229 205 / 48%);
+}
+
+.ask-duna__map-card,
+.ask-duna__metric-card {
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 13px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+}
+
+.ask-duna__map-card > span,
+.ask-duna__metric-card > span {
+  align-items: center;
+  color: var(--color-aqua);
+  display: inline-flex;
+  font-size: 0.61rem;
+  font-weight: 800;
+  gap: 0.3rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ask-duna__map-card > strong,
+.ask-duna__metric-card > strong {
+  color: #fff;
+  font-size: 0.8rem;
+}
+
+.ask-duna__map-card > p,
+.ask-duna__metric-card > p {
+  color: rgb(255 255 255 / 65%);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ask-duna__mini-map {
+  background:
+    linear-gradient(
+      42deg,
+      transparent 47%,
+      rgb(117 229 205 / 14%) 48%,
+      rgb(117 229 205 / 14%) 51%,
+      transparent 52%
+    ),
+    linear-gradient(
+      -20deg,
+      transparent 44%,
+      rgb(255 255 255 / 9%) 45%,
+      rgb(255 255 255 / 9%) 48%,
+      transparent 49%
+    ),
+    #172f38;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  height: 132px;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.ask-duna__mini-map > a {
+  align-items: center;
+  background: var(--color-aqua);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  color: var(--color-ink);
+  display: flex;
+  font-size: 0.6rem;
+  font-weight: 900;
+  height: 23px;
+  justify-content: center;
+  position: absolute;
+  text-decoration: none;
+  transform: translate(-50%, -50%);
+  width: 23px;
+}
+
+.ask-duna__map-card > ol {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ask-duna__map-card li a {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 22px 1fr;
+  text-decoration: none;
+}
+
+.ask-duna__map-card li b {
+  align-items: center;
+  background: rgb(117 229 205 / 15%);
+  border-radius: 50%;
+  color: var(--color-aqua);
+  display: flex;
+  font-size: 0.58rem;
+  height: 22px;
+  justify-content: center;
+}
+
+.ask-duna__map-card li span {
+  display: grid;
+}
+
+.ask-duna__map-card li strong {
+  color: #fff;
+  font-size: 0.68rem;
+}
+
+.ask-duna__map-card li small {
+  color: rgb(255 255 255 / 58%);
+  font-size: 0.61rem;
+}
+
+.ask-duna__event-card {
+  align-items: center;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 13px;
+  color: inherit;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto 1fr auto;
+  overflow: hidden;
+  padding: 0.5rem;
+  text-decoration: none;
+}
+
+.ask-duna__event-card > img {
+  border-radius: 9px;
+  height: 68px;
+  object-fit: cover;
+  width: 82px;
+}
+
+.ask-duna__event-card > span {
+  display: grid;
+  gap: 0.13rem;
+  min-width: 0;
+}
+
+.ask-duna__event-card small {
+  color: var(--color-aqua);
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ask-duna__event-card strong {
+  color: #fff;
+  font-size: 0.72rem;
+}
+
+.ask-duna__event-card p,
+.ask-duna__event-card em {
+  color: rgb(255 255 255 / 62%);
+  font-size: 0.61rem;
+  font-style: normal;
+  margin: 0;
+}
+
+.ask-duna__metric-card dl {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.25rem 0 0;
+}
+
+.ask-duna__metric-card dl div {
+  background: rgb(255 255 255 / 6%);
+  border-radius: 9px;
+  display: grid;
+  padding: 0.5rem;
+}
+
+.ask-duna__metric-card dt,
+.ask-duna__metric-card small {
+  color: rgb(255 255 255 / 55%);
+  font-size: 0.57rem;
+}
+
+.ask-duna__metric-card dd {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin: 0.08rem 0;
+}
+
+.ask-duna__controls {
+  align-items: center;
+  color: rgb(255 255 255 / 42%);
+  display: flex;
+  font-size: 0.58rem;
+  justify-content: space-between;
+  padding: 0.6rem 1rem 0.75rem;
+}
+
+.ask-duna__controls button,
+.ask-duna__controls span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.ask-duna__controls button {
+  background: transparent;
+  border: 0;
+  color: var(--color-aqua);
+  font-size: inherit;
+  padding: 0;
+}
+
+.ask-duna__thinking {
+  color: rgb(255 255 255 / 62%);
+  font-size: 0.7rem;
+  margin: 0;
+}
+
 @media (max-width: 1120px) {
   .player-shell {
     grid-template-columns: 82px minmax(0, 1fr);
