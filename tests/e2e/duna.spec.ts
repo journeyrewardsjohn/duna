@@ -1056,10 +1056,16 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
 
   await page.goto(`${hqBaseUrl}/ai`);
-  await expect(page.getByText("Grounded read-only analysis")).toBeVisible();
-  await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
+  await expect(page.getByText("Context-aware co-pilot")).toBeVisible();
   await expect(
-    page.getByText(/Model-generated recommendations remain off/),
+    page.getByRole("heading", { name: "See what matters. Act with control." }),
+  ).toBeVisible();
+  await expect(page.getByText("Consequential work")).toBeVisible();
+  await expect(
+    page.getByText("Fresh approval, execution result, audit trail"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Web research off" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
