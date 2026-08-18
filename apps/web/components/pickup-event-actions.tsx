@@ -33,6 +33,7 @@ import {
   requestPickupJoinAction,
   reviewPickupJoinRequestAction,
 } from "@/app/events/[slug]/actions";
+import { PlayerEventNotes } from "@/components/player-event-notes";
 import {
   searchTeammatesAction,
   startEventCheckoutAction,
@@ -281,6 +282,9 @@ export function PickupEventActions({
             <Camera aria-hidden size={15} /> Recordings
           </Link>
         </div>
+        {management?.isParticipant ? (
+          <PlayerEventNotes activityId={pickupSessionId} slug={slug} />
+        ) : null}
       </div>
     );
   }

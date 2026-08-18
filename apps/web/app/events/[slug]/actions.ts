@@ -136,6 +136,31 @@ export async function reportPickupAttendanceAction(input: {
   }
 }
 
+export async function createPlayerEventNoteAction(input: {
+  readonly activityType: "pickup" | "session";
+  readonly activityId: string;
+  readonly slug: string;
+  readonly body: string;
+  readonly visibility: "private" | "shared-with-host";
+  readonly idempotencyKey: string;
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.createEventNote({
+      activityType: input.activityType,
+      activityId: input.activityId,
+      body: input.body,
+      visibility: input.visibility,
+      source: "typed",
+      idempotencyKey: input.idempotencyKey,
+    });
+    revalidatePath(`/events/${input.slug}`);
+    return { ok: true as const, result };
+  } catch (error) {
+    return failure(error, "Your note could not be saved.");
+  }
+}
+
 export async function cancelPickupAction(input: {
   readonly pickupSessionId: string;
   readonly slug: string;
