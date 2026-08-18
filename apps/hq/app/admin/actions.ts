@@ -13,6 +13,7 @@ export type VideoAdminActionState = GuardianReviewActionState;
 export type VisionAdminActionState = GuardianReviewActionState;
 export type OrganizationCommissionActionState = GuardianReviewActionState;
 export type PredictionAdminActionState = GuardianReviewActionState;
+export type DemoDataActionState = GuardianReviewActionState;
 export interface PeopleAdminActionState extends GuardianReviewActionState {
   readonly reviewId?: string;
   readonly confirmationCode?: string;
@@ -128,6 +129,49 @@ export async function updateFeatureFlagAction(
         error instanceof Error
           ? error.message
           : "The feature flag could not be updated.",
+    };
+  }
+}
+
+export async function setDemoDataAction(
+  _previous: DemoDataActionState,
+  formData: FormData,
+): Promise<DemoDataActionState> {
+  const enabled = formData.get("enabled") === "true";
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (reason.length < 10 || !confirmed) {
+    return {
+      status: "error",
+      message:
+        "Add a removal-safe audit reason and confirm this exact Demo data change.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.setDemoData({
+      enabled,
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin");
+    revalidatePath("/admin/flags");
+    revalidatePath("/events");
+    revalidatePath("/leagues");
+    return {
+      status: "success",
+      message: result.enabled
+        ? `Demo data is live for ${result.target?.name ?? "Beach Elite Academy"} (${result.recordCount} tagged records).`
+        : "All tracked Beach Elite Academy Demo records were removed.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The Demo data control could not be updated.",
     };
   }
 }

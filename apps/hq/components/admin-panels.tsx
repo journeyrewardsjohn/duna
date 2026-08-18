@@ -7,6 +7,7 @@ import type {
   AdminVisionOverview,
   AdminVideoOverview,
   FeatureFlagCollection,
+  DemoDataControl,
   GuardianReviewItem,
   PlayerIntelligenceAdmin,
   PlayerIntelligenceDetail,
@@ -774,6 +775,7 @@ export function AdminPanel({
   organizations,
   guardianReviews,
   featureFlags,
+  demoData,
   video,
   vision,
   people,
@@ -794,6 +796,7 @@ export function AdminPanel({
   readonly organizations: readonly OrganizationSummary[];
   readonly guardianReviews: readonly GuardianReviewItem[];
   readonly featureFlags: FeatureFlagCollection;
+  readonly demoData: DemoDataControl;
   readonly video?: AdminVideoOverview;
   readonly vision?: AdminVisionOverview;
   readonly people?: SuperAdminPeopleOverview;
@@ -953,6 +956,7 @@ export function AdminPanel({
       ) : module === "flags" ? (
         <FeatureFlagControls
           collection={featureFlags}
+          demoData={demoData}
           organizations={organizations}
         />
       ) : (

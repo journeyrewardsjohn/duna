@@ -17,6 +17,7 @@ export * from "./duna-ai-support";
 export * from "./duna-ai";
 export * from "./commerce";
 export * from "./feature-flags";
+export * from "./demo-data-service";
 export * from "./forms-service";
 export * from "./match-availability-service";
 export * from "./member-card-service";

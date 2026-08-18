@@ -9083,6 +9083,64 @@ export const featureFlags = pgTable(
   ],
 );
 
+// Demo data is deliberately tracked independently from the production tables it
+// exercises. This makes the records visible to every normal product surface,
+// while giving Super Admin an exact, auditable set of rows to remove later.
+export const demoDataSets = pgTable(
+  "demo_data_sets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 96 }).notNull(),
+    label: text("label").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    updatedByPersonId: uuid("updated_by_person_id").references(() => people.id),
+    enabledAt: timestamp("enabled_at", { withTimezone: true, mode: "date" }),
+    disabledAt: timestamp("disabled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    ...{ createdAt, updatedAt },
+  },
+  (table) => [
+    uniqueIndex("demo_data_set_organization_key_unique").on(
+      table.organizationId,
+      table.key,
+    ),
+    index("demo_data_set_organization_enabled_idx").on(
+      table.organizationId,
+      table.enabled,
+    ),
+  ],
+);
+
+export const demoDataRecords = pgTable(
+  "demo_data_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dataSetId: uuid("data_set_id")
+      .notNull()
+      .references(() => demoDataSets.id, { onDelete: "cascade" }),
+    entityType: varchar("entity_type", { length: 64 }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("demo_data_record_entity_unique").on(
+      table.dataSetId,
+      table.entityType,
+      table.entityId,
+    ),
+    index("demo_data_record_set_type_idx").on(
+      table.dataSetId,
+      table.entityType,
+    ),
+  ],
+);
+
 // Duna Messaging is a relationship-scoped communication system. Neon remains
 // authoritative for every read and write; the owned delivery layer only adds
 // cursor sync and best-effort wake-up hints around these tables.

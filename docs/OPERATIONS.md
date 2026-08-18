@@ -57,9 +57,11 @@ separate release gates.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 
-The production previews must use `DUNA_DATA_SOURCE=database`. If a hosted HQ
-ever displays seeded demonstration metrics, treat that as a release failure and
-verify the project-level environment before redeploying.
+The production previews must use `DUNA_DATA_SOURCE=database`. Do not mistake
+the local demo adapter for connected evidence. During the current QA period,
+the only permitted production-like Demo records are the clearly labelled,
+Super-Admin-controlled Beach Elite Academy dataset described below; it is
+stored in the connected database and is not a fallback data source.
 
 ## Professional tour data
 
@@ -141,6 +143,19 @@ pnpm db:seed
 
 Production recovery uses Neon point-in-time recovery and a new branch; never
 rewrite a live migration.
+
+### Beach Elite Academy live Demo data
+
+In Super Admin → Feature flags, **Enable Demo Data** controls the current
+Beach Elite Academy (legacy `Demo`) QA account. Enabling it creates an
+idempotent, production-shaped dataset: a multi-division tournament with a
+waitlist plus live, future, and completed leagues across NC, SC, GA, and FL.
+Every created entity is recorded in `demo_data_records` under the scoped
+`demo_data_sets` entry, and all visible names are labelled `Demo`.
+
+Turning the control off is an audited Super Admin action and deletes only the
+tracked rows in dependency-safe order. It never deletes normal organization
+data. Use the control rather than `pnpm db:seed` for this QA dataset.
 
 ## Stripe delivery
 
