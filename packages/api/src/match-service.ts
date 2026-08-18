@@ -4,6 +4,7 @@ import {
   divisions,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   matchConfirmations,
   matchHistoryDisputes,
   matchParticipantInvitations,
@@ -1567,7 +1568,8 @@ export async function claimMatchParticipantInvitation(input: {
       "The invited team could not be found.",
     );
   }
-  await database.transaction(async (transaction) => {
+  const tx = getTransactionalDatabase();
+  await tx.transaction(async (transaction) => {
     if (input.actor.personId !== invitation.provisionalPersonId) {
       await transaction
         .update(teamMembers)
