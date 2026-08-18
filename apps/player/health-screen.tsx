@@ -44,9 +44,9 @@ import {
   type AppleHealthSyncState,
 } from "./health-sync-utils";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { usePlayerRuntime } from "./runtime";
 
 type HealthTheme = "light" | "dark";
@@ -2739,7 +2739,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     eyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.3,
       marginBottom: 4,
@@ -2764,7 +2764,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     previewText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
       textAlign: "center",
@@ -2801,7 +2801,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     errorActionText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     notice: {
@@ -2836,10 +2836,10 @@ function createHealthStyles(colors: HealthPalette) {
       borderTopColor: colors.aqua,
       paddingTop: 9,
     },
-    benefitNumber: { color: colors.aqua, fontSize: 10, fontWeight: "900" },
+    benefitNumber: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
     benefitLabel: {
       color: colors.ink,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       lineHeight: 15,
       marginTop: 4,
@@ -2859,7 +2859,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     finePrint: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       textAlign: "center",
     },
@@ -2924,7 +2924,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     importEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.5,
       marginBottom: 8,
@@ -2962,7 +2962,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     importMinimizeButtonText: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     importProgressTrack: {
@@ -2993,7 +2993,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     importStageText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     readinessHero: {
@@ -3028,7 +3028,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     readinessEyebrow: {
       color: colors.ink,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
@@ -3081,7 +3081,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     readinessMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 13,
     },
@@ -3103,7 +3103,7 @@ function createHealthStyles(colors: HealthPalette) {
       backgroundColor: colors.aquaSoft,
       borderRadius: 999,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       overflow: "hidden",
       paddingHorizontal: 9,
@@ -3142,7 +3142,7 @@ function createHealthStyles(colors: HealthPalette) {
     factorFillWatch: { backgroundColor: colors.coral },
     factorSummary: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 7,
     },
@@ -3169,7 +3169,7 @@ function createHealthStyles(colors: HealthPalette) {
     checkInTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
     checkInBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
@@ -3184,7 +3184,7 @@ function createHealthStyles(colors: HealthPalette) {
     recommendationMark: { color: colors.performanceAccent, fontSize: 23 },
     recommendationEyebrow: {
       color: colors.performanceAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
       marginBottom: 5,
@@ -3212,7 +3212,7 @@ function createHealthStyles(colors: HealthPalette) {
     trendLabel: { color: colors.ink, fontSize: 16, fontWeight: "900" },
     trendDescription: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 13,
       marginTop: 4,
       maxWidth: 210,
@@ -3225,8 +3225,8 @@ function createHealthStyles(colors: HealthPalette) {
       fontWeight: "800",
       letterSpacing: -1,
     },
-    trendUnit: { color: colors.muted, fontSize: 10, fontWeight: "700" },
-    trendEmpty: { color: colors.muted, fontSize: 11, marginVertical: 36 },
+    trendUnit: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+    trendEmpty: { color: colors.muted, fontSize: 12, marginVertical: 36 },
     trendSelected: {
       alignItems: "center",
       backgroundColor: colors.surfaceSoft,
@@ -3239,7 +3239,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     trendSelectedDate: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
       textTransform: "uppercase",
@@ -3247,7 +3247,7 @@ function createHealthStyles(colors: HealthPalette) {
     trendSelectedValue: {
       color: colors.ink,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     trendSelectedClose: { color: colors.muted, fontSize: 16 },
@@ -3261,14 +3261,14 @@ function createHealthStyles(colors: HealthPalette) {
     },
     trendBandLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
     trendBandValue: {
       color: colors.ink,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     sleepCard: {
@@ -3288,7 +3288,7 @@ function createHealthStyles(colors: HealthPalette) {
       backgroundColor: colors.aquaSoft,
       borderRadius: 999,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       overflow: "hidden",
       paddingHorizontal: 9,
@@ -3315,8 +3315,8 @@ function createHealthStyles(colors: HealthPalette) {
       width: "47%",
     },
     sleepStageDot: { borderRadius: 4, height: 7, width: 7 },
-    sleepStageName: { color: colors.muted, flex: 1, fontSize: 10 },
-    sleepStageValue: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+    sleepStageName: { color: colors.muted, flex: 1, fontSize: 12 },
+    sleepStageValue: { color: colors.ink, fontSize: 12, fontWeight: "800" },
     sleepStats: {
       borderBottomColor: colors.line,
       borderBottomWidth: StyleSheet.hairlineWidth,
@@ -3328,7 +3328,7 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 14,
     },
     sleepStatValue: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-    sleepStatLabel: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    sleepStatLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
     sleepSummary: {
       color: colors.ink,
       fontSize: 13,
@@ -3338,7 +3338,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     sleepEstimate: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 7,
     },
@@ -3360,7 +3360,7 @@ function createHealthStyles(colors: HealthPalette) {
       fontWeight: "300",
       letterSpacing: -3,
     },
-    strainScale: { color: "#A8B4B1", fontSize: 10, marginBottom: 9 },
+    strainScale: { color: "#A8B4B1", fontSize: 12, marginBottom: 9 },
     strainArc: {
       backgroundColor: "#263433",
       borderRadius: 5,
@@ -3389,8 +3389,8 @@ function createHealthStyles(colors: HealthPalette) {
       paddingTop: 14,
     },
     strainCompareValue: { color: "#F8F6EF", fontSize: 17, fontWeight: "900" },
-    strainCompareLabel: { color: "#97A6A2", fontSize: 10, marginTop: 2 },
-    strainVersus: { color: "#657572", fontSize: 10, fontWeight: "900" },
+    strainCompareLabel: { color: "#97A6A2", fontSize: 12, marginTop: 2 },
+    strainVersus: { color: "#657572", fontSize: 12, fontWeight: "900" },
     researchCard: {
       backgroundColor: colors.surface,
       borderColor: colors.line,
@@ -3401,7 +3401,7 @@ function createHealthStyles(colors: HealthPalette) {
     researchTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
     researchBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginBottom: 8,
       marginTop: 6,
@@ -3416,7 +3416,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     researchCitationTitle: {
       color: colors.ink,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
       lineHeight: 15,
     },
@@ -3458,7 +3458,7 @@ function createHealthStyles(colors: HealthPalette) {
       justifyContent: "space-between",
       marginTop: 6,
     },
-    ratingEnd: { color: colors.muted, fontSize: 10 },
+    ratingEnd: { color: colors.muted, fontSize: 12 },
     effortRow: { flexDirection: "row", gap: 7 },
     effortButton: {
       alignItems: "center",
@@ -3468,7 +3468,7 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 10,
     },
     effortButtonActive: { backgroundColor: colors.aquaSoft },
-    effortText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+    effortText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
     durationRow: { flexDirection: "row", gap: 7, marginTop: 9 },
     durationButton: {
       alignItems: "center",
@@ -3479,7 +3479,7 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 8,
     },
     durationButtonActive: { borderColor: colors.aqua },
-    durationText: { color: colors.muted, fontSize: 10, fontWeight: "800" },
+    durationText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
     checkInNote: {
       backgroundColor: colors.surface,
       borderColor: colors.line,
@@ -3529,7 +3529,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     scoreLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1,
     },
@@ -3565,7 +3565,7 @@ function createHealthStyles(colors: HealthPalette) {
     historySyncCopy: { flex: 1, minWidth: 0 },
     historySyncEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.75,
     },
@@ -3578,13 +3578,13 @@ function createHealthStyles(colors: HealthPalette) {
     },
     historySyncBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 5,
     },
     historySyncSourceNote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 7,
     },
@@ -3597,7 +3597,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     historySyncActionText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -3612,7 +3612,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     statLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.1,
     },
@@ -3625,7 +3625,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     statUnit: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 2,
     },
@@ -3677,7 +3677,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     emptyHealthButtonText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     sectionHeader: {
@@ -3701,7 +3701,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     secondaryButtonText: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     card: {
@@ -3721,7 +3721,7 @@ function createHealthStyles(colors: HealthPalette) {
     dayDate: { color: colors.ink, fontSize: 12, fontWeight: "800", width: 72 },
     dayMetric: { flex: 1, alignItems: "flex-end" },
     dayValue: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-    dayLabel: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    dayLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
     horizontalBleed: { marginHorizontal: -18, paddingLeft: 18 },
     matchRow: { flexDirection: "row", gap: 10, paddingRight: 36 },
     matchCard: {
@@ -3737,8 +3737,8 @@ function createHealthStyles(colors: HealthPalette) {
       justifyContent: "space-between",
       alignItems: "center",
     },
-    matchDate: { color: colors.muted, fontSize: 10, fontWeight: "700" },
-    result: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+    matchDate: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+    result: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
     win: { color: colors.aqua },
     loss: { color: colors.coral },
     matchTitle: {
@@ -3755,7 +3755,7 @@ function createHealthStyles(colors: HealthPalette) {
       borderRadius: 9,
       paddingVertical: 5,
       paddingHorizontal: 7,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     insightCard: {
@@ -3796,7 +3796,7 @@ function createHealthStyles(colors: HealthPalette) {
     timelineTitle: { color: colors.ink, fontSize: 12, fontWeight: "800" },
     timelineMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
@@ -3832,7 +3832,7 @@ function createHealthStyles(colors: HealthPalette) {
       alignItems: "center",
       gap: 10,
     },
-    revokeText: { color: colors.coral, fontSize: 11, fontWeight: "800" },
+    revokeText: { color: colors.coral, fontSize: 12, fontWeight: "800" },
     systemNote: {
       borderRadius: 20,
       backgroundColor: colors.surfaceSoft,
@@ -3840,22 +3840,22 @@ function createHealthStyles(colors: HealthPalette) {
       gap: 9,
     },
     systemNoteTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-    systemNoteBody: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+    systemNoteBody: { color: colors.muted, fontSize: 12, lineHeight: 17 },
     linkText: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 4,
     },
     deleteText: {
       color: colors.coral,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 10,
     },
     disclaimer: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       textAlign: "center",
       paddingHorizontal: 20,
@@ -3884,7 +3884,7 @@ function createHealthStyles(colors: HealthPalette) {
     modalClose: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
     modalEyebrow: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
@@ -3934,11 +3934,11 @@ function createHealthStyles(colors: HealthPalette) {
       fontWeight: "800",
       marginBottom: 5,
     },
-    promiseBody: { color: colors.muted, fontSize: 10, lineHeight: 16 },
+    promiseBody: { color: colors.muted, fontSize: 12, lineHeight: 16 },
     disabled: { opacity: 0.42 },
     formLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
       marginTop: 8,
@@ -3966,7 +3966,7 @@ function createHealthStyles(colors: HealthPalette) {
       backgroundColor: colors.aqua,
       borderColor: colors.aqua,
     },
-    choiceChipText: { color: colors.ink, fontSize: 11, fontWeight: "800" },
+    choiceChipText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
     choiceChipTextActive: { color: colors.onAccent },
     scopeList: { gap: 8 },
     scopeRow: {

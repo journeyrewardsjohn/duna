@@ -19,9 +19,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
 
@@ -1272,7 +1272,7 @@ const styles = StyleSheet.create({
   progressOn: { backgroundColor: "#3d6672" },
   eyebrow: {
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
     marginTop: 10,
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
   },
   goalEyebrow: {
     color: "#d9bd82",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 13,
   },
-  goalButtonText: { color: "#fff", fontSize: 11, fontWeight: "900" },
+  goalButtonText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   goalTrack: {
     backgroundColor: "rgba(255,255,255,.14)",
     borderRadius: 6,
@@ -1366,7 +1366,7 @@ const styles = StyleSheet.create({
   goalFill: { backgroundColor: "#d4b77c", borderRadius: 6, height: 8 },
   goalMeta: {
     color: "rgba(255,255,255,.68)",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 15,
     marginTop: 8,
   },
@@ -1401,7 +1401,7 @@ const styles = StyleSheet.create({
   goalPeriodOn: { backgroundColor: "#fff" },
   goalPeriodText: {
     color: "rgba(255,255,255,.7)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     textTransform: "capitalize",
   },
@@ -1413,11 +1413,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 48,
   },
-  goalSaveText: { color: "#22343b", fontSize: 11, fontWeight: "900" },
-  inlineError: { color: "#ffd0d0", fontSize: 10, lineHeight: 15 },
+  goalSaveText: { color: "#22343b", fontSize: 12, fontWeight: "900" },
+  inlineError: { color: "#ffd0d0", fontSize: 12, lineHeight: 15 },
   sectionLabel: {
     color: "#766f61",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     marginTop: 34,
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
   historyTitle: { color: "#1b1b19", fontSize: 12, fontWeight: "900" },
   historyMeta: {
     color: "#766f61",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 3,
     textTransform: "capitalize",
   },
@@ -1490,7 +1490,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
   personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#766f61", fontSize: 10, marginTop: 4 },
+  personMeta: { color: "#766f61", fontSize: 12, marginTop: 4 },
   radio: {
     alignItems: "center",
     borderColor: "#bfc6d0",
@@ -1533,7 +1533,7 @@ const styles = StyleSheet.create({
   referenceTitle: { color: "#1b1b19", fontSize: 13, fontWeight: "900" },
   referenceMeta: {
     color: "#766f61",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 13,
     marginTop: 4,
   },
@@ -1556,7 +1556,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -1,
   },
-  summaryMeta: { color: "rgba(255,255,255,.68)", fontSize: 11, marginTop: 6 },
+  summaryMeta: { color: "rgba(255,255,255,.68)", fontSize: 12, marginTop: 6 },
   tenders: { gap: 10, marginTop: 16 },
   tender: {
     alignItems: "center",
@@ -1580,7 +1580,7 @@ const styles = StyleSheet.create({
   },
   tenderIconText: { color: "#d4b77c", fontSize: 17, fontWeight: "900" },
   tenderTitle: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  tenderMeta: { color: "#766f61", fontSize: 10, lineHeight: 13, marginTop: 4 },
+  tenderMeta: { color: "#766f61", fontSize: 12, lineHeight: 13, marginTop: 4 },
   disabled: { opacity: 0.45 },
   netCard: {
     backgroundColor: "#eef5f1",
@@ -1590,7 +1590,7 @@ const styles = StyleSheet.create({
   },
   netLabel: {
     color: "#3d7d66",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
   },
@@ -1601,7 +1601,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 5,
   },
-  netMeta: { color: "#587466", fontSize: 10, lineHeight: 14, marginTop: 5 },
+  netMeta: { color: "#587466", fontSize: 12, lineHeight: 14, marginTop: 5 },
   paymentError: {
     backgroundColor: "#fff0f0",
     borderRadius: 13,
@@ -1713,7 +1713,7 @@ const styles = StyleSheet.create({
   },
   cardMark: {
     color: "#604b24",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     marginTop: "auto",
     textAlign: "right",
@@ -1745,7 +1745,7 @@ const styles = StyleSheet.create({
   motionPrompt: {
     bottom: 33,
     color: "rgba(255,255,255,.72)",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     maxWidth: 280,
     position: "absolute",
@@ -1758,11 +1758,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 16,
   },
-  secureText: { color: "#766f61", fontSize: 10, fontWeight: "700" },
+  secureText: { color: "#766f61", fontSize: 12, fontWeight: "700" },
   resultActions: { gap: 9, marginTop: 18 },
   loggedTrust: {
     color: "#766f61",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 15,
     textAlign: "center",

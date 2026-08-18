@@ -27,7 +27,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useMapboxToken } from "./discovery-map";
-import { DunaNumericText, FellixText as Text } from "./fellix-text";
+import { DunaNumericText, SatoshiText as Text } from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { dunaWebUrl } from "./mobile-api";
 import { NativeMarkdownContent } from "./markdown-content";
@@ -1698,7 +1698,7 @@ function createStyles(token: ResolvedDunaTokens) {
     eventFallbackDay: { fontSize: 52 },
     eventFallbackMonth: { fontSize: 16, marginTop: 4 },
     eventImage: { height: 190, width: "100%" },
-    eventKicker: { fontSize: 11, fontWeight: "800", letterSpacing: 1.1 },
+    eventKicker: { fontSize: 12, fontWeight: "800", letterSpacing: 1.1 },
     eventMeta: { color: token.text2, fontSize: 15, marginTop: 8 },
     eventName: {
       color: token.text1,
@@ -1723,7 +1723,7 @@ function createStyles(token: ResolvedDunaTokens) {
     headerCopy: { alignItems: "center", flex: 1, minWidth: 0 },
     headerEyebrow: {
       color: token.text2,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.1,
       textTransform: "uppercase",
@@ -1919,7 +1919,7 @@ function createStyles(token: ResolvedDunaTokens) {
       lineHeight: 24,
       marginTop: 7,
     },
-    productCardType: { fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+    productCardType: { fontSize: 12, fontWeight: "800", letterSpacing: 1 },
     productDetailSummary: {
       color: token.text2,
       fontSize: 18,
@@ -1949,7 +1949,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     productHero: { height: 350, overflow: "hidden" },
     productHeroMedia: { height: "100%", width: "100%" },
-    productKicker: { fontSize: 11, fontWeight: "800", letterSpacing: 1.1 },
+    productKicker: { fontSize: 12, fontWeight: "800", letterSpacing: 1.1 },
     productPage: { backgroundColor: token.ground, paddingBottom: 55 },
     productRail: { flexDirection: "row", gap: 14, paddingRight: 20 },
     purchaseCard: {

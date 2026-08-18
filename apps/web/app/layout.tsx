@@ -1,4 +1,3 @@
-import "@fontsource-variable/archivo";
 import "@duna/ui/styles.css";
 import "flag-icons/css/flag-icons.min.css";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -95,6 +94,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <link href="https://api.fontshare.com" rel="preconnect" />
+        <link
+          href="https://api.fontshare.com/v2/css?f[]=satoshi@1,2&display=swap"
+          rel="stylesheet"
+        />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>

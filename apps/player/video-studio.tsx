@@ -47,9 +47,9 @@ import {
   type MobilePlaceSelection,
 } from "./components/mobile-place-picker";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import {
   acknowledgeWatchVisionEvents,
   getPendingWatchVisionEvents,
@@ -4892,7 +4892,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: palette.aqua,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.6,
   },
@@ -4913,7 +4913,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  complimentaryText: { color: palette.sand, fontSize: 11, fontWeight: "800" },
+  complimentaryText: { color: palette.sand, fontSize: 12, fontWeight: "800" },
   iosNote: { color: palette.sand, fontSize: 12, lineHeight: 18 },
   captureChoiceStack: { gap: 10 },
   captureChoiceCard: {
@@ -4975,7 +4975,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.aquaSoft,
     borderRadius: 10,
     color: palette.navy,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
     overflow: "hidden",
@@ -4986,17 +4986,17 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 10,
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
     overflow: "hidden",
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
-  captureChoiceBody: { color: palette.muted, fontSize: 11, lineHeight: 16 },
+  captureChoiceBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
   captureChoiceBodyLight: {
     color: "rgba(255,255,255,0.88)",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
   },
   libraryButton: {
@@ -5009,7 +5009,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   libraryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  libraryButtonMeta: { color: "rgba(255,255,255,0.65)", fontSize: 10 },
+  libraryButtonMeta: { color: "rgba(255,255,255,0.65)", fontSize: 12 },
   disabled: { opacity: 0.42 },
   errorCard: {
     alignItems: "center",
@@ -5035,12 +5035,12 @@ const styles = StyleSheet.create({
   },
   offlineQueueActionText: {
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   offlineQueueBody: {
     color: "#526d65",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 3,
   },
@@ -5090,7 +5090,7 @@ const styles = StyleSheet.create({
   readyImportTitle: { color: palette.navy, fontSize: 13, fontWeight: "900" },
   readyImportBody: {
     color: "#526d75",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 3,
   },
@@ -5105,7 +5105,7 @@ const styles = StyleSheet.create({
   },
   readyImportActionText: {
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   usageCard: {
@@ -5132,7 +5132,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.aquaSoft,
     borderRadius: 14,
     color: palette.aqua,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     overflow: "hidden",
     paddingHorizontal: 10,
@@ -5145,7 +5145,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   usageTitle: { color: palette.ink, fontSize: 12, fontWeight: "700" },
-  usageValue: { color: palette.muted, fontSize: 11 },
+  usageValue: { color: palette.muted, fontSize: 12 },
   progressTrack: {
     backgroundColor: "#eef0f3",
     borderRadius: 4,
@@ -5162,13 +5162,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     height: 7,
   },
-  usageFootnote: { color: palette.muted, fontSize: 10, lineHeight: 15 },
+  usageFootnote: { color: palette.muted, fontSize: 12, lineHeight: 15 },
   section: { gap: 11 },
   countBadge: {
     backgroundColor: palette.aquaSoft,
     borderRadius: 12,
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     minWidth: 26,
     overflow: "hidden",
@@ -5221,11 +5221,11 @@ const styles = StyleSheet.create({
     height: 6,
     width: 6,
   },
-  liveBadgeText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  liveBadgeText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   videoThumbMeta: {
     bottom: 7,
     color: "rgba(255,255,255,0.8)",
-    fontSize: 10,
+    fontSize: 12,
     position: "absolute",
     right: 8,
   },
@@ -5236,9 +5236,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 18,
   },
-  videoMeta: { color: palette.muted, fontSize: 10 },
-  videoPrivacy: { color: palette.aqua, fontSize: 10, fontWeight: "700" },
-  metricLine: { color: palette.positive, fontSize: 10, fontWeight: "700" },
+  videoMeta: { color: palette.muted, fontSize: 12 },
+  videoPrivacy: { color: palette.aqua, fontSize: 12, fontWeight: "700" },
+  metricLine: { color: palette.positive, fontSize: 12, fontWeight: "700" },
   emptyCard: {
     backgroundColor: "#f2efe8",
     borderRadius: 16,
@@ -5246,7 +5246,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyTitle: { color: palette.ink, fontSize: 13, fontWeight: "800" },
-  emptyBody: { color: palette.muted, fontSize: 11, lineHeight: 17 },
+  emptyBody: { color: palette.muted, fontSize: 12, lineHeight: 17 },
   analyticsDisclosure: {
     backgroundColor: "#eef5f4",
     borderRadius: 18,
@@ -5254,7 +5254,7 @@ const styles = StyleSheet.create({
     padding: 17,
   },
   analyticsTitle: { color: palette.positive, fontSize: 13, fontWeight: "800" },
-  analyticsBody: { color: "#48645a", fontSize: 11, lineHeight: 17 },
+  analyticsBody: { color: "#48645a", fontSize: 12, lineHeight: 17 },
   modalSafe: { backgroundColor: palette.canvas, flex: 1 },
   modalHeader: {
     alignItems: "center",
@@ -5273,7 +5273,7 @@ const styles = StyleSheet.create({
   formHero: { gap: 8, paddingBottom: 4 },
   formStep: {
     color: palette.aqua,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.4,
   },
@@ -5319,14 +5319,14 @@ const styles = StyleSheet.create({
   choiceTextActive: { color: palette.aqua },
   choiceBody: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 15,
     marginTop: 4,
   },
   choiceBodyActive: { color: "#526c8e" },
   recommendedLabel: {
     color: palette.positive,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
     marginTop: 7,
@@ -5366,7 +5366,7 @@ const styles = StyleSheet.create({
   },
   scheduledAssociationEyebrow: {
     color: palette.positive,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
@@ -5378,7 +5378,7 @@ const styles = StyleSheet.create({
   },
   scheduledAssociationHint: {
     color: palette.positive,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.6,
   },
@@ -5413,7 +5413,7 @@ const styles = StyleSheet.create({
   },
   createMatchInlineText: {
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   option: {
@@ -5430,7 +5430,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e8f5ee",
     borderRadius: 8,
     color: palette.positive,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     overflow: "hidden",
     paddingHorizontal: 6,
@@ -5439,7 +5439,7 @@ const styles = StyleSheet.create({
   helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
   importedVideoNote: {
     color: palette.warning,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 6,
   },
@@ -5471,7 +5471,7 @@ const styles = StyleSheet.create({
   },
   importedVisionEyebrow: {
     color: palette.positive,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
@@ -5495,12 +5495,12 @@ const styles = StyleSheet.create({
   },
   importedVisionLoadingText: {
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
   },
   importedVisionLabel: {
     color: palette.navy,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
     marginTop: 2,
@@ -5520,7 +5520,7 @@ const styles = StyleSheet.create({
   importedFrameImage: { height: 80, width: "100%" },
   importedFrameTime: {
     color: palette.navy,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     paddingHorizontal: 7,
     paddingTop: 5,
@@ -5536,7 +5536,7 @@ const styles = StyleSheet.create({
     top: 5,
     width: 20,
   },
-  importedFrameCheckText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
+  importedFrameCheckText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   importedVisionAction: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.72)",
@@ -5550,7 +5550,7 @@ const styles = StyleSheet.create({
   },
   importedVisionActionText: {
     color: palette.aqua,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   importedVisionActionArrow: {
@@ -5560,10 +5560,10 @@ const styles = StyleSheet.create({
   },
   importedVisionUnavailable: {
     color: palette.warning,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 17,
   },
-  importedVisionPrivacy: { color: "#60716d", fontSize: 10, lineHeight: 15 },
+  importedVisionPrivacy: { color: "#60716d", fontSize: 12, lineHeight: 15 },
   toggleRow: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -5693,7 +5693,7 @@ const styles = StyleSheet.create({
   },
   framingGuideLabelText: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
   },
@@ -5738,13 +5738,13 @@ const styles = StyleSheet.create({
   },
   calibrationEditorHeaderButtonText: {
     color: "rgba(255,255,255,0.78)",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
   },
   calibrationEditorHeading: { alignItems: "center", flex: 1 },
   calibrationEditorEyebrow: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
@@ -5759,7 +5759,7 @@ const styles = StyleSheet.create({
   },
   calibrationEditorSaveText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   calibrationEditorBottom: {
@@ -5772,7 +5772,7 @@ const styles = StyleSheet.create({
   },
   calibrationEditorHelp: {
     color: "rgba(255,255,255,0.82)",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
   },
   calibrationPresetRow: { gap: 8, paddingRight: 12 },
@@ -5790,7 +5790,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(61,102,114,0.22)",
     borderColor: palette.aqua,
   },
-  calibrationPresetText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
+  calibrationPresetText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   calibrationEditorStatus: {
     alignItems: "center",
     flexDirection: "row",
@@ -5798,12 +5798,12 @@ const styles = StyleSheet.create({
   },
   calibrationEditorStatusText: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   calibrationEditorStatusMeta: {
     color: "rgba(255,255,255,0.6)",
-    fontSize: 10,
+    fontSize: 12,
   },
   calibrationAnchor: {
     alignItems: "center",
@@ -5834,7 +5834,7 @@ const styles = StyleSheet.create({
   },
   calibrationAnchorLabel: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     marginTop: 2,
   },
@@ -5920,7 +5920,7 @@ const styles = StyleSheet.create({
   remoteButtonIcon: { color: palette.sand, fontSize: 15, fontWeight: "900" },
   remoteButtonText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -5935,7 +5935,7 @@ const styles = StyleSheet.create({
   },
   captureStatusText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -5987,7 +5987,7 @@ const styles = StyleSheet.create({
   },
   orientationWarningBody: {
     color: "rgba(255,255,255,0.72)",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 2,
   },
@@ -5999,14 +5999,14 @@ const styles = StyleSheet.create({
   guidanceGrade: {
     color: palette.sand,
     flex: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
   },
-  guidanceScore: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
+  guidanceScore: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
   guidanceNote: {
     color: "rgba(255,255,255,0.66)",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
   },
   calibrationGuide: {
@@ -6025,13 +6025,13 @@ const styles = StyleSheet.create({
   },
   calibrationGuideEyebrow: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.9,
   },
   calibrationGuideState: {
     color: "rgba(255,255,255,0.62)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.6,
   },
@@ -6053,14 +6053,14 @@ const styles = StyleSheet.create({
   },
   calibrationGuideMark: {
     color: "rgba(255,255,255,0.45)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   calibrationGuideMarkDone: { color: palette.positive },
   calibrationGuideMarkActive: { color: palette.sand },
   calibrationGuideStepText: {
     color: "rgba(255,255,255,0.64)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   calibrationGuideStepTextActive: { color: "#ffffff" },
@@ -6078,7 +6078,7 @@ const styles = StyleSheet.create({
   },
   guidanceSignalText: {
     color: "rgba(255,255,255,0.85)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   adjustCalibrationButton: {
@@ -6092,12 +6092,12 @@ const styles = StyleSheet.create({
   },
   adjustCalibrationButtonText: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   partialCourtNote: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 13,
     marginTop: 2,
   },
@@ -6107,7 +6107,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
   },
-  captureErrorText: { color: "#ffffff", fontSize: 11, textAlign: "center" },
+  captureErrorText: { color: "#ffffff", fontSize: 12, textAlign: "center" },
   captureFallbackButton: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.96)",
@@ -6118,7 +6118,7 @@ const styles = StyleSheet.create({
   },
   captureFallbackButtonText: {
     color: "#7f1d1d",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   visionNotice: {
@@ -6132,7 +6132,7 @@ const styles = StyleSheet.create({
   },
   visionNoticeText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 15,
     textAlign: "center",
   },
@@ -6142,7 +6142,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 9,
   },
-  sharePillText: { color: palette.navy, fontSize: 11, fontWeight: "800" },
+  sharePillText: { color: palette.navy, fontSize: 12, fontWeight: "800" },
   captureMomentActions: {
     alignItems: "center",
     flexDirection: "row",
@@ -6160,7 +6160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   favoriteMomentStar: { color: palette.sand, fontSize: 19 },
-  favoriteMomentText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
+  favoriteMomentText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   remoteStatusPill: {
     alignItems: "center",
     backgroundColor: "rgba(4,10,13,0.82)",
@@ -6179,7 +6179,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   remoteStatusDotLive: { backgroundColor: palette.positive },
-  remoteStatusText: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
+  remoteStatusText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   captureButton: {
     alignItems: "center",
     backgroundColor: "rgba(232,104,58,0.94)",
@@ -6226,11 +6226,11 @@ const styles = StyleSheet.create({
   },
   visionScoreBrand: {
     color: palette.sand,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
-  visionScoreSet: { color: "#ffffff", fontSize: 10, fontWeight: "800" },
+  visionScoreSet: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   visionScoreRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -6248,13 +6248,13 @@ const styles = StyleSheet.create({
   visionTeamName: {
     color: "#ffffff",
     flex: 1,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     maxWidth: 102,
   },
   visionSetCount: {
     color: "rgba(255,255,255,0.62)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     minWidth: 12,
     textAlign: "center",
@@ -6292,7 +6292,7 @@ const styles = StyleSheet.create({
   },
   healthVideoLabel: {
     color: "rgba(255,255,255,0.58)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
     marginTop: 1,
@@ -6315,7 +6315,7 @@ const styles = StyleSheet.create({
   remoteCardHeader: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
   remoteEyebrow: {
     color: palette.aqua,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.3,
   },
@@ -6433,7 +6433,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
-  playerPrivacy: { color: "#d4b77c", fontSize: 10, fontWeight: "800" },
+  playerPrivacy: { color: "#d4b77c", fontSize: 12, fontWeight: "800" },
   playerVenue: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -6447,7 +6447,7 @@ const styles = StyleSheet.create({
   playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   playerVenueAddress: {
     color: "#aaaeb6",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 15,
     marginTop: 2,
   },
@@ -6469,7 +6469,7 @@ const styles = StyleSheet.create({
   },
   playerMetricLabel: {
     color: "#d4b77c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
     marginTop: 4,
@@ -6490,20 +6490,20 @@ const styles = StyleSheet.create({
   },
   visionAnalysisEyebrow: {
     color: "#d4b77c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
   visionAnalysisTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
   visionAnalysisStatus: {
     color: "#a8d9bf",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
     maxWidth: 88,
     textAlign: "right",
   },
-  visionAnalysisBody: { color: "#c7cfcb", fontSize: 11, lineHeight: 16 },
+  visionAnalysisBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
   visionCourt: {
     backgroundColor: "#1b2929",
     borderColor: "rgba(255,255,255,0.3)",
@@ -6530,7 +6530,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "absolute",
   },
-  visionHeatCellText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  visionHeatCellText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   visionCourtLabels: {
     bottom: 7,
     flexDirection: "row",
@@ -6541,7 +6541,7 @@ const styles = StyleSheet.create({
   },
   visionCourtLabel: {
     color: "rgba(255,255,255,0.72)",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
   },
@@ -6556,7 +6556,7 @@ const styles = StyleSheet.create({
   },
   visionCourtTapText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.55,
   },
@@ -6577,7 +6577,7 @@ const styles = StyleSheet.create({
   },
   visionMetricLabel: {
     color: "#b8c1be",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.52,
     lineHeight: 11,
@@ -6598,7 +6598,7 @@ const styles = StyleSheet.create({
   },
   visionPerformanceEyebrow: {
     color: "#a8d9bf",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -6611,13 +6611,13 @@ const styles = StyleSheet.create({
   visionPerformanceCoverage: {
     color: "#b8c1be",
     fontFamily: "Archivo-Chip",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     textAlign: "right",
   },
   visionPerformanceSummary: {
     color: "#c7cfcb",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
   },
   visionPerformanceMetrics: { flexDirection: "row", gap: 7 },
@@ -6636,7 +6636,7 @@ const styles = StyleSheet.create({
   },
   visionPerformanceLabel: {
     color: "#aeb8b5",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     lineHeight: 12,
     marginTop: 3,
@@ -6652,7 +6652,7 @@ const styles = StyleSheet.create({
   visionSideName: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   visionSideDetail: {
     color: "#aeb8b5",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 14,
     marginTop: 2,
   },
@@ -6665,17 +6665,17 @@ const styles = StyleSheet.create({
   },
   visionSideEfficiencyLabel: {
     color: "#aeb8b5",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   visionPerformanceEmpty: {
     color: "#aeb8b5",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
   },
   visionPerformanceReview: {
     color: "#d4b77c",
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 15,
   },
   visionReviewRail: {
@@ -6688,7 +6688,7 @@ const styles = StyleSheet.create({
   },
   visionReviewTitle: {
     color: "#d4b77c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -6700,10 +6700,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 8,
   },
-  visionReviewItemTitle: { color: "#f2f5f3", fontSize: 11, lineHeight: 15 },
+  visionReviewItemTitle: { color: "#f2f5f3", fontSize: 12, lineHeight: 15 },
   visionReviewItemMeta: {
     color: "#aeb8b5",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     marginTop: 2,
   },
@@ -6719,7 +6719,7 @@ const styles = StyleSheet.create({
   },
   visionReviewRejectText: {
     color: "#d2d7d5",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   visionReviewConfirm: {
@@ -6732,10 +6732,10 @@ const styles = StyleSheet.create({
   },
   visionReviewConfirmText: {
     color: "#111719",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
-  visionEvidenceNote: { color: "#aeb8b5", fontSize: 10, lineHeight: 15 },
+  visionEvidenceNote: { color: "#aeb8b5", fontSize: 12, lineHeight: 15 },
   visionAnalysisButton: {
     alignItems: "center",
     backgroundColor: "#d4b77c",
@@ -6749,7 +6749,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  visionAnalysisNotice: { color: "#b9d9ca", fontSize: 10, lineHeight: 15 },
+  visionAnalysisNotice: { color: "#b9d9ca", fontSize: 12, lineHeight: 15 },
   uploadOverlay: {
     alignItems: "center",
     backgroundColor: "rgba(10,20,28,0.92)",
@@ -6823,5 +6823,5 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   sheetActionText: { color: palette.ink, fontSize: 13, fontWeight: "800" },
-  sheetActionMeta: { color: "#98a2b3", fontSize: 10 },
+  sheetActionMeta: { color: "#98a2b3", fontSize: 12 },
 });

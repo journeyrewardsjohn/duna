@@ -1962,8 +1962,8 @@ export function ThemeKitEditor({
   const [submittedClubColor, setSubmittedClubColor] = useState(
     workspace.theme.palette.primary,
   );
-  const headingFont = "Fellix";
-  const bodyFont = "Fellix";
+  const headingFont = "Satoshi";
+  const bodyFont = "Satoshi";
   const [cardStyle, setCardStyle] = useState(workspace.theme.cardStyle);
   const [profileLayout, setProfileLayout] = useState(
     workspace.theme.profileLayout === "immersive" ||
@@ -2533,13 +2533,11 @@ export function ThemeKitEditor({
                 </div>
               </header>
               <div className="operator-form-grid operator-form-grid--two">
-                <input name="headingFont" type="hidden" value="Fellix" />
-                <input name="bodyFont" type="hidden" value="Fellix" />
+                <input name="headingFont" type="hidden" value="Satoshi" />
+                <input name="bodyFont" type="hidden" value="Satoshi" />
                 <div className="operator-field--wide theme-kit-type-lock">
                   <span>Typography system</span>
-                  <strong>
-                    Fellix for words. Archivo for meaningful data.
-                  </strong>
+                  <strong>Satoshi throughout the Duna product.</strong>
                   <p>
                     Duna keeps type consistent and licensed across club pages.
                     Your submitted color, imagery, mark, and voice carry the
@@ -2568,7 +2566,7 @@ export function ThemeKitEditor({
                 <input
                   name="safeFallbackFont"
                   type="hidden"
-                  value="Fellix, sans-serif"
+                  value="Satoshi, sans-serif"
                 />
               </div>
               <input name="fontLicenseConfirmed" type="hidden" value="true" />

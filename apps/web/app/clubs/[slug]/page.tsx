@@ -204,7 +204,7 @@ export default async function ClubPage({
       clubHue: 220.25,
       clubChroma: 0.0489,
     },
-    typography: { heading: "Fellix", body: "Fellix" },
+    typography: { heading: "Satoshi", body: "Satoshi" },
     fontLicenseConfirmed: false,
     safeFallbackFont: "Arial, Helvetica, sans-serif",
     cardStyle: "soft" as const,

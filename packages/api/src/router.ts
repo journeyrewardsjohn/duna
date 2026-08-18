@@ -8185,8 +8185,8 @@ const operatorRouter = router({
           clubChroma: z.number().min(0.04).max(0.15).optional(),
         }),
         typography: z.object({
-          heading: z.literal("Fellix"),
-          body: z.literal("Fellix"),
+          heading: z.literal("Satoshi"),
+          body: z.literal("Satoshi"),
         }),
         fontLicenseConfirmed: z.boolean(),
         safeFallbackFont: z.string().trim().min(2).max(240),

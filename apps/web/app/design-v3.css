@@ -177,7 +177,7 @@
   gap: 0.5rem;
   color: var(--text-2);
   font-family: var(--font-body);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -233,7 +233,7 @@
 .campaign-apps__status small {
   margin-bottom: 0.1rem;
   color: var(--text-3);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -407,7 +407,7 @@
 .site-header__enter small {
   margin-bottom: 0.16rem;
   color: var(--text-3);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -546,7 +546,7 @@
   border-radius: 999px;
   background: var(--text-1);
   color: var(--ground);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -571,7 +571,7 @@
 .site-header-account header small {
   overflow: hidden;
   color: var(--text-3);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
 }
 
@@ -730,7 +730,7 @@
   border: 1px solid currentColor;
   border-radius: 999px;
   font-family: var(--font-data);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-variation-settings:
     "wdth" 90,
     "wght" 800;
@@ -748,7 +748,7 @@
 .site-mobile-sheet__quick-actions small {
   margin-bottom: 0.2rem;
   color: inherit;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.14em;
   opacity: 0.62;
@@ -782,7 +782,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--text-3);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -894,7 +894,7 @@
 .site-mobile-sheet__account > div small {
   overflow: hidden;
   color: var(--text-3);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -998,7 +998,7 @@
 
 .player-organization-switcher > summary small {
   color: var(--text-3);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 750;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1022,7 +1022,7 @@
   background: var(--surface-3);
   color: var(--text-2);
   font-family: var(--font-data);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-style: normal;
   font-variation-settings:
     "wdth" 78,
@@ -1056,7 +1056,7 @@
 
 .player-organization-switcher__panel > header span {
   color: var(--color-sand-deep);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -1128,12 +1128,12 @@
 
 .player-organization-switcher__list small {
   color: var(--text-3);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
 }
 
 .player-organization-switcher__switch {
   color: var(--text-3);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -1160,7 +1160,7 @@
 .player-organization-switcher__enroll p {
   margin: 0.25rem 0 0.65rem;
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -1179,7 +1179,7 @@
   color: var(--text-1);
   cursor: pointer;
   font: inherit;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -1208,7 +1208,7 @@
 
 .player-organization-switcher__hq small {
   color: color-mix(in srgb, var(--ground) 58%, transparent);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 750;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1217,7 +1217,7 @@
 .player-organization-switcher__hq strong {
   max-width: 32ch;
   overflow: hidden;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1229,7 +1229,7 @@
   gap: 0.4rem;
   margin: 0;
   padding: 0.25rem 0.6rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .player-organization-switcher__status {
@@ -1336,7 +1336,7 @@
   }
 
   .player-organization-switcher > summary strong {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
   }
 
   .player-organization-switcher__panel {
@@ -1449,7 +1449,7 @@ body {
 ) {
   color: color-mix(in srgb, var(--text-2) 72%, transparent);
   font-family: var(--font-body);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.35;
   letter-spacing: 0.14em;
@@ -1720,7 +1720,7 @@ body {
   justify-content: start;
   gap: 0.5rem;
   color: var(--signal);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1742,7 +1742,7 @@ body {
 .campaign-strand > a > span,
 .campaign-strand > a > small {
   color: rgb(242 240 234 / 58%);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .campaign-strand > a > strong {
@@ -1825,7 +1825,7 @@ body {
 .campaign-paths__role {
   display: inline-flex;
   color: var(--text-3);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2078,7 +2078,7 @@ body {
 .pro-tour-hero__stat > span {
   margin-top: 0.45rem;
   color: rgb(242 240 234 / 62%);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2987,7 +2987,7 @@ body {
   gap: 0.65rem;
   color: var(--text-2);
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -3331,7 +3331,7 @@ body {
   }
 
   .campaign-hero__proof span:last-child {
-    font-size: 0.625rem;
+    font-size: 0.75rem;
   }
 
   .athlete-stage .athlete-hero__content {
@@ -3572,7 +3572,7 @@ body {
   z-index: 1;
   color: var(--text-3);
   font-family: var(--font-body);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -3662,7 +3662,7 @@ body {
 
 .pro-player-team-card dt {
   color: var(--text-3);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .pro-player-team-card dd {
@@ -4757,7 +4757,7 @@ html[data-theme="dark"] .player-venue-layout {
   align-items: center;
   gap: 0.4rem;
   color: var(--player-accent);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 900;
   letter-spacing: 0.12em;
 }
@@ -4784,7 +4784,7 @@ html[data-theme="dark"] .player-venue-layout {
   border-radius: 99rem;
   background: var(--surface-2);
   color: var(--text-1);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   text-decoration: none;
 }
@@ -4822,7 +4822,7 @@ html[data-theme="dark"] .player-venue-layout {
 }
 
 .player-venue-layout__map > div[role="status"] span {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .player-venue-layout__floorplan {
@@ -4882,7 +4882,7 @@ html[data-theme="dark"] .player-venue-layout {
 }
 
 .player-venue-layout__floorplan text.is-live-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -4938,7 +4938,7 @@ html[data-theme="dark"] .player-venue-layout {
 
 .player-venue-layout__selected small {
   color: var(--text-3);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   text-transform: capitalize;
 }
 
@@ -4953,7 +4953,7 @@ html[data-theme="dark"] .player-venue-layout {
 .player-venue-layout__selected b {
   color: var(--player-accent);
   font-family: var(--font-data);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .player-venue-layout__selected .duna-numeric {
@@ -4964,7 +4964,7 @@ html[data-theme="dark"] .player-venue-layout {
 }
 
 .player-venue-layout__selected .duna-numeric small {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
 }
 
 .player-venue-layout__live {
@@ -4986,7 +4986,7 @@ html[data-theme="dark"] .player-venue-layout {
   align-items: center;
   gap: 0.35rem;
   color: var(--player-accent);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 900;
 }
 
@@ -5001,14 +5001,14 @@ html[data-theme="dark"] .player-venue-layout {
 
 .player-venue-layout__live > strong {
   overflow: hidden;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .player-venue-layout__live em {
   color: var(--text-3);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-style: normal;
 }
 
@@ -5051,14 +5051,14 @@ html[data-theme="dark"] .player-venue-layout {
 .player-venue-layout__directory strong {
   overflow: hidden;
   color: var(--text-1);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .player-venue-layout__directory small {
   color: var(--text-3);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   text-transform: capitalize;
 }
 

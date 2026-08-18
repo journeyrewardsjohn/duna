@@ -20,9 +20,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMapboxToken } from "./discovery-map";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { dunaApiBaseUrl } from "./mobile-api";
 import {
   MobilePlacePicker,
@@ -1731,7 +1731,7 @@ const styles = StyleSheet.create({
   closeText: { fontSize: 34, lineHeight: 36 },
   content: { paddingBottom: 132, paddingHorizontal: 18, paddingTop: 18 },
   dateSummary: { borderRadius: 20, padding: 18 },
-  dateSummaryLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  dateSummaryLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
   dateSummaryTime: { fontFamily: "Archivo-Table", fontSize: 18, marginTop: 4 },
   dateSummaryValue: {
     fontSize: 18,
@@ -1745,7 +1745,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: "center",
   },
-  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  eyebrow: { fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   fieldLabel: { fontSize: 13, fontWeight: "800", marginBottom: 7 },
   flex: { flex: 1 },
   footer: {
@@ -1783,7 +1783,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   invitePreview: { borderRadius: 20, borderWidth: 1, gap: 9, padding: 16 },
-  invitePreviewLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+  invitePreviewLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.1 },
   invitePreviewLink: { fontSize: 12, fontWeight: "800", lineHeight: 17 },
   invitePreviewText: { fontSize: 15, lineHeight: 22 },
   mapPin: { borderRadius: 11, borderWidth: 3, height: 22, width: 22 },
@@ -1819,7 +1819,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   participantInitials: { fontSize: 15, fontWeight: "900" },
-  participantMeta: { fontFamily: "Archivo-Table", fontSize: 11, marginTop: 3 },
+  participantMeta: { fontFamily: "Archivo-Table", fontSize: 12, marginTop: 3 },
   participantName: { fontSize: 15, fontWeight: "800" },
   participantSlot: {
     alignItems: "center",
@@ -1837,8 +1837,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 12,
   },
-  placeMapAddress: { fontSize: 11, lineHeight: 16, marginTop: 3 },
-  placeMapEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  placeMapAddress: { fontSize: 12, lineHeight: 16, marginTop: 3 },
+  placeMapEyebrow: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   placeMapLabel: { borderRadius: 15, padding: 12 },
   placeMapName: { fontSize: 16, fontWeight: "900", marginTop: 4 },
   previewNote: {
@@ -1895,11 +1895,11 @@ const styles = StyleSheet.create({
     width: 40,
   },
   removeSlotText: { fontSize: 25, lineHeight: 28 },
-  reviewEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+  reviewEyebrow: { fontSize: 12, fontWeight: "900", letterSpacing: 1.1 },
   reviewHero: { borderRadius: 24, borderWidth: 1, padding: 18 },
   reviewMeta: { fontSize: 12, lineHeight: 18, marginTop: 5 },
   reviewPlayer: { alignItems: "center", flexDirection: "row", gap: 9 },
-  reviewPlayerMeta: { fontFamily: "Archivo-Table", fontSize: 10, marginTop: 2 },
+  reviewPlayerMeta: { fontFamily: "Archivo-Table", fontSize: 12, marginTop: 2 },
   reviewPlayerName: { fontSize: 12, fontWeight: "800" },
   reviewScore: {
     fontFamily: "Archivo-Table",
@@ -1921,7 +1921,7 @@ const styles = StyleSheet.create({
     minWidth: "47%",
     padding: 12,
   },
-  reviewTeamLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  reviewTeamLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   reviewTeams: { flexDirection: "row", gap: 10 },
   reviewTitle: {
     fontSize: 21,
@@ -1958,7 +1958,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   scoreSetLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     position: "absolute",
@@ -1966,9 +1966,9 @@ const styles = StyleSheet.create({
   },
   scoreTeam: { flex: 1, fontSize: 13, fontWeight: "800" },
   scoreTeamRight: { textAlign: "right" },
-  scoreVersus: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  scoreVersus: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   screen: { flex: 1 },
-  sectionLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  sectionLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
   sectionStack: { gap: 12 },
   secondaryButton: {
     alignItems: "center",

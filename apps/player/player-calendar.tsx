@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   connectPlayerCalendar,
   readPlayerCalendarConnection,
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: "#111719", fontSize: 18, fontWeight: "800" },
   eyebrow: {
     color: "#203740",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.3,
   },
@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
     width: 5,
   },
   weekDayDotActive: { backgroundColor: "#d4b77c" },
-  weekDayLabel: { color: "#777166", fontSize: 11, fontWeight: "700" },
+  weekDayLabel: { color: "#777166", fontSize: 12, fontWeight: "700" },
   weekDayNumber: {
     color: "#111719",
     fontSize: 16,
@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
   weekDayTextActive: { color: "#ffffff" },
   weekdayLabel: {
     color: "#8a857d",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
     width: "14.285%",

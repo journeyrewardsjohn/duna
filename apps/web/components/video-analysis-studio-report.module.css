@@ -17,7 +17,7 @@
   color: var(--signal-text);
   display: block;
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -141,7 +141,7 @@
 }
 
 .heatCell small {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 750;
   text-transform: uppercase;
 }
@@ -160,7 +160,7 @@
 .opponentLabel,
 .playerLabel {
   color: var(--text-2);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.08em;
   position: absolute;
@@ -248,7 +248,7 @@
 }
 .timelineGrid li small {
   color: var(--text-2);
-  font-size: 0.71rem;
+  font-size: 0.75rem;
 }
 .empty {
   margin: 1rem 0 0;

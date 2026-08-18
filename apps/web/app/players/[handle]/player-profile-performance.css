@@ -87,7 +87,7 @@
   border: 1px solid rgb(var(--overlay-rgb) / 9%);
   border-radius: 999px;
   color: var(--color-bone-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.07em;
   padding: 0.32rem 0.55rem;
@@ -169,7 +169,7 @@
 
 .rating-trend-chart__matchup span {
   color: var(--color-bone-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -192,7 +192,7 @@
 
 .rating-trend-chart__detail dt {
   color: var(--color-bone-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .rating-trend-chart__detail dd {
@@ -252,7 +252,7 @@
 .rating-trend-chart__visual > header b,
 .rating-trend-chart__visual > p {
   color: var(--color-bone-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -406,7 +406,7 @@
   background: rgb(var(--overlay-rgb) / 7%);
   border-radius: 999px;
   color: var(--color-bone-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.07em;
   padding: 0.28rem 0.45rem;
@@ -427,7 +427,7 @@
 .rating-trend-chart__tooltip small,
 .rating-trend-chart__tooltip p {
   color: var(--color-bone-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -444,7 +444,7 @@
 
 .rating-trend-chart__tooltip > strong em {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-style: normal;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -471,7 +471,7 @@
 
 .rating-trend-chart__tooltip dt {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -598,7 +598,7 @@
   align-items: center;
   color: var(--color-aqua);
   display: flex;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 820;
   gap: 0.35rem;
   letter-spacing: 0.04em;
@@ -617,7 +617,7 @@
   align-items: center;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   gap: 0.25rem;
   line-height: 1.35;
   margin: 0;
@@ -629,7 +629,7 @@
   border-radius: 999px;
   color: var(--color-aqua);
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
   gap: 0.28rem;
   padding: 0.55rem 0.68rem;
@@ -658,7 +658,7 @@
 
 .partnership-card__metrics small {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   line-height: 1.3;
 }
 
@@ -712,7 +712,7 @@
 
 .partnership-card__trend > header span {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -805,7 +805,7 @@
 
 .partnership-card__tooltip > span {
   color: var(--color-aqua);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -822,7 +822,7 @@
 .partnership-card__tooltip time,
 .partnership-card__tooltip small {
   color: var(--color-bone-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -834,7 +834,7 @@
 .partnership-card__axis {
   fill: var(--color-bone-muted);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .partnership-card__recent {
@@ -852,13 +852,13 @@
 }
 
 .partnership-card__recent > header span {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 820;
 }
 
 .partnership-card__recent > header small {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
 }
 
 .partnership-card__recent ol {
@@ -886,7 +886,7 @@
   border-radius: 50%;
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 900;
   height: 30px;
   justify-content: center;
@@ -915,7 +915,7 @@
 }
 
 .partnership-card__recent li strong {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -924,7 +924,7 @@
 
 .partnership-card__recent li small {
   color: var(--color-bone-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -944,7 +944,7 @@
   background: rgb(var(--accent-rgb) / 6%);
   color: var(--color-bone-muted);
   display: flex;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   gap: 0.35rem;
   padding: 0.65rem 1.1rem;
 }
@@ -1150,7 +1150,7 @@
 
 .world-ranking-connection-card small {
   color: rgb(255 255 255 / 60%);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1162,7 +1162,7 @@
 
 .world-ranking-connection-card p {
   color: rgb(255 255 255 / 68%);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -1197,7 +1197,7 @@
 
 .world-ranking-connection-note small {
   color: var(--color-aqua);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1278,7 +1278,7 @@
 
 .world-ranking-dossier article > span {
   color: var(--color-aqua);
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1291,7 +1291,7 @@
 
 .world-ranking-dossier article > p {
   color: var(--color-bone-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   margin: 0;
 }
 
@@ -1307,7 +1307,7 @@
 
 .world-ranking-dossier article > footer span {
   color: var(--color-bone-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .world-ranking-dossier article > footer .duna-numeric {
@@ -1349,7 +1349,7 @@
 .world-ranking-signal-guide small {
   color: var(--color-aqua);
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
