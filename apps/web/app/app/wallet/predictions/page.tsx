@@ -86,7 +86,7 @@ export default async function PredictionPortfolioPage() {
             </small>
           </article>
           <article>
-            <span>Order book</span>
+            <span>Open orders</span>
             <Numeric tier="block">{wallet.portfolio.openOrders}</Numeric>
             <small>{wallet.portfolio.openPositions} open positions</small>
           </article>
@@ -144,7 +144,7 @@ export default async function PredictionPortfolioPage() {
               <Coins aria-hidden size={20} />
               <span>
                 <strong>No open positions.</strong>
-                Your next matched prediction will appear here.
+                Your next prediction will appear here.
               </span>
             </div>
           )}
@@ -219,7 +219,7 @@ export default async function PredictionPortfolioPage() {
           <header>
             <div>
               <span className="page-eyebrow">Orders</span>
-              <h2>Still in the book</h2>
+              <h2>Open sell orders</h2>
             </div>
             <Badge>{wallet.openOrders.length}</Badge>
           </header>
@@ -256,8 +256,8 @@ export default async function PredictionPortfolioPage() {
             <div className="prediction-portfolio-empty">
               <BookOpenCheck aria-hidden size={20} />
               <span>
-                <strong>No unmatched orders.</strong>
-                Your order book is clear.
+                <strong>No open sell orders.</strong>
+                Your shares are available to hold or sell.
               </span>
             </div>
           )}

@@ -1,6 +1,7 @@
 export const PREDICTION_CREDIT_SCALE = 1_000;
 export const PREDICTION_PRICE_SCALE = 10_000;
 export const PREDICTION_CONTRACT_PAYOUT_CREDITS = 1;
+export const PREDICTION_MARKET_LIQUIDITY_CREDITS = 1_000;
 
 export type PredictionSide = "yes" | "no";
 
@@ -168,6 +169,53 @@ export function predictionDisplayPriceBps(input: {
   return ask >= bid && ask - bid <= spreadLimit
     ? Math.round((bid + ask) / 2)
     : lastTrade;
+}
+
+/**
+ * Quotes bounded Duna free-play liquidity after the community order book has
+ * been exhausted. It preserves the binary complement while making a buy move
+ * the probability in its selected direction. The quote uses a smooth curve so
+ * a single small position cannot jump a market from a low probability to 99%.
+ */
+export function predictionMarketLiquidityQuote(input: {
+  readonly currentYesPriceBps: number;
+  readonly side: PredictionSide;
+  readonly credits: number;
+  readonly liquidityCredits?: number;
+}): {
+  readonly executionSidePriceBps: number;
+  readonly nextYesPriceBps: number;
+} {
+  const currentYesPriceBps = validatePredictionPrice(input.currentYesPriceBps);
+  if (!Number.isFinite(input.credits) || input.credits <= 0) {
+    throw new Error("Liquidity quotes require a positive credit amount");
+  }
+  const liquidityCredits =
+    input.liquidityCredits ?? PREDICTION_MARKET_LIQUIDITY_CREDITS;
+  if (!Number.isFinite(liquidityCredits) || liquidityCredits <= 0) {
+    throw new Error("Market liquidity must be positive");
+  }
+  const current = currentYesPriceBps / PREDICTION_PRICE_SCALE;
+  const movement = 1 - Math.exp(-input.credits / liquidityCredits);
+  const next =
+    input.side === "yes"
+      ? current + (1 - current) * movement
+      : current - current * movement;
+  const nextYesPriceBps = Math.max(
+    100,
+    Math.min(9_900, Math.round(next * PREDICTION_PRICE_SCALE)),
+  );
+  const averageYesPriceBps = Math.max(
+    100,
+    Math.min(9_900, Math.round((currentYesPriceBps + nextYesPriceBps) / 2)),
+  );
+  return {
+    nextYesPriceBps,
+    executionSidePriceBps:
+      input.side === "yes"
+        ? averageYesPriceBps
+        : PREDICTION_PRICE_SCALE - averageYesPriceBps,
+  };
 }
 
 export function predictionSettlementPayoutMicros(input: {
