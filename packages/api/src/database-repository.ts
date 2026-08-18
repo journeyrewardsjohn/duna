@@ -61,6 +61,7 @@ import {
   type EventTeamFormat,
   type EventSurface,
   type EventGender,
+  withEventLifecycle,
   type EventPoolPlay,
   type EventSeedingMethod,
   type LeagueRecurrence,
@@ -1670,9 +1671,12 @@ async function loadEvents(input?: {
       },
     };
   });
-  return [...sessionEvents, ...pickupEvents].sort((a, b) =>
-    a.event.startsAt.localeCompare(b.event.startsAt),
-  );
+  return [...sessionEvents, ...pickupEvents]
+    .map(({ organizationId, event }) => ({
+      organizationId,
+      event: withEventLifecycle(event),
+    }))
+    .sort((a, b) => a.event.startsAt.localeCompare(b.event.startsAt));
 }
 
 async function loadVenues(organizationId?: string): Promise<VenueSummary[]> {

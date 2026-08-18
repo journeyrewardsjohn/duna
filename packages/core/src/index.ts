@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./eligibility";
 export * from "./division-eligibility";
 export * from "./event-media";
+export * from "./event-lifecycle";
 export * from "./product-media";
 export * from "./forms";
 export * from "./identity";

@@ -1,4 +1,8 @@
-import type { EventSummary, MatchSummary } from "@duna/core";
+import {
+  withEventLifecycle,
+  type EventSummary,
+  type MatchSummary,
+} from "@duna/core";
 import {
   adminMetrics,
   demoAdminQueues,
@@ -31,9 +35,11 @@ const mutableMatches: MatchSummary[] = [...demoMatches];
 
 export const demoRepository = {
   public: {
-    events: () => [...mutableEvents],
+    events: () => mutableEvents.map((event) => withEventLifecycle(event)),
     eventBySlug: (slug: string) =>
-      mutableEvents.find((event) => event.slug === slug),
+      mutableEvents
+        .filter((event) => event.slug === slug)
+        .map((event) => withEventLifecycle(event))[0],
     venues: () => demoVenues,
     players: (limit: number) => demoPeople.slice(0, limit),
     playerByHandle: (handle: string) =>
@@ -46,7 +52,7 @@ export const demoRepository = {
       player: demoPlayer,
       metrics: playerMetrics,
       bookings: demoBookings,
-      events: mutableEvents,
+      events: mutableEvents.map((event) => withEventLifecycle(event)),
       feed: demoFeed,
       recentMatches: mutableMatches.slice(0, 3),
       walletBalanceMinor: demoWalletBalanceMinor(),
