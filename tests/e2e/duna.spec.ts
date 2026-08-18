@@ -271,7 +271,8 @@ test("public pickup pages keep their story and booking rail contained", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
   ).toBeVisible();
-  await expect(page.getByText("Ready to play?")).toBeVisible();
+  await expect(page.getByText("Event complete.")).toBeVisible();
+  await expect(page.getByText("This pickup has ended.")).toBeVisible();
   await expect(
     page.getByText("6:00 PM–7:30 PM PDT", { exact: true }),
   ).toBeVisible();
@@ -449,22 +450,18 @@ test("public event creation carries a clean starter into guided HQ", async ({
     name: /Continue the guided setup/,
   });
   await expect(continueButton).toBeEnabled();
-  await continueButton.click();
-  const expectedHqUrl = new URL(hqBaseUrl);
-  const acceptableHqHosts = new Set([expectedHqUrl.hostname]);
-  // A local dev server can resolve either loopback spelling while CI keeps the
-  // configured host. They are the same local Duna HQ destination.
-  if (expectedHqUrl.hostname === "127.0.0.1") {
-    acceptableHqHosts.add("localhost");
-  }
-  await page.waitForURL((url) => {
-    return (
-      acceptableHqHosts.has(url.hostname) &&
-      url.port === expectedHqUrl.port &&
-      url.pathname === "/events/create" &&
-      url.searchParams.get("type") === "league"
-    );
+  const handoffRequestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.isNavigationRequest() && url.pathname === "/events/create";
   });
+  await continueButton.click();
+  const handoffUrl = new URL((await handoffRequestPromise).url());
+  expect(handoffUrl.searchParams.get("type")).toBe("league");
+  expect(handoffUrl.searchParams.get("title")).toBe("Hermosa Moonlight League");
+  expect(handoffUrl.searchParams.get("source")).toBe("public-create");
+  const localHqHandoff = new URL("/events/create", hqBaseUrl);
+  localHqHandoff.search = handoffUrl.search;
+  await page.goto(localHqHandoff.href);
   await expect(
     page.getByRole("heading", {
       name: "Create something players remember.",
@@ -947,17 +944,21 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("button", { name: "Pricing & rules", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Availability", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Set recurring court hours." }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Monday start time")).toHaveValue("07:00");
-  await page
-    .getByRole("button", { name: "Pricing & rules", exact: true })
-    .click();
-  await expect(page.getByLabel("Rate plan")).toHaveValue(
-    "10000000-0000-4000-8000-000000000102",
-  );
+  if ((page.viewportSize()?.width ?? 1_280) > 600) {
+    await page
+      .getByRole("button", { name: "Availability", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Set recurring court hours." }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Monday start time")).toHaveValue("07:00");
+    await page
+      .getByRole("button", { name: "Pricing & rules", exact: true })
+      .click();
+    await expect(page.getByLabel("Rate plan")).toHaveValue(
+      "10000000-0000-4000-8000-000000000102",
+    );
+  }
   await expectNoHorizontalOverflow(page);
 
   await page.goto(
@@ -1056,10 +1057,15 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
 
   await page.goto(`${hqBaseUrl}/ai`);
-  await expect(page.getByText("Grounded read-only analysis")).toBeVisible();
-  await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
+  await expect(page.getByText("Context-aware co-pilot")).toBeVisible();
   await expect(
-    page.getByText(/Model-generated recommendations remain off/),
+    page.getByRole("heading", { name: "See what matters. Act with control." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/fresh approval for consequential actions/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Web research off" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

@@ -385,6 +385,8 @@ are in [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md).
 - Vercel AI Gateway uses `AI_GATEWAY_API_KEY` or deployment workload
   `VERCEL_OIDC_TOKEN`; models remain provider-qualified. Direct OpenAI Agents
   use `OPENAI_API_KEY` only for their documented support/safety/voice paths.
+- Duna CoPilot is Gateway-only. It uses `DUNA_COPILOT_MODEL` and never falls
+  back to `OPENAI_API_KEY`.
 - Google Places/Routes, Mapbox, Tomorrow.io, Firecrawl, and Higgsfield keys stay
   server-side except the explicitly public Mapbox client token.
 - Knock, Resend, Sent, Twilio, Expo Push, APNs, and Apple Wallet require their

@@ -14,6 +14,7 @@ export * from "./discovery-service";
 export * from "./discovery-search";
 export * from "./event-operations-service";
 export * from "./duna-ai-support";
+export * from "./duna-ai";
 export * from "./commerce";
 export * from "./feature-flags";
 export * from "./forms-service";
