@@ -1,4 +1,13 @@
-import { ArrowLeft, Check, WalletCards } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CircleHelp,
+  Clock3,
+  MapPin,
+  Quote,
+  Users,
+  WalletCards,
+} from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -10,6 +19,14 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+
+function configurationRecord(
+  value: unknown,
+): Readonly<Record<string, unknown>> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
+}
 
 export async function generateMetadata({
   params,
@@ -95,6 +112,7 @@ export default async function CatalogProductPage({
     !Array.isArray(item.configuration.membership)
       ? (item.configuration.membership as Readonly<Record<string, unknown>>)
       : undefined;
+  const serviceConfiguration = configurationRecord(item.configuration.service);
   const benefits = Array.isArray(membershipConfiguration?.benefits)
     ? membershipConfiguration.benefits.filter(
         (benefit): benefit is string => typeof benefit === "string",
@@ -125,6 +143,42 @@ export default async function CatalogProductPage({
       ? item.configuration.redemptionNotes
       : undefined;
   const validityDays = Number(item.configuration.validityDays ?? 0);
+  const testimonials = Array.isArray(item.configuration.testimonials)
+    ? item.configuration.testimonials.flatMap((entry) => {
+        const testimonial = configurationRecord(entry);
+        const quote = testimonial?.quote;
+        if (typeof quote !== "string" || !quote.trim()) return [];
+        return [
+          {
+            quote,
+            author:
+              typeof testimonial?.author === "string"
+                ? testimonial.author
+                : undefined,
+            context:
+              typeof testimonial?.context === "string"
+                ? testimonial.context
+                : undefined,
+          },
+        ];
+      })
+    : [];
+  const faqs = Array.isArray(item.configuration.faqs)
+    ? item.configuration.faqs.flatMap((entry) => {
+        const faq = configurationRecord(entry);
+        const question = faq?.question;
+        const answer = faq?.answer;
+        return typeof question === "string" &&
+          question.trim() &&
+          typeof answer === "string" &&
+          answer.trim()
+          ? [{ question, answer }]
+          : [];
+      })
+    : [];
+  const durationMinutes = Number(serviceConfiguration?.durationMinutes ?? 0);
+  const capacity = Number(serviceConfiguration?.capacity ?? 0);
+  const isOnline = item.configuration.deliveryMode === "online";
   const membershipOffers = storefront.catalog.filter(
     (candidate) =>
       candidate.type === "plan" && candidate.subtype === "membership",
@@ -243,6 +297,78 @@ export default async function CatalogProductPage({
                 {item.shortSummary ??
                   `A better way to spend time with ${storefront.name}.`}
               </p>
+              <section
+                className="catalog-product-at-a-glance"
+                aria-label="Offer at a glance"
+              >
+                <span className="section__eyebrow">At a glance</span>
+                <div>
+                  {item.type === "service" && durationMinutes > 0 && (
+                    <article>
+                      <Clock3 aria-hidden size={18} />
+                      <span>
+                        <strong>{durationMinutes} minutes</strong>
+                        <small>Focused coaching time</small>
+                      </span>
+                    </article>
+                  )}
+                  {item.type === "service" && capacity > 0 && (
+                    <article>
+                      <Users aria-hidden size={18} />
+                      <span>
+                        <strong>
+                          {capacity === 1
+                            ? "Private session"
+                            : `Up to ${capacity} players`}
+                        </strong>
+                        <small>
+                          {capacity === 1
+                            ? "One player or private group"
+                            : "Train together"}
+                        </small>
+                      </span>
+                    </article>
+                  )}
+                  {item.type === "service" && (
+                    <article>
+                      <MapPin aria-hidden size={18} />
+                      <span>
+                        <strong>
+                          {isOnline ? "Online delivery" : "At the club"}
+                        </strong>
+                        <small>
+                          {isOnline
+                            ? "Train from wherever you are"
+                            : "Details confirmed when you book"}
+                        </small>
+                      </span>
+                    </article>
+                  )}
+                  {validityDays > 0 && (
+                    <article>
+                      <Clock3 aria-hidden size={18} />
+                      <span>
+                        <strong>
+                          {validityDays} day{validityDays === 1 ? "" : "s"} to
+                          use
+                        </strong>
+                        <small>From the date of purchase</small>
+                      </span>
+                    </article>
+                  )}
+                  {item.type === "plan" && (
+                    <article>
+                      <WalletCards aria-hidden size={18} />
+                      <span>
+                        <strong>{item.subtype.replaceAll("-", " ")}</strong>
+                        <small>
+                          Club value that stays connected to your account
+                        </small>
+                      </span>
+                    </article>
+                  )}
+                </div>
+              </section>
               {bestFor && (
                 <section className="catalog-product-story">
                   <span className="section__eyebrow">Best for</span>
@@ -267,6 +393,50 @@ export default async function CatalogProductPage({
                   <span className="section__eyebrow">The details</span>
                   <MarkdownContent>{item.description}</MarkdownContent>
                 </div>
+              )}
+              {testimonials.length > 0 && (
+                <section className="catalog-product-testimonials">
+                  <header>
+                    <span className="section__eyebrow">From the community</span>
+                    <Quote aria-hidden size={24} />
+                  </header>
+                  <div>
+                    {testimonials.map((testimonial) => (
+                      <blockquote
+                        key={`${testimonial.quote}-${testimonial.author ?? ""}`}
+                      >
+                        <p>“{testimonial.quote}”</p>
+                        {(testimonial.author || testimonial.context) && (
+                          <footer>
+                            {testimonial.author && (
+                              <strong>{testimonial.author}</strong>
+                            )}
+                            {testimonial.author && testimonial.context && " · "}
+                            {testimonial.context}
+                          </footer>
+                        )}
+                      </blockquote>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {faqs.length > 0 && (
+                <section className="catalog-product-faqs">
+                  <header>
+                    <span className="section__eyebrow">
+                      A few helpful answers
+                    </span>
+                    <CircleHelp aria-hidden size={23} />
+                  </header>
+                  <div>
+                    {faqs.map((faq) => (
+                      <details key={faq.question}>
+                        <summary>{faq.question}</summary>
+                        <p>{faq.answer}</p>
+                      </details>
+                    ))}
+                  </div>
+                </section>
               )}
               {Number(membershipConfiguration?.includedCreditsPerCycle ?? 0) >
                 0 && (

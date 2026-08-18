@@ -2689,6 +2689,125 @@
   }
 }
 
+/* Offer story blocks: editorial proof and decision-support after the hero. */
+.catalog-product-at-a-glance,
+.catalog-product-testimonials,
+.catalog-product-faqs {
+  border-top: 1px solid #e8ebef;
+  margin-top: 1.7rem;
+  padding-top: 1.55rem;
+}
+
+.catalog-product-at-a-glance > div {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.9rem;
+}
+
+.catalog-product-at-a-glance article {
+  align-items: flex-start;
+  background: linear-gradient(135deg, #f5f8fb, #fbfcfd);
+  border: 1px solid #e5eaf0;
+  border-radius: 15px;
+  color: #1f5d92;
+  display: flex;
+  gap: 0.65rem;
+  min-height: 72px;
+  padding: 0.85rem;
+}
+
+.catalog-product-at-a-glance article > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.catalog-product-at-a-glance strong,
+.catalog-product-testimonials blockquote p {
+  color: #172033;
+}
+
+.catalog-product-at-a-glance small {
+  color: #677386;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.catalog-product-testimonials > header,
+.catalog-product-faqs > header {
+  align-items: center;
+  color: #1f5d92;
+  display: flex;
+  justify-content: space-between;
+}
+
+.catalog-product-testimonials > div {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.95rem;
+}
+
+.catalog-product-testimonials blockquote {
+  background: #173a63;
+  border-radius: 18px;
+  color: #dce9f4;
+  margin: 0;
+  padding: 1.15rem;
+}
+
+.catalog-product-testimonials blockquote p {
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.catalog-product-testimonials blockquote footer {
+  color: #bed0e3;
+  font-size: 0.78rem;
+  margin-top: 0.9rem;
+}
+
+.catalog-product-testimonials blockquote footer strong {
+  color: #fff;
+}
+
+.catalog-product-faqs > div {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.95rem;
+}
+
+.catalog-product-faqs details {
+  background: #f7f9fb;
+  border: 1px solid #e4e9ef;
+  border-radius: 13px;
+  padding: 0.9rem 1rem;
+}
+
+.catalog-product-faqs summary {
+  color: #172033;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.catalog-product-faqs details p {
+  color: #536174;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0.8rem 0 0;
+}
+
+@media (max-width: 620px) {
+  .catalog-product-at-a-glance > div,
+  .catalog-product-testimonials > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Club commerce — editorial product pages and an honest, compact checkout. */
 .catalog-product-page {
   background:

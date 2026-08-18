@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { GuidedProductBuilder } from "@/components/guided-product-builder";
 import { OperatorShell } from "@/components/operator-shell";
 import { ProductVersionHistory } from "@/components/product-version-history";
+import { ProductLifecycleControls } from "@/components/product-lifecycle-controls";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Edit product" };
@@ -49,6 +50,7 @@ export default async function ProductDetailPage({
         ) : (
           <GuidedProductBuilder initialItem={item} workspace={workspace} />
         )}
+        <ProductLifecycleControls item={item} />
         <ProductVersionHistory catalogItemId={item.id} versions={versions} />
       </main>
     </OperatorShell>

@@ -37,6 +37,8 @@ import {
   UserRound,
   Users,
   Video,
+  Quote,
+  CircleHelp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -69,6 +71,19 @@ type ProductMedia = {
   readonly url: string;
   readonly alt: string;
   readonly variantIndex?: number;
+};
+
+type CustomerProof = {
+  readonly id: string;
+  readonly quote: string;
+  readonly author: string;
+  readonly context: string;
+};
+
+type StoryFaq = {
+  readonly id: string;
+  readonly question: string;
+  readonly answer: string;
 };
 
 function productMediaPreviewUrl(url: string): string {
@@ -512,6 +527,48 @@ export function GuidedProductBuilder({
           .join("\n")
       : "",
   );
+  const [testimonials, setTestimonials] = useState<readonly CustomerProof[]>(
+    () =>
+      Array.isArray(initialConfiguration.testimonials)
+        ? initialConfiguration.testimonials.flatMap((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+              return [];
+            }
+            const value = entry as Record<string, unknown>;
+            return typeof value.quote === "string" && value.quote.trim()
+              ? [
+                  {
+                    id: crypto.randomUUID(),
+                    quote: value.quote,
+                    author:
+                      typeof value.author === "string" ? value.author : "",
+                    context:
+                      typeof value.context === "string" ? value.context : "",
+                  },
+                ]
+              : [];
+          })
+        : [],
+  );
+  const [faqs, setFaqs] = useState<readonly StoryFaq[]>(() =>
+    Array.isArray(initialConfiguration.faqs)
+      ? initialConfiguration.faqs.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return [];
+          }
+          const value = entry as Record<string, unknown>;
+          return typeof value.question === "string" && value.question.trim()
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  question: value.question,
+                  answer: typeof value.answer === "string" ? value.answer : "",
+                },
+              ]
+            : [];
+        })
+      : [],
+  );
   const [validityDays, setValidityDays] = useState(0);
   const [redemptionNotes, setRedemptionNotes] = useState(
     typeof initialConfiguration.redemptionNotes === "string"
@@ -727,6 +784,19 @@ export function GuidedProductBuilder({
     .split("\n")
     .map((highlight) => highlight.trim())
     .filter(Boolean);
+  const publishedTestimonials = testimonials
+    .map((testimonial) => ({
+      quote: testimonial.quote.trim(),
+      author: testimonial.author.trim(),
+      context: testimonial.context.trim(),
+    }))
+    .filter((testimonial) => testimonial.quote.length > 0);
+  const publishedFaqs = faqs
+    .map((faq) => ({
+      question: faq.question.trim(),
+      answer: faq.answer.trim(),
+    }))
+    .filter((faq) => faq.question.length > 0 && faq.answer.length > 0);
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
     receiptTotalMinor === undefined
@@ -990,6 +1060,8 @@ export function GuidedProductBuilder({
     flowVersion: 3,
     bestFor: bestFor.trim() || undefined,
     highlights: parsedHighlights,
+    testimonials: publishedTestimonials,
+    faqs: publishedFaqs,
     validityDays: validityDays > 0 ? validityDays : undefined,
     redemptionNotes: redemptionNotes.trim() || undefined,
     ...(type === "service"
@@ -1492,6 +1564,211 @@ export function GuidedProductBuilder({
                     value={redemptionNotes}
                   />
                 </label>
+              </div>
+
+              <div className="guided-product-proof">
+                <header>
+                  <div>
+                    <strong>Customer proof · optional</strong>
+                    <small>
+                      Add approved customer quotes that make the value feel
+                      real. These are shown as testimonials on the offer page.
+                    </small>
+                  </div>
+                  <button
+                    className="hq-button hq-button--secondary"
+                    onClick={() =>
+                      setTestimonials((current) => [
+                        ...current,
+                        {
+                          id: crypto.randomUUID(),
+                          quote: "",
+                          author: "",
+                          context: "",
+                        },
+                      ])
+                    }
+                    type="button"
+                  >
+                    <Quote aria-hidden size={15} /> Add quote
+                  </button>
+                </header>
+                {testimonials.length > 0 && (
+                  <div className="guided-product-proof__rows">
+                    {testimonials.map((testimonial, index) => (
+                      <article key={testimonial.id}>
+                        <span className="guided-product-proof__number">
+                          {index + 1}
+                        </span>
+                        <label className="operator-field--wide">
+                          <span>Quote</span>
+                          <textarea
+                            maxLength={500}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        quote: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="A specific result, feeling, or reason they would recommend it."
+                            rows={3}
+                            value={testimonial.quote}
+                          />
+                        </label>
+                        <label>
+                          <span>Name</span>
+                          <input
+                            maxLength={100}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        author: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Avery R."
+                            value={testimonial.author}
+                          />
+                        </label>
+                        <label>
+                          <span>Context</span>
+                          <input
+                            maxLength={120}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        context: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Parent of a 15U player"
+                            value={testimonial.context}
+                          />
+                        </label>
+                        <button
+                          aria-label={`Remove customer quote ${index + 1}`}
+                          className="guided-product-proof__remove"
+                          onClick={() =>
+                            setTestimonials((current) =>
+                              current.filter(
+                                (candidate) => candidate.id !== testimonial.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 aria-hidden size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="guided-product-proof guided-product-proof--faq">
+                <header>
+                  <div>
+                    <strong>Helpful answers · optional</strong>
+                    <small>
+                      Answer the questions that usually slow someone down before
+                      they reach checkout.
+                    </small>
+                  </div>
+                  <button
+                    className="hq-button hq-button--secondary"
+                    onClick={() =>
+                      setFaqs((current) => [
+                        ...current,
+                        { id: crypto.randomUUID(), question: "", answer: "" },
+                      ])
+                    }
+                    type="button"
+                  >
+                    <CircleHelp aria-hidden size={15} /> Add answer
+                  </button>
+                </header>
+                {faqs.length > 0 && (
+                  <div className="guided-product-proof__rows">
+                    {faqs.map((faq, index) => (
+                      <article key={faq.id}>
+                        <span className="guided-product-proof__number">
+                          {index + 1}
+                        </span>
+                        <label className="operator-field--wide">
+                          <span>Question</span>
+                          <input
+                            maxLength={180}
+                            onChange={(event) =>
+                              setFaqs((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === faq.id
+                                    ? {
+                                        ...candidate,
+                                        question: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="What happens after I purchase?"
+                            value={faq.question}
+                          />
+                        </label>
+                        <label className="operator-field--wide">
+                          <span>Answer</span>
+                          <textarea
+                            maxLength={600}
+                            onChange={(event) =>
+                              setFaqs((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === faq.id
+                                    ? {
+                                        ...candidate,
+                                        answer: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Give a calm, specific answer in the customer’s language."
+                            rows={3}
+                            value={faq.answer}
+                          />
+                        </label>
+                        <button
+                          aria-label={`Remove answer ${index + 1}`}
+                          className="guided-product-proof__remove"
+                          onClick={() =>
+                            setFaqs((current) =>
+                              current.filter(
+                                (candidate) => candidate.id !== faq.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 aria-hidden size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="guided-product-media">
