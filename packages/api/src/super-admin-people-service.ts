@@ -44,7 +44,6 @@ import {
 import { resolveWorkOSCredentials } from "./workos-environment";
 
 const DUNA_PLATFORM_SYSTEM_KEY = "duna-platform";
-const DUNA_PLATFORM_WORKOS_ROLE_SLUG = "org-admin";
 const SUPER_ADMIN_ROLE = "super-admin";
 const PEOPLE_DIRECTORY_PAGE_SIZE = 100;
 
@@ -847,7 +846,7 @@ export async function setPersonSuperAdmin(input: {
       ipAddress: input.ipAddress,
       now: input.now,
       allowSystemOrganization: true,
-      workosRoleSlug: DUNA_PLATFORM_WORKOS_ROLE_SLUG,
+      useDefaultWorkosRole: true,
     });
     workosSync = access.workosSync;
     if (!person.workosUserId && dunaOrganization.workosOrganizationId) {
@@ -860,7 +859,6 @@ export async function setPersonSuperAdmin(input: {
           await workos.userManagement.sendInvitation({
             email: person.email,
             organizationId: dunaOrganization.workosOrganizationId,
-            roleSlug: DUNA_PLATFORM_WORKOS_ROLE_SLUG,
             expiresInDays: 7,
           });
           workosInvitationSent = true;

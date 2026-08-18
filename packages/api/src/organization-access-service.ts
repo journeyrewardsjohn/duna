@@ -98,6 +98,8 @@ async function synchronizeWorkOSMembership(input: {
   readonly role: OrganizationAccessRole;
   /** A provider role can be narrower than Duna's local staff role. */
   readonly workosRoleSlug?: string;
+  /** System workspaces use the provider's safe default membership role. */
+  readonly useDefaultWorkosRole?: boolean;
 }): Promise<"synced" | "not-linked"> {
   if (!input.workosOrganizationId || !input.workosUserId) return "not-linked";
   const credentials = resolveWorkOSCredentials();
@@ -122,15 +124,17 @@ async function synchronizeWorkOSMembership(input: {
     const membership = memberships.data.find(
       (candidate) => candidate.userId === input.workosUserId,
     );
-    if (membership) {
+    if (membership && !input.useDefaultWorkosRole) {
       await workos.userManagement.updateOrganizationMembership(membership.id, {
         roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role),
       });
-    } else {
+    } else if (!membership) {
       await workos.userManagement.createOrganizationMembership({
         organizationId: input.workosOrganizationId,
         userId: input.workosUserId,
-        roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role),
+        ...(input.useDefaultWorkosRole
+          ? {}
+          : { roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role) }),
       });
     }
     return "synced";
@@ -159,6 +163,8 @@ export async function grantOrganizationAccess(input: {
   readonly allowSystemOrganization?: boolean;
   /** Internal provider mapping for system workspaces. */
   readonly workosRoleSlug?: string;
+  /** Internal identity-only membership for system workspaces. */
+  readonly useDefaultWorkosRole?: boolean;
 }): Promise<{
   readonly id: string;
   readonly entity: "staff-profile" | "staff-invitation";
@@ -227,6 +233,7 @@ export async function grantOrganizationAccess(input: {
     workosUserId: person.workosUserId,
     role: input.role,
     workosRoleSlug: input.workosRoleSlug,
+    useDefaultWorkosRole: input.useDefaultWorkosRole,
   });
   const membershipRole = input.role === "director" ? "owner" : input.role;
   await database.transaction(async (transaction) => {
