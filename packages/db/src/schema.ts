@@ -3971,6 +3971,18 @@ export const videoAnalysisRuns = pgTable(
       readonly sourceVideoAvailable: boolean;
       readonly scoreTimelineAvailable: boolean;
     }>(),
+    qualityGate: jsonb("quality_gate").$type<{
+      attestationVersion: 1;
+      decision: "passed" | "failed" | "unverified";
+      productionEligible: boolean;
+      benchmarkId?: string;
+      modelBundleSha256: string;
+      datasetManifestSha256?: string;
+      evaluatedAt?: string;
+      metrics: Record<string, number>;
+      failedChecks: string[];
+      evaluatedSlices: string[];
+    }>(),
     artifactR2Key: text("artifact_r2_key"),
     failureCode: varchar("failure_code", { length: 80 }),
     startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),

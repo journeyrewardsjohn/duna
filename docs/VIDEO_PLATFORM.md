@@ -213,6 +213,9 @@ queued rather than claim that ML completed. The dedicated worker is the only
 component allowed to publish model observations; it writes derived artifacts
 under `video-analysis/{videoId}/` in private R2 and posts a validated callback
 to Duna Web. Heavy decode, inference, and model weights never run in Vercel.
+Queued runs are safely redispatched when the user retries, and a processing run
+older than two hours is returned to the queue before redispatch. Worker run-ID
+claims and stable observation IDs keep both inference and callbacks idempotent.
 
 On Watch, the review surface is intentionally a compact last-rally cue with the
 latest alignment snapshot, score, and a `Flag for coaching review` action. It

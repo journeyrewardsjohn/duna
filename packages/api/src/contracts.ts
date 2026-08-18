@@ -1376,12 +1376,106 @@ export const videoAnalysisCourtMapSchema = z.object({
   calibrationSource: z.enum(["vision", "manual", "unknown"]),
   calibrationQualityScore: z.number().int().min(0).max(100).optional(),
 });
-export const videoAnalysisCoverageSchema = z.object({
-  sampledDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
-  usableDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
-  sourceVideoAvailable: z.boolean(),
-  scoreTimelineAvailable: z.boolean(),
-});
+export const videoAnalysisCoverageSchema = z
+  .object({
+    sampledDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+    usableDurationUs: z.number().int().min(0).max(43_200_000_000).optional(),
+    sourceVideoAvailable: z.boolean(),
+    scoreTimelineAvailable: z.boolean(),
+  })
+  .superRefine((coverage, context) => {
+    if (
+      coverage.sampledDurationUs !== undefined &&
+      coverage.usableDurationUs !== undefined &&
+      coverage.usableDurationUs > coverage.sampledDurationUs
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["usableDurationUs"],
+        message: "Usable coverage cannot exceed sampled coverage.",
+      });
+    }
+  });
+export const videoAnalysisQualityGateSchema = z
+  .object({
+    attestationVersion: z.literal(1),
+    decision: z.enum(["passed", "failed", "unverified"]),
+    productionEligible: z.boolean(),
+    benchmarkId: z.string().trim().min(1).max(120).optional(),
+    modelBundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    datasetManifestSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    evaluatedAt: z.iso.datetime().optional(),
+    metrics: z
+      .object({
+        contactF1: z.number().finite().min(0).max(1).optional(),
+        rallyF1: z.number().finite().min(0).max(1).optional(),
+        landingF1: z.number().finite().min(0).max(1).optional(),
+        landingErrorP95Meters: z.number().finite().nonnegative().optional(),
+        courtErrorP95Pixels: z.number().finite().nonnegative().optional(),
+        falseEventsPerMinute: z.number().finite().nonnegative().optional(),
+        usableCoverageRatio: z.number().finite().min(0).max(1).optional(),
+      })
+      .default({}),
+    failedChecks: z
+      .array(z.string().trim().min(1).max(160))
+      .max(40)
+      .default([]),
+    evaluatedSlices: z
+      .array(z.string().trim().min(1).max(80))
+      .max(80)
+      .default([]),
+  })
+  .superRefine((gate, context) => {
+    if (gate.productionEligible && gate.decision !== "passed") {
+      context.addIssue({
+        code: "custom",
+        path: ["productionEligible"],
+        message: "Only a passing quality gate can be production eligible.",
+      });
+    }
+    if (gate.decision !== "passed" && gate.failedChecks.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["failedChecks"],
+        message: "A non-passing quality gate must explain what remains.",
+      });
+    }
+    if (gate.decision === "passed" && gate.failedChecks.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["failedChecks"],
+        message: "A passing quality gate cannot retain failed checks.",
+      });
+    }
+    if (gate.productionEligible) {
+      const requiredMetrics = [
+        gate.metrics.contactF1,
+        gate.metrics.rallyF1,
+        gate.metrics.landingF1,
+        gate.metrics.landingErrorP95Meters,
+        gate.metrics.courtErrorP95Pixels,
+        gate.metrics.falseEventsPerMinute,
+        gate.metrics.usableCoverageRatio,
+      ];
+      if (
+        !gate.benchmarkId ||
+        !gate.datasetManifestSha256 ||
+        !gate.evaluatedAt ||
+        gate.evaluatedSlices.length === 0 ||
+        requiredMetrics.some((metric) => metric === undefined)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["productionEligible"],
+          message:
+            "A production gate needs complete benchmark provenance and metrics.",
+        });
+      }
+    }
+  });
 export const videoAnalysisRunSchema = z.object({
   id: z.string().uuid(),
   videoId: z.string().uuid(),
@@ -1398,6 +1492,7 @@ export const videoAnalysisRunSchema = z.object({
   modelVersion: z.string().optional(),
   courtMap: videoAnalysisCourtMapSchema.optional(),
   coverage: videoAnalysisCoverageSchema.optional(),
+  qualityGate: videoAnalysisQualityGateSchema.optional(),
   artifactAvailable: z.boolean(),
   failureCode: z.string().optional(),
   startedAt: z.iso.datetime().optional(),
@@ -1557,21 +1652,147 @@ export const videoAnalysisWorkerEventSchema = z
         message: "A ball contact needs a volleyball contact kind.",
       });
     }
+    if (
+      (event.eventType === "rally-started" ||
+        event.eventType === "rally-ended") &&
+      !event.payload.rallyId
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["payload", "rallyId"],
+        message: "A rally boundary needs a stable rally ID.",
+      });
+    }
+    if (
+      event.eventType === "ball-landing" &&
+      event.courtPoint?.observed !== "visible"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["courtPoint", "observed"],
+        message: "A model landing must be visibly observed.",
+      });
+    }
   });
-export const videoAnalysisWorkerResultSchema = z.object({
-  runId: z.string().uuid(),
-  status: z.enum(["ready", "needs-review", "failed"]),
-  modelVersion: z.string().trim().min(1).max(80).optional(),
-  artifactR2Key: z
-    .string()
-    .trim()
-    .regex(/^video-analysis\/[a-zA-Z0-9/_-]+$/)
-    .max(500)
-    .optional(),
-  failureCode: z.string().trim().min(1).max(80).optional(),
-  coverage: videoAnalysisCoverageSchema.optional(),
-  events: z.array(videoAnalysisWorkerEventSchema).max(100_000).default([]),
-});
+export const videoAnalysisWorkerResultSchema = z
+  .object({
+    runId: z.string().uuid(),
+    status: z.enum(["ready", "needs-review", "failed"]),
+    modelVersion: z.string().trim().min(1).max(80).optional(),
+    artifactR2Key: z
+      .string()
+      .trim()
+      .regex(/^video-analysis\/[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*(?:\.json)?$/)
+      .max(500)
+      .optional(),
+    failureCode: z.string().trim().min(1).max(80).optional(),
+    coverage: videoAnalysisCoverageSchema.optional(),
+    qualityGate: videoAnalysisQualityGateSchema.optional(),
+    events: z.array(videoAnalysisWorkerEventSchema).max(100_000).default([]),
+  })
+  .superRefine((result, context) => {
+    if (result.status === "failed") {
+      if (!result.failureCode) {
+        context.addIssue({
+          code: "custom",
+          path: ["failureCode"],
+          message: "A failed analysis needs a bounded failure code.",
+        });
+      }
+      if (result.events.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["events"],
+          message: "A failed analysis cannot publish model observations.",
+        });
+      }
+      return;
+    }
+    if (!result.modelVersion) {
+      context.addIssue({
+        code: "custom",
+        path: ["modelVersion"],
+        message: "A completed analysis needs model provenance.",
+      });
+    }
+    if (!result.coverage?.sourceVideoAvailable) {
+      context.addIssue({
+        code: "custom",
+        path: ["coverage", "sourceVideoAvailable"],
+        message:
+          "A completed analysis must prove that source video was available.",
+      });
+    }
+    if (result.status === "ready") {
+      if (!result.artifactR2Key) {
+        context.addIssue({
+          code: "custom",
+          path: ["artifactR2Key"],
+          message:
+            "A production-ready analysis needs an immutable artifact manifest.",
+        });
+      }
+      if (
+        result.qualityGate?.decision !== "passed" ||
+        !result.qualityGate.productionEligible
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["qualityGate"],
+          message: "Only a benchmark-attested model may return ready.",
+        });
+      }
+    }
+    result.events.forEach((event, index) => {
+      if (event.confidence === undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["events", index, "confidence"],
+          message: "Every model observation needs calibrated confidence.",
+        });
+      }
+      if (event.eventType === "ball-landing" && !event.courtPoint) {
+        context.addIssue({
+          code: "custom",
+          path: ["events", index, "courtPoint"],
+          message: "A model landing needs a visibly observed court point.",
+        });
+      }
+      if (
+        result.coverage?.sampledDurationUs !== undefined &&
+        (event.sessionTimeUs > result.coverage.sampledDurationUs ||
+          event.sessionTimeUs + (event.durationUs ?? 0) >
+            result.coverage.sampledDurationUs)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["events", index, "sessionTimeUs"],
+          message: "A model observation cannot exceed sampled video coverage.",
+        });
+      }
+    });
+    const eventIds = new Set(result.events.map((event) => event.id));
+    if (eventIds.size !== result.events.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["events"],
+        message: "Model observation IDs must be unique within a callback.",
+      });
+    }
+    for (let index = 1; index < result.events.length; index += 1) {
+      if (
+        result.events[index]!.sessionTimeUs <
+        result.events[index - 1]!.sessionTimeUs
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["events", index, "sessionTimeUs"],
+          message: "Model observations must be ordered by recording time.",
+        });
+        break;
+      }
+    }
+  });
 export const healthCategorySchema = z.enum([
   "heart",
   "recovery",

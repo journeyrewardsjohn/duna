@@ -262,6 +262,10 @@ routes execute.
 ```text
 DUNA_ANALYSIS_WORKER_URL
 DUNA_ANALYSIS_WORKER_TOKEN
+DUNA_CONTROL_PLANE_URL
+DUNA_VISION_MODEL_BUNDLE
+DUNA_VISION_PROMOTION_ATTESTATION
+DUNA_VISION_PROMOTION_PUBLIC_KEY
 ```
 
 The optional worker receives a queued server-to-server job and posts validated
@@ -269,6 +273,17 @@ model observations back to `/api/video/analysis`. It may read private source
 video and write derived artifacts only under `video-analysis/{videoId}/` in R2.
 This worker is the model execution plane—not a Vercel request handler—and its
 token must remain server-side.
+
+`DUNA_ANALYSIS_WORKER_URL` points Web to the worker's `/v1/analysis` endpoint.
+The worker uses `DUNA_CONTROL_PLANE_URL` plus the fixed callback path; it never
+trusts a callback origin supplied by a job. The model bundle is an immutable
+mounted directory. Promotion files are optional as a pair: without a verified
+Ed25519 attestation for the exact bundle hash, results remain `needs-review`.
+The offline private signing key is intentionally not a runtime variable.
+
+The worker also needs the canonical scoped R2 S3 variables above and a
+persistent `/var/lib/duna-vision` volume. It requires an NVIDIA GPU and will
+fail closed when the CUDA execution provider is unavailable.
 
 ## LiveKit and voice
 
