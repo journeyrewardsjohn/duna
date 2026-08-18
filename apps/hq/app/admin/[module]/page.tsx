@@ -113,7 +113,7 @@ export default async function AdminModulePage({
       ? caller.admin.visionOverview()
       : Promise.resolve(undefined),
     module === "people"
-      ? caller.admin.people({ query: q })
+      ? caller.admin.people({ query: q, page })
       : Promise.resolve(undefined),
     module === "people" && person
       ? caller.admin.person({ personId: person })

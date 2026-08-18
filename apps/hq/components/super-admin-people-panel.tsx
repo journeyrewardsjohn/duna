@@ -575,6 +575,8 @@ export function SuperAdminPeoplePanel({
   readonly query?: string;
 }) {
   const queryString = query ? `&q=${encodeURIComponent(query)}` : "";
+  const directoryHref = (page: number) =>
+    `/admin/people?page=${page}${queryString}`;
   return (
     <div className="super-admin-people">
       <MetricCards overview={overview} />
@@ -585,7 +587,7 @@ export function SuperAdminPeoplePanel({
               <span className="hq-eyebrow">Platform directory</span>
               <h2>Every Duna account</h2>
             </div>
-            <Badge>{overview.people.length}</Badge>
+            <Badge>Page {overview.page}</Badge>
           </header>
           <form action="/admin/people" className="people-search" method="get">
             <input
@@ -600,7 +602,7 @@ export function SuperAdminPeoplePanel({
           <div className="people-directory-list">
             {overview.people.map((person) => (
               <Link
-                href={`/admin/people?person=${person.id}${queryString}`}
+                href={`/admin/people?person=${person.id}&page=${overview.page}${queryString}`}
                 key={person.id}
               >
                 <span className="people-avatar" aria-hidden>
@@ -628,6 +630,34 @@ export function SuperAdminPeoplePanel({
               </p>
             )}
           </div>
+          {(overview.page > 1 || overview.hasNextPage) && (
+            <nav
+              aria-label="People directory pages"
+              className="people-directory-pagination"
+            >
+              {overview.page > 1 ? (
+                <Link
+                  className="hq-button hq-button--secondary"
+                  href={directoryHref(overview.page - 1)}
+                >
+                  Previous
+                </Link>
+              ) : (
+                <span />
+              )}
+              <small>{overview.people.length} accounts on this page</small>
+              {overview.hasNextPage ? (
+                <Link
+                  className="hq-button hq-button--secondary"
+                  href={directoryHref(overview.page + 1)}
+                >
+                  Next
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          )}
         </aside>
         <div>
           {personProfile ? (

@@ -2965,6 +2965,30 @@ html[data-theme="dark"] body[data-zone="operator"] {
   color: var(--hq-core);
 }
 
+.people-directory-pagination {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin-top: 0.85rem;
+}
+
+.people-directory-pagination .hq-button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0.42rem 0.65rem;
+}
+
+.people-directory-pagination .hq-button:last-child {
+  justify-self: end;
+}
+
+.people-directory-pagination small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 .people-avatar {
   align-items: center;
   background: var(--hq-tint);

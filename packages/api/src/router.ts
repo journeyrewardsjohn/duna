@@ -10832,12 +10832,18 @@ const adminRouter = router({
       }
     }),
   people: superAdminProcedure
-    .input(z.object({ query: z.string().trim().max(120).optional() }))
+    .input(
+      z.object({
+        query: z.string().trim().max(120).optional(),
+        page: z.number().int().positive().max(10_000).optional(),
+      }),
+    )
     .output(superAdminPeopleOverviewSchema)
     .query(async ({ input, ctx }) => {
       try {
         return await loadSuperAdminPeopleOverview({
           query: input.query,
+          page: input.page,
           now: ctx.now,
         });
       } catch (error) {
