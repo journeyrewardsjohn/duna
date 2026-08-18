@@ -1,6 +1,10 @@
 "use client";
 
-import type { FeatureFlagCollection, FeatureFlagSummary } from "@duna/api";
+import type {
+  DemoDataControl,
+  FeatureFlagCollection,
+  FeatureFlagSummary,
+} from "@duna/api";
 import type { OrganizationSummary } from "@duna/core";
 import { Badge } from "@duna/ui";
 import { Check, CircleAlert, Flag, Plus, ShieldCheck } from "lucide-react";
@@ -10,6 +14,7 @@ import {
   updateFeatureFlagAction,
   type FeatureFlagActionState,
 } from "@/app/admin/actions";
+import { DemoDataControls } from "./demo-data-controls";
 
 const initialState: FeatureFlagActionState = {
   status: "idle",
@@ -243,12 +248,15 @@ function CreateFlag({
 export function FeatureFlagControls({
   collection,
   organizations,
+  demoData,
 }: {
   readonly collection: FeatureFlagCollection;
   readonly organizations: readonly OrganizationSummary[];
+  readonly demoData: DemoDataControl;
 }) {
   return (
     <div className="feature-flag-controls">
+      <DemoDataControls control={demoData} />
       {!collection.canManage && (
         <section className="hq-card feature-flag-readonly">
           <ShieldCheck aria-hidden size={22} />

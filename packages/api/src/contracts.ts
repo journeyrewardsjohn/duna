@@ -6025,8 +6025,22 @@ export const featureFlagCollectionSchema = z.object({
   canManage: z.boolean(),
 });
 
+export const demoDataControlSchema = z.object({
+  target: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string().min(1),
+    })
+    .optional(),
+  enabled: z.boolean(),
+  recordCount: z.number().int().nonnegative(),
+  updatedAt: z.iso.datetime().optional(),
+  canManage: z.boolean(),
+});
+
 export type FeatureFlagSummary = z.infer<typeof featureFlagSummarySchema>;
 export type FeatureFlagCollection = z.infer<typeof featureFlagCollectionSchema>;
+export type DemoDataControl = z.infer<typeof demoDataControlSchema>;
 export type VideoSummary = z.infer<typeof videoSummarySchema>;
 export type VideoStudio = z.infer<typeof videoStudioSchema>;
 export type VideoUsage = z.infer<typeof videoUsageSchema>;

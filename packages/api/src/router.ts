@@ -63,6 +63,7 @@ import {
   eventCheckoutStatusSchema,
   featureFlagCollectionSchema,
   featureFlagSummarySchema,
+  demoDataControlSchema,
   formSubmissionResultSchema,
   guardianReviewItemSchema,
   guardianReviewResultSchema,
@@ -310,6 +311,11 @@ import {
   loadFeatureFlags,
   updateFeatureFlag,
 } from "./feature-flags";
+import {
+  DemoDataError,
+  loadBeachEliteDemoDataControl,
+  setBeachEliteDemoData,
+} from "./demo-data-service";
 import {
   executeIdempotent,
   IdempotencyConflictError,
@@ -1062,6 +1068,15 @@ function throwDomainError(error: unknown): never {
           : error.code === "DATABASE_REQUIRED"
             ? "INTERNAL_SERVER_ERROR"
             : "BAD_REQUEST";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof DemoDataError) {
+    const code =
+      error.code === "BEACH_ELITE_ACCOUNT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "SUPER_ADMIN_REQUIRED"
+          ? "FORBIDDEN"
+          : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof FeatureFlagError) {
@@ -12434,6 +12449,49 @@ const adminRouter = router({
   guardianships: adminProcedure
     .output(z.array(guardianReviewItemSchema).readonly())
     .query(() => loadGuardianReviewQueue()),
+  demoData: adminProcedure
+    .output(demoDataControlSchema)
+    .query(({ ctx }) => loadBeachEliteDemoDataControl(ctx.actor!)),
+  setDemoData: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-demo-data-set",
+        capacity: 6,
+        refillPerMinute: 1,
+        scope: "actor",
+      }),
+    )
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        reason: z.string().trim().min(10).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(demoDataControlSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.setDemoData",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await setBeachEliteDemoData({
+              actor: ctx.actor!,
+              enabled: input.enabled,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   featureFlags: adminProcedure
     .output(featureFlagCollectionSchema)
     .query(({ ctx }) => loadFeatureFlags(ctx.actor!)),

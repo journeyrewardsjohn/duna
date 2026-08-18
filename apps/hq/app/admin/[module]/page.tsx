@@ -102,6 +102,13 @@ export default async function AdminModulePage({
     module === "flags"
       ? caller.admin.featureFlags()
       : Promise.resolve({ flags: [], canManage: false }),
+    module === "flags"
+      ? caller.admin.demoData()
+      : Promise.resolve({
+          enabled: false,
+          recordCount: 0,
+          canManage: false,
+        }),
     needsSandData ? caller.admin.sandData() : Promise.resolve(undefined),
     module === "player-mapping" || module === "pro-tour"
       ? caller.admin.players({ query: q, limit: 40 })
@@ -140,6 +147,7 @@ export default async function AdminModulePage({
         organizations,
         guardianReviews,
         featureFlags,
+        demoData,
         sandData,
         players,
         video,
@@ -154,6 +162,7 @@ export default async function AdminModulePage({
         organizations,
         guardianReviews,
         featureFlags,
+        demoData,
         sandData,
         players,
         video,
@@ -186,6 +195,7 @@ export default async function AdminModulePage({
         overview={result.overview}
         guardianReviews={result.guardianReviews}
         featureFlags={result.featureFlags}
+        demoData={result.demoData}
         video={result.video}
         vision={result.vision}
         people={result.people}
