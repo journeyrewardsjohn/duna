@@ -4,6 +4,7 @@ import {
   auditLog,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   organizationMemberships,
   organizationParticipants,
   organizations,
@@ -787,7 +788,7 @@ export async function setPersonSuperAdmin(input: {
         // not leave an accidental Super Admin grant in Duna.
       }
     }
-    await database.transaction(async (transaction) => {
+    await getTransactionalDatabase().transaction(async (transaction) => {
       await transaction
         .delete(adminRoles)
         .where(
@@ -869,7 +870,7 @@ export async function setPersonSuperAdmin(input: {
       }
     }
   }
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .insert(adminRoles)
       .values({

@@ -1,6 +1,7 @@
 import {
   auditLog,
   getDatabase,
+  getTransactionalDatabase,
   organizationMemberships,
   organizationStaffProfiles,
   organizations,
@@ -236,7 +237,7 @@ export async function grantOrganizationAccess(input: {
     useDefaultWorkosRole: input.useDefaultWorkosRole,
   });
   const membershipRole = input.role === "director" ? "owner" : input.role;
-  await database.transaction(async (transaction) => {
+  await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(organizationMemberships)
       .set({ active: false, updatedAt: input.now })
