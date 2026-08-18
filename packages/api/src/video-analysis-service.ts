@@ -137,6 +137,7 @@ function asCourtDimensions(input: {
       coordinateFrame: "canonical-court",
       calibrationSource,
       calibrationQualityScore: calibration?.qualityScore,
+      imageCorners: settings?.corners ?? calibration?.corners,
     },
   };
 }
@@ -159,6 +160,7 @@ function serializeRun(
     modelVersion: row.modelVersion ?? undefined,
     courtMap: row.courtMap ?? undefined,
     coverage: row.coverage ?? undefined,
+    qualityGate: row.qualityGate ?? undefined,
     artifactAvailable: Boolean(row.artifactR2Key),
     failureCode: row.failureCode ?? undefined,
     startedAt: row.startedAt?.toISOString(),
@@ -531,7 +533,6 @@ export async function requestVideoAnalysis(input: {
     )
     .orderBy(desc(videoAnalysisRuns.createdAt))
     .limit(1);
-  if (active[0]) return serializeRun(active[0]);
 
   const session = await database.query.visionSessions.findFirst({
     where: eq(visionSessions.videoId, video.id),
@@ -549,6 +550,44 @@ export async function requestVideoAnalysis(input: {
         .orderBy(asc(visionTimelineEvents.elapsedMs))
     : [];
   const { court } = asCourtDimensions({ video, session });
+  const activeRun = active[0];
+  if (activeRun) {
+    const staleProcessing =
+      activeRun.status === "processing" &&
+      input.now.getTime() - activeRun.updatedAt.getTime() > 2 * 60 * 60 * 1_000;
+    if (activeRun.status === "queued" || staleProcessing) {
+      if (staleProcessing) {
+        await database
+          .update(videoAnalysisRuns)
+          .set({ status: "queued", startedAt: null, updatedAt: input.now })
+          .where(eq(videoAnalysisRuns.id, activeRun.id));
+      }
+      await dispatchAnalysisRun({
+        runId: activeRun.id,
+        video,
+        court,
+        visionSessionId: session?.id,
+        visionSetup: session
+          ? {
+              settings: session.settings,
+              previewJpegBase64: session.previewJpegBase64 ?? undefined,
+              previewCapturedAt: session.previewCapturedAt?.toISOString(),
+              timeline: setupTimeline.map((event) => ({
+                type: event.type,
+                elapsedMs: event.elapsedMs,
+                label: event.label ?? undefined,
+                payload: event.payload ?? undefined,
+              })),
+            }
+          : undefined,
+        now: input.now,
+      });
+    }
+    const refreshed = await database.query.videoAnalysisRuns.findFirst({
+      where: eq(videoAnalysisRuns.id, activeRun.id),
+    });
+    return serializeRun(refreshed ?? activeRun);
+  }
   const id = randomUUID();
   const coverage = {
     sampledDurationUs: video.durationSeconds
@@ -754,6 +793,9 @@ export async function ingestVideoAnalysisWorkerResult(input: {
   if (!run) {
     throw new VideoAnalysisError("VIDEO_NOT_FOUND", "Analysis run not found.");
   }
+  if (["ready", "needs-review", "failed", "cancelled"].includes(run.status)) {
+    return serializeRun(run);
+  }
   if (
     input.result.artifactR2Key &&
     !input.result.artifactR2Key.startsWith(`video-analysis/${run.videoId}/`)
@@ -768,6 +810,20 @@ export async function ingestVideoAnalysisWorkerResult(input: {
       "INVALID_REVIEW",
       "A failed analysis result needs a failure code.",
     );
+  }
+  const court = run.courtMap;
+  for (const event of input.result.events) {
+    const point = event.courtPoint;
+    if (
+      point?.observed === "visible" &&
+      court &&
+      (point.xMeters > court.widthMeters || point.yMeters > court.lengthMeters)
+    ) {
+      throw new VideoAnalysisError(
+        "INVALID_REVIEW",
+        "Visible model coordinates must remain inside the calibrated court.",
+      );
+    }
   }
   const rows = input.result.events.map((event) => ({
     id: event.id,
@@ -801,6 +857,7 @@ export async function ingestVideoAnalysisWorkerResult(input: {
       artifactR2Key: input.result.artifactR2Key,
       failureCode: input.result.failureCode,
       coverage: input.result.coverage,
+      qualityGate: input.result.qualityGate,
       startedAt: run.startedAt ?? input.now,
       completedAt: input.now,
       updatedAt: input.now,

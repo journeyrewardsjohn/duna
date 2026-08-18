@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "duna-vision-benchmark-v1",
+  "benchmarkId": "replace-with-held-out-benchmark-id",
+  "kind": "private-real-match-held-out",
+  "clips": [],
+  "thresholds": {
+    "minimumClipCount": 20,
+    "minimumContactCount": 100,
+    "minimumRallyCount": 40,
+    "minimumLandingCount": 40,
+    "contactF1": 0.86,
+    "rallyF1": 0.9,
+    "landingF1": 0.82,
+    "maximumLandingErrorP95Meters": 0.75,
+    "maximumCourtErrorP95Pixels": 12,
+    "maximumFalseEventsPerMinute": 1.5,
+    "minimumUsableCoverageRatio": 0.75,
+    "eventToleranceMilliseconds": 500,
+    "requiredSlices": {
+      "sunny": 3,
+      "backlit": 3,
+      "overcast": 3,
+      "night": 3,
+      "partial-occlusion": 3,
+      "elevated-camera": 3,
+      "sideline-camera": 3
+    },
+    "minimumSliceContactF1": 0.7,
+    "minimumSliceContactCount": 10
+  }
+}

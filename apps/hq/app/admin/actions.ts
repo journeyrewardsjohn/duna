@@ -10,6 +10,7 @@ export interface GuardianReviewActionState {
 
 export type FeatureFlagActionState = GuardianReviewActionState;
 export type VideoAdminActionState = GuardianReviewActionState;
+export type VisionAdminActionState = GuardianReviewActionState;
 export type OrganizationCommissionActionState = GuardianReviewActionState;
 export type PredictionAdminActionState = GuardianReviewActionState;
 
@@ -181,6 +182,207 @@ function videoActionError(
     status: "error",
     message: error instanceof Error ? error.message : fallback,
   };
+}
+
+function visionActionError(
+  error: unknown,
+  fallback: string,
+): VisionAdminActionState {
+  return {
+    status: "error",
+    message: error instanceof Error ? error.message : fallback,
+  };
+}
+
+export async function registerVisionModelAction(
+  _previous: VisionAdminActionState,
+  formData: FormData,
+): Promise<VisionAdminActionState> {
+  const version = String(formData.get("version") ?? "").trim();
+  const bundleSha256 = String(formData.get("bundleSha256") ?? "").trim();
+  const bundleR2Prefix = String(formData.get("bundleR2Prefix") ?? "").trim();
+  const detectorFamily = String(formData.get("detectorFamily") ?? "").trim();
+  const sourceLicense = String(formData.get("sourceLicense") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const manifest = parseConfiguration(formData.get("manifest"));
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    version.length < 3 ||
+    !/^[a-f0-9]{64}$/.test(bundleSha256) ||
+    !/^vision-models\/[a-zA-Z0-9_./-]+\/$/.test(bundleR2Prefix) ||
+    !detectorFamily ||
+    !sourceLicense ||
+    !manifest ||
+    reason.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Complete the immutable bundle details, valid manifest, audit reason, and confirmation.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const model = await caller.admin.registerVisionModel({
+      version,
+      bundleSha256,
+      bundleR2Prefix,
+      detectorFamily,
+      sourceLicense,
+      manifest,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/vision");
+    return {
+      status: "success",
+      message: `${model.version} is registered as a candidate. No traffic was changed.`,
+    };
+  } catch (error) {
+    return visionActionError(
+      error,
+      "The model bundle could not be registered.",
+    );
+  }
+}
+
+export async function requestVisionTrainingAction(
+  _previous: VisionAdminActionState,
+  formData: FormData,
+): Promise<VisionAdminActionState> {
+  const requestedModelVersion = String(
+    formData.get("requestedModelVersion") ?? "",
+  ).trim();
+  const datasetR2Key = String(formData.get("datasetR2Key") ?? "").trim();
+  const baseModelVersion =
+    String(formData.get("baseModelVersion") ?? "").trim() || undefined;
+  const codeCommitSha = String(formData.get("codeCommitSha") ?? "").trim();
+  const budgetCents = Math.round(Number(formData.get("budgetDollars")) * 100);
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    requestedModelVersion.length < 3 ||
+    !/^vision-training\/datasets\/[a-zA-Z0-9_./-]+\.zip$/.test(datasetR2Key) ||
+    !/^[a-f0-9]{7,64}$/.test(codeCommitSha) ||
+    !Number.isInteger(budgetCents) ||
+    budgetCents < 100 ||
+    budgetCents > 100_000 ||
+    reason.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Use an approved dataset ZIP, immutable code commit, budget from $1 to $1,000, audit reason, and confirmation.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const run = await caller.admin.requestVisionTraining({
+      requestedModelVersion,
+      datasetR2Key,
+      baseModelVersion,
+      codeCommitSha,
+      budgetCents,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/vision");
+    return {
+      status: "success",
+      message: `Modal L4 training ${run.id} is running inside the approved budget ceiling.`,
+    };
+  } catch (error) {
+    return visionActionError(error, "The L4 training run could not start.");
+  }
+}
+
+export async function requestVisionBenchmarkAction(
+  _previous: VisionAdminActionState,
+  formData: FormData,
+): Promise<VisionAdminActionState> {
+  const modelId = String(formData.get("modelId") ?? "");
+  const benchmarkId = String(formData.get("benchmarkId") ?? "").trim();
+  const datasetManifestR2Key = String(
+    formData.get("datasetManifestR2Key") ?? "",
+  ).trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !modelId ||
+    benchmarkId.length < 3 ||
+    !/^vision-benchmarks\/[a-zA-Z0-9_./-]+\.json$/.test(datasetManifestR2Key) ||
+    reason.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose a model and immutable benchmark manifest, add an audit reason, and confirm the run.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const run = await caller.admin.requestVisionBenchmark({
+      modelId,
+      benchmarkId,
+      datasetManifestR2Key,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/vision");
+    return {
+      status: "success",
+      message: `Signed benchmark ${run.id} is running on Modal L4.`,
+    };
+  } catch (error) {
+    return visionActionError(error, "The benchmark could not start.");
+  }
+}
+
+export async function reviewVisionModelAction(
+  _previous: VisionAdminActionState,
+  formData: FormData,
+): Promise<VisionAdminActionState> {
+  const modelId = String(formData.get("modelId") ?? "");
+  const stage = String(formData.get("stage") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !modelId ||
+    !["shadow", "production", "rollback"].includes(stage) ||
+    !["approved", "rejected"].includes(decision) ||
+    notes.length < 8 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose a bounded decision, add review notes, and confirm the exact model stage.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.reviewVisionModel({
+      modelId,
+      stage: stage as "shadow" | "production" | "rollback",
+      decision: decision as "approved" | "rejected",
+      notes,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/vision");
+    return {
+      status: "success",
+      message:
+        result.approvalsNeeded > 0
+          ? `Review recorded. ${result.approvalsNeeded} independent production approval remains.`
+          : `Review recorded. Model status is now ${result.status}.`,
+    };
+  } catch (error) {
+    return visionActionError(error, "The model review could not be saved.");
+  }
 }
 
 export async function grantComplimentaryDunaPlusAction(

@@ -57,4 +57,5 @@ export * from "./video-providers";
 export * from "./video-analysis-service";
 export * from "./video-service";
 export * from "./vision-service";
+export * from "./vision-model-service";
 export * from "./workflows";

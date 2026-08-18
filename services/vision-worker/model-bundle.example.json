@@ -1,0 +1,41 @@
+{
+  "contractVersion": "duna-volleyball-onnx-v1",
+  "modelVersion": "replace-with-immutable-model-version",
+  "detector": {
+    "format": "duna-nms-v1",
+    "path": "detector.onnx",
+    "inputName": "images",
+    "outputName": "detections",
+    "inputWidth": 960,
+    "inputHeight": 544,
+    "labels": {
+      "ball": 0,
+      "court_tl": 1,
+      "court_tr": 2,
+      "court_br": 3,
+      "court_bl": 4
+    },
+    "confidenceThreshold": 0.35,
+    "batchSize": 16
+  },
+  "temporal": {
+    "mode": "onnx",
+    "path": "temporal.onnx",
+    "inputName": "features",
+    "outputName": "probabilities",
+    "windowFrames": 31,
+    "labels": [
+      "none",
+      "serve",
+      "reception",
+      "set",
+      "attack",
+      "block",
+      "dig",
+      "free-ball",
+      "landing"
+    ],
+    "confidenceThreshold": 0.55,
+    "debounceMilliseconds": 350
+  }
+}

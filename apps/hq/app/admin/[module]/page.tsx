@@ -101,6 +101,9 @@ export default async function AdminModulePage({
     module === "video"
       ? caller.admin.videoOverview()
       : Promise.resolve(undefined),
+    module === "vision"
+      ? caller.admin.visionOverview()
+      : Promise.resolve(undefined),
     module === "player-intelligence"
       ? caller.admin.playerIntelligence({
           page,
@@ -126,6 +129,7 @@ export default async function AdminModulePage({
         sandData,
         players,
         video,
+        vision,
         playerIntelligence,
         playerIntelligenceDetail,
         predictions,
@@ -137,6 +141,7 @@ export default async function AdminModulePage({
         sandData,
         players,
         video,
+        vision,
         playerIntelligence,
         playerIntelligenceDetail,
         predictions,
@@ -164,6 +169,7 @@ export default async function AdminModulePage({
         guardianReviews={result.guardianReviews}
         featureFlags={result.featureFlags}
         video={result.video}
+        vision={result.vision}
         sandData={result.sandData}
         playerDirectory={result.players}
         playerSearchQuery={q}

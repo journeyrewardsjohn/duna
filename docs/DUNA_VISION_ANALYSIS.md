@@ -111,7 +111,8 @@ failure code; a worker must not report `ready` without a real completion.
 
 ## Model promotion rules
 
-The worker repository is intentionally independent from this product
+The deployable worker lives in `services/vision-worker`; model weights and
+private validation media remain independently controlled and never enter this
 repository. Before a model version is allowed to return production proposals,
 the model owner must retain:
 
@@ -127,6 +128,18 @@ the model owner must retain:
 No unregistered model, raw neural logit, inferred invisible landing, or
 single-camera centimeter claim is allowed to become a user-visible fact.
 
+The Web callback enforces this boundary. `ready` requires an immutable artifact
+manifest and a signed, production-eligible quality gate tied to the exact model
+bundle hash. An unsigned or unpromoted model can return only `needs-review`.
+Visible points are rejected if they exceed the calibrated court dimensions,
+and every model observation requires calibrated confidence.
+
+The held-out gate is volleyball-specific: contact, rally, and landing F1;
+landing and court error; false events per minute; usable coverage; and minimum
+performance across declared lighting, occlusion, camera-angle, court, uniform,
+ball, and skin-tone slices. Synthetic fixtures may verify the evaluator but
+cannot promote a model. See `services/vision-worker/README.md`.
+
 ## Release gates
 
 1. Apply the latest migration to an approved isolated database branch and
@@ -141,6 +154,9 @@ single-camera centimeter claim is allowed to become a user-visible fact.
    the exact run, callback, R2 artifact prefix, model version, and human review
    path. Without a configured worker, reports remain honest and visibly
    queued—do not call model analysis live.
+6. Retain the signed promotion attestation, model bundle digest, held-out
+   dataset-manifest digest, slice report, and rollback version with the release
+   evidence. A passing aggregate without the required slices is a failed gate.
 
 See `docs/VIDEO_PLATFORM.md` for capture/provider behavior and
 `docs/ENVIRONMENT_VARIABLES.md` for variable names and scope.

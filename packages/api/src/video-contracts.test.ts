@@ -101,13 +101,6 @@ describe("Duna Video contracts", () => {
         events: [
           {
             id: crypto.randomUUID(),
-            eventType: "ball-landing",
-            sessionTimeUs: 84_000_000,
-            confidence: 0.82,
-            courtPoint: { xMeters: 3.4, yMeters: 12.1, observed: "visible" },
-          },
-          {
-            id: crypto.randomUUID(),
             eventType: "ball-contact",
             sessionTimeUs: 82_000_000,
             confidence: 0.91,
@@ -118,6 +111,13 @@ describe("Duna Video contracts", () => {
               side: "a",
               speedKph: 73.2,
             },
+          },
+          {
+            id: crypto.randomUUID(),
+            eventType: "ball-landing",
+            sessionTimeUs: 84_000_000,
+            confidence: 0.82,
+            courtPoint: { xMeters: 3.4, yMeters: 12.1, observed: "visible" },
           },
         ],
       }),
@@ -145,6 +145,48 @@ describe("Duna Video contracts", () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it("requires benchmark provenance before a worker can declare production readiness", () => {
+    const base = {
+      runId: crypto.randomUUID(),
+      status: "ready",
+      modelVersion: "duna-volleyball-v1",
+      artifactR2Key: `video-analysis/${crypto.randomUUID()}/runs/manifest`,
+      coverage: {
+        sampledDurationUs: 60_000_000,
+        usableDurationUs: 54_000_000,
+        sourceVideoAvailable: true,
+        scoreTimelineAvailable: false,
+      },
+      events: [],
+    } as const;
+    expect(() => videoAnalysisWorkerResultSchema.parse(base)).toThrow();
+    expect(
+      videoAnalysisWorkerResultSchema.parse({
+        ...base,
+        qualityGate: {
+          attestationVersion: 1,
+          decision: "passed",
+          productionEligible: true,
+          benchmarkId: "held-out-beach-v1",
+          modelBundleSha256: "a".repeat(64),
+          datasetManifestSha256: "b".repeat(64),
+          evaluatedAt: "2026-08-17T20:00:00.000Z",
+          metrics: {
+            contactF1: 0.91,
+            rallyF1: 0.94,
+            landingF1: 0.88,
+            landingErrorP95Meters: 0.42,
+            courtErrorP95Pixels: 7.2,
+            falseEventsPerMinute: 0.4,
+            usableCoverageRatio: 0.9,
+          },
+          failedChecks: [],
+          evaluatedSlices: ["sunny", "backlit"],
+        },
+      }),
+    ).toMatchObject({ status: "ready" });
   });
 
   it("carries match venue and camera defaults into the mobile setup", () => {

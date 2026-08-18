@@ -112,6 +112,35 @@ export function isR2VideoConfigured(): boolean {
   return Boolean(r2Configuration());
 }
 
+export async function readPrivateR2JsonObject(
+  objectKey: string,
+  maximumBytes = 1_048_576,
+): Promise<unknown> {
+  if (
+    !objectKey ||
+    objectKey.startsWith("/") ||
+    objectKey.includes("..") ||
+    !objectKey.endsWith(".json")
+  ) {
+    throw new Error("The private R2 object key is invalid.");
+  }
+  const { client, configuration } = getR2Client();
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: configuration.bucket, Key: objectKey }),
+  );
+  if (
+    typeof response.ContentLength === "number" &&
+    response.ContentLength > maximumBytes
+  ) {
+    throw new Error("The private R2 JSON object is too large.");
+  }
+  const body = await response.Body?.transformToString("utf-8");
+  if (!body || Buffer.byteLength(body, "utf-8") > maximumBytes) {
+    throw new Error("The private R2 JSON object is unavailable or too large.");
+  }
+  return JSON.parse(body) as unknown;
+}
+
 export async function createR2VideoUpload(input: {
   readonly objectKey: string;
   readonly contentType: string;

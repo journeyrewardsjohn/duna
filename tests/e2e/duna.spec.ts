@@ -271,7 +271,9 @@ test("public pickup pages keep their story and booking rail contained", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
   ).toBeVisible();
-  await expect(page.getByText("Event complete.")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Event complete." }),
+  ).toBeVisible();
   await expect(page.getByText("This pickup has ended.")).toBeVisible();
   await expect(
     page.getByText("6:00 PM–7:30 PM PDT", { exact: true }),
@@ -944,21 +946,19 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("button", { name: "Pricing & rules", exact: true }),
   ).toBeVisible();
-  if ((page.viewportSize()?.width ?? 1_280) > 600) {
-    await page
-      .getByRole("button", { name: "Availability", exact: true })
-      .click();
-    await expect(
-      page.getByRole("heading", { name: "Set recurring court hours." }),
-    ).toBeVisible();
-    await expect(page.getByLabel("Monday start time")).toHaveValue("07:00");
-    await page
-      .getByRole("button", { name: "Pricing & rules", exact: true })
-      .click();
-    await expect(page.getByLabel("Rate plan")).toHaveValue(
-      "10000000-0000-4000-8000-000000000102",
-    );
-  }
+  await page
+    .getByRole("button", { name: "Availability", exact: true })
+    .dispatchEvent("click");
+  await expect(
+    page.getByRole("heading", { name: "Set recurring court hours." }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Monday start time")).toHaveValue("07:00");
+  await page
+    .getByRole("button", { name: "Pricing & rules", exact: true })
+    .click();
+  await expect(page.getByLabel("Rate plan")).toHaveValue(
+    "10000000-0000-4000-8000-000000000102",
+  );
   await expectNoHorizontalOverflow(page);
 
   await page.goto(

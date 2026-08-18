@@ -4008,12 +4008,28 @@ export const videoAnalysisRuns = pgTable(
       readonly coordinateFrame: "canonical-court";
       readonly calibrationSource: "vision" | "manual" | "unknown";
       readonly calibrationQualityScore?: number;
+      readonly imageCorners?: readonly {
+        readonly x: number;
+        readonly y: number;
+      }[];
     }>(),
     coverage: jsonb("coverage").$type<{
       readonly sampledDurationUs?: number;
       readonly usableDurationUs?: number;
       readonly sourceVideoAvailable: boolean;
       readonly scoreTimelineAvailable: boolean;
+    }>(),
+    qualityGate: jsonb("quality_gate").$type<{
+      attestationVersion: 1;
+      decision: "passed" | "failed" | "unverified";
+      productionEligible: boolean;
+      benchmarkId?: string;
+      modelBundleSha256: string;
+      datasetManifestSha256?: string;
+      evaluatedAt?: string;
+      metrics: Record<string, number>;
+      failedChecks: string[];
+      evaluatedSlices: string[];
     }>(),
     artifactR2Key: text("artifact_r2_key"),
     failureCode: varchar("failure_code", { length: 80 }),
@@ -4041,6 +4057,184 @@ export const videoAnalysisRuns = pgTable(
     check(
       "video_analysis_run_completed_pair",
       sql`(${table.status} IN ('ready', 'needs-review', 'failed', 'cancelled') AND ${table.completedAt} IS NOT NULL) OR (${table.status} NOT IN ('ready', 'needs-review', 'failed', 'cancelled'))`,
+    ),
+  ],
+);
+
+// Model files remain private objects. These rows are the governed registry:
+// immutable bundle identity, evidence, lifecycle, cost, and human approvals.
+export const visionModels = pgTable(
+  "vision_models",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    version: varchar("version", { length: 80 }).notNull(),
+    bundleSha256: varchar("bundle_sha256", { length: 64 }).notNull(),
+    bundleR2Prefix: text("bundle_r2_prefix").notNull(),
+    detectorFamily: varchar("detector_family", { length: 80 }).notNull(),
+    sourceLicense: varchar("source_license", { length: 80 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("candidate"),
+    manifest: jsonb("manifest").notNull().$type<Record<string, unknown>>(),
+    qualityGate: jsonb("quality_gate").$type<Record<string, unknown>>(),
+    promotionAttestationR2Key: text("promotion_attestation_r2_key"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    shadowApprovedAt: timestamp("shadow_approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    productionApprovedAt: timestamp("production_approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    retiredAt: timestamp("retired_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("vision_model_version_unique").on(table.version),
+    uniqueIndex("vision_model_bundle_sha_unique").on(table.bundleSha256),
+    index("vision_model_status_updated_idx").on(table.status, table.updatedAt),
+    check(
+      "vision_model_status_valid",
+      sql`${table.status} IN ('candidate', 'shadow', 'production', 'retired', 'rejected')`,
+    ),
+    check(
+      "vision_model_bundle_sha_valid",
+      sql`${table.bundleSha256} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const visionTrainingRuns = pgTable(
+  "vision_training_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestedModelVersion: varchar("requested_model_version", {
+      length: 80,
+    }).notNull(),
+    modelId: uuid("model_id").references(() => visionModels.id, {
+      onDelete: "set null",
+    }),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    provider: varchar("provider", { length: 24 }).notNull().default("modal"),
+    gpuType: varchar("gpu_type", { length: 24 }).notNull().default("L4"),
+    datasetR2Key: text("dataset_r2_key").notNull(),
+    datasetManifestSha256: varchar("dataset_manifest_sha256", { length: 64 }),
+    baseModelVersion: varchar("base_model_version", { length: 80 }),
+    codeCommitSha: varchar("code_commit_sha", { length: 64 }).notNull(),
+    budgetCents: integer("budget_cents").notNull(),
+    actualCostCents: integer("actual_cost_cents"),
+    providerJobId: varchar("provider_job_id", { length: 160 }),
+    metrics: jsonb("metrics").$type<Record<string, number>>(),
+    failureCode: varchar("failure_code", { length: 80 }),
+    requestedByPersonId: uuid("requested_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("vision_training_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "vision_training_status_valid",
+      sql`${table.status} IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')`,
+    ),
+    check(
+      "vision_training_budget_valid",
+      sql`${table.budgetCents} BETWEEN 100 AND 100000`,
+    ),
+    check(
+      "vision_training_cost_valid",
+      sql`${table.actualCostCents} IS NULL OR ${table.actualCostCents} >= 0`,
+    ),
+  ],
+);
+
+export const visionBenchmarkRuns = pgTable(
+  "vision_benchmark_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    modelId: uuid("model_id")
+      .notNull()
+      .references(() => visionModels.id, { onDelete: "cascade" }),
+    benchmarkId: varchar("benchmark_id", { length: 120 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    datasetManifestR2Key: text("dataset_manifest_r2_key").notNull(),
+    datasetManifestSha256: varchar("dataset_manifest_sha256", { length: 64 }),
+    attestationR2Key: text("attestation_r2_key"),
+    qualityGate: jsonb("quality_gate").$type<Record<string, unknown>>(),
+    providerJobId: varchar("provider_job_id", { length: 160 }),
+    failureCode: varchar("failure_code", { length: 80 }),
+    requestedByPersonId: uuid("requested_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("vision_benchmark_model_created_idx").on(
+      table.modelId,
+      table.createdAt,
+    ),
+    check(
+      "vision_benchmark_status_valid",
+      sql`${table.status} IN ('queued', 'running', 'passed', 'failed', 'cancelled')`,
+    ),
+  ],
+);
+
+export const visionModelApprovals = pgTable(
+  "vision_model_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    modelId: uuid("model_id")
+      .notNull()
+      .references(() => visionModels.id, { onDelete: "cascade" }),
+    stage: varchar("stage", { length: 24 }).notNull(),
+    decision: varchar("decision", { length: 16 }).notNull(),
+    reviewerPersonId: uuid("reviewer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    notes: text("notes").notNull(),
+    evidenceSha256: varchar("evidence_sha256", { length: 64 }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("vision_model_approval_model_stage_idx").on(
+      table.modelId,
+      table.stage,
+      table.createdAt,
+    ),
+    check(
+      "vision_model_approval_stage_valid",
+      sql`${table.stage} IN ('dataset', 'shadow', 'production', 'rollback')`,
+    ),
+    check(
+      "vision_model_approval_decision_valid",
+      sql`${table.decision} IN ('approved', 'rejected')`,
+    ),
+    check(
+      "vision_model_approval_evidence_sha_valid",
+      sql`${table.evidenceSha256} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
