@@ -1335,7 +1335,7 @@ export const organizationThemes = pgTable(
     typography: jsonb("typography")
       .notNull()
       .$type<{ heading: string; body: string }>()
-      .default({ heading: "Fellix", body: "Fellix" }),
+      .default({ heading: "Satoshi", body: "Satoshi" }),
     fontLicenseConfirmed: boolean("font_license_confirmed")
       .notNull()
       .default(false),

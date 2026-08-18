@@ -11,7 +11,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 export type AdmissionPass = Awaited<
   ReturnType<DunaApiClient["player"]["admissionPasses"]["query"]>
@@ -400,7 +400,7 @@ const confirmationStyles = StyleSheet.create({
   },
   eyebrow: {
     color: "#78858a",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.1,
   },
@@ -475,7 +475,7 @@ function createStyles(palette: TournamentPassPalette) {
     },
     eyebrow: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -516,14 +516,14 @@ function createStyles(palette: TournamentPassPalette) {
       width: 38,
     },
     kindMarkText: { color: palette.onButton, fontSize: 15, fontWeight: "900" },
-    kind: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+    kind: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
     eventTitle: {
       color: palette.text,
       fontSize: 14,
       fontWeight: "900",
       marginTop: 2,
     },
-    meta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    meta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     chevron: { color: palette.muted, fontSize: 24, fontWeight: "500" },
     passDetail: {
       alignItems: "center",
@@ -550,7 +550,7 @@ function createStyles(palette: TournamentPassPalette) {
       marginTop: 12,
     },
     statusDot: { borderRadius: 4, height: 8, width: 8 },
-    statusText: { color: palette.text, fontSize: 11, fontWeight: "800" },
+    statusText: { color: palette.text, fontSize: 12, fontWeight: "800" },
     walletButton: {
       alignItems: "center",
       backgroundColor: palette.button,
@@ -569,15 +569,15 @@ function createStyles(palette: TournamentPassPalette) {
     },
     security: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 11,
       textAlign: "center",
     },
-    walletMessage: { color: palette.warning, fontSize: 11, lineHeight: 16 },
+    walletMessage: { color: palette.warning, fontSize: 12, lineHeight: 16 },
     walletFallback: {
       color: palette.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 12,
       textAlign: "center",

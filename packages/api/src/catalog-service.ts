@@ -108,8 +108,8 @@ const DEFAULT_THEME: OperatorWorkspace["theme"] = {
     clubChroma: 0.0489,
   },
   typography: {
-    heading: "Fellix",
-    body: "Fellix",
+    heading: "Satoshi",
+    body: "Satoshi",
   },
   fontLicenseConfirmed: false,
   safeFallbackFont: "Arial, Helvetica, sans-serif",

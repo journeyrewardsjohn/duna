@@ -24,9 +24,9 @@ import {
 } from "react-native-safe-area-context";
 import {
   DunaNumericText,
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { dunaWebUrl } from "./mobile-api";
 import {
   discoveryPresetRange,
@@ -1052,7 +1052,7 @@ function createStyles(
     mainHeadingCopy: { alignItems: "center", flex: 1 },
     mainEyebrow: {
       color: token.flareText,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
@@ -1098,7 +1098,7 @@ function createStyles(
     mainSelectorCopy: { flex: 1 },
     selectorLabel: {
       color: token.flareText,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
@@ -1149,7 +1149,7 @@ function createStyles(
     stepHeadingCopy: { alignItems: "center", flex: 1 },
     stepEyebrow: {
       color: token.flareText,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
@@ -1195,7 +1195,7 @@ function createStyles(
     },
     groupLabel: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
       paddingBottom: spacing[3],
@@ -1238,7 +1238,7 @@ function createStyles(
     },
     poweredBy: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       padding: spacing[3],
       textAlign: "right",
     },
@@ -1302,7 +1302,7 @@ function createStyles(
     weekRow: { flexDirection: "row", marginBottom: spacing[2] },
     weekDay: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       textAlign: "center",
       width: `${100 / 7}%`,

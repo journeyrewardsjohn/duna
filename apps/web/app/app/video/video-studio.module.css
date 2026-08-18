@@ -22,7 +22,7 @@
   color: var(--signal);
   display: block;
   font-family: var(--font-body);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -116,7 +116,7 @@
 }
 .videoStatus {
   color: var(--signal-text);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;

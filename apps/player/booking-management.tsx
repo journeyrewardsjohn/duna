@@ -21,9 +21,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
 import { presentNativeEventPayment } from "./native-payments";
 import { shareBooking, type ShareableBookingDetails } from "./booking-share";
@@ -1703,7 +1703,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 40,
   },
-  attributionAvatarText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
+  attributionAvatarText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   attributionBackdrop: {
     backgroundColor: "rgba(17,23,25,0.66)",
     bottom: 0,
@@ -1810,7 +1810,7 @@ const styles = StyleSheet.create({
   },
   bookingDetailLabel: {
     color: "#78858a",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     width: 92,
@@ -1894,7 +1894,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: "#203740",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     marginBottom: 7,
@@ -1921,7 +1921,7 @@ const styles = StyleSheet.create({
   detailsLinkArrow: { color: "#203740", fontSize: 24, fontWeight: "900" },
   detailsLinkEyebrow: {
     color: "#718084",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -1933,7 +1933,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: "#203740",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
@@ -1997,7 +1997,7 @@ const styles = StyleSheet.create({
   },
   locationMapBadgeText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
@@ -2105,7 +2105,7 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: 15,
   },
-  paymentText: { color: "#2d6a3c", fontSize: 11, fontWeight: "900" },
+  paymentText: { color: "#2d6a3c", fontSize: 12, fontWeight: "900" },
   playerMeta: {
     color: "#777166",
     fontSize: 13,
@@ -2120,7 +2120,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   playerPaymentPending: { backgroundColor: "#f3e9d5" },
-  playerPaymentText: { color: "#2d6a3c", fontSize: 10, fontWeight: "900" },
+  playerPaymentText: { color: "#2d6a3c", fontSize: 12, fontWeight: "900" },
   playerPaymentTextPending: { color: "#8b5a1b" },
   playerRow: {
     alignItems: "center",
@@ -2181,7 +2181,7 @@ const styles = StyleSheet.create({
   },
   attendanceActionText: {
     color: "#4e4a42",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
   },
   attendanceActionTextActive: { color: "#ffffff" },
@@ -2236,7 +2236,7 @@ const styles = StyleSheet.create({
   },
   resultMeta: { color: "#777166", fontSize: 12, marginTop: 3 },
   resultEligibility: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     lineHeight: 14,
     marginTop: 7,
@@ -2252,7 +2252,7 @@ const styles = StyleSheet.create({
   resultRail: { marginTop: 12 },
   resultChoice: {
     color: "#203740",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.7,
     marginTop: 9,
@@ -2348,7 +2348,7 @@ const styles = StyleSheet.create({
   },
   sectionEyebrow: {
     color: "#203740",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
@@ -2407,7 +2407,7 @@ const styles = StyleSheet.create({
   },
   statusPillCancelled: { backgroundColor: "#ece9e3" },
   statusRow: { flexDirection: "row", gap: 8 },
-  statusText: { color: "#2d6a3c", fontSize: 11, fontWeight: "900" },
+  statusText: { color: "#2d6a3c", fontSize: 12, fontWeight: "900" },
   statusTextCancelled: { color: "#68635a" },
   title: {
     color: "#111719",

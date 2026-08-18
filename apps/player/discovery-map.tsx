@@ -27,7 +27,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import { resolveDiscoveryMediaUrl } from "./discovery-media";
 import { dunaWebUrl } from "./mobile-api";
 import { type DiscoveryCoordinates } from "./discovery-search";
@@ -1235,7 +1235,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     fallbackBody: {
       color: environmentalColors.marine200,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: spacing[1],
       textAlign: "center",
     },
@@ -1261,7 +1261,7 @@ function createStyles(token: ResolvedDunaTokens) {
     previewLabel: { left: spacing[5], position: "absolute", top: spacing[5] },
     previewEyebrow: {
       color: environmentalColors.signal,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
@@ -1274,7 +1274,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     previewAction: {
       color: environmentalColors.sand300,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       marginTop: spacing[2],
     },
@@ -1291,7 +1291,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     legendItem: { alignItems: "center", flexDirection: "row", gap: spacing[1] },
     legendDot: { borderRadius: 4, height: 7, width: 7 },
-    legendText: { color: token.text2, fontSize: 10, fontWeight: "800" },
+    legendText: { color: token.text2, fontSize: 12, fontWeight: "800" },
     mapChrome: { left: 0, position: "absolute", right: 0, top: 0 },
     mapHeader: {
       alignItems: "center",
@@ -1326,7 +1326,7 @@ function createStyles(token: ResolvedDunaTokens) {
     mapSearchIcon: { color: token.text1, fontSize: 21 },
     mapSearchCopy: { flex: 1 },
     mapSearchText: { color: token.text1, fontSize: 12, fontWeight: "800" },
-    mapSearchMeta: { color: token.text3, fontSize: 10, marginTop: 2 },
+    mapSearchMeta: { color: token.text3, fontSize: 12, marginTop: 2 },
     mapFilterScroll: { marginTop: spacing[3] },
     mapFilterContent: {
       gap: spacing[2],
@@ -1346,7 +1346,7 @@ function createStyles(token: ResolvedDunaTokens) {
       backgroundColor: token.buttonPrimaryBackground,
       borderColor: token.buttonPrimaryBackground,
     },
-    mapFilterText: { color: token.text2, fontSize: 11, fontWeight: "700" },
+    mapFilterText: { color: token.text2, fontSize: 12, fontWeight: "700" },
     mapFilterTextActive: {
       color: token.buttonPrimaryForeground,
       fontWeight: "900",
@@ -1369,7 +1369,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     searchAreaText: {
       color: token.text1,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     bottomSheet: {
@@ -1411,7 +1411,7 @@ function createStyles(token: ResolvedDunaTokens) {
       fontWeight: "900",
       letterSpacing: -0.7,
     },
-    sheetSubtitle: { color: token.text3, fontSize: 11, marginTop: spacing[1] },
+    sheetSubtitle: { color: token.text3, fontSize: 12, marginTop: spacing[1] },
     sheetResults: {
       gap: spacing[4],
       padding: spacing[4],
@@ -1451,7 +1451,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     resultMediaFallbackEyebrow: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -1501,12 +1501,12 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     resultVideoControlIcon: {
       color: environmentalColors.white,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     resultVideoControlText: {
       color: environmentalColors.white,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.65,
       textTransform: "uppercase",
@@ -1523,7 +1523,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     liveBadgeText: {
       color: token.textOnAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -1536,7 +1536,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     placeholderEyebrow: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -1557,7 +1557,7 @@ function createStyles(token: ResolvedDunaTokens) {
     resultTypeDot: { borderRadius: 4, height: 7, width: 7 },
     resultType: {
       color: token.text3,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -1588,7 +1588,7 @@ function createStyles(token: ResolvedDunaTokens) {
       paddingHorizontal: spacing[3],
       paddingVertical: spacing[2],
     },
-    factText: { color: token.text2, fontFamily: "Archivo-Chip", fontSize: 10 },
+    factText: { color: token.text2, fontFamily: "Archivo-Chip", fontSize: 12 },
     resultFooter: {
       alignItems: "center",
       borderTopColor: token.hairline,

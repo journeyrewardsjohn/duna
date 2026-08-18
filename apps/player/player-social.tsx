@@ -20,9 +20,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 import { VideoPlayerModal, type VideoSummary } from "./video-studio";
@@ -1395,7 +1395,7 @@ const socialStyles = StyleSheet.create({
   },
   eventDay: { fontSize: 20, fontWeight: "900" },
   eventMeta: { fontSize: 13, lineHeight: 18, marginTop: 4 },
-  eventMonth: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  eventMonth: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   eventRow: {
     alignItems: "center",
     borderRadius: 18,
@@ -1407,12 +1407,12 @@ const socialStyles = StyleSheet.create({
   },
   eventTitle: { fontSize: 16, fontWeight: "800" },
   evidence: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.3,
     marginTop: 12,
   },
-  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  eyebrow: { fontSize: 12, fontWeight: "900", letterSpacing: 1.4 },
   flex: { flex: 1, minWidth: 0 },
   followButton: {
     alignItems: "center",
@@ -1430,8 +1430,8 @@ const socialStyles = StyleSheet.create({
     width: 48,
   },
   identityRow: { alignItems: "center", flexDirection: "row", gap: 16 },
-  ineligible: { bottom: 3, fontSize: 10, left: 78, position: "absolute" },
-  liveAction: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  ineligible: { bottom: 3, fontSize: 12, left: 78, position: "absolute" },
+  liveAction: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   liveBadge: {
     borderRadius: 5,
     bottom: -5,
@@ -1439,7 +1439,7 @@ const socialStyles = StyleSheet.create({
     paddingVertical: 3,
     position: "absolute",
   },
-  liveBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  liveBadgeText: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
   liveButton: {
     alignItems: "center",
     borderRadius: 18,
@@ -1451,7 +1451,7 @@ const socialStyles = StyleSheet.create({
   },
   liveDot: { borderRadius: 6, height: 12, width: 12 },
   liveMeta: { fontSize: 13, marginTop: 3 },
-  liveName: { fontSize: 11, marginTop: 10, maxWidth: 84, textAlign: "center" },
+  liveName: { fontSize: 12, marginTop: 10, maxWidth: 84, textAlign: "center" },
   livePerson: { alignItems: "center", marginRight: 14, width: 86 },
   liveRail: { marginHorizontal: -4, marginTop: 7 },
   liveRailHeader: {
@@ -1460,7 +1460,7 @@ const socialStyles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 20,
   },
-  liveRailHint: { fontSize: 11 },
+  liveRailHint: { fontSize: 12 },
   liveRingInner: {
     alignItems: "center",
     borderRadius: 37,
@@ -1515,7 +1515,7 @@ const socialStyles = StyleSheet.create({
     paddingVertical: 13,
   },
   pickerSectionLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginBottom: 2,
@@ -1527,7 +1527,7 @@ const socialStyles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 4,
   },
-  pickerSectionHint: { fontSize: 10, fontWeight: "700" },
+  pickerSectionHint: { fontSize: 12, fontWeight: "700" },
   pickerPeopleRail: { marginHorizontal: -2 },
   pickerPeopleRow: { flexDirection: "row", gap: 12, paddingRight: 8 },
   pickerPerson: { alignItems: "center", width: 64 },
@@ -1545,7 +1545,7 @@ const socialStyles = StyleSheet.create({
     width: 22,
   },
   pickerPersonAddMarkText: { fontSize: 15, fontWeight: "900", lineHeight: 17 },
-  pickerPersonName: { fontSize: 10, fontWeight: "800", marginTop: 7 },
+  pickerPersonName: { fontSize: 12, fontWeight: "800", marginTop: 7 },
   pickerTitle: { fontSize: 25, fontWeight: "800", marginTop: 3 },
   playMark: {
     alignItems: "center",
@@ -1555,9 +1555,9 @@ const socialStyles = StyleSheet.create({
     width: 48,
   },
   playMarkText: { fontSize: 17, marginLeft: 3 },
-  playerActivity: { fontSize: 10, marginTop: 3 },
+  playerActivity: { fontSize: 12, marginTop: 3 },
   playerMeta: { fontSize: 13, marginTop: 3 },
-  playerSignal: { fontSize: 10, fontWeight: "800" },
+  playerSignal: { fontSize: 12, fontWeight: "800" },
   playerSignals: {
     alignItems: "center",
     flexDirection: "row",
@@ -1578,7 +1578,7 @@ const socialStyles = StyleSheet.create({
     position: "relative",
   },
   proBadge: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 4 },
-  proBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  proBadgeText: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   proCard: { borderRadius: 22, marginTop: 20, padding: 18 },
   profileContent: { padding: 20, paddingBottom: 72 },
   profileHandle: { fontSize: 13, fontWeight: "800", marginTop: 5 },
@@ -1617,7 +1617,7 @@ const socialStyles = StyleSheet.create({
     minHeight: 68,
   },
   resultTitle: { fontSize: 15, fontWeight: "800" },
-  rowPro: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  rowPro: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
   safe: { flex: 1 },
   search: {
     alignItems: "center",
@@ -1659,7 +1659,7 @@ const socialStyles = StyleSheet.create({
     paddingBottom: 12,
   },
   stat: { alignItems: "center", flex: 1 },
-  statLabel: { fontSize: 11, marginTop: 4 },
+  statLabel: { fontSize: 12, marginTop: 4 },
   stats: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1685,11 +1685,11 @@ const socialStyles = StyleSheet.create({
   },
   videoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   videoMeta: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     marginTop: 4,
   },
   videoTitle: { fontSize: 14, fontWeight: "800", lineHeight: 18 },
-  viewProfile: { fontSize: 11, fontWeight: "800", marginTop: 5 },
+  viewProfile: { fontSize: 12, fontWeight: "800", marginTop: 5 },
 });

@@ -35,9 +35,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import VideoCapture from "./modules/duna-video-capture";
 import { createPlayerMessagingOutbox } from "./messaging-outbox";
 import {
@@ -535,7 +535,7 @@ const stylesBase = StyleSheet.create({
     justifyContent: "center",
     width: 16,
   },
-  proBadgeText: { fontSize: 10, fontWeight: "900", lineHeight: 12 },
+  proBadgeText: { fontSize: 12, fontWeight: "900", lineHeight: 12 },
 });
 
 function ConversationRow({
@@ -2324,7 +2324,7 @@ function createStyles(palette: MessagingPalette) {
       fontWeight: "900",
       maxWidth: "100%",
     },
-    inboxAccountMeta: { color: palette.muted, fontSize: 10, marginTop: 2 },
+    inboxAccountMeta: { color: palette.muted, fontSize: 12, marginTop: 2 },
     closeButton: {
       alignItems: "center",
       borderColor: palette.border,
@@ -2337,7 +2337,7 @@ function createStyles(palette: MessagingPalette) {
     closeButtonText: { color: palette.text, fontSize: 34, lineHeight: 36 },
     eyebrow: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
@@ -2399,7 +2399,7 @@ function createStyles(palette: MessagingPalette) {
     },
     notificationBody: {
       color: palette.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 2,
     },
@@ -2414,7 +2414,7 @@ function createStyles(palette: MessagingPalette) {
     },
     notificationButtonText: {
       color: palette.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     inboxList: { gap: 10, padding: 14, paddingBottom: 34 },
@@ -2443,12 +2443,12 @@ function createStyles(palette: MessagingPalette) {
       marginTop: 2,
     },
     sectionHeading: { color: palette.text, fontSize: 13, fontWeight: "900" },
-    sectionMeta: { color: palette.muted, fontSize: 10 },
+    sectionMeta: { color: palette.muted, fontSize: 12 },
     followerRail: { gap: 14, paddingRight: 18 },
     followerItem: { alignItems: "center", gap: 6, width: 70 },
     followerName: {
       color: palette.text,
-      fontSize: 10,
+      fontSize: 12,
       maxWidth: 70,
       textAlign: "center",
     },
@@ -2468,7 +2468,7 @@ function createStyles(palette: MessagingPalette) {
       backgroundColor: palette.surface,
       borderColor: palette.surface,
     },
-    filterChipText: { color: palette.muted, fontSize: 11, fontWeight: "800" },
+    filterChipText: { color: palette.muted, fontSize: 12, fontWeight: "800" },
     filterChipTextSelected: { color: palette.text },
     filterBadge: {
       alignItems: "center",
@@ -2481,7 +2481,7 @@ function createStyles(palette: MessagingPalette) {
     },
     filterBadgeText: {
       color: palette.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     loading: { marginTop: 48 },
@@ -2537,16 +2537,16 @@ function createStyles(palette: MessagingPalette) {
     contextLabel: {
       color: palette.accent,
       flexShrink: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     safeLabel: {
       color: palette.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.5,
     },
-    timeText: { color: palette.muted, fontSize: 10, marginLeft: 6 },
+    timeText: { color: palette.muted, fontSize: 12, marginLeft: 6 },
     unreadBadge: {
       alignItems: "center",
       backgroundColor: palette.danger,
@@ -2556,7 +2556,7 @@ function createStyles(palette: MessagingPalette) {
       minWidth: 20,
       paddingHorizontal: 5,
     },
-    unreadText: { color: palette.onAccent, fontSize: 10, fontWeight: "900" },
+    unreadText: { color: palette.onAccent, fontSize: 12, fontWeight: "900" },
     offlineBanner: {
       backgroundColor: palette.surfaceAlt,
       borderColor: palette.warning,
@@ -2570,12 +2570,12 @@ function createStyles(palette: MessagingPalette) {
     },
     offlineBannerText: {
       color: palette.warning,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     errorText: {
       color: palette.danger,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       paddingHorizontal: 20,
       paddingTop: 10,
@@ -2628,7 +2628,7 @@ function createStyles(palette: MessagingPalette) {
     },
     threadMarkText: { color: palette.accent, fontSize: 15, fontWeight: "900" },
     threadTitle: { color: palette.text, fontSize: 15, fontWeight: "900" },
-    threadMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    threadMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     threadMenu: {
       alignItems: "center",
       height: 48,
@@ -2652,7 +2652,7 @@ function createStyles(palette: MessagingPalette) {
       paddingVertical: 10,
     },
     safetyIcon: { color: palette.positive, fontSize: 13, fontWeight: "900" },
-    safetyText: { color: palette.muted, flex: 1, fontSize: 10, lineHeight: 15 },
+    safetyText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
     aiBanner: {
       alignItems: "center",
       backgroundColor: palette.surface,
@@ -2664,7 +2664,7 @@ function createStyles(palette: MessagingPalette) {
       paddingVertical: 10,
     },
     aiIcon: { color: palette.accent, fontSize: 15, fontWeight: "900" },
-    aiText: { color: palette.muted, flex: 1, fontSize: 10, lineHeight: 15 },
+    aiText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
     messages: {
       flexGrow: 1,
       gap: 14,
@@ -2677,7 +2677,7 @@ function createStyles(palette: MessagingPalette) {
     messageWrapMine: { alignSelf: "flex-end" },
     senderName: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginBottom: 4,
       marginLeft: 8,
@@ -2700,7 +2700,7 @@ function createStyles(palette: MessagingPalette) {
     messageBody: { color: palette.text, fontSize: 14, lineHeight: 20 },
     messageBodyMine: { color: palette.onAccent },
     messageStatusRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-    messageTime: { color: palette.muted, fontSize: 10 },
+    messageTime: { color: palette.muted, fontSize: 12 },
     messageTimeMine: { color: palette.onAccent, opacity: 0.72 },
     attachmentImage: {
       borderRadius: 13,
@@ -2708,7 +2708,7 @@ function createStyles(palette: MessagingPalette) {
       maxWidth: 260,
       width: 230,
     },
-    attachmentCaption: { color: palette.muted, fontSize: 10, marginTop: 5 },
+    attachmentCaption: { color: palette.muted, fontSize: 12, marginTop: 5 },
     attachmentCard: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
@@ -2731,13 +2731,13 @@ function createStyles(palette: MessagingPalette) {
     },
     attachmentGlyphText: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
-    attachmentName: { color: palette.text, fontSize: 11, fontWeight: "900" },
-    attachmentMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
-    screeningLabel: { color: palette.warning, fontSize: 10, fontWeight: "800" },
-    heldLabel: { color: palette.danger, fontSize: 10, fontWeight: "800" },
+    attachmentName: { color: palette.text, fontSize: 12, fontWeight: "900" },
+    attachmentMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
+    screeningLabel: { color: palette.warning, fontSize: 12, fontWeight: "800" },
+    heldLabel: { color: palette.danger, fontSize: 12, fontWeight: "800" },
     widget: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -2749,7 +2749,7 @@ function createStyles(palette: MessagingPalette) {
     },
     widgetEyebrow: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -2759,8 +2759,8 @@ function createStyles(palette: MessagingPalette) {
       fontWeight: "900",
       lineHeight: 18,
     },
-    widgetBody: { color: palette.muted, fontSize: 11, lineHeight: 16 },
-    widgetMeta: { color: palette.accent, fontSize: 10, fontWeight: "800" },
+    widgetBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
+    widgetMeta: { color: palette.accent, fontSize: 12, fontWeight: "800" },
     widgetAmount: {
       color: palette.text,
       fontSize: 24,
@@ -2777,7 +2777,7 @@ function createStyles(palette: MessagingPalette) {
     },
     widgetPrimaryText: {
       color: palette.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     widgetSecondary: {
@@ -2791,7 +2791,7 @@ function createStyles(palette: MessagingPalette) {
     },
     widgetSecondaryText: {
       color: palette.text,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     quickActions: { gap: 7 },
@@ -2804,7 +2804,7 @@ function createStyles(palette: MessagingPalette) {
     scoreTeam: {
       color: palette.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     scoreTeamRight: { textAlign: "right" },
@@ -2836,18 +2836,18 @@ function createStyles(palette: MessagingPalette) {
     },
     pendingAttachmentFileText: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     pendingAttachmentBody: { flex: 1, minWidth: 0, paddingHorizontal: 8 },
     pendingAttachmentName: {
       color: palette.text,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     pendingAttachmentMeta: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     pendingAttachmentRemove: {
@@ -2908,7 +2908,7 @@ function createStyles(palette: MessagingPalette) {
       borderTopWidth: 1,
       padding: 16,
     },
-    readOnlyText: { color: palette.muted, fontSize: 11, textAlign: "center" },
+    readOnlyText: { color: palette.muted, fontSize: 12, textAlign: "center" },
     threadEmpty: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
@@ -2973,7 +2973,7 @@ function createStyles(palette: MessagingPalette) {
     },
     composeRecipientChipText: {
       color: palette.text,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     composeSectionTitle: {
@@ -3008,13 +3008,13 @@ function createStyles(palette: MessagingPalette) {
     },
     groupShortcutTitle: {
       color: palette.text,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       lineHeight: 14,
     },
     groupShortcutMeta: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 5,
       textTransform: "capitalize",
     },
@@ -3035,7 +3035,7 @@ function createStyles(palette: MessagingPalette) {
     composePolicyText: {
       color: palette.muted,
       flex: 1,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
     },
     composeChoice: {
@@ -3068,7 +3068,7 @@ function createStyles(palette: MessagingPalette) {
     },
     composeChoiceMeta: {
       color: palette.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -3079,7 +3079,7 @@ function createStyles(palette: MessagingPalette) {
     },
     composeFieldLabel: {
       color: palette.accent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
       marginTop: 8,
@@ -3109,7 +3109,7 @@ function createStyles(palette: MessagingPalette) {
       fontWeight: "900",
     },
     composePersonName: { color: palette.text, fontSize: 12, fontWeight: "900" },
-    composePersonMeta: { color: palette.muted, fontSize: 10, marginTop: 3 },
+    composePersonMeta: { color: palette.muted, fontSize: 12, marginTop: 3 },
     composeCheck: {
       alignItems: "center",
       borderColor: palette.muted,

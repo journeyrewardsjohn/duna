@@ -20,7 +20,7 @@
 
 .pageHeader span:first-child {
   color: var(--signal);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -61,7 +61,7 @@
 
 .headerTrust strong,
 .headerTrust small {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .headerTrust small {
@@ -129,7 +129,7 @@
   color: var(--surface-1);
   display: inline-flex;
   font-family: var(--font-data);
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   font-style: normal;
   font-weight: 800;
   height: 1.35rem;
@@ -173,7 +173,7 @@
   color: var(--signal);
   display: flex;
   flex: 0 0 auto;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
   height: 2.75rem;
   justify-content: center;
@@ -201,7 +201,7 @@
 .inbox nav small,
 .inbox nav time {
   color: var(--text-2);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
 }
 
 .inbox nav > a > span:last-child {
@@ -262,7 +262,7 @@
 .message time,
 .messageMine time {
   color: var(--text-2);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
 }
 
 .thread > header button {
@@ -279,7 +279,7 @@
   border-bottom: 1px solid var(--hairline);
   color: var(--text-2);
   display: flex;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   gap: 0.5rem;
   justify-content: center;
   padding: 0.55rem 1rem;
@@ -318,7 +318,7 @@
 
 .message > div > small {
   color: var(--text-2);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   padding-left: 0.25rem;
 }
@@ -368,7 +368,7 @@
 }
 
 .attachmentImageLink small {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   opacity: 0.72;
 }
 
@@ -392,7 +392,7 @@
 
 .attachmentFile strong,
 .attachmentFile small {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .attachmentFile small {
@@ -419,7 +419,7 @@
 
 .widget strong,
 .widget small {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .widget small {
@@ -433,7 +433,7 @@
   border: 0;
   border-radius: 999px;
   color: var(--surface-1);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 800;
   min-height: 2.35rem;
   padding: 0 0.75rem;
@@ -459,7 +459,7 @@
 
 .scoreWidget small {
   color: var(--signal);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -494,7 +494,7 @@
 .newConversation > label > span,
 .newConversation legend {
   color: var(--text-2);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -545,7 +545,7 @@
 .newConversation fieldset small,
 .broadcastChoice small {
   color: var(--text-2);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
 }
 
 .composeTrust {
@@ -566,7 +566,7 @@
 
 .composeTrust small {
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -615,7 +615,7 @@
 
 .composer > small {
   color: var(--text-2);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   grid-column: 1 / -1;
   padding-left: 0.75rem;
 }
@@ -625,7 +625,7 @@
   border-top: 1px solid var(--hairline);
   color: var(--text-2);
   display: flex;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   gap: 0.45rem;
   justify-content: center;
   min-height: 4.5rem;
@@ -664,7 +664,7 @@
 .contextPanel dl > div {
   align-items: center;
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   justify-content: space-between;
   min-height: 2.55rem;
 }
@@ -686,7 +686,7 @@
   border-radius: 999px;
   color: var(--surface-1);
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
   justify-content: center;
   min-height: 2.8rem;

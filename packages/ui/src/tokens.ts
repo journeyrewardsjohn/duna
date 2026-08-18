@@ -336,10 +336,10 @@ export const radii = {
 } as const;
 
 export const typography = {
-  display: "Fellix",
-  body: "Fellix",
-  data: "Archivo",
-  mono: "Archivo",
+  display: "Satoshi",
+  body: "Satoshi",
+  data: "Satoshi",
+  mono: "Satoshi",
 } as const;
 
 export const numericTiers = {

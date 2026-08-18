@@ -1,0 +1,1 @@
+ALTER TABLE "organization_themes" ALTER COLUMN "typography" SET DEFAULT '{"heading":"Satoshi","body":"Satoshi"}'::jsonb;

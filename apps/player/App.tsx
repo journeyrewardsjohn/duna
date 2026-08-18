@@ -146,10 +146,10 @@ import {
   type MobilePlaceSelection,
 } from "./components/mobile-place-picker";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-  useFellixFonts,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+  useSatoshiFonts,
+} from "./satoshi-text";
 
 // Metro requires static module references so the full Duna mark ships natively.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -13908,7 +13908,7 @@ function DunaApp() {
 }
 
 export default function App() {
-  const [fontsLoaded, fontError] = useFellixFonts();
+  const [fontsLoaded, fontError] = useSatoshiFonts();
   const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
@@ -13984,10 +13984,10 @@ function createStyles(palette: Palette) {
     },
     videoTransferPercent: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
-    videoTransferDetail: { color: colors.muted, fontSize: 10, lineHeight: 14 },
+    videoTransferDetail: { color: colors.muted, fontSize: 12, lineHeight: 14 },
     videoTransferTrack: {
       backgroundColor: rgba(colors.accentRgb, 0.14),
       borderRadius: 2,
@@ -13996,12 +13996,12 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
     },
     videoTransferFill: { backgroundColor: colors.aqua, height: 4 },
-    videoTransferOpen: { color: colors.aqua, fontSize: 10, fontWeight: "900" },
+    videoTransferOpen: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
     buttonDisabled: { opacity: 0.45 },
     flex: { flex: 1, minWidth: 0 },
     formError: {
       color: colors.danger,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 12,
     },
@@ -14025,7 +14025,7 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       justifyContent: "space-between",
     },
-    linkText: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
+    linkText: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
     venueFinderSafe: { backgroundColor: colors.canvas, flex: 1 },
     venueFinderHeader: {
       alignItems: "flex-start",
@@ -14083,7 +14083,7 @@ function createStyles(palette: Palette) {
     },
     venueFinderLocationBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -14099,7 +14099,7 @@ function createStyles(palette: Palette) {
     },
     venueFinderLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.15,
       marginTop: 6,
@@ -14121,7 +14121,7 @@ function createStyles(palette: Palette) {
     },
     venueFinderDayName: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     venueFinderDayNumber: {
@@ -14180,7 +14180,7 @@ function createStyles(palette: Palette) {
     },
     venueFinderResultMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 4,
     },
@@ -14199,7 +14199,7 @@ function createStyles(palette: Palette) {
     },
     venueFinderEmptyBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 5,
     },
@@ -14221,7 +14221,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -14235,7 +14235,7 @@ function createStyles(palette: Palette) {
     },
     bookingVenueAction: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     bookingVenueName: {
@@ -14254,7 +14254,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateToolbarLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -14302,7 +14302,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateCalendarText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     bookingDateRow: {
@@ -14329,7 +14329,7 @@ function createStyles(palette: Palette) {
     bookingDateUnavailable: { opacity: 0.32 },
     bookingDateDay: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     bookingDateNumber: {
@@ -14341,7 +14341,7 @@ function createStyles(palette: Palette) {
     },
     bookingDateMonth: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 1,
     },
@@ -14372,7 +14372,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarEyebrow: {
       color: colors.sand,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -14430,7 +14430,7 @@ function createStyles(palette: Palette) {
     bookingCalendarRange: {
       color: colors.bone,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       paddingHorizontal: 8,
       textAlign: "center",
@@ -14467,7 +14467,7 @@ function createStyles(palette: Palette) {
     bookingCalendarWeekday: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       paddingBottom: 7,
       textAlign: "center",
@@ -14550,7 +14550,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarAvailabilityEyebrow: {
       color: colors.sand,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -14558,7 +14558,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.navy,
       borderRadius: 999,
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       overflow: "hidden",
       paddingHorizontal: 9,
@@ -14592,7 +14592,7 @@ function createStyles(palette: Palette) {
     },
     bookingCalendarLegendText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     bookingDurationRow: {
@@ -14616,7 +14616,7 @@ function createStyles(palette: Palette) {
     },
     bookingDurationText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     bookingDurationTextActive: { color: "#ffffff" },
@@ -14634,12 +14634,12 @@ function createStyles(palette: Palette) {
     bookingWeatherIcon: { fontSize: 24 },
     bookingWeatherUpdated: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       textAlign: "right",
     },
     bookingTimeSectionLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.15,
       marginBottom: 9,
@@ -14692,7 +14692,7 @@ function createStyles(palette: Palette) {
       borderRadius: 11,
       borderWidth: 2,
       color: colors.ink,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       height: 22,
       lineHeight: 18,
@@ -14703,7 +14703,7 @@ function createStyles(palette: Palette) {
     },
     bookingTimeOptionMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 7,
     },
@@ -14719,7 +14719,7 @@ function createStyles(palette: Palette) {
     },
     bookingOpenMatchEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -14782,7 +14782,7 @@ function createStyles(palette: Palette) {
     },
     bookingOpenMatchPlayerName: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       maxWidth: 60,
       textAlign: "center",
     },
@@ -14794,7 +14794,7 @@ function createStyles(palette: Palette) {
     },
     bookingOpenMatchSpots: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     bookingOpenMatchJoin: {
@@ -14834,7 +14834,7 @@ function createStyles(palette: Palette) {
     },
     bookingHostButtonText: {
       color: "#ffffff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     bookingPrivateButton: {
@@ -14849,7 +14849,7 @@ function createStyles(palette: Palette) {
     },
     bookingPrivateButtonText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     bookingHostIntent: {
@@ -14888,23 +14888,23 @@ function createStyles(palette: Palette) {
     },
     bookingSlotCourt: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 5,
     },
     bookingSlotWeather: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 4,
     },
     bookingSlotPrice: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 5,
     },
     bookingEmpty: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       paddingVertical: 28,
       textAlign: "center",
     },
@@ -14917,7 +14917,7 @@ function createStyles(palette: Palette) {
     },
     bookingDaylightNote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 13,
       marginTop: 10,
     },
@@ -14993,7 +14993,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.navyLift,
       borderRadius: 22,
       color: colors.aquaDeep,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       height: 44,
       lineHeight: 44,
@@ -15003,7 +15003,7 @@ function createStyles(palette: Palette) {
     },
     bookingPartnerName: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       textAlign: "center",
       width: 58,
     },
@@ -15020,7 +15020,7 @@ function createStyles(palette: Palette) {
     },
     bookingSelectedTimeLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -15068,7 +15068,7 @@ function createStyles(palette: Palette) {
     },
     bookingPlayerPickerBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -15114,14 +15114,14 @@ function createStyles(palette: Palette) {
       borderRadius: 12,
       borderWidth: 1,
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 12,
       padding: 11,
     },
     formSectionLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1,
       marginTop: 8,
@@ -15176,7 +15176,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
@@ -15189,7 +15189,7 @@ function createStyles(palette: Palette) {
     hostFlowProgressValue: {
       color: colors.muted,
       fontFamily: "Archivo-Block",
-      fontSize: 10,
+      fontSize: 12,
       paddingRight: 6,
     },
     hostFlowProgressTrack: {
@@ -15216,7 +15216,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
       marginBottom: 9,
@@ -15337,7 +15337,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLockedPlaceBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 4,
     },
     hostFlowPlaceMapPreview: {
@@ -15390,7 +15390,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowPlaceMapLabelText: {
       color: "#ffffff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.55,
     },
@@ -15413,7 +15413,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowReserveVenueBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
@@ -15430,13 +15430,13 @@ function createStyles(palette: Palette) {
     },
     hostFlowDatePickerLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
     hostFlowDatePickerBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 5,
     },
@@ -15447,7 +15447,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowCourtMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 7,
     },
@@ -15488,7 +15488,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowDayName: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -15515,7 +15515,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowRosterMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 3,
     },
     hostFlowAddPlayers: {
@@ -15547,7 +15547,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLabelInline: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -15564,7 +15564,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLookingBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
     },
     hostFlowLookingPlayer: {
@@ -15580,7 +15580,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLookingNote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 4,
     },
@@ -15598,12 +15598,12 @@ function createStyles(palette: Palette) {
     },
     hostFlowLookingInviteText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     hostFlowLookingEmpty: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontStyle: "italic",
       lineHeight: 16,
       paddingVertical: 8,
@@ -15641,7 +15641,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowPlayerMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 4,
     },
     hostFlowRemovePlayer: {
@@ -15696,7 +15696,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowToggleBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 3,
     },
@@ -15725,7 +15725,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowPriceSuffix: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     hostFlowCostChoiceRow: { flexDirection: "row", gap: 10 },
@@ -15751,7 +15751,7 @@ function createStyles(palette: Palette) {
     hostFlowCostChoiceTitleActive: { color: colors.aqua },
     hostFlowCostChoiceBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -15794,7 +15794,7 @@ function createStyles(palette: Palette) {
     hostFlowReviewGrid: { gap: 18 },
     hostFlowReviewLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
@@ -15877,7 +15877,7 @@ function createStyles(palette: Palette) {
     },
     previewBannerText: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
       textAlign: "center",
@@ -15893,14 +15893,14 @@ function createStyles(palette: Palette) {
     },
     offlineModeBannerText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.55,
       textAlign: "center",
     },
     offlineModeBannerMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
@@ -15941,7 +15941,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1,
       overflow: "hidden",
@@ -15950,7 +15950,7 @@ function createStyles(palette: Palette) {
     },
     headerEyebrow: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 1.2,
       marginTop: 5,
     },
@@ -15974,7 +15974,7 @@ function createStyles(palette: Palette) {
       position: "relative",
       width: 38,
     },
-    avatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    avatarText: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     notificationDot: {
       backgroundColor: colors.danger,
       borderColor: colors.ink,
@@ -15994,7 +15994,7 @@ function createStyles(palette: Palette) {
     },
     homeWelcomeDate: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.1,
     },
@@ -16031,7 +16031,7 @@ function createStyles(palette: Palette) {
     },
     homeRatingBadgeLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1,
       marginTop: 2,
@@ -16084,7 +16084,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -0.4,
     },
     homeQuickLabelPrimary: { color: colors.onAccent },
-    homeQuickMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    homeQuickMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
     playLauncherIntro: {
       color: colors.muted,
@@ -16128,7 +16128,7 @@ function createStyles(palette: Palette) {
     },
     playLauncherDetail: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 3,
     },
@@ -16207,18 +16207,18 @@ function createStyles(palette: Palette) {
     homeNextAvailablePlus: { color: colors.aqua, fontSize: 22 },
     homeNextAvailableText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 5,
     },
     homeNextAvailableCount: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 1,
     },
     homeNextPlayerName: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 5,
       maxWidth: "100%",
@@ -16228,7 +16228,7 @@ function createStyles(palette: Palette) {
       borderRadius: 8,
       color: colors.warning,
       fontFamily: "Archivo-Block",
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 2,
       overflow: "hidden",
       paddingHorizontal: 5,
@@ -16255,7 +16255,7 @@ function createStyles(palette: Palette) {
     },
     homeNextDetails: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     homeNextDate: {
@@ -16268,7 +16268,7 @@ function createStyles(palette: Palette) {
     },
     homeNextDateMonth: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.9,
     },
@@ -16289,7 +16289,7 @@ function createStyles(palette: Palette) {
     homeNextOpenMarkText: { color: colors.aqua, fontSize: 22 },
     homeNextEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.9,
     },
@@ -16299,7 +16299,7 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
       marginTop: 3,
     },
-    homeNextMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    homeNextMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     homePerformanceCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
@@ -16330,7 +16330,7 @@ function createStyles(palette: Palette) {
       fontSize: 18,
       letterSpacing: -0.5,
     },
-    homePerformanceLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    homePerformanceLabel: { color: colors.muted, fontSize: 12, marginTop: 3 },
     homePerformanceChart: {
       backgroundColor: rgba(colors.overlayRgb, 0.025),
       borderRadius: 18,
@@ -16361,7 +16361,7 @@ function createStyles(palette: Palette) {
     },
     homePerformanceEmptyBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
@@ -16373,18 +16373,18 @@ function createStyles(palette: Palette) {
     },
     homePerformanceLegendWin: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     homePerformanceLegendLoss: {
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     homePerformanceLegendMeta: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       textAlign: "right",
     },
     memberOrganizationCard: {
@@ -16413,7 +16413,7 @@ function createStyles(palette: Palette) {
     },
     memberOrganizationEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -16425,14 +16425,14 @@ function createStyles(palette: Palette) {
     },
     memberOrganizationMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
     memberOrganizationCount: {
       backgroundColor: rgba(colors.accentRgb, 0.14),
       borderRadius: 12,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       minWidth: 24,
       overflow: "hidden",
@@ -16510,12 +16510,12 @@ function createStyles(palette: Palette) {
     },
     organizationListRole: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 3,
     },
     organizationListAction: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -16528,7 +16528,7 @@ function createStyles(palette: Palette) {
     },
     organizationEnrollEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -16592,7 +16592,7 @@ function createStyles(palette: Palette) {
     },
     organizationHqEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -16646,7 +16646,7 @@ function createStyles(palette: Palette) {
     },
     coachingNoteEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
@@ -16658,7 +16658,7 @@ function createStyles(palette: Palette) {
     },
     coachingNoteMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 4,
     },
     coachingNoteSummary: {
@@ -16668,7 +16668,7 @@ function createStyles(palette: Palette) {
     },
     coachingNoteSession: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     coachCardRow: {
@@ -16720,13 +16720,13 @@ function createStyles(palette: Palette) {
     },
     playerFollowMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 4,
       maxWidth: "100%",
     },
     playerFollowProfileLink: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 7,
     },
@@ -16747,13 +16747,13 @@ function createStyles(palette: Palette) {
     },
     playerFollowButtonText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     playerFollowButtonTextActive: { color: colors.positive },
     playerFollowError: {
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 13,
       marginTop: 6,
       textAlign: "center",
@@ -16806,13 +16806,13 @@ function createStyles(palette: Palette) {
     },
     coachCardOrganization: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 4,
     },
     coachCardMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -16884,7 +16884,7 @@ function createStyles(palette: Palette) {
     },
     coachModalOrganization: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 5,
       textAlign: "center",
@@ -16906,7 +16906,7 @@ function createStyles(palette: Palette) {
     },
     coachServiceType: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -16918,13 +16918,13 @@ function createStyles(palette: Palette) {
     },
     coachServiceBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 6,
     },
     coachServiceAction: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 12,
     },
@@ -16955,7 +16955,7 @@ function createStyles(palette: Palette) {
     },
     coachSessionMonth: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     coachSessionDay: {
@@ -17005,7 +17005,7 @@ function createStyles(palette: Palette) {
     discoverSearchIcon: { color: colors.bone, fontSize: 25 },
     discoverSearchEyebrow: {
       color: colors.flare,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -17016,7 +17016,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -0.7,
       marginTop: 4,
     },
-    discoverSearchMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
+    discoverSearchMeta: { color: colors.muted, fontSize: 12, marginTop: 5 },
     discoverSearchArrow: {
       color: colors.flare,
       fontSize: 20,
@@ -17035,7 +17035,7 @@ function createStyles(palette: Palette) {
     },
     scoreActionText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     heroGrid: { gap: 10 },
@@ -17063,7 +17063,7 @@ function createStyles(palette: Palette) {
     },
     eyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       letterSpacing: 1.15,
     },
@@ -17086,7 +17086,7 @@ function createStyles(palette: Palette) {
     },
     pillText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.7,
     },
@@ -17119,7 +17119,7 @@ function createStyles(palette: Palette) {
     ratingOrbitInnerCompact: { borderRadius: 55, height: 110, width: 110 },
     ratingLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 0.9,
       transform: [{ rotate: "12deg" }],
     },
@@ -17135,7 +17135,7 @@ function createStyles(palette: Palette) {
     ratingValueCompact: { fontSize: 34, lineHeight: 36 },
     ratingDelta: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       transform: [{ rotate: "12deg" }],
     },
@@ -17149,7 +17149,7 @@ function createStyles(palette: Palette) {
     },
     lockedText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -17166,10 +17166,10 @@ function createStyles(palette: Palette) {
       fontSize: 15,
       fontWeight: "800",
     },
-    statLabel: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    statLabel: { color: colors.muted, fontSize: 12, marginTop: 3 },
     nextDate: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.2,
       marginTop: 26,
@@ -17187,7 +17187,7 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
       letterSpacing: -0.7,
     },
-    nextMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    nextMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     avatarStack: { flexDirection: "row", marginTop: 15 },
     miniAvatar: {
       alignItems: "center",
@@ -17200,14 +17200,14 @@ function createStyles(palette: Palette) {
       marginLeft: -5,
       width: 34,
     },
-    miniAvatarText: { color: colors.bone, fontSize: 10, fontWeight: "800" },
+    miniAvatarText: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     cardLink: {
       borderTopColor: rgba(colors.overlayRgb, 0.07),
       borderTopWidth: 1,
       marginTop: 14,
       paddingTop: 12,
     },
-    cardLinkText: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
+    cardLinkText: { color: colors.aqua, fontSize: 12, fontWeight: "700" },
     liveActivityButton: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -17218,12 +17218,12 @@ function createStyles(palette: Palette) {
     },
     liveActivityButtonText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     liveActivityNotice: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 8,
     },
@@ -17246,7 +17246,7 @@ function createStyles(palette: Palette) {
     },
     metricLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 4,
       textAlign: "center",
     },
@@ -17265,7 +17265,7 @@ function createStyles(palette: Palette) {
       lineHeight: 28,
       marginTop: 4,
     },
-    sectionAction: { color: colors.aqua, fontSize: 10, fontWeight: "700" },
+    sectionAction: { color: colors.aqua, fontSize: 12, fontWeight: "700" },
     horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     eventCard: {
       backgroundColor: colors.depth,
@@ -17313,7 +17313,7 @@ function createStyles(palette: Palette) {
     eventBody: { padding: 12 },
     eventTime: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       letterSpacing: 0.6,
       textTransform: "uppercase",
@@ -17326,10 +17326,10 @@ function createStyles(palette: Palette) {
       marginTop: 6,
       minHeight: 39,
     },
-    eventMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
+    eventMeta: { color: colors.muted, fontSize: 12, marginTop: 5 },
     eventWeather: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 5,
     },
@@ -17342,8 +17342,8 @@ function createStyles(palette: Palette) {
       marginTop: 11,
       paddingTop: 9,
     },
-    eventPrice: { color: colors.bone, fontSize: 10, fontWeight: "800" },
-    eventSpots: { color: colors.muted, fontSize: 10 },
+    eventPrice: { color: colors.bone, fontSize: 12, fontWeight: "800" },
+    eventSpots: { color: colors.muted, fontSize: 12 },
     proTourEntry: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
@@ -17360,7 +17360,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -17374,7 +17374,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 5,
     },
     proTourEntryBrands: {
@@ -17385,7 +17385,7 @@ function createStyles(palette: Palette) {
     },
     proTourEntryLive: {
       color: colors.flare,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -17439,7 +17439,7 @@ function createStyles(palette: Palette) {
     },
     proEventPickerStatus: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
@@ -17467,13 +17467,13 @@ function createStyles(palette: Palette) {
     },
     proEventHeroMeta: {
       color: "rgba(255,255,255,.74)",
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 10,
     },
     proEventUpdated: {
       color: "rgba(255,255,255,.56)",
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 12,
     },
     proBracket: {
@@ -17486,7 +17486,7 @@ function createStyles(palette: Palette) {
     proBracketRound: { minWidth: 240, width: 240 },
     proBracketRoundTitle: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
       marginBottom: 9,
@@ -17516,19 +17516,19 @@ function createStyles(palette: Palette) {
     proBracketTeamName: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     proBracketWinner: { color: colors.bone, fontWeight: "900" },
     proBracketScore: {
       color: colors.aqua,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     proBracketPrediction: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 7,
       textTransform: "uppercase",
     },
@@ -17544,7 +17544,7 @@ function createStyles(palette: Palette) {
     proFollowButtonActive: { backgroundColor: colors.aqua },
     proFollowButtonText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     proFollowButtonTextActive: { color: colors.onAccent },
@@ -17576,9 +17576,9 @@ function createStyles(palette: Palette) {
       gap: 8,
       minHeight: 32,
     },
-    proPoolPlace: { color: colors.aqua, fontSize: 10, width: 15 },
-    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 10 },
-    proPoolRecord: { color: colors.muted, fontSize: 10 },
+    proPoolPlace: { color: colors.aqua, fontSize: 12, width: 15 },
+    proPoolTeam: { color: colors.bone, flex: 1, fontSize: 12 },
+    proPoolRecord: { color: colors.muted, fontSize: 12 },
     proMobilePressed: { opacity: 0.82 },
     proMobileBrandMark: {
       alignItems: "center",
@@ -17600,7 +17600,7 @@ function createStyles(palette: Palette) {
     },
     proMobileBrandFallback: {
       color: "#102340",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: -0.2,
       textAlign: "center",
@@ -17624,7 +17624,7 @@ function createStyles(palette: Palette) {
     },
     proMobileHubEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
@@ -17680,7 +17680,7 @@ function createStyles(palette: Palette) {
     },
     proMobileIntroKicker: {
       color: "#ff9d81",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -17694,7 +17694,7 @@ function createStyles(palette: Palette) {
     },
     proMobileIntroBody: {
       color: "rgba(255,255,255,.72)",
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 9,
     },
@@ -17750,7 +17750,7 @@ function createStyles(palette: Palette) {
     proMobileSectionTitleCopy: { flex: 1, minWidth: 0 },
     proMobileSectionEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
@@ -17766,7 +17766,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.navyLift,
       borderRadius: 999,
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginLeft: 10,
       overflow: "hidden",
@@ -17799,14 +17799,14 @@ function createStyles(palette: Palette) {
     },
     proMobileEventStatus: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.55,
     },
     proMobileEventStatusLive: { color: "#ff9d81" },
     proMobileEventDivision: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       textTransform: "capitalize",
     },
@@ -17822,7 +17822,7 @@ function createStyles(palette: Palette) {
     proMobileEventNameLive: { color: "#ffffff" },
     proMobileEventMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 6,
     },
@@ -17848,7 +17848,7 @@ function createStyles(palette: Palette) {
     proMobileDetailHeaderCopy: { flex: 1, minWidth: 0 },
     proMobileDetailHeaderEyebrow: {
       color: colors.danger,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -17882,7 +17882,7 @@ function createStyles(palette: Palette) {
     proMobileSectionTabActive: { backgroundColor: colors.aquaDeep },
     proMobileSectionTabText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     proMobileSectionTabTextActive: { color: "#ffffff" },
@@ -17963,7 +17963,7 @@ function createStyles(palette: Palette) {
     proMobileHeroBadgeLive: { backgroundColor: "rgba(184,68,68,.9)" },
     proMobileHeroBadgeText: {
       color: "#ffffff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.45,
     },
@@ -17977,7 +17977,7 @@ function createStyles(palette: Palette) {
     },
     proMobileHeroCategory: {
       color: "#a7d7ff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
       textTransform: "uppercase",
@@ -17992,7 +17992,7 @@ function createStyles(palette: Palette) {
     },
     proMobileHeroMeta: {
       color: "rgba(255,255,255,.74)",
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 9,
     },
@@ -18040,7 +18040,7 @@ function createStyles(palette: Palette) {
     },
     proMobileFollowEventBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 3,
     },
@@ -18051,7 +18051,7 @@ function createStyles(palette: Palette) {
     },
     proMobileNoticeText: {
       color: colors.positive,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       lineHeight: 15,
     },
@@ -18080,7 +18080,7 @@ function createStyles(palette: Palette) {
     },
     proMobileStatLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 3,
     },
@@ -18129,7 +18129,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationMapLabelText: {
       color: "#ffffff",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.3,
     },
@@ -18163,7 +18163,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationCopyText: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     proMobileLocationOpen: {
@@ -18176,12 +18176,12 @@ function createStyles(palette: Palette) {
     },
     proMobileLocationOpenText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     proMobileInfoEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -18200,13 +18200,13 @@ function createStyles(palette: Palette) {
     },
     proMobileInfoBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 5,
     },
     proMobileInfoFootnote: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 9,
     },
@@ -18226,7 +18226,7 @@ function createStyles(palette: Palette) {
     },
     proMobilePrimaryActionText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     proMobileSecondaryAction: {
@@ -18241,7 +18241,7 @@ function createStyles(palette: Palette) {
     },
     proMobileSecondaryActionText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     proMobileSiblingCard: {
@@ -18290,7 +18290,7 @@ function createStyles(palette: Palette) {
     mobilePredictionChartLegendText: {
       color: colors.muted,
       flex: 1,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
     },
     mobilePredictionChartLegendValue: {
@@ -18307,10 +18307,10 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       minHeight: 42,
     },
-    mobilePredictionChartTime: { color: colors.muted, fontSize: 10 },
+    mobilePredictionChartTime: { color: colors.muted, fontSize: 12 },
     mobilePredictionChartVolume: {
       color: colors.aquaDeep,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     mobilePredictionSheetHeader: {
@@ -18323,7 +18323,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionSheetEyebrow: {
       color: colors.aquaDeep,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -18354,7 +18354,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionTradeEyebrow: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -18375,7 +18375,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionStatusPillText: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -18410,7 +18410,7 @@ function createStyles(palette: Palette) {
     mobilePredictionSideLabel: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       lineHeight: 14,
     },
@@ -18427,7 +18427,7 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       justifyContent: "space-between",
     },
-    mobilePredictionAmountHint: { color: colors.muted, fontSize: 10 },
+    mobilePredictionAmountHint: { color: colors.muted, fontSize: 12 },
     mobilePredictionAmountInput: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
@@ -18456,7 +18456,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionQuickButtonText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     mobilePredictionReviewCard: {
@@ -18469,7 +18469,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionReviewEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
@@ -18482,13 +18482,13 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionReviewBody: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
     mobilePredictionMessage: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 12,
     },
@@ -18508,7 +18508,7 @@ function createStyles(palette: Palette) {
     },
     mobilePredictionTradeFootnote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 13,
       marginTop: 11,
       textAlign: "center",
@@ -18539,7 +18539,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.11),
       borderRadius: 999,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       overflow: "hidden",
       paddingHorizontal: 8,
@@ -18556,7 +18556,7 @@ function createStyles(palette: Palette) {
     mobileTournamentMarketCopy: { flex: 1 },
     mobileTournamentMarketName: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     mobileTournamentMarketTrack: {
@@ -18582,14 +18582,14 @@ function createStyles(palette: Palette) {
     },
     mobileTournamentMarketChange: {
       color: colors.positive,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     mobileTournamentMarketChangeDown: { color: colors.danger },
     mobileTournamentMarketArrow: { color: colors.muted, fontSize: 22 },
     mobileTournamentMarketsFootnote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 13,
       marginTop: 10,
     },
@@ -18615,7 +18615,7 @@ function createStyles(palette: Palette) {
     },
     proMobileMatchStatus: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
@@ -18623,7 +18623,7 @@ function createStyles(palette: Palette) {
     proMobileMatchMeta: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       textAlign: "right",
     },
     proMobileMatchTeamRow: {
@@ -18667,12 +18667,12 @@ function createStyles(palette: Palette) {
     proMobileMatchPredictionValue: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     proMobileMatchPredictionCaption: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,
     },
@@ -18698,7 +18698,7 @@ function createStyles(palette: Palette) {
     proMobileFollowButtonActive: { backgroundColor: colors.aqua },
     proMobileFollowButtonText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     proMobileFollowButtonTextActive: { color: colors.onAccent },
@@ -18725,14 +18725,14 @@ function createStyles(palette: Palette) {
     },
     proMobileEmptyBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 6,
       textAlign: "center",
     },
     proMobileListNote: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 6,
       textAlign: "center",
     },
@@ -18764,7 +18764,7 @@ function createStyles(palette: Palette) {
       fontSize: 15,
       fontWeight: "900",
     },
-    proMobilePoolProgress: { color: colors.muted, fontSize: 10 },
+    proMobilePoolProgress: { color: colors.muted, fontSize: 12 },
     proMobileStandingRow: {
       alignItems: "center",
       borderTopColor: rgba(colors.overlayRgb, 0.07),
@@ -18775,7 +18775,7 @@ function createStyles(palette: Palette) {
     },
     proMobileStandingRank: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       textAlign: "center",
       width: 22,
@@ -18783,12 +18783,12 @@ function createStyles(palette: Palette) {
     proMobileStandingTeam: {
       color: colors.bone,
       flex: 1,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
     },
     proMobileStandingRecord: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     proMobileStandingsCard: {
@@ -18821,7 +18821,7 @@ function createStyles(palette: Palette) {
     },
     proMobileTeamSeed: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
@@ -18835,7 +18835,7 @@ function createStyles(palette: Palette) {
     },
     proMobileTeamPlayers: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 6,
     },
@@ -18869,7 +18869,7 @@ function createStyles(palette: Palette) {
       fontSize: 14,
       fontWeight: "900",
     },
-    proMobileWatchMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    proMobileWatchMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     proMobileWatchArrow: { color: colors.aqua, fontSize: 19 },
     proMobileLoadingState: {
       alignItems: "center",
@@ -18901,7 +18901,7 @@ function createStyles(palette: Palette) {
     },
     proMobileLoadingBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 7,
       textAlign: "center",
@@ -18915,7 +18915,7 @@ function createStyles(palette: Palette) {
     },
     proMobileRetryButtonText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     listCard: {
@@ -18970,7 +18970,7 @@ function createStyles(palette: Palette) {
     },
     resultStoryRecapLabel: {
       color: rgba(colors.inkRgb, 0.62),
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
       marginTop: "auto",
@@ -18979,7 +18979,7 @@ function createStyles(palette: Palette) {
     resultStoryDate: {
       color: rgba(colors.inkRgb, 0.68),
       fontFamily: "Archivo-Block",
-      fontSize: 10,
+      fontSize: 12,
       paddingTop: 4,
       zIndex: 3,
     },
@@ -19048,27 +19048,27 @@ function createStyles(palette: Palette) {
     },
     resultStoryAvatarText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
-    resultStoryAvatarTextDense: { fontSize: 10 },
+    resultStoryAvatarTextDense: { fontSize: 12 },
     resultStoryPlayerName: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "600",
       marginTop: 5,
       textAlign: "center",
       width: "100%",
     },
-    resultStoryPlayerNameCompact: { fontSize: 10, marginTop: 3 },
-    resultStoryPlayerNameDense: { fontSize: 10, marginTop: 2 },
+    resultStoryPlayerNameCompact: { fontSize: 12, marginTop: 3 },
+    resultStoryPlayerNameDense: { fontSize: 12, marginTop: 2 },
     resultStoryPlayerRating: {
       color: colors.signalInk,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
-    resultStoryPlayerRatingDense: { fontSize: 10 },
+    resultStoryPlayerRatingDense: { fontSize: 12 },
     resultStoryPlayerRatingPill: {
       alignSelf: "center",
       backgroundColor: colors.signal,
@@ -19113,12 +19113,12 @@ function createStyles(palette: Palette) {
     resultStoryVenue: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
     },
     resultStoryDelta: {
       color: colors.positive,
       fontFamily: "Archivo-Block",
-      fontSize: 11,
+      fontSize: 12,
     },
     resultStoryDeltaNegative: { color: colors.danger },
     matchRow: {
@@ -19138,8 +19138,8 @@ function createStyles(palette: Palette) {
       width: 32,
     },
     resultText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
-    rowTitle: { color: colors.bone, fontSize: 11, fontWeight: "700" },
-    rowMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    rowTitle: { color: colors.bone, fontSize: 12, fontWeight: "700" },
+    rowMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     matchScore: { alignItems: "flex-end" },
     aiInsight: {
       backgroundColor: colors.navy,
@@ -19167,7 +19167,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -0.4,
       marginTop: 6,
     },
-    aiBody: { color: colors.muted, fontSize: 10, lineHeight: 14, marginTop: 5 },
+    aiBody: { color: colors.muted, fontSize: 12, lineHeight: 14, marginTop: 5 },
     searchField: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -19180,10 +19180,10 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 14,
     },
     searchIcon: { color: colors.muted, fontSize: 20 },
-    searchInput: { color: colors.bone, flex: 1, fontSize: 11, height: 46 },
+    searchInput: { color: colors.bone, flex: 1, fontSize: 12, height: 46 },
     searchAllText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       paddingHorizontal: 4,
       paddingVertical: 10,
@@ -19213,12 +19213,12 @@ function createStyles(palette: Palette) {
     },
     searchSuggestionTitle: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     searchSuggestionMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
       textTransform: "capitalize",
     },
@@ -19229,7 +19229,7 @@ function createStyles(palette: Palette) {
     },
     searchSuggestionAllText: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     filterRow: {
@@ -19250,7 +19250,7 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.aqua,
       borderColor: colors.aqua,
     },
-    filterText: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+    filterText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
     filterTextActive: { color: colors.onAccent, fontWeight: "800" },
     mapCard: {
       backgroundColor: colors.navy,
@@ -19290,7 +19290,7 @@ function createStyles(palette: Palette) {
       position: "absolute",
       width: 32,
     },
-    mapPinText: { color: colors.onAccent, fontSize: 10, fontWeight: "900" },
+    mapPinText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     mapLabel: {
       backgroundColor: rgba(colors.inkRgb, 0.82),
       borderRadius: 10,
@@ -19299,8 +19299,8 @@ function createStyles(palette: Palette) {
       padding: 10,
       position: "absolute",
     },
-    mapLabelTitle: { color: colors.bone, fontSize: 11, fontWeight: "800" },
-    mapLabelText: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    mapLabelTitle: { color: colors.bone, fontSize: 12, fontWeight: "800" },
+    mapLabelText: { color: colors.muted, fontSize: 12, marginTop: 2 },
     eventGrid: { gap: 10 },
     successBanner: {
       alignItems: "center",
@@ -19342,11 +19342,11 @@ function createStyles(palette: Palette) {
       width: 38,
     },
     weekDayActive: { backgroundColor: colors.aqua },
-    weekDayLabel: { color: colors.muted, fontSize: 10 },
+    weekDayLabel: { color: colors.muted, fontSize: 12 },
     weekDayNumber: {
       color: colors.bone,
       fontFamily: "Archivo-Table",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 4,
     },
@@ -19370,14 +19370,14 @@ function createStyles(palette: Palette) {
     },
     bookingDateLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.5,
       marginBottom: 3,
     },
     bookingTime: { width: 48 },
-    bookingTimeMain: { color: colors.bone, fontSize: 10, fontWeight: "700" },
-    bookingTimeSuffix: { color: colors.muted, fontSize: 10 },
+    bookingTimeMain: { color: colors.bone, fontSize: 12, fontWeight: "700" },
+    bookingTimeSuffix: { color: colors.muted, fontSize: 12 },
     bookingAccent: { borderRadius: 2, height: 35, width: 3 },
     pickupRow: {
       alignItems: "center",
@@ -19395,7 +19395,7 @@ function createStyles(palette: Palette) {
       padding: 6,
       width: 38,
     },
-    pickupDay: { color: colors.aqua, fontSize: 10, fontWeight: "800" },
+    pickupDay: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
     pickupNumber: {
       color: colors.bone,
       fontFamily: "Archivo-Table",
@@ -19431,7 +19431,7 @@ function createStyles(palette: Palette) {
     hostMarkText: { color: colors.aqua, fontSize: 22 },
     bodyText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 14,
       marginTop: 5,
     },
@@ -19446,7 +19446,7 @@ function createStyles(palette: Palette) {
     },
     primaryButtonText: {
       color: colors.onAccent,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
     },
     walletCard: {
@@ -19471,7 +19471,7 @@ function createStyles(palette: Palette) {
     },
     memberCardLabel: {
       color: "#f4c47f",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.25,
       marginTop: 30,
@@ -19498,7 +19498,7 @@ function createStyles(palette: Palette) {
     memberCardDetails: { flex: 1, gap: 5 },
     memberCardDetailLabel: {
       color: "#f4c47f",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
       marginTop: 4,
@@ -19511,7 +19511,7 @@ function createStyles(palette: Palette) {
     },
     memberCardMeta: {
       color: "rgba(255, 253, 246, 0.8)",
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
     },
     memberCardUpcoming: {
@@ -19549,7 +19549,7 @@ function createStyles(palette: Palette) {
     },
     memberCardWalletButtonText: {
       color: "#ffffff",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       textAlign: "center",
     },
@@ -19612,7 +19612,7 @@ function createStyles(palette: Palette) {
     },
     walletLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       letterSpacing: 1.2,
       marginTop: 40,
     },
@@ -19623,13 +19623,13 @@ function createStyles(palette: Palette) {
       letterSpacing: -3,
       marginTop: 5,
     },
-    walletMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    walletMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     walletActions: { flexDirection: "row", gap: 8, marginTop: 25 },
     walletActionText: {
       backgroundColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 18,
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       overflow: "hidden",
       paddingHorizontal: 12,
@@ -19672,7 +19672,7 @@ function createStyles(palette: Palette) {
     predictionDiscoveryCompetition: {
       color: colors.muted,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
     },
@@ -19680,7 +19680,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.1),
       borderRadius: 999,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       overflow: "hidden",
       paddingHorizontal: 8,
@@ -19701,7 +19701,7 @@ function createStyles(palette: Palette) {
     },
     predictionDiscoveryReason: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 6,
     },
     predictionDiscoveryOdds: {
@@ -19717,7 +19717,7 @@ function createStyles(palette: Palette) {
     },
     predictionDiscoveryOutcomeLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     predictionDiscoveryOutcomeValue: {
@@ -19747,7 +19747,7 @@ function createStyles(palette: Palette) {
     predictionDiscoveryHandles: {
       color: colors.aqua,
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     predictionDiscoveryArrow: {
@@ -19778,7 +19778,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletCreditLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
     },
@@ -19797,7 +19797,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 8,
     },
@@ -19818,7 +19818,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletFactLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.7,
       marginTop: 2,
@@ -19826,7 +19826,7 @@ function createStyles(palette: Palette) {
     predictionWalletOpen: {
       alignSelf: "flex-end",
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     predictionWalletRow: {
@@ -19848,7 +19848,7 @@ function createStyles(palette: Palette) {
     },
     predictionWalletStatusText: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     predictionPortfolioBack: {
@@ -19885,7 +19885,7 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioHeroLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -19899,7 +19899,7 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioHeroUnit: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 1,
     },
     predictionPortfolioMetrics: {
@@ -19921,14 +19921,14 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioMetricLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.6,
       marginTop: 3,
     },
     predictionPortfolioGrant: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 16,
     },
@@ -19964,7 +19964,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 999,
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       overflow: "hidden",
       paddingHorizontal: 7,
@@ -19980,7 +19980,7 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioSelection: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 5,
     },
     predictionPortfolioNumbers: {
@@ -19990,7 +19990,7 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioNumberLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.5,
     },
@@ -20069,7 +20069,7 @@ function createStyles(palette: Palette) {
     },
     predictionPortfolioTrustBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 4,
     },
@@ -20097,7 +20097,7 @@ function createStyles(palette: Palette) {
     moneyAmount: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     trustNote: {
@@ -20266,7 +20266,7 @@ function createStyles(palette: Palette) {
     },
     athleteHeroRatingLabel: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "500",
       letterSpacing: 1.1,
     },
@@ -20288,12 +20288,12 @@ function createStyles(palette: Palette) {
     },
     athleteHeroRatingDelta: {
       fontFamily: "Archivo-Chip",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
     },
     athleteHeroRatingMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "500",
       textTransform: "uppercase",
     },
@@ -20326,7 +20326,7 @@ function createStyles(palette: Palette) {
     },
     athleteMetricLabel: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
     },
     athleteMetricValue: {
@@ -20339,7 +20339,7 @@ function createStyles(palette: Palette) {
     },
     athleteMetricChange: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "600",
       marginTop: 5,
     },
@@ -20385,7 +20385,7 @@ function createStyles(palette: Palette) {
     },
     athleteNarrativeSource: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "600",
       marginTop: 11,
     },
@@ -20421,7 +20421,7 @@ function createStyles(palette: Palette) {
     },
     athleteChartSummaryLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "600",
       marginTop: 2,
     },
@@ -20524,7 +20524,7 @@ function createStyles(palette: Palette) {
     },
     performanceEvidenceLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 4,
       textTransform: "uppercase",
@@ -20538,7 +20538,7 @@ function createStyles(palette: Palette) {
     },
     performancePartnerHeading: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -20549,7 +20549,7 @@ function createStyles(palette: Palette) {
     },
     performancePartnerName: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       width: 92,
     },
@@ -20568,7 +20568,7 @@ function createStyles(palette: Palette) {
     performancePartnerRecord: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       textAlign: "right",
       width: 34,
@@ -20616,12 +20616,12 @@ function createStyles(palette: Palette) {
     performancePulsePointText: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     performancePulseSummary: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 12,
     },
@@ -20641,7 +20641,7 @@ function createStyles(palette: Palette) {
     },
     performanceImpactLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       width: 76,
     },
@@ -20658,7 +20658,7 @@ function createStyles(palette: Palette) {
     performanceImpactValue: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       textAlign: "right",
       width: 42,
@@ -20691,7 +20691,7 @@ function createStyles(palette: Palette) {
     },
     performanceStatLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 4,
     },
@@ -20711,7 +20711,7 @@ function createStyles(palette: Palette) {
     },
     athleteMomentEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
@@ -20732,7 +20732,7 @@ function createStyles(palette: Palette) {
     },
     athleteMomentMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: "auto",
     },
@@ -20757,7 +20757,7 @@ function createStyles(palette: Palette) {
     },
     athleteUpcomingMonth: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     athleteUpcomingDay: {
@@ -20771,10 +20771,10 @@ function createStyles(palette: Palette) {
       fontSize: 14,
       fontWeight: "800",
     },
-    athleteUpcomingMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    athleteUpcomingMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     athleteUpcomingWatch: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 5,
     },
@@ -20802,7 +20802,7 @@ function createStyles(palette: Palette) {
     performanceResultFilterActive: { backgroundColor: colors.aqua },
     performanceResultFilterText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     performanceResultFilterTextActive: { color: colors.onAccent },
@@ -20853,7 +20853,7 @@ function createStyles(palette: Palette) {
     },
     athleteResultStorySource: {
       color: rgba(colors.inkRgb, 0.62),
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
       marginTop: "auto",
@@ -20896,7 +20896,7 @@ function createStyles(palette: Palette) {
       fontSize: 13,
       fontWeight: "800",
     },
-    athleteResultMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+    athleteResultMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     athleteResultDelta: { alignItems: "flex-end" },
     athleteResultDeltaValue: {
       fontFamily: "Archivo-Chip",
@@ -20905,7 +20905,7 @@ function createStyles(palette: Palette) {
     },
     athleteResultExpected: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.5,
       marginTop: 3,
@@ -20966,10 +20966,10 @@ function createStyles(palette: Palette) {
     },
     athleteResultAvatarText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
-    athleteResultAvatarTextDense: { fontSize: 10 },
+    athleteResultAvatarTextDense: { fontSize: 12 },
     athleteResultPersonName: {
       color: colors.bone,
       fontSize: 12,
@@ -20978,8 +20978,8 @@ function createStyles(palette: Palette) {
       textAlign: "center",
       width: "100%",
     },
-    athleteResultPersonNameCompact: { fontSize: 10, marginTop: 3 },
-    athleteResultPersonNameDense: { fontSize: 10, marginTop: 2 },
+    athleteResultPersonNameCompact: { fontSize: 12, marginTop: 3 },
+    athleteResultPersonNameDense: { fontSize: 12, marginTop: 2 },
     athleteResultRatingPill: {
       alignSelf: "center",
       backgroundColor: colors.signal,
@@ -20996,10 +20996,10 @@ function createStyles(palette: Palette) {
     athleteResultRatingText: {
       color: colors.signalInk,
       fontFamily: "Archivo-Chip",
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
-    athleteResultRatingTextDense: { fontSize: 10 },
+    athleteResultRatingTextDense: { fontSize: 12 },
     athleteResultSetScores: {
       alignItems: "center",
       flexDirection: "row",
@@ -21032,14 +21032,14 @@ function createStyles(palette: Palette) {
     },
     athleteResultBreakdownLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,
     },
     athleteResultBreakdownValue: {
       color: colors.bone,
       fontFamily: "Archivo-Table",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 3,
     },
@@ -21056,7 +21056,7 @@ function createStyles(palette: Palette) {
     },
     athleteFullHistoryButtonText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     athleteBioCard: {
@@ -21090,7 +21090,7 @@ function createStyles(palette: Palette) {
     },
     athleteBioFactLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "700",
     },
     athleteBioFactValue: {
@@ -21111,7 +21111,7 @@ function createStyles(palette: Palette) {
     },
     athleteStudioSecondaryText: {
       color: colors.bone,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     profileHero: {
@@ -21157,7 +21157,7 @@ function createStyles(palette: Palette) {
       letterSpacing: -1,
       marginTop: 7,
     },
-    profileHandle: { color: colors.muted, fontSize: 10, marginTop: 2 },
+    profileHandle: { color: colors.muted, fontSize: 12, marginTop: 2 },
     profileSetupCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.accentRgb, 0.14),
@@ -21293,7 +21293,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderRadius: 10,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.7,
       overflow: "hidden",
@@ -21354,7 +21354,7 @@ function createStyles(palette: Palette) {
       minHeight: 60,
     },
     tabIcon: { color: colors.muted, fontSize: 18 },
-    tabLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     tabActive: { color: colors.aqua },
     tabCenterIcon: { color: colors.onAccent, fontSize: 22 },
     tabCenterLabel: { color: colors.onAccent, fontWeight: "900" },
@@ -21427,7 +21427,7 @@ function createStyles(palette: Palette) {
     },
     hostedReviewDurationLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -21525,7 +21525,7 @@ function createStyles(palette: Palette) {
     },
     hostedSelectedPartnerMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 4,
     },
     hostedRemovePartner: {
@@ -21565,7 +21565,7 @@ function createStyles(palette: Palette) {
     },
     hostedTotalMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 4,
     },
@@ -21737,10 +21737,10 @@ function createStyles(palette: Palette) {
       letterSpacing: -1.4,
       marginTop: 18,
     },
-    checkoutMeta: { color: colors.muted, fontSize: 10, marginTop: 5 },
+    checkoutMeta: { color: colors.muted, fontSize: 12, marginTop: 5 },
     checkoutSummaryText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 8,
     },
@@ -21768,7 +21768,7 @@ function createStyles(palette: Palette) {
     },
     purchaseKindText: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
     },
     purchaseKindTextActive: { color: colors.aqua },
@@ -21810,13 +21810,13 @@ function createStyles(palette: Palette) {
     mobileDivisionOptionNameActive: { color: colors.aqua },
     mobileDivisionOptionMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 5,
     },
     mobileDivisionPrices: { gap: 3, marginTop: "auto" },
     mobileDivisionPrice: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
     },
     mobileTicketList: { gap: 8, marginTop: 10 },
@@ -21863,7 +21863,7 @@ function createStyles(palette: Palette) {
     },
     mobileTicketDescription: {
       color: "rgba(255,255,255,0.78)",
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 7,
     },
@@ -21928,9 +21928,9 @@ function createStyles(palette: Palette) {
       marginTop: 9,
       textAlign: "center",
     },
-    mobileParticipantMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    mobileParticipantMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     mobileParticipantEligibility: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 7,
     },
@@ -21950,13 +21950,13 @@ function createStyles(palette: Palette) {
     mobileRosterPlayer: { alignItems: "center", flex: 1, minWidth: 0 },
     mobileRosterName: {
       color: colors.bone,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 5,
       maxWidth: 72,
     },
-    mobileRosterStatus: { color: colors.muted, fontSize: 10, marginTop: 2 },
-    mobileRosterRemove: { color: colors.danger, fontSize: 10, marginTop: 2 },
+    mobileRosterStatus: { color: colors.muted, fontSize: 12, marginTop: 2 },
+    mobileRosterRemove: { color: colors.danger, fontSize: 12, marginTop: 2 },
     mobileRosterOpen: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.03),
@@ -22019,9 +22019,9 @@ function createStyles(palette: Palette) {
       marginTop: 8,
       maxWidth: 140,
     },
-    mobileSuggestionMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+    mobileSuggestionMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     mobileSuggestionEligibility: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       lineHeight: 14,
       marginTop: 7,
@@ -22043,7 +22043,7 @@ function createStyles(palette: Palette) {
     },
     mobileSuggestionAddText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     mobileInviteRow: {
@@ -22060,7 +22060,7 @@ function createStyles(palette: Palette) {
       borderRadius: 12,
       color: colors.bone,
       flex: 1,
-      fontSize: 11,
+      fontSize: 12,
       minHeight: 44,
       paddingHorizontal: 10,
     },
@@ -22073,7 +22073,7 @@ function createStyles(palette: Palette) {
     },
     mobileInviteButtonText: {
       color: colors.onAccent,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
     },
     mobileTeamPaymentChoices: { flexDirection: "row", gap: 8, marginTop: 14 },
@@ -22112,7 +22112,7 @@ function createStyles(palette: Palette) {
     mobileGuestInitials: { color: colors.ink, fontSize: 25, fontWeight: "900" },
     mobileGuestLabel: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -22124,13 +22124,13 @@ function createStyles(palette: Palette) {
     },
     mobileGuestMeta: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginBottom: 5,
       marginTop: 3,
     },
     mobileGuestLink: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       marginTop: 5,
     },
@@ -22194,7 +22194,7 @@ function createStyles(palette: Palette) {
     mobilePolicyActionTitleAccepted: { color: colors.positive },
     mobilePolicyActionMeta: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 2,
     },
@@ -22238,7 +22238,7 @@ function createStyles(palette: Palette) {
     policyReviewHeading: { flex: 1, minWidth: 0 },
     policyReviewEyebrow: {
       color: colors.warning,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -22318,7 +22318,7 @@ function createStyles(palette: Palette) {
     },
     policyReviewConfirmation: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 16,
       marginBottom: 10,
       textAlign: "center",
@@ -22339,7 +22339,7 @@ function createStyles(palette: Palette) {
     },
     policyReviewLockedText: {
       color: colors.warning,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 8,
       textAlign: "center",
@@ -22427,7 +22427,7 @@ function createStyles(palette: Palette) {
     payButtonText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     paymentTrust: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 9,
       textAlign: "center",
     },
@@ -22458,7 +22458,7 @@ function createStyles(palette: Palette) {
     },
     completeBody: {
       color: colors.muted,
-      fontSize: 11,
+      fontSize: 12,
       lineHeight: 17,
       marginTop: 8,
       maxWidth: 300,

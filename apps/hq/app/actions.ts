@@ -648,11 +648,11 @@ export async function updateThemeAction(
     }
     const headingFont = field(formData, "headingFont");
     const bodyFont = field(formData, "bodyFont");
-    if (headingFont !== "Fellix") {
-      throw new Error("Duna club headings use Fellix.");
+    if (headingFont !== "Satoshi") {
+      throw new Error("Duna club headings use Satoshi.");
     }
-    if (bodyFont !== "Fellix") {
-      throw new Error("Duna club body text uses Fellix.");
+    if (bodyFont !== "Satoshi") {
+      throw new Error("Duna club body text uses Satoshi.");
     }
     const profileLayout = field(formData, "profileLayout");
     if (
@@ -693,8 +693,8 @@ export async function updateThemeAction(
         clubChroma: clubColor.chroma,
       },
       typography: {
-        heading: "Fellix",
-        body: "Fellix",
+        heading: "Satoshi",
+        body: "Satoshi",
       },
       fontLicenseConfirmed: field(formData, "fontLicenseConfirmed") === "true",
       safeFallbackFont:

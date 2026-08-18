@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  FellixText as Text,
-  FellixTextInput as TextInput,
-} from "./fellix-text";
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
 
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 135 },
   eyebrow: {
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.15,
     marginTop: 12,
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
   orbIcon: { color: "#141a1e", fontSize: 24, fontWeight: "900" },
   voiceState: {
     color: "#f7c86b",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginTop: 15,
@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   fieldGroup: { gap: 7, marginTop: 22 },
   label: {
     color: "#475467",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
   },
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   summaryInput: { minHeight: 105, textAlignVertical: "top" },
   sectionLabel: {
     color: "#475467",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.95,
     marginTop: 28,
@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
   visibilityTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
   visibilityBody: {
     color: "#766f61",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 3,
   },
@@ -937,7 +937,7 @@ const styles = StyleSheet.create({
   },
   personAvatarText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
   personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#766f61", fontSize: 10, lineHeight: 15, marginTop: 3 },
+  personMeta: { color: "#766f61", fontSize: 12, lineHeight: 15, marginTop: 3 },
   check: {
     alignItems: "center",
     borderColor: "#c7cdd5",
@@ -959,7 +959,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   privacyNoteIcon: { color: "#3d7d66", fontSize: 16, fontWeight: "900" },
-  privacyNoteText: { color: "#587466", flex: 1, fontSize: 11, lineHeight: 17 },
+  privacyNoteText: { color: "#587466", flex: 1, fontSize: 12, lineHeight: 17 },
   error: {
     color: "#b42318",
     fontSize: 12,
@@ -1016,7 +1016,7 @@ const styles = StyleSheet.create({
   savedIconText: { color: "#3d6672", fontSize: 30, fontWeight: "900" },
   savedEyebrow: {
     color: "#3d7d66",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
     marginTop: 24,
@@ -1051,7 +1051,7 @@ const styles = StyleSheet.create({
   },
   confirmEyebrow: {
     color: "#b4653d",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },

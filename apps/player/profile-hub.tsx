@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { demoPlayer } from "@duna/core/demo";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import { dunaWebUrl } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 import {
@@ -1076,7 +1076,7 @@ const styles = StyleSheet.create({
   billingButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
   billingFootnote: {
     color: "#777166",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 17,
     paddingHorizontal: 8,
     textAlign: "center",
@@ -1084,7 +1084,7 @@ const styles = StyleSheet.create({
   detailFact: { alignItems: "center", flex: 1 },
   detailFactLabel: {
     color: "#777166",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
     marginTop: 3,
@@ -1101,7 +1101,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: "#203740",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
@@ -1196,7 +1196,7 @@ const styles = StyleSheet.create({
   subscriptionIntro: { color: "#706a60", fontSize: 14, lineHeight: 21 },
   subscriptionManagedExternally: {
     color: "#777166",
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 17,
     marginTop: 15,
   },
@@ -1216,11 +1216,11 @@ const styles = StyleSheet.create({
   },
   subscriptionOwner: {
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
   },
-  subscriptionPeriod: { color: "#777166", fontSize: 11, marginTop: 4 },
+  subscriptionPeriod: { color: "#777166", fontSize: 12, marginTop: 4 },
   subscriptionPrimaryAction: {
     alignItems: "center",
     backgroundColor: "#203740",
@@ -1256,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   subscriptionStatusText: {
     color: "#203740",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     textTransform: "capitalize",
   },
@@ -1422,7 +1422,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   settingArrow: { color: "#777166", fontSize: 23 },
-  settingMeta: { color: "#777166", fontSize: 10, marginTop: 3 },
+  settingMeta: { color: "#777166", fontSize: 12, marginTop: 3 },
   settingText: { color: "#111719", flex: 1, fontSize: 15, fontWeight: "700" },
   settings: {
     backgroundColor: "#ffffff",

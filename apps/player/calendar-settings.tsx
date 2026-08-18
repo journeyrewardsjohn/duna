@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { FellixText as Text } from "./fellix-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   connectPlayerCalendar,
   findPlayerCalendarConflicts,
@@ -164,10 +164,10 @@ const base = {
   },
   markText: { fontSize: 20, fontWeight: "900" },
   flex: { flex: 1 },
-  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+  eyebrow: { fontSize: 12, fontWeight: "900", letterSpacing: 1.1 },
   title: { fontSize: 20, fontWeight: "900", letterSpacing: -0.4, marginTop: 3 },
-  connected: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
-  disconnected: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
+  connected: { fontSize: 12, fontWeight: "900", letterSpacing: 0.7 },
+  disconnected: { fontSize: 12, fontWeight: "900", letterSpacing: 0.7 },
   body: { fontSize: 14, lineHeight: 21 },
   calendarName: { fontSize: 12, fontWeight: "800" },
   autoSyncRow: {
@@ -214,7 +214,7 @@ const base = {
     paddingHorizontal: 10,
   },
   secondaryText: { fontSize: 12, fontWeight: "900", textAlign: "center" },
-  privacy: { fontSize: 10, lineHeight: 15 },
+  privacy: { fontSize: 12, lineHeight: 15 },
 } as const;
 
 function createStyles(palette: PlayerCalendarPalette) {

@@ -12,6 +12,8 @@ const ignoredDirectories = new Set([
   "node_modules",
 ]);
 const violations: string[] = [];
+const minimumFontSizePx = 12;
+const minimumFontSizeRem = 0.75;
 
 function sourceFiles(directory: string): string[] {
   if (!existsSync(directory)) return [];
@@ -26,7 +28,9 @@ function sourceFiles(directory: string): string[] {
 
 function belowMinimum(value: string, unit: string) {
   const numericValue = Number.parseFloat(value);
-  return unit === "rem" ? numericValue < 0.625 : numericValue < 10;
+  return unit === "rem"
+    ? numericValue < minimumFontSizeRem
+    : numericValue < minimumFontSizePx;
 }
 
 for (const file of sourceRoots.flatMap((root) => sourceFiles(root))) {
@@ -56,7 +60,7 @@ for (const file of sourceRoots.flatMap((root) => sourceFiles(root))) {
       }
     } else {
       for (const match of line.matchAll(/fontSize\s*:\s*([0-9]*\.?[0-9]+)/g)) {
-        if (Number.parseFloat(match[1]) < 10) {
+        if (Number.parseFloat(match[1]) < minimumFontSizePx) {
           violations.push(
             `${relative(repositoryRoot, file)}:${index + 1} uses ${match[1]}px`,
           );
@@ -67,9 +71,9 @@ for (const file of sourceRoots.flatMap((root) => sourceFiles(root))) {
 }
 
 if (violations.length > 0) {
-  console.error("Typography below Duna's 10px readability floor:\n");
+  console.error("Typography below Duna's 12px readability floor:\n");
   console.error(violations.join("\n"));
   process.exit(1);
 }
 
-console.log("Readable typography verified: no product font is below 10px.");
+console.log("Readable typography verified: no product font is below 12px.");

@@ -80,7 +80,7 @@
   align-items: center;
   color: var(--flare);
   display: inline-flex;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 850;
   gap: 0.4rem;
   letter-spacing: 0.1em;
@@ -89,7 +89,7 @@
 
 .liveRail > header > small {
   color: var(--text-2);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .liveRail > div {
@@ -153,7 +153,7 @@
   border-radius: 0.35rem;
   bottom: -0.3rem;
   color: white;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 900;
   letter-spacing: 0.06em;
   padding: 0.18rem 0.38rem;
@@ -164,7 +164,7 @@
 .liveRail article > a:last-child {
   color: var(--text-1);
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 750;
   max-width: 100%;
   overflow: hidden;
@@ -273,7 +273,7 @@
 
 .profilePrompt small {
   color: var(--signal-text);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -355,7 +355,7 @@
 
 .nextUpMediaTopline > span:last-child {
   color: var(--surface-1);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -398,7 +398,7 @@
 .nextUpDate > span:first-child,
 .bookingDate small {
   color: var(--text-2);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -492,7 +492,7 @@
 
 .ratingInsight small {
   color: var(--signal-text);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -533,7 +533,7 @@
 
 .ratingStats small {
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .ratingStats strong,
@@ -723,7 +723,7 @@
 
   .quickAction small,
   .quickActionPrimary small {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
   }
 
   .profilePrompt {
