@@ -183,6 +183,7 @@ import {
   createSessionNote,
   loadDemoOperatorMemberProfile,
   loadDemoOperatorSessionDetail,
+  loadOperatorMemberHealthProfile,
   loadOperatorMemberProfile,
   loadOperatorSessionDetail,
   loadPlayerCoachingNotes,
@@ -445,12 +446,14 @@ import {
   applyVenueLayoutCourtAssignments,
   createCourtFromVenueLayout,
   createVenueLayout,
+  deleteVenueLayoutDraft,
   loadPublicVenueLayout,
   loadVenueLayoutWorkspace,
   planVenueLayoutCourtAssignments,
   publishVenueLayout,
   saveVenueLayout,
   saveVenueLayoutEventSettings,
+  unpublishVenueLayout,
 } from "./venue-layout-service";
 import {
   loadPlayerOrganizationAccess,
@@ -7398,6 +7401,23 @@ const operatorRouter = router({
             ipAddress: ctx.ipAddress,
           }),
     ),
+  memberHealthProfile: organizationProcedure("members:read")
+    .input(z.object({ personId: z.string().uuid() }))
+    .output(healthProfileSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadOperatorMemberHealthProfile({
+          actor: ctx.actor!,
+          organizationId: ctx.actor!.organizationId!,
+          personId: input.personId,
+          now: ctx.now,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   sessionArrivalBoard: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))
     .output(sessionArrivalBoardSchema)
@@ -9222,6 +9242,16 @@ const operatorRouter = router({
               weekday: z.number().int().min(0).max(6),
               startsAt: z.string().regex(/^\d{2}:\d{2}$/),
               endsAt: z.string().regex(/^\d{2}:\d{2}$/),
+              scheduleId: z.string().uuid().optional(),
+              scheduleName: z.string().trim().min(1).max(80).optional(),
+              effectiveFrom: z
+                .string()
+                .regex(/^\d{4}-\d{2}-\d{2}$/)
+                .optional(),
+              effectiveTo: z
+                .string()
+                .regex(/^\d{4}-\d{2}-\d{2}$/)
+                .optional(),
             }),
           )
           .max(28),
@@ -9573,6 +9603,64 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await publishVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  deleteVenueLayoutDraft: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.deleteVenueLayoutDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await deleteVenueLayoutDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  unpublishVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.unpublishVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await unpublishVenueLayout({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

@@ -53,10 +53,12 @@ import {
   applyVenueLayoutCourtAssignmentsAction,
   createCourtFromVenueLayoutAction,
   createVenueLayoutAction,
+  deleteVenueLayoutDraftAction,
   previewVenueLayoutCourtAssignmentsAction,
   publishVenueLayoutAction,
   saveVenueLayoutAction,
   saveVenueLayoutEventSettingsAction,
+  unpublishVenueLayoutAction,
   type OperatorActionState,
 } from "@/app/actions";
 import type { FloorplanAnalysisProposal } from "@/lib/floorplan-analysis";
@@ -1262,6 +1264,14 @@ export function VenueLayoutStudio({
     publishVenueLayoutAction,
     initialState,
   );
+  const [deleteState, deleteAction, deletePending] = useActionState(
+    deleteVenueLayoutDraftAction,
+    initialState,
+  );
+  const [unpublishState, unpublishAction, unpublishPending] = useActionState(
+    unpublishVenueLayoutAction,
+    initialState,
+  );
 
   useEffect(() => {
     if (!layout) return;
@@ -1289,7 +1299,11 @@ export function VenueLayoutStudio({
   ]);
 
   useEffect(() => {
-    if (saveState.status === "success" || publishState.status === "success") {
+    if (
+      saveState.status === "success" ||
+      publishState.status === "success" ||
+      unpublishState.status === "success"
+    ) {
       setDirty(false);
       if (saveState.status === "success" && pendingCourtDraft) {
         setCourtDraft(pendingCourtDraft);
@@ -1297,7 +1311,30 @@ export function VenueLayoutStudio({
       }
       router.refresh();
     }
-  }, [pendingCourtDraft, publishState.status, router, saveState.status]);
+  }, [
+    pendingCourtDraft,
+    publishState.status,
+    router,
+    saveState.status,
+    unpublishState.status,
+  ]);
+
+  useEffect(() => {
+    if (deleteState.status !== "success") return;
+    const nextLayout = workspace.layouts.find((item) => item.id !== layoutId);
+    router.replace(
+      nextLayout
+        ? `/locations/${workspace.venue.id}/layout?layout=${nextLayout.id}`
+        : `/locations/${workspace.venue.id}/layout`,
+    );
+    router.refresh();
+  }, [
+    deleteState.status,
+    layoutId,
+    router,
+    workspace.layouts,
+    workspace.venue.id,
+  ]);
 
   useEffect(() => {
     if (versionState.status === "success" && versionState.entityId) {
@@ -2537,8 +2574,88 @@ export function VenueLayoutStudio({
                           ? `Published ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(layout.publishedAt))}.`
                           : "This version is locked in layout history."}
                       </small>
+                      {!layoutEvent && !layout.isPrimary && (
+                        <form action={publishAction}>
+                          <input
+                            name="layoutId"
+                            type="hidden"
+                            value={layout.id}
+                          />
+                          <input
+                            name="makePrimary"
+                            type="hidden"
+                            value="true"
+                          />
+                          <button
+                            className="hq-button hq-button--secondary hq-button--compact"
+                            disabled={publishPending}
+                            type="submit"
+                          >
+                            <Check aria-hidden size={15} />
+                            {publishPending
+                              ? "Setting default…"
+                              : "Set as venue default"}
+                          </button>
+                        </form>
+                      )}
                     </div>
                   )}
+                  <div className="venue-layout-lifecycle-actions">
+                    {layout.status === "draft" ? (
+                      <form
+                        action={deleteAction}
+                        onSubmit={(event) => {
+                          if (
+                            !window.confirm(
+                              "Delete this unpublished layout draft? This cannot be undone.",
+                            )
+                          )
+                            event.preventDefault();
+                        }}
+                      >
+                        <input
+                          name="layoutId"
+                          type="hidden"
+                          value={layout.id}
+                        />
+                        <button disabled={deletePending} type="submit">
+                          <Trash2 aria-hidden size={15} />
+                          {deletePending ? "Deleting…" : "Delete draft"}
+                        </button>
+                      </form>
+                    ) : (
+                      <form
+                        action={unpublishAction}
+                        onSubmit={(event) => {
+                          if (
+                            !window.confirm(
+                              "Move this published layout back to draft? Players will stop seeing it.",
+                            )
+                          )
+                            event.preventDefault();
+                        }}
+                      >
+                        <input
+                          name="layoutId"
+                          type="hidden"
+                          value={layout.id}
+                        />
+                        <button disabled={unpublishPending} type="submit">
+                          <EyeOff aria-hidden size={15} />
+                          {unpublishPending
+                            ? "Unpublishing…"
+                            : "Unpublish layout"}
+                        </button>
+                      </form>
+                    )}
+                    <ActionNotice
+                      state={
+                        deleteState.status !== "idle"
+                          ? deleteState
+                          : unpublishState
+                      }
+                    />
+                  </div>
                 </div>
               </section>
               {layoutEvent && (

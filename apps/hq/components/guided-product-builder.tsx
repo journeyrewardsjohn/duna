@@ -82,6 +82,36 @@ type OptionDraft = {
   readonly values: string;
 };
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function configurationText(
+  configuration: Record<string, unknown>,
+  key: string,
+): string {
+  return typeof configuration[key] === "string"
+    ? String(configuration[key])
+    : "";
+}
+
+function configurationTextList(
+  configuration: Record<string, unknown>,
+  key: string,
+): readonly string[] {
+  return Array.isArray(configuration[key])
+    ? configuration[key].filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+}
+
+function priceInputValue(amountMinor?: number): string {
+  return amountMinor === undefined ? "" : (amountMinor / 100).toFixed(2);
+}
+
 const productTypes = [
   {
     value: "service" as const,
@@ -429,21 +459,39 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
 }
 
 export function GuidedProductBuilder({
+  sourceItem,
   waivers,
   workspace,
 }: {
+  readonly sourceItem?: OperatorWorkspace["catalog"][number];
   readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedType = searchParams.get("type");
-  const initialType: ProductType =
+  const requestedProductType =
     requestedType === "good" ||
     requestedType === "plan" ||
     requestedType === "service"
       ? requestedType
       : "service";
+  const initialType: ProductType =
+    sourceItem?.type === "good" ||
+    sourceItem?.type === "plan" ||
+    sourceItem?.type === "service"
+      ? sourceItem.type
+      : requestedProductType;
+  const sourceConfiguration = sourceItem?.configuration ?? {};
+  const sourceMembership = recordValue(sourceConfiguration.membership);
+  const sourceCardPrice = sourceItem?.variants
+    .flatMap((variant) => variant.prices)
+    .find(
+      (candidate) =>
+        candidate.active &&
+        candidate.paymentKind === "card" &&
+        candidate.amountMinor !== undefined,
+    );
   const [state, action, pending] = useActionState(
     createCatalogItemAction,
     initialActionState,
@@ -451,26 +499,43 @@ export function GuidedProductBuilder({
   const [type, setType] = useState<ProductType>(initialType);
   const [step, setStep] = useState(0);
   const [subtype, setSubtype] = useState(
-    initialType === "good"
-      ? "equipment"
-      : initialType === "plan"
-        ? "membership"
-        : "private-lesson",
+    sourceItem?.subtype ??
+      (initialType === "good"
+        ? "equipment"
+        : initialType === "plan"
+          ? "membership"
+          : "private-lesson"),
   );
-  const [title, setTitle] = useState("");
-  const [shortSummary, setShortSummary] = useState("");
-  const [description, setDescription] = useState("");
-  const [bestFor, setBestFor] = useState("");
-  const [highlights, setHighlights] = useState("");
-  const [validityDays, setValidityDays] = useState(0);
-  const [redemptionNotes, setRedemptionNotes] = useState("");
+  const [title, setTitle] = useState(sourceItem?.title ?? "");
+  const [shortSummary, setShortSummary] = useState(
+    sourceItem?.shortSummary ?? "",
+  );
+  const [description, setDescription] = useState(sourceItem?.description ?? "");
+  const [bestFor, setBestFor] = useState(
+    configurationText(sourceConfiguration, "bestFor"),
+  );
+  const [highlights, setHighlights] = useState(
+    configurationTextList(sourceConfiguration, "highlights").join("\n"),
+  );
+  const [validityDays, setValidityDays] = useState(
+    typeof sourceConfiguration.validityDays === "number"
+      ? sourceConfiguration.validityDays
+      : 0,
+  );
+  const [redemptionNotes, setRedemptionNotes] = useState(
+    configurationText(sourceConfiguration, "redemptionNotes"),
+  );
   const [visibility, setVisibility] = useState<
     "public" | "members" | "private"
-  >("public");
-  const [allowCard, setAllowCard] = useState(true);
+  >(sourceItem?.visibility ?? "public");
+  const [allowCard, setAllowCard] = useState(
+    sourceCardPrice !== undefined || !sourceItem,
+  );
   const [allowCash, setAllowCash] = useState(false);
   const [allowCredits, setAllowCredits] = useState(false);
-  const [price, setPrice] = useState("");
+  const [price, setPrice] = useState(
+    priceInputValue(sourceCardPrice?.amountMinor),
+  );
   const [creditCost, setCreditCost] = useState(1);
   const [taxable, setTaxable] = useState(false);
   const [membershipRequired, setMembershipRequired] = useState(false);
@@ -492,16 +557,30 @@ export function GuidedProductBuilder({
   );
   const [customerCoachSelection, setCustomerCoachSelection] = useState(true);
 
-  const [billingMode, setBillingMode] = useState<"month" | "year">("month");
+  const [billingMode, setBillingMode] = useState<"month" | "year">(
+    sourceCardPrice?.recurringInterval === "year" ? "year" : "month",
+  );
   const [creditsGranted, setCreditsGranted] = useState(10);
-  const [membershipCredits, setMembershipCredits] = useState(0);
-  const [membershipBookingLimit, setMembershipBookingLimit] = useState(0);
-  const [benefits, setBenefits] = useState("");
+  const [membershipCredits, setMembershipCredits] = useState(
+    typeof sourceMembership.includedCreditsPerCycle === "number"
+      ? sourceMembership.includedCreditsPerCycle
+      : 0,
+  );
+  const [membershipBookingLimit, setMembershipBookingLimit] = useState(
+    typeof sourceMembership.bookingLimitPerCycle === "number"
+      ? sourceMembership.bookingLimitPerCycle
+      : 0,
+  );
+  const [benefits, setBenefits] = useState(
+    configurationTextList(sourceMembership, "benefits").join("\n"),
+  );
   const [includedCatalogItemIds, setIncludedCatalogItemIds] = useState<
     readonly string[]
-  >([]);
+  >(() => configurationTextList(sourceMembership, "includedCatalogItemIds"));
   const [membershipWaiverDocumentIds, setMembershipWaiverDocumentIds] =
-    useState<readonly string[]>([]);
+    useState<readonly string[]>(() =>
+      configurationTextList(sourceMembership, "waiverDocumentIds"),
+    );
 
   const [trackInventory, setTrackInventory] = useState(true);
   const [sellEnabled, setSellEnabled] = useState(true);
@@ -519,7 +598,15 @@ export function GuidedProductBuilder({
   const [locationId, setLocationId] = useState("");
   const [newLocationName, setNewLocationName] = useState("");
   const [options, setOptions] = useState<readonly OptionDraft[]>([]);
-  const [media, setMedia] = useState<readonly ProductMedia[]>([]);
+  const [media, setMedia] = useState<readonly ProductMedia[]>(
+    () =>
+      sourceItem?.media.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        url: item.url,
+        alt: item.alt ?? sourceItem.title,
+      })) ?? [],
+  );
   const [hostedMediaUrl, setHostedMediaUrl] = useState("");
   const [hostedMediaKind, setHostedMediaKind] = useState<"image" | "video">(
     "image",
@@ -869,8 +956,10 @@ export function GuidedProductBuilder({
                   : "Confirm that you reviewed the setup.";
 
   const configuration = {
+    ...sourceConfiguration,
     source: "hq-guided-product-builder",
     flowVersion: 3,
+    ...(sourceItem ? { basedOnCatalogItemId: sourceItem.id } : {}),
     bestFor: bestFor.trim() || undefined,
     highlights: parsedHighlights,
     validityDays: validityDays > 0 ? validityDays : undefined,
@@ -970,10 +1059,15 @@ export function GuidedProductBuilder({
           <span className="guided-product-builder__label">
             <Sparkles aria-hidden size={14} /> Guided offer studio
           </span>
-          <h2>Build an offer people understand.</h2>
+          <h2>
+            {sourceItem
+              ? "Revise this offer with the full builder."
+              : "Build an offer people understand."}
+          </h2>
           <p>
-            Start with the customer outcome. Duna will guide you through only
-            the story, delivery, pricing, and controls that belong to it.
+            {sourceItem
+              ? "Your current offer stays unchanged while you shape and review this new private draft."
+              : "Start with the customer outcome. Duna will guide you through only the story, delivery, pricing, and controls that belong to it."}
           </p>
           <div className="guided-product-builder__trust">
             <span>

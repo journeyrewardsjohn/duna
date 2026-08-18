@@ -3422,6 +3422,10 @@ export async function updateStaffProfile(input: {
     readonly weekday: number;
     readonly startsAt: string;
     readonly endsAt: string;
+    readonly scheduleId?: string;
+    readonly scheduleName?: string;
+    readonly effectiveFrom?: string;
+    readonly effectiveTo?: string;
   }[];
   readonly blackoutDates: readonly {
     readonly startsOn: string;
@@ -3506,7 +3510,13 @@ export async function updateStaffProfile(input: {
         block.weekday > 6 ||
         !/^\d{2}:\d{2}$/.test(block.startsAt) ||
         !/^\d{2}:\d{2}$/.test(block.endsAt) ||
-        block.startsAt >= block.endsAt,
+        block.startsAt >= block.endsAt ||
+        (block.effectiveFrom !== undefined &&
+          !/^\d{4}-\d{2}-\d{2}$/.test(block.effectiveFrom)) ||
+        (block.effectiveTo !== undefined &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(block.effectiveTo) ||
+            (block.effectiveFrom !== undefined &&
+              block.effectiveTo < block.effectiveFrom))),
     )
   ) {
     throw new OperatorServiceError(

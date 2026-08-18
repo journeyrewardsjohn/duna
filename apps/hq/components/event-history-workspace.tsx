@@ -16,14 +16,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type EventFilter =
-  | "all"
-  | "events"
-  | "matches"
-  | "court-reservations"
-  | "upcoming"
-  | "history"
-  | "cancelled";
+type EventFilter = "today" | "week" | "month" | "year" | "all";
 type ActivityType = "event" | "match" | "court-reservation";
 
 type HistoryItem = {
@@ -72,6 +65,29 @@ function activityTone(status: string) {
   return "neutral" as const;
 }
 
+function isInTimeRange(
+  startsAt: string,
+  filter: EventFilter,
+  now: Date,
+): boolean {
+  if (filter === "all") return true;
+  const start = new Date(startsAt);
+  const rangeStart = new Date(now);
+  rangeStart.setHours(0, 0, 0, 0);
+  const rangeEnd = new Date(rangeStart);
+  if (filter === "today") rangeEnd.setDate(rangeEnd.getDate() + 1);
+  if (filter === "week") rangeEnd.setDate(rangeEnd.getDate() + 7);
+  if (filter === "month") {
+    rangeStart.setDate(1);
+    rangeEnd.setMonth(rangeEnd.getMonth() + 1, 1);
+  }
+  if (filter === "year") {
+    rangeStart.setMonth(0, 1);
+    rangeEnd.setFullYear(rangeEnd.getFullYear() + 1, 0, 1);
+  }
+  return start >= rangeStart && start < rangeEnd;
+}
+
 export function EventHistoryWorkspace({
   workspace,
   kinds,
@@ -79,9 +95,10 @@ export function EventHistoryWorkspace({
   readonly workspace: OperatorWorkspace;
   readonly kinds?: readonly string[];
 }) {
-  const [filter, setFilter] = useState<EventFilter>("all");
+  const [filter, setFilter] = useState<EventFilter>("month");
   const [query, setQuery] = useState("");
   const now = Date.now();
+  const nowDate = new Date(now);
   const includeActivities = !kinds || kinds.some((kind) => kind !== "league");
   const items = useMemo<readonly HistoryItem[]>(() => {
     const sessionItems = workspace.sessions
@@ -167,16 +184,7 @@ export function EventHistoryWorkspace({
   const normalized = query.trim().toLowerCase();
   const filtered = items
     .filter((item) => {
-      const startsAt = Date.parse(item.startsAt);
-      if (filter === "events") return item.type === "event";
-      if (filter === "matches") return item.type === "match";
-      if (filter === "court-reservations")
-        return item.type === "court-reservation";
-      if (filter === "upcoming")
-        return startsAt >= now && item.status !== "cancelled";
-      if (filter === "history") return startsAt < now;
-      if (filter === "cancelled") return item.status === "cancelled";
-      return true;
+      return isInTimeRange(item.startsAt, filter, nowDate);
     })
     .filter((item) =>
       normalized
@@ -207,65 +215,68 @@ export function EventHistoryWorkspace({
     "court-reservation",
   ];
 
-  const renderItem = (item: HistoryItem) => (
-    <Link href={item.href} key={`${item.type}:${item.id}`}>
-      <time>
-        <strong>
-          {formatVenueTime(item.startsAt, item.timezone, "en-US", {
-            month: "short",
-            day: "numeric",
-          })}
-        </strong>
-        <small>
-          {formatVenueTime(item.startsAt, item.timezone, "en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </small>
-      </time>
-      <span className="event-history-list__title">
-        <span>
-          <Badge tone={activityTone(item.status)}>
-            {item.status.replaceAll("-", " ")}
-          </Badge>
-          <small>{item.kind}</small>
+  const renderItem = (item: HistoryItem) => {
+    const past = Date.parse(item.startsAt) < now && item.status !== "cancelled";
+    return (
+      <Link href={item.href} key={`${item.type}:${item.id}`}>
+        <time>
+          <strong>
+            {formatVenueTime(item.startsAt, item.timezone, "en-US", {
+              month: "short",
+              day: "numeric",
+            })}
+          </strong>
+          <small>
+            {formatVenueTime(item.startsAt, item.timezone, "en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </small>
+        </time>
+        <span className="event-history-list__title">
+          <span>
+            <Badge tone={past ? "neutral" : activityTone(item.status)}>
+              {past ? "past" : item.status.replaceAll("-", " ")}
+            </Badge>
+            <small>{item.kind}</small>
+          </span>
+          <strong>{item.title}</strong>
+          <small>
+            {item.venueName}
+            {item.courtName ? ` · ${item.courtName}` : ""}
+          </small>
         </span>
-        <strong>{item.title}</strong>
-        <small>
-          {item.venueName}
-          {item.courtName ? ` · ${item.courtName}` : ""}
-        </small>
-      </span>
-      <span className="event-history-list__metric">
-        <UsersRound aria-hidden size={16} />
-        <strong>
-          {item.participantCount}/{item.capacity || "open"}
-        </strong>
-        <small>
-          {item.checkedIn} checked in
-          {item.cancelledCount ? ` · ${item.cancelledCount} cancelled` : ""}
-        </small>
-      </span>
-      <span className="event-history-list__metric">
-        <strong>
-          {item.bookedValue
-            ? formatMoney(
-                item.bookedValue.amountMinor,
-                item.bookedValue.currency,
-              )
-            : item.checkedIn
-              ? `${item.checkedIn} arrived`
-              : "Check-in ready"}
-        </strong>
-        <small>
-          {item.bookedValue
-            ? "booked value · open for exact net"
-            : "open details"}
-        </small>
-      </span>
-      <ArrowRight aria-hidden size={18} />
-    </Link>
-  );
+        <span className="event-history-list__metric">
+          <UsersRound aria-hidden size={16} />
+          <strong>
+            {item.participantCount}/{item.capacity || "open"}
+          </strong>
+          <small>
+            {item.checkedIn} checked in
+            {item.cancelledCount ? ` · ${item.cancelledCount} cancelled` : ""}
+          </small>
+        </span>
+        <span className="event-history-list__metric">
+          <strong>
+            {item.bookedValue
+              ? formatMoney(
+                  item.bookedValue.amountMinor,
+                  item.bookedValue.currency,
+                )
+              : item.checkedIn
+                ? `${item.checkedIn} arrived`
+                : "Check-in ready"}
+          </strong>
+          <small>
+            {item.bookedValue
+              ? "booked value · open for exact net"
+              : "open details"}
+          </small>
+        </span>
+        <ArrowRight aria-hidden size={18} />
+      </Link>
+    );
+  };
 
   return (
     <section className="hq-card event-history-workspace">
@@ -377,13 +388,11 @@ export function EventHistoryWorkspace({
       <div className="event-history-workspace__filters" role="tablist">
         {(
           [
-            ["all", "All activity"],
-            ["events", "Events"],
-            ["matches", "Matches"],
-            ["court-reservations", "Court reservations"],
-            ["upcoming", "Upcoming"],
-            ["history", "History"],
-            ["cancelled", "Cancelled"],
+            ["today", "Today"],
+            ["week", "This week"],
+            ["month", "This month"],
+            ["year", "This year"],
+            ["all", "All time"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -399,7 +408,7 @@ export function EventHistoryWorkspace({
         ))}
       </div>
       <div className="event-history-list">
-        {filter === "all" && !normalized
+        {!normalized
           ? sectionTypes.map((type) => {
               const section = filtered
                 .filter((item) => item.type === type)

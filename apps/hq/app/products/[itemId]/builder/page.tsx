@@ -1,27 +1,24 @@
 import { notFound } from "next/navigation";
-import { CatalogItemEditor } from "@/components/catalog-item-editor";
+import { GuidedProductBuilder } from "@/components/guided-product-builder";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 
-export const metadata = { title: "Edit product" };
+export const metadata = { title: "Revise product" };
 
-export default async function ProductDetailPage({
+export default async function ProductBuilderPage({
   params,
-  searchParams,
 }: {
   readonly params: Promise<{ itemId: string }>;
-  readonly searchParams: Promise<{ created?: string }>;
 }) {
   const { itemId } = await params;
-  const query = await searchParams;
   const caller = await getServerCaller();
   const [dashboard, workspace, waivers] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     caller.operator.waiverWorkspace(),
   ]);
-  const item = workspace.catalog.find((candidate) => candidate.id === itemId);
-  if (!item) notFound();
+  const sourceItem = workspace.catalog.find((item) => item.id === itemId);
+  if (!sourceItem || sourceItem.type === "event") notFound();
 
   return (
     <OperatorShell
@@ -29,9 +26,8 @@ export default async function ProductDetailPage({
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <CatalogItemEditor
-        created={query.created === "1"}
-        item={item}
+      <GuidedProductBuilder
+        sourceItem={sourceItem}
         waivers={waivers}
         workspace={workspace}
       />
