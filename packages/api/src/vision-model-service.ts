@@ -292,7 +292,8 @@ export async function loadAdminVisionOverview(
       sourceLicense: model.sourceLicense,
       status: model.status as VisionModelSummary["status"],
       manifest: model.manifest,
-      qualityGate: model.qualityGate as VisionModelSummary["qualityGate"],
+      qualityGate:
+        (model.qualityGate as VisionModelSummary["qualityGate"]) ?? undefined,
       promotionAttestationAvailable: Boolean(model.promotionAttestationR2Key),
       createdByName: createdByName ?? undefined,
       shadowApprovedAt: iso(model.shadowApprovedAt),
@@ -337,7 +338,9 @@ export async function loadAdminVisionOverview(
       datasetManifestR2Key: run.datasetManifestR2Key,
       datasetManifestSha256: run.datasetManifestSha256 ?? undefined,
       attestationAvailable: Boolean(run.attestationR2Key),
-      qualityGate: run.qualityGate as VisionBenchmarkRunSummary["qualityGate"],
+      qualityGate:
+        (run.qualityGate as VisionBenchmarkRunSummary["qualityGate"]) ??
+        undefined,
       failureCode: run.failureCode ?? undefined,
       requestedByName: requestedByName ?? undefined,
       startedAt: iso(run.startedAt),
