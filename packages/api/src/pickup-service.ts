@@ -27,6 +27,15 @@ export interface PickupJoinRequestSummary {
   readonly createdAt: string;
 }
 
+export interface PickupParticipantSummary {
+  readonly id: string;
+  readonly personId: string;
+  readonly displayName: string;
+  readonly avatarUrl?: string;
+  readonly status: "confirmed" | "checked-in";
+  readonly isHost: boolean;
+}
+
 export interface PickupManagementSummary {
   readonly pickupSessionId: string;
   readonly status: "active" | "cancelled" | "completed";
@@ -43,6 +52,7 @@ export interface PickupManagementSummary {
   readonly confirmedParticipantCount: number;
   readonly invitedParticipantCount: number;
   readonly ownRequestStatus?: PickupRequestStatus;
+  readonly participants: readonly PickupParticipantSummary[];
   readonly requests: readonly PickupJoinRequestSummary[];
 }
 
@@ -59,6 +69,7 @@ async function pickupOrThrow(pickupSessionId: string) {
 export async function loadPickupManagement(input: {
   readonly actor: ApiActor;
   readonly pickupSessionId: string;
+  readonly now: Date;
 }): Promise<PickupManagementSummary> {
   const database = getDatabase();
   const pickup = await pickupOrThrow(input.pickupSessionId);
@@ -66,11 +77,15 @@ export async function loadPickupManagement(input: {
   const [participantRows, ownRequest, requestRows] = await Promise.all([
     database
       .select({
+        id: pickupParticipants.id,
         holdExpiresAt: pickupParticipants.holdExpiresAt,
         personId: pickupParticipants.personId,
+        displayName: people.displayName,
+        avatarUrl: people.avatarUrl,
         status: pickupParticipants.status,
       })
       .from(pickupParticipants)
+      .leftJoin(people, eq(pickupParticipants.personId, people.id))
       .where(
         and(
           eq(pickupParticipants.pickupSessionId, pickup.id),
@@ -120,7 +135,7 @@ export async function loadPickupManagement(input: {
     (row) =>
       ["confirmed", "checked-in"].includes(row.status) ||
       (row.status === "pending" &&
-        Boolean(row.holdExpiresAt && row.holdExpiresAt > new Date())),
+        Boolean(row.holdExpiresAt && row.holdExpiresAt > input.now)),
   ).length;
   const spotsRemaining = Math.max(
     0,
@@ -132,7 +147,9 @@ export async function loadPickupManagement(input: {
       ["confirmed", "checked-in"].includes(row.status),
   );
   const isFutureActive =
-    pickup.status === "active" && pickup.startsAt > new Date();
+    pickup.status === "active" && pickup.startsAt > input.now;
+  const isLiveOrUpcoming =
+    pickup.status === "active" && pickup.endsAt > input.now;
   const hostCanCancel =
     isHost && isFutureActive && activeParticipants.length === 0;
   const waitlistEnabled = pickup.smartRules.waitlistEnabled;
@@ -146,10 +163,10 @@ export async function loadPickupManagement(input: {
     canCancel: hostCanCancel,
     canLeave:
       isParticipant &&
-      pickup.status === "active" &&
+      isFutureActive &&
       (!isHost || activeParticipants.length > 0),
     canAddPlayers:
-      isFutureActive &&
+      isLiveOrUpcoming &&
       (isHost || isParticipant) &&
       (spotsRemaining > 0 || waitlistEnabled),
     capacity: pickup.capacity,
@@ -160,6 +177,20 @@ export async function loadPickupManagement(input: {
       (row) => row.status === "invited",
     ).length,
     ownRequestStatus: ownRequest?.status as PickupRequestStatus | undefined,
+    participants: participantRows.flatMap((row) =>
+      row.status === "confirmed" || row.status === "checked-in"
+        ? [
+            {
+              id: row.id,
+              personId: row.personId,
+              displayName: row.displayName ?? "Duna player",
+              avatarUrl: row.avatarUrl ?? undefined,
+              status: row.status,
+              isHost: row.personId === pickup.hostPersonId,
+            },
+          ]
+        : [],
+    ),
     requests: requestRows.map((row) => ({
       id: row.id,
       personId: row.personId,
@@ -276,7 +307,11 @@ export async function reviewPickupJoinRequest(input: {
       "Only the pickup host can review join requests.",
     );
   }
-  if (request.status !== "requested" || pickup.status !== "active") {
+  if (
+    request.status !== "requested" ||
+    pickup.status !== "active" ||
+    pickup.startsAt <= input.now
+  ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
       "This join request can no longer be reviewed.",
@@ -475,12 +510,12 @@ export async function invitePickupPlayers(input: {
   });
   if (
     pickup.status !== "active" ||
-    pickup.startsAt <= input.now ||
+    pickup.endsAt <= input.now ||
     (pickup.hostPersonId !== input.actor.personId && !actorParticipation)
   ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
-      "Only the creator or a confirmed player can add people to this future match.",
+      "Only the creator or a confirmed player can add people before the match ends.",
     );
   }
   await Promise.all(
@@ -618,7 +653,11 @@ export async function cancelPickup(input: {
       ]),
     ),
   });
-  if (pickup.status !== "active" || otherParticipant) {
+  if (
+    pickup.status !== "active" ||
+    pickup.startsAt <= input.now ||
+    otherParticipant
+  ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
       "A host can cancel only before another player has joined.",
@@ -687,7 +726,11 @@ export async function leavePickup(input: {
       ]),
     ),
   });
-  if (!participation || pickup.status !== "active") {
+  if (
+    !participation ||
+    pickup.status !== "active" ||
+    pickup.startsAt <= input.now
+  ) {
     throw new CommerceError(
       "PICKUP_NOT_JOINABLE",
       "You do not have an active spot in this pickup.",

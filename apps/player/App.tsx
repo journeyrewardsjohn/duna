@@ -1883,12 +1883,25 @@ function HomeScreen({
       (coach) => coach.organizationId === homeOrganization?.organizationId,
     ) ?? [];
   const homeNow = Date.now();
-  const nextBooking = [...bookings]
-    .filter((booking) => new Date(booking.startsAt).getTime() >= homeNow)
+  const liveBooking = [...bookings]
+    .filter((booking) => {
+      const startsAt = new Date(booking.startsAt).getTime();
+      const endsAt = new Date(booking.endsAt).getTime();
+      return startsAt <= homeNow && endsAt > homeNow;
+    })
     .sort(
       (left, right) =>
-        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+        new Date(left.endsAt).getTime() - new Date(right.endsAt).getTime(),
     )[0];
+  const nextBooking =
+    liveBooking ??
+    [...bookings]
+      .filter((booking) => new Date(booking.startsAt).getTime() >= homeNow)
+      .sort(
+        (left, right) =>
+          new Date(left.startsAt).getTime() -
+          new Date(right.startsAt).getTime(),
+      )[0];
   const nextBookingEventIndex = nextBooking?.sessionId
     ? events.findIndex((event) => event.id === nextBooking.sessionId)
     : -1;
@@ -1896,6 +1909,9 @@ function HomeScreen({
     nextBookingEventIndex >= 0 ? events[nextBookingEventIndex] : undefined;
   const nextBookingAttendees = nextBookingEvent?.attendees?.slice(0, 3) ?? [];
   const nextBookingOpenSpots = nextBookingEvent?.spotsRemaining ?? 0;
+  const isLiveBooking = Boolean(
+    liveBooking && nextBooking?.id === liveBooking.id,
+  );
   const insight = dashboard?.feed[0];
   const performanceHistory = performance?.history ?? [];
   const verifiedWindow = [...performanceHistory].reverse().slice(-14);
@@ -2155,7 +2171,9 @@ function HomeScreen({
               </View>
               <View style={styles.homeNextActivityInfo}>
                 <Text style={styles.homeNextEyebrow}>
-                  NEXT UP · YOUR ACTIVITY
+                  {isLiveBooking
+                    ? "LIVE NOW · YOUR ACTIVITY"
+                    : "NEXT UP · YOUR ACTIVITY"}
                 </Text>
                 <Text style={styles.homeNextActivityWhen}>
                   {new Date(nextBooking.startsAt).toLocaleDateString("en-US", {
@@ -2173,16 +2191,50 @@ function HomeScreen({
                 <Text style={styles.homeNextMeta}>{nextBooking.venueName}</Text>
                 <View style={styles.homeNextStatusRow}>
                   <Pill
-                    tone={nextBookingOpenSpots > 0 ? "warning" : "positive"}
+                    tone={
+                      isLiveBooking
+                        ? "live"
+                        : nextBookingOpenSpots > 0
+                          ? "warning"
+                          : "positive"
+                    }
                   >
-                    {nextBookingOpenSpots > 0
-                      ? nextBookingOpenSpots + " available"
-                      : nextBooking.status.replace("-", " ")}
+                    {isLiveBooking
+                      ? "live now"
+                      : nextBookingOpenSpots > 0
+                        ? nextBookingOpenSpots + " available"
+                        : nextBooking.status.replace("-", " ")}
                   </Pill>
                   <Text style={styles.homeNextDetails}>Details →</Text>
                 </View>
               </View>
             </Pressable>
+            {isLiveBooking && (
+              <View style={styles.homeLiveActions}>
+                <Pressable
+                  accessibilityLabel="Keep live score"
+                  onPress={() => onAction("upload-score")}
+                  style={({ pressed }) => [
+                    styles.homeLiveAction,
+                    pressed && styles.homeQuickActionPressed,
+                  ]}
+                >
+                  <Text style={styles.homeLiveActionIcon}>⌁</Text>
+                  <Text style={styles.homeLiveActionLabel}>Keep score</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Record event video"
+                  onPress={() => onAction("record-video")}
+                  style={({ pressed }) => [
+                    styles.homeLiveAction,
+                    pressed && styles.homeQuickActionPressed,
+                  ]}
+                >
+                  <Text style={styles.homeLiveActionIcon}>●</Text>
+                  <Text style={styles.homeLiveActionLabel}>Record video</Text>
+                </Pressable>
+              </View>
+            )}
             {!["pickup", "court-rental"].includes(nextBooking.kind) && (
               <LiveActivitiesPrompt booking={nextBooking} client={client} />
             )}
@@ -16257,6 +16309,34 @@ function createStyles(palette: Palette) {
       color: colors.aqua,
       fontSize: 12,
       fontWeight: "800",
+    },
+    homeLiveActions: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+    },
+    homeLiveAction: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderColor: rgba(colors.accentRgb, 0.32),
+      borderRadius: 16,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "center",
+      minHeight: 50,
+      paddingHorizontal: 12,
+    },
+    homeLiveActionIcon: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    homeLiveActionLabel: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
     },
     homeNextDate: {
       alignItems: "center",

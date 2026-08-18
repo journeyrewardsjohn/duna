@@ -24455,7 +24455,8 @@ html {
 .pickup-actions > header,
 .pickup-actions--approved,
 .pickup-actions--waiting,
-.pickup-actions--signed-out {
+.pickup-actions--signed-out,
+.pickup-actions--finished {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -24568,6 +24569,54 @@ html {
 .pickup-actions--approved > a,
 .pickup-actions--signed-out > a {
   margin-left: auto;
+}
+
+.pickup-actions--finished {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.pickup-actions--finished > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pickup-actions__finished-links,
+.pickup-actions__live-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pickup-actions--live {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-aqua-haze) 76%, var(--color-canvas)),
+    var(--color-canvas)
+  );
+  border-color: color-mix(in srgb, var(--color-aqua) 36%, var(--color-line));
+}
+
+.pickup-actions__live-copy {
+  color: var(--color-bone-muted) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.45;
+}
+
+.pickup-actions__live-primary > a:first-child {
+  background: var(--color-aqua);
+  border-color: var(--color-aqua);
+}
+
+.pickup-actions__attendance {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.65rem;
+}
+
+.pickup-actions__attendance > button {
+  justify-self: start;
 }
 
 .pickup-actions__player-adder {

@@ -10,13 +10,16 @@ import {
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
+  Camera,
   Check,
   Clock3,
   LogOut,
   Pencil,
   ShieldCheck,
   Trash2,
+  Trophy,
   UserPlus,
+  UserX,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +29,7 @@ import {
   cancelPickupAction,
   invitePickupPlayersAction,
   leavePickupAction,
+  reportPickupAttendanceAction,
   requestPickupJoinAction,
   reviewPickupJoinRequestAction,
 } from "@/app/events/[slug]/actions";
@@ -216,6 +220,7 @@ interface PickupEventActionsProps {
   readonly slug: string;
   readonly approvalRequired: boolean;
   readonly paidMatch: boolean;
+  readonly phase: "upcoming" | "live" | "completed" | "cancelled";
   readonly management?: PickupManagementSummary;
 }
 
@@ -224,6 +229,7 @@ export function PickupEventActions({
   slug,
   approvalRequired,
   paidMatch,
+  phase,
   management,
 }: PickupEventActionsProps) {
   const router = useRouter();
@@ -242,6 +248,113 @@ export function PickupEventActions({
       if (result.ok) router.refresh();
     });
   };
+
+  if (phase === "cancelled") {
+    return (
+      <div className="pickup-actions pickup-actions--finished">
+        <Badge tone="warning">Cancelled</Badge>
+        <span>
+          <strong>This pickup was cancelled.</strong>
+          <small>
+            Its roster and original details remain here for reference.
+          </small>
+        </span>
+      </div>
+    );
+  }
+
+  if (phase === "completed") {
+    return (
+      <div className="pickup-actions pickup-actions--finished">
+        <Badge tone="positive">Event ended</Badge>
+        <span>
+          <strong>This pickup has ended.</strong>
+          <small>
+            Review the result or revisit any recordings from the match.
+          </small>
+        </span>
+        <div className="pickup-actions__finished-links">
+          <Link href="/app/matches">
+            <Trophy aria-hidden size={15} /> Results
+          </Link>
+          <Link href="/app/video">
+            <Camera aria-hidden size={15} /> Recordings
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "live" && management) {
+    const noShowCandidates = management.participants.filter(
+      (participant) =>
+        !participant.isHost && participant.status === "confirmed",
+    );
+    return (
+      <div className="pickup-actions pickup-actions--live">
+        <header>
+          <Badge tone="live">Live now</Badge>
+          <strong>Keep the match moving.</strong>
+        </header>
+        <p className="pickup-actions__live-copy">
+          Score the match or capture it with Duna. Hosts can replace a no-show
+          before the final whistle.
+        </p>
+        <div className="pickup-actions__live-primary">
+          <Link
+            href={`/app/score?event=${encodeURIComponent(pickupSessionId)}`}
+          >
+            <Trophy aria-hidden size={16} /> Keep score
+          </Link>
+          <Link
+            href={`/app/video?event=${encodeURIComponent(pickupSessionId)}`}
+          >
+            <Camera aria-hidden size={16} /> Record video
+          </Link>
+        </div>
+        {management.isHost && (
+          <>
+            <PickupPlayerAdder
+              management={management}
+              paidMatch={paidMatch}
+              pickupSessionId={pickupSessionId}
+              slug={slug}
+            />
+            {noShowCandidates.length > 0 && (
+              <section className="pickup-actions__attendance">
+                <small>Player missing?</small>
+                {noShowCandidates.map((participant) => (
+                  <button
+                    className="secondary"
+                    disabled={pending}
+                    key={participant.id}
+                    onClick={() =>
+                      run(
+                        () =>
+                          reportPickupAttendanceAction({
+                            pickupSessionId,
+                            participantId: participant.id,
+                            status: "no-show",
+                            slug,
+                            idempotencyKey: crypto.randomUUID(),
+                          }),
+                        `${participant.displayName} marked as not present.`,
+                      )
+                    }
+                    type="button"
+                  >
+                    <UserX aria-hidden size={15} /> Report{" "}
+                    {participant.displayName} absent
+                  </button>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+        {message && <p role="status">{message}</p>}
+      </div>
+    );
+  }
 
   if (!management) {
     return approvalRequired ? (

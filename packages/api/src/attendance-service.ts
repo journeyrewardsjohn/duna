@@ -302,6 +302,13 @@ export async function recordActivityAttendance(
         .update(pickupParticipants)
         .set({ status: "checked-in", updatedAt: input.now })
         .where(eq(pickupParticipants.id, row.participantId));
+    } else if (input.activityType === "pickup" && input.status === "no-show") {
+      // Keep the attendance record as the durable no-show history, while
+      // releasing this live pickup spot so the host can add a replacement.
+      await transaction
+        .update(pickupParticipants)
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(eq(pickupParticipants.id, row.participantId));
     } else if (input.activityType === "pickup") {
       await transaction
         .update(pickupParticipants)

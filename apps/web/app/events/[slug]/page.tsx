@@ -225,6 +225,21 @@ export default async function EventPage({
   const startingPlayerPrice = event.divisions
     ?.map((division) => division.playerPrice)
     .sort((left, right) => left.amountMinor - right.amountMinor)[0];
+  const lifecyclePhase = event.live
+    ? "live"
+    : event.lifecycleStatus === "completed"
+      ? "completed"
+      : event.lifecycleStatus === "cancelled"
+        ? "cancelled"
+        : "upcoming";
+  const phaseLabel =
+    lifecyclePhase === "live"
+      ? "Live now"
+      : lifecyclePhase === "completed"
+        ? "Event ended"
+        : lifecyclePhase === "cancelled"
+          ? "Cancelled"
+          : words(event.kind);
   const sectionNav: EventSectionNavItem[] = [
     { id: "event-overview", label: "Overview" },
     ...(eventPredictionData?.markets.length
@@ -259,8 +274,18 @@ export default async function EventPage({
       <section className="event-public__hero" id="event-overview">
         <div className="event-public__hero-copy">
           <div className="event-public__badges">
-            <Badge tone={event.live ? "live" : "neutral"}>
-              {event.live ? "Live now" : words(event.kind)}
+            <Badge
+              tone={
+                lifecyclePhase === "live"
+                  ? "live"
+                  : lifecyclePhase === "completed"
+                    ? "positive"
+                    : lifecyclePhase === "cancelled"
+                      ? "warning"
+                      : "neutral"
+              }
+            >
+              {phaseLabel}
             </Badge>
             {event.tags.slice(0, 2).map((tag) => (
               <Badge key={tag}>{tag}</Badge>
@@ -920,33 +945,58 @@ export default async function EventPage({
               </span>
             )}
           </div>
-          <h2>Ready to play?</h2>
+          <h2>
+            {lifecyclePhase === "live"
+              ? "Live on the sand."
+              : lifecyclePhase === "completed"
+                ? "Event complete."
+                : lifecyclePhase === "cancelled"
+                  ? "Event cancelled."
+                  : "Ready to play?"}
+          </h2>
           <p>
-            Choose your division, complete your team, review the waiver, and pay
-            securely.
+            {lifecyclePhase === "live"
+              ? "Live tools are ready for scoring, video, and last-minute roster changes."
+              : lifecyclePhase === "completed"
+                ? "The final roster and event details are preserved here. Results and recordings are ready in Duna Player."
+                : lifecyclePhase === "cancelled"
+                  ? "This event is no longer accepting registrations."
+                  : "Choose your division, complete your team, review the waiver, and pay securely."}
           </p>
-          <ul>
-            <li>
-              <Check aria-hidden size={15} /> Eligibility checked before payment
-            </li>
-            <li>
-              <Check aria-hidden size={15} /> Invite teammates from Duna or by
-              link
-            </li>
-            <li>
-              <Check aria-hidden size={15} /> Registration confirms when the
-              team is complete
-            </li>
-          </ul>
+          {lifecyclePhase === "upcoming" && (
+            <ul>
+              <li>
+                <Check aria-hidden size={15} /> Eligibility checked before
+                payment
+              </li>
+              <li>
+                <Check aria-hidden size={15} /> Invite teammates from Duna or by
+                link
+              </li>
+              <li>
+                <Check aria-hidden size={15} /> Registration confirms when the
+                team is complete
+              </li>
+            </ul>
+          )}
           {event.kind === "pickup" ? (
             <PickupEventActions
               approvalRequired={event.approvalRequired ?? false}
               management={pickupManagement}
               paidMatch={event.price.amountMinor > 0}
+              phase={lifecyclePhase}
               pickupSessionId={event.id}
               slug={event.slug}
             />
-          ) : (
+          ) : lifecyclePhase === "completed" ? (
+            <Link href="/app/matches">
+              <Trophy aria-hidden size={17} /> Review results
+            </Link>
+          ) : lifecyclePhase === "live" ? (
+            <Link href="/app/score">
+              <Trophy aria-hidden size={17} /> Open live score
+            </Link>
+          ) : lifecyclePhase === "cancelled" ? null : (
             <Link
               href={
                 event.divisions?.length === 1
