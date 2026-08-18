@@ -81,6 +81,7 @@ import type {
   OperatorMutationResult,
   OperatorWorkspace,
   PublicCoach,
+  PublicCatalogRecommendations,
   PublicOrganizationStorefront,
 } from "./contracts";
 import type { ApiActor } from "./context";
@@ -2147,6 +2148,338 @@ export async function loadPublicOrganizationStorefront(
   };
 }
 
+function recommendationTokens(value: string): ReadonlySet<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, " ")
+      .split(" ")
+      .filter((token) => token.length > 2),
+  );
+}
+
+function sharedRecommendationTokens(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): number {
+  let matches = 0;
+  for (const token of left) if (right.has(token)) matches += 1;
+  return matches;
+}
+
+function distanceMiles(
+  from: { readonly latitude: number; readonly longitude: number },
+  to: { readonly latitude: number; readonly longitude: number },
+): number {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDelta = radians(to.longitude - from.longitude);
+  const fromLatitude = radians(from.latitude);
+  const toLatitude = radians(to.latitude);
+  const value =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(fromLatitude) *
+      Math.cos(toLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+export async function loadPublicCatalogRecommendations(input: {
+  readonly organizationSlug: string;
+  readonly catalogItemId?: string;
+  readonly title: string;
+  readonly type: CatalogItemType;
+  readonly subtype?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+}): Promise<PublicCatalogRecommendations> {
+  requireDatabase();
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.slug, input.organizationSlug),
+  });
+  if (!organization) return { sameOrganization: [], nearby: [] };
+
+  const rows = await database
+    .select({
+      catalogItemId: catalogItems.id,
+      organizationId: organizations.id,
+      organizationSlug: organizations.slug,
+      organizationName: organizations.name,
+      type: catalogItems.type,
+      subtype: catalogItems.subtype,
+      slug: catalogItems.slug,
+      title: catalogItems.title,
+      shortSummary: catalogItems.shortSummary,
+      description: catalogItems.description,
+      configuration: catalogItems.configuration,
+      visibility: catalogItems.visibility,
+      currency: organizations.currency,
+      locality: organizations.locality,
+      administrativeArea: organizations.administrativeArea,
+      latitude: organizations.latitude,
+      longitude: organizations.longitude,
+    })
+    .from(catalogItems)
+    .innerJoin(organizations, eq(organizations.id, catalogItems.organizationId))
+    .where(
+      and(
+        eq(catalogItems.status, "active"),
+        inArray(catalogItems.visibility, ["public", "members"]),
+        isNull(organizations.systemKey),
+        or(
+          eq(organizations.id, organization.id),
+          eq(catalogItems.type, input.type),
+        ),
+      ),
+    );
+  const candidates = rows.filter(
+    (row) =>
+      row.catalogItemId !== input.catalogItemId &&
+      !(
+        row.organizationId === organization.id &&
+        row.title.trim().toLowerCase() === input.title.trim().toLowerCase()
+      ),
+  );
+  if (candidates.length === 0) {
+    return { sameOrganization: [], nearby: [] };
+  }
+
+  const itemIds = candidates.map((row) => row.catalogItemId);
+  const organizationIds = [
+    ...new Set(candidates.map((row) => row.organizationId)),
+  ];
+  const [mediaRows, priceRows, venueRows, currentItem] = await Promise.all([
+    database
+      .select()
+      .from(catalogMedia)
+      .where(inArray(catalogMedia.catalogItemId, itemIds))
+      .orderBy(asc(catalogMedia.sortOrder)),
+    database
+      .select()
+      .from(catalogPrices)
+      .where(
+        and(
+          inArray(catalogPrices.catalogItemId, itemIds),
+          eq(catalogPrices.active, true),
+        ),
+      ),
+    database
+      .select()
+      .from(venues)
+      .where(
+        and(
+          inArray(venues.organizationId, organizationIds),
+          eq(venues.status, "active"),
+        ),
+      )
+      .orderBy(asc(venues.name)),
+    input.catalogItemId
+      ? database.query.catalogItems.findFirst({
+          where: and(
+            eq(catalogItems.id, input.catalogItemId),
+            eq(catalogItems.organizationId, organization.id),
+          ),
+        })
+      : Promise.resolve(undefined),
+  ]);
+
+  const mediaByItem = new Map<string, (typeof mediaRows)[number]>();
+  for (const media of mediaRows) {
+    if (media.kind !== "image" || mediaByItem.has(media.catalogItemId))
+      continue;
+    mediaByItem.set(media.catalogItemId, media);
+  }
+  const priceByItem = new Map<string, number>();
+  for (const price of priceRows) {
+    if (price.amountMinor === null) continue;
+    const current = priceByItem.get(price.catalogItemId);
+    if (current === undefined || price.amountMinor < current) {
+      priceByItem.set(price.catalogItemId, price.amountMinor);
+    }
+  }
+  const venueByOrganization = new Map<string, (typeof venueRows)[number]>();
+  for (const venue of venueRows) {
+    if (!venueByOrganization.has(venue.organizationId)) {
+      venueByOrganization.set(venue.organizationId, venue);
+    }
+  }
+
+  const explicitIds = new Set(
+    Array.isArray(currentItem?.configuration.recommendedCatalogItemIds)
+      ? currentItem.configuration.recommendedCatalogItemIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const currentText = recommendationTokens(
+    [
+      input.title,
+      input.type,
+      input.subtype,
+      typeof currentItem?.configuration.bestFor === "string"
+        ? currentItem.configuration.bestFor
+        : undefined,
+      ...(Array.isArray(currentItem?.configuration.highlights)
+        ? currentItem.configuration.highlights
+        : []),
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join(" "),
+  );
+  const originVenue = venueRows.find(
+    (venue) => venue.organizationId === organization.id,
+  );
+  const origin =
+    input.latitude !== undefined && input.longitude !== undefined
+      ? { latitude: input.latitude, longitude: input.longitude }
+      : organization.latitude !== null && organization.longitude !== null
+        ? {
+            latitude: organization.latitude,
+            longitude: organization.longitude,
+          }
+        : originVenue &&
+            originVenue.latitude !== null &&
+            originVenue.longitude !== null
+          ? {
+              latitude: originVenue.latitude,
+              longitude: originVenue.longitude,
+            }
+          : undefined;
+  const originLocality =
+    organization.locality ?? originVenue?.locality ?? undefined;
+  const originAdministrativeArea =
+    organization.administrativeArea ??
+    originVenue?.administrativeArea ??
+    undefined;
+
+  const ranked = candidates.map((candidate) => {
+    const candidateText = recommendationTokens(
+      [
+        candidate.title,
+        candidate.shortSummary,
+        candidate.description,
+        candidate.type,
+        candidate.subtype,
+        typeof candidate.configuration.bestFor === "string"
+          ? candidate.configuration.bestFor
+          : undefined,
+      ]
+        .filter((value): value is string => typeof value === "string")
+        .join(" "),
+    );
+    const venue = venueByOrganization.get(candidate.organizationId);
+    const candidateLocation =
+      candidate.latitude !== null && candidate.longitude !== null
+        ? {
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+          }
+        : venue && venue.latitude !== null && venue.longitude !== null
+          ? { latitude: venue.latitude, longitude: venue.longitude }
+          : undefined;
+    const miles =
+      origin && candidateLocation
+        ? distanceMiles(origin, candidateLocation)
+        : undefined;
+    const candidateLocality = candidate.locality ?? venue?.locality;
+    const candidateAdministrativeArea =
+      candidate.administrativeArea ?? venue?.administrativeArea;
+    const sameRegion = Boolean(
+      (originLocality &&
+        candidateLocality &&
+        originLocality.toLowerCase() === candidateLocality.toLowerCase()) ||
+      (originAdministrativeArea &&
+        candidateAdministrativeArea &&
+        originAdministrativeArea.toLowerCase() ===
+          candidateAdministrativeArea.toLowerCase()),
+    );
+    const explicit = explicitIds.has(candidate.catalogItemId);
+    const sameSubtype = Boolean(
+      input.subtype && candidate.subtype === input.subtype,
+    );
+    const sameType = candidate.type === input.type;
+    const shared = sharedRecommendationTokens(currentText, candidateText);
+    const score =
+      (explicit ? 1_000 : 0) +
+      (sameSubtype ? 80 : 0) +
+      (sameType ? 35 : 0) +
+      (candidate.organizationId === organization.id && !sameType ? 24 : 0) +
+      shared * 6 -
+      (miles ?? 0) / 25;
+    return {
+      candidate,
+      explicit,
+      sameSubtype,
+      sameType,
+      sameRegion,
+      miles,
+      score,
+    };
+  });
+
+  const toCard = (
+    match: (typeof ranked)[number],
+  ): PublicCatalogRecommendations["sameOrganization"][number] => {
+    const { candidate } = match;
+    const venue = venueByOrganization.get(candidate.organizationId);
+    return {
+      catalogItemId: candidate.catalogItemId,
+      organizationId: candidate.organizationId,
+      organizationSlug: candidate.organizationSlug,
+      organizationName: candidate.organizationName,
+      type: candidate.type,
+      subtype: candidate.subtype,
+      slug: candidate.slug,
+      title: candidate.title,
+      shortSummary: candidate.shortSummary ?? undefined,
+      mediaUrl: mediaByItem.get(candidate.catalogItemId)?.url,
+      priceMinor: priceByItem.get(candidate.catalogItemId),
+      currency: playerMembershipCurrency(candidate.currency),
+      locality: candidate.locality ?? venue?.locality ?? undefined,
+      administrativeArea:
+        candidate.administrativeArea ?? venue?.administrativeArea ?? undefined,
+      distanceMiles:
+        match.miles === undefined ? undefined : Math.round(match.miles),
+      reason: match.explicit
+        ? "Selected by the organization"
+        : match.sameSubtype
+          ? "A close match for this experience"
+          : match.sameType
+            ? "Similar offer, different path"
+            : "Complements this part of the journey",
+      href:
+        candidate.type === "event"
+          ? `/events/${candidate.slug}`
+          : `/clubs/${candidate.organizationSlug}/products/${candidate.slug}`,
+    };
+  };
+
+  const sameOrganization = ranked
+    .filter((match) => match.candidate.organizationId === organization.id)
+    .toSorted((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map(toCard);
+  const nearby = ranked
+    .filter(
+      (match) =>
+        match.candidate.organizationId !== organization.id &&
+        match.candidate.visibility === "public" &&
+        match.sameType &&
+        (match.miles !== undefined ? match.miles <= 250 : match.sameRegion),
+    )
+    .toSorted((left, right) => {
+      if (left.miles !== undefined && right.miles !== undefined) {
+        const distanceDifference = left.miles - right.miles;
+        if (Math.abs(distanceDifference) > 10) return distanceDifference;
+      }
+      return right.score - left.score;
+    })
+    .slice(0, 4)
+    .map(toCard);
+  return { sameOrganization, nearby };
+}
+
 function catalogItemSupportsCoach(
   item: PublicOrganizationStorefront["catalog"][number],
   personId: string,
@@ -3675,13 +4008,19 @@ export async function replaceCatalogItem(
       ),
     ...(nextVariants.some((variant) => !variant.existing)
       ? [
-          database
-            .insert(catalogVariants)
-            .values(
-              nextVariants
-                .filter((variant) => !variant.existing)
-                .map(({ existing: _existing, ...variant }) => variant),
-            ),
+          database.insert(catalogVariants).values(
+            nextVariants
+              .filter((variant) => !variant.existing)
+              .map((variant) => ({
+                id: variant.id,
+                organizationId: variant.organizationId,
+                catalogItemId: variant.catalogItemId,
+                sku: variant.sku,
+                title: variant.title,
+                optionCoordinates: variant.optionCoordinates,
+                status: variant.status,
+              })),
+          ),
         ]
       : []),
     optionRows.length > 0

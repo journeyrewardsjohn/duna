@@ -91,6 +91,7 @@ import {
   operatorSessionDetailSchema,
   operatorWorkspaceSchema,
   publicVenueLayoutSchema,
+  publicCatalogRecommendationsSchema,
   organizationCommissionPolicySchema,
   organizationWalletSummarySchema,
   organizationSummarySchema,
@@ -263,6 +264,7 @@ import {
   loadPlayerOrganizationWallets,
   loadPublicCoach,
   loadPublicCoaches,
+  loadPublicCatalogRecommendations,
   loadPublicOrganizationStorefront,
   proposeCalendarChange,
   loadCatalogItemVersions,
@@ -2192,6 +2194,20 @@ const publicRouter = router({
       if (!storefront) throw new TRPCError({ code: "NOT_FOUND" });
       return storefront;
     }),
+  catalogRecommendations: publicProcedure
+    .input(
+      z.object({
+        organizationSlug: z.string().trim().min(1).max(64),
+        catalogItemId: z.string().uuid().optional(),
+        title: z.string().trim().min(1).max(180),
+        type: z.enum(["event", "service", "good", "plan"]),
+        subtype: z.string().trim().min(1).max(64).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+      }),
+    )
+    .output(publicCatalogRecommendationsSchema)
+    .query(({ input }) => loadPublicCatalogRecommendations(input)),
   coaches: publicProcedure
     .input(
       z

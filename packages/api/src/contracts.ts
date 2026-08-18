@@ -3745,6 +3745,34 @@ export const publicCatalogItemSchema = operatorCatalogItemSchema
     variants: z.array(publicCatalogVariantSchema).readonly(),
   });
 
+export const publicCatalogRecommendationCardSchema = z.object({
+  catalogItemId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  organizationSlug: z.string(),
+  organizationName: z.string(),
+  type: z.enum(["event", "service", "good", "plan"]),
+  subtype: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  shortSummary: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  priceMinor: z.number().int().nonnegative().optional(),
+  currency: currencySchema,
+  locality: z.string().optional(),
+  administrativeArea: z.string().optional(),
+  distanceMiles: z.number().nonnegative().optional(),
+  reason: z.string(),
+  href: z.string().startsWith("/"),
+});
+
+export const publicCatalogRecommendationsSchema = z.object({
+  sameOrganization: z
+    .array(publicCatalogRecommendationCardSchema)
+    .max(4)
+    .readonly(),
+  nearby: z.array(publicCatalogRecommendationCardSchema).max(4).readonly(),
+});
+
 export const operatorInventoryItemSchema = z.object({
   id: z.string().uuid(),
   catalogItemId: z.string().uuid(),
@@ -5131,6 +5159,9 @@ export type OperatorDivisionDetail = z.infer<
 export type OperatorSessionNote = z.infer<typeof operatorSessionNoteSchema>;
 export type EventDraftEditor = z.infer<typeof eventDraftEditorSchema>;
 export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
+export type PublicCatalogRecommendations = z.infer<
+  typeof publicCatalogRecommendationsSchema
+>;
 export type PublicOrganizationStorefront = z.infer<
   typeof publicOrganizationStorefrontSchema
 >;

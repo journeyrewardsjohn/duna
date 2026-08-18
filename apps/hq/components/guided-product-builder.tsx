@@ -78,6 +78,7 @@ type CustomerProof = {
   readonly quote: string;
   readonly author: string;
   readonly context: string;
+  readonly rating: number;
 };
 
 type StoryFaq = {
@@ -527,6 +528,32 @@ export function GuidedProductBuilder({
           .join("\n")
       : "",
   );
+  const [outcomeHeadline, setOutcomeHeadline] = useState(
+    typeof initialConfiguration.outcomeHeadline === "string"
+      ? initialConfiguration.outcomeHeadline
+      : "",
+  );
+  const [outcomeBody, setOutcomeBody] = useState(
+    typeof initialConfiguration.outcomeBody === "string"
+      ? initialConfiguration.outcomeBody
+      : "",
+  );
+  const [howItWorks, setHowItWorks] = useState(
+    Array.isArray(initialConfiguration.howItWorks)
+      ? initialConfiguration.howItWorks
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
+      : "",
+  );
+  const [recommendedCatalogItemIds, setRecommendedCatalogItemIds] = useState<
+    readonly string[]
+  >(
+    Array.isArray(initialConfiguration.recommendedCatalogItemIds)
+      ? initialConfiguration.recommendedCatalogItemIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
   const [testimonials, setTestimonials] = useState<readonly CustomerProof[]>(
     () =>
       Array.isArray(initialConfiguration.testimonials)
@@ -544,6 +571,12 @@ export function GuidedProductBuilder({
                       typeof value.author === "string" ? value.author : "",
                     context:
                       typeof value.context === "string" ? value.context : "",
+                    rating:
+                      typeof value.rating === "number" &&
+                      value.rating >= 1 &&
+                      value.rating <= 5
+                        ? value.rating
+                        : 5,
                   },
                 ]
               : [];
@@ -768,6 +801,10 @@ export function GuidedProductBuilder({
       item.status === "active",
   );
   const mediaChoices = useMemo(() => productMediaForKind(subtype), [subtype]);
+  const recommendationCandidates = workspace.catalog.filter(
+    (candidate) =>
+      candidate.status !== "archived" && candidate.id !== initialItem?.id,
+  );
   useEffect(() => {
     if (isMembership || !membershipConfigured) {
       setMembershipRequired(false);
@@ -784,11 +821,16 @@ export function GuidedProductBuilder({
     .split("\n")
     .map((highlight) => highlight.trim())
     .filter(Boolean);
+  const parsedHowItWorks = howItWorks
+    .split("\n")
+    .map((step) => step.trim())
+    .filter(Boolean);
   const publishedTestimonials = testimonials
     .map((testimonial) => ({
       quote: testimonial.quote.trim(),
       author: testimonial.author.trim(),
       context: testimonial.context.trim(),
+      rating: testimonial.rating,
     }))
     .filter((testimonial) => testimonial.quote.length > 0);
   const publishedFaqs = faqs
@@ -966,6 +1008,7 @@ export function GuidedProductBuilder({
             confirmed,
           ];
   const canContinue = stepReadiness[step] ?? false;
+  const editorSaveReady = stepReadiness.slice(0, -1).every((ready) => ready);
   const activeProductType = productTypes.find(
     (productType) => productType.value === type,
   )!;
@@ -1060,6 +1103,10 @@ export function GuidedProductBuilder({
     flowVersion: 3,
     bestFor: bestFor.trim() || undefined,
     highlights: parsedHighlights,
+    outcomeHeadline: outcomeHeadline.trim() || undefined,
+    outcomeBody: outcomeBody.trim() || undefined,
+    howItWorks: parsedHowItWorks,
+    recommendedCatalogItemIds,
     testimonials: publishedTestimonials,
     faqs: publishedFaqs,
     validityDays: validityDays > 0 ? validityDays : undefined,
@@ -1327,7 +1374,7 @@ export function GuidedProductBuilder({
         <input
           name="confirmed"
           type="hidden"
-          value={confirmed ? "true" : "false"}
+          value={editing || confirmed ? "true" : "false"}
         />
 
         <aside className="guided-product-guide">
@@ -1363,7 +1410,7 @@ export function GuidedProductBuilder({
                       ? "complete"
                       : undefined
                 }
-                disabled={index > step}
+                disabled={!editing && index > step}
                 key={name}
                 onClick={() => setStep(index)}
                 type="button"
@@ -1543,6 +1590,38 @@ export function GuidedProductBuilder({
                     value={highlights}
                   />
                 </label>
+                <label className="operator-field--wide">
+                  <span>Outcome headline · optional</span>
+                  <input
+                    maxLength={180}
+                    onChange={(event) => setOutcomeHeadline(event.target.value)}
+                    placeholder="Know where you are. See exactly what comes next."
+                    value={outcomeHeadline}
+                  />
+                  <small>
+                    Powers the large editorial story below the purchase area.
+                  </small>
+                </label>
+                <label className="operator-field--wide">
+                  <span>Outcome story · optional</span>
+                  <textarea
+                    maxLength={900}
+                    onChange={(event) => setOutcomeBody(event.target.value)}
+                    placeholder="Explain the transformation or value in two or three customer-focused sentences."
+                    rows={4}
+                    value={outcomeBody}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>How it works · one step per line</span>
+                  <textarea
+                    maxLength={1_200}
+                    onChange={(event) => setHowItWorks(event.target.value)}
+                    placeholder="Purchase and choose your preferred time\nMeet your coach and complete the experience\nFind your notes and next steps in Duna"
+                    rows={4}
+                    value={howItWorks}
+                  />
+                </label>
                 <label>
                   <span>Valid for · days · optional</span>
                   <input
@@ -1566,6 +1645,62 @@ export function GuidedProductBuilder({
                 </label>
               </div>
 
+              <div className="guided-product-recommendations">
+                <header>
+                  <div>
+                    <strong>Continue the customer journey</strong>
+                    <small>
+                      Duna automatically ranks related active offers. Select up
+                      to four offers to guarantee they appear first.
+                    </small>
+                  </div>
+                  <Badge>{recommendedCatalogItemIds.length} selected</Badge>
+                </header>
+                {recommendationCandidates.length > 0 ? (
+                  <div>
+                    {recommendationCandidates.map((candidate) => {
+                      const checked = recommendedCatalogItemIds.includes(
+                        candidate.id,
+                      );
+                      return (
+                        <label
+                          className={checked ? "active" : undefined}
+                          key={candidate.id}
+                        >
+                          <input
+                            checked={checked}
+                            disabled={
+                              !checked && recommendedCatalogItemIds.length >= 4
+                            }
+                            onChange={(event) =>
+                              setRecommendedCatalogItemIds((current) =>
+                                event.target.checked
+                                  ? [...current, candidate.id]
+                                  : current.filter((id) => id !== candidate.id),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            <strong>{candidate.title}</strong>
+                            <small>
+                              {candidate.type} ·{" "}
+                              {candidate.subtype.replaceAll("-", " ")} ·{" "}
+                              {candidate.status}
+                            </small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p>
+                    Publish another service, plan, good, or event to connect it
+                    to this customer journey.
+                  </p>
+                )}
+              </div>
+
               <div className="guided-product-proof">
                 <header>
                   <div>
@@ -1585,6 +1720,7 @@ export function GuidedProductBuilder({
                           quote: "",
                           author: "",
                           context: "",
+                          rating: 5,
                         },
                       ])
                     }
@@ -1660,6 +1796,31 @@ export function GuidedProductBuilder({
                             placeholder="Parent of a 15U player"
                             value={testimonial.context}
                           />
+                        </label>
+                        <label>
+                          <span>Rating</span>
+                          <select
+                            aria-label={`Rating for customer quote ${index + 1}`}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        rating: Number(event.target.value),
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            value={testimonial.rating}
+                          >
+                            {[5, 4, 3, 2, 1].map((rating) => (
+                              <option key={rating} value={rating}>
+                                {rating} star{rating === 1 ? "" : "s"}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <button
                           aria-label={`Remove customer quote ${index + 1}`}
@@ -3166,6 +3327,15 @@ export function GuidedProductBuilder({
                 <small>Customer price</small>
                 <strong>{pricePreview}</strong>
               </span>
+              {editing && (
+                <button
+                  className="guided-offer-preview__edit-link"
+                  onClick={() => setStep(3)}
+                  type="button"
+                >
+                  Edit price
+                </button>
+              )}
             </div>
             <dl className="guided-offer-preview__details">
               {previewHighlights.map((highlight) => (
@@ -3242,9 +3412,18 @@ export function GuidedProductBuilder({
             </p>
           </div>
           <div className="guided-product-footer__actions">
-            {step < currentSteps.length - 1 ? (
+            {editing && (
               <button
                 className="hq-button hq-button--primary"
+                disabled={!editorSaveReady || pending}
+                type="submit"
+              >
+                {pending ? "Saving…" : "Save new private version"}
+              </button>
+            )}
+            {step < currentSteps.length - 1 ? (
+              <button
+                className="hq-button hq-button--secondary"
                 disabled={!canContinue || pending}
                 onClick={() =>
                   setStep((current) =>
@@ -3256,21 +3435,15 @@ export function GuidedProductBuilder({
                 Continue to {currentSteps[step + 1]}
                 <ArrowRight aria-hidden size={16} />
               </button>
-            ) : (
+            ) : !editing ? (
               <button
                 className="hq-button hq-button--primary"
                 disabled={!canContinue || pending}
                 type="submit"
               >
-                {pending
-                  ? editing
-                    ? "Saving…"
-                    : "Creating…"
-                  : editing
-                    ? "Save new version"
-                    : "Create private draft"}
+                {pending ? "Creating…" : "Create private draft"}
               </button>
-            )}
+            ) : null}
           </div>
         </footer>
       </form>

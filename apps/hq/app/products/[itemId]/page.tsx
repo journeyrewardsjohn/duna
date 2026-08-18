@@ -3,6 +3,7 @@ import { GuidedProductBuilder } from "@/components/guided-product-builder";
 import { OperatorShell } from "@/components/operator-shell";
 import { ProductVersionHistory } from "@/components/product-version-history";
 import { ProductLifecycleControls } from "@/components/product-lifecycle-controls";
+import { ProductInventoryReceiver } from "@/components/product-inventory-receiver";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Edit product" };
@@ -49,6 +50,9 @@ export default async function ProductDetailPage({
           </p>
         ) : (
           <GuidedProductBuilder initialItem={item} workspace={workspace} />
+        )}
+        {item.type === "good" && (
+          <ProductInventoryReceiver item={item} workspace={workspace} />
         )}
         <ProductLifecycleControls item={item} />
         <ProductVersionHistory catalogItemId={item.id} versions={versions} />
