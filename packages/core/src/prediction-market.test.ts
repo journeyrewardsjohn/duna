@@ -4,6 +4,7 @@ import {
   predictionCreditsToMicros,
   predictionDisplayPriceBps,
   predictionExecutionPrices,
+  predictionMarketLiquidityQuote,
   predictionOrderCostMicros,
   predictionOrderSharesMicros,
   predictionOrdersCross,
@@ -81,6 +82,34 @@ describe("prediction market math", () => {
         lastTradeBps: 4_900,
       }),
     ).toBe(4_900);
+  });
+
+  it("moves a free-play liquidity quote toward the selected side without breaking the complement", () => {
+    const yes = predictionMarketLiquidityQuote({
+      currentYesPriceBps: 5_000,
+      side: "yes",
+      credits: 20,
+    });
+    const no = predictionMarketLiquidityQuote({
+      currentYesPriceBps: 5_000,
+      side: "no",
+      credits: 20,
+    });
+
+    expect(yes.nextYesPriceBps).toBeGreaterThan(5_000);
+    expect(no.nextYesPriceBps).toBeLessThan(5_000);
+    expect(yes.executionSidePriceBps).toBeGreaterThan(5_000);
+    expect(no.executionSidePriceBps).toBeGreaterThan(5_000);
+  });
+
+  it("bounds even a very large liquidity position inside tradable probability limits", () => {
+    const quote = predictionMarketLiquidityQuote({
+      currentYesPriceBps: 8_300,
+      side: "yes",
+      credits: 100_000,
+    });
+    expect(quote.nextYesPriceBps).toBe(9_900);
+    expect(quote.executionSidePriceBps).toBeLessThanOrEqual(9_900);
   });
 
   it("pays one prediction credit per winning share and zero to the loser", () => {

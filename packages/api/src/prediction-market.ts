@@ -4,6 +4,7 @@ import {
   predictionDisplayPriceBps,
   predictionExecutionPrices,
   predictionMicrosToCredits,
+  predictionMarketLiquidityQuote,
   predictionOrderCostMicros,
   predictionOrderSharesMicros,
   predictionOrdersCross,
@@ -1379,6 +1380,50 @@ export async function placePredictionOrder(input: {
       }
     }
 
+    // Community orders always receive priority. Any unfilled amount then uses
+    // bounded Duna free-play liquidity, so a submitted prediction immediately
+    // becomes a position and moves the market instead of silently resting in
+    // an empty book.
+    if (remaining > 0 && stakeMicros > spent) {
+      const liquidityBudgetMicros = Math.max(0, stakeMicros - spent);
+      const quote = predictionMarketLiquidityQuote({
+        currentYesPriceBps: latestYesPriceBps,
+        side: input.side,
+        credits: predictionMicrosToCredits(liquidityBudgetMicros),
+      });
+      if (input.limitPriceBps >= quote.executionSidePriceBps) {
+        const liquidityShares = predictionOrderSharesMicros({
+          stakeMicros: liquidityBudgetMicros,
+          limitPriceBps: quote.executionSidePriceBps,
+        });
+        const liquidityCostMicros = predictionSideCostMicros({
+          sharesMicros: liquidityShares,
+          side: input.side,
+          sidePriceBps: quote.executionSidePriceBps,
+        });
+        await addPosition({
+          accountId: account.id,
+          personId: input.personId,
+          side: input.side,
+          sharesMicros: liquidityShares,
+          costMicros: liquidityCostMicros,
+        });
+        remaining = 0;
+        filledShares += liquidityShares;
+        spent += liquidityCostMicros;
+        latestYesPriceBps = quote.nextYesPriceBps;
+        addedVolumeMicros += liquidityCostMicros;
+        await transaction.insert(predictionPriceSnapshots).values({
+          marketId: market.id,
+          yesPriceBps: quote.nextYesPriceBps,
+          source: "trade",
+          volumeMicros: lockedMarket.volumeMicros + addedVolumeMicros,
+          recordedAt: now,
+          createdAt: now,
+        });
+      }
+    }
+
     const remainingReserve = predictionSideCostMicros({
       sharesMicros: remaining,
       side: input.side,
@@ -1416,6 +1461,7 @@ export async function placePredictionOrder(input: {
     await transaction
       .update(predictionOrders)
       .set({
+        sharesMicros: filledShares + remaining,
         remainingSharesMicros: remaining,
         reservedMicros: remainingReserve,
         spentMicros: spent,
