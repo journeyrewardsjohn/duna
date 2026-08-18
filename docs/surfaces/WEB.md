@@ -127,8 +127,12 @@ pnpm dev:web
 The app runs on `http://localhost:3000`. For a connected environment, place the
 required names from [`../ENVIRONMENT_VARIABLES.md`](../ENVIRONMENT_VARIABLES.md)
 in ignored `apps/web/.env.local`. Keep `NEXT_PUBLIC_*` values non-secret. The
-API host needs `DUNA_DATA_SOURCE=database` and `DATABASE_URL` for connected
-truth; otherwise the repository can intentionally select demo data.
+API host needs `DUNA_DATA_SOURCE=database` and primary `DATABASE_URL` for
+connected truth; otherwise the repository can intentionally select demo data.
+Production also configures `NEON_READ_ONLY_REPLICA`; eligible public discovery,
+ranking, reporting, and other latency-tolerant reads use it through
+`getReadOnlyDatabase()`. Authentication, checkout, capacity, registration,
+live state, messaging cursors, and read-after-write paths stay on the primary.
 
 ## Validation and release
 

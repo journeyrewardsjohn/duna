@@ -25,19 +25,19 @@ The variable catalog and deployment-scope matrix are in
 
 ## Provider inventory
 
-| Provider   | Duna resource                                                               | Purpose                                                                    | Access                                                                    |
-| ---------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| GitHub     | `journeyrewardsjohn/duna`                                                   | Source, PRs, CI, scheduled Sand sync                                       | Repository/team invitation                                                |
-| Vercel     | Team `suttonx`; projects `duna-web`, `duna-hq`                              | Next.js deployments, crons, server variables, AI Gateway workload identity | [Vercel dashboard](https://vercel.com/dashboard) team invitation          |
-| Expo/EAS   | Organization `journey-rewards-inc`; projects `duna-player`, `duna-pro`      | Native builds, updates, credentials, submissions                           | [Expo dashboard](https://expo.dev/) organization invitation               |
-| Neon       | Project `beach-elite`; production branch `duna-production`; database `duna` | Postgres application truth                                                 | [Neon console](https://console.neon.tech/) project invitation             |
-| Upstash    | Redis database referenced by the deployed REST variable names               | Messaging wake hints only                                                  | [Upstash console](https://console.upstash.com/) team/database invitation  |
-| WorkOS     | Duna AuthKit/User Management environment                                    | Web/native identity and organizations                                      | [WorkOS dashboard](https://dashboard.workos.com/) organization invitation |
-| Stripe     | Beach Elite LLC, test mode unless an approved release says otherwise        | Checkout, Connect, Identity, Terminal, subscriptions, refunds              | [Stripe dashboard](https://dashboard.stripe.com/test) team invitation     |
-| Cloudflare | R2 bucket configured as `R2_BUCKET_NAME`                                    | Private video originals and message attachments                            | [Cloudflare dashboard](https://dash.cloudflare.com/) account invitation   |
-| Mux        | Duna video environment                                                      | Live ingest, assets, playback signing, Data                                | [Mux dashboard](https://dashboard.mux.com/) team invitation               |
-| LiveKit    | Duna Cloud project                                                          | Purpose-bound voice rooms and agent dispatch                               | [LiveKit Cloud](https://cloud.livekit.io/) project invitation             |
-| Inngest    | Duna application/environment                                                | Durable event dispatch and recovery                                        | [Inngest dashboard](https://app.inngest.com/) organization invitation     |
+| Provider   | Duna resource                                                          | Purpose                                                                    | Access                                                                    |
+| ---------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| GitHub     | `journeyrewardsjohn/duna`                                              | Source, PRs, CI, scheduled Sand sync                                       | Repository/team invitation                                                |
+| Vercel     | Team `suttonx`; projects `duna-web`, `duna-hq`                         | Next.js deployments, crons, server variables, AI Gateway workload identity | [Vercel dashboard](https://vercel.com/dashboard) team invitation          |
+| Expo/EAS   | Organization `journey-rewards-inc`; projects `duna-player`, `duna-pro` | Native builds, updates, credentials, submissions                           | [Expo dashboard](https://expo.dev/) organization invitation               |
+| Neon       | Project `duna`; production branch `duna-production`; database `duna`   | Postgres application truth                                                 | [Neon console](https://console.neon.tech/) project invitation             |
+| Upstash    | Redis database referenced by the deployed REST variable names          | Messaging wake hints only                                                  | [Upstash console](https://console.upstash.com/) team/database invitation  |
+| WorkOS     | Duna AuthKit/User Management environment                               | Web/native identity and organizations                                      | [WorkOS dashboard](https://dashboard.workos.com/) organization invitation |
+| Stripe     | Beach Elite LLC, test mode unless an approved release says otherwise   | Checkout, Connect, Identity, Terminal, subscriptions, refunds              | [Stripe dashboard](https://dashboard.stripe.com/test) team invitation     |
+| Cloudflare | R2 bucket configured as `R2_BUCKET_NAME`                               | Private video originals and message attachments                            | [Cloudflare dashboard](https://dash.cloudflare.com/) account invitation   |
+| Mux        | Duna video environment                                                 | Live ingest, assets, playback signing, Data                                | [Mux dashboard](https://dashboard.mux.com/) team invitation               |
+| LiveKit    | Duna Cloud project                                                     | Purpose-bound voice rooms and agent dispatch                               | [LiveKit Cloud](https://cloud.livekit.io/) project invitation             |
+| Inngest    | Duna application/environment                                           | Durable event dispatch and recovery                                        | [Inngest dashboard](https://app.inngest.com/) organization invitation     |
 
 Other adapters—Google Places/Routes, Mapbox, Tomorrow.io, Firecrawl, Higgsfield,
 Knock, Resend, Sent, Twilio, Sentry, Axiom, PostHog, APNs, and Apple Wallet—are
@@ -239,16 +239,33 @@ review state, and live availability separately.
 
 ### Connected database
 
-- Project: `beach-elite`
+- Organization: `Journey`
+- Project: `duna` (`polished-sky-03515868`)
 - Production branch: `duna-production`
 - Database: `duna`
-- Application variable: `DATABASE_URL`
+- Primary application variable: `DATABASE_URL`
+- Read-only replica variable: `NEON_READ_ONLY_REPLICA`
 - Schema/migrations: `packages/db/src/schema.ts`, `packages/db/drizzle`
+
+The `duna-production` branch is the primary/default branch. Its read/write
+compute is intentionally configured to stay active so production writes and
+consistency-sensitive reads do not incur a wake-up delay. A separate read-only
+compute serves `NEON_READ_ONLY_REPLICA` and may autosuspend.
 
 Open the [Neon console](https://console.neon.tech/), choose the project, branch,
 database, and role, then use **Connect** to obtain a connection string. Put it
 directly into the intended local/provider secret store. Never paste it into a
 command transcript, code, docs, or an agent prompt.
+
+Route eligible latency-tolerant reads through `getReadOnlyDatabase()`. Public
+discovery, rankings, reporting, and dashboards are good candidates. Keep
+writes, transactions, migrations, locks, authentication and authorization,
+membership/guardian state, payments, inventory/capacity, registration and
+waitlist decisions, live scoring, messaging cursors, idempotency/rate limits,
+and read-after-write flows on the primary. The helper falls back to
+`DATABASE_URL` outside production when the replica variable is absent; never
+fall back from the primary to the replica for a write or consistency-sensitive
+operation.
 
 Neon branches are isolated copy-on-write data/schema environments. Use a
 feature-specific development branch instead of experimenting on

@@ -14,7 +14,7 @@ The executable sources of truth are `.env.example`, `turbo.json`, the two
 | -------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | Public client config | Compiled into browser/native code and readable by every user                       | `NEXT_PUBLIC_*`, `EXPO_PUBLIC_*`, Stripe publishable key |
 | Server config        | Non-secret behavior/identifier, but not automatically exposed to clients           | feature switches, model names, sender/template names     |
-| Server secret        | Credential, connection string, signing material, allowlist, private endpoint/token | `DATABASE_URL`, API keys, private keys, webhook secrets  |
+| Server secret        | Credential, connection string, signing material, allowlist, private endpoint/token | `DATABASE_URL`, `NEON_READ_ONLY_REPLICA`, API keys       |
 | Provider/system      | Injected by Vercel/EAS/CI; normally not created or copied manually                 | `VERCEL`, `VERCEL_ENV`, `VERCEL_OIDC_TOKEN`, `CI`        |
 
 When uncertain, treat a value as a server secret. “Publishable” or “public”
@@ -55,11 +55,21 @@ or route. Adding a value to one project does not add it to the other.
 | `DUNA_WEB_URL`             | Server config        | Server-only Web URL fallback for video/Vision links                        |
 | `NEXT_PUBLIC_DEMO_MODE`    | Public config        | Enables explicit demo actor behavior when not `false`                      |
 | `DUNA_DATA_SOURCE`         | Server config        | Set to `database` for connected deployments; `demo` forces demo repository |
-| `DATABASE_URL`             | Server secret        | Neon branch/database connection for Web, HQ, migrations, connected scripts |
+| `DATABASE_URL`             | Server secret        | Neon primary for writes, transactions, migrations, and consistent reads    |
+| `NEON_READ_ONLY_REPLICA`   | Server secret        | Neon read-only replica for eligible latency-tolerant reads                 |
 | `DUNA_ADMIN_EMAILS`        | Server secret/config | Comma-separated approved Admin bootstrap allowlist                         |
 | `DUNA_SUPER_ADMIN_EMAILS`  | Server secret/config | Comma-separated approved Super Admin bootstrap allowlist                   |
 | `DUNA_MCP_ALLOWED_ORIGINS` | Server config        | Additional explicit CORS origins for public MCP                            |
 | `CRON_SECRET`              | Server secret        | Bearer validation for Web/HQ cron routes                                   |
+
+`getReadOnlyDatabase()` uses `NEON_READ_ONLY_REPLICA` and falls back to
+`DATABASE_URL` when the replica is absent in local or isolated environments.
+Production should configure both values in `duna-web` and `duna-hq`. The
+replica is only for read-only, latency-tolerant work such as public discovery,
+rankings, reporting, and dashboards. Authentication/authorization,
+membership/guardian state, payments, inventory/capacity, registration,
+waitlists, live scoring, messaging cursors, migrations, transactions, and any
+read-after-write flow stay on `DATABASE_URL` because replica data can lag.
 
 GitHub's scheduled Sand workflow stores the bearer under the repository secret
 name `DUNA_CRON_SECRET` and exposes it to the request process as `CRON_SECRET`.

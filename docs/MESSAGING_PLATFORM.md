@@ -122,6 +122,7 @@ record contains verified parental consent.
 
 ```text
 DATABASE_URL
+NEON_READ_ONLY_REPLICA
 OPENAI_API_KEY
 AI_GATEWAY_API_KEY
 DUNA_AI_MODEL
@@ -139,9 +140,13 @@ EXPO_PLAYER_ACCESS_TOKEN
 EXPO_PRO_ACCESS_TOKEN
 ```
 
-Only `DATABASE_URL` is required for correct persistent text messaging. Private
-attachments additionally require the four Cloudflare R2 values above and a
-private bucket. Missing OpenAI configuration creates a human review/handoff
+Only primary `DATABASE_URL` is required for correct persistent text messaging.
+`NEON_READ_ONLY_REPLICA` may serve unrelated latency-tolerant product reads,
+but messaging membership, authorization, sequence, cursor, send confirmation,
+and foreground gap-fill remain on the primary because replica lag cannot define
+delivery correctness. Private attachments additionally require the four
+Cloudflare R2 values above and a private bucket. Missing OpenAI configuration
+creates a human review/handoff
 path. Missing Upstash configuration or `MESSAGING_SSE_ENABLED=false` keeps
 cursor polling active but removes sub-second wake-ups. Cursor sync is the only
 shipped delivery branch. The Expo access tokens are optional unless enhanced

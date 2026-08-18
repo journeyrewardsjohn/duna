@@ -138,8 +138,10 @@ For a person and organization already linked to WorkOS, the grant updates the
 matching WorkOS organization membership in the same operation (`director`
 maps to the WorkOS `owner` role). If either side has not been linked yet, Duna
 records the role and returns `not-linked` rather than falsely claiming a WorkOS
-sync. Production must set `DATABASE_URL`, `WORKOS_API_KEY`, and
-`WORKOS_CLIENT_ID` for a linked grant to be actionable.
+sync. Production must set primary `DATABASE_URL`, `NEON_READ_ONLY_REPLICA`,
+`WORKOS_API_KEY`, and `WORKOS_CLIENT_ID` for connected operation. The linked
+grant and its permission checks stay on the primary; only latency-tolerant HQ
+reporting and dashboard reads may use the replica.
 
 ## Local development
 
@@ -149,7 +151,8 @@ pnpm dev:hq
 
 HQ runs on `http://localhost:3001`. Configure ignored
 `apps/hq/.env.local` only with the variable groups required by the workflow.
-Connected HQ must set `DUNA_DATA_SOURCE=database`; visible demo metrics in a
+Connected HQ must set `DUNA_DATA_SOURCE=database` and `DATABASE_URL`;
+production also sets `NEON_READ_ONLY_REPLICA`. Visible demo metrics in a
 connected environment are a release failure.
 
 ## Validation and release
