@@ -32229,3 +32229,392 @@ body {
     justify-content: center;
   }
 }
+
+.duna-ai-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.duna-ai-workspace {
+  background: #fff;
+  border: 1px solid var(--hq-border);
+  border-radius: 20px;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.76fr) minmax(0, 1.24fr);
+  min-height: 570px;
+  overflow: hidden;
+}
+
+.duna-ai-workspace__intro {
+  background: linear-gradient(155deg, #123e54, #0d2738);
+  color: #fff;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+}
+
+.duna-ai-workspace__intro .hq-eyebrow {
+  align-items: center;
+  color: #9ce3df;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.duna-ai-workspace__intro h2 {
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+  margin: 0;
+}
+
+.duna-ai-workspace__intro p {
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.duna-ai-workspace__intro dl {
+  border-top: 1px solid rgb(255 255 255 / 15%);
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.5rem 0 0;
+  padding-top: 1rem;
+}
+
+.duna-ai-workspace__intro dl div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.duna-ai-workspace__intro dt {
+  color: #9ce3df;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.duna-ai-workspace__intro dd {
+  color: rgb(255 255 255 / 77%);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.duna-ai-workspace__chat {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+}
+
+.duna-ai-workspace__chat > header {
+  align-items: center;
+  border-bottom: 1px solid var(--hq-border);
+  display: flex;
+  gap: 0.7rem;
+  padding: 1rem 1.15rem;
+}
+
+.duna-ai-workspace__avatar {
+  align-items: center;
+  background: #dcf7f4;
+  border-radius: 10px;
+  color: #127777;
+  display: inline-flex;
+  height: 35px;
+  justify-content: center;
+  width: 35px;
+}
+
+.duna-ai-workspace__chat header div {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.duna-ai-workspace__chat header strong {
+  color: var(--hq-ink);
+  font-size: 0.83rem;
+}
+
+.duna-ai-workspace__chat header small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+}
+
+.duna-ai-workspace__messages {
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+  min-height: 255px;
+  overflow-y: auto;
+  padding: 1rem 1.15rem;
+}
+
+.duna-ai-workspace__turn {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.duna-ai-workspace__turn > p {
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 90%;
+  padding: 0.7rem 0.8rem;
+}
+
+.duna-ai-workspace__turn--assistant > p {
+  background: #f2f6f7;
+  color: #26424c;
+}
+
+.duna-ai-workspace__turn--user > p {
+  background: #123e54;
+  color: #fff;
+  justify-self: end;
+}
+
+.duna-ai-workspace__card {
+  border: 1px solid var(--hq-border);
+  border-radius: 12px;
+  color: inherit;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+  position: relative;
+  text-decoration: none;
+}
+
+.duna-ai-workspace__card:hover {
+  border-color: #79c7c3;
+}
+
+.duna-ai-workspace__card > span {
+  color: #16817f;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.duna-ai-workspace__card > strong {
+  color: var(--hq-ink);
+  font-size: 0.78rem;
+}
+.duna-ai-workspace__card > small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  max-width: 92%;
+}
+.duna-ai-workspace__card > svg {
+  color: #16817f;
+  position: absolute;
+  right: 0.65rem;
+  top: 0.65rem;
+}
+
+.duna-ai-workspace__card--approval {
+  border-color: #79c7c3;
+}
+.duna-ai-workspace__card--approval button {
+  align-items: center;
+  background: #123e54;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  margin-top: 0.35rem;
+  min-height: 32px;
+}
+
+.duna-ai-workspace__card--approval ul {
+  color: var(--hq-muted);
+  display: grid;
+  font-size: 0.75rem;
+  gap: 0.3rem;
+  line-height: 1.42;
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}
+
+.duna-ai-workspace__card--warning {
+  border-color: #d7a64e;
+}
+
+.duna-ai-workspace__card--danger {
+  border-color: #d97575;
+}
+
+.duna-ai-workspace__card--positive {
+  border-color: #59aaa4;
+}
+
+.duna-ai-workspace__metric-card {
+  border: 1px solid var(--hq-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.duna-ai-workspace__metric-card > span {
+  color: #16817f;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.duna-ai-workspace__metric-card > strong {
+  color: var(--hq-ink);
+  font-size: 0.8rem;
+}
+
+.duna-ai-workspace__metric-card > small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+}
+
+.duna-ai-workspace__metric-card dl {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.35rem 0 0;
+}
+
+.duna-ai-workspace__metric-card dl div {
+  background: #f4f7f7;
+  border-radius: 9px;
+  display: grid;
+  padding: 0.55rem;
+}
+
+.duna-ai-workspace__metric-card dt,
+.duna-ai-workspace__metric-card dl small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+}
+
+.duna-ai-workspace__metric-card dd {
+  color: var(--hq-ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin: 0.1rem 0;
+}
+
+.duna-ai-workspace__research {
+  align-items: center;
+  align-self: end;
+  background: rgb(255 255 255 / 8%);
+  border: 1px solid rgb(255 255 255 / 17%);
+  border-radius: 999px;
+  color: #9ce3df;
+  display: inline-flex;
+  font-size: 0.75rem;
+  gap: 0.4rem;
+  justify-self: start;
+  padding: 0.5rem 0.7rem;
+}
+
+.duna-ai-workspace__thinking {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.duna-ai-workspace__starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0 1.15rem 0.8rem;
+}
+
+.duna-ai-workspace__starters button {
+  background: #f4f7f7;
+  border: 1px solid var(--hq-border);
+  border-radius: 99px;
+  color: #35606a;
+  font-size: 0.75rem;
+  padding: 0.42rem 0.58rem;
+}
+
+.duna-ai-workspace__chat > form {
+  border-top: 1px solid var(--hq-border);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 1fr auto;
+  padding: 0.85rem 1.15rem;
+}
+
+.duna-ai-workspace__chat > form input {
+  background: #f8fafb;
+  border: 1px solid var(--hq-border);
+  border-radius: 9px;
+  color: var(--hq-ink);
+  min-height: 40px;
+  padding: 0 0.75rem;
+}
+
+.duna-ai-workspace__chat > form button {
+  align-items: center;
+  background: #16817f;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 42px;
+}
+
+[data-theme="dark"] .duna-ai-workspace {
+  background: #17242a;
+  border-color: rgb(255 255 255 / 10%);
+}
+[data-theme="dark"] .duna-ai-workspace__chat > header,
+[data-theme="dark"] .duna-ai-workspace__chat > form {
+  border-color: rgb(255 255 255 / 10%);
+}
+[data-theme="dark"] .duna-ai-workspace__turn--assistant > p,
+[data-theme="dark"] .duna-ai-workspace__starters button,
+[data-theme="dark"] .duna-ai-workspace__chat > form input {
+  background: #213139;
+  color: #e9f0f1;
+}
+[data-theme="dark"] .duna-ai-workspace__card {
+  border-color: rgb(255 255 255 / 14%);
+}
+[data-theme="dark"] .duna-ai-workspace__metric-card,
+[data-theme="dark"] .duna-ai-workspace__metric-card dl div {
+  background: #213139;
+  border-color: rgb(255 255 255 / 14%);
+}
+[data-theme="dark"] .duna-ai-workspace__metric-card > strong,
+[data-theme="dark"] .duna-ai-workspace__metric-card dd {
+  color: #f4f8f8;
+}
+[data-theme="dark"] .duna-ai-workspace__card > strong,
+[data-theme="dark"] .duna-ai-workspace__chat header strong {
+  color: #f4f8f8;
+}
+
+@media (max-width: 780px) {
+  .duna-ai-workspace {
+    grid-template-columns: 1fr;
+  }
+  .duna-ai-workspace__intro {
+    gap: 0.7rem;
+  }
+  .duna-ai-workspace__intro dl {
+    display: none;
+  }
+  .duna-ai-workspace__messages {
+    min-height: 320px;
+  }
+}

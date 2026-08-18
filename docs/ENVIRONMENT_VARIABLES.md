@@ -150,6 +150,7 @@ be mixed in source.
 | `OPENAI_API_KEY`                       | Server secret          | OpenAI Agents/LiveKit paths that are explicitly direct-provider    |
 | `DUNA_AI_MODEL`                        | Server config          | Duna messaging/support agent model                                 |
 | `DUNA_SAFETY_MODEL`                    | Server config          | Youth/safety screening model                                       |
+| `DUNA_COPILOT_MODEL`                   | Server config          | Provider-qualified Duna CoPilot model used only through AI Gateway |
 | `OPENAI_ZERO_DATA_RETENTION_CONFIRMED` | Server config          | Fail-closed environment attestation for minor-content provider use |
 | `FIRECRAWL_API_KEY`                    | Server secret          | Firecrawl access for rendered/source research                      |
 | `SAND_SCRAPER_ENGINE`                  | Server config          | Explicit native/scraper selection                                  |
