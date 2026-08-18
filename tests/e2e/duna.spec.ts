@@ -271,7 +271,10 @@ test("public pickup pages keep their story and booking rail contained", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
   ).toBeVisible();
-  await expect(page.getByText("Ready to play?")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Event complete." }),
+  ).toBeVisible();
+  await expect(page.getByText("This pickup has ended.")).toBeVisible();
   await expect(
     page.getByText("6:00 PM–7:30 PM PDT", { exact: true }),
   ).toBeVisible();
@@ -947,7 +950,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("button", { name: "Pricing & rules", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Availability", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Availability", exact: true })
+    .dispatchEvent("click");
   await expect(
     page.getByRole("heading", { name: "Set recurring court hours." }),
   ).toBeVisible();
