@@ -35,6 +35,10 @@ import {
   adminQueueSchema,
   adminVisionOverviewSchema,
   adminVideoOverviewSchema,
+  superAdminMutationResultSchema,
+  superAdminPeopleOverviewSchema,
+  superAdminPersonProfileSchema,
+  superAdminRefundReviewSchema,
   agentDraftSchema,
   auditEventSchema,
   availableSlotSchema,
@@ -389,6 +393,16 @@ import {
   reviewVisionModel,
   VisionModelError,
 } from "./vision-model-service";
+import {
+  assignPersonToEvent,
+  confirmSuperAdminRefund,
+  grantPersonOrganizationRole,
+  loadSuperAdminPeopleOverview,
+  loadSuperAdminPersonProfile,
+  prepareSuperAdminRefund,
+  setPersonSuperAdmin,
+  SuperAdminPeopleError,
+} from "./super-admin-people-service";
 import {
   activateCourt,
   blockCourtTime,
@@ -1159,6 +1173,13 @@ function throwDomainError(error: unknown): never {
               ? "INTERNAL_SERVER_ERROR"
               : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof SuperAdminPeopleError) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: error.message,
+      cause: error,
+    });
   }
   if (error instanceof HealthServiceError) {
     const code =
@@ -10810,6 +10831,239 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  people: superAdminProcedure
+    .input(z.object({ query: z.string().trim().max(120).optional() }))
+    .output(superAdminPeopleOverviewSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadSuperAdminPeopleOverview({
+          query: input.query,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  person: superAdminProcedure
+    .input(z.object({ personId: z.string().uuid() }))
+    .output(superAdminPersonProfileSchema.nullable())
+    .query(async ({ input }) => {
+      try {
+        return await loadSuperAdminPersonProfile(input.personId);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  assignPersonToEvent: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "super-admin-assign-event",
+        capacity: 40,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        sessionId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(superAdminMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.assignPersonToEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await assignPersonToEvent({
+              actor: ctx.actor!,
+              personId: input.personId,
+              sessionId: input.sessionId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  grantPersonOrganizationRole: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "super-admin-person-organization-role",
+        capacity: 40,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        organizationId: z.string().uuid(),
+        role: z.enum([
+          "director",
+          "manager",
+          "coach",
+          "front-desk",
+          "accountant",
+        ]),
+        workerClassification: z.enum(["1099-contractor", "w2-employee"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(superAdminMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.grantPersonOrganizationRole",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const result = await grantPersonOrganizationRole({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+            return {
+              id: result.id,
+              status: result.status,
+              workosSync: result.workosSync,
+            };
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  setPersonSuperAdmin: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "super-admin-platform-role",
+        capacity: 12,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        enabled: z.boolean(),
+        reason: z.string().trim().min(12).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(superAdminMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.setPersonSuperAdmin",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await setPersonSuperAdmin({
+              actor: ctx.actor!,
+              personId: input.personId,
+              enabled: input.enabled,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  prepareSuperAdminRefund: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "super-admin-refund-review",
+        capacity: 20,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        orderId: z.string().uuid(),
+        amountMinor: z.number().int().positive().max(100_000_000),
+        disposition: z.enum(["original-payment", "organization-credit"]),
+        credits: z.number().int().positive().max(1_000_000).optional(),
+        reason: z.string().trim().min(12).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(superAdminRefundReviewSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.prepareSuperAdminRefund",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await prepareSuperAdminRefund({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  confirmSuperAdminRefund: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "super-admin-refund-confirm",
+        capacity: 10,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        reviewId: z.string().uuid(),
+        confirmationCode: z.string().trim().min(8).max(32),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(superAdminMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.confirmSuperAdminRefund",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await confirmSuperAdminRefund({
+              actor: ctx.actor!,
+              reviewId: input.reviewId,
+              confirmationCode: input.confirmationCode,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   registerVisionModel: superAdminProcedure
     .input(
       z.object({

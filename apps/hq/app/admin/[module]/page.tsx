@@ -42,6 +42,7 @@ export default async function AdminModulePage({
     gender?: string;
     status?: string;
     player?: string;
+    person?: string;
   }>;
 }) {
   const { module } = await params;
@@ -52,6 +53,7 @@ export default async function AdminModulePage({
     gender: rawGender,
     page: rawPage,
     player: rawPlayer,
+    person: rawPerson,
     q,
     status: rawStatus,
     tool,
@@ -74,6 +76,12 @@ export default async function AdminModulePage({
       rawPlayer ?? "",
     )
       ? rawPlayer
+      : undefined;
+  const person =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      rawPerson ?? "",
+    )
+      ? rawPerson
       : undefined;
   const proTourTool = professionalTourTools.has(tool as ProfessionalTourTool)
     ? (tool as ProfessionalTourTool)
@@ -104,6 +112,12 @@ export default async function AdminModulePage({
     module === "vision"
       ? caller.admin.visionOverview()
       : Promise.resolve(undefined),
+    module === "people"
+      ? caller.admin.people({ query: q })
+      : Promise.resolve(undefined),
+    module === "people" && person
+      ? caller.admin.person({ personId: person })
+      : Promise.resolve(undefined),
     module === "player-intelligence"
       ? caller.admin.playerIntelligence({
           page,
@@ -130,6 +144,8 @@ export default async function AdminModulePage({
         players,
         video,
         vision,
+        people,
+        personProfile,
         playerIntelligence,
         playerIntelligenceDetail,
         predictions,
@@ -142,6 +158,8 @@ export default async function AdminModulePage({
         players,
         video,
         vision,
+        people,
+        personProfile,
         playerIntelligence,
         playerIntelligenceDetail,
         predictions,
@@ -170,6 +188,8 @@ export default async function AdminModulePage({
         featureFlags={result.featureFlags}
         video={result.video}
         vision={result.vision}
+        people={result.people}
+        personProfile={result.personProfile}
         sandData={result.sandData}
         playerDirectory={result.players}
         playerSearchQuery={q}

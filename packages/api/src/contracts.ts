@@ -2482,6 +2482,38 @@ export const visionBenchmarkRunSummarySchema = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+export const visionUploadedVideoSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  ownerName: z.string(),
+  ownerId: z.string().uuid(),
+  status: z.string(),
+  durationSeconds: z.number().int().nonnegative().optional(),
+  recordingVisibility: z.string(),
+  learningConsent: z.boolean(),
+  createdAt: z.iso.datetime(),
+  playerViewPath: z.string().startsWith("/app/video/"),
+  analysis: z
+    .object({
+      id: z.string().uuid(),
+      status: z.enum([
+        "queued",
+        "processing",
+        "ready",
+        "needs-review",
+        "failed",
+        "cancelled",
+      ]),
+      modelVersion: z.string().optional(),
+      pipelineVersion: z.string(),
+      calibrationQualityScore: z.number().min(0).max(1).optional(),
+      qualityDecision: z.enum(["passed", "failed", "unverified"]).optional(),
+      eventCount: z.number().int().nonnegative(),
+      completedAt: z.iso.datetime().optional(),
+      failureCode: z.string().optional(),
+    })
+    .optional(),
+});
 export const adminVisionOverviewSchema = z.object({
   canManage: z.boolean(),
   runtime: z.object({
@@ -2498,6 +2530,104 @@ export const adminVisionOverviewSchema = z.object({
   models: z.array(visionModelSummarySchema).readonly(),
   trainingRuns: z.array(visionTrainingRunSummarySchema).readonly(),
   benchmarkRuns: z.array(visionBenchmarkRunSummarySchema).readonly(),
+  uploadedVideos: z.array(visionUploadedVideoSchema).readonly(),
+});
+
+export const superAdminPersonRowSchema = z.object({
+  id: z.string().uuid(),
+  displayName: z.string(),
+  email: z.string().email().optional(),
+  avatarUrl: z.string().url().optional(),
+  dunaMemberId: z.string(),
+  status: z.enum(["active", "restricted", "suspended", "deleted"]),
+  ageBand: z.enum(["unknown", "under-13", "teen", "adult"]),
+  accountRoles: z.array(personRoleSchema).readonly(),
+  organizationCount: z.number().int().nonnegative(),
+  eventCount: z.number().int().nonnegative(),
+  purchaseTotalMinor: z.number().int().nonnegative(),
+  currency: z.string(),
+  isSuperAdmin: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+export const superAdminOrganizationOptionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  plan: z.string(),
+});
+export const superAdminEventOptionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  organizationId: z.string().uuid(),
+  organizationName: z.string(),
+  startsAt: z.iso.datetime(),
+  capacity: z.number().int().positive(),
+  confirmedCount: z.number().int().nonnegative(),
+  status: z.string(),
+});
+export const superAdminPeopleOverviewSchema = z.object({
+  totals: z.object({
+    accounts: z.number().int().nonnegative(),
+    superAdmins: z.number().int().nonnegative(),
+    activeOrganizations: z.number().int().nonnegative(),
+    upcomingEvents: z.number().int().nonnegative(),
+  }),
+  people: z.array(superAdminPersonRowSchema).readonly(),
+  organizations: z.array(superAdminOrganizationOptionSchema).readonly(),
+  events: z.array(superAdminEventOptionSchema).readonly(),
+  query: z.string().optional(),
+});
+export const superAdminPersonProfileSchema = z.object({
+  person: superAdminPersonRowSchema,
+  organizationRoles: z
+    .array(
+      z.object({
+        organizationId: z.string().uuid(),
+        organizationName: z.string(),
+        role: z.string(),
+        active: z.boolean(),
+      }),
+    )
+    .readonly(),
+  purchases: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        organizationId: z.string().uuid().optional(),
+        organizationName: z.string().optional(),
+        status: z.string(),
+        totalMinor: z.number().int().nonnegative(),
+        refundableMinor: z.number().int().nonnegative(),
+        currency: z.string(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  eventAssignments: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        sessionId: z.string().uuid(),
+        title: z.string(),
+        organizationName: z.string().optional(),
+        startsAt: z.iso.datetime(),
+        status: z.string(),
+      }),
+    )
+    .readonly(),
+});
+export const superAdminRefundReviewSchema = z.object({
+  id: z.string().uuid(),
+  orderId: z.string().uuid(),
+  amountMinor: z.number().int().positive(),
+  currency: z.string(),
+  confirmationCode: z.string(),
+  expiresAt: z.iso.datetime(),
+});
+export const superAdminMutationResultSchema = z.object({
+  id: z.string().uuid(),
+  status: z.string(),
+  workosSync: z.enum(["synced", "not-linked"]).optional(),
+  workosInvitationSent: z.boolean().optional(),
 });
 export const visionTrainingCommandSchema = z.object({
   kind: z.literal("training"),
@@ -5930,6 +6060,12 @@ export type HealthVideoOverlay = z.infer<typeof healthVideoOverlaySchema>;
 export type HealthCorrelation = z.infer<typeof healthCorrelationSchema>;
 export type AdminVideoOverview = z.infer<typeof adminVideoOverviewSchema>;
 export type AdminVisionOverview = z.infer<typeof adminVisionOverviewSchema>;
+export type SuperAdminPeopleOverview = z.infer<
+  typeof superAdminPeopleOverviewSchema
+>;
+export type SuperAdminPersonProfile = z.infer<
+  typeof superAdminPersonProfileSchema
+>;
 export type VisionModelSummary = z.infer<typeof visionModelSummarySchema>;
 export type VisionTrainingRunSummary = z.infer<
   typeof visionTrainingRunSummarySchema

@@ -153,6 +153,8 @@ export async function grantOrganizationAccess(input: {
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
+  /** Internal platform-only path; never exposed by the public admin mutation. */
+  readonly allowSystemOrganization?: boolean;
 }): Promise<{
   readonly id: string;
   readonly entity: "staff-profile" | "staff-invitation";
@@ -174,6 +176,12 @@ export async function grantOrganizationAccess(input: {
     throw new OrganizationAccessError(
       "NOT_FOUND",
       "Organization was not found.",
+    );
+  }
+  if (organization.systemKey && !input.allowSystemOrganization) {
+    throw new OrganizationAccessError(
+      "NOT_FOUND",
+      "System workspaces cannot receive organization access through this route.",
     );
   }
   const email = input.email.trim().toLowerCase();

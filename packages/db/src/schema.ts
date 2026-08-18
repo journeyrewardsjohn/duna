@@ -1043,6 +1043,10 @@ export const organizations = pgTable(
   "organizations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // System workspaces are real WorkOS organizations, but never tenants. The
+    // Duna platform workspace is used to synchronize staff membership without
+    // letting it leak into club pickers or active organization context.
+    systemKey: varchar("system_key", { length: 32 }).unique(),
     workosOrganizationId: varchar("workos_organization_id", {
       length: 128,
     }).unique(),
@@ -8812,6 +8816,68 @@ export const adminRoles = pgTable(
       .defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.personId, table.role] })],
+);
+
+// A Super Admin refund is deliberately reviewed before it can reach Stripe or
+// issue organization credits. The server stores only a hash of the challenge
+// phrase and consumes each review once, so a front-end confirmation alone can
+// never move money.
+export const superAdminMoneyReviews = pgTable(
+  "super_admin_money_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorPersonId: uuid("actor_person_id")
+      .notNull()
+      .references(() => people.id),
+    buyerPersonId: uuid("buyer_person_id")
+      .notNull()
+      .references(() => people.id),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    disposition: varchar("disposition", { length: 24 }).notNull(),
+    credits: integer("credits"),
+    reason: text("reason").notNull(),
+    confirmationCodeHash: varchar("confirmation_code_hash", {
+      length: 128,
+    }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    confirmedAt: timestamp("confirmed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failureCode: varchar("failure_code", { length: 80 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("super_admin_money_review_actor_created_idx").on(
+      table.actorPersonId,
+      table.createdAt,
+    ),
+    index("super_admin_money_review_order_idx").on(table.orderId),
+    check(
+      "super_admin_money_review_amount_positive",
+      sql`${table.amountMinor} > 0`,
+    ),
+    check(
+      "super_admin_money_review_disposition_valid",
+      sql`${table.disposition} IN ('original-payment', 'organization-credit')`,
+    ),
+    check(
+      "super_admin_money_review_status_valid",
+      sql`${table.status} IN ('pending', 'processing', 'succeeded', 'failed', 'expired')`,
+    ),
+  ],
 );
 
 export const auditLog = pgTable(

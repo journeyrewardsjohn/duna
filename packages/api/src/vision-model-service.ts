@@ -9,6 +9,8 @@ import {
   getDatabase,
   people,
   videos,
+  videoAnalysisEvents,
+  videoAnalysisRuns,
   visionBenchmarkRuns,
   visionCalibrationSamples,
   visionModelApprovals,
@@ -206,65 +208,109 @@ export async function loadAdminVisionOverview(
       models: [],
       trainingRuns: [],
       benchmarkRuns: [],
+      uploadedVideos: [],
     };
   }
   const database = getDatabase();
-  const [modelRows, approvalRows, trainingRows, benchmarkRows, eligibility] =
-    await Promise.all([
+  const [
+    modelRows,
+    approvalRows,
+    trainingRows,
+    benchmarkRows,
+    eligibility,
+    uploadedVideoRows,
+  ] = await Promise.all([
+    database
+      .select({ model: visionModels, createdByName: people.displayName })
+      .from(visionModels)
+      .leftJoin(people, eq(visionModels.createdByPersonId, people.id))
+      .orderBy(desc(visionModels.updatedAt)),
+    database
+      .select({
+        approval: visionModelApprovals,
+        reviewerName: people.displayName,
+      })
+      .from(visionModelApprovals)
+      .innerJoin(people, eq(visionModelApprovals.reviewerPersonId, people.id))
+      .orderBy(desc(visionModelApprovals.createdAt)),
+    database
+      .select({
+        run: visionTrainingRuns,
+        requestedByName: people.displayName,
+      })
+      .from(visionTrainingRuns)
+      .leftJoin(people, eq(visionTrainingRuns.requestedByPersonId, people.id))
+      .orderBy(desc(visionTrainingRuns.createdAt))
+      .limit(30),
+    database
+      .select({
+        run: visionBenchmarkRuns,
+        modelVersion: visionModels.version,
+        requestedByName: people.displayName,
+      })
+      .from(visionBenchmarkRuns)
+      .innerJoin(visionModels, eq(visionBenchmarkRuns.modelId, visionModels.id))
+      .leftJoin(people, eq(visionBenchmarkRuns.requestedByPersonId, people.id))
+      .orderBy(desc(visionBenchmarkRuns.createdAt))
+      .limit(30),
+    Promise.all([
       database
-        .select({ model: visionModels, createdByName: people.displayName })
-        .from(visionModels)
-        .leftJoin(people, eq(visionModels.createdByPersonId, people.id))
-        .orderBy(desc(visionModels.updatedAt)),
+        .select({ count: sql<number>`count(*)::int` })
+        .from(visionCalibrationSamples)
+        .where(eq(visionCalibrationSamples.status, "approved")),
       database
-        .select({
-          approval: visionModelApprovals,
-          reviewerName: people.displayName,
-        })
-        .from(visionModelApprovals)
-        .innerJoin(people, eq(visionModelApprovals.reviewerPersonId, people.id))
-        .orderBy(desc(visionModelApprovals.createdAt)),
+        .select({ count: sql<number>`count(*)::int` })
+        .from(videos)
+        .where(eq(videos.visionLearningConsent, true)),
       database
-        .select({
-          run: visionTrainingRuns,
-          requestedByName: people.displayName,
-        })
-        .from(visionTrainingRuns)
-        .leftJoin(people, eq(visionTrainingRuns.requestedByPersonId, people.id))
-        .orderBy(desc(visionTrainingRuns.createdAt))
-        .limit(30),
-      database
-        .select({
-          run: visionBenchmarkRuns,
-          modelVersion: visionModels.version,
-          requestedByName: people.displayName,
-        })
-        .from(visionBenchmarkRuns)
-        .innerJoin(
-          visionModels,
-          eq(visionBenchmarkRuns.modelId, visionModels.id),
-        )
-        .leftJoin(
-          people,
-          eq(visionBenchmarkRuns.requestedByPersonId, people.id),
-        )
-        .orderBy(desc(visionBenchmarkRuns.createdAt))
-        .limit(30),
-      Promise.all([
-        database
-          .select({ count: sql<number>`count(*)::int` })
-          .from(visionCalibrationSamples)
-          .where(eq(visionCalibrationSamples.status, "approved")),
-        database
-          .select({ count: sql<number>`count(*)::int` })
-          .from(videos)
-          .where(eq(videos.visionLearningConsent, true)),
-        database
-          .select({ count: sql<number>`count(*)::int` })
-          .from(visionCalibrationSamples)
-          .where(eq(visionCalibrationSamples.status, "pending")),
-      ]),
-    ]);
+        .select({ count: sql<number>`count(*)::int` })
+        .from(visionCalibrationSamples)
+        .where(eq(visionCalibrationSamples.status, "pending")),
+    ]),
+    database
+      .select({ video: videos, ownerName: people.displayName })
+      .from(videos)
+      .innerJoin(people, eq(videos.ownerPersonId, people.id))
+      .where(sql`${videos.status} <> 'deleted'`)
+      .orderBy(desc(videos.createdAt))
+      .limit(30),
+  ]);
+  const uploadedVideoIds = uploadedVideoRows.map(({ video }) => video.id);
+  const [analysisRunRows, analysisEventCounts] = await Promise.all([
+    uploadedVideoIds.length > 0
+      ? database
+          .select()
+          .from(videoAnalysisRuns)
+          .where(inArray(videoAnalysisRuns.videoId, uploadedVideoIds))
+          .orderBy(desc(videoAnalysisRuns.createdAt))
+      : Promise.resolve([]),
+    uploadedVideoIds.length > 0
+      ? database
+          .select({
+            runId: videoAnalysisEvents.runId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(videoAnalysisEvents)
+          .innerJoin(
+            videoAnalysisRuns,
+            eq(videoAnalysisEvents.runId, videoAnalysisRuns.id),
+          )
+          .where(inArray(videoAnalysisRuns.videoId, uploadedVideoIds))
+          .groupBy(videoAnalysisEvents.runId)
+      : Promise.resolve([]),
+  ]);
+  const latestAnalysisByVideo = new Map<
+    string,
+    (typeof analysisRunRows)[number]
+  >();
+  for (const run of analysisRunRows) {
+    if (!latestAnalysisByVideo.has(run.videoId)) {
+      latestAnalysisByVideo.set(run.videoId, run);
+    }
+  }
+  const analysisEventCountByRun = new Map(
+    analysisEventCounts.map((row) => [row.runId, row.count]),
+  );
   const approvalsByModel = new Map<string, VisionModelSummary["approvals"]>();
   for (const row of approvalRows) {
     const values = approvalsByModel.get(row.approval.modelId) ?? [];
@@ -349,6 +395,41 @@ export async function loadAdminVisionOverview(
       updatedAt: run.updatedAt.toISOString(),
     }),
   );
+  const uploadedVideos = uploadedVideoRows.map(({ video, ownerName }) => {
+    const analysis = latestAnalysisByVideo.get(video.id);
+    return {
+      id: video.id,
+      title: video.title,
+      ownerName,
+      ownerId: video.ownerPersonId,
+      status: video.status,
+      durationSeconds: video.durationSeconds ?? undefined,
+      recordingVisibility: video.recordingVisibility,
+      learningConsent: video.visionLearningConsent,
+      createdAt: video.createdAt.toISOString(),
+      playerViewPath: `/app/video/${video.id}`,
+      analysis: analysis
+        ? {
+            id: analysis.id,
+            status: analysis.status as
+              | "queued"
+              | "processing"
+              | "ready"
+              | "needs-review"
+              | "failed"
+              | "cancelled",
+            modelVersion: analysis.modelVersion ?? undefined,
+            pipelineVersion: analysis.pipelineVersion,
+            calibrationQualityScore:
+              analysis.courtMap?.calibrationQualityScore ?? undefined,
+            qualityDecision: analysis.qualityGate?.decision,
+            eventCount: analysisEventCountByRun.get(analysis.id) ?? 0,
+            completedAt: iso(analysis.completedAt),
+            failureCode: analysis.failureCode ?? undefined,
+          }
+        : undefined,
+    };
+  });
   return {
     canManage,
     runtime: {
@@ -367,6 +448,7 @@ export async function loadAdminVisionOverview(
     models,
     trainingRuns,
     benchmarkRuns,
+    uploadedVideos,
   };
 }
 
