@@ -64,6 +64,7 @@ import {
   featureFlagCollectionSchema,
   featureFlagSummarySchema,
   demoDataControlSchema,
+  catalogItemVersionSummarySchema,
   formSubmissionResultSchema,
   guardianReviewItemSchema,
   guardianReviewResultSchema,
@@ -264,6 +265,9 @@ import {
   loadPublicCoaches,
   loadPublicOrganizationStorefront,
   proposeCalendarChange,
+  loadCatalogItemVersions,
+  replaceCatalogItem,
+  revertCatalogItemVersion,
   refundOrganizationOrder,
   removeCalendarEquipment,
   removeCalendarParticipant,
@@ -8082,6 +8086,115 @@ const operatorRouter = router({
             return await createCatalogItem({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  replaceCatalogItem: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        type: z.enum(["event", "service", "good", "plan"]),
+        subtype: z.string().trim().min(2).max(64),
+        title: z.string().trim().min(2).max(140),
+        shortSummary: z.string().trim().max(240).optional(),
+        description: z.string().trim().max(20_000).optional(),
+        visibility: z.enum(["public", "members", "private"]),
+        taxable: z.boolean(),
+        stripeTaxCode: z.string().trim().max(48).optional(),
+        allowCard: z.boolean(),
+        allowCash: z.boolean(),
+        allowCredits: z.boolean(),
+        membershipRequired: z.boolean(),
+        priceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        creditCost: z.number().int().positive().max(100_000).optional(),
+        recurringInterval: z.enum(["week", "month", "year"]).optional(),
+        recurringIntervalCount: z.number().int().min(1).max(52).optional(),
+        options: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(48),
+              values: z.array(z.string().trim().min(1).max(96)).min(1).max(100),
+            }),
+          )
+          .max(12)
+          .default([]),
+        media: z
+          .array(
+            z.object({
+              kind: z.enum(["image", "video"]),
+              url: z.url().max(2_000),
+              posterUrl: z.url().max(2_000).optional(),
+              alt: z.string().trim().max(240).optional(),
+              variantIndex: z.number().int().min(0).max(499).optional(),
+            }),
+          )
+          .max(24)
+          .default([]),
+        configuration: z.record(z.string(), z.unknown()).default({}),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.replaceCatalogItem",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await replaceCatalogItem({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  catalogItemVersions: organizationProcedure("payments:write")
+    .input(z.object({ catalogItemId: z.string().uuid() }))
+    .output(z.array(catalogItemVersionSummarySchema).readonly())
+    .query(({ input, ctx }) =>
+      loadCatalogItemVersions({
+        actor: ctx.actor!,
+        catalogItemId: input.catalogItemId,
+      }),
+    ),
+  revertCatalogItemVersion: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        versionId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.revertCatalogItemVersion",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await revertCatalogItemVersion({
+              actor: ctx.actor!,
+              catalogItemId: input.catalogItemId,
+              versionId: input.versionId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

@@ -49,6 +49,7 @@ import {
 } from "react";
 import {
   createCatalogItemAction,
+  replaceCatalogItemAction,
   type OperatorActionState,
 } from "@/app/actions";
 import {
@@ -431,66 +432,171 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
 export function GuidedProductBuilder({
   waivers,
   workspace,
+  initialItem,
+  mode = "create",
 }: {
   readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
+  readonly initialItem?: OperatorWorkspace["catalog"][number];
+  readonly mode?: "create" | "edit" | "clone";
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedType = searchParams.get("type");
   const initialType: ProductType =
-    requestedType === "good" ||
-    requestedType === "plan" ||
-    requestedType === "service"
-      ? requestedType
-      : "service";
+    initialItem?.type === "good" ||
+    initialItem?.type === "plan" ||
+    initialItem?.type === "service"
+      ? initialItem.type
+      : requestedType === "good" ||
+          requestedType === "plan" ||
+          requestedType === "service"
+        ? requestedType
+        : "service";
+  const editing = Boolean(initialItem && mode !== "clone");
   const [state, action, pending] = useActionState(
-    createCatalogItemAction,
+    editing ? replaceCatalogItemAction : createCatalogItemAction,
     initialActionState,
   );
+  const initialConfiguration = initialItem?.configuration ?? {};
+  const initialCardPrice = initialItem?.variants
+    .flatMap((variant) => variant.prices)
+    .find(
+      (candidate) =>
+        candidate.active &&
+        candidate.paymentKind === "card" &&
+        candidate.amountMinor !== undefined &&
+        candidate.recurringInterval !== "year",
+    );
+  const initialOptions = useMemo(() => {
+    const values = new Map<string, Set<string>>();
+    for (const variant of initialItem?.variants ?? []) {
+      for (const [name, value] of Object.entries(variant.optionCoordinates)) {
+        const entries = values.get(name) ?? new Set<string>();
+        entries.add(value);
+        values.set(name, entries);
+      }
+    }
+    return [...values.entries()].map(([name, optionValues]) => ({
+      id: crypto.randomUUID(),
+      name,
+      values: [...optionValues].join(", "),
+    }));
+  }, [initialItem]);
   const [type, setType] = useState<ProductType>(initialType);
   const [step, setStep] = useState(0);
   const [subtype, setSubtype] = useState(
-    initialType === "good"
-      ? "equipment"
-      : initialType === "plan"
-        ? "membership"
-        : "private-lesson",
+    initialItem?.subtype ??
+      (initialType === "good"
+        ? "equipment"
+        : initialType === "plan"
+          ? "membership"
+          : "private-lesson"),
   );
-  const [title, setTitle] = useState("");
-  const [shortSummary, setShortSummary] = useState("");
-  const [description, setDescription] = useState("");
-  const [bestFor, setBestFor] = useState("");
-  const [highlights, setHighlights] = useState("");
+  const [title, setTitle] = useState(initialItem?.title ?? "");
+  const [shortSummary, setShortSummary] = useState(
+    initialItem?.shortSummary ?? "",
+  );
+  const [description, setDescription] = useState(
+    initialItem?.description ?? "",
+  );
+  const [bestFor, setBestFor] = useState(
+    typeof initialConfiguration.bestFor === "string"
+      ? initialConfiguration.bestFor
+      : "",
+  );
+  const [highlights, setHighlights] = useState(
+    Array.isArray(initialConfiguration.highlights)
+      ? initialConfiguration.highlights
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
+      : "",
+  );
   const [validityDays, setValidityDays] = useState(0);
-  const [redemptionNotes, setRedemptionNotes] = useState("");
+  const [redemptionNotes, setRedemptionNotes] = useState(
+    typeof initialConfiguration.redemptionNotes === "string"
+      ? initialConfiguration.redemptionNotes
+      : "",
+  );
   const [visibility, setVisibility] = useState<
     "public" | "members" | "private"
-  >("public");
-  const [allowCard, setAllowCard] = useState(true);
-  const [allowCash, setAllowCash] = useState(false);
-  const [allowCredits, setAllowCredits] = useState(false);
-  const [price, setPrice] = useState("");
-  const [creditCost, setCreditCost] = useState(1);
-  const [taxable, setTaxable] = useState(false);
-  const [membershipRequired, setMembershipRequired] = useState(false);
+  >(initialItem?.visibility ?? "public");
+  const [allowCard, setAllowCard] = useState(initialItem?.allowCard ?? true);
+  const [allowCash, setAllowCash] = useState(initialItem?.allowCash ?? false);
+  const [allowCredits, setAllowCredits] = useState(
+    initialItem?.allowCredits ?? false,
+  );
+  const [price, setPrice] = useState(
+    initialCardPrice?.amountMinor === undefined
+      ? ""
+      : String(initialCardPrice.amountMinor / 100),
+  );
+  const [creditCost, setCreditCost] = useState(
+    initialItem?.variants
+      .flatMap((variant) => variant.prices)
+      .find(
+        (candidate) => candidate.active && candidate.paymentKind === "credit",
+      )?.creditAmount ?? 1,
+  );
+  const [taxable, setTaxable] = useState(initialItem?.taxable ?? false);
+  const [membershipRequired, setMembershipRequired] = useState(
+    initialItem?.membershipRequired ?? false,
+  );
   const [allowInstallments, setAllowInstallments] = useState(false);
   const [installmentCount, setInstallmentCount] = useState(3);
 
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [capacity, setCapacity] = useState(1);
-  const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">("venue");
-  const [venueId, setVenueId] = useState(workspace.venues[0]?.id ?? "");
-  const [bookingLeadHours, setBookingLeadHours] = useState(12);
-  const [bookingBufferMinutes, setBookingBufferMinutes] = useState(15);
+  const serviceConfiguration = initialConfiguration.service as
+    Record<string, unknown> | undefined;
+  const [durationMinutes, setDurationMinutes] = useState(
+    typeof serviceConfiguration?.durationMinutes === "number"
+      ? serviceConfiguration.durationMinutes
+      : 60,
+  );
+  const [capacity, setCapacity] = useState(
+    typeof serviceConfiguration?.capacity === "number"
+      ? serviceConfiguration.capacity
+      : 1,
+  );
+  const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">(
+    initialConfiguration.deliveryMode === "online" ? "online" : "venue",
+  );
+  const [venueId, setVenueId] = useState(
+    typeof initialConfiguration.venueId === "string"
+      ? initialConfiguration.venueId
+      : (workspace.venues[0]?.id ?? ""),
+  );
+  const [bookingLeadHours, setBookingLeadHours] = useState(
+    typeof serviceConfiguration?.bookingLeadHours === "number"
+      ? serviceConfiguration.bookingLeadHours
+      : 12,
+  );
+  const [bookingBufferMinutes, setBookingBufferMinutes] = useState(
+    typeof serviceConfiguration?.bookingBufferMinutes === "number"
+      ? serviceConfiguration.bookingBufferMinutes
+      : 15,
+  );
   const [schedulingStyle, setSchedulingStyle] = useState<
     "coach-availability" | "request-to-book"
-  >("coach-availability");
-  const [coachMode, setCoachMode] = useState<"all" | "selected">("all");
-  const [selectedCoachIds, setSelectedCoachIds] = useState<readonly string[]>(
-    [],
+  >(
+    serviceConfiguration?.schedulingStyle === "request-to-book"
+      ? "request-to-book"
+      : "coach-availability",
   );
-  const [customerCoachSelection, setCustomerCoachSelection] = useState(true);
+  const [coachMode, setCoachMode] = useState<"all" | "selected">(
+    initialConfiguration.coachAssignmentMode === "selected"
+      ? "selected"
+      : "all",
+  );
+  const [selectedCoachIds, setSelectedCoachIds] = useState<readonly string[]>(
+    Array.isArray(initialConfiguration.coachPersonIds)
+      ? initialConfiguration.coachPersonIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const [customerCoachSelection, setCustomerCoachSelection] = useState(
+    initialConfiguration.customerCoachSelection !== false,
+  );
 
   const [billingMode, setBillingMode] = useState<"month" | "year">("month");
   const [creditsGranted, setCreditsGranted] = useState(10);
@@ -518,8 +624,19 @@ export function GuidedProductBuilder({
   const [receiptUrl, setReceiptUrl] = useState("");
   const [locationId, setLocationId] = useState("");
   const [newLocationName, setNewLocationName] = useState("");
-  const [options, setOptions] = useState<readonly OptionDraft[]>([]);
-  const [media, setMedia] = useState<readonly ProductMedia[]>([]);
+  const [options, setOptions] =
+    useState<readonly OptionDraft[]>(initialOptions);
+  const [media, setMedia] = useState<readonly ProductMedia[]>(
+    (initialItem?.media ?? []).map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      url: item.url,
+      alt: item.alt ?? initialItem?.title ?? "Product media",
+      variantIndex: (initialItem?.variants ?? []).findIndex(
+        (variant) => variant.id === item.catalogVariantId,
+      ),
+    })),
+  );
   const [hostedMediaUrl, setHostedMediaUrl] = useState("");
   const [hostedMediaKind, setHostedMediaKind] = useState<"image" | "video">(
     "image",
@@ -970,7 +1087,11 @@ export function GuidedProductBuilder({
           <span className="guided-product-builder__label">
             <Sparkles aria-hidden size={14} /> Guided offer studio
           </span>
-          <h2>Build an offer people understand.</h2>
+          <h2>
+            {editing
+              ? `Edit ${initialItem?.title ?? "offer"}`
+              : "Build an offer people understand."}
+          </h2>
           <p>
             Start with the customer outcome. Duna will guide you through only
             the story, delivery, pricing, and controls that belong to it.
@@ -983,6 +1104,14 @@ export function GuidedProductBuilder({
               <BookOpenCheck aria-hidden size={15} /> Five clear decisions
             </span>
           </div>
+          {editing && initialItem && (
+            <Link
+              className="hq-button hq-button--secondary"
+              href={`/products/create?clone=${initialItem.id}`}
+            >
+              <Plus aria-hidden size={16} /> Clone as a new draft
+            </Link>
+          )}
         </div>
         <Link className="guided-event-link" href="/events/create">
           <CalendarClock aria-hidden size={18} />
@@ -1014,6 +1143,7 @@ export function GuidedProductBuilder({
                 aria-pressed={active}
                 className={active ? "active" : undefined}
                 key={productType.value}
+                disabled={editing}
                 onClick={() => chooseType(productType.value)}
                 type="button"
               >
@@ -1037,6 +1167,9 @@ export function GuidedProductBuilder({
       </section>
 
       <form action={action} className="guided-product-form">
+        {editing && initialItem && (
+          <input name="catalogItemId" type="hidden" value={initialItem.id} />
+        )}
         <input name="type" type="hidden" value={type} />
         <input name="subtype" type="hidden" value={subtype} />
         <input name="title" type="hidden" value={title} />
@@ -2852,7 +2985,13 @@ export function GuidedProductBuilder({
                 disabled={!canContinue || pending}
                 type="submit"
               >
-                {pending ? "Creating…" : "Create private draft"}
+                {pending
+                  ? editing
+                    ? "Saving…"
+                    : "Creating…"
+                  : editing
+                    ? "Save new version"
+                    : "Create private draft"}
               </button>
             )}
           </div>

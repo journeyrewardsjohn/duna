@@ -3690,6 +3690,14 @@ export const operatorCatalogItemSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+export const catalogItemVersionSummarySchema = z.object({
+  id: z.string().uuid(),
+  version: z.number().int().positive(),
+  title: z.string(),
+  createdAt: z.iso.datetime(),
+  current: z.boolean(),
+});
+
 export const publicCatalogPriceSchema = operatorCatalogPriceSchema.pick({
   id: true,
   audience: true,

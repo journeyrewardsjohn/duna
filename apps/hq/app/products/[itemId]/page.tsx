@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { CatalogItemEditor } from "@/components/catalog-item-editor";
+import { GuidedProductBuilder } from "@/components/guided-product-builder";
 import { OperatorShell } from "@/components/operator-shell";
+import { ProductVersionHistory } from "@/components/product-version-history";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Edit product" };
@@ -21,6 +22,9 @@ export default async function ProductDetailPage({
   ]);
   const item = workspace.catalog.find((candidate) => candidate.id === itemId);
   if (!item) notFound();
+  const versions = await caller.operator.catalogItemVersions({
+    catalogItemId: item.id,
+  });
 
   return (
     <OperatorShell
@@ -28,11 +32,25 @@ export default async function ProductDetailPage({
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <CatalogItemEditor
-        created={query.created === "1"}
-        item={item}
-        workspace={workspace}
-      />
+      <main className="hq-page">
+        {query.created === "1" && (
+          <p
+            className="operator-action-notice operator-action-notice--success"
+            role="status"
+          >
+            Your private draft is ready. Continue in the same guided flow
+            whenever you edit it.
+          </p>
+        )}
+        {item.type === "event" ? (
+          <p className="hq-card">
+            Events continue in their dedicated event builder.
+          </p>
+        ) : (
+          <GuidedProductBuilder initialItem={item} workspace={workspace} />
+        )}
+        <ProductVersionHistory catalogItemId={item.id} versions={versions} />
+      </main>
     </OperatorShell>
   );
 }

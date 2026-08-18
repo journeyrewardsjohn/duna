@@ -7,6 +7,7 @@ import {
   catalogEntitlements,
   catalogFulfillments,
   catalogItems,
+  catalogItemVersions,
   catalogMedia,
   catalogOptions,
   catalogPrices,
@@ -3176,6 +3177,53 @@ export async function createCatalogItem(
     defaultFulfillment: defaultFulfillment(input.type, input.subtype),
     configuration: normalizedConfiguration,
   };
+  const versionId = crypto.randomUUID();
+  const versionSnapshot = {
+    item: values,
+    options: optionValues.map(({ code, name, values: optionValues }) => ({
+      code,
+      name,
+      values: optionValues,
+    })),
+    variants: variantValues.map(
+      ({ sku, title, optionCoordinates, status }) => ({
+        sku,
+        title,
+        optionCoordinates,
+        status,
+      }),
+    ),
+    prices: prices.map(
+      ({
+        audience,
+        paymentKind,
+        amountMinor,
+        currency,
+        creditAmount,
+        recurringInterval,
+        recurringIntervalCount,
+      }) => ({
+        audience,
+        paymentKind,
+        amountMinor,
+        currency,
+        creditAmount,
+        recurringInterval,
+        recurringIntervalCount,
+      }),
+    ),
+    media: mediaValues.map(
+      ({ kind, url, posterUrl, alt, sortOrder, catalogVariantId }) => ({
+        kind,
+        url,
+        posterUrl,
+        alt,
+        sortOrder,
+        catalogVariantId,
+      }),
+    ),
+    entitlements: planEntitlementValues,
+  };
   await database.batch([
     database.insert(catalogItems).values({
       id: itemId,
@@ -3183,6 +3231,7 @@ export async function createCatalogItem(
       ...values,
       createdByPersonId: input.actor.personId,
       status: "draft",
+      currentVersionId: versionId,
     }),
     optionValues.length > 0
       ? database.insert(catalogOptions).values(optionValues)
@@ -3290,6 +3339,15 @@ export async function createCatalogItem(
           .update(catalogItems)
           .set({ updatedAt: input.now })
           .where(sql`false`),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: itemId,
+      version: 1,
+      snapshot: versionSnapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -3312,6 +3370,490 @@ export async function createCatalogItem(
     }),
   ]);
   return { id: itemId, entity: "catalog-item", status: "draft" };
+}
+
+/**
+ * Replaces the sellable projection of an offer while preserving every prior
+ * checkout reference. Existing variants are reused where their option
+ * coordinates match so inventory remains connected; retired variants and
+ * prices are archived instead of deleted.
+ */
+export async function replaceCatalogItem(
+  input: CreateCatalogItemInput & { readonly catalogItemId: string },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const [organization, item, existingVariants, versions] = await Promise.all([
+    database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }),
+    database.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.id, input.catalogItemId),
+        eq(catalogItems.organizationId, organizationId),
+      ),
+    }),
+    database
+      .select()
+      .from(catalogVariants)
+      .where(
+        and(
+          eq(catalogVariants.catalogItemId, input.catalogItemId),
+          eq(catalogVariants.organizationId, organizationId),
+        ),
+      ),
+    database
+      .select({ version: catalogItemVersions.version })
+      .from(catalogItemVersions)
+      .where(eq(catalogItemVersions.catalogItemId, input.catalogItemId))
+      .orderBy(desc(catalogItemVersions.version))
+      .limit(1),
+  ]);
+  if (!organization || !item) {
+    throw new Error("Product was not found in this organization.");
+  }
+  if (item.type !== input.type || item.subtype !== input.subtype) {
+    throw new Error("Create a clone to change an offer's family or type.");
+  }
+  if (input.initialInventory) {
+    throw new Error(
+      "Receive additional stock from Inventory so its movement history stays append-only.",
+    );
+  }
+  if (
+    input.type === "good" &&
+    !input.media.some((media) => media.kind === "image")
+  ) {
+    throw new Error("Add at least one image before saving a good.");
+  }
+  const inventoryOnlyGood =
+    input.type === "good" &&
+    input.configuration.inventoryTracked === true &&
+    input.configuration.saleEnabled === false;
+  if (
+    !inventoryOnlyGood &&
+    !input.allowCard &&
+    !input.allowCash &&
+    !input.allowCredits
+  ) {
+    throw new Error("Choose at least one way customers can pay.");
+  }
+  if (
+    !inventoryOnlyGood &&
+    (input.allowCard || input.allowCash) &&
+    input.priceMinor === undefined
+  ) {
+    throw new Error("Add a cash price when card or cash payment is enabled.");
+  }
+  if (input.allowCredits && (!input.creditCost || input.creditCost <= 0)) {
+    throw new Error("Add a positive credit cost when credits are enabled.");
+  }
+
+  const coordinates = variantMatrix(input.options);
+  const existingByCoordinate = new Map(
+    existingVariants.map((variant) => [
+      stableHash(variant.optionCoordinates),
+      variant,
+    ]),
+  );
+  const nextVariants = coordinates.map((optionCoordinates, index) => {
+    const existing = existingByCoordinate.get(stableHash(optionCoordinates));
+    return {
+      id: existing?.id ?? crypto.randomUUID(),
+      existing: Boolean(existing),
+      organizationId,
+      catalogItemId: item.id,
+      sku:
+        input.type === "good"
+          ? `${item.slug.toUpperCase().replaceAll("-", "_")}-${String(index + 1).padStart(3, "0")}`
+          : undefined,
+      title: variantTitle(input.title.trim(), optionCoordinates),
+      optionCoordinates,
+      status: "active" as const,
+    };
+  });
+  const variantById = new Map(
+    nextVariants.map((variant) => [variant.id, variant]),
+  );
+  const priceRows = nextVariants.flatMap((variant) => {
+    const money = (
+      [
+        input.allowCard ? "card" : undefined,
+        input.allowCash ? "cash" : undefined,
+      ] as const
+    )
+      .filter((kind): kind is "card" | "cash" => Boolean(kind))
+      .map((paymentKind) => ({
+        id: crypto.randomUUID(),
+        organizationId,
+        catalogItemId: item.id,
+        catalogVariantId: variant.id,
+        audience: "everyone" as const,
+        paymentKind,
+        amountMinor: input.priceMinor ?? 0,
+        currency: organization.currency,
+        recurringInterval: input.recurringInterval,
+        recurringIntervalCount: input.recurringIntervalCount,
+      }));
+    return input.allowCredits && input.creditCost
+      ? [
+          ...money,
+          {
+            id: crypto.randomUUID(),
+            organizationId,
+            catalogItemId: item.id,
+            catalogVariantId: variant.id,
+            audience: "everyone" as const,
+            paymentKind: "credit" as const,
+            creditAmount: input.creditCost,
+          },
+        ]
+      : money;
+  });
+  const optionRows = input.options.map((option, sortOrder) => ({
+    id: crypto.randomUUID(),
+    organizationId,
+    catalogItemId: item.id,
+    code: optionCode(option.name),
+    name: option.name.trim(),
+    values: [
+      ...new Set(option.values.map((value) => value.trim()).filter(Boolean)),
+    ],
+    required: true,
+    sortOrder,
+  }));
+  const mediaRows = input.media.map((media, sortOrder) => {
+    const variant =
+      media.variantIndex === undefined
+        ? undefined
+        : nextVariants[media.variantIndex];
+    if (media.variantIndex !== undefined && !variant) {
+      throw new Error("Product media points to a variant that does not exist.");
+    }
+    return {
+      id: crypto.randomUUID(),
+      organizationId,
+      catalogItemId: item.id,
+      catalogVariantId: variant?.id,
+      kind: media.kind,
+      url: media.url.trim(),
+      posterUrl: media.posterUrl?.trim() || undefined,
+      alt: media.alt?.trim() || input.title.trim(),
+      sortOrder,
+    };
+  });
+  const values = {
+    title: input.title.trim(),
+    shortSummary: input.shortSummary?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    visibility: input.visibility,
+    taxable: input.taxable,
+    stripeTaxCode: input.stripeTaxCode?.trim() || undefined,
+    allowCard: input.allowCard,
+    allowCash: input.allowCash,
+    allowCredits: input.allowCredits,
+    membershipRequired: input.membershipRequired,
+    configuration: input.configuration,
+    status: "draft" as const,
+    updatedAt: input.now,
+  };
+  const versionId = crypto.randomUUID();
+  const version = (versions[0]?.version ?? 0) + 1;
+  const snapshot = {
+    item: {
+      type: item.type,
+      subtype: item.subtype,
+      slug: item.slug,
+      ...values,
+    },
+    options: optionRows.map(({ code, name, values: optionValues }) => ({
+      code,
+      name,
+      values: optionValues,
+    })),
+    variants: nextVariants.map(({ sku, title, optionCoordinates, status }) => ({
+      sku,
+      title,
+      optionCoordinates,
+      status,
+    })),
+    prices: priceRows,
+    media: mediaRows.map(
+      ({ kind, url, posterUrl, alt, sortOrder, catalogVariantId }) => ({
+        kind,
+        url,
+        posterUrl,
+        alt,
+        sortOrder,
+        catalogVariantId,
+      }),
+    ),
+  };
+  const retiredVariantIds = existingVariants
+    .filter((variant) => !variantById.has(variant.id))
+    .map((variant) => variant.id);
+  await database.batch([
+    database
+      .update(catalogItems)
+      .set({ ...values, currentVersionId: versionId })
+      .where(
+        and(
+          eq(catalogItems.id, item.id),
+          eq(catalogItems.organizationId, organizationId),
+        ),
+      ),
+    database
+      .delete(catalogOptions)
+      .where(eq(catalogOptions.catalogItemId, item.id)),
+    database
+      .delete(catalogMedia)
+      .where(eq(catalogMedia.catalogItemId, item.id)),
+    database
+      .update(catalogPrices)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(catalogPrices.catalogItemId, item.id),
+          eq(catalogPrices.organizationId, organizationId),
+          eq(catalogPrices.active, true),
+        ),
+      ),
+    ...(retiredVariantIds.length > 0
+      ? [
+          database
+            .update(catalogVariants)
+            .set({ status: "archived", updatedAt: input.now })
+            .where(inArray(catalogVariants.id, retiredVariantIds)),
+        ]
+      : []),
+    ...nextVariants
+      .filter((variant) => variant.existing)
+      .map((variant) =>
+        database
+          .update(catalogVariants)
+          .set({
+            title: variant.title,
+            sku: variant.sku,
+            status: "active",
+            updatedAt: input.now,
+          })
+          .where(eq(catalogVariants.id, variant.id)),
+      ),
+    ...(nextVariants.some((variant) => !variant.existing)
+      ? [
+          database
+            .insert(catalogVariants)
+            .values(
+              nextVariants
+                .filter((variant) => !variant.existing)
+                .map(({ existing: _existing, ...variant }) => variant),
+            ),
+        ]
+      : []),
+    optionRows.length > 0
+      ? database.insert(catalogOptions).values(optionRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    priceRows.length > 0
+      ? database.insert(catalogPrices).values(priceRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    mediaRows.length > 0
+      ? database.insert(catalogMedia).values(mediaRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: item.id,
+      version,
+      snapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "catalog.item_version_created",
+      entityType: "catalog-item",
+      entityId: item.id,
+      beforeHash: stableHash(item),
+      afterHash: stableHash(snapshot),
+      reason: `Operator saved product version ${version} as a private draft.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: item.id, entity: "catalog-item", status: "draft" };
+}
+
+export async function loadCatalogItemVersions(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+}) {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const [item, rows] = await Promise.all([
+    database.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.id, input.catalogItemId),
+        eq(catalogItems.organizationId, organizationId),
+      ),
+    }),
+    database
+      .select()
+      .from(catalogItemVersions)
+      .where(
+        and(
+          eq(catalogItemVersions.catalogItemId, input.catalogItemId),
+          eq(catalogItemVersions.organizationId, organizationId),
+        ),
+      )
+      .orderBy(desc(catalogItemVersions.version)),
+  ]);
+  if (!item) throw new Error("Product was not found in this organization.");
+  return rows.map((row) => {
+    const snapshotItem = row.snapshot.item as
+      Record<string, unknown> | undefined;
+    return {
+      id: row.id,
+      version: row.version,
+      title:
+        typeof snapshotItem?.title === "string"
+          ? snapshotItem.title
+          : item.title,
+      createdAt: row.createdAt.toISOString(),
+      current: row.id === item.currentVersionId,
+    };
+  });
+}
+
+export async function revertCatalogItemVersion(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+  readonly versionId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const version = await database.query.catalogItemVersions.findFirst({
+    where: and(
+      eq(catalogItemVersions.id, input.versionId),
+      eq(catalogItemVersions.catalogItemId, input.catalogItemId),
+      eq(catalogItemVersions.organizationId, organizationId),
+    ),
+  });
+  if (!version) throw new Error("That product version was not found.");
+  const snapshot = version.snapshot as Record<string, unknown>;
+  const item = snapshot.item as Record<string, unknown> | undefined;
+  const options = Array.isArray(snapshot.options)
+    ? snapshot.options.map((option) => option as Record<string, unknown>)
+    : [];
+  const media = Array.isArray(snapshot.media)
+    ? snapshot.media.map((entry) => entry as Record<string, unknown>)
+    : [];
+  const prices = Array.isArray(snapshot.prices)
+    ? snapshot.prices.map((entry) => entry as Record<string, unknown>)
+    : [];
+  if (
+    !item ||
+    typeof item.type !== "string" ||
+    typeof item.subtype !== "string"
+  ) {
+    throw new Error("This historical version cannot be restored safely.");
+  }
+  const cardPrice = prices.find(
+    (price) => price.paymentKind === "card" || price.paymentKind === "cash",
+  );
+  const creditPrice = prices.find((price) => price.paymentKind === "credit");
+  return replaceCatalogItem({
+    actor: input.actor,
+    catalogItemId: input.catalogItemId,
+    type: item.type as CatalogItemType,
+    subtype: item.subtype,
+    title: String(item.title ?? "Untitled product"),
+    shortSummary:
+      typeof item.shortSummary === "string" ? item.shortSummary : undefined,
+    description:
+      typeof item.description === "string" ? item.description : undefined,
+    visibility:
+      item.visibility === "members" || item.visibility === "private"
+        ? item.visibility
+        : "public",
+    taxable: item.taxable === true,
+    stripeTaxCode:
+      typeof item.stripeTaxCode === "string" ? item.stripeTaxCode : undefined,
+    allowCard: item.allowCard === true,
+    allowCash: item.allowCash === true,
+    allowCredits: item.allowCredits === true,
+    membershipRequired: item.membershipRequired === true,
+    priceMinor:
+      typeof cardPrice?.amountMinor === "number"
+        ? cardPrice.amountMinor
+        : undefined,
+    creditCost:
+      typeof creditPrice?.creditAmount === "number"
+        ? creditPrice.creditAmount
+        : undefined,
+    recurringInterval:
+      cardPrice?.recurringInterval === "week" ||
+      cardPrice?.recurringInterval === "month" ||
+      cardPrice?.recurringInterval === "year"
+        ? cardPrice.recurringInterval
+        : undefined,
+    recurringIntervalCount:
+      typeof cardPrice?.recurringIntervalCount === "number"
+        ? cardPrice.recurringIntervalCount
+        : undefined,
+    options: options.flatMap((option) =>
+      typeof option.name === "string" && Array.isArray(option.values)
+        ? [
+            {
+              name: option.name,
+              values: option.values.filter(
+                (value): value is string => typeof value === "string",
+              ),
+            },
+          ]
+        : [],
+    ),
+    media: media.flatMap((entry) =>
+      (entry.kind === "image" || entry.kind === "video") &&
+      typeof entry.url === "string"
+        ? [
+            {
+              kind: entry.kind,
+              url: entry.url,
+              posterUrl:
+                typeof entry.posterUrl === "string"
+                  ? entry.posterUrl
+                  : undefined,
+              alt: typeof entry.alt === "string" ? entry.alt : undefined,
+            },
+          ]
+        : [],
+    ),
+    configuration:
+      item.configuration && typeof item.configuration === "object"
+        ? (item.configuration as Record<string, unknown>)
+        : {},
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
 }
 
 export async function updateCatalogItem(input: {
@@ -3439,26 +3981,68 @@ export async function updateCatalogItem(input: {
     configuration: normalizedConfiguration,
     updatedAt: input.now,
   };
+  const [latestVersion, options, variants, prices, media] = await Promise.all([
+    database
+      .select({ version: catalogItemVersions.version })
+      .from(catalogItemVersions)
+      .where(eq(catalogItemVersions.catalogItemId, item.id))
+      .orderBy(desc(catalogItemVersions.version))
+      .limit(1),
+    database
+      .select()
+      .from(catalogOptions)
+      .where(eq(catalogOptions.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogVariants)
+      .where(eq(catalogVariants.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogPrices)
+      .where(eq(catalogPrices.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogMedia)
+      .where(eq(catalogMedia.catalogItemId, item.id)),
+  ]);
+  const versionId = crypto.randomUUID();
+  const version = (latestVersion[0]?.version ?? 0) + 1;
+  const snapshot = {
+    item: { ...item, ...changes },
+    options,
+    variants,
+    prices,
+    media,
+  };
   await database.batch([
     database
       .update(catalogItems)
-      .set(changes)
+      .set({ ...changes, currentVersionId: versionId })
       .where(
         and(
           eq(catalogItems.id, item.id),
           eq(catalogItems.organizationId, organizationId),
         ),
       ),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: item.id,
+      version,
+      snapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
       actorType: "person",
-      action: "catalog.item_updated",
+      action: "catalog.item_version_created",
       entityType: "catalog-item",
       entityId: item.id,
       beforeHash: stableHash(item),
-      afterHash: stableHash({ ...item, ...changes }),
-      reason: "Operator updated a catalog offer and its coach assignment.",
+      afterHash: stableHash(snapshot),
+      reason: `Operator saved product version ${version} from the catalog editor.`,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
