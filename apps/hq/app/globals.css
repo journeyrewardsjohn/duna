@@ -31276,6 +31276,36 @@ body {
   overflow: hidden;
 }
 
+.prediction-admin-settle {
+  align-items: start;
+  background: color-mix(in srgb, var(--hq-tint) 45%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--hq-core) 26%, var(--color-line));
+  border-radius: 20px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  padding: 1.1rem 1.25rem;
+}
+
+.prediction-admin-settle h2 {
+  font-size: 1.1rem;
+  margin: 0.2rem 0 0;
+}
+
+.prediction-admin-settle p {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0.4rem 0 0;
+  max-width: 64ch;
+}
+
+.prediction-admin-settle .operator-form {
+  align-items: end;
+  display: grid;
+  gap: 0.6rem;
+}
+
 .prediction-admin-list > header {
   align-items: start;
   display: flex;
@@ -31298,6 +31328,161 @@ body {
 
 .prediction-admin-market {
   border-top: 1px solid var(--color-line);
+}
+
+.prediction-admin-result {
+  border-top: 1px solid var(--color-line);
+}
+
+.prediction-admin-result > summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 170px minmax(220px, 1fr) auto;
+  list-style: none;
+  min-height: 82px;
+  padding: 0.85rem 1.2rem;
+}
+
+.prediction-admin-result > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prediction-admin-result > summary:hover {
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+}
+
+.prediction-admin-result > summary > span:not(:first-child) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prediction-admin-result > summary > span:last-child {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-align: right;
+}
+
+.prediction-admin-result > summary strong,
+.prediction-admin-result > summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prediction-admin-result > summary small {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  margin-top: 0.22rem;
+}
+
+.prediction-admin-result__status {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--color-warning) 45%, var(--color-line));
+  border-radius: 999px;
+  color: var(--hq-ink);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  padding: 0.38rem 0.55rem;
+}
+
+.prediction-admin-result__form {
+  background: var(--color-canvas);
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.prediction-admin-result__form > header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prediction-admin-result__form h3 {
+  font-size: 1rem;
+  margin: 0.18rem 0 0;
+}
+
+.prediction-admin-result__form p {
+  color: var(--color-bone-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0.35rem 0 0;
+  max-width: 62ch;
+}
+
+.prediction-admin-result__form fieldset {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+}
+
+.prediction-admin-result__form legend {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  margin-bottom: 0.4rem;
+  padding: 0;
+  width: 100%;
+}
+
+.prediction-admin-result__winner {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 750;
+  gap: 0.45rem;
+  padding: 0.6rem 0.7rem;
+}
+
+.prediction-admin-result__sets {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prediction-admin-result__sets > label {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  padding: 0.55rem;
+}
+
+.prediction-admin-result__sets span {
+  color: var(--color-bone-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.prediction-admin-result__sets input {
+  min-width: 0;
+  padding: 0.45rem !important;
+  text-align: center;
+}
+
+.prediction-admin-result__sets b {
+  color: var(--color-bone-muted);
 }
 
 .prediction-admin-market > summary {
@@ -31548,6 +31733,10 @@ body {
   .prediction-admin-workspace {
     grid-template-columns: 1fr;
   }
+
+  .prediction-admin-settle {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -31557,6 +31746,14 @@ body {
 
   .prediction-admin-market > summary {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .prediction-admin-result > summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .prediction-admin-result > summary > span:last-child {
+    display: none;
   }
 
   .prediction-admin-market > summary > span:nth-child(3),
@@ -31572,6 +31769,10 @@ body {
 
   .prediction-admin-public > div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prediction-admin-result__sets {
+    grid-template-columns: 1fr;
   }
 }
 

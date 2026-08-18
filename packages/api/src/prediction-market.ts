@@ -2034,9 +2034,161 @@ export async function settlePredictionMarket(input: {
   });
 }
 
+function validatedManualScore(input: {
+  readonly winnerSide: "A" | "B";
+  readonly sets: readonly { readonly a: number; readonly b: number }[];
+}) {
+  if (input.sets.length < 2 || input.sets.length > 5) {
+    throw new PredictionMarketError(
+      "INVALID_ORDER",
+      "Enter the completed set scores (between two and five sets).",
+    );
+  }
+  const setWins = input.sets.reduce(
+    (wins, set) => {
+      if (
+        !Number.isInteger(set.a) ||
+        !Number.isInteger(set.b) ||
+        set.a < 0 ||
+        set.b < 0 ||
+        set.a === set.b
+      ) {
+        throw new PredictionMarketError(
+          "INVALID_ORDER",
+          "Every set needs two non-negative, non-tied scores.",
+        );
+      }
+      return set.a > set.b
+        ? { ...wins, A: wins.A + 1 }
+        : { ...wins, B: wins.B + 1 };
+    },
+    { A: 0, B: 0 },
+  );
+  const scoreWinner = setWins.A > setWins.B ? "A" : "B";
+  if (scoreWinner !== input.winnerSide) {
+    throw new PredictionMarketError(
+      "INVALID_ORDER",
+      "The declared winner must have won more submitted sets.",
+    );
+  }
+  return input.sets.map((set) => ({ a: set.a, b: set.b }));
+}
+
+/**
+ * Records a SuperAdmin-verified professional result when an upstream scorer is
+ * incomplete. The manual evidence stays attached to the source payload so a
+ * later partial scrape cannot make the public result disappear.
+ */
+export async function recordManualProMatchResult(input: {
+  readonly matchId: string;
+  readonly winnerSide: "A" | "B";
+  readonly sets: readonly { readonly a: number; readonly b: number }[];
+  readonly actorPersonId: string;
+  readonly reason: string;
+  readonly sourceUrl?: string;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+  readonly now?: Date;
+}) {
+  requireDatabase();
+  const now = input.now ?? new Date();
+  const sets = validatedManualScore(input);
+  const database = getTransactionalDatabase();
+  const result = await database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${input.matchId}))`,
+    );
+    const match = await transaction.query.importedMatches.findFirst({
+      where: eq(importedMatches.id, input.matchId),
+    });
+    if (!match) {
+      throw new PredictionMarketError("MARKET_NOT_FOUND", "Match not found.");
+    }
+    const previousPayload =
+      match.rawPayload &&
+      typeof match.rawPayload === "object" &&
+      !Array.isArray(match.rawPayload)
+        ? match.rawPayload
+        : {};
+    const manualResult = {
+      winnerSide: input.winnerSide,
+      sets,
+      reason: input.reason,
+      ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
+      submittedByPersonId: input.actorPersonId,
+      submittedAt: now.toISOString(),
+    };
+    await transaction
+      .update(importedMatches)
+      .set({
+        sets,
+        winnerSide: input.winnerSide,
+        rawPayload: { ...previousPayload, dunaManualResult: manualResult },
+        updatedAt: now,
+      })
+      .where(eq(importedMatches.id, match.id));
+    await transaction.insert(auditLog).values({
+      actorPersonId: input.actorPersonId,
+      actorType: "person",
+      action: "professional-match.result.recorded",
+      entityType: "imported-match",
+      entityId: match.id,
+      beforeHash: stableHash({
+        sets: match.sets,
+        winnerSide: match.winnerSide,
+        manualResult: (previousPayload as Record<string, unknown>)
+          .dunaManualResult,
+      }),
+      afterHash: stableHash({
+        sets,
+        winnerSide: input.winnerSide,
+        manualResult,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: now,
+    });
+    const markets = await transaction
+      .select({ id: predictionMarkets.id })
+      .from(predictionMarkets)
+      .where(
+        and(
+          eq(predictionMarkets.subjectType, "pro-match"),
+          eq(predictionMarkets.subjectId, match.id),
+          inArray(predictionMarkets.status, ["open", "locked"]),
+        ),
+      );
+    return { marketIds: markets.map((market) => market.id), manualResult };
+  });
+  let settledMarkets = 0;
+  for (const marketId of result.marketIds) {
+    const settlement = await settlePredictionMarket({
+      marketId,
+      resolvedSide: input.winnerSide === "A" ? "yes" : "no",
+      actorPersonId: input.actorPersonId,
+      reason: `Manual score result: ${input.reason}`,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now,
+    });
+    if (settlement.settled) settledMarkets += 1;
+  }
+  return {
+    matchId: input.matchId,
+    winnerSide: input.winnerSide,
+    settledMarkets,
+    manualResult: result.manualResult,
+  };
+}
+
 export async function settleResolvedPredictionMarkets(input?: {
   readonly limit?: number;
   readonly now?: Date;
+  readonly actorPersonId?: string;
+  readonly reason?: string;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
 }) {
   if (!isDatabaseConfigured()) return { settled: 0 };
   const database = getDatabase();
@@ -2098,6 +2250,10 @@ export async function settleResolvedPredictionMarkets(input?: {
     const result = await settlePredictionMarket({
       marketId: row.marketId,
       resolvedSide,
+      actorPersonId: input?.actorPersonId,
+      reason: input?.reason,
+      requestId: input?.requestId,
+      ipAddress: input?.ipAddress,
       now,
     });
     if (result.settled) settled += 1;
@@ -2456,6 +2612,7 @@ export async function loadAdminPredictionOverview(input?: {
         volumeCredits: 0,
       },
       markets: [],
+      manualResultMatches: [],
       canManage: Boolean(input?.canManage),
       updatedAt: now.toISOString(),
     };
@@ -2467,68 +2624,93 @@ export async function loadAdminPredictionOverview(input?: {
     .orderBy(desc(predictionMarkets.updatedAt))
     .limit(250);
   const marketIds = marketRows.map((market) => market.id);
-  const [ruleRows, positionRows, orderRows, marketMetrics, predictorMetrics] =
-    await Promise.all([
-      marketIds.length
-        ? database
-            .select({
-              rule: predictionMarketRuleVersions,
-              createdByHandle: people.handle,
-            })
-            .from(predictionMarketRuleVersions)
-            .leftJoin(
-              people,
-              eq(predictionMarketRuleVersions.createdByPersonId, people.id),
-            )
-            .where(inArray(predictionMarketRuleVersions.marketId, marketIds))
-            .orderBy(desc(predictionMarketRuleVersions.version))
-        : Promise.resolve([]),
-      marketIds.length
-        ? database
-            .select({
-              marketId: predictionPositions.marketId,
-              personId: predictionPositions.personId,
-              handle: people.handle,
-              side: predictionPositions.side,
-              sharesMicros: predictionPositions.sharesMicros,
-              status: predictionPositions.status,
-              updatedAt: predictionPositions.updatedAt,
-            })
-            .from(predictionPositions)
-            .innerJoin(people, eq(predictionPositions.personId, people.id))
-            .where(
-              and(
-                inArray(predictionPositions.marketId, marketIds),
-                gte(predictionPositions.sharesMicros, 1),
-              ),
-            )
-        : Promise.resolve([]),
-      marketIds.length
-        ? database
-            .select({ marketId: predictionOrders.marketId })
-            .from(predictionOrders)
-            .where(
-              and(
-                inArray(predictionOrders.marketId, marketIds),
-                inArray(predictionOrders.status, ["open", "partially-filled"]),
-              ),
-            )
-        : Promise.resolve([]),
-      database
-        .select({
-          totalMarkets: sql<number>`count(*)::int`,
-          openMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'open')::int`,
-          lockedMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'locked')::int`,
-          determinedMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'settled')::int`,
-          volumeMicros: sql<number>`coalesce(sum(${predictionMarkets.volumeMicros}), 0)`,
-        })
-        .from(predictionMarkets),
-      database
-        .select({
-          predictorCount: sql<number>`count(distinct ${predictionPositions.personId})::int`,
-        })
-        .from(predictionPositions),
-    ]);
+  const proMatchIds = marketRows
+    .filter(
+      (market) =>
+        market.subjectType === "pro-match" &&
+        (market.status === "open" || market.status === "locked"),
+    )
+    .map((market) => market.subjectId);
+  const [
+    ruleRows,
+    positionRows,
+    orderRows,
+    manualResultRows,
+    marketMetrics,
+    predictorMetrics,
+  ] = await Promise.all([
+    marketIds.length
+      ? database
+          .select({
+            rule: predictionMarketRuleVersions,
+            createdByHandle: people.handle,
+          })
+          .from(predictionMarketRuleVersions)
+          .leftJoin(
+            people,
+            eq(predictionMarketRuleVersions.createdByPersonId, people.id),
+          )
+          .where(inArray(predictionMarketRuleVersions.marketId, marketIds))
+          .orderBy(desc(predictionMarketRuleVersions.version))
+      : Promise.resolve([]),
+    marketIds.length
+      ? database
+          .select({
+            marketId: predictionPositions.marketId,
+            personId: predictionPositions.personId,
+            handle: people.handle,
+            side: predictionPositions.side,
+            sharesMicros: predictionPositions.sharesMicros,
+            status: predictionPositions.status,
+            updatedAt: predictionPositions.updatedAt,
+          })
+          .from(predictionPositions)
+          .innerJoin(people, eq(predictionPositions.personId, people.id))
+          .where(
+            and(
+              inArray(predictionPositions.marketId, marketIds),
+              gte(predictionPositions.sharesMicros, 1),
+            ),
+          )
+      : Promise.resolve([]),
+    marketIds.length
+      ? database
+          .select({ marketId: predictionOrders.marketId })
+          .from(predictionOrders)
+          .where(
+            and(
+              inArray(predictionOrders.marketId, marketIds),
+              inArray(predictionOrders.status, ["open", "partially-filled"]),
+            ),
+          )
+      : Promise.resolve([]),
+    proMatchIds.length
+      ? database
+          .select({
+            id: importedMatches.id,
+            title: importedMatches.title,
+            playedAt: importedMatches.playedAt,
+            sets: importedMatches.sets,
+            winnerSide: importedMatches.winnerSide,
+          })
+          .from(importedMatches)
+          .where(inArray(importedMatches.id, proMatchIds))
+      : Promise.resolve([]),
+    database
+      .select({
+        totalMarkets: sql<number>`count(*)::int`,
+        openMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'open')::int`,
+        lockedMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'locked')::int`,
+        determinedMarkets: sql<number>`count(*) filter (where ${predictionMarkets.status} = 'settled')::int`,
+        volumeMicros: sql<number>`coalesce(sum(${predictionMarkets.volumeMicros}), 0)`,
+      })
+      .from(predictionMarkets),
+    database
+      .select({
+        predictorCount: sql<number>`count(distinct ${predictionPositions.personId})::int`,
+      })
+      .from(predictionPositions),
+  ]);
   const metrics = marketMetrics[0];
   const predictorMetric = predictorMetrics[0];
   return {
@@ -2588,6 +2770,28 @@ export async function loadAdminPredictionOverview(input?: {
           status: predictionPositionStatus(position.status),
           updatedAt: position.updatedAt.toISOString(),
         })),
+      };
+    }),
+    manualResultMatches: manualResultRows.map((match) => {
+      const linkedMarkets = marketRows.filter(
+        (market) =>
+          market.subjectType === "pro-match" &&
+          market.subjectId === match.id &&
+          (market.status === "open" || market.status === "locked"),
+      );
+      const primary = linkedMarkets[0];
+      return {
+        id: match.id,
+        title: match.title,
+        yesLabel: primary?.yesLabel ?? "Team A",
+        noLabel: primary?.noLabel ?? "Team B",
+        playedAt: match.playedAt?.toISOString(),
+        sets: match.sets,
+        winnerSide:
+          match.winnerSide === "A" || match.winnerSide === "B"
+            ? (match.winnerSide as "A" | "B")
+            : undefined,
+        marketCount: linkedMarkets.length,
       };
     }),
     canManage: Boolean(input?.canManage),
@@ -2880,6 +3084,12 @@ export async function loadPredictionWallet(input: {
       marketId: market.id,
       title: market.title,
       selectedLabel: side === "yes" ? market.yesLabel : market.noLabel,
+      resolvedLabel:
+        market.resolvedSide === "yes"
+          ? market.yesLabel
+          : market.resolvedSide === "no"
+            ? market.noLabel
+            : undefined,
       side,
       shares: predictionMicrosToCredits(position.sharesMicros),
       availableShares: predictionMicrosToCredits(

@@ -379,6 +379,33 @@ function unknownRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function manualImportedMatchResult(value: unknown):
+  | {
+      readonly winnerSide: "A" | "B";
+      readonly sets: readonly { readonly a: number; readonly b: number }[];
+    }
+  | undefined {
+  const manual = unknownRecord(unknownRecord(value).dunaManualResult);
+  const winnerSide = manual.winnerSide;
+  if (winnerSide !== "A" && winnerSide !== "B") return undefined;
+  const sets = Array.isArray(manual.sets)
+    ? manual.sets.flatMap((candidate) => {
+        const set = unknownRecord(candidate);
+        const a = typeof set.a === "number" ? set.a : undefined;
+        const b = typeof set.b === "number" ? set.b : undefined;
+        return typeof a === "number" &&
+          typeof b === "number" &&
+          Number.isInteger(a) &&
+          Number.isInteger(b) &&
+          a >= 0 &&
+          b >= 0
+          ? [{ a, b }]
+          : [];
+      })
+    : [];
+  return sets.length >= 2 ? { winnerSide, sets } : undefined;
+}
+
 function preserveEditorialPayload(
   incoming: Readonly<Record<string, unknown>>,
   existing: unknown,
@@ -9063,7 +9090,12 @@ export async function loadPublicProEvent(
   };
   const basePublicMatches: readonly PublicProMatch[] = matchRows.map(
     (match) => {
-      const liveScore = parseStoredVolleyballWorldMatch(match.rawPayload);
+      const manualResult = manualImportedMatchResult(match.rawPayload);
+      // A verified operator score takes precedence over a stale provider
+      // transport record, but provider stats remain available on later refresh.
+      const liveScore = manualResult
+        ? undefined
+        : parseStoredVolleyballWorldMatch(match.rawPayload);
       const baseTeamA = toTeam(match.participants, "A");
       const baseTeamB = toTeam(match.participants, "B");
       const teamA = {
@@ -9102,11 +9134,13 @@ export async function loadPublicProEvent(
         : 50;
       const matchSlug =
         slugSegment(`${teamA.label}-vs-${teamB.label}`) || "match";
-      const winnerSide = liveScore
-        ? officialMatchWinner(liveScore)
-        : match.winnerSide === "A" || match.winnerSide === "B"
-          ? match.winnerSide
-          : undefined;
+      const winnerSide =
+        manualResult?.winnerSide ??
+        (liveScore
+          ? officialMatchWinner(liveScore)
+          : match.winnerSide === "A" || match.winnerSide === "B"
+            ? match.winnerSide
+            : undefined);
       const time = objectString(match.rawPayload, "time");
       const timezone =
         objectString(match.rawPayload, "timezone") ??
@@ -9156,9 +9190,10 @@ export async function loadPublicProEvent(
         teamA,
         teamB,
         sets:
-          liveScore && liveScore.sets.length > 0
+          manualResult?.sets ??
+          (liveScore && liveScore.sets.length > 0
             ? liveScore.sets.map((set) => ({ a: set.a, b: set.b }))
-            : match.sets,
+            : match.sets),
         ...(liveScore ? { liveScore } : {}),
         ...(winnerSide ? { winnerSide } : {}),
         status,

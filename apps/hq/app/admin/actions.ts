@@ -806,6 +806,104 @@ export async function determinePredictionMarketAction(
   }
 }
 
+export async function recordPredictionMatchResultAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const matchId = String(formData.get("matchId") ?? "");
+  const winnerSide = String(formData.get("winnerSide") ?? "");
+  const sourceUrl = String(formData.get("sourceUrl") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const sets = [1, 2, 3, 4, 5].flatMap((setNo) => {
+    const aValue = String(formData.get(`set${setNo}A`) ?? "").trim();
+    const bValue = String(formData.get(`set${setNo}B`) ?? "").trim();
+    if (!aValue && !bValue) return [];
+    const a = Number(aValue);
+    const b = Number(bValue);
+    return Number.isInteger(a) && Number.isInteger(b) ? [{ a, b }] : [];
+  });
+  if (
+    !matchId ||
+    (winnerSide !== "A" && winnerSide !== "B") ||
+    sets.length < 2 ||
+    reason.length < 10 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Enter the final set scores, choose the winning team, document the verified source, and confirm the result.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.recordManualProMatchResult({
+      matchId,
+      winnerSide,
+      sets,
+      sourceUrl: sourceUrl || undefined,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    revalidatePath("/events");
+    revalidatePath("/events/[slug]", "page");
+    return {
+      status: "success",
+      message: `Final score saved. ${result.settledMarkets} linked ${result.settledMarkets === 1 ? "market was" : "markets were"} determined.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The final score could not be saved.",
+    };
+  }
+}
+
+export async function settleVerifiedPredictionMarketsAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (reason.length < 10 || !confirmed) {
+    return {
+      status: "error",
+      message:
+        "Add an operator reason and confirm the verified-result settlement run.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.settleResolvedPredictionMarkets({
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    revalidatePath("/events");
+    revalidatePath("/events/[slug]", "page");
+    return {
+      status: "success",
+      message:
+        result.settled > 0
+          ? `${result.settled} verified ${result.settled === 1 ? "market was" : "markets were"} determined.`
+          : "No open markets currently have a verified result to determine.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Verified markets could not be determined.",
+    };
+  }
+}
+
 export async function assignPersonToEventAction(
   _previous: PeopleAdminActionState,
   formData: FormData,
