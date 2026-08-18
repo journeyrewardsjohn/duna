@@ -505,25 +505,23 @@ private final class DunaVideoCaptureController: NSObject {
     orientation: CGImagePropertyOrientation
   ) {
     guard reserveVisionWork() else { return }
-    CVPixelBufferRetain(pixelBuffer)
     visionQueue.async { [weak self] in
-      guard let self else {
-        CVPixelBufferRelease(pixelBuffer)
-        return
-      }
+      guard let self else { return }
       defer {
-        CVPixelBufferRelease(pixelBuffer)
         self.finishVisionWork()
       }
       self.analyze(pixelBuffer, orientation: orientation)
     }
   }
 
-  private func analyze(_ sampleBuffer: CMSampleBuffer) {
+  private func analyze(
+    _ sampleBuffer: CMSampleBuffer,
+    orientation: CGImagePropertyOrientation
+  ) {
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
       return
     }
-    analyze(pixelBuffer, orientation: visionOrientation())
+    analyze(pixelBuffer, orientation: orientation)
   }
 
   private func analyze(
