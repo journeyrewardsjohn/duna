@@ -23,6 +23,7 @@ export * from "./match-availability-service";
 export * from "./member-card-service";
 export * from "./health-service";
 export * from "./health-intelligence";
+export * from "./higgsfield";
 export * from "./identity";
 export * from "./identity-verification";
 export * from "./family-wallet";

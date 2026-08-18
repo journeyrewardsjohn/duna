@@ -530,6 +530,10 @@ export const playerMediaWorkflows = pgTable(
       .$type<{
         readonly cutout?: string;
         readonly poster?: string;
+        readonly provider?: "higgsfield";
+        readonly cutoutJobId?: string;
+        readonly posterJobId?: string;
+        readonly referenceMediaIds?: readonly string[];
       }>()
       .default({}),
     outputImages: jsonb("output_images")

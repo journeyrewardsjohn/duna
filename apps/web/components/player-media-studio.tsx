@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createPlayerMediaWorkflowAction } from "@/app/app/settings/actions";
 import {
   playerMediaPath,
@@ -81,13 +81,33 @@ async function imageDimensions(file: File) {
 }
 
 function statusCopy(status: string) {
-  if (status === "ready") return "Ready for Duna AI production";
+  if (status === "ready") return "Artwork request received";
   if (status === "generating") return "Generating your athlete package";
   if (status === "review") return "Ready for your review";
   if (status === "published") return "Published to your public profile";
   if (status === "rejected") return "Changes requested";
   if (status === "failed") return "Production needs attention";
   return "Draft";
+}
+
+function productionProgress(status: string) {
+  if (status === "ready") return 18;
+  if (status === "generating") return 62;
+  if (status === "review") return 90;
+  if (status === "published") return 100;
+  return 0;
+}
+
+function productionTiming(status: string) {
+  if (status === "ready")
+    return "Artwork may take 3–5 minutes to begin. Your cutout and hero will appear here when they are ready for review.";
+  if (status === "generating")
+    return "Duna is creating your cutout and poster hero now. This usually takes 3–5 minutes.";
+  if (status === "review")
+    return "Your artwork is ready. Review the cutout and hero below before anything is published.";
+  if (status === "published")
+    return "Your approved artwork is now on your public player profile.";
+  return "";
 }
 
 export function PlayerMediaStudio({
@@ -104,6 +124,13 @@ export function PlayerMediaStudio({
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const status = studio.workflow?.status;
+    if (status !== "ready" && status !== "generating") return;
+    const interval = window.setInterval(() => router.refresh(), 15_000);
+    return () => window.clearInterval(interval);
+  }, [router, studio.workflow?.status]);
 
   async function choose(key: SlotKey, kind: "action", file: File) {
     setError(undefined);
@@ -265,8 +292,18 @@ export function PlayerMediaStudio({
               {new Date(studio.workflow.createdAt).toLocaleDateString()}
               {studio.workflow.failureReason
                 ? ` · ${studio.workflow.failureReason}`
-                : ""}
+                : ` · ${productionTiming(studio.workflow.status)}`}
             </p>
+            {studio.workflow.status !== "failed" &&
+              studio.workflow.status !== "rejected" && (
+                <span className="player-media-studio__production-progress">
+                  <i
+                    style={{
+                      width: `${productionProgress(studio.workflow.status)}%`,
+                    }}
+                  />
+                </span>
+              )}
           </div>
           {studio.workflow.outputImages.length > 0 && (
             <div className="player-media-studio__outputs">

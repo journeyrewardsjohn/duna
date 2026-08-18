@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/player-source-refresh",
       "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/cron/player-media",
+      "schedule": "*/2 * * * *"
     }
   ]
 }

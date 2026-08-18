@@ -33,6 +33,13 @@ import {
 } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
+import {
+  createHiggsfieldImage,
+  getHiggsfieldJob,
+  isHiggsfieldConfigured,
+  isHiggsfieldTerminal,
+  uploadHiggsfieldReference,
+} from "./higgsfield";
 import { assertProfileSubjectAuthority } from "./profile-onboarding";
 import {
   createPlayerResearchProposal,
@@ -742,7 +749,7 @@ export async function createPlayerMediaWorkflow(input: {
       })),
       brief: input.brief,
       generationPrompt: JSON.stringify(prompts),
-      models: { cutout: "nano_banana_2", poster: "gpt_image_2" },
+      models: { cutout: "nano_banana_pro", poster: "gpt_image_2" },
       rightsConfirmedAt: input.now,
       createdAt: input.now,
       updatedAt: input.now,
@@ -769,6 +776,221 @@ export async function createPlayerMediaWorkflow(input: {
       createdAt: input.now,
     });
   return { id: workflow.id, status: "ready" as const };
+}
+
+function mediaWorkflowPrompts(
+  workflow: typeof playerMediaWorkflows.$inferSelect,
+): { readonly cutout: string; readonly poster: string } {
+  try {
+    const parsed = JSON.parse(workflow.generationPrompt ?? "{}") as {
+      readonly cutout?: unknown;
+      readonly poster?: unknown;
+    };
+    if (
+      typeof parsed.cutout === "string" &&
+      typeof parsed.poster === "string"
+    ) {
+      return { cutout: parsed.cutout, poster: parsed.poster };
+    }
+  } catch {
+    // The processor below records malformed legacy briefs as a recoverable failure.
+  }
+  throw new PlayerIntelligenceError(
+    "MEDIA_REFERENCES_INVALID",
+    "The artwork brief is incomplete. Please submit the reference photos again.",
+  );
+}
+
+async function startPlayerMediaWorkflow(input: {
+  readonly workflow: typeof playerMediaWorkflows.$inferSelect;
+  readonly now: Date;
+}) {
+  const database = getDatabase();
+  // Claim before provider submission: repeated cron invocations must not spend
+  // credits on duplicate cutout/poster pairs.
+  const [claimed] = await database
+    .update(playerMediaWorkflows)
+    .set({
+      status: "generating",
+      models: {
+        cutout: "nano_banana_pro",
+        poster: "gpt_image_2",
+        provider: "higgsfield",
+      },
+      failureReason: null,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(playerMediaWorkflows.id, input.workflow.id),
+        eq(playerMediaWorkflows.status, "ready"),
+      ),
+    )
+    .returning({ id: playerMediaWorkflows.id });
+  if (!claimed) return false;
+
+  const prompts = mediaWorkflowPrompts(input.workflow);
+  const referenceMediaIds = await Promise.all(
+    input.workflow.referenceImages.map((image) =>
+      uploadHiggsfieldReference(image.url),
+    ),
+  );
+  const [cutout, poster] = await Promise.all([
+    createHiggsfieldImage({
+      jobType: "nano_banana_pro",
+      prompt: prompts.cutout,
+      imageReferenceIds: referenceMediaIds,
+      aspectRatio: "4:3",
+      resolution: "2k",
+    }),
+    createHiggsfieldImage({
+      jobType: "gpt_image_2",
+      prompt: prompts.poster,
+      imageReferenceIds: referenceMediaIds,
+      aspectRatio: "16:9",
+      resolution: "2k",
+      quality: "high",
+    }),
+  ]);
+  await database
+    .update(playerMediaWorkflows)
+    .set({
+      status: "generating",
+      models: {
+        cutout: "nano_banana_pro",
+        poster: "gpt_image_2",
+        provider: "higgsfield",
+        cutoutJobId: cutout.id,
+        posterJobId: poster.id,
+        referenceMediaIds,
+      },
+      failureReason: null,
+      updatedAt: input.now,
+    })
+    .where(eq(playerMediaWorkflows.id, input.workflow.id));
+  return true;
+}
+
+async function refreshPlayerMediaWorkflow(input: {
+  readonly workflow: typeof playerMediaWorkflows.$inferSelect;
+  readonly now: Date;
+}) {
+  const cutoutJobId = input.workflow.models.cutoutJobId;
+  const posterJobId = input.workflow.models.posterJobId;
+  if (!cutoutJobId || !posterJobId) {
+    if (
+      input.now.getTime() - input.workflow.updatedAt.getTime() <
+      10 * 60 * 1_000
+    ) {
+      return { pending: true as const };
+    }
+    await getDatabase()
+      .update(playerMediaWorkflows)
+      .set({
+        status: "failed",
+        failureReason:
+          "Duna could not confirm the artwork generation. Please submit the package again.",
+        updatedAt: input.now,
+      })
+      .where(eq(playerMediaWorkflows.id, input.workflow.id));
+    return { failed: true as const };
+  }
+  const [cutout, poster] = await Promise.all([
+    getHiggsfieldJob(cutoutJobId),
+    getHiggsfieldJob(posterJobId),
+  ]);
+  const jobs = [cutout, poster];
+  const failed = jobs.find(
+    (job) => isHiggsfieldTerminal(job.status) && job.status !== "completed",
+  );
+  if (failed) {
+    await getDatabase()
+      .update(playerMediaWorkflows)
+      .set({
+        status: "failed",
+        failureReason:
+          failed.failureReason ??
+          "Higgsfield could not complete this artwork package.",
+        updatedAt: input.now,
+      })
+      .where(eq(playerMediaWorkflows.id, input.workflow.id));
+    return { failed: true as const };
+  }
+  if (jobs.some((job) => job.status !== "completed")) {
+    return { pending: true as const };
+  }
+  if (!cutout.resultUrl || !poster.resultUrl) {
+    await getDatabase()
+      .update(playerMediaWorkflows)
+      .set({
+        status: "failed",
+        failureReason:
+          "Higgsfield completed the job without a downloadable image.",
+        updatedAt: input.now,
+      })
+      .where(eq(playerMediaWorkflows.id, input.workflow.id));
+    return { failed: true as const };
+  }
+  await getDatabase()
+    .update(playerMediaWorkflows)
+    .set({
+      status: "review",
+      outputImages: [
+        { url: cutout.resultUrl, kind: "cutout", jobId: cutout.id },
+        { url: poster.resultUrl, kind: "poster", jobId: poster.id },
+      ],
+      failureReason: null,
+      updatedAt: input.now,
+    })
+    .where(eq(playerMediaWorkflows.id, input.workflow.id));
+  return { completed: true as const };
+}
+
+export async function processPendingPlayerMediaWorkflows(input?: {
+  readonly limit?: number;
+}) {
+  requireDatabase();
+  if (!isHiggsfieldConfigured()) {
+    return { started: 0, completed: 0, failed: 0, pending: 0, skipped: true };
+  }
+  const now = new Date();
+  const limit = Math.max(1, Math.min(input?.limit ?? 8, 25));
+  const database = getDatabase();
+  const rows = await database.query.playerMediaWorkflows.findMany({
+    where: inArray(playerMediaWorkflows.status, ["ready", "generating"]),
+    orderBy: [asc(playerMediaWorkflows.createdAt)],
+    limit,
+  });
+  let started = 0;
+  let completed = 0;
+  let failed = 0;
+  let pending = 0;
+  for (const workflow of rows) {
+    try {
+      if (workflow.status === "ready") {
+        if (await startPlayerMediaWorkflow({ workflow, now })) started += 1;
+      } else {
+        const result = await refreshPlayerMediaWorkflow({ workflow, now });
+        if (result.completed) completed += 1;
+        else if (result.failed) failed += 1;
+        else if (result.pending) pending += 1;
+      }
+    } catch (error) {
+      await database
+        .update(playerMediaWorkflows)
+        .set({
+          status: "failed",
+          failureReason:
+            error instanceof Error
+              ? error.message.slice(0, 1_000)
+              : "Duna could not start this artwork package.",
+          updatedAt: now,
+        })
+        .where(eq(playerMediaWorkflows.id, workflow.id));
+      failed += 1;
+    }
+  }
+  return { started, completed, failed, pending, skipped: false };
 }
 
 export async function playerMediaUploadContext(input: {
