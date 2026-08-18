@@ -166,24 +166,31 @@ export default async function PredictionPortfolioPage() {
                 </span>
                 <div>
                   <strong>{position.title}</strong>
-                  <span>{position.selectedLabel}</span>
+                  <span>Picked: {position.selectedLabel}</span>
                   <small>
+                    {position.resolvedLabel
+                      ? `Final outcome: ${position.resolvedLabel}`
+                      : "Final outcome recorded"}
                     {position.determinedAt
-                      ? new Intl.DateTimeFormat("en-US", {
+                      ? ` · ${new Intl.DateTimeFormat("en-US", {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
-                        }).format(new Date(position.determinedAt))
-                      : "Final result recorded"}
+                        }).format(new Date(position.determinedAt))}`
+                      : ""}
                   </small>
                 </div>
                 <p>
                   <Badge
                     tone={position.status === "won" ? "positive" : "neutral"}
                   >
-                    {position.status}
+                    {position.status === "won"
+                      ? "Won"
+                      : position.status === "lost"
+                        ? "Lost"
+                        : "Voided"}
                   </Badge>
-                  <Numeric>{amount(position.payoutCredits)} paid</Numeric>
+                  <Numeric>{amount(position.payoutCredits)} returned</Numeric>
                   <span
                     data-tone={
                       position.netCredits >= 0 ? "positive" : "negative"

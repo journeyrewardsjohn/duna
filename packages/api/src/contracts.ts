@@ -958,6 +958,7 @@ export const predictionWalletSchema = z.object({
         marketId: z.string().uuid(),
         title: z.string(),
         selectedLabel: z.string(),
+        resolvedLabel: z.string().optional(),
         side: z.enum(["yes", "no"]),
         shares: z.number().nonnegative(),
         availableShares: z.number().nonnegative(),
@@ -1096,6 +1097,27 @@ export const adminPredictionOverviewSchema = z.object({
           )
           .readonly(),
         predictors: predictionMarketSchema.shape.predictors,
+      }),
+    )
+    .readonly(),
+  manualResultMatches: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        yesLabel: z.string(),
+        noLabel: z.string(),
+        playedAt: z.iso.datetime().optional(),
+        sets: z
+          .array(
+            z.object({
+              a: z.number().int().nonnegative(),
+              b: z.number().int().nonnegative(),
+            }),
+          )
+          .readonly(),
+        winnerSide: z.enum(["A", "B"]).optional(),
+        marketCount: z.number().int().positive(),
       }),
     )
     .readonly(),

@@ -569,9 +569,11 @@ import {
   placePredictionOrder,
   placePredictionSellOrder,
   PredictionMarketError,
+  recordManualProMatchResult,
   setPredictionMarketTradingStatus,
   settleDeterminedMatchPredictionMarket,
   settlePredictionMarket,
+  settleResolvedPredictionMarkets,
   updatePredictionMarketRules,
 } from "./prediction-market";
 import {
@@ -10828,6 +10830,91 @@ const adminRouter = router({
             return await settlePredictionMarket({
               marketId: input.marketId,
               resolvedSide: input.resolvedSide,
+              actorPersonId: ctx.actor!.personId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordManualProMatchResult: superAdminProcedure
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        winnerSide: z.enum(["A", "B"]),
+        sets: z
+          .array(
+            z.object({
+              a: z.number().int().min(0).max(99),
+              b: z.number().int().min(0).max(99),
+            }),
+          )
+          .min(2)
+          .max(5),
+        sourceUrl: z.url().max(2_000).optional(),
+        reason: z.string().trim().min(10).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        winnerSide: z.enum(["A", "B"]),
+        settledMarkets: z.number().int().nonnegative(),
+        manualResult: z.object({
+          winnerSide: z.enum(["A", "B"]),
+          sets: z.array(z.object({ a: z.number(), b: z.number() })),
+          reason: z.string(),
+          sourceUrl: z.string().optional(),
+          submittedByPersonId: z.string().uuid(),
+          submittedAt: z.iso.datetime(),
+        }),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.recordManualProMatchResult",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordManualProMatchResult({
+              ...input,
+              actorPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  settleResolvedPredictionMarkets: superAdminProcedure
+    .input(
+      z.object({
+        reason: z.string().trim().min(10).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ settled: z.number().int().nonnegative() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.settleResolvedPredictionMarkets",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await settleResolvedPredictionMarkets({
+              limit: 1_000,
               actorPersonId: ctx.actor!.personId,
               reason: input.reason,
               requestId: ctx.requestId,
