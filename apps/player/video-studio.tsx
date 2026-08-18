@@ -2680,8 +2680,31 @@ function CaptureExperience({
             setStreamState(next);
             if (next === "connecting" || next === "live")
               activeRef.current = true;
-            if (next === "stopped" && mode === "live")
+            if (next === "stopped") {
               activeRef.current = false;
+              setRecording(false);
+            }
+          }}
+          onRecordingFinalized={(event) => {
+            if (mode !== "record") return;
+            const stoppedAt = new Date();
+            const lockedCalibration = calibration();
+            activeRef.current = false;
+            setRecording(false);
+            setVisionNotice(
+              "Your recording was safely finalized after iOS interrupted capture.",
+            );
+            void appendPhoneEvent(
+              "recording-stopped",
+              "Duna Vision recording safely finalized after an iOS interruption",
+              stoppedAt,
+            );
+            void updateVisionStatus("ended");
+            onRecorded(
+              event.nativeEvent,
+              lockedCalibration,
+              sessionRef.current?.id,
+            );
           }}
           style={StyleSheet.absoluteFill}
         />

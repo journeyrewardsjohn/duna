@@ -112,6 +112,10 @@ export interface DunaVideoCaptureViewProps {
       readonly capturedAt: string;
     };
   }) => void;
+  /** A foreground interruption safely finalized a local recording. */
+  readonly onRecordingFinalized?: (event: {
+    readonly nativeEvent: PreparedVideo;
+  }) => void;
 }
 
 export type DunaVideoCaptureModuleEvents = Record<string, never>;
