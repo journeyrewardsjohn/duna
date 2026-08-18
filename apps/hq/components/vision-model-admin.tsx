@@ -8,6 +8,7 @@ import {
   Check,
   CircleAlert,
   CloudCog,
+  ExternalLink,
   FileCheck2,
   FlaskConical,
   Gauge,
@@ -15,8 +16,9 @@ import {
   Play,
   RotateCcw,
   ShieldCheck,
-  UsersRound,
+  Video,
 } from "lucide-react";
+import Link from "next/link";
 import { useActionState } from "react";
 import {
   registerVisionModelAction,
@@ -69,30 +71,38 @@ function RuntimeMetrics({
 }: {
   readonly overview: AdminVisionOverview;
 }) {
+  const analyzed = overview.uploadedVideos.filter((video) =>
+    ["ready", "needs-review"].includes(video.analysis?.status ?? ""),
+  ).length;
+  const completedEvals = overview.benchmarkRuns.filter(
+    (run) => run.status === "passed" || run.status === "failed",
+  ).length;
   const metrics = [
     {
-      label: "Modal runtime",
-      value: overview.runtime.configured ? "L4 ready" : "Setup needed",
-      detail: "Usage-based GPU inference and bounded jobs",
-      icon: CloudCog,
+      label: "Uploaded videos",
+      value: overview.uploadedVideos.length.toLocaleString(),
+      detail: "Recent footage in the analysis queue",
+      icon: Video,
     },
     {
-      label: "Training-eligible videos",
-      value: overview.eligibility.consentedVideos.toLocaleString(),
-      detail: "Explicitly consented corpus only",
-      icon: UsersRound,
-    },
-    {
-      label: "Approved calibration",
-      value: overview.eligibility.approvedCalibrationSamples.toLocaleString(),
-      detail: `${overview.eligibility.pendingCalibrationReviews} awaiting human review`,
-      icon: FileCheck2,
-    },
-    {
-      label: "Production model",
-      value: overview.runtime.productionModelVersion ?? "None",
-      detail: "Exact signed bundle currently serving traffic",
+      label: "Rendered analyses",
+      value: analyzed.toLocaleString(),
+      detail: "Ready or waiting on human review",
       icon: BadgeCheck,
+    },
+    {
+      label: "Model evaluations",
+      value: completedEvals.toLocaleString(),
+      detail: "Held-out match validations completed",
+      icon: FlaskConical,
+    },
+    {
+      label: "Serving model",
+      value: overview.runtime.productionModelVersion ?? "None",
+      detail: overview.runtime.configured
+        ? "Modal L4 is connected"
+        : "Modal runtime needs configuration",
+      icon: CloudCog,
     },
   ] as const;
   return (
@@ -107,6 +117,160 @@ function RuntimeMetrics({
           <p>{detail}</p>
         </article>
       ))}
+    </section>
+  );
+}
+
+function UploadedVideoEvidence({
+  overview,
+}: {
+  readonly overview: AdminVisionOverview;
+}) {
+  return (
+    <section className="hq-card vision-evidence-card">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Uploaded footage</span>
+          <h2>What the model is seeing</h2>
+          <p>
+            Recent uploads and the latest analysis attached to each one. Open a
+            player view to inspect the same rendered result people receive.
+          </p>
+        </div>
+        <Badge>{overview.uploadedVideos.length}</Badge>
+      </header>
+      <div className="vision-evidence-list">
+        {overview.uploadedVideos.map((video) => (
+          <article key={video.id}>
+            <span className="vision-evidence-icon">
+              <Video aria-hidden size={18} />
+            </span>
+            <div className="vision-evidence-copy">
+              <strong>{video.title}</strong>
+              <small>
+                {video.ownerName} · {formatDate(video.createdAt)} ·{" "}
+                {video.durationSeconds
+                  ? `${Math.floor(video.durationSeconds / 60)}m ${video.durationSeconds % 60}s`
+                  : "Duration processing"}
+              </small>
+              <span>
+                <Badge tone={video.learningConsent ? "positive" : "neutral"}>
+                  {video.learningConsent
+                    ? "Training consent"
+                    : "Private evidence"}
+                </Badge>
+                <Badge
+                  tone={statusTone(video.analysis?.status ?? video.status)}
+                >
+                  {video.analysis?.status ?? video.status}
+                </Badge>
+              </span>
+            </div>
+            <div className="vision-output-summary">
+              {video.analysis ? (
+                <>
+                  <strong>{video.analysis.eventCount} observed events</strong>
+                  <small>
+                    {video.analysis.modelVersion ??
+                      video.analysis.pipelineVersion}
+                    {video.analysis.calibrationQualityScore !== undefined
+                      ? ` · calibration ${Math.round(video.analysis.calibrationQualityScore * 100)}%`
+                      : ""}
+                    {video.analysis.qualityDecision
+                      ? ` · ${video.analysis.qualityDecision}`
+                      : ""}
+                  </small>
+                </>
+              ) : (
+                <small>Analysis has not been requested yet.</small>
+              )}
+            </div>
+            <Link
+              className="hq-button hq-button--secondary"
+              href={`https://duna.coach${video.playerViewPath}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Player view <ExternalLink aria-hidden size={14} />
+            </Link>
+          </article>
+        ))}
+        {overview.uploadedVideos.length === 0 && (
+          <p className="hq-empty">
+            Upload a match video to see its calibration, events, and
+            player-facing output here.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EvaluationEvidence({
+  overview,
+}: {
+  readonly overview: AdminVisionOverview;
+}) {
+  return (
+    <section className="hq-card vision-evaluation-card">
+      <header className="hq-card-heading">
+        <div>
+          <span className="hq-eyebrow">Held-out evaluation</span>
+          <h2>Does it pass real-match validation?</h2>
+          <p>
+            Each result is bound to an exact model and held-out match manifest;
+            production still requires signed evidence and independent approval.
+          </p>
+        </div>
+        <FileCheck2 aria-hidden size={22} />
+      </header>
+      <div className="vision-evaluation-list">
+        {overview.benchmarkRuns.slice(0, 6).map((run) => (
+          <article key={run.id}>
+            <div>
+              <span>
+                <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                <strong>{run.modelVersion}</strong>
+              </span>
+              <small>
+                {run.benchmarkId} · {formatDate(run.updatedAt)}
+              </small>
+            </div>
+            <div className="vision-evaluation-metrics">
+              <span>
+                <small>Contact F1</small>
+                <strong>
+                  {run.qualityGate?.metrics.contactF1 !== undefined
+                    ? `${Math.round(run.qualityGate.metrics.contactF1 * 100)}%`
+                    : "—"}
+                </strong>
+              </span>
+              <span>
+                <small>Rally F1</small>
+                <strong>
+                  {run.qualityGate?.metrics.rallyF1 !== undefined
+                    ? `${Math.round(run.qualityGate.metrics.rallyF1 * 100)}%`
+                    : "—"}
+                </strong>
+              </span>
+              <span>
+                <small>Gate</small>
+                <strong>
+                  {run.qualityGate?.productionEligible
+                    ? "Eligible"
+                    : "Not eligible"}
+                </strong>
+              </span>
+            </div>
+          </article>
+        ))}
+        {overview.benchmarkRuns.length === 0 && (
+          <p className="hq-empty">
+            No held-out evaluation has run yet. Candidate weights cannot serve
+            production traffic.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -659,9 +823,9 @@ export function VisionModelAdmin({
         <div>
           <strong>Human-controlled release path</strong>
           <span>
-            Candidate → signed held-out benchmark → shadow approval → two
-            independent production approvals. Every step is immutable and
-            audited.
+            Upload → review rendered output → held-out match evaluation → shadow
+            approval → two independent production approvals. Every step is
+            immutable and audited.
           </span>
         </div>
         <Badge tone={overview.runtime.configured ? "positive" : "warning"}>
@@ -670,18 +834,16 @@ export function VisionModelAdmin({
             : "Modal setup required"}
         </Badge>
       </section>
-      <div className="vision-operation-grid">
-        <TrainingForm overview={overview} />
-        <BenchmarkForm overview={overview} />
-      </div>
+      <UploadedVideoEvidence overview={overview} />
+      <EvaluationEvidence overview={overview} />
       <section className="hq-card vision-model-registry">
         <header className="hq-card-heading">
           <div>
-            <span className="hq-eyebrow">Weights + promotion</span>
-            <h2>Model registry</h2>
+            <span className="hq-eyebrow">Model decisions</span>
+            <h2>Weights and approvals</h2>
             <p>
-              This is where Super Admins approve exact model weights.
-              Unbenchmarked bundles cannot be selected for production.
+              Approve exact weights here only after you have reviewed their
+              video evidence and held-out evaluation above.
             </p>
           </div>
           <Badge>{overview.models.length}</Badge>
@@ -706,10 +868,27 @@ export function VisionModelAdmin({
           )}
         </div>
       </section>
-      <div className="vision-lower-grid">
-        <Runs overview={overview} />
-        <RegisterBundle overview={overview} />
-      </div>
+      <details className="hq-card vision-advanced-operations">
+        <summary>
+          <span>
+            <span className="hq-eyebrow">Advanced operations</span>
+            <strong>Train, benchmark, or register a bundle</strong>
+            <small>
+              Use immutable private R2 manifests only. Starting a job never
+              promotes a model.
+            </small>
+          </span>
+          <span>Open</span>
+        </summary>
+        <div className="vision-operation-grid">
+          <TrainingForm overview={overview} />
+          <BenchmarkForm overview={overview} />
+        </div>
+        <div className="vision-lower-grid">
+          <Runs overview={overview} />
+          <RegisterBundle overview={overview} />
+        </div>
+      </details>
     </div>
   );
 }

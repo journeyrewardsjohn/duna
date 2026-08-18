@@ -2,6 +2,8 @@ import type {
   AdminOrganizationDetail,
   AdminOverview as AdminOverviewData,
   AdminPredictionOverview,
+  SuperAdminPeopleOverview,
+  SuperAdminPersonProfile,
   AdminVisionOverview,
   AdminVideoOverview,
   FeatureFlagCollection,
@@ -56,6 +58,7 @@ import { VideoAdminControls } from "./video-admin-controls";
 import { VisionModelAdmin } from "./vision-model-admin";
 import { PlayerIntelligenceAdminPanel } from "./player-intelligence-admin";
 import { PredictionAdminControls } from "./prediction-admin-controls";
+import { SuperAdminPeoplePanel } from "./super-admin-people-panel";
 
 const adminMetricIcons = [
   WalletCards,
@@ -79,6 +82,12 @@ const copy: Record<
     title: "Organizations",
     description:
       "Connected operators, plans, people, venues, and payment readiness.",
+  },
+  people: {
+    eyebrow: "One trusted account record",
+    title: "People",
+    description:
+      "Every Duna account, their organization access, events, purchases, and governed platform authority.",
   },
   trust: {
     eyebrow: "Human-first safeguards",
@@ -767,6 +776,8 @@ export function AdminPanel({
   featureFlags,
   video,
   vision,
+  people,
+  personProfile,
   sandData,
   playerDirectory,
   playerSearchQuery,
@@ -785,6 +796,8 @@ export function AdminPanel({
   readonly featureFlags: FeatureFlagCollection;
   readonly video?: AdminVideoOverview;
   readonly vision?: AdminVisionOverview;
+  readonly people?: SuperAdminPeopleOverview;
+  readonly personProfile?: SuperAdminPersonProfile | null;
   readonly sandData?: SandDataOverview;
   readonly playerDirectory: readonly PersonSummary[];
   readonly playerSearchQuery?: string;
@@ -802,31 +815,33 @@ export function AdminPanel({
   const Icon =
     module === "organizations"
       ? Building2
-      : module === "trust"
-        ? ShieldCheck
-        : module === "ratings"
-          ? Activity
-          : module === "pro-tour"
-            ? Trophy
-            : module === "player-intelligence"
-              ? Sparkles
-              : module === "sand-data" ||
-                  module === "player-mapping" ||
-                  module === "ratings-lab"
-                ? Activity
-                : module === "predictions"
-                  ? Coins
-                  : module === "payments"
-                    ? WalletCards
-                    : module === "video"
-                      ? Radio
-                      : module === "vision"
-                        ? BrainCircuit
-                        : module === "audit"
-                          ? ScrollText
-                          : module === "flags"
-                            ? Flag
-                            : HeartPulse;
+      : module === "people"
+        ? UsersRound
+        : module === "trust"
+          ? ShieldCheck
+          : module === "ratings"
+            ? Activity
+            : module === "pro-tour"
+              ? Trophy
+              : module === "player-intelligence"
+                ? Sparkles
+                : module === "sand-data" ||
+                    module === "player-mapping" ||
+                    module === "ratings-lab"
+                  ? Activity
+                  : module === "predictions"
+                    ? Coins
+                    : module === "payments"
+                      ? WalletCards
+                      : module === "video"
+                        ? Radio
+                        : module === "vision"
+                          ? BrainCircuit
+                          : module === "audit"
+                            ? ScrollText
+                            : module === "flags"
+                              ? Flag
+                              : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -869,6 +884,12 @@ export function AdminPanel({
 
       {module === "organizations" ? (
         <OrganizationsList organizations={organizations} />
+      ) : module === "people" && people ? (
+        <SuperAdminPeoplePanel
+          overview={people}
+          personProfile={personProfile}
+          query={playerSearchQuery}
+        />
       ) : module === "trust" ? (
         <div className="module-grid">
           <GuardianReviewList reviews={guardianReviews} />

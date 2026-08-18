@@ -13,6 +13,11 @@ export type VideoAdminActionState = GuardianReviewActionState;
 export type VisionAdminActionState = GuardianReviewActionState;
 export type OrganizationCommissionActionState = GuardianReviewActionState;
 export type PredictionAdminActionState = GuardianReviewActionState;
+export interface PeopleAdminActionState extends GuardianReviewActionState {
+  readonly reviewId?: string;
+  readonly confirmationCode?: string;
+  readonly expiresAt?: string;
+}
 
 function parseConfiguration(
   value: FormDataEntryValue | null,
@@ -753,6 +758,238 @@ export async function determinePredictionMarketAction(
         error instanceof Error
           ? error.message
           : "The market could not be determined.",
+    };
+  }
+}
+
+export async function assignPersonToEventAction(
+  _previous: PeopleAdminActionState,
+  formData: FormData,
+): Promise<PeopleAdminActionState> {
+  const personId = String(formData.get("personId") ?? "");
+  const sessionId = String(formData.get("sessionId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!personId || !sessionId || reason.length < 10) {
+    return {
+      status: "error",
+      message:
+        "Choose an event and add an assignment reason of at least 10 characters.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    await caller.admin.assignPersonToEvent({
+      personId,
+      sessionId,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/people");
+    return { status: "success", message: "Person assigned to the event." };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Event assignment could not be saved.",
+    };
+  }
+}
+
+export async function grantPersonOrganizationRoleAction(
+  _previous: PeopleAdminActionState,
+  formData: FormData,
+): Promise<PeopleAdminActionState> {
+  const personId = String(formData.get("personId") ?? "");
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const role = String(formData.get("role") ?? "");
+  const workerClassification = String(
+    formData.get("workerClassification") ?? "",
+  );
+  if (
+    !personId ||
+    !organizationId ||
+    !["director", "manager", "coach", "front-desk", "accountant"].includes(
+      role,
+    ) ||
+    !["1099-contractor", "w2-employee"].includes(workerClassification)
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose an organization, a valid role, and the worker classification.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.grantPersonOrganizationRole({
+      personId,
+      organizationId,
+      role: role as
+        "director" | "manager" | "coach" | "front-desk" | "accountant",
+      workerClassification: workerClassification as
+        "1099-contractor" | "w2-employee",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/people");
+    return {
+      status: "success",
+      message:
+        result.workosSync === "synced"
+          ? "Organization role granted and WorkOS membership synchronized."
+          : "Organization role granted in Duna. WorkOS will synchronize after identity linking.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Organization role could not be granted.",
+    };
+  }
+}
+
+export async function setPersonSuperAdminAction(
+  _previous: PeopleAdminActionState,
+  formData: FormData,
+): Promise<PeopleAdminActionState> {
+  const personId = String(formData.get("personId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const enabled = formData.get("enabled") === "true";
+  if (!personId || reason.length < 12 || !confirmed) {
+    return {
+      status: "error",
+      message:
+        "Add an auditable reason of at least 12 characters and confirm the platform access change.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.setPersonSuperAdmin({
+      personId,
+      enabled,
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/people");
+    return {
+      status: "success",
+      message:
+        result.status === "granted"
+          ? result.workosSync === "synced"
+            ? "Super Admin granted and the hidden Duna WorkOS workspace is synchronized."
+            : result.workosInvitationSent
+              ? "Super Admin granted and a WorkOS invitation was sent from the hidden Duna workspace."
+              : "Super Admin granted. The hidden Duna workspace will link when WorkOS identity is available."
+          : "Super Admin access revoked.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Platform access could not be changed.",
+    };
+  }
+}
+
+export async function prepareSuperAdminRefundAction(
+  _previous: PeopleAdminActionState,
+  formData: FormData,
+): Promise<PeopleAdminActionState> {
+  const personId = String(formData.get("personId") ?? "");
+  const orderId = String(formData.get("orderId") ?? "");
+  const amount = Number(String(formData.get("amount") ?? ""));
+  const disposition = String(formData.get("disposition") ?? "");
+  const creditsSource = String(formData.get("credits") ?? "").trim();
+  const credits = creditsSource ? Number(creditsSource) : undefined;
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    !personId ||
+    !orderId ||
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !["original-payment", "organization-credit"].includes(disposition) ||
+    reason.length < 12 ||
+    (credits !== undefined && (!Number.isInteger(credits) || credits <= 0))
+  ) {
+    return {
+      status: "error",
+      message:
+        "Review the amount, refund destination, optional credits, and an auditable reason before continuing.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const review = await caller.admin.prepareSuperAdminRefund({
+      personId,
+      orderId,
+      amountMinor: Math.round(amount * 100),
+      disposition: disposition as "original-payment" | "organization-credit",
+      credits,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return {
+      status: "success",
+      message:
+        "Review is ready. Type the exact server-generated code to send this refund.",
+      reviewId: review.id,
+      confirmationCode: review.confirmationCode,
+      expiresAt: review.expiresAt,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Refund review could not be created.",
+    };
+  }
+}
+
+export async function confirmSuperAdminRefundAction(
+  _previous: PeopleAdminActionState,
+  formData: FormData,
+): Promise<PeopleAdminActionState> {
+  const reviewId = String(formData.get("reviewId") ?? "");
+  const confirmationCode = String(
+    formData.get("confirmationCode") ?? "",
+  ).trim();
+  if (!reviewId || confirmationCode.length < 8) {
+    return {
+      status: "error",
+      message: "Type the exact refund confirmation code to continue.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.confirmSuperAdminRefund({
+      reviewId,
+      confirmationCode,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/people");
+    return {
+      status: result.status === "failed" ? "error" : "success",
+      message:
+        result.status === "failed"
+          ? "Refund processor reported a failure. No second attempt was made."
+          : "Refund request was sent and fully audit-recorded.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Refund could not be confirmed.",
     };
   }
 }

@@ -78,6 +78,12 @@ export const adminModules = [
     group: "Network",
   },
   {
+    slug: "people",
+    label: "People",
+    icon: UsersRound,
+    group: "Network",
+  },
+  {
     slug: "trust",
     label: "Trust + safety",
     icon: ShieldCheck,

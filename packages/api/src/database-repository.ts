@@ -1738,7 +1738,12 @@ async function loadOrganizations(
   const organizationRows = await database
     .select()
     .from(organizations)
-    .where(organizationId ? eq(organizations.id, organizationId) : undefined)
+    .where(
+      and(
+        isNull(organizations.systemKey),
+        organizationId ? eq(organizations.id, organizationId) : undefined,
+      ),
+    )
     .orderBy(asc(organizations.name));
   if (organizationRows.length === 0) return [];
   const ids = organizationRows.map((row) => row.id);

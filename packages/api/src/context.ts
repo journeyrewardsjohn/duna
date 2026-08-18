@@ -45,9 +45,9 @@ export interface ApiContext {
 }
 
 export const DUNA_ORGANIZATION_CONTEXT_COOKIE = "duna-organization-context";
-// Platform ownership is deliberately not environment-configurable. This keeps
-// the control plane from gaining a second SuperAdmin through a stale deploy
-// variable or an identity-provider metadata edit.
+// This bootstrap identity can establish the first durable Super Admin grant.
+// Every subsequent platform role is stored and audited in Duna rather than
+// being inferred from a deploy variable or identity-provider metadata.
 const DUNA_SUPER_ADMIN_EMAIL = "john@beachelite.org";
 
 export function activeOrganizationIdFromCookie(
@@ -447,9 +447,15 @@ async function resolveWorkOSActor(input: {
       })
       .onConflictDoNothing();
   }
-  const workosOrganization = input.workosOrganizationId
+  const resolvedWorkosOrganization = input.workosOrganizationId
     ? await resolveWorkOSOrganization(input.client, input.workosOrganizationId)
     : undefined;
+  // The Duna platform workspace is strictly an identity-management boundary.
+  // It must never become a tenant context, even if WorkOS issues a session for
+  // that organization while an administrator is being provisioned.
+  const workosOrganization = resolvedWorkosOrganization?.systemKey
+    ? undefined
+    : resolvedWorkosOrganization;
 
   const workosRoleCandidates = [
     input.workosOrganizationRole,
@@ -504,6 +510,7 @@ async function resolveWorkOSActor(input: {
           .where(
             and(
               eq(organizations.id, input.dunaOrganizationId),
+              isNull(organizations.systemKey),
               eq(organizationMemberships.personId, person.id),
               eq(organizationMemberships.active, true),
             ),
@@ -545,20 +552,13 @@ async function resolveWorkOSActor(input: {
   if (guardianshipRows.length > 0) roles.add("guardian");
   for (const membership of membershipRows) roles.add(membership.role);
   for (const platformRole of platformRoleRows) {
-    if (
-      platformRole.role === "admin" ||
-      (platformRole.role === "super-admin" && email === DUNA_SUPER_ADMIN_EMAIL)
-    ) {
+    if (platformRole.role === "admin" || platformRole.role === "super-admin") {
       roles.add(platformRole.role);
     }
   }
   const customScopes = [
     ...membershipRows.flatMap((membership) => membership.scopes),
-    ...platformRoleRows.flatMap((platformRole) =>
-      platformRole.role === "super-admin" && email !== DUNA_SUPER_ADMIN_EMAIL
-        ? []
-        : platformRole.scopes,
-    ),
+    ...platformRoleRows.flatMap((platformRole) => platformRole.scopes),
   ];
   return {
     personId: person.id,

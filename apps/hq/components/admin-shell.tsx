@@ -60,16 +60,12 @@ export function AdminShell({
       </aside>
       <div className="hq-workspace">
         <header className="hq-topbar">
-          <form
-            action="/admin/player-mapping"
-            className="hq-search"
-            method="get"
-          >
+          <form action="/admin/people" className="hq-search" method="get">
             <Search aria-hidden size={17} />
             <input
               aria-label="Search Duna Admin"
               name="q"
-              placeholder="Search players across Duna…"
+              placeholder="Search people across Duna…"
             />
             <kbd>↵</kbd>
           </form>
