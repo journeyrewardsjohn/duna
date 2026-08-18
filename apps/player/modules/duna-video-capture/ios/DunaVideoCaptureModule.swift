@@ -21,6 +21,12 @@ private final class DunaVideoCaptureController: NSObject {
     label: "co.duna.video.vision",
     qos: .userInitiated
   )
+  // Vision requests are much slower than 30/60 fps camera delivery. Queueing
+  // every frame retains buffers faster than they can be released and can
+  // exhaust memory during a recording. Keep one current frame at most.
+  private let visionScheduleLock = NSLock()
+  private var visionWorkInFlight = false
+  private var lastVisionScheduledAt = CFAbsoluteTimeGetCurrent()
   private let previewContext = CIContext(options: [.useSoftwareRenderer: false])
 
   weak var activeView: DunaVideoCaptureView?
@@ -28,11 +34,11 @@ private final class DunaVideoCaptureController: NSObject {
   private var prepared = false
   var audioEnabled = true
   private var pendingStreamKey: String?
-  private var lastVisionAt = CFAbsoluteTimeGetCurrent()
   private var lastPreviewAt = CFAbsoluteTimeGetCurrent()
   private var lastARAt = CFAbsoluteTimeGetCurrent()
   private var recorder: IOStreamRecorder?
   private var recordingPromise: Promise?
+  private var recorderWasInterrupted = false
   private var latestGuidance: [String: Any]?
   private var usesGroundTracking = false
   private var lidarAvailable = false
@@ -77,6 +83,12 @@ private final class DunaVideoCaptureController: NSObject {
       self,
       selector: #selector(handleOrientationChange),
       name: UIDevice.orientationDidChangeNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleApplicationWillResignActive),
+      name: UIApplication.willResignActiveNotification,
       object: nil
     )
     UIDevice.current.beginGeneratingDeviceOrientationNotifications()
@@ -203,6 +215,7 @@ private final class DunaVideoCaptureController: NSObject {
     }
     stream.addObserver(nextRecorder)
     recorder = nextRecorder
+    recorderWasInterrupted = false
     UIApplication.shared.isIdleTimerDisabled = true
     nextRecorder.startRunning()
   }
@@ -215,6 +228,7 @@ private final class DunaVideoCaptureController: NSObject {
       )
       return
     }
+    recorderWasInterrupted = false
     recordingPromise = promise
     recorder.stopRunning()
   }
@@ -431,11 +445,83 @@ private final class DunaVideoCaptureController: NSObject {
     }
   }
 
-  private func analyze(_ sampleBuffer: CMSampleBuffer) {
+  @objc
+  private func handleApplicationWillResignActive() {
+    // iOS can revoke camera access immediately for a phone call, lock screen,
+    // Control Center, or an app switch. Finish the movie while the capture
+    // session is still valid instead of allowing the writer to be torn down
+    // under an active recorder. The recorder delegate clears all state.
+    guard let recorder, recordingPromise == nil else { return }
+    recorderWasInterrupted = true
+    recorder.stopRunning()
+    emitState("stopped")
+    emitError(
+      "Recording paused because Duna left the foreground. Your saved video is being finalized."
+    )
+  }
+
+  private func reserveVisionWork() -> Bool {
+    visionScheduleLock.lock()
+    defer { visionScheduleLock.unlock() }
+    let now = CFAbsoluteTimeGetCurrent()
+    guard !visionWorkInFlight, now - lastVisionScheduledAt >= 0.45 else {
+      return false
+    }
+    visionWorkInFlight = true
+    lastVisionScheduledAt = now
+    return true
+  }
+
+  private func finishVisionWork() {
+    visionScheduleLock.lock()
+    visionWorkInFlight = false
+    visionScheduleLock.unlock()
+  }
+
+  private func scheduleAnalysis(
+    _ sampleBuffer: CMSampleBuffer,
+    orientation: CGImagePropertyOrientation
+  ) {
+    guard reserveVisionWork() else { return }
+    var copiedBuffer: CMSampleBuffer?
+    let copyResult = CMSampleBufferCreateCopy(
+      allocator: kCFAllocatorDefault,
+      sampleBuffer: sampleBuffer,
+      sampleBufferOut: &copiedBuffer
+    )
+    guard copyResult == noErr, let copiedBuffer else {
+      finishVisionWork()
+      return
+    }
+    visionQueue.async { [weak self] in
+      guard let self else { return }
+      defer { self.finishVisionWork() }
+      self.analyze(copiedBuffer, orientation: orientation)
+    }
+  }
+
+  private func scheduleAnalysis(
+    _ pixelBuffer: CVPixelBuffer,
+    orientation: CGImagePropertyOrientation
+  ) {
+    guard reserveVisionWork() else { return }
+    visionQueue.async { [weak self] in
+      guard let self else { return }
+      defer {
+        self.finishVisionWork()
+      }
+      self.analyze(pixelBuffer, orientation: orientation)
+    }
+  }
+
+  private func analyze(
+    _ sampleBuffer: CMSampleBuffer,
+    orientation: CGImagePropertyOrientation
+  ) {
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
       return
     }
-    analyze(pixelBuffer, orientation: visionOrientation())
+    analyze(pixelBuffer, orientation: orientation)
   }
 
   private func analyze(
@@ -443,8 +529,6 @@ private final class DunaVideoCaptureController: NSObject {
     orientation: CGImagePropertyOrientation
   ) {
     let now = CFAbsoluteTimeGetCurrent()
-    guard now - lastVisionAt >= 0.45 else { return }
-    lastVisionAt = now
     let rectangleRequest = VNDetectRectanglesRequest()
     rectangleRequest.maximumObservations = 8
     rectangleRequest.minimumConfidence = 0.42
@@ -985,9 +1069,7 @@ extension DunaVideoCaptureController: ARSessionDelegate {
 
     let pixelBuffer = frame.capturedImage
     let orientation = visionOrientation()
-    visionQueue.async { [weak self] in
-      self?.analyze(pixelBuffer, orientation: orientation)
-    }
+    scheduleAnalysis(pixelBuffer, orientation: orientation)
   }
 
   func session(_ session: ARSession, didFailWithError error: Error) {
@@ -1016,9 +1098,7 @@ extension DunaVideoCaptureController: IOStreamDelegate {
     didInput buffer: CMSampleBuffer
   ) {
     guard track == 0 else { return }
-    visionQueue.async { [weak self] in
-      self?.analyze(buffer)
-    }
+    scheduleAnalysis(buffer, orientation: visionOrientation())
   }
 
   func stream(
@@ -1072,6 +1152,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
   ) {
     stream.removeObserver(recorder)
     self.recorder = nil
+    recorderWasInterrupted = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
     recordingPromise?.reject(
@@ -1096,14 +1177,22 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
       atPath: url.path
     )
     let bytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
-    recordingPromise?.resolve([
+    let payload: [String: Any] = [
       "fileUri": url.absoluteString,
       "fileName": url.lastPathComponent,
       "mimeType": "video/mp4",
       "bytes": bytes,
       "durationSeconds": duration
-    ])
+    ]
+    let interrupted = recorderWasInterrupted
+    recorderWasInterrupted = false
+    recordingPromise?.resolve(payload)
     recordingPromise = nil
+    if interrupted {
+      DispatchQueue.main.async { [weak self] in
+        self?.activeView?.onRecordingFinalized(payload)
+      }
+    }
   }
 }
 
@@ -1114,6 +1203,7 @@ public final class DunaVideoCaptureView: ExpoView {
   let onStreamState = ExpoModulesCore.EventDispatcher()
   let onCaptureError = ExpoModulesCore.EventDispatcher()
   let onPreview = ExpoModulesCore.EventDispatcher()
+  let onRecordingFinalized = ExpoModulesCore.EventDispatcher()
 
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -1524,7 +1614,13 @@ public final class DunaVideoCaptureModule: Module {
     }
 
     View(DunaVideoCaptureView.self) {
-      Events("onGuidance", "onStreamState", "onCaptureError", "onPreview")
+      Events(
+        "onGuidance",
+        "onStreamState",
+        "onCaptureError",
+        "onPreview",
+        "onRecordingFinalized"
+      )
 
       Prop("audioEnabled") {
         (_: DunaVideoCaptureView, enabled: Bool) in
