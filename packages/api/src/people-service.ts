@@ -31,6 +31,7 @@ import { arrivalSharingWindow } from "@duna/scheduling";
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
+  HealthProfile,
   OperatorMemberProfile,
   OperatorMutationResult,
   OperatorSessionDetail,
@@ -797,6 +798,25 @@ export async function loadOperatorMemberProfile(input: {
         : undefined,
     timeline,
   };
+}
+
+export async function loadOperatorMemberHealthProfile(input: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly personId: string;
+  readonly now: Date;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+}): Promise<HealthProfile> {
+  requireDatabase();
+  await assertRelationship(input.organizationId, input.personId);
+  return loadHealthProfile({
+    actor: input.actor,
+    subjectPersonId: input.personId,
+    now: input.now,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+  });
 }
 
 export async function loadDemoOperatorMemberProfile(

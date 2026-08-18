@@ -1819,6 +1819,10 @@ export async function updateStaffProfileAction(
           weekday: number;
           startsAt: string;
           endsAt: string;
+          scheduleId?: string;
+          scheduleName?: string;
+          effectiveFrom?: string;
+          effectiveTo?: string;
         }[])
       : [];
     const blackoutDatesValue = field(formData, "blackoutDates");
@@ -2097,6 +2101,50 @@ export async function publishVenueLayoutAction(
       field(formData, "makePrimary") === "true"
         ? "Layout published and set as the player-facing default."
         : "Layout version published.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function deleteVenueLayoutDraftAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.deleteVenueLayoutDraft({
+      layoutId: field(formData, "layoutId"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Draft layout deleted.",
+      undefined,
+      field(formData, "layoutId"),
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function unpublishVenueLayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.unpublishVenueLayout({
+      layoutId: field(formData, "layoutId"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Layout moved back to draft. The newest other published layout became the default when one was available.",
+      undefined,
+      field(formData, "layoutId"),
     );
   } catch (error) {
     return errorState(error);

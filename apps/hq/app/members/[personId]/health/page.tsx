@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
-import { MemberProfileWorkspace } from "@/components/member-profile-workspace";
+import { MemberHealthDetails } from "@/components/member-health-details";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 
-export const metadata = { title: "Member profile" };
+export const metadata = { title: "Health details" };
 
-export default async function MemberProfilePage({
+export default async function MemberHealthDetailsPage({
   params,
 }: {
   readonly params: Promise<{ personId: string }>;
@@ -15,18 +15,16 @@ export default async function MemberProfilePage({
   const [dashboard, workspace, profile] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
-    caller.operator.memberProfile({ personId }),
+    caller.operator.memberHealthProfile({ personId }).catch(() => undefined),
   ]);
-  if (!workspace.people.some((person) => person.personId === personId)) {
-    notFound();
-  }
+  if (!profile) notFound();
   return (
     <OperatorShell
       active="members"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <MemberProfileWorkspace profile={profile} workspace={workspace} />
+      <MemberHealthDetails profile={profile} />
     </OperatorShell>
   );
 }
