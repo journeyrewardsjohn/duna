@@ -1,1 +1,0 @@
-ALTER TABLE "video_analysis_runs" ADD COLUMN "quality_gate" jsonb;
