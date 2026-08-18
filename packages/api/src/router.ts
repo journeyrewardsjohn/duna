@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import type { EventSummary } from "@duna/core";
+import { withEventLifecycle, type EventSummary } from "@duna/core";
 import { priceConsumerOrder } from "@duna/pricing";
 import { scheduleTournament, solveAvailableSlots } from "@duna/scheduling";
 import {
@@ -237,6 +237,10 @@ import {
   reviewPickupJoinRequest,
   updatePickup,
 } from "./pickup-service";
+import {
+  createPlayerEventNote,
+  loadPlayerEventNotes,
+} from "./player-event-notes-service";
 import {
   addOrganizationBrandKnowledgeSource,
   addCalendarEquipment,
@@ -561,39 +565,46 @@ async function attachEventWeather(
   event: EventSummary,
   now = new Date(),
 ): Promise<EventSummary> {
+  const lifecycleEvent = withEventLifecycle(event, now);
   if (
-    event.location?.mode === "online" ||
-    Date.parse(event.endsAt) < now.getTime() - 6 * 60 * 60_000
+    lifecycleEvent.location?.mode === "online" ||
+    Date.parse(lifecycleEvent.endsAt) < now.getTime() - 6 * 60 * 60_000
   ) {
-    return event;
+    return lifecycleEvent;
   }
   const coordinates = await resolveWeatherCoordinates({
-    latitude: event.location?.latitude,
-    longitude: event.location?.longitude,
-    googlePlaceId: event.location?.googlePlaceId,
-    query: [event.location?.venueName, event.location?.address]
+    latitude: lifecycleEvent.location?.latitude,
+    longitude: lifecycleEvent.location?.longitude,
+    googlePlaceId: lifecycleEvent.location?.googlePlaceId,
+    query: [
+      lifecycleEvent.location?.venueName,
+      lifecycleEvent.location?.address,
+    ]
       .filter(Boolean)
       .join(", "),
     now,
   });
-  if (!coordinates) return event;
+  if (!coordinates) return lifecycleEvent;
   return {
-    ...event,
-    location: event.location
+    ...lifecycleEvent,
+    location: lifecycleEvent.location
       ? {
-          ...event.location,
+          ...lifecycleEvent.location,
           ...coordinates,
-          confidence: event.location.confidence ?? "approximate",
+          confidence: lifecycleEvent.location.confidence ?? "approximate",
         }
       : event.location,
     weather: await loadWeatherForecast({
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
-      timezone: event.timezone,
+      timezone: lifecycleEvent.timezone,
       startsAt: new Date(
-        Math.max(now.getTime(), Date.parse(event.startsAt) - 6 * 60 * 60_000),
+        Math.max(
+          now.getTime(),
+          Date.parse(lifecycleEvent.startsAt) - 6 * 60 * 60_000,
+        ),
       ),
-      endsAt: new Date(Date.parse(event.endsAt) + 6 * 60 * 60_000),
+      endsAt: new Date(Date.parse(lifecycleEvent.endsAt) + 6 * 60 * 60_000),
       now,
     }),
   };
@@ -848,6 +859,18 @@ const pickupManagementSchema = z.object({
   confirmedParticipantCount: z.number().int().nonnegative(),
   invitedParticipantCount: z.number().int().nonnegative(),
   ownRequestStatus: pickupRequestStatusSchema.optional(),
+  participants: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        avatarUrl: z.string().optional(),
+        status: z.enum(["confirmed", "checked-in"]),
+        isHost: z.boolean(),
+      }),
+    )
+    .readonly(),
   requests: z
     .array(
       z.object({
@@ -1478,7 +1501,7 @@ const publicRouter = router({
         .optional(),
     )
     .output(z.array(eventSummarySchema).readonly())
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const events = (await getRepository().public.events()).filter((event) => {
         if (input?.kind && event.kind !== input.kind) return false;
         if (
@@ -1491,15 +1514,17 @@ const publicRouter = router({
         }
         return true;
       });
-      return Promise.all(events.map((event) => attachEventWeather(event)));
+      return Promise.all(
+        events.map((event) => attachEventWeather(event, ctx.now)),
+      );
     }),
   eventBySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
     .output(eventSummarySchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
-      return attachEventWeather(event);
+      return attachEventWeather(event, ctx.now);
     }),
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
@@ -2146,6 +2171,72 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  eventNotes: protectedProcedure
+    .input(
+      z.object({
+        activityType: z.enum(["pickup", "session"]),
+        activityId: z.string().uuid(),
+      }),
+    )
+    .output(
+      z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            body: z.string(),
+            visibility: z.enum(["private", "shared-with-host"]),
+            source: z.enum(["typed", "voice"]),
+            audioUrl: z.string().url().optional(),
+            createdAt: z.iso.datetime(),
+          }),
+        )
+        .readonly(),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPlayerEventNotes({ actor: ctx.actor!, ...input });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createEventNote: protectedProcedure
+    .input(
+      z
+        .object({
+          activityType: z.enum(["pickup", "session"]),
+          activityId: z.string().uuid(),
+          body: z.string().trim().min(1).max(5_000),
+          visibility: z.enum(["private", "shared-with-host"]),
+          source: z.enum(["typed", "voice"]),
+          audioUrl: z.string().url().optional(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) => value.source !== "voice" || Boolean(value.audioUrl),
+          "Voice reflections require an audio recording.",
+        ),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createEventNote",
+        request: input,
+        ctx,
+        execute: () =>
+          createPlayerEventNote({
+            actor: ctx.actor!,
+            activityType: input.activityType,
+            activityId: input.activityId,
+            body: input.body,
+            visibility: input.visibility,
+            source: input.source,
+            audioUrl: input.audioUrl,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
   matchAvailability: adultProcedure
     .output(z.array(matchAvailabilityPostSchema).readonly())
     .query(({ ctx }) =>
@@ -5723,6 +5814,7 @@ const playerRouter = router({
         return await loadPickupManagement({
           actor: ctx.actor!,
           pickupSessionId: input.pickupSessionId,
+          now: ctx.now,
         });
       } catch (error) {
         return throwDomainError(error);

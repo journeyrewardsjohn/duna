@@ -3094,6 +3094,50 @@ export const activityAttendance = pgTable(
   ],
 );
 
+// A player's post-event reflection belongs to that player alone unless they
+// explicitly choose to share it. It is deliberately separate from a coach's
+// session note: coaches and organizations must never gain read access merely
+// because they hosted the activity.
+export const playerEventNotes = pgTable(
+  "player_event_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    activityType: varchar("activity_type", { length: 24 }).notNull(),
+    activityId: uuid("activity_id").notNull(),
+    visibility: varchar("visibility", { length: 24 })
+      .notNull()
+      .default("private"),
+    source: varchar("source", { length: 24 }).notNull().default("typed"),
+    body: text("body").notNull(),
+    audioUrl: text("audio_url"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_event_note_person_activity_idx").on(
+      table.personId,
+      table.activityType,
+      table.activityId,
+      table.createdAt,
+    ),
+    check(
+      "player_event_note_type_valid",
+      sql`${table.activityType} IN ('pickup', 'session')`,
+    ),
+    check(
+      "player_event_note_visibility_valid",
+      sql`${table.visibility} IN ('private', 'shared-with-host')`,
+    ),
+    check(
+      "player_event_note_source_valid",
+      sql`${table.source} IN ('typed', 'voice')`,
+    ),
+  ],
+);
+
 // Arrival signals deliberately retain only short-lived derived travel data.
 // Raw device coordinates are used to calculate distance/ETA, then discarded.
 export const sessionArrivalSignals = pgTable(
