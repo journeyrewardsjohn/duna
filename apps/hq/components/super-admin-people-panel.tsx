@@ -233,6 +233,63 @@ function EventAssignmentForm({
   );
 }
 
+function PlatformWorkspaceSyncForm({
+  personId,
+}: {
+  readonly personId: string;
+}) {
+  const [state, action, pending] = useActionState(
+    setPersonSuperAdminAction,
+    initialState,
+  );
+  return (
+    <form action={action} className="operator-form people-platform-access">
+      <input name="personId" type="hidden" value={personId} />
+      <input name="enabled" type="hidden" value="true" />
+      <input name="mode" type="hidden" value="sync" />
+      <header>
+        <ShieldCheck aria-hidden size={19} />
+        <div>
+          <span className="hq-eyebrow">Identity workspace</span>
+          <h3>Synchronize Duna workspace</h3>
+          <p>
+            Repairs this Super Admin&apos;s hidden Duna WorkOS membership. It
+            does not change platform authority or expose Duna as a tenant.
+          </p>
+        </div>
+        <Badge tone="neutral">Private workspace</Badge>
+      </header>
+      <label>
+        <span>Audit reason</span>
+        <textarea
+          defaultValue="Synchronize hidden Duna platform workspace membership."
+          minLength={12}
+          name="reason"
+          required
+        />
+      </label>
+      <label className="operator-confirmation">
+        <input name="confirmed" required type="checkbox" value="true" />
+        <span>
+          <strong>I understand this synchronizes provider access.</strong>
+          The Duna workspace remains hidden from organization selectors and
+          cannot become an operating context.
+        </span>
+      </label>
+      <footer>
+        <ActionNotice state={state} />
+        <button
+          className="hq-button hq-button--secondary"
+          disabled={pending}
+          type="submit"
+        >
+          {pending ? "Synchronizing…" : "Synchronize Duna workspace"}
+        </button>
+      </footer>
+    </form>
+  );
+}
+
 function PlatformAccessForm({
   personId,
   enabled,
@@ -245,64 +302,71 @@ function PlatformAccessForm({
     initialState,
   );
   return (
-    <form action={action} className="operator-form people-platform-access">
-      <input name="personId" type="hidden" value={personId} />
-      <input name="enabled" type="hidden" value={enabled ? "false" : "true"} />
-      <header>
-        <ShieldCheck aria-hidden size={19} />
-        <div>
-          <span className="hq-eyebrow">Platform authority</span>
-          <h3>{enabled ? "Super Admin active" : "Make Super Admin"}</h3>
-          <p>
-            {enabled
-              ? "This removes platform-wide authority, not organization access."
-              : "Creates an audited Duna platform grant and links the person to the hidden Duna WorkOS workspace when available."}
-          </p>
-        </div>
-        <Badge tone={enabled ? "warning" : "neutral"}>
-          {enabled ? "Elevated access" : "No platform access"}
-        </Badge>
-      </header>
-      <label>
-        <span>Audit reason</span>
-        <textarea
-          minLength={12}
-          name="reason"
-          placeholder={
-            enabled
-              ? "Why this platform access is being removed"
-              : "Why this person needs platform-wide authority"
-          }
-          required
+    <>
+      {enabled && <PlatformWorkspaceSyncForm personId={personId} />}
+      <form action={action} className="operator-form people-platform-access">
+        <input name="personId" type="hidden" value={personId} />
+        <input
+          name="enabled"
+          type="hidden"
+          value={enabled ? "false" : "true"}
         />
-      </label>
-      <label className="operator-confirmation">
-        <input name="confirmed" required type="checkbox" value="true" />
-        <span>
-          <strong>I understand this changes platform-wide authority.</strong>
-          This access is audited and the Duna system organization remains
-          invisible in tenant selectors.
-        </span>
-      </label>
-      <footer>
-        <ActionNotice state={state} />
-        <button
-          className={
-            enabled
-              ? "hq-button hq-button--secondary"
-              : "hq-button hq-button--primary"
-          }
-          disabled={pending}
-          type="submit"
-        >
-          {pending
-            ? "Saving…"
-            : enabled
-              ? "Revoke Super Admin"
-              : "Grant Super Admin"}
-        </button>
-      </footer>
-    </form>
+        <header>
+          <ShieldCheck aria-hidden size={19} />
+          <div>
+            <span className="hq-eyebrow">Platform authority</span>
+            <h3>{enabled ? "Super Admin active" : "Make Super Admin"}</h3>
+            <p>
+              {enabled
+                ? "This removes platform-wide authority, not organization access."
+                : "Creates an audited Duna platform grant and links the person to the hidden Duna WorkOS workspace when available."}
+            </p>
+          </div>
+          <Badge tone={enabled ? "warning" : "neutral"}>
+            {enabled ? "Elevated access" : "No platform access"}
+          </Badge>
+        </header>
+        <label>
+          <span>Audit reason</span>
+          <textarea
+            minLength={12}
+            name="reason"
+            placeholder={
+              enabled
+                ? "Why this platform access is being removed"
+                : "Why this person needs platform-wide authority"
+            }
+            required
+          />
+        </label>
+        <label className="operator-confirmation">
+          <input name="confirmed" required type="checkbox" value="true" />
+          <span>
+            <strong>I understand this changes platform-wide authority.</strong>
+            This access is audited and the Duna system organization remains
+            invisible in tenant selectors.
+          </span>
+        </label>
+        <footer>
+          <ActionNotice state={state} />
+          <button
+            className={
+              enabled
+                ? "hq-button hq-button--secondary"
+                : "hq-button hq-button--primary"
+            }
+            disabled={pending}
+            type="submit"
+          >
+            {pending
+              ? "Saving…"
+              : enabled
+                ? "Revoke Super Admin"
+                : "Grant Super Admin"}
+          </button>
+        </footer>
+      </form>
+    </>
   );
 }
 
