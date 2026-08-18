@@ -50,7 +50,9 @@ export function PlayerEventNotes({
               slug,
               idempotencyKey: crypto.randomUUID(),
             });
-            setMessage(result.ok ? "Saved to your private match notes." : result.error);
+            setMessage(
+              result.ok ? "Saved to your private match notes." : result.error,
+            );
             if (result.ok) {
               setBody("");
               router.refresh();

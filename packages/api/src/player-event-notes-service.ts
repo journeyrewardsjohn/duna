@@ -49,7 +49,9 @@ async function requireParticipation(input: {
   }
 }
 
-function noteSummary(note: typeof playerEventNotes.$inferSelect): PlayerEventNote {
+function noteSummary(
+  note: typeof playerEventNotes.$inferSelect,
+): PlayerEventNote {
   return {
     id: note.id,
     body: note.body,
