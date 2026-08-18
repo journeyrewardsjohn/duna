@@ -859,6 +859,7 @@ export async function setPersonSuperAdminAction(
   const reason = String(formData.get("reason") ?? "").trim();
   const confirmed = formData.get("confirmed") === "true";
   const enabled = formData.get("enabled") === "true";
+  const mode = formData.get("mode");
   if (!personId || reason.length < 12 || !confirmed) {
     return {
       status: "error",
@@ -881,7 +882,9 @@ export async function setPersonSuperAdminAction(
       message:
         result.status === "granted"
           ? result.workosSync === "synced"
-            ? "Super Admin granted and the hidden Duna WorkOS workspace is synchronized."
+            ? mode === "sync"
+              ? "The hidden Duna WorkOS workspace is synchronized."
+              : "Super Admin granted and the hidden Duna WorkOS workspace is synchronized."
             : result.workosInvitationSent
               ? "Super Admin granted and a WorkOS invitation was sent from the hidden Duna workspace."
               : "Super Admin granted. The hidden Duna workspace will link when WorkOS identity is available."

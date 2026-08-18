@@ -59,4 +59,5 @@ export * from "./video-service";
 export * from "./vision-service";
 export * from "./vision-model-service";
 export * from "./super-admin-people-service";
+export * from "./system-workspace-service";
 export * from "./workflows";
