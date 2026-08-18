@@ -382,6 +382,7 @@ export function loadDemoCommerceWorkspace(): Pick<
   OperatorWorkspace,
   | "catalog"
   | "productPerformance"
+  | "productCustomers"
   | "inventory"
   | "inventoryLocations"
   | "people"
@@ -394,6 +395,7 @@ export function loadDemoCommerceWorkspace(): Pick<
   return {
     catalog: [],
     productPerformance: [],
+    productCustomers: [],
     inventory: [],
     inventoryLocations: [],
     people: [],
@@ -432,6 +434,7 @@ export async function loadOperatorCommerceWorkspace(
     OperatorWorkspace,
     | "catalog"
     | "productPerformance"
+    | "productCustomers"
     | "inventory"
     | "inventoryLocations"
     | "people"
@@ -714,7 +717,8 @@ export async function loadOperatorCommerceWorkspace(
       .select({
         catalogItemId: catalogFulfillments.catalogItemId,
         orderId: orders.id,
-        personId: orders.buyerPersonId,
+        personId: catalogFulfillments.personId,
+        displayName: people.displayName,
         orderStatus: orders.status,
         totalMinor: orders.totalMinor,
         subtotalMinor: orders.subtotalMinor,
@@ -722,6 +726,7 @@ export async function loadOperatorCommerceWorkspace(
       })
       .from(catalogFulfillments)
       .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
+      .innerJoin(people, eq(catalogFulfillments.personId, people.id))
       .where(eq(catalogFulfillments.organizationId, organizationId))
       .orderBy(desc(orders.createdAt))
       .limit(100_000),
@@ -902,6 +907,33 @@ export async function loadOperatorCommerceWorkspace(
         lastPurchaseAt: paidOrders[0]?.purchasedAt.toISOString(),
       };
     });
+  const productCustomers: OperatorWorkspace["productCustomers"] = [
+    ...productOrderRows
+      .filter((row) =>
+        ["paid", "partially-refunded", "refunded"].includes(row.orderStatus),
+      )
+      .reduce((customers, row) => {
+        const key = `${row.catalogItemId}:${row.personId}`;
+        const current = customers.get(key);
+        const purchasedAt = row.purchasedAt.toISOString();
+        customers.set(key, {
+          catalogItemId: row.catalogItemId,
+          personId: row.personId,
+          displayName: row.displayName,
+          purchaseCount: (current?.purchaseCount ?? 0) + 1,
+          grossBookedMinor:
+            (current?.grossBookedMinor ?? 0) + Math.max(0, row.subtotalMinor),
+          lastPurchaseAt:
+            current?.lastPurchaseAt && current.lastPurchaseAt > purchasedAt
+              ? current.lastPurchaseAt
+              : purchasedAt,
+        });
+        return customers;
+      }, new Map<string, OperatorWorkspace["productCustomers"][number]>())
+      .values(),
+  ].toSorted((left, right) =>
+    right.lastPurchaseAt.localeCompare(left.lastPurchaseAt),
+  );
 
   const inventory: OperatorWorkspace["inventory"] = stockRows.map((row) => {
     const receipt = receiptByStockId.get(row.stock.id);
@@ -1761,6 +1793,7 @@ export async function loadOperatorCommerceWorkspace(
   return {
     catalog,
     productPerformance,
+    productCustomers,
     inventory,
     inventoryLocations: locationRows.map((location) => ({
       id: location.id,

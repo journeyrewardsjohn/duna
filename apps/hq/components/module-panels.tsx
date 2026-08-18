@@ -119,6 +119,12 @@ const moduleCopy: Record<
   },
 };
 
+export type ModulePageCopy = {
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly description: string;
+};
+
 function venueWeatherSymbol(icon: string | undefined): string {
   if (icon === "clear" || icon === "mostly-clear") return "☀";
   if (icon === "partly-cloudy") return "🌤";
@@ -235,10 +241,14 @@ function EventInventory({
   );
 }
 
-function ProductCatalogPanel({
+export type ProductCatalogScope = "service" | "plan" | "good";
+
+export function ProductCatalogPanel({
   workspace,
+  scope,
 }: {
   readonly workspace: OperatorWorkspace;
+  readonly scope?: ProductCatalogScope;
 }) {
   const groups = [
     {
@@ -282,23 +292,36 @@ function ProductCatalogPanel({
       .filter(Boolean)
       .join(" or ");
   };
-  const totalPurchases = workspace.productPerformance.reduce(
+  const scopeLabel = groups.find((group) => group.type === scope)?.label;
+  const catalog = scope
+    ? workspace.catalog.filter((item) => item.type === scope)
+    : workspace.catalog;
+  const productPerformance = workspace.productPerformance.filter(
+    (performance) =>
+      catalog.some((item) => item.id === performance.catalogItemId),
+  );
+  const inventory = scope
+    ? workspace.inventory.filter((item) =>
+        catalog.some((catalogItem) => catalogItem.id === item.catalogItemId),
+      )
+    : workspace.inventory;
+  const totalPurchases = productPerformance.reduce(
     (total, item) => total + item.paidPurchases,
     0,
   );
-  const grossBookedMinor = workspace.productPerformance.reduce(
+  const grossBookedMinor = productPerformance.reduce(
     (total, item) => total + item.grossBookedMinor,
     0,
   );
   const uniqueCustomers = new Set(
-    workspace.productPerformance
+    productPerformance
       .filter((item) => item.uniqueCustomers > 0)
       .map((item) => item.catalogItemId),
   ).size;
-  const goodsPerformance = workspace.productPerformance.filter(
+  const goodsPerformance = productPerformance.filter(
     (performance) =>
-      workspace.catalog.find((item) => item.id === performance.catalogItemId)
-        ?.type === "good",
+      catalog.find((item) => item.id === performance.catalogItemId)?.type ===
+      "good",
   );
   const goodsNetSalesMinor = goodsPerformance.reduce(
     (total, item) => total + item.netSalesMinor,
@@ -309,19 +332,19 @@ function ProductCatalogPanel({
     0,
   );
   const goodsGrossProfitMinor = goodsNetSalesMinor - goodsCogsMinor;
-  const inventoryCostOnHandMinor = workspace.inventory.reduce(
+  const inventoryCostOnHandMinor = inventory.reduce(
     (total, receipt) =>
       total + (receipt.unitCostMinor ?? 0) * receipt.quantityOnHand,
     0,
   );
-  const inventoryReceivedCostMinor = workspace.inventory.reduce(
+  const inventoryReceivedCostMinor = inventory.reduce(
     (total, receipt) =>
       total +
       (receipt.totalCostMinor ??
         (receipt.unitCostMinor ?? 0) * receipt.quantityReceived),
     0,
   );
-  const topOffers = workspace.productPerformance
+  const topOffers = productPerformance
     .filter((item) => item.paidPurchases > 0)
     .toSorted((left, right) => right.grossBookedMinor - left.grossBookedMinor)
     .slice(0, 4);
@@ -331,14 +354,16 @@ function ProductCatalogPanel({
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Connected product performance</span>
-            <h2>Everything in view.</h2>
+            <h2>
+              {scopeLabel ? `${scopeLabel} in view.` : "Everything in view."}
+            </h2>
             <p>
               Paid purchases and booked value come from connected Duna orders.
               Duna does not invent conversion rates when impression data is not
               available.
             </p>
           </div>
-          <Badge>{workspace.catalog.length} offers</Badge>
+          <Badge>{catalog.length} offers</Badge>
         </header>
         <div className="product-performance-metrics">
           <article>
@@ -357,10 +382,7 @@ function ProductCatalogPanel({
             <small>Offers with customers</small>
             <Numeric>{uniqueCustomers}</Numeric>
             <span>
-              {
-                workspace.catalog.filter((item) => item.status === "active")
-                  .length
-              }{" "}
+              {catalog.filter((item) => item.status === "active").length}{" "}
               currently live
             </span>
           </article>
@@ -397,7 +419,7 @@ function ProductCatalogPanel({
         {topOffers.length > 0 ? (
           <div className="product-performance-bars">
             {topOffers.map((performance) => {
-              const item = workspace.catalog.find(
+              const item = catalog.find(
                 (candidate) => candidate.id === performance.catalogItemId,
               );
               const maximum = topOffers[0]?.grossBookedMinor || 1;
@@ -451,65 +473,134 @@ function ProductCatalogPanel({
           </div>
         )}
       </section>
-      <section className="product-kind-grid">
-        {groups.map((group) => {
-          const items = workspace.catalog.filter(
-            (item) => item.type === group.type,
-          );
-          const Icon = group.icon;
-          return (
-            <article className="hq-card product-kind-card" key={group.type}>
-              <header>
-                <span className="product-kind-card__icon">
-                  <Icon aria-hidden size={20} />
+      {!scope && (
+        <section className="product-kind-grid">
+          {groups.map((group) => {
+            const items = catalog.filter((item) => item.type === group.type);
+            const Icon = group.icon;
+            return (
+              <article className="hq-card product-kind-card" key={group.type}>
+                <header>
+                  <span className="product-kind-card__icon">
+                    <Icon aria-hidden size={20} />
+                  </span>
+                  <Badge>{items.length}</Badge>
+                </header>
+                <h2>{group.label}</h2>
+                <p>{group.detail}</p>
+                <Link href={`/products/create?type=${group.type}`}>
+                  Add {group.label.toLowerCase()} <ArrowRight size={15} />
+                </Link>
+              </article>
+            );
+          })}
+        </section>
+      )}
+      {!scope && (
+        <section className="hq-card product-event-builder-callout">
+          <span className="catalog-type-mark catalog-type-mark--event">
+            <Trophy aria-hidden size={18} />
+          </span>
+          <div>
+            <strong>Events have their own builder.</strong>
+            <p>
+              Leagues, tournaments, clinics, camps, pickup, and open play belong
+              in the event workflow with schedules, divisions, tickets, and
+              policies.
+            </p>
+          </div>
+          <Link href="/events/create">
+            Open event builder <ArrowRight aria-hidden size={15} />
+          </Link>
+        </section>
+      )}
+      {scope && (
+        <section className="hq-card product-customer-activity">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">Customers by offer</span>
+              <h2>Who is buying each product?</h2>
+              <p>
+                Connected purchases only. Open an offer to manage its pricing,
+                fulfillment, and settings.
+              </p>
+            </div>
+          </header>
+          <div>
+            {catalog.map((item) => {
+              const performance = productPerformance.find(
+                (candidate) => candidate.catalogItemId === item.id,
+              );
+              const customers = workspace.productCustomers.filter(
+                (customer) => customer.catalogItemId === item.id,
+              );
+              return (
+                <article key={item.id}>
+                  <header>
+                    <Link href={`/products/${item.id}`}>
+                      <span>
+                        <strong>{item.title}</strong>
+                        <small>
+                          {performance?.paidPurchases ?? 0} purchase
+                          {(performance?.paidPurchases ?? 0) === 1 ? "" : "s"}
+                        </small>
+                      </span>
+                      <ArrowRight aria-hidden size={16} />
+                    </Link>
+                    <span>
+                      <strong>{performance?.uniqueCustomers ?? 0}</strong>
+                      <small>customers</small>
+                    </span>
+                  </header>
+                  {customers.length > 0 && (
+                    <div className="product-customer-activity__people">
+                      {customers.slice(0, 6).map((customer) => (
+                        <Link
+                          href={`/members/${customer.personId}`}
+                          key={customer.personId}
+                        >
+                          {customer.displayName}
+                        </Link>
+                      ))}
+                      {customers.length > 6 && (
+                        <span>+{customers.length - 6} more</span>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+            {catalog.length === 0 && (
+              <div className="hq-empty">
+                <strong>
+                  Customers will appear after the first offer is live.
+                </strong>
+                <span>
+                  Create an offer, set the right audience, then publish it.
                 </span>
-                <Badge>{items.length}</Badge>
-              </header>
-              <h2>{group.label}</h2>
-              <p>{group.detail}</p>
-              <Link href={`/products/create?type=${group.type}`}>
-                Add {group.label.toLowerCase()} <ArrowRight size={15} />
-              </Link>
-            </article>
-          );
-        })}
-      </section>
-      <section className="hq-card product-event-builder-callout">
-        <span className="catalog-type-mark catalog-type-mark--event">
-          <Trophy aria-hidden size={18} />
-        </span>
-        <div>
-          <strong>Events have their own builder.</strong>
-          <p>
-            Leagues, tournaments, clinics, camps, pickup, and open play belong
-            in the event workflow with schedules, divisions, tickets, and
-            policies.
-          </p>
-        </div>
-        <Link href="/events/create">
-          Open event builder <ArrowRight aria-hidden size={15} />
-        </Link>
-      </section>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
       <section className="hq-card catalog-inventory-card">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Catalog</span>
-            <h2>{workspace.catalog.length} products</h2>
+            <h2>
+              {catalog.length} {scopeLabel?.toLowerCase() ?? "products"}
+            </h2>
             <p>
               One source for storefront pricing, member pricing, credits,
               fulfillment, and inventory.
             </p>
           </div>
           <Badge>
-            {
-              workspace.catalog.filter((item) => item.status === "active")
-                .length
-            }{" "}
-            live
+            {catalog.filter((item) => item.status === "active").length} live
           </Badge>
         </header>
         <div className="catalog-table">
-          {workspace.catalog.map((item) => (
+          {catalog.map((item) => (
             <Link
               aria-label={`Edit ${item.title}`}
               className="catalog-table__row"
@@ -561,7 +652,7 @@ function ProductCatalogPanel({
               <ArrowRight aria-hidden size={16} />
             </Link>
           ))}
-          {workspace.catalog.length === 0 && (
+          {catalog.length === 0 && (
             <div className="hq-empty">
               <strong>No products yet.</strong>
               <span>
@@ -572,17 +663,17 @@ function ProductCatalogPanel({
           )}
         </div>
       </section>
-      {workspace.inventory.length > 0 && (
+      {inventory.length > 0 && (
         <section className="hq-card inventory-snapshot-card">
           <header className="hq-card-heading">
             <div>
               <span className="hq-eyebrow">Equipment + goods</span>
               <h2>Inventory snapshot</h2>
             </div>
-            <Badge>{workspace.inventory.length} stock records</Badge>
+            <Badge>{inventory.length} stock records</Badge>
           </header>
           <div className="inventory-snapshot-grid">
-            {workspace.inventory.slice(0, 8).map((stock) => (
+            {inventory.slice(0, 8).map((stock) => (
               <article key={stock.id}>
                 <span>
                   <strong>{stock.itemTitle}</strong>
@@ -1186,20 +1277,26 @@ function SettingsPanel({
 export function ModulePanel({
   module,
   dashboard,
+  eventKinds,
   focusedDraftId,
   matches,
+  pageCopy,
+  productScope,
   workspace,
   ticketApprovals,
 }: {
   readonly module: OperatorModule;
   readonly dashboard: OperatorDashboard;
+  readonly eventKinds?: readonly OperatorWorkspace["sessions"][number]["kind"][];
   readonly focusedDraftId?: string;
   readonly matches: readonly OperatorScorableMatch[];
+  readonly pageCopy?: ModulePageCopy;
+  readonly productScope?: ProductCatalogScope;
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
   if (module === "overview" || module === "messages") return null;
-  const copy = moduleCopy[module];
+  const copy = pageCopy ?? moduleCopy[module];
   const icon =
     module === "calendar"
       ? CalendarDays
@@ -1220,25 +1317,30 @@ export function ModulePanel({
                     : Trophy;
   const Icon = icon;
   const createAction =
-    module === "events"
-      ? { href: "/events/create?type=tournament", label: "Create event" }
-      : module === "leagues"
-        ? { href: "/events/create?type=league", label: "Create league" }
-        : module === "products"
-          ? { href: "/products/create", label: "Create product" }
-          : module === "locations"
-            ? { href: "/locations/create", label: "Add venue" }
-            : module === "members"
-              ? { href: "/members/invite", label: "Invite person" }
-              : module === "team"
-                ? { href: "/team/invite", label: "Invite team member" }
-                : module === "marketing"
-                  ? { href: "/marketing/create", label: "Create campaign" }
-                  : module === "payments"
-                    ? { href: "/payments/setup", label: "Configure money" }
-                    : module === "calendar"
-                      ? { href: "/events/create", label: "Add to calendar" }
-                      : undefined;
+    module === "events" && eventKinds?.[0]
+      ? {
+          href: `/events/create?type=${eventKinds[0]}`,
+          label: `Create ${eventKinds[0].replaceAll("-", " ")}`,
+        }
+      : module === "events"
+        ? { href: "/events/create?type=tournament", label: "Create event" }
+        : module === "leagues"
+          ? { href: "/events/create?type=league", label: "Create league" }
+          : module === "products"
+            ? { href: "/products/create", label: "Create product" }
+            : module === "locations"
+              ? { href: "/locations/create", label: "Add venue" }
+              : module === "members"
+                ? { href: "/members/invite", label: "Invite person" }
+                : module === "team"
+                  ? { href: "/team/invite", label: "Invite team member" }
+                  : module === "marketing"
+                    ? { href: "/marketing/create", label: "Create campaign" }
+                    : module === "payments"
+                      ? { href: "/payments/setup", label: "Configure money" }
+                      : module === "calendar"
+                        ? { href: "/events/create", label: "Add to calendar" }
+                        : undefined;
 
   return (
     <main className="hq-page module-page">
@@ -1292,26 +1394,30 @@ export function ModulePanel({
       ) : module === "team" ? (
         <TeamPanel workspace={workspace} />
       ) : module === "products" ? (
-        <ProductCatalogPanel workspace={workspace} />
+        <ProductCatalogPanel scope={productScope} workspace={workspace} />
       ) : module === "events" ? (
         <>
           <SessionDraftManager
             focusedDraftId={focusedDraftId}
-            kinds={["tournament", "clinic", "open-play", "pickup"]}
+            kinds={
+              eventKinds ?? ["tournament", "clinic", "open-play", "pickup"]
+            }
             workspace={workspace}
           />
           <EventHistoryWorkspace
-            kinds={[
-              "tournament",
-              "clinic",
-              "open-play",
-              "pickup",
-              "private-lesson",
-              "court-rental",
-            ]}
+            kinds={
+              eventKinds ?? [
+                "tournament",
+                "clinic",
+                "open-play",
+                "pickup",
+                "private-lesson",
+                "court-rental",
+              ]
+            }
             workspace={workspace}
           />
-          <EventInventory dashboard={dashboard} />
+          <EventInventory dashboard={dashboard} kinds={eventKinds} />
         </>
       ) : module === "leagues" ? (
         <>

@@ -48,7 +48,13 @@ export const operatorModules = [
   { slug: "team", label: "Team", icon: UserRoundSearch, group: "Run" },
   { slug: "products", label: "Products", icon: ShoppingBag, group: "Run" },
   { slug: "events", label: "Events", icon: Trophy, group: "Run" },
-  { slug: "leagues", label: "Leagues", icon: Network, group: "Run" },
+  {
+    slug: "leagues",
+    label: "Leagues",
+    icon: Network,
+    group: "Run",
+    hiddenFromNavigation: true,
+  },
   {
     slug: "messages",
     label: "Messages",
@@ -65,9 +71,103 @@ export const operatorModules = [
   readonly label: string;
   readonly icon: LucideIcon;
   readonly group: string;
+  readonly hiddenFromNavigation?: boolean;
 }[];
 
 export type OperatorModule = (typeof operatorModules)[number]["slug"];
+
+export const productNavigationItems = [
+  { slug: "all-products", label: "All products", href: "/products" },
+  {
+    slug: "services",
+    label: "Services",
+    href: "/products/types/services",
+    productType: "service",
+    title: "Services",
+    description: "Lessons, coaching, programs, and bookable services.",
+  },
+  {
+    slug: "plans",
+    label: "Plans",
+    href: "/products/types/plans",
+    productType: "plan",
+    title: "Plans",
+    description: "Memberships, credit packs, and recurring offers.",
+  },
+  {
+    slug: "goods",
+    label: "Goods + equipment",
+    href: "/products/types/goods",
+    productType: "good",
+    title: "Goods + equipment",
+    description: "Inventory-backed goods, rentals, and equipment.",
+  },
+] as const;
+
+export type ProductNavigationItem = (typeof productNavigationItems)[number];
+export type ProductNavigationSlug = ProductNavigationItem["slug"];
+
+export const eventNavigationItems = [
+  { slug: "all-events", label: "All events", href: "/events" },
+  {
+    slug: "tournaments",
+    label: "Tournaments",
+    href: "/events/types/tournaments",
+    eventKinds: ["tournament"],
+    title: "Tournaments",
+    description:
+      "Brackets, divisions, registrations, and event-day operations.",
+  },
+  {
+    slug: "clinics",
+    label: "Clinics",
+    href: "/events/types/clinics",
+    eventKinds: ["clinic"],
+    title: "Clinics",
+    description:
+      "Skill-building sessions, rosters, and coach-ready operations.",
+  },
+  {
+    slug: "open-play",
+    label: "Open play",
+    href: "/events/types/open-play",
+    eventKinds: ["open-play"],
+    title: "Open play",
+    description:
+      "Flexible sessions, attendance, and player-facing availability.",
+  },
+  {
+    slug: "pickup",
+    label: "Pickup",
+    href: "/events/types/pickup",
+    eventKinds: ["pickup"],
+    title: "Pickup",
+    description:
+      "Community pickup sessions and their live participant operations.",
+  },
+  {
+    slug: "leagues",
+    label: "Leagues",
+    href: "/leagues",
+    eventKinds: ["league"],
+    title: "Leagues",
+    description:
+      "Seasonal schedules, standings, scoring, and league operations.",
+  },
+] as const;
+
+export type EventNavigationItem = (typeof eventNavigationItems)[number];
+export type EventNavigationSlug = EventNavigationItem["slug"];
+
+export type OperatorNavigationChild =
+  ProductNavigationItem | EventNavigationItem;
+
+export const operatorNavigationChildren: Partial<
+  Record<OperatorModule, readonly OperatorNavigationChild[]>
+> = {
+  products: productNavigationItems,
+  events: eventNavigationItems,
+};
 
 export const adminModules = [
   { slug: "overview", label: "Network", icon: Waves, group: "Network" },

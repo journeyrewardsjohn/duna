@@ -4904,6 +4904,18 @@ export const operatorWorkspaceSchema = z.object({
       }),
     )
     .readonly(),
+  productCustomers: z
+    .array(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        purchaseCount: z.number().int().nonnegative(),
+        grossBookedMinor: z.number().int().nonnegative(),
+        lastPurchaseAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
   inventory: z.array(operatorInventoryItemSchema).readonly(),
   inventoryLocations: z.array(operatorInventoryLocationSchema).readonly(),
   calendar: z.object({
