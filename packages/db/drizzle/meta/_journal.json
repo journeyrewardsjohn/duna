@@ -540,6 +540,13 @@
       "when": 1787013629000,
       "tag": "0076_player_event_reflections",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1787018006509,
+      "tag": "0077_gifted_toad",
+      "breakpoints": true
     }
   ]
 }

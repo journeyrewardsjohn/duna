@@ -137,6 +137,7 @@ function asCourtDimensions(input: {
       coordinateFrame: "canonical-court",
       calibrationSource,
       calibrationQualityScore: calibration?.qualityScore,
+      imageCorners: settings?.corners ?? calibration?.corners,
     },
   };
 }

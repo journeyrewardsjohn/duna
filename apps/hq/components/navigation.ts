@@ -2,6 +2,7 @@ import {
   Activity,
   BadgeDollarSign,
   Bot,
+  BrainCircuit,
   Building2,
   CalendarDays,
   CircleGauge,
@@ -133,6 +134,12 @@ export const adminModules = [
     group: "Platform",
   },
   { slug: "video", label: "Video + Premium", icon: Radio, group: "Platform" },
+  {
+    slug: "vision",
+    label: "Vision models",
+    icon: BrainCircuit,
+    group: "Platform",
+  },
   { slug: "audit", label: "Audit log", icon: ScrollText, group: "Platform" },
   { slug: "flags", label: "Feature flags", icon: Flag, group: "Platform" },
   {

@@ -352,11 +352,12 @@ def signed_envelope(gate: QualityGate, private_key_path: Path) -> dict[str, Any]
     )
     if not isinstance(key, Ed25519PrivateKey):
         raise TypeError("Attestation signing key must be Ed25519")
-    payload = gate.model_dump(mode="json", exclude_none=True)
-    payload["signature"] = base64.b64encode(key.sign(canonical_json(payload))).decode(
-        "ascii"
-    )
-    return payload
+    payload = canonical_json(gate.model_dump(mode="json", exclude_none=True))
+    return {
+        "schemaVersion": "duna-vision-promotion-attestation-v2",
+        "payloadBase64": base64.b64encode(payload).decode("ascii"),
+        "signature": base64.b64encode(key.sign(payload)).decode("ascii"),
+    }
 
 
 def main() -> None:

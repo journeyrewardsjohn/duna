@@ -1375,6 +1375,7 @@ export const videoAnalysisCourtMapSchema = z.object({
   coordinateFrame: z.literal("canonical-court"),
   calibrationSource: z.enum(["vision", "manual", "unknown"]),
   calibrationQualityScore: z.number().int().min(0).max(100).optional(),
+  imageCorners: z.array(capturePointSchema).length(4).readonly().optional(),
 });
 export const videoAnalysisCoverageSchema = z
   .object({
@@ -2397,6 +2398,197 @@ export const adminVideoOverviewSchema = z.object({
   muxConfigured: z.boolean(),
   r2Configured: z.boolean(),
 });
+export const visionModelStatusSchema = z.enum([
+  "candidate",
+  "shadow",
+  "production",
+  "retired",
+  "rejected",
+]);
+export const visionTrainingStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+export const visionModelSummarySchema = z.object({
+  id: z.string().uuid(),
+  version: z.string().min(1).max(80),
+  bundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  bundleR2Prefix: z.string(),
+  detectorFamily: z.string(),
+  sourceLicense: z.string(),
+  status: visionModelStatusSchema,
+  manifest: z.record(z.string(), z.unknown()),
+  qualityGate: videoAnalysisQualityGateSchema.optional(),
+  promotionAttestationAvailable: z.boolean(),
+  createdByName: z.string().optional(),
+  shadowApprovedAt: z.iso.datetime().optional(),
+  productionApprovedAt: z.iso.datetime().optional(),
+  retiredAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  approvals: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        stage: z.enum(["dataset", "shadow", "production", "rollback"]),
+        decision: z.enum(["approved", "rejected"]),
+        reviewerName: z.string(),
+        notes: z.string(),
+        evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+});
+export const visionTrainingRunSummarySchema = z.object({
+  id: z.string().uuid(),
+  requestedModelVersion: z.string(),
+  modelId: z.string().uuid().optional(),
+  status: visionTrainingStatusSchema,
+  provider: z.literal("modal"),
+  gpuType: z.literal("L4"),
+  datasetR2Key: z.string(),
+  datasetManifestSha256: z.string().optional(),
+  baseModelVersion: z.string().optional(),
+  codeCommitSha: z.string(),
+  budgetCents: z.number().int().positive(),
+  actualCostCents: z.number().int().nonnegative().optional(),
+  providerJobId: z.string().optional(),
+  metrics: z.record(z.string(), z.number()).optional(),
+  failureCode: z.string().optional(),
+  requestedByName: z.string().optional(),
+  startedAt: z.iso.datetime().optional(),
+  completedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const visionBenchmarkRunSummarySchema = z.object({
+  id: z.string().uuid(),
+  modelId: z.string().uuid(),
+  modelVersion: z.string(),
+  benchmarkId: z.string(),
+  status: z.enum(["queued", "running", "passed", "failed", "cancelled"]),
+  datasetManifestR2Key: z.string(),
+  datasetManifestSha256: z.string().optional(),
+  attestationAvailable: z.boolean(),
+  qualityGate: videoAnalysisQualityGateSchema.optional(),
+  failureCode: z.string().optional(),
+  requestedByName: z.string().optional(),
+  startedAt: z.iso.datetime().optional(),
+  completedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const adminVisionOverviewSchema = z.object({
+  canManage: z.boolean(),
+  runtime: z.object({
+    configured: z.boolean(),
+    provider: z.literal("modal"),
+    gpuType: z.literal("L4"),
+    productionModelVersion: z.string().optional(),
+  }),
+  eligibility: z.object({
+    approvedCalibrationSamples: z.number().int().nonnegative(),
+    consentedVideos: z.number().int().nonnegative(),
+    pendingCalibrationReviews: z.number().int().nonnegative(),
+  }),
+  models: z.array(visionModelSummarySchema).readonly(),
+  trainingRuns: z.array(visionTrainingRunSummarySchema).readonly(),
+  benchmarkRuns: z.array(visionBenchmarkRunSummarySchema).readonly(),
+});
+export const visionTrainingCommandSchema = z.object({
+  kind: z.literal("training"),
+  runId: z.string().uuid(),
+  requestedModelVersion: z.string().trim().min(3).max(80),
+  datasetR2Key: z
+    .string()
+    .trim()
+    .regex(/^vision-training\/datasets\/[a-zA-Z0-9_./-]+\.zip$/),
+  baseModelVersion: z.string().trim().min(1).max(80).optional(),
+  baseModelBundleR2Prefix: z
+    .string()
+    .trim()
+    .regex(/^vision-models\/[a-zA-Z0-9_./-]+\/$/)
+    .optional(),
+  codeCommitSha: z.string().regex(/^[a-f0-9]{7,64}$/),
+  budgetCents: z.number().int().min(100).max(100_000),
+  callbackPath: z.literal("/api/vision/operations"),
+});
+export const visionBenchmarkCommandSchema = z.object({
+  kind: z.literal("benchmark"),
+  runId: z.string().uuid(),
+  modelId: z.string().uuid(),
+  modelVersion: z.string().trim().min(1).max(80),
+  modelBundleR2Prefix: z
+    .string()
+    .trim()
+    .regex(/^vision-models\/[a-zA-Z0-9_./-]+\/$/),
+  benchmarkId: z.string().trim().min(3).max(120),
+  datasetManifestR2Key: z
+    .string()
+    .trim()
+    .regex(/^vision-benchmarks\/[a-zA-Z0-9_./-]+\.json$/),
+  callbackPath: z.literal("/api/vision/operations"),
+});
+export const visionOperationResultSchema = z
+  .object({
+    kind: z.enum(["training", "benchmark"]),
+    runId: z.string().uuid(),
+    status: z.enum(["running", "succeeded", "passed", "failed"]),
+    providerJobId: z.string().trim().min(1).max(160).optional(),
+    actualCostCents: z.number().int().nonnegative().optional(),
+    failureCode: z.string().trim().min(1).max(80).optional(),
+    model: z
+      .object({
+        version: z.string().trim().min(1).max(80),
+        bundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        bundleR2Prefix: z.string().regex(/^vision-models\/[a-zA-Z0-9_./-]+\/$/),
+        detectorFamily: z.string().trim().min(1).max(80),
+        sourceLicense: z.string().trim().min(1).max(80),
+        manifest: z.record(z.string(), z.unknown()),
+        metrics: z.record(z.string(), z.number()).optional(),
+      })
+      .optional(),
+    qualityGate: videoAnalysisQualityGateSchema.optional(),
+    attestationR2Key: z
+      .string()
+      .regex(/^vision-models\/[a-zA-Z0-9_./-]+\.json$/)
+      .optional(),
+  })
+  .superRefine((result, context) => {
+    if (result.status === "failed" && !result.failureCode) {
+      context.addIssue({
+        code: "custom",
+        path: ["failureCode"],
+        message: "A failed operation requires a bounded failure code.",
+      });
+    }
+    if (
+      result.kind === "training" &&
+      result.status === "succeeded" &&
+      !result.model
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["model"],
+        message: "Successful training requires an immutable model bundle.",
+      });
+    }
+    if (
+      result.kind === "benchmark" &&
+      result.status === "passed" &&
+      (!result.qualityGate?.productionEligible || !result.attestationR2Key)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["qualityGate"],
+        message: "A passed benchmark requires signed production evidence.",
+      });
+    }
+  });
 export const accountDeletionReadinessSchema = z.object({
   canRequestDeletion: z.boolean(),
   blockingReasons: z
@@ -5729,6 +5921,14 @@ export type HealthDashboard = z.infer<typeof healthDashboardSchema>;
 export type HealthVideoOverlay = z.infer<typeof healthVideoOverlaySchema>;
 export type HealthCorrelation = z.infer<typeof healthCorrelationSchema>;
 export type AdminVideoOverview = z.infer<typeof adminVideoOverviewSchema>;
+export type AdminVisionOverview = z.infer<typeof adminVisionOverviewSchema>;
+export type VisionModelSummary = z.infer<typeof visionModelSummarySchema>;
+export type VisionTrainingRunSummary = z.infer<
+  typeof visionTrainingRunSummarySchema
+>;
+export type VisionBenchmarkRunSummary = z.infer<
+  typeof visionBenchmarkRunSummarySchema
+>;
 export type VisionCalibrationReviewSample = z.infer<
   typeof visionCalibrationReviewSampleSchema
 >;

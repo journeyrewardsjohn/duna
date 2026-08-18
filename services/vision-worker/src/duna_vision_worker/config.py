@@ -33,6 +33,20 @@ class Settings(BaseSettings):
     callback_attempts: int = Field(default=6, ge=1, le=12)
     stale_job_seconds: int = Field(default=7_200, ge=300, le=86_400)
     target_fps: float = Field(default=12.0, ge=1, le=30)
+    attestation_private_key: Path | None = Field(
+        default=None,
+        validation_alias="DUNA_VISION_ATTESTATION_PRIVATE_KEY",
+    )
+    attestation_private_key_pem: str | None = Field(
+        default=None,
+        validation_alias="DUNA_VISION_ATTESTATION_PRIVATE_KEY_PEM",
+    )
+    l4_cents_per_hour: int = Field(
+        default=120,
+        ge=1,
+        le=10_000,
+        validation_alias="DUNA_VISION_L4_CENTS_PER_HOUR",
+    )
 
     r2_account_id: str | None = Field(
         default=None,

@@ -23,4 +23,5 @@ RUN useradd --system --uid 10001 --create-home duna \
 USER duna
 EXPOSE 8080
 ENV PATH="/opt/venv/bin:${PATH}"
+ENV PYTHONPATH="/opt/venv/lib/python3.12/site-packages:/opt/duna-vision/src"
 CMD ["duna-vision-worker"]

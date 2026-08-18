@@ -1,0 +1,29 @@
+{
+  "contractVersion": "duna-volleyball-onnx-v1",
+  "modelVersion": "duna-bootstrap-yolox-s-coco-2026-08",
+  "detector": {
+    "format": "yolox-v1",
+    "path": "detector.onnx",
+    "inputName": "images",
+    "outputName": "output",
+    "inputWidth": 640,
+    "inputHeight": 640,
+    "labels": {
+      "ball": 32
+    },
+    "confidenceThreshold": 0.2,
+    "nmsThreshold": 0.45,
+    "batchSize": 1,
+    "strides": [8, 16, 32]
+  },
+  "temporal": {
+    "mode": "trajectory-heuristic-v1",
+    "path": "detector.onnx",
+    "inputName": "features",
+    "outputName": "probabilities",
+    "windowFrames": 31,
+    "labels": ["none", "free-ball"],
+    "confidenceThreshold": 0.55,
+    "debounceMilliseconds": 750
+  }
+}

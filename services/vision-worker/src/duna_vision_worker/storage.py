@@ -49,3 +49,67 @@ class PrivateVideoStorage:
             ContentType="application/json",
             Metadata={"duna-artifact": "vision-analysis-manifest-v1"},
         )
+
+    def download_object(self, object_key: str, destination: Path) -> dict[str, Any]:
+        if (
+            not object_key
+            or object_key.startswith("/")
+            or ".." in object_key.split("/")
+        ):
+            raise ValueError("R2_OBJECT_KEY_INVALID")
+        return self.download(object_key, destination)
+
+    def download_prefix(self, prefix: str, destination: Path) -> list[str]:
+        if (
+            not prefix.endswith("/")
+            or prefix.startswith("/")
+            or ".." in prefix.split("/")
+        ):
+            raise ValueError("R2_PREFIX_INVALID")
+        paginator = self.client.get_paginator("list_objects_v2")
+        downloaded: list[str] = []
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            for item in page.get("Contents", []):
+                key = str(item["Key"])
+                relative = key.removeprefix(prefix)
+                if (
+                    not relative
+                    or relative.startswith("/")
+                    or ".." in relative.split("/")
+                ):
+                    continue
+                target = destination / relative
+                self.download_object(key, target)
+                downloaded.append(relative)
+        if not downloaded:
+            raise FileNotFoundError("R2_PREFIX_EMPTY")
+        return downloaded
+
+    def upload_json(self, key: str, document: dict[str, Any], artifact: str) -> None:
+        if key.startswith("/") or ".." in key.split("/") or not key.endswith(".json"):
+            raise ValueError("R2_JSON_KEY_INVALID")
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=json.dumps(document, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            ),
+            ContentType="application/json",
+            Metadata={"duna-artifact": artifact},
+        )
+
+    def upload_file(
+        self, key: str, source: Path, content_type: str, artifact: str
+    ) -> None:
+        if key.startswith("/") or ".." in key.split("/"):
+            raise ValueError("R2_OBJECT_KEY_INVALID")
+        with source.open("rb") as body:
+            self.client.upload_fileobj(
+                body,
+                self.bucket,
+                key,
+                ExtraArgs={
+                    "ContentType": content_type,
+                    "Metadata": {"duna-artifact": artifact},
+                },
+            )

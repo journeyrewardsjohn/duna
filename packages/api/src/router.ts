@@ -33,6 +33,7 @@ import {
   adminOrganizationDetailSchema,
   adminOverviewSchema,
   adminQueueSchema,
+  adminVisionOverviewSchema,
   adminVideoOverviewSchema,
   agentDraftSchema,
   auditEventSchema,
@@ -380,6 +381,14 @@ import {
   updateVisionPreview,
   VisionServiceError,
 } from "./vision-service";
+import {
+  loadAdminVisionOverview,
+  registerVisionModel,
+  requestVisionBenchmark,
+  requestVisionTraining,
+  reviewVisionModel,
+  VisionModelError,
+} from "./vision-model-service";
 import {
   activateCourt,
   blockCourtTime,
@@ -1134,6 +1143,21 @@ function throwDomainError(error: unknown): never {
           : error.code === "INVALID_REVIEW"
             ? "BAD_REQUEST"
             : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof VisionModelError) {
+    const code =
+      error.code === "MODEL_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MODEL_ALREADY_EXISTS"
+          ? "CONFLICT"
+          : error.code === "MODEL_STAGE_INVALID" ||
+              error.code === "INDEPENDENT_APPROVER_REQUIRED"
+            ? "PRECONDITION_FAILED"
+            : error.code === "DATABASE_REQUIRED" ||
+                error.code === "OPERATIONS_UNAVAILABLE"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof HealthServiceError) {
@@ -10777,6 +10801,168 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  visionOverview: adminProcedure
+    .output(adminVisionOverviewSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadAdminVisionOverview(ctx.actor!);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  registerVisionModel: superAdminProcedure
+    .input(
+      z.object({
+        version: z.string().trim().min(3).max(80),
+        bundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        bundleR2Prefix: z
+          .string()
+          .trim()
+          .regex(/^vision-models\/[a-zA-Z0-9_./-]+\/$/),
+        detectorFamily: z.string().trim().min(1).max(80),
+        sourceLicense: z.string().trim().min(1).max(80),
+        manifest: z.record(z.string(), z.unknown()),
+        reason: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string().uuid(), version: z.string() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.registerVisionModel",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await registerVisionModel({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  requestVisionTraining: superAdminProcedure
+    .input(
+      z.object({
+        requestedModelVersion: z.string().trim().min(3).max(80),
+        datasetR2Key: z
+          .string()
+          .trim()
+          .regex(/^vision-training\/datasets\/[a-zA-Z0-9_./-]+\.zip$/),
+        baseModelVersion: z.string().trim().min(1).max(80).optional(),
+        codeCommitSha: z.string().regex(/^[a-f0-9]{7,64}$/),
+        budgetCents: z.number().int().min(100).max(100_000),
+        reason: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["queued", "running"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.requestVisionTraining",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestVisionTraining({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  requestVisionBenchmark: superAdminProcedure
+    .input(
+      z.object({
+        modelId: z.string().uuid(),
+        benchmarkId: z.string().trim().min(3).max(120),
+        datasetManifestR2Key: z
+          .string()
+          .trim()
+          .regex(/^vision-benchmarks\/[a-zA-Z0-9_./-]+\.json$/),
+        reason: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string().uuid(), status: z.literal("running") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.requestVisionBenchmark",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestVisionBenchmark({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewVisionModel: superAdminProcedure
+    .input(
+      z.object({
+        modelId: z.string().uuid(),
+        stage: z.enum(["shadow", "production", "rollback"]),
+        decision: z.enum(["approved", "rejected"]),
+        notes: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        modelId: z.string().uuid(),
+        status: z.string(),
+        approvalsNeeded: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.reviewVisionModel",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewVisionModel({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   reviewVisionCalibrationSample: superAdminProcedure
     .input(
       z.object({

@@ -2,6 +2,7 @@
   "contractVersion": "duna-volleyball-onnx-v1",
   "modelVersion": "replace-with-immutable-model-version",
   "detector": {
+    "format": "duna-nms-v1",
     "path": "detector.onnx",
     "inputName": "images",
     "outputName": "detections",
@@ -18,6 +19,7 @@
     "batchSize": 16
   },
   "temporal": {
+    "mode": "onnx",
     "path": "temporal.onnx",
     "inputName": "features",
     "outputName": "probabilities",

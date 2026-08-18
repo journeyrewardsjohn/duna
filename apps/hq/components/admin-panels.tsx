@@ -2,6 +2,7 @@ import type {
   AdminOrganizationDetail,
   AdminOverview as AdminOverviewData,
   AdminPredictionOverview,
+  AdminVisionOverview,
   AdminVideoOverview,
   FeatureFlagCollection,
   GuardianReviewItem,
@@ -14,6 +15,7 @@ import { Badge, Numeric } from "@duna/ui";
 import {
   Activity,
   ArrowRight,
+  BrainCircuit,
   Building2,
   CalendarDays,
   Check,
@@ -51,6 +53,7 @@ import {
   type ProfessionalTourTool,
 } from "./pro-tour-admin-controls";
 import { VideoAdminControls } from "./video-admin-controls";
+import { VisionModelAdmin } from "./vision-model-admin";
 import { PlayerIntelligenceAdminPanel } from "./player-intelligence-admin";
 import { PredictionAdminControls } from "./prediction-admin-controls";
 
@@ -147,6 +150,12 @@ const copy: Record<
     title: "Video + Premium",
     description:
       "Mux live streams, R2 uploads, player usage, complimentary entitlements, and global allowances.",
+  },
+  vision: {
+    eyebrow: "Verified model operations",
+    title: "Vision Model Lab",
+    description:
+      "Train on consented match evidence, benchmark exact model bundles, and govern shadow or production promotion on Modal L4.",
   },
   audit: {
     eyebrow: "Append-only governance",
@@ -757,6 +766,7 @@ export function AdminPanel({
   guardianReviews,
   featureFlags,
   video,
+  vision,
   sandData,
   playerDirectory,
   playerSearchQuery,
@@ -774,6 +784,7 @@ export function AdminPanel({
   readonly guardianReviews: readonly GuardianReviewItem[];
   readonly featureFlags: FeatureFlagCollection;
   readonly video?: AdminVideoOverview;
+  readonly vision?: AdminVisionOverview;
   readonly sandData?: SandDataOverview;
   readonly playerDirectory: readonly PersonSummary[];
   readonly playerSearchQuery?: string;
@@ -809,11 +820,13 @@ export function AdminPanel({
                     ? WalletCards
                     : module === "video"
                       ? Radio
-                      : module === "audit"
-                        ? ScrollText
-                        : module === "flags"
-                          ? Flag
-                          : HeartPulse;
+                      : module === "vision"
+                        ? BrainCircuit
+                        : module === "audit"
+                          ? ScrollText
+                          : module === "flags"
+                            ? Flag
+                            : HeartPulse;
   const ratedPlayers = overview.metrics.find(
     (metric) => metric.label === "Rated players",
   );
@@ -910,6 +923,8 @@ export function AdminPanel({
         </div>
       ) : module === "video" && video ? (
         <VideoAdminControls overview={video} />
+      ) : module === "vision" && vision ? (
+        <VisionModelAdmin overview={vision} />
       ) : module === "audit" ? (
         <AuditList overview={overview} />
       ) : module === "health" ? (

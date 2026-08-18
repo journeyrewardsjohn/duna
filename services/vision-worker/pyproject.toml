@@ -2,7 +2,7 @@
 name = "duna-vision-worker"
 version = "0.1.0"
 description = "GPU execution and held-out validation for Duna Vision"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
   "boto3>=1.40,<2",
   "cryptography>=45,<46",

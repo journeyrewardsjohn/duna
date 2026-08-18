@@ -7,12 +7,20 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class ImagePoint(BaseModel):
+    x: float = Field(ge=-1.5, le=2.5)
+    y: float = Field(ge=-1.5, le=2.5)
+
+
 class CourtMap(BaseModel):
     widthMeters: float = Field(gt=0, le=30)
     lengthMeters: float = Field(gt=0, le=40)
     coordinateFrame: Literal["canonical-court"]
     calibrationSource: Literal["vision", "manual", "unknown"]
     calibrationQualityScore: int | None = Field(default=None, ge=0, le=100)
+    imageCorners: list[ImagePoint] | None = Field(
+        default=None, min_length=4, max_length=4
+    )
 
 
 class VisionSetup(BaseModel):

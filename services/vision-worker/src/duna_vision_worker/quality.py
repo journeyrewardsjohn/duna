@@ -61,12 +61,23 @@ def load_verified_quality_gate(
     public_key = serialization.load_pem_public_key(public_key_path.read_bytes())
     if not isinstance(public_key, Ed25519PublicKey):
         raise TypeError("Promotion key must be Ed25519")
+    payload_value = envelope.get("payloadBase64")
+    if envelope.get("schemaVersion") == "duna-vision-promotion-attestation-v2":
+        if not isinstance(payload_value, str):
+            raise TypeError("Promotion attestation payload is missing")
+        payload = base64.b64decode(payload_value, validate=True)
+        gate_document = json.loads(payload)
+    else:
+        # Read legacy local attestations while every newly generated promotion
+        # uses the byte-exact v2 envelope that the control plane also verifies.
+        payload = canonical_json(envelope)
+        gate_document = envelope
     try:
-        public_key.verify(base64.b64decode(signature_value), canonical_json(envelope))
+        public_key.verify(base64.b64decode(signature_value, validate=True), payload)
     except (InvalidSignature, ValueError) as error:
         raise ValueError("Promotion attestation signature is invalid") from error
 
-    gate = QualityGate.model_validate(envelope)
+    gate = QualityGate.model_validate(gate_document)
     if gate.modelBundleSha256 != model_bundle_sha256:
         raise ValueError(
             "Promotion attestation does not match the mounted model bundle"
