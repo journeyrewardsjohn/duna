@@ -5529,7 +5529,8 @@ export async function createRecurringCalendarBlocks(input: {
     effectiveFrom: input.effectiveFrom,
     effectiveTo: input.effectiveTo,
   }));
-  await database.transaction(async (transaction) => {
+  const tx = getTransactionalDatabase();
+  await tx.transaction(async (transaction) => {
     await transaction.insert(scheduleBlocks).values(blockRows);
     await transaction.insert(auditLog).values({
       organizationId,

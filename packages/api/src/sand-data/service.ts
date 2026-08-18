@@ -4,6 +4,7 @@ import {
   externalPlayerProfiles,
   follows,
   getDatabase,
+  getTransactionalDatabase,
   importedMatches,
   importLinks,
   importSources,
@@ -4689,7 +4690,8 @@ export async function mergeUnclaimedProfile(input: {
       Record<PlayerMergeFieldKey, PlayerMergeFieldChoice>
     >,
   );
-  const transactionResult = await database.transaction(async (transaction) => {
+  const tx = getTransactionalDatabase();
+  const transactionResult = await tx.transaction(async (transaction) => {
     const [source, target, sourceProfile, targetProfile] = await Promise.all([
       transaction.query.people.findFirst({
         where: eq(people.id, input.sourcePersonId),
@@ -9559,7 +9561,7 @@ export async function saveProfessionalEventPrediction(input: {
   readonly now?: Date;
 }) {
   requireDatabase();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const now = input.now ?? new Date();
   const event = await storedProfessionalEventBySlug(input.eventSlug);
   if (!event) {
@@ -9700,7 +9702,8 @@ export async function saveProfessionalMatchPrediction(input: {
       "Match picks close when the match begins.",
     );
   }
-  return database.transaction(async (transaction) => {
+  const tx = getTransactionalDatabase();
+  return tx.transaction(async (transaction) => {
     const [existing] = await transaction
       .select()
       .from(professionalMatchPredictions)

@@ -9,14 +9,22 @@ import {
 } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
 
-let database: NeonHttpDatabase<typeof schema> | undefined;
+/**
+ * The Neon HTTP driver accepts individual queries and batches, but cannot
+ * execute interactive transactions. Keeping `transaction` out of this type
+ * makes accidental use a compile-time error; use `getTransactionalDatabase`
+ * whenever multiple statements must succeed or fail together.
+ */
+type HttpDatabase = Omit<NeonHttpDatabase<typeof schema>, "transaction">;
+
+let database: HttpDatabase | undefined;
 let transactionalDatabase: NeonDatabase<typeof schema> | undefined;
 
 export function isDatabaseConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
 }
 
-export function getDatabase(): NeonHttpDatabase<typeof schema> {
+export function getDatabase(): HttpDatabase {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(

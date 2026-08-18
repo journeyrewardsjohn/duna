@@ -3,6 +3,7 @@ import {
   externalPlayerProfiles,
   follows,
   getDatabase,
+  getTransactionalDatabase,
   importedMatches,
   importLinks,
   importSources,
@@ -1695,7 +1696,7 @@ async function queueFollowMessage(input: {
   readonly event: UpcomingPlayerEvent;
   readonly now: Date;
 }) {
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   const entityKey = input.event.id;
   const watch = input.event.watchOptions[0];
   const body =
@@ -1752,6 +1753,7 @@ export async function dispatchPlayerFollowNotifications(input: {
 }) {
   requireDatabase();
   const database = getDatabase();
+  const tx = getTransactionalDatabase();
   const now = input.now ?? new Date();
   const rows = await database
     .select({
@@ -1850,7 +1852,7 @@ export async function dispatchPlayerFollowNotifications(input: {
           .join(" / ");
         const won = playerSide === match.winnerSide;
         const score = match.sets.map((set) => `${set.a}–${set.b}`).join(", ");
-        const resultQueued = await database.transaction(async (transaction) => {
+        const resultQueued = await tx.transaction(async (transaction) => {
           const [delivery] = await transaction
             .insert(playerFollowDeliveries)
             .values({

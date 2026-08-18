@@ -10,6 +10,7 @@ import {
   eventImpressions,
   eventTypes,
   getDatabase,
+  getTransactionalDatabase,
   guardianships,
   marketingCampaigns,
   marketingFlows,
@@ -3277,7 +3278,7 @@ export async function claimStaffInvitation(input: {
   readonly now: Date;
 }): Promise<OperatorMutationResult> {
   requireDatabase();
-  const database = getDatabase();
+  const database = getTransactionalDatabase();
   let invitationId = "";
   await database.transaction(async (transaction) => {
     const claimed = await transaction
@@ -3607,7 +3608,8 @@ export async function updateStaffProfile(input: {
     active: input.active,
     updatedAt: input.now,
   };
-  await database.transaction(async (transaction) => {
+  const tx = getTransactionalDatabase();
+  await tx.transaction(async (transaction) => {
     await transaction
       .update(people)
       .set({ displayName, updatedAt: input.now })
