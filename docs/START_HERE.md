@@ -65,8 +65,9 @@ connected evidence.
 ### Connected mode
 
 Use a non-production Neon branch and provider sandbox credentials. Set
-`DUNA_DATA_SOURCE=database`, provide `DATABASE_URL`, and configure only the
-variables needed by the target surface. Store values in ignored app-local
+`DUNA_DATA_SOURCE=database`, provide `DATABASE_URL`, and optionally provide
+`NEON_READ_ONLY_REPLICA` when that branch has a read-only compute. Store values
+in ignored app-local
 `.env.local` files or the provider's encrypted environment store. Follow
 [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md); do not copy values into
 commits, issue text, logs, screenshots, or chat.
@@ -74,6 +75,12 @@ commits, issue text, logs, screenshots, or chat.
 Production database or payment access is never required for ordinary feature
 development. Create or request an isolated provider branch/environment when a
 connected test is necessary.
+
+In production, use `getReadOnlyDatabase()` for latency-tolerant public,
+reporting, ranking, or dashboard reads. Keep writes, transactions,
+authorization and guardian checks, checkout, capacity, registration/waitlists,
+live scoring, messaging cursors, and read-after-write verification on the
+primary `DATABASE_URL`.
 
 ## Pick the owning layer
 

@@ -18,10 +18,15 @@ import * as schema from "./schema";
 type HttpDatabase = Omit<NeonHttpDatabase<typeof schema>, "transaction">;
 
 let database: HttpDatabase | undefined;
+let readOnlyDatabase: HttpDatabase | undefined;
 let transactionalDatabase: NeonDatabase<typeof schema> | undefined;
 
 export function isDatabaseConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
+}
+
+export function isReadOnlyReplicaConfigured(): boolean {
+  return Boolean(process.env.NEON_READ_ONLY_REPLICA);
 }
 
 export function getDatabase(): HttpDatabase {
@@ -35,6 +40,27 @@ export function getDatabase(): HttpDatabase {
     database = drizzleHttp(neon(connectionString), { schema });
   }
   return database;
+}
+
+/**
+ * Returns the Neon read-only replica for latency-tolerant reads. A replica can
+ * lag the primary, so authorization, checkout, capacity, live state, messaging
+ * cursors, and read-after-write flows must continue to use `getDatabase()`.
+ * Local and isolated environments may omit the replica and safely fall back to
+ * the primary connection.
+ */
+export function getReadOnlyDatabase(): HttpDatabase {
+  const connectionString =
+    process.env.NEON_READ_ONLY_REPLICA || process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "NEON_READ_ONLY_REPLICA and DATABASE_URL are not configured. Use the demo adapter or connect Neon.",
+    );
+  }
+  if (!readOnlyDatabase) {
+    readOnlyDatabase = drizzleHttp(neon(connectionString), { schema });
+  }
+  return readOnlyDatabase;
 }
 
 export function getTransactionalDatabase(): NeonDatabase<typeof schema> {

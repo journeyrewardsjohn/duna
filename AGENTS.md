@@ -95,6 +95,26 @@ When the documents appear to conflict, preserve these invariants:
 - Charts must explain change, expose an accessible summary, respect reduced
   motion, and remain legible without color.
 
+## Database routing contract
+
+- Neon production has a read/write primary and a read-only replica. Use
+  `DATABASE_URL` for writes, transactions, migrations, locking, and any read
+  that must observe a just-completed write. Use `NEON_READ_ONLY_REPLICA` through
+  `getReadOnlyDatabase()` for eligible read-only work so public discovery,
+  reporting, rankings, dashboards, and other latency-tolerant queries do not
+  add avoidable load to the primary.
+- A replica can lag the primary. Keep authentication, authorization,
+  membership/guardian checks, checkout and payments, capacity/inventory,
+  registration and waitlist decisions, live scoring, messaging cursors,
+  idempotency, rate limits, and read-after-write flows on the primary.
+- Never migrate, seed, repair, or mutate through `NEON_READ_ONLY_REPLICA`.
+  `getReadOnlyDatabase()` safely falls back to `DATABASE_URL` when a replica is
+  not configured, but connected production must configure both server secrets
+  in every Web/HQ runtime that executes eligible reads.
+- Direct database access remains server-only and subordinate to typed API,
+  tenancy, permission, and audit rules. Moving a query to the replica must not
+  weaken any of those controls.
+
 ## Homepage creative direction
 
 - The homepage opens on a nearly white editorial ground. Its signature is one
