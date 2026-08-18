@@ -19,6 +19,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -341,10 +342,12 @@ export function OrganizationExperienceModal({
   >([]);
   const [waiverVisible, setWaiverVisible] = useState(false);
   const [waiverScrolled, setWaiverScrolled] = useState(false);
-  const [waiverAccepted, setWaiverAccepted] = useState(false);
+  const [waiverVerified, setWaiverVerified] = useState(false);
   const [waiverName, setWaiverName] = useState("");
-  const [waiverAcknowledgements, setWaiverAcknowledgements] = useState<
-    readonly string[]
+  const [remainingWaiverSignerRoles, setRemainingWaiverSignerRoles] = useState<
+    readonly (
+      "adult-player" | "parent-or-guardian" | "player-acknowledgement"
+    )[]
   >([]);
 
   useEffect(() => {
@@ -470,19 +473,6 @@ export function OrganizationExperienceModal({
     if (!client || !storefront) {
       throw new Error("Sign in to purchase from this club.");
     }
-    const requirements = await client.player.waiverRequirements.query({
-      organizationId: storefront.organizationId,
-      catalogItemId: item.id,
-    });
-    if (requirements.some((requirement) => !requirement.complete)) {
-      setWaiverRequirements(requirements);
-      setWaiverScrolled(false);
-      setWaiverAccepted(false);
-      setWaiverName("");
-      setWaiverAcknowledgements([]);
-      setWaiverVisible(true);
-      return false;
-    }
     const variant =
       item.variants.find((candidate) => candidate.id === selectedVariantId) ??
       item.variants[0];
@@ -542,6 +532,7 @@ export function OrganizationExperienceModal({
     if (!item) return;
     setCheckoutBusy(true);
     try {
+      let purchasedMembership: CatalogItem | undefined;
       const requiresMembership =
         (item.membershipRequired || item.visibility === "members") &&
         eligibility?.isMember === false;
@@ -556,6 +547,7 @@ export function OrganizationExperienceModal({
         }
         const membershipCompleted = await purchase(membership, "card");
         if (!membershipCompleted) return;
+        purchasedMembership = membership;
         const active = await pollMembership(item.id);
         if (!active) {
           Alert.alert(
@@ -567,6 +559,9 @@ export function OrganizationExperienceModal({
       }
       const completed = await purchase(item, paymentKind);
       if (completed) {
+        await promptForPostPurchaseWaiver(
+          purchasedMembership ? [purchasedMembership, item] : [item],
+        );
         Alert.alert(
           item.subtype === "credit-pack" ? "Credits added" : "You’re all set",
           item.subtype === "credit-pack"
@@ -594,24 +589,23 @@ export function OrganizationExperienceModal({
   const canSignWaiver =
     Boolean(currentWaiver) &&
     waiverScrolled &&
-    waiverAccepted &&
-    requiredWaiverSections.every((section) =>
-      waiverAcknowledgements.includes(section.id),
-    ) &&
+    waiverVerified &&
     (!currentWaiver?.requiresSignature || waiverName.trim().length >= 3);
 
   async function signWaiver() {
     if (!client || !storefront || !currentWaiver || !canSignWaiver) return;
     setCheckoutBusy(true);
     try {
-      await client.player.executeWaiver.mutate({
+      const result = await client.player.executeWaiver.mutate({
         organizationId: storefront.organizationId,
         waiverDocumentId: currentWaiver.documentId,
         subjectPersonId: currentWaiver.subjectPersonId,
         typedLegalName: currentWaiver.requiresSignature
           ? waiverName
           : undefined,
-        acknowledgedSectionIds: [...waiverAcknowledgements],
+        acknowledgedSectionIds: requiredWaiverSections.map(
+          (section) => section.id,
+        ),
         displayedInline: true,
         scrolledToEnd: true,
         confirmed: true,
@@ -622,6 +616,17 @@ export function OrganizationExperienceModal({
         catalogItemId: selectedItem?.id,
       });
       setWaiverRequirements(refreshed);
+      setRemainingWaiverSignerRoles(
+        result.remainingSignerRoles.filter(
+          (
+            role,
+          ): role is
+            "adult-player" | "parent-or-guardian" | "player-acknowledgement" =>
+            role === "adult-player" ||
+            role === "parent-or-guardian" ||
+            role === "player-acknowledgement",
+        ),
+      );
       if (refreshed.every((requirement) => requirement.complete)) {
         setWaiverVisible(false);
         Alert.alert(
@@ -642,6 +647,46 @@ export function OrganizationExperienceModal({
     } finally {
       setCheckoutBusy(false);
     }
+  }
+
+  async function promptForPostPurchaseWaiver(items: readonly CatalogItem[]) {
+    if (!client || !storefront) return;
+    const requirementSets = await Promise.all(
+      items.map((item) =>
+        client.player.waiverRequirements
+          .query({
+            organizationId: storefront.organizationId,
+            catalogItemId: item.id,
+          })
+          .catch(() => []),
+      ),
+    );
+    const requirements = Array.from(
+      new Map(
+        requirementSets
+          .flat()
+          .map((requirement) => [requirement.documentId, requirement]),
+      ).values(),
+    );
+    if (requirements.every((requirement) => requirement.complete)) return;
+    setWaiverRequirements(requirements);
+    setWaiverScrolled(false);
+    setWaiverVerified(false);
+    setWaiverName("");
+    setRemainingWaiverSignerRoles([]);
+    setWaiverVisible(true);
+  }
+
+  async function shareWaiverCompletion(role: string) {
+    if (!storefront || !currentWaiver) return;
+    const url = new URL("/waivers/complete", dunaWebUrl);
+    url.searchParams.set("organizationId", storefront.organizationId);
+    url.searchParams.set("waiverDocumentId", currentWaiver.documentId);
+    url.searchParams.set("subjectPersonId", currentWaiver.subjectPersonId);
+    await Share.share({
+      message: `Please complete the ${currentWaiver.title} for the ${role === "parent-or-guardian" ? "parent or guardian" : "player"}. ${url.toString()}`,
+      url: url.toString(),
+    });
   }
 
   const closeOrBack = () => {
@@ -1471,8 +1516,9 @@ export function OrganizationExperienceModal({
               scrollEventThrottle={16}
             >
               <Text style={styles.waiverIntro}>
-                Review the complete waiver below. Duna will only unlock the
-                acknowledgement controls after you reach the end.
+                Your purchase is complete. Finish this waiver before the player
+                participates. Read the complete document, then verify the key
+                sections below.
               </Text>
               <NativeMarkdownContent
                 color={themeTokens.text1}
@@ -1481,75 +1527,41 @@ export function OrganizationExperienceModal({
               />
               <Text style={styles.waiverStatus}>
                 {waiverScrolled
-                  ? "Full document reviewed. You can now acknowledge and sign."
+                  ? "Full document reviewed. Verify the key sections to continue."
                   : "Scroll to the bottom to continue."}
               </Text>
-              {requiredWaiverSections.map((section) => {
-                const checked = waiverAcknowledgements.includes(section.id);
-                return (
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked, disabled: !waiverScrolled }}
-                    disabled={!waiverScrolled}
-                    key={section.id}
-                    onPress={() =>
-                      setWaiverAcknowledgements((current) =>
-                        checked
-                          ? current.filter((id) => id !== section.id)
-                          : [...current, section.id],
-                      )
-                    }
-                    style={styles.waiverAcknowledgement}
-                  >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        checked && {
-                          backgroundColor: primary,
-                          borderColor: primary,
-                        },
-                      ]}
-                    >
-                      {checked ? <CheckIcon color={onPrimary} /> : null}
-                    </View>
-                    <Text style={styles.waiverAcknowledgementText}>
-                      I specifically acknowledge: {section.title}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{
-                  checked: waiverAccepted,
-                  disabled: !waiverScrolled,
-                }}
-                disabled={!waiverScrolled}
-                onPress={() => setWaiverAccepted((value) => !value)}
-                style={styles.waiverAcknowledgement}
-              >
-                <View
+              {!waiverVerified ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !waiverScrolled }}
+                  disabled={!waiverScrolled}
+                  onPress={() => setWaiverVerified(true)}
                   style={[
-                    styles.checkbox,
-                    waiverAccepted && {
-                      backgroundColor: primary,
-                      borderColor: primary,
-                    },
+                    styles.waiverAcknowledgement,
+                    !waiverScrolled && styles.disabled,
                   ]}
                 >
-                  {waiverAccepted ? <CheckIcon color={onPrimary} /> : null}
-                </View>
-                <Text style={styles.waiverAcknowledgementText}>
-                  I have reviewed the full waiver and affirmatively agree to it.
+                  <View style={styles.checkbox}>
+                    <CheckIcon color={primary} />
+                  </View>
+                  <Text style={styles.waiverAcknowledgementText}>
+                    {requiredWaiverSections.length
+                      ? `I verify I read ${requiredWaiverSections.map((section) => section.title).join(", ")}.`
+                      : "I verify I read the full waiver."}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.waiverStatus}>
+                  ✓ Key sections verified. Add the legal name to sign.
                 </Text>
-              </Pressable>
-              {currentWaiver?.requiresSignature ? (
+              )}
+              {waiverVerified && currentWaiver?.requiresSignature ? (
                 <View style={styles.waiverNameGroup}>
                   <Text style={styles.waiverNameLabel}>
                     Type your full legal name to sign
                   </Text>
                   <TextInput
-                    editable={waiverScrolled}
+                    editable={waiverVerified}
                     onChangeText={setWaiverName}
                     placeholder="Full legal name"
                     placeholderTextColor={themeTokens.text3}
@@ -1558,23 +1570,39 @@ export function OrganizationExperienceModal({
                   />
                 </View>
               ) : null}
-              <Pressable
-                disabled={!canSignWaiver || checkoutBusy}
-                onPress={() => void signWaiver()}
-                style={[
-                  styles.buyButton,
-                  { backgroundColor: primary },
-                  (!canSignWaiver || checkoutBusy) && styles.disabled,
-                ]}
-              >
-                {checkoutBusy ? (
-                  <ActivityIndicator color={onPrimary} />
-                ) : (
-                  <Text style={[styles.buyButtonText, { color: onPrimary }]}>
-                    Sign waiver
+              {waiverVerified ? (
+                <Pressable
+                  disabled={!canSignWaiver || checkoutBusy}
+                  onPress={() => void signWaiver()}
+                  style={[
+                    styles.buyButton,
+                    { backgroundColor: primary },
+                    (!canSignWaiver || checkoutBusy) && styles.disabled,
+                  ]}
+                >
+                  {checkoutBusy ? (
+                    <ActivityIndicator color={onPrimary} />
+                  ) : (
+                    <Text style={[styles.buyButtonText, { color: onPrimary }]}>
+                      Sign and agree
+                    </Text>
+                  )}
+                </Pressable>
+              ) : null}
+              {remainingWaiverSignerRoles.map((role) => (
+                <Pressable
+                  key={role}
+                  onPress={() => void shareWaiverCompletion(role)}
+                  style={styles.contactAction}
+                >
+                  <Text style={styles.contactActionText}>
+                    Send completion link to{" "}
+                    {role === "parent-or-guardian"
+                      ? "parent or guardian"
+                      : "player"}
                   </Text>
-                )}
-              </Pressable>
+                </Pressable>
+              ))}
             </ScrollView>
           </SafeAreaView>
         </Modal>

@@ -15,6 +15,7 @@ export default async function CheckoutPage({
     ticket?: string;
     quantity?: string;
     team?: string;
+    participant?: string;
     session_id?: string;
   }>;
 }) {
@@ -33,6 +34,22 @@ export default async function CheckoutPage({
       caller.public.players({ limit: 50 }),
     ]);
   if (!event) notFound();
+  const postPurchaseWaiverRequirements =
+    query.checkout === "success" && event.organizationId
+      ? await caller.player
+          .waiverRequirements({
+            organizationId: event.organizationId,
+            subjectPersonId: query.participant,
+            waiverDocumentIds: event.policies
+              ?.filter(
+                (policy) =>
+                  policy.kind === "waiver" && Boolean(policy.waiverDocumentId),
+              )
+              .map((policy) => policy.waiverDocumentId!)
+              .slice(0, 20),
+          })
+          .catch(() => [])
+      : [];
   return (
     <main className="standard-page checkout-page">
       <CheckoutPanel
@@ -61,6 +78,7 @@ export default async function CheckoutPage({
         }
         player={dashboard.player}
         searchablePlayers={searchablePlayers}
+        postPurchaseWaiverRequirements={postPurchaseWaiverRequirements}
         participants={[
           {
             person: settings.profile.person,

@@ -4216,6 +4216,20 @@ const playerRouter = router({
       z.object({
         executionId: z.string().uuid(),
         expiresAt: z.iso.datetime(),
+        signerRole: z.enum([
+          "adult-player",
+          "parent-or-guardian",
+          "player-acknowledgement",
+        ]),
+        remainingSignerRoles: z
+          .array(
+            z.enum([
+              "adult-player",
+              "parent-or-guardian",
+              "player-acknowledgement",
+            ]),
+          )
+          .readonly(),
       }),
     )
     .mutation(({ input, ctx }) =>
@@ -4245,6 +4259,7 @@ const playerRouter = router({
       z.object({
         organizationId: z.string().uuid(),
         catalogItemId: z.string().uuid().optional(),
+        waiverDocumentIds: z.array(z.string().uuid()).max(20).optional(),
         subjectPersonId: z.string().uuid().optional(),
       }),
     )

@@ -1,6 +1,6 @@
 "use client";
 
-import type { TeammateSearchResult } from "@duna/api";
+import type { TeammateSearchResult, WaiverRequirement } from "@duna/api";
 import type {
   EventDivisionSummary,
   EventSummary,
@@ -33,6 +33,7 @@ import {
   searchTeammatesAction,
   startEventCheckoutAction,
 } from "@/app/app/checkout/[slug]/actions";
+import { WaiverSignaturePanel } from "./waiver-signature-panel";
 
 type PurchaseKind = "entry" | "ticket";
 type CompletionState =
@@ -191,6 +192,7 @@ export function CheckoutPanel({
   player,
   searchablePlayers,
   walletAvailableMinor,
+  postPurchaseWaiverRequirements = [],
 }: {
   readonly event: EventSummary;
   readonly initialDivisionId?: string;
@@ -212,6 +214,7 @@ export function CheckoutPanel({
   readonly player: PersonSummary;
   readonly searchablePlayers: readonly PersonSummary[];
   readonly walletAvailableMinor: number;
+  readonly postPurchaseWaiverRequirements?: readonly WaiverRequirement[];
 }) {
   const initialTicket = event.tickets?.find(
     (ticketItem) => ticketItem.id === initialTicketTypeId,
@@ -346,9 +349,7 @@ export function CheckoutPanel({
   );
 
   const applicablePolicies =
-    event.policies?.filter(
-      (policy) => purchaseKind === "entry" || policy.kind !== "waiver",
-    ) ?? [];
+    event.policies?.filter((policy) => policy.kind !== "waiver") ?? [];
   const requiredPolicies = applicablePolicies.filter(
     (policy) => policy.required,
   );
@@ -621,6 +622,16 @@ export function CheckoutPanel({
             </button>
           </div>
         )}
+        {postPurchaseWaiverRequirements.some(
+          (requirement) => !requirement.complete,
+        ) &&
+          event.organizationId && (
+            <WaiverSignaturePanel
+              onSigned={() => window.location.reload()}
+              organizationId={event.organizationId}
+              requirements={postPurchaseWaiverRequirements}
+            />
+          )}
         <a className="primary-action" href="/app/play">
           View your plans <ChevronRight aria-hidden size={17} />
         </a>
