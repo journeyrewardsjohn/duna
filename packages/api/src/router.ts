@@ -238,6 +238,10 @@ import {
   updatePickup,
 } from "./pickup-service";
 import {
+  createPlayerEventNote,
+  loadPlayerEventNotes,
+} from "./player-event-notes-service";
+import {
   addOrganizationBrandKnowledgeSource,
   addCalendarEquipment,
   addCalendarParticipant,
@@ -2167,6 +2171,72 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  eventNotes: protectedProcedure
+    .input(
+      z.object({
+        activityType: z.enum(["pickup", "session"]),
+        activityId: z.string().uuid(),
+      }),
+    )
+    .output(
+      z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            body: z.string(),
+            visibility: z.enum(["private", "shared-with-host"]),
+            source: z.enum(["typed", "voice"]),
+            audioUrl: z.string().url().optional(),
+            createdAt: z.iso.datetime(),
+          }),
+        )
+        .readonly(),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPlayerEventNotes({ actor: ctx.actor!, ...input });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createEventNote: protectedProcedure
+    .input(
+      z
+        .object({
+          activityType: z.enum(["pickup", "session"]),
+          activityId: z.string().uuid(),
+          body: z.string().trim().min(1).max(5_000),
+          visibility: z.enum(["private", "shared-with-host"]),
+          source: z.enum(["typed", "voice"]),
+          audioUrl: z.string().url().optional(),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine(
+          (value) => value.source !== "voice" || Boolean(value.audioUrl),
+          "Voice reflections require an audio recording.",
+        ),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createEventNote",
+        request: input,
+        ctx,
+        execute: () =>
+          createPlayerEventNote({
+            actor: ctx.actor!,
+            activityType: input.activityType,
+            activityId: input.activityId,
+            body: input.body,
+            visibility: input.visibility,
+            source: input.source,
+            audioUrl: input.audioUrl,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
   matchAvailability: adultProcedure
     .output(z.array(matchAvailabilityPostSchema).readonly())
     .query(({ ctx }) =>
