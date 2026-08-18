@@ -526,6 +526,37 @@ export async function executeWaiver(input: {
     });
   if (!execution)
     throw new Error("Duna could not record the waiver signature.");
+  const requiredSigners: (
+    "adult-player" | "parent-or-guardian" | "player-acknowledgement"
+  )[] = subject.isMinor
+    ? [
+        ...(version.requiresParentForMinors
+          ? ["parent-or-guardian" as const]
+          : []),
+        ...(subject.ageBand === "teen" &&
+        version.playerAcknowledgementMinimumAge !== null
+          ? ["player-acknowledgement" as const]
+          : []),
+      ]
+    : ["adult-player"];
+  const activeExecutions = await database
+    .select({ signerRole: waiverExecutions.signerRole })
+    .from(waiverExecutions)
+    .where(
+      and(
+        eq(waiverExecutions.organizationId, organizationId),
+        eq(waiverExecutions.waiverDocumentId, document.id),
+        eq(waiverExecutions.waiverVersionId, version.id),
+        eq(waiverExecutions.subjectPersonId, subject.id),
+        gt(waiverExecutions.expiresAt, input.now),
+      ),
+    );
+  const completedSignerRoles = new Set(
+    activeExecutions.map((item) => item.signerRole),
+  );
+  const remainingSignerRoles = requiredSigners.filter(
+    (role) => !completedSignerRoles.has(role),
+  );
   await database.insert(auditLog).values({
     actorPersonId: signer.id,
     actorType: "person",
@@ -582,6 +613,8 @@ export async function executeWaiver(input: {
   return {
     executionId: execution.id,
     expiresAt: execution.expiresAt.toISOString(),
+    signerRole,
+    remainingSignerRoles,
   };
 }
 

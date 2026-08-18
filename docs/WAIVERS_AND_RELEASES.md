@@ -29,16 +29,20 @@ later version is published.
 ## Signing journey
 
 The Web and Player native flows always render the complete waiver inline. The
-final confirmation and per-section acknowledgements remain disabled until the
-signer reaches the end. A configured signature requires an affirmative checkbox
-and typed full legal name.
+single **“I verify I read…”** action names every configured key section and
+remains disabled until the signer reaches the end. It unlocks the typed legal
+name and final **Sign and agree** action; Duna records every configured key
+section as part of that one deliberate verification, rather than making a
+signer complete a stack of repetitive checkboxes.
 
 For a minor, a verified parent or legal guardian signs against the child’s
 profile. A teen can separately acknowledge a waiver when the organization
 enables an age threshold from 13–17, but it never replaces a required guardian
 signature. Guardian invitation/claim links use the existing linked dependent
 flow; relationship review must be verified before it can be used to execute a
-waiver.
+waiver. When another signer remains, Duna exposes a subject- and
+document-scoped HTTPS completion link. On mobile it attempts the Duna app
+first and otherwise leaves the signer on the same secure Web flow.
 
 Each execution retains the subject and signer, signer role and relationship,
 typed name, required section IDs, the full-inline/scroll confirmations,
@@ -50,20 +54,24 @@ durable signature evidence.
 
 ## Enforcement
 
-`loadWaiverRequirements` is the shared authoritative requirement resolver.
-It derives the active document/version and checks unexpired, role-complete
-executions for the participant. The following entry points must use it rather
-than treating a client checkbox as consent:
+`loadWaiverRequirements` is the shared authoritative requirement resolver. It
+derives the active document/version and checks unexpired, role-complete
+executions for the participant. Payment is deliberately never conditioned on a
+participation waiver: checkout takes payment first, then presents the signing
+journey and prevents participation until it is complete. The following entry
+points use the resolver to present and enforce the post-purchase participation
+state rather than treating a client control as consent:
 
-| Journey                                    | Enforcement point                                |
-| ------------------------------------------ | ------------------------------------------------ |
-| Catalog purchase and membership activation | `packages/api/src/catalog-checkout.ts`           |
-| Event checkout                             | `packages/api/src/checkout.ts`                   |
-| Web purchase UI                            | `apps/web/components/catalog-checkout-panel.tsx` |
-| Player native purchase UI                  | `apps/player/organization-experience.tsx`        |
+| Journey                                  | Enforcement point                         |
+| ---------------------------------------- | ----------------------------------------- |
+| Catalog / membership post-purchase state | `packages/api/src/waiver-service.ts`      |
+| Event participation state                | `packages/api/src/waiver-service.ts`      |
+| Web completion                           | `apps/web/app/waivers/complete/page.tsx`  |
+| Player post-purchase completion          | `apps/player/organization-experience.tsx` |
 
-Server-side refusal is mandatory. UI gates only explain and collect the
-required execution; they are not authorization.
+Server-side signer/guardian authorization is mandatory. UI gates only explain
+and collect the required execution; they are not authorization. Checkout code
+must not add a waiver precondition.
 
 ## Implementation map
 
@@ -74,7 +82,7 @@ required execution; they are not authorization.
 | Typed procedures         | `packages/api/src/router.ts`, `packages/api/src/contracts.ts`                                     |
 | PDF receipt and delivery | `packages/api/src/waiver-receipt.ts`, `packages/api/src/resend.ts`                                |
 | HQ library/import        | `apps/hq/components/waiver-library.tsx`, `apps/hq/app/api/waivers/import/route.ts`                |
-| Web signer               | `apps/web/components/waiver-signature-panel.tsx`                                                  |
+| Web signer and handoff   | `apps/web/app/waivers/complete/page.tsx`, `apps/web/components/waiver-signature-panel.tsx`        |
 | Native signer            | `apps/player/organization-experience.tsx`                                                         |
 
 ## Configuration and release checks
@@ -87,5 +95,6 @@ provider-qualified model. Receipt email requires `RESEND_API_KEY` and
 
 Before release, apply migrations to an isolated Neon branch, test an adult and
 minor/guardian signing journey, revise a waiver and prove re-consent is
-required, verify event and membership checkout refusal, and inspect a generated
-receipt. Confirm the exact Web and HQ production deployment commits separately.
+required, verify event and membership checkout succeeds before waiver
+completion while participation stays blocked, and inspect a generated receipt.
+Confirm the exact Web and HQ production deployment commits separately.

@@ -10691,9 +10691,7 @@ function BookingModal({
         }[division?.teamFormat ?? "solo"]);
   const requiredPolicies =
     event.policies?.filter(
-      (policy) =>
-        policy.required &&
-        (purchaseKind === "entry" || policy.kind !== "waiver"),
+      (policy) => policy.required && policy.kind !== "waiver",
     ) ?? [];
   const rosterComplete = checkoutRosterComplete({
     eventKind: event.kind,
@@ -10978,6 +10976,44 @@ function BookingModal({
               ? `${selectedEvent.title} is waiting for organizer approval. Your admission pass will appear as soon as the ticket is issued.`
               : `${selectedEvent.title} now appears with your bookings.`,
         });
+      }
+      if (
+        purchaseKind === "entry" &&
+        selectedEvent.organizationId &&
+        selectedParticipant?.person.id
+      ) {
+        const waiverDocumentIds = selectedEvent.policies
+          ?.filter(
+            (policy) =>
+              policy.kind === "waiver" && Boolean(policy.waiverDocumentId),
+          )
+          .map((policy) => policy.waiverDocumentId!)
+          .slice(0, 20);
+        if (waiverDocumentIds?.length) {
+          const requirements = await client.player.waiverRequirements
+            .query({
+              organizationId: selectedEvent.organizationId,
+              subjectPersonId: selectedParticipant.person.id,
+              waiverDocumentIds,
+            })
+            .catch(() => []);
+          const next = requirements.find(
+            (requirement) => !requirement.complete,
+          );
+          if (next) {
+            const completionUrl = new URL("/waivers/complete", dunaWebUrl);
+            completionUrl.searchParams.set(
+              "organizationId",
+              selectedEvent.organizationId,
+            );
+            completionUrl.searchParams.set("waiverDocumentId", next.documentId);
+            completionUrl.searchParams.set(
+              "subjectPersonId",
+              next.subjectPersonId,
+            );
+            await WebBrowser.openBrowserAsync(completionUrl.toString());
+          }
+        }
       }
       await refresh();
     } catch (reason) {
@@ -11942,7 +11978,7 @@ function BookingModal({
                 )}
               </View>
             )}
-            {event.policies && event.policies.length > 0 && (
+            {event.policies?.some((policy) => policy.kind !== "waiver") && (
               <View style={styles.checkoutSection}>
                 <Text style={styles.eyebrow}>AGREEMENTS</Text>
                 <Text style={styles.checkoutSummaryText}>
@@ -11951,10 +11987,7 @@ function BookingModal({
                 </Text>
                 <View style={styles.mobilePolicyList}>
                   {event.policies
-                    .filter(
-                      (policy) =>
-                        purchaseKind === "entry" || policy.kind !== "waiver",
-                    )
+                    .filter((policy) => policy.kind !== "waiver")
                     .map((policy) => {
                       const accepted = acceptedPolicyIds.includes(policy.id);
                       const document: MobilePolicyReviewDocument = policy;
@@ -13569,6 +13602,15 @@ function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      if (url?.startsWith("duna://waiver/complete")) {
+        const query = url.split("?")[1] ?? "";
+        // The signed-in app keeps the same secure web completion surface in an
+        // in-app browser, while a shared HTTPS link remains usable everywhere.
+        void WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/waivers/complete?${query}`,
+        );
+        return;
+      }
       if (url?.startsWith("duna://messages")) {
         setEventIndex(null);
         const conversationId = url.match(/^duna:\/\/messages\/([^/?#]+)/)?.[1];

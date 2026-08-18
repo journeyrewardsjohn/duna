@@ -138,10 +138,10 @@ function WaiverSigningPreview({
     (section) => section.acknowledgementRequired,
   );
   const acknowledgementSummary = requiredSections.length
-    ? `${requiredSections.length} specific acknowledgement${
+    ? `One verification for ${requiredSections.length} key section${
         requiredSections.length === 1 ? "" : "s"
       } required`
-    : "No separate section acknowledgements";
+    : "One full-waiver verification";
 
   return (
     <section
@@ -184,22 +184,22 @@ function WaiverSigningPreview({
             <span>
               <Monitor aria-hidden size={15} /> Duna web
             </span>
-            <small>Checkout requirement</small>
+            <small>After purchase</small>
           </header>
           <div className="waiver-signing-preview__web-frame">
             <div className="waiver-signing-preview__web-topbar">
               <span>Duna</span>
-              <small>Secure checkout</small>
+              <small>Purchase confirmed</small>
             </div>
             <div className="waiver-signing-preview__web-panel">
               <div className="waiver-signing-preview__panel-heading">
                 <ShieldCheck aria-hidden size={20} />
                 <div>
-                  <span>REQUIRED BEFORE CHECKOUT</span>
-                  <h4>Review and sign the waiver</h4>
+                  <span>REQUIRED BEFORE PARTICIPATION</span>
+                  <h4>Complete the participation waiver</h4>
                   <p>
-                    The complete document is shown below and this version is
-                    retained with the signature.
+                    Payment comes first. This version is retained with the
+                    signature before the player participates.
                   </p>
                 </div>
               </div>
@@ -208,32 +208,28 @@ function WaiverSigningPreview({
               </div>
               <p className="waiver-signing-preview__status">
                 {reviewed
-                  ? "Full document reviewed. You can now acknowledge and sign."
-                  : "Scroll to the end of the full waiver to unlock acknowledgement."}
+                  ? "Full document reviewed. Verify the key sections to continue."
+                  : "Scroll to the end of the full waiver to continue."}
               </p>
-              <div className="waiver-signing-preview__checks">
-                {requiredSections.map((section) => (
-                  <label key={section.id}>
-                    <input disabled={!reviewed} type="checkbox" />I specifically
-                    acknowledge: {section.title}
-                  </label>
-                ))}
-                <label>
-                  <input disabled={!reviewed} type="checkbox" />I have reviewed
-                  the full waiver and affirmatively agree to it.
-                </label>
-              </div>
-              {waiver.requiresSignature && (
+              <button disabled={!reviewed} type="button">
+                I verify I read{" "}
+                {requiredSections.map((section) => section.title).join(", ") ||
+                  "the full waiver"}
+                .
+              </button>
+              {reviewed && waiver.requiresSignature && (
                 <label className="waiver-signing-preview__name">
                   Type your full legal name to sign
                   <input disabled={!reviewed} placeholder="Full legal name" />
                 </label>
               )}
-              <button disabled type="button">
-                {waiver.requiresSignature
-                  ? "Sign waiver"
-                  : "Record acknowledgement"}
-              </button>
+              {reviewed && (
+                <button disabled type="button">
+                  {waiver.requiresSignature
+                    ? "Sign and agree"
+                    : "Record acknowledgement"}
+                </button>
+              )}
             </div>
           </div>
         </article>
@@ -255,40 +251,36 @@ function WaiverSigningPreview({
             </div>
             <div className="waiver-signing-preview__app-body">
               <p className="waiver-signing-preview__app-intro">
-                Review the complete waiver below. Duna unlocks the
-                acknowledgement controls after you reach the end.
+                Payment is complete. Review the full waiver before the player
+                takes part.
               </p>
               <div className="waiver-signing-preview__app-reader">
                 <WaiverTextPreview markdown={waiver.markdown ?? ""} />
               </div>
               <p className="waiver-signing-preview__status">
                 {reviewed
-                  ? "Full document reviewed. You can now acknowledge and sign."
+                  ? "Full document reviewed. Verify the key sections to continue."
                   : "Scroll to the bottom to continue."}
               </p>
-              <div className="waiver-signing-preview__app-checks">
-                {requiredSections.slice(0, 2).map((section) => (
-                  <p key={section.id}>
-                    <i aria-hidden /> I specifically acknowledge:{" "}
-                    {section.title}
-                  </p>
-                ))}
-                <p>
-                  <i aria-hidden /> I have reviewed the full waiver and
-                  affirmatively agree to it.
-                </p>
-              </div>
-              {waiver.requiresSignature && (
+              <button disabled={!reviewed} type="button">
+                I verify I read{" "}
+                {requiredSections.map((section) => section.title).join(", ") ||
+                  "the full waiver"}
+                .
+              </button>
+              {reviewed && waiver.requiresSignature && (
                 <div className="waiver-signing-preview__app-name">
                   <span>Type your full legal name to sign</span>
                   <em>Full legal name</em>
                 </div>
               )}
-              <button disabled type="button">
-                {waiver.requiresSignature
-                  ? "Sign waiver"
-                  : "Record acknowledgement"}
-              </button>
+              {reviewed && (
+                <button disabled type="button">
+                  {waiver.requiresSignature
+                    ? "Sign and agree"
+                    : "Record acknowledgement"}
+                </button>
+              )}
             </div>
           </div>
         </article>

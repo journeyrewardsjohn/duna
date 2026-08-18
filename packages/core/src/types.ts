@@ -192,6 +192,9 @@ export interface EventPolicy {
   readonly markdown: string;
   readonly required: boolean;
   readonly requireFullScroll: boolean;
+  readonly waiverDocumentId?: string;
+  readonly waiverVersionId?: string;
+  readonly waiverContentHash?: string;
 }
 
 export interface LeagueRecurrence {

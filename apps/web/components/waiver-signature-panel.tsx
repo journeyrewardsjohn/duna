@@ -1,10 +1,21 @@
 "use client";
 
 import type { WaiverRequirement } from "@duna/api";
-import { Check, ShieldCheck } from "lucide-react";
+import { Check, Copy, Send, ShieldCheck } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { executeWaiverAction } from "@/app/clubs/[slug]/products/[productSlug]/actions";
 import { MarkdownContent } from "./markdown-content";
+
+type SignerRole =
+  "adult-player" | "parent-or-guardian" | "player-acknowledgement";
+
+function signerLabel(role: SignerRole): string {
+  return role === "parent-or-guardian"
+    ? "parent or guardian"
+    : role === "player-acknowledgement"
+      ? "player"
+      : "adult player";
+}
 
 export function WaiverSignaturePanel({
   organizationId,
@@ -13,13 +24,15 @@ export function WaiverSignaturePanel({
 }: {
   readonly organizationId: string;
   readonly requirements: readonly WaiverRequirement[];
-  readonly onSigned: () => void;
+  readonly onSigned?: () => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [scrolledToEnd, setScrolledToEnd] = useState(false);
-  const [accepted, setAccepted] = useState(false);
+  const [verified, setVerified] = useState(false);
   const [typedLegalName, setTypedLegalName] = useState("");
-  const [acknowledged, setAcknowledged] = useState<readonly string[]>([]);
+  const [remainingSignerRoles, setRemainingSignerRoles] = useState<
+    readonly SignerRole[]
+  >([]);
   const [message, setMessage] = useState<string>();
   const [pending, startTransition] = useTransition();
   const readerRef = useRef<HTMLDivElement>(null);
@@ -28,23 +41,51 @@ export function WaiverSignaturePanel({
   const requiredSections = requirement.keySections.filter(
     (section) => section.acknowledgementRequired,
   );
-  const sectionsReady = requiredSections.every((section) =>
-    acknowledged.includes(section.id),
-  );
+  const sectionNames = requiredSections.map((section) => section.title);
+  const verificationLabel = sectionNames.length
+    ? `I verify I read ${sectionNames.join(", ")}.`
+    : "I verify I read the full waiver.";
   const canSign =
     scrolledToEnd &&
-    accepted &&
-    sectionsReady &&
+    verified &&
     (!requirement.requiresSignature || typedLegalName.trim().length >= 3);
+  const supportsShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   const changeRequirement = (index: number) => {
     setCurrentIndex(index);
     setScrolledToEnd(false);
-    setAccepted(false);
+    setVerified(false);
     setTypedLegalName("");
-    setAcknowledged([]);
+    setRemainingSignerRoles([]);
     setMessage(undefined);
     readerRef.current?.scrollTo({ top: 0 });
+  };
+
+  const completionUrl = () => {
+    const url = new URL("/waivers/complete", window.location.origin);
+    url.searchParams.set("organizationId", organizationId);
+    url.searchParams.set("waiverDocumentId", requirement.documentId);
+    url.searchParams.set("subjectPersonId", requirement.subjectPersonId);
+    return url.toString();
+  };
+
+  const shareCompletionLink = async (role: SignerRole) => {
+    const url = completionUrl();
+    const text = `Please complete the ${requirement.title} for ${signerLabel(role)} eligibility.`;
+    try {
+      if (supportsShare) {
+        await navigator.share({ title: requirement.title, text, url });
+        setMessage("Secure completion link shared.");
+      } else {
+        await navigator.clipboard.writeText(url);
+        setMessage(
+          "Secure completion link copied. Send it to the required signer.",
+        );
+      }
+    } catch {
+      // The signer can continue here if they dismiss their share sheet.
+    }
   };
 
   const sign = () => {
@@ -58,27 +99,35 @@ export function WaiverSignaturePanel({
         typedLegalName: requirement.requiresSignature
           ? typedLegalName
           : undefined,
-        acknowledgedSectionIds: acknowledged,
+        acknowledgedSectionIds: requiredSections.map((section) => section.id),
       });
       if (!response.ok) {
         setMessage(response.error);
         return;
       }
-      setMessage("Signature recorded. Refreshing your waiver status…");
-      onSigned();
+      setRemainingSignerRoles(response.result.remainingSignerRoles);
+      setMessage(
+        response.result.remainingSignerRoles.length
+          ? "Your signature is recorded. Another required signer can complete their part from the link below."
+          : "Signature recorded. This participant is cleared to take part.",
+      );
+      if (response.result.remainingSignerRoles.length === 0) onSigned?.();
     });
   };
 
   return (
-    <section className="waiver-signature-panel" aria-label="Required waivers">
+    <section
+      className="waiver-signature-panel"
+      aria-label="Participation waiver"
+    >
       <header>
         <ShieldCheck aria-hidden size={21} />
         <div>
-          <span>Required before checkout</span>
-          <h3>Review and sign the waiver</h3>
+          <span>Required before participation</span>
+          <h3>Complete the participation waiver</h3>
           <p>
-            Duna displays the complete document and records the exact version,
-            your authenticated account, and this signature event.
+            Your purchase is confirmed. Complete this before the player arrives
+            or takes part in the activity.
           </p>
         </div>
       </header>
@@ -116,56 +165,66 @@ export function WaiverSignaturePanel({
       </div>
       <p className="waiver-signature-panel__scroll-status">
         {scrolledToEnd
-          ? "Full document reviewed. You can now acknowledge and sign."
-          : "Scroll to the end of the full waiver to unlock acknowledgement."}
+          ? "Full document reviewed. Verify the key sections to continue."
+          : "Scroll to the end of the full waiver to continue."}
       </p>
-      <div className="waiver-signature-panel__acknowledgements">
-        {requiredSections.map((section) => (
-          <label key={section.id}>
-            <input
-              checked={acknowledged.includes(section.id)}
-              disabled={!scrolledToEnd}
-              onChange={(event) =>
-                setAcknowledged((current) =>
-                  event.target.checked
-                    ? [...current, section.id]
-                    : current.filter((id) => id !== section.id),
-                )
-              }
-              type="checkbox"
-            />
-            I specifically acknowledge: {section.title}
-          </label>
-        ))}
-        <label>
-          <input
-            checked={accepted}
-            disabled={!scrolledToEnd}
-            onChange={(event) => setAccepted(event.target.checked)}
-            type="checkbox"
-          />
-          I have reviewed the full waiver and affirmatively agree to it.
-        </label>
-      </div>
-      {requirement.requiresSignature && (
+      {!verified ? (
+        <button
+          className="waiver-signature-panel__verify"
+          disabled={!scrolledToEnd}
+          onClick={() => setVerified(true)}
+          type="button"
+        >
+          <Check aria-hidden size={17} /> {verificationLabel}
+        </button>
+      ) : (
+        <p className="waiver-signature-panel__verified" role="status">
+          <Check aria-hidden size={17} /> Key sections verified. Add the legal
+          name for the final signature.
+        </p>
+      )}
+      {verified && requirement.requiresSignature && (
         <label className="waiver-signature-panel__name">
           <span>Type your full legal name to sign</span>
           <input
-            disabled={!scrolledToEnd}
             onChange={(event) => setTypedLegalName(event.target.value)}
             placeholder="Full legal name"
             value={typedLegalName}
           />
         </label>
       )}
+      {verified && (
+        <button disabled={!canSign || pending} onClick={sign} type="button">
+          {pending
+            ? "Recording signature…"
+            : requirement.requiresSignature
+              ? "Sign and agree"
+              : "Record acknowledgement"}
+        </button>
+      )}
+      {remainingSignerRoles.length > 0 && (
+        <div className="waiver-signature-panel__share">
+          <strong>Another signature is required</strong>
+          <p>
+            Send a secure link to finish this player’s waiver on web or Duna.
+          </p>
+          {remainingSignerRoles.map((role) => (
+            <button
+              key={role}
+              onClick={() => void shareCompletionLink(role)}
+              type="button"
+            >
+              {supportsShare ? (
+                <Send aria-hidden size={16} />
+              ) : (
+                <Copy aria-hidden size={16} />
+              )}
+              Send to {signerLabel(role)}
+            </button>
+          ))}
+        </div>
+      )}
       {message && <p role="status">{message}</p>}
-      <button disabled={!canSign || pending} onClick={sign} type="button">
-        {pending
-          ? "Recording signature…"
-          : requirement.requiresSignature
-            ? "Sign waiver"
-            : "Record acknowledgement"}
-      </button>
     </section>
   );
 }

@@ -44,6 +44,9 @@ export async function startEventCheckoutAction(input: {
     const teamQuery = input.teamClaimToken
       ? `&team=${encodeURIComponent(input.teamClaimToken)}`
       : "";
+    const participantQuery = input.subjectPersonId
+      ? `&participant=${encodeURIComponent(input.subjectPersonId)}`
+      : "";
     const caller = await getServerCaller();
     const result = await caller.player.startEventCheckout({
       sessionId: input.sessionId,
@@ -57,8 +60,8 @@ export async function startEventCheckoutAction(input: {
       acceptedPolicyIds: [...input.acceptedPolicyIds],
       readPolicyIds: [...input.readPolicyIds],
       isDunaPlus: input.isDunaPlus,
-      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}${selectionQuery}${teamQuery}`,
-      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled${selectionQuery}${teamQuery}`,
+      successUrl: `${origin}/app/checkout/${input.slug}?checkout=success&session_id={CHECKOUT_SESSION_ID}${selectionQuery}${teamQuery}${participantQuery}`,
+      cancelUrl: `${origin}/app/checkout/${input.slug}?checkout=cancelled${selectionQuery}${teamQuery}${participantQuery}`,
       idempotencyKey: input.idempotencyKey,
     });
     return { ok: true as const, result };

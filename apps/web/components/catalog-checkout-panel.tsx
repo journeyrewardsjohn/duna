@@ -11,7 +11,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   catalogOfferEligibilityAction,
@@ -62,7 +61,6 @@ export function CatalogCheckoutPanel({
   readonly itemWaiverRequirements: readonly WaiverRequirement[];
   readonly membershipWaiverRequirements?: readonly WaiverRequirement[];
 }) {
-  const router = useRouter();
   const [variantId, setVariantId] = useState(item.variants[0]?.id ?? "");
   const [paymentMethod, setPaymentMethod] = useState<
     "card" | "cash" | "credit"
@@ -73,6 +71,7 @@ export function CatalogCheckoutPanel({
   const [memberActive, setMemberActive] = useState(isMember);
   const [addMembership, setAddMembership] = useState(true);
   const [complete, setComplete] = useState(false);
+  const [membershipComplete, setMembershipComplete] = useState(false);
   const [completionMode, setCompletionMode] = useState<
     "purchase" | "cash-reservation" | null
   >(null);
@@ -146,16 +145,14 @@ export function CatalogCheckoutPanel({
     available &&
     (!requiresMembership || memberActive) &&
     (paymentMethod !== "card" || organization.paymentsReady) &&
-    (paymentMethod !== "credit" || walletCredits >= creditTotal) &&
-    itemWaiverRequirements.every((requirement) => requirement.complete);
+    (paymentMethod !== "credit" || walletCredits >= creditTotal);
   const membershipStep = requiresMembership && !memberActive;
   const canStartMembership = Boolean(
     addMembership &&
     membershipOffer &&
     membershipVariant &&
     membershipPrice &&
-    organization.paymentsReady &&
-    membershipWaiverRequirements.every((requirement) => requirement.complete),
+    organization.paymentsReady,
   );
 
   useEffect(() => {
@@ -170,7 +167,7 @@ export function CatalogCheckoutPanel({
         setComplete(true);
         setCompletionMode("purchase");
         setNotice(
-          "Purchase confirmed. It is now visible in your Duna account.",
+          "Purchase confirmed. Complete the participation waiver below before you arrive.",
         );
       } else if (response.ok) {
         setNotice("Payment received. Duna is finishing fulfillment.");
@@ -197,6 +194,7 @@ export function CatalogCheckoutPanel({
         setNotice(payment.error);
         return;
       }
+      setMembershipComplete(true);
       setNotice("Membership paid. Activating your club access…");
       for (let attempt = 0; attempt < 18 && !cancelled; attempt += 1) {
         const response = await catalogOfferEligibilityAction(item.id);
@@ -245,8 +243,11 @@ export function CatalogCheckoutPanel({
         window.location.assign(response.result.checkoutUrl);
         return;
       }
-      setNotice("Membership added. You can continue with this purchase.");
+      setNotice(
+        "Membership added. Complete its participation waiver after your purchase is confirmed.",
+      );
       setMemberActive(true);
+      setMembershipComplete(true);
       membershipIdempotencyKey.current = crypto.randomUUID();
     });
   };
@@ -285,7 +286,7 @@ export function CatalogCheckoutPanel({
           ? `${response.result.creditsApplied} ${organization.name} credits applied.`
           : response.result.mode === "cash-reservation"
             ? `Reservation recorded. Pay ${organization.name} in person within 24 hours to keep it active.`
-            : "Purchase confirmed.",
+            : "Purchase confirmed. Complete the participation waiver below before you arrive.",
       );
       idempotencyKey.current = crypto.randomUUID();
     });
@@ -320,20 +321,21 @@ export function CatalogCheckoutPanel({
           </span>
         </div>
       )}
-      {(membershipStep
-        ? membershipWaiverRequirements
-        : itemWaiverRequirements
-      ).some((requirement) => !requirement.complete) && (
-        <WaiverSignaturePanel
-          onSigned={() => router.refresh()}
-          organizationId={organization.id}
-          requirements={
-            membershipStep
-              ? membershipWaiverRequirements
-              : itemWaiverRequirements
-          }
-        />
-      )}
+      {(complete || membershipComplete) &&
+        (membershipComplete
+          ? membershipWaiverRequirements
+          : itemWaiverRequirements
+        ).some((requirement) => !requirement.complete) && (
+          <WaiverSignaturePanel
+            onSigned={() => window.location.reload()}
+            organizationId={organization.id}
+            requirements={
+              membershipComplete
+                ? membershipWaiverRequirements
+                : itemWaiverRequirements
+            }
+          />
+        )}
       {item.variants.length > 1 && (
         <label>
           <span>Choose an option</span>
