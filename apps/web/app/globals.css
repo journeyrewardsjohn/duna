@@ -41625,7 +41625,7 @@ button.selected > .choice-radio {
 
 .waiver-completion-page__content > div > h1 {
   font-size: clamp(2.25rem, 5vw, 4.75rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   line-height: 0.95;
   margin: 0.45rem 0 1rem;
 }

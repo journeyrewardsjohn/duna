@@ -2575,6 +2575,9 @@ export const superAdminPeopleOverviewSchema = z.object({
   organizations: z.array(superAdminOrganizationOptionSchema).readonly(),
   events: z.array(superAdminEventOptionSchema).readonly(),
   query: z.string().optional(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  hasNextPage: z.boolean(),
 });
 export const superAdminPersonProfileSchema = z.object({
   person: superAdminPersonRowSchema,

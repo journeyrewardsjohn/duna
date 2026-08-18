@@ -45,6 +45,7 @@ import { resolveWorkOSCredentials } from "./workos-environment";
 
 const DUNA_PLATFORM_SYSTEM_KEY = "duna-platform";
 const SUPER_ADMIN_ROLE = "super-admin";
+const PEOPLE_DIRECTORY_PAGE_SIZE = 100;
 
 export class SuperAdminPeopleError extends Error {
   constructor(message: string) {
@@ -154,8 +155,7 @@ async function eventOrganizationRows(now: Date) {
         sql`${sessions.status} NOT IN ('cancelled', 'completed')`,
       ),
     )
-    .orderBy(asc(sessions.startsAt))
-    .limit(80);
+    .orderBy(asc(sessions.startsAt));
 }
 
 function personRow(input: {
@@ -191,12 +191,14 @@ function personRow(input: {
 
 export async function loadSuperAdminPeopleOverview(input: {
   readonly query?: string;
+  readonly page?: number;
   readonly now: Date;
 }): Promise<SuperAdminPeopleOverview> {
   requireDatabase();
   const database = getDatabase();
   const query = input.query?.trim();
-  const personRows = await database
+  const page = input.page ?? 1;
+  const fetchedPersonRows = await database
     .select()
     .from(people)
     .where(
@@ -210,7 +212,10 @@ export async function loadSuperAdminPeopleOverview(input: {
         : undefined,
     )
     .orderBy(asc(people.displayName))
-    .limit(250);
+    .limit(PEOPLE_DIRECTORY_PAGE_SIZE + 1)
+    .offset((page - 1) * PEOPLE_DIRECTORY_PAGE_SIZE);
+  const hasNextPage = fetchedPersonRows.length > PEOPLE_DIRECTORY_PAGE_SIZE;
+  const personRows = fetchedPersonRows.slice(0, PEOPLE_DIRECTORY_PAGE_SIZE);
   const personIds = personRows.map((person) => person.id);
   const [
     membershipRows,
@@ -291,8 +296,7 @@ export async function loadSuperAdminPeopleOverview(input: {
       })
       .from(organizations)
       .where(isNull(organizations.systemKey))
-      .orderBy(asc(organizations.name))
-      .limit(250),
+      .orderBy(asc(organizations.name)),
     eventOrganizationRows(input.now),
     database
       .select({ count: sql<number>`count(*)::int` })
@@ -410,6 +414,9 @@ export async function loadSuperAdminPeopleOverview(input: {
         : [];
     }),
     query,
+    page,
+    pageSize: PEOPLE_DIRECTORY_PAGE_SIZE,
+    hasNextPage,
   };
 }
 

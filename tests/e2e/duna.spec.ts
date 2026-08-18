@@ -553,17 +553,12 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   const waiverAgreement = page
     .locator(".checkout-agreement-list article")
     .filter({ hasText: "Participation waiver" });
-  const waiverCheckbox = waiverAgreement.locator('input[type="checkbox"]');
-  await expect(waiverCheckbox).toBeDisabled();
-  await waiverAgreement
-    .locator(".checkout-agreement-scroll")
-    .evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-      element.dispatchEvent(new Event("scroll", { bubbles: true }));
-    });
-  await expect(waiverCheckbox).toBeEnabled();
-  await waiverAgreement.locator("label").click();
-  await expect(waiverCheckbox).toBeChecked();
+  await expect(waiverAgreement).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Required waivers unlock after you reach the end. Duna records the exact document and acceptance state with your order.",
+    ),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Continue to payment/ }),
   ).toBeEnabled();
