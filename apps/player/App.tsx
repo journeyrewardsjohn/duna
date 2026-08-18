@@ -102,6 +102,7 @@ import { PlayerCalendarAutoSync } from "./player-calendar-sync";
 import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
+import { NativeEventDetails } from "./event-details";
 import { OrganizationExperienceModal } from "./organization-experience";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
@@ -13634,6 +13635,7 @@ function DunaApp() {
     useState<string>();
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [eventDetailIndex, setEventDetailIndex] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
   const [courtBookingRequest, setCourtBookingRequest] =
@@ -13857,7 +13859,7 @@ function DunaApp() {
                 {tab === "home" && (
                   <HomeScreen
                     onAction={openHomeAction}
-                    onBook={setEventIndex}
+                    onBook={setEventDetailIndex}
                     onOpenBooking={setBookingId}
                     onPredictions={() => setTab("predictions")}
                   />
@@ -13957,6 +13959,30 @@ function DunaApp() {
               <BookingModal
                 eventIndex={eventIndex}
                 onClose={() => setEventIndex(null)}
+              />
+              <NativeEventDetails
+                client={runtime.client}
+                event={
+                  eventDetailIndex === null
+                    ? undefined
+                    : (runtime.dashboard?.events ?? demoEvents)[
+                        eventDetailIndex
+                      ]
+                }
+                onClose={() => setEventDetailIndex(null)}
+                onRegister={() => {
+                  setEventIndex(eventDetailIndex);
+                  setEventDetailIndex(null);
+                }}
+                onScore={() => {
+                  setEventDetailIndex(null);
+                  setTab("score");
+                }}
+                onVideo={() => {
+                  setEventDetailIndex(null);
+                  setTab("video");
+                }}
+                visible={eventDetailIndex !== null}
               />
               <ProfileEditorModal
                 onClose={() => setProfileEditorOpen(false)}
