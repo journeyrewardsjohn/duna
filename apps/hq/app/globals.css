@@ -32263,7 +32263,7 @@ body {
 
 .duna-ai-workspace__intro h2 {
   font-size: clamp(1.65rem, 3vw, 2.45rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }
