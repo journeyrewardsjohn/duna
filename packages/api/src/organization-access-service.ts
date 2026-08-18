@@ -96,6 +96,8 @@ async function synchronizeWorkOSMembership(input: {
   readonly workosOrganizationId?: string | null;
   readonly workosUserId?: string | null;
   readonly role: OrganizationAccessRole;
+  /** A provider role can be narrower than Duna's local staff role. */
+  readonly workosRoleSlug?: string;
 }): Promise<"synced" | "not-linked"> {
   if (!input.workosOrganizationId || !input.workosUserId) return "not-linked";
   const credentials = resolveWorkOSCredentials();
@@ -122,13 +124,13 @@ async function synchronizeWorkOSMembership(input: {
     );
     if (membership) {
       await workos.userManagement.updateOrganizationMembership(membership.id, {
-        roleSlug: workOSRoleSlug(input.role),
+        roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role),
       });
     } else {
       await workos.userManagement.createOrganizationMembership({
         organizationId: input.workosOrganizationId,
         userId: input.workosUserId,
-        roleSlug: workOSRoleSlug(input.role),
+        roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role),
       });
     }
     return "synced";
@@ -155,6 +157,8 @@ export async function grantOrganizationAccess(input: {
   readonly now: Date;
   /** Internal platform-only path; never exposed by the public admin mutation. */
   readonly allowSystemOrganization?: boolean;
+  /** Internal provider mapping for system workspaces. */
+  readonly workosRoleSlug?: string;
 }): Promise<{
   readonly id: string;
   readonly entity: "staff-profile" | "staff-invitation";
@@ -222,6 +226,7 @@ export async function grantOrganizationAccess(input: {
     workosOrganizationId: organization.workosOrganizationId,
     workosUserId: person.workosUserId,
     role: input.role,
+    workosRoleSlug: input.workosRoleSlug,
   });
   const membershipRole = input.role === "director" ? "owner" : input.role;
   await database.transaction(async (transaction) => {
