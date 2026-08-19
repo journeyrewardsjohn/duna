@@ -147,6 +147,7 @@ export class VideoServiceError extends Error {
       | "GRANT_NOT_FOUND"
       | "CALIBRATION_SAMPLE_NOT_FOUND"
       | "CALIBRATION_SAMPLE_ALREADY_REVIEWED"
+      | "CALIBRATION_SAMPLE_PREVIEW_REQUIRED"
       | "INVALID_GRANT_WINDOW",
     message: string,
   ) {
@@ -2041,14 +2042,19 @@ export async function loadAdminVideoOverview(
     database
       .select({
         count: sql<number>`count(*)::int`,
-        bytes: sql<number>`coalesce(sum(${videos.bytes}), 0)::bigint`,
+        bytes: sql<number>`coalesce(sum(${videos.bytes}), 0)::bigint`.mapWith(
+          Number,
+        ),
       })
       .from(videos)
       .where(sql`${videos.status} <> 'deleted'`)
       .then((rows) => rows[0]),
     database
       .select({
-        watched: sql<number>`coalesce(sum(${videoViews.watchedSeconds}), 0)::bigint`,
+        watched:
+          sql<number>`coalesce(sum(${videoViews.watchedSeconds}), 0)::bigint`.mapWith(
+            Number,
+          ),
       })
       .from(videoViews)
       .then((rows) => rows[0]),
@@ -2144,8 +2150,11 @@ export async function loadAdminVideoOverview(
     totals: {
       videos: totalRows?.count ?? 0,
       liveNow: activeStreams.length,
-      storageBytes: totalRows?.bytes ?? 0,
-      watchedSeconds: viewRows?.watched ?? 0,
+      // Neon returns PostgreSQL bigint aggregates as strings unless the SQL
+      // expression supplies an explicit runtime decoder. Number() remains a
+      // defensive boundary for older drivers and cached query results.
+      storageBytes: Number(totalRows?.bytes ?? 0),
+      watchedSeconds: Number(viewRows?.watched ?? 0),
       complimentarySubscribers: grantRows.filter(
         (grant) =>
           grant.status === "active" &&
@@ -2239,6 +2248,18 @@ export async function reviewVisionCalibrationSample(input: {
       "CALIBRATION_SAMPLE_ALREADY_REVIEWED",
       "This calibration sample has already been reviewed.",
     );
+  }
+  if (input.decision === "approved") {
+    const session = await database.query.visionSessions.findFirst({
+      columns: { previewJpegBase64: true },
+      where: eq(visionSessions.id, sample.sessionId),
+    });
+    if (!session?.previewJpegBase64) {
+      throw new VideoServiceError(
+        "CALIBRATION_SAMPLE_PREVIEW_REQUIRED",
+        "A court preview is required before this sample can be approved.",
+      );
+    }
   }
 
   const approvedForTrainingAt =

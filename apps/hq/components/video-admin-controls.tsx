@@ -7,6 +7,7 @@ import type {
 } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
+  ArrowRight,
   Check,
   BrainCircuit,
   CircleAlert,
@@ -23,6 +24,7 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import { useActionState } from "react";
 import {
   grantComplimentaryDunaPlusAction,
@@ -387,6 +389,24 @@ function CalibrationSampleRow({
     reviewVisionCalibrationSampleAction,
     initialState,
   );
+  const courtDetected =
+    typeof sample.geometry.courtDetected === "boolean"
+      ? sample.geometry.courtDetected
+      : undefined;
+  const netDetected =
+    typeof sample.geometry.netDetected === "boolean"
+      ? sample.geometry.netDetected
+      : undefined;
+  const orientationMatches =
+    typeof sample.geometry.orientationMatches === "boolean"
+      ? sample.geometry.orientationMatches
+      : undefined;
+  const visibleCornerCount =
+    typeof sample.geometry.visibleCornerCount === "number"
+      ? sample.geometry.visibleCornerCount
+      : undefined;
+  const signal = (value: boolean | undefined) =>
+    value === true ? "Yes" : value === false ? "No" : "Check preview";
   return (
     <article className="video-calibration-sample">
       <div
@@ -420,6 +440,28 @@ function CalibrationSampleRow({
           {sample.sourceModelVersion ?? "Unversioned detector"} · queued{" "}
           {formatDate(sample.createdAt)}
         </small>
+        <dl className="video-calibration-signals">
+          <div>
+            <dt>Court found</dt>
+            <dd>{signal(courtDetected)}</dd>
+          </div>
+          <div>
+            <dt>Net found</dt>
+            <dd>{signal(netDetected)}</dd>
+          </div>
+          <div>
+            <dt>Orientation</dt>
+            <dd>{signal(orientationMatches)}</dd>
+          </div>
+          <div>
+            <dt>Visible corners</dt>
+            <dd>
+              {visibleCornerCount === undefined
+                ? "Check preview"
+                : `${visibleCornerCount} of 4`}
+            </dd>
+          </div>
+        </dl>
         {sample.reviewedAt && (
           <p>
             Reviewed {formatDate(sample.reviewedAt)}
@@ -431,14 +473,45 @@ function CalibrationSampleRow({
       {sample.status === "pending" ? (
         <form action={action} className="video-calibration-review">
           <input name="sampleId" type="hidden" value={sample.id} />
+          <fieldset className="video-calibration-labels">
+            <legend>Label what is correct</legend>
+            <label>
+              <span>Court lines</span>
+              <select disabled={!canManage} name="courtLabel" required>
+                <option value="">Choose</option>
+                <option value="accurate">Accurate</option>
+                <option value="inaccurate">Incorrect</option>
+                <option value="unclear">Cannot tell</option>
+              </select>
+            </label>
+            <label>
+              <span>Net position</span>
+              <select disabled={!canManage} name="netLabel" required>
+                <option value="">Choose</option>
+                <option value="accurate">Accurate</option>
+                <option value="inaccurate">Incorrect</option>
+                <option value="not-visible">Not visible</option>
+                <option value="unclear">Cannot tell</option>
+              </select>
+            </label>
+            <label>
+              <span>Camera framing</span>
+              <select disabled={!canManage} name="framingLabel" required>
+                <option value="">Choose</option>
+                <option value="usable">Usable</option>
+                <option value="unusable">Unusable</option>
+                <option value="unclear">Cannot tell</option>
+              </select>
+            </label>
+          </fieldset>
           <label>
-            <span>Reviewer notes</span>
+            <span>What should Vision learn from this example?</span>
             <textarea
               disabled={!canManage}
-              maxLength={1_000}
+              maxLength={800}
               minLength={8}
               name="notes"
-              placeholder="Are court, net, and visible/off-screen landmarks accurate?"
+              placeholder="Example: Far sideline is correct, but the left corner sits outside the frame."
               required
               rows={3}
             />
@@ -465,7 +538,7 @@ function CalibrationSampleRow({
             </button>
             <button
               className="hq-button hq-button--primary"
-              disabled={!canManage || pending}
+              disabled={!canManage || !sample.previewDataUrl || pending}
               name="decision"
               type="submit"
               value="approved"
@@ -473,6 +546,12 @@ function CalibrationSampleRow({
               Approve sample
             </button>
           </div>
+          {!sample.previewDataUrl && (
+            <small className="video-calibration-warning">
+              A preview is required before this sample can be approved. Reject
+              it if the visual evidence cannot be recovered.
+            </small>
+          )}
           <ActionNotice state={state} />
         </form>
       ) : null}
@@ -487,7 +566,7 @@ function VisionLearningReview({
 }) {
   const learning = overview.visionLearning;
   return (
-    <section className="hq-card video-learning-review">
+    <section className="hq-card video-learning-review" id="vision-learning">
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Duna Vision learning lab</span>
@@ -503,6 +582,38 @@ function VisionLearningReview({
           <Badge tone="positive">Human review required</Badge>
         </div>
       </header>
+      <div className="video-learning-guide">
+        <article>
+          <span>1</span>
+          <div>
+            <strong>Compare the overlay with the court</strong>
+            <p>
+              Check the four court edges, net position, phone orientation, and
+              whether off-screen corners point in a believable direction.
+            </p>
+          </div>
+        </article>
+        <article>
+          <span>2</span>
+          <div>
+            <strong>Label the example precisely</strong>
+            <p>
+              Approve only accurate, usable geometry. Reject false courts,
+              misplaced nets, or unclear framing and explain the mistake.
+            </p>
+          </div>
+        </article>
+        <article>
+          <span>3</span>
+          <div>
+            <strong>Release improvements separately</strong>
+            <p>
+              Approval adds evidence to a future dataset. Training, match
+              testing, shadow review, and production approval happen later.
+            </p>
+          </div>
+        </article>
+      </div>
       <div className="video-learning-summary">
         <article>
           <strong>{learning.counts.pending}</strong>
@@ -546,6 +657,19 @@ function VisionLearningReview({
           </div>
         )}
       </div>
+      <footer className="video-learning-next-step">
+        <div>
+          <strong>Finished reviewing today&apos;s shared examples?</strong>
+          <span>
+            The Model Lab shows what has been analyzed and whether a candidate
+            is ready for controlled testing. Most reviewers should not start a
+            GPU training job themselves.
+          </span>
+        </div>
+        <Link className="hq-button hq-button--secondary" href="/admin/vision">
+          Open Model Lab <ArrowRight aria-hidden size={15} />
+        </Link>
+      </footer>
     </section>
   );
 }

@@ -571,26 +571,46 @@ export async function reviewVisionCalibrationSampleAction(
   const sampleId = String(formData.get("sampleId") ?? "");
   const decision = String(formData.get("decision") ?? "");
   const notes = String(formData.get("notes") ?? "").trim();
+  const courtLabel = String(formData.get("courtLabel") ?? "");
+  const netLabel = String(formData.get("netLabel") ?? "");
+  const framingLabel = String(formData.get("framingLabel") ?? "");
   const confirmed = formData.get("confirmed") === "true";
   if (
     !sampleId ||
     !["approved", "rejected"].includes(decision) ||
+    !["accurate", "inaccurate", "unclear"].includes(courtLabel) ||
+    !["accurate", "inaccurate", "not-visible", "unclear"].includes(netLabel) ||
+    !["usable", "unusable", "unclear"].includes(framingLabel) ||
     notes.length < 8 ||
     !confirmed
   ) {
     return {
       status: "error",
       message:
-        "Choose approve or reject, add review notes of at least 8 characters, and confirm the decision.",
+        "Label the court, net, and framing; add review notes; then confirm approve or reject.",
     };
   }
+  if (
+    decision === "approved" &&
+    (courtLabel !== "accurate" ||
+      !["accurate", "not-visible"].includes(netLabel) ||
+      framingLabel !== "usable")
+  ) {
+    return {
+      status: "error",
+      message:
+        "This example contains an incorrect or unclear label. Reject it so the model does not learn from unreliable geometry.",
+    };
+  }
+
+  const labeledNotes = `[court=${courtLabel}; net=${netLabel}; framing=${framingLabel}] ${notes}`;
 
   try {
     const caller = await getServerCaller();
     const sample = await caller.admin.reviewVisionCalibrationSample({
       sampleId,
       decision: decision as "approved" | "rejected",
-      notes,
+      notes: labeledNotes,
       idempotencyKey: crypto.randomUUID(),
     });
     revalidatePath("/admin/video");

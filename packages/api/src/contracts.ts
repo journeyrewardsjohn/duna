@@ -2658,7 +2658,10 @@ export const visionUploadedVideoSchema = z.object({
       ]),
       modelVersion: z.string().optional(),
       pipelineVersion: z.string(),
-      calibrationQualityScore: z.number().min(0).max(1).optional(),
+      // Capture, analysis, and the worker all use the operator-facing 0-100
+      // calibration scale. Keeping the admin projection on the same scale
+      // prevents valid production analyses from failing output validation.
+      calibrationQualityScore: z.number().int().min(0).max(100).optional(),
       qualityDecision: z.enum(["passed", "failed", "unverified"]).optional(),
       eventCount: z.number().int().nonnegative(),
       completedAt: z.iso.datetime().optional(),

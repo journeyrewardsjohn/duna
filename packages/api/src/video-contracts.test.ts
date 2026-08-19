@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   adminVideoOverviewSchema,
+  adminVisionOverviewSchema,
   courtCalibrationSchema,
   dunaPlusEntitlementSchema,
   videoPlaybackSchema,
@@ -418,6 +419,45 @@ describe("Duna Video contracts", () => {
       canManage: true,
       totals: { complimentarySubscribers: 1 },
     });
+  });
+
+  it("accepts the native 0-100 calibration score in the Vision Model Lab", () => {
+    const overview = adminVisionOverviewSchema.parse({
+      canManage: true,
+      runtime: { configured: false, provider: "modal", gpuType: "L4" },
+      eligibility: {
+        approvedCalibrationSamples: 1,
+        consentedVideos: 1,
+        pendingCalibrationReviews: 0,
+      },
+      models: [],
+      trainingRuns: [],
+      benchmarkRuns: [],
+      uploadedVideos: [
+        {
+          id: crypto.randomUUID(),
+          title: "Shared court recording",
+          ownerName: "Duna Player",
+          ownerId: crypto.randomUUID(),
+          status: "ready",
+          recordingVisibility: "private",
+          learningConsent: true,
+          createdAt: "2026-08-19T10:00:00.000Z",
+          playerViewPath: `/app/video/${crypto.randomUUID()}`,
+          analysis: {
+            id: crypto.randomUUID(),
+            status: "ready",
+            pipelineVersion: "duna-vision-event-graph-v1",
+            calibrationQualityScore: 82,
+            eventCount: 14,
+          },
+        },
+      ],
+    });
+
+    expect(overview.uploadedVideos[0]?.analysis?.calibrationQualityScore).toBe(
+      82,
+    );
   });
 });
 

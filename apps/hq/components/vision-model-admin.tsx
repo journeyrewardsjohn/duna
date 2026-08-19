@@ -3,6 +3,7 @@
 import type { AdminVisionOverview, VisionModelSummary } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
+  ArrowRight,
   BadgeCheck,
   BrainCircuit,
   Check,
@@ -121,13 +122,86 @@ function RuntimeMetrics({
   );
 }
 
+function ModelLabGuide({
+  overview,
+}: {
+  readonly overview: AdminVisionOverview;
+}) {
+  const nextAction =
+    overview.eligibility.pendingCalibrationReviews > 0
+      ? {
+          title: `Review ${overview.eligibility.pendingCalibrationReviews} shared ${overview.eligibility.pendingCalibrationReviews === 1 ? "example" : "examples"}`,
+          detail:
+            "Compare each setup preview with its court and label inaccurate lines, net placement, or framing.",
+          href: "/admin/video#vision-learning",
+          action: "Open review queue",
+        }
+      : overview.eligibility.approvedCalibrationSamples === 0
+        ? {
+            title: "Collect varied, consented court examples",
+            detail:
+              "Ask players to opt in after recording different courts, camera angles, lighting, and devices.",
+            href: "/admin/video#vision-learning",
+            action: "View learning queue",
+          }
+        : {
+            title: "Inspect results from the current model",
+            detail:
+              "Look for repeated misses in the analyzed videos below. Training remains a separate technical handoff.",
+            href: "#vision-evidence",
+            action: "Review model evidence",
+          };
+  return (
+    <section className="vision-operator-guide">
+      <div>
+        <span className="hq-eyebrow">Recommended next action</span>
+        <h2>{nextAction.title}</h2>
+        <p>{nextAction.detail}</p>
+        <Link className="hq-button hq-button--primary" href={nextAction.href}>
+          {nextAction.action} <ArrowRight aria-hidden size={15} />
+        </Link>
+      </div>
+      <ol>
+        <li>
+          <span>1</span>
+          <div>
+            <strong>People share examples</strong>
+            <small>Consent is attached to each recording.</small>
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <strong>You correct the evidence</strong>
+            <small>Human labels prevent false court geometry.</small>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <strong>Technical training is prepared</strong>
+            <small>An immutable dataset and budget are required.</small>
+          </div>
+        </li>
+        <li>
+          <span>4</span>
+          <div>
+            <strong>A candidate earns release</strong>
+            <small>Held-out tests, shadow review, then two approvals.</small>
+          </div>
+        </li>
+      </ol>
+    </section>
+  );
+}
+
 function UploadedVideoEvidence({
   overview,
 }: {
   readonly overview: AdminVisionOverview;
 }) {
   return (
-    <section className="hq-card vision-evidence-card">
+    <section className="hq-card vision-evidence-card" id="vision-evidence">
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Uploaded footage</span>
@@ -174,7 +248,7 @@ function UploadedVideoEvidence({
                     {video.analysis.modelVersion ??
                       video.analysis.pipelineVersion}
                     {video.analysis.calibrationQualityScore !== undefined
-                      ? ` · calibration ${Math.round(video.analysis.calibrationQualityScore * 100)}%`
+                      ? ` · calibration ${video.analysis.calibrationQualityScore}%`
                       : ""}
                     {video.analysis.qualityDecision
                       ? ` · ${video.analysis.qualityDecision}`
@@ -817,6 +891,7 @@ export function VisionModelAdmin({
 }) {
   return (
     <div className="vision-model-admin">
+      <ModelLabGuide overview={overview} />
       <RuntimeMetrics overview={overview} />
       <section className="vision-safety-rail">
         <ShieldCheck aria-hidden size={21} />
