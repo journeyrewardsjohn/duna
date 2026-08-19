@@ -24,7 +24,7 @@
 .eyebrow {
   color: var(--catalog-primary, #315f79);
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.16em;
   margin-bottom: 0.7rem;
@@ -126,7 +126,7 @@
   color: #6b7788;
   display: flex;
   flex-wrap: wrap;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 750;
   gap: 0.35rem;
   letter-spacing: 0.05em;

@@ -32813,7 +32813,7 @@ body {
 
 .guided-product-proof__rows label > span {
   color: var(--hq-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -32955,7 +32955,7 @@ body {
   border: 0;
   color: #277673;
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   margin-left: auto;
   padding: 0.35rem;
@@ -32991,7 +32991,7 @@ body {
 .product-inventory-receiver label > span:first-child,
 .product-inventory-receiver__details label > span {
   color: var(--hq-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -33083,7 +33083,7 @@ body {
 
 .product-inventory-receiver__history article small {
   color: var(--hq-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 940px) {

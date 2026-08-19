@@ -87,7 +87,7 @@
   background: color-mix(in srgb, var(--catalog-primary) 9%, #fff);
   border-radius: 999px;
   color: var(--catalog-primary);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.08em;
   padding: 0.42rem 0.65rem;
@@ -96,7 +96,7 @@
 
 .identityMeta > a {
   color: #687586;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -159,7 +159,7 @@
 
 .fact small {
   color: #768193;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.3;
 }
 
@@ -229,7 +229,7 @@
 .eyebrow {
   color: var(--catalog-primary);
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.16em;
   margin-bottom: 0.85rem;
@@ -308,7 +308,7 @@
   color: #fff;
   content: counter(product-step, decimal-leading-zero);
   display: flex;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 850;
   height: 29px;
   justify-content: center;

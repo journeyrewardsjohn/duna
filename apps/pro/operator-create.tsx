@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
   },
   storyCardEyebrow: {
     color: "#143d6b",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
