@@ -37,6 +37,8 @@ import {
   UserRound,
   Users,
   Video,
+  Quote,
+  CircleHelp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -49,6 +51,7 @@ import {
 } from "react";
 import {
   createCatalogItemAction,
+  replaceCatalogItemAction,
   type OperatorActionState,
 } from "@/app/actions";
 import {
@@ -68,6 +71,20 @@ type ProductMedia = {
   readonly url: string;
   readonly alt: string;
   readonly variantIndex?: number;
+};
+
+type CustomerProof = {
+  readonly id: string;
+  readonly quote: string;
+  readonly author: string;
+  readonly context: string;
+  readonly rating: number;
+};
+
+type StoryFaq = {
+  readonly id: string;
+  readonly question: string;
+  readonly answer: string;
 };
 
 function productMediaPreviewUrl(url: string): string {
@@ -431,66 +448,251 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
 export function GuidedProductBuilder({
   waivers,
   workspace,
+  initialItem,
+  mode = "create",
 }: {
   readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
+  readonly initialItem?: OperatorWorkspace["catalog"][number];
+  readonly mode?: "create" | "edit" | "clone";
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedType = searchParams.get("type");
-  const initialType: ProductType =
+  const hasRequestedType =
     requestedType === "good" ||
     requestedType === "plan" ||
-    requestedType === "service"
-      ? requestedType
-      : "service";
+    requestedType === "service";
+  const initialType: ProductType =
+    initialItem?.type === "good" ||
+    initialItem?.type === "plan" ||
+    initialItem?.type === "service"
+      ? initialItem.type
+      : requestedType === "good" ||
+          requestedType === "plan" ||
+          requestedType === "service"
+        ? requestedType
+        : "service";
+  const editing = Boolean(initialItem && mode !== "clone");
   const [state, action, pending] = useActionState(
-    createCatalogItemAction,
+    editing ? replaceCatalogItemAction : createCatalogItemAction,
     initialActionState,
   );
+  const initialConfiguration = initialItem?.configuration ?? {};
+  const initialCardPrice = initialItem?.variants
+    .flatMap((variant) => variant.prices)
+    .find(
+      (candidate) =>
+        candidate.active &&
+        candidate.paymentKind === "card" &&
+        candidate.amountMinor !== undefined &&
+        candidate.recurringInterval !== "year",
+    );
+  const initialOptions = useMemo(() => {
+    const values = new Map<string, Set<string>>();
+    for (const variant of initialItem?.variants ?? []) {
+      for (const [name, value] of Object.entries(variant.optionCoordinates)) {
+        const entries = values.get(name) ?? new Set<string>();
+        entries.add(value);
+        values.set(name, entries);
+      }
+    }
+    return [...values.entries()].map(([name, optionValues]) => ({
+      id: crypto.randomUUID(),
+      name,
+      values: [...optionValues].join(", "),
+    }));
+  }, [initialItem]);
   const [type, setType] = useState<ProductType>(initialType);
-  const [step, setStep] = useState(0);
-  const [subtype, setSubtype] = useState(
-    initialType === "good"
-      ? "equipment"
-      : initialType === "plan"
-        ? "membership"
-        : "private-lesson",
+  const [step, setStep] = useState(
+    mode === "create" && hasRequestedType ? 1 : 0,
   );
-  const [title, setTitle] = useState("");
-  const [shortSummary, setShortSummary] = useState("");
-  const [description, setDescription] = useState("");
-  const [bestFor, setBestFor] = useState("");
-  const [highlights, setHighlights] = useState("");
+  const [subtype, setSubtype] = useState(
+    initialItem?.subtype ??
+      (initialType === "good"
+        ? "equipment"
+        : initialType === "plan"
+          ? "membership"
+          : "private-lesson"),
+  );
+  const [title, setTitle] = useState(initialItem?.title ?? "");
+  const [shortSummary, setShortSummary] = useState(
+    initialItem?.shortSummary ?? "",
+  );
+  const [description, setDescription] = useState(
+    initialItem?.description ?? "",
+  );
+  const [bestFor, setBestFor] = useState(
+    typeof initialConfiguration.bestFor === "string"
+      ? initialConfiguration.bestFor
+      : "",
+  );
+  const [highlights, setHighlights] = useState(
+    Array.isArray(initialConfiguration.highlights)
+      ? initialConfiguration.highlights
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
+      : "",
+  );
+  const [outcomeHeadline, setOutcomeHeadline] = useState(
+    typeof initialConfiguration.outcomeHeadline === "string"
+      ? initialConfiguration.outcomeHeadline
+      : "",
+  );
+  const [outcomeBody, setOutcomeBody] = useState(
+    typeof initialConfiguration.outcomeBody === "string"
+      ? initialConfiguration.outcomeBody
+      : "",
+  );
+  const [howItWorks, setHowItWorks] = useState(
+    Array.isArray(initialConfiguration.howItWorks)
+      ? initialConfiguration.howItWorks
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
+      : "",
+  );
+  const [recommendedCatalogItemIds, setRecommendedCatalogItemIds] = useState<
+    readonly string[]
+  >(
+    Array.isArray(initialConfiguration.recommendedCatalogItemIds)
+      ? initialConfiguration.recommendedCatalogItemIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const [testimonials, setTestimonials] = useState<readonly CustomerProof[]>(
+    () =>
+      Array.isArray(initialConfiguration.testimonials)
+        ? initialConfiguration.testimonials.flatMap((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+              return [];
+            }
+            const value = entry as Record<string, unknown>;
+            return typeof value.quote === "string" && value.quote.trim()
+              ? [
+                  {
+                    id: crypto.randomUUID(),
+                    quote: value.quote,
+                    author:
+                      typeof value.author === "string" ? value.author : "",
+                    context:
+                      typeof value.context === "string" ? value.context : "",
+                    rating:
+                      typeof value.rating === "number" &&
+                      value.rating >= 1 &&
+                      value.rating <= 5
+                        ? value.rating
+                        : 5,
+                  },
+                ]
+              : [];
+          })
+        : [],
+  );
+  const [faqs, setFaqs] = useState<readonly StoryFaq[]>(() =>
+    Array.isArray(initialConfiguration.faqs)
+      ? initialConfiguration.faqs.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return [];
+          }
+          const value = entry as Record<string, unknown>;
+          return typeof value.question === "string" && value.question.trim()
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  question: value.question,
+                  answer: typeof value.answer === "string" ? value.answer : "",
+                },
+              ]
+            : [];
+        })
+      : [],
+  );
   const [validityDays, setValidityDays] = useState(0);
-  const [redemptionNotes, setRedemptionNotes] = useState("");
+  const [redemptionNotes, setRedemptionNotes] = useState(
+    typeof initialConfiguration.redemptionNotes === "string"
+      ? initialConfiguration.redemptionNotes
+      : "",
+  );
   const [visibility, setVisibility] = useState<
     "public" | "members" | "private"
-  >("public");
-  const [allowCard, setAllowCard] = useState(true);
-  const [allowCash, setAllowCash] = useState(false);
-  const [allowCredits, setAllowCredits] = useState(false);
-  const [price, setPrice] = useState("");
-  const [creditCost, setCreditCost] = useState(1);
-  const [taxable, setTaxable] = useState(false);
-  const [membershipRequired, setMembershipRequired] = useState(false);
+  >(initialItem?.visibility ?? "public");
+  const [allowCard, setAllowCard] = useState(initialItem?.allowCard ?? true);
+  const [allowCash, setAllowCash] = useState(initialItem?.allowCash ?? false);
+  const [allowCredits, setAllowCredits] = useState(
+    initialItem?.allowCredits ?? false,
+  );
+  const [price, setPrice] = useState(
+    initialCardPrice?.amountMinor === undefined
+      ? ""
+      : String(initialCardPrice.amountMinor / 100),
+  );
+  const [creditCost, setCreditCost] = useState(
+    initialItem?.variants
+      .flatMap((variant) => variant.prices)
+      .find(
+        (candidate) => candidate.active && candidate.paymentKind === "credit",
+      )?.creditAmount ?? 1,
+  );
+  const [taxable, setTaxable] = useState(initialItem?.taxable ?? false);
+  const [membershipRequired, setMembershipRequired] = useState(
+    initialItem?.membershipRequired ?? false,
+  );
   const [allowInstallments, setAllowInstallments] = useState(false);
   const [installmentCount, setInstallmentCount] = useState(3);
 
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [capacity, setCapacity] = useState(1);
-  const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">("venue");
-  const [venueId, setVenueId] = useState(workspace.venues[0]?.id ?? "");
-  const [bookingLeadHours, setBookingLeadHours] = useState(12);
-  const [bookingBufferMinutes, setBookingBufferMinutes] = useState(15);
+  const serviceConfiguration = initialConfiguration.service as
+    Record<string, unknown> | undefined;
+  const [durationMinutes, setDurationMinutes] = useState(
+    typeof serviceConfiguration?.durationMinutes === "number"
+      ? serviceConfiguration.durationMinutes
+      : 60,
+  );
+  const [capacity, setCapacity] = useState(
+    typeof serviceConfiguration?.capacity === "number"
+      ? serviceConfiguration.capacity
+      : 1,
+  );
+  const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">(
+    initialConfiguration.deliveryMode === "online" ? "online" : "venue",
+  );
+  const [venueId, setVenueId] = useState(
+    typeof initialConfiguration.venueId === "string"
+      ? initialConfiguration.venueId
+      : (workspace.venues[0]?.id ?? ""),
+  );
+  const [bookingLeadHours, setBookingLeadHours] = useState(
+    typeof serviceConfiguration?.bookingLeadHours === "number"
+      ? serviceConfiguration.bookingLeadHours
+      : 12,
+  );
+  const [bookingBufferMinutes, setBookingBufferMinutes] = useState(
+    typeof serviceConfiguration?.bookingBufferMinutes === "number"
+      ? serviceConfiguration.bookingBufferMinutes
+      : 15,
+  );
   const [schedulingStyle, setSchedulingStyle] = useState<
     "coach-availability" | "request-to-book"
-  >("coach-availability");
-  const [coachMode, setCoachMode] = useState<"all" | "selected">("all");
-  const [selectedCoachIds, setSelectedCoachIds] = useState<readonly string[]>(
-    [],
+  >(
+    serviceConfiguration?.schedulingStyle === "request-to-book"
+      ? "request-to-book"
+      : "coach-availability",
   );
-  const [customerCoachSelection, setCustomerCoachSelection] = useState(true);
+  const [coachMode, setCoachMode] = useState<"all" | "selected">(
+    initialConfiguration.coachAssignmentMode === "selected"
+      ? "selected"
+      : "all",
+  );
+  const [selectedCoachIds, setSelectedCoachIds] = useState<readonly string[]>(
+    Array.isArray(initialConfiguration.coachPersonIds)
+      ? initialConfiguration.coachPersonIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const [customerCoachSelection, setCustomerCoachSelection] = useState(
+    initialConfiguration.customerCoachSelection !== false,
+  );
 
   const [billingMode, setBillingMode] = useState<"month" | "year">("month");
   const [creditsGranted, setCreditsGranted] = useState(10);
@@ -518,8 +720,19 @@ export function GuidedProductBuilder({
   const [receiptUrl, setReceiptUrl] = useState("");
   const [locationId, setLocationId] = useState("");
   const [newLocationName, setNewLocationName] = useState("");
-  const [options, setOptions] = useState<readonly OptionDraft[]>([]);
-  const [media, setMedia] = useState<readonly ProductMedia[]>([]);
+  const [options, setOptions] =
+    useState<readonly OptionDraft[]>(initialOptions);
+  const [media, setMedia] = useState<readonly ProductMedia[]>(
+    (initialItem?.media ?? []).map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      url: item.url,
+      alt: item.alt ?? initialItem?.title ?? "Product media",
+      variantIndex: (initialItem?.variants ?? []).findIndex(
+        (variant) => variant.id === item.catalogVariantId,
+      ),
+    })),
+  );
   const [hostedMediaUrl, setHostedMediaUrl] = useState("");
   const [hostedMediaKind, setHostedMediaKind] = useState<"image" | "video">(
     "image",
@@ -594,6 +807,10 @@ export function GuidedProductBuilder({
       item.status === "active",
   );
   const mediaChoices = useMemo(() => productMediaForKind(subtype), [subtype]);
+  const recommendationCandidates = workspace.catalog.filter(
+    (candidate) =>
+      candidate.status !== "archived" && candidate.id !== initialItem?.id,
+  );
   useEffect(() => {
     if (isMembership || !membershipConfigured) {
       setMembershipRequired(false);
@@ -610,6 +827,24 @@ export function GuidedProductBuilder({
     .split("\n")
     .map((highlight) => highlight.trim())
     .filter(Boolean);
+  const parsedHowItWorks = howItWorks
+    .split("\n")
+    .map((step) => step.trim())
+    .filter(Boolean);
+  const publishedTestimonials = testimonials
+    .map((testimonial) => ({
+      quote: testimonial.quote.trim(),
+      author: testimonial.author.trim(),
+      context: testimonial.context.trim(),
+      rating: testimonial.rating,
+    }))
+    .filter((testimonial) => testimonial.quote.length > 0);
+  const publishedFaqs = faqs
+    .map((faq) => ({
+      question: faq.question.trim(),
+      answer: faq.answer.trim(),
+    }))
+    .filter((faq) => faq.question.length > 0 && faq.answer.length > 0);
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
     receiptTotalMinor === undefined
@@ -779,6 +1014,7 @@ export function GuidedProductBuilder({
             confirmed,
           ];
   const canContinue = stepReadiness[step] ?? false;
+  const editorSaveReady = stepReadiness.slice(0, -1).every((ready) => ready);
   const activeProductType = productTypes.find(
     (productType) => productType.value === type,
   )!;
@@ -873,6 +1109,12 @@ export function GuidedProductBuilder({
     flowVersion: 3,
     bestFor: bestFor.trim() || undefined,
     highlights: parsedHighlights,
+    outcomeHeadline: outcomeHeadline.trim() || undefined,
+    outcomeBody: outcomeBody.trim() || undefined,
+    howItWorks: parsedHowItWorks,
+    recommendedCatalogItemIds,
+    testimonials: publishedTestimonials,
+    faqs: publishedFaqs,
     validityDays: validityDays > 0 ? validityDays : undefined,
     redemptionNotes: redemptionNotes.trim() || undefined,
     ...(type === "service"
@@ -970,7 +1212,11 @@ export function GuidedProductBuilder({
           <span className="guided-product-builder__label">
             <Sparkles aria-hidden size={14} /> Guided offer studio
           </span>
-          <h2>Build an offer people understand.</h2>
+          <h2>
+            {editing
+              ? `Edit ${initialItem?.title ?? "offer"}`
+              : "Build an offer people understand."}
+          </h2>
           <p>
             Start with the customer outcome. Duna will guide you through only
             the story, delivery, pricing, and controls that belong to it.
@@ -983,6 +1229,14 @@ export function GuidedProductBuilder({
               <BookOpenCheck aria-hidden size={15} /> Five clear decisions
             </span>
           </div>
+          {editing && initialItem && (
+            <Link
+              className="hq-button hq-button--secondary"
+              href={`/products/create?clone=${initialItem.id}`}
+            >
+              <Plus aria-hidden size={16} /> Clone as a new draft
+            </Link>
+          )}
         </div>
         <Link className="guided-event-link" href="/events/create">
           <CalendarClock aria-hidden size={18} />
@@ -1014,6 +1268,7 @@ export function GuidedProductBuilder({
                 aria-pressed={active}
                 className={active ? "active" : undefined}
                 key={productType.value}
+                disabled={editing}
                 onClick={() => chooseType(productType.value)}
                 type="button"
               >
@@ -1037,6 +1292,9 @@ export function GuidedProductBuilder({
       </section>
 
       <form action={action} className="guided-product-form">
+        {editing && initialItem && (
+          <input name="catalogItemId" type="hidden" value={initialItem.id} />
+        )}
         <input name="type" type="hidden" value={type} />
         <input name="subtype" type="hidden" value={subtype} />
         <input name="title" type="hidden" value={title} />
@@ -1122,7 +1380,7 @@ export function GuidedProductBuilder({
         <input
           name="confirmed"
           type="hidden"
-          value={confirmed ? "true" : "false"}
+          value={editing || confirmed ? "true" : "false"}
         />
 
         <aside className="guided-product-guide">
@@ -1158,7 +1416,7 @@ export function GuidedProductBuilder({
                       ? "complete"
                       : undefined
                 }
-                disabled={index > step}
+                disabled={!editing && index > step}
                 key={name}
                 onClick={() => setStep(index)}
                 type="button"
@@ -1338,6 +1596,38 @@ export function GuidedProductBuilder({
                     value={highlights}
                   />
                 </label>
+                <label className="operator-field--wide">
+                  <span>Outcome headline · optional</span>
+                  <input
+                    maxLength={180}
+                    onChange={(event) => setOutcomeHeadline(event.target.value)}
+                    placeholder="Know where you are. See exactly what comes next."
+                    value={outcomeHeadline}
+                  />
+                  <small>
+                    Powers the large editorial story below the purchase area.
+                  </small>
+                </label>
+                <label className="operator-field--wide">
+                  <span>Outcome story · optional</span>
+                  <textarea
+                    maxLength={900}
+                    onChange={(event) => setOutcomeBody(event.target.value)}
+                    placeholder="Explain the transformation or value in two or three customer-focused sentences."
+                    rows={4}
+                    value={outcomeBody}
+                  />
+                </label>
+                <label className="operator-field--wide">
+                  <span>How it works · one step per line</span>
+                  <textarea
+                    maxLength={1_200}
+                    onChange={(event) => setHowItWorks(event.target.value)}
+                    placeholder="Purchase and choose your preferred time\nMeet your coach and complete the experience\nFind your notes and next steps in Duna"
+                    rows={4}
+                    value={howItWorks}
+                  />
+                </label>
                 <label>
                   <span>Valid for · days · optional</span>
                   <input
@@ -1359,6 +1649,293 @@ export function GuidedProductBuilder({
                     value={redemptionNotes}
                   />
                 </label>
+              </div>
+
+              <div className="guided-product-recommendations">
+                <header>
+                  <div>
+                    <strong>Continue the customer journey</strong>
+                    <small>
+                      Duna automatically ranks related active offers. Select up
+                      to four offers to guarantee they appear first.
+                    </small>
+                  </div>
+                  <Badge>{recommendedCatalogItemIds.length} selected</Badge>
+                </header>
+                {recommendationCandidates.length > 0 ? (
+                  <div>
+                    {recommendationCandidates.map((candidate) => {
+                      const checked = recommendedCatalogItemIds.includes(
+                        candidate.id,
+                      );
+                      return (
+                        <label
+                          className={checked ? "active" : undefined}
+                          key={candidate.id}
+                        >
+                          <input
+                            checked={checked}
+                            disabled={
+                              !checked && recommendedCatalogItemIds.length >= 4
+                            }
+                            onChange={(event) =>
+                              setRecommendedCatalogItemIds((current) =>
+                                event.target.checked
+                                  ? [...current, candidate.id]
+                                  : current.filter((id) => id !== candidate.id),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            <strong>{candidate.title}</strong>
+                            <small>
+                              {candidate.type} ·{" "}
+                              {candidate.subtype.replaceAll("-", " ")} ·{" "}
+                              {candidate.status}
+                            </small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p>
+                    Publish another service, plan, good, or event to connect it
+                    to this customer journey.
+                  </p>
+                )}
+              </div>
+
+              <div className="guided-product-proof">
+                <header>
+                  <div>
+                    <strong>Customer proof · optional</strong>
+                    <small>
+                      Add approved customer quotes that make the value feel
+                      real. These are shown as testimonials on the offer page.
+                    </small>
+                  </div>
+                  <button
+                    className="hq-button hq-button--secondary"
+                    onClick={() =>
+                      setTestimonials((current) => [
+                        ...current,
+                        {
+                          id: crypto.randomUUID(),
+                          quote: "",
+                          author: "",
+                          context: "",
+                          rating: 5,
+                        },
+                      ])
+                    }
+                    type="button"
+                  >
+                    <Quote aria-hidden size={15} /> Add quote
+                  </button>
+                </header>
+                {testimonials.length > 0 && (
+                  <div className="guided-product-proof__rows">
+                    {testimonials.map((testimonial, index) => (
+                      <article key={testimonial.id}>
+                        <span className="guided-product-proof__number">
+                          {index + 1}
+                        </span>
+                        <label className="operator-field--wide">
+                          <span>Quote</span>
+                          <textarea
+                            maxLength={500}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        quote: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="A specific result, feeling, or reason they would recommend it."
+                            rows={3}
+                            value={testimonial.quote}
+                          />
+                        </label>
+                        <label>
+                          <span>Name</span>
+                          <input
+                            maxLength={100}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        author: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Avery R."
+                            value={testimonial.author}
+                          />
+                        </label>
+                        <label>
+                          <span>Context</span>
+                          <input
+                            maxLength={120}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        context: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Parent of a 15U player"
+                            value={testimonial.context}
+                          />
+                        </label>
+                        <label>
+                          <span>Rating</span>
+                          <select
+                            aria-label={`Rating for customer quote ${index + 1}`}
+                            onChange={(event) =>
+                              setTestimonials((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === testimonial.id
+                                    ? {
+                                        ...candidate,
+                                        rating: Number(event.target.value),
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            value={testimonial.rating}
+                          >
+                            {[5, 4, 3, 2, 1].map((rating) => (
+                              <option key={rating} value={rating}>
+                                {rating} star{rating === 1 ? "" : "s"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          aria-label={`Remove customer quote ${index + 1}`}
+                          className="guided-product-proof__remove"
+                          onClick={() =>
+                            setTestimonials((current) =>
+                              current.filter(
+                                (candidate) => candidate.id !== testimonial.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 aria-hidden size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="guided-product-proof guided-product-proof--faq">
+                <header>
+                  <div>
+                    <strong>Helpful answers · optional</strong>
+                    <small>
+                      Answer the questions that usually slow someone down before
+                      they reach checkout.
+                    </small>
+                  </div>
+                  <button
+                    className="hq-button hq-button--secondary"
+                    onClick={() =>
+                      setFaqs((current) => [
+                        ...current,
+                        { id: crypto.randomUUID(), question: "", answer: "" },
+                      ])
+                    }
+                    type="button"
+                  >
+                    <CircleHelp aria-hidden size={15} /> Add answer
+                  </button>
+                </header>
+                {faqs.length > 0 && (
+                  <div className="guided-product-proof__rows">
+                    {faqs.map((faq, index) => (
+                      <article key={faq.id}>
+                        <span className="guided-product-proof__number">
+                          {index + 1}
+                        </span>
+                        <label className="operator-field--wide">
+                          <span>Question</span>
+                          <input
+                            maxLength={180}
+                            onChange={(event) =>
+                              setFaqs((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === faq.id
+                                    ? {
+                                        ...candidate,
+                                        question: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="What happens after I purchase?"
+                            value={faq.question}
+                          />
+                        </label>
+                        <label className="operator-field--wide">
+                          <span>Answer</span>
+                          <textarea
+                            maxLength={600}
+                            onChange={(event) =>
+                              setFaqs((current) =>
+                                current.map((candidate) =>
+                                  candidate.id === faq.id
+                                    ? {
+                                        ...candidate,
+                                        answer: event.target.value,
+                                      }
+                                    : candidate,
+                                ),
+                              )
+                            }
+                            placeholder="Give a calm, specific answer in the customer’s language."
+                            rows={3}
+                            value={faq.answer}
+                          />
+                        </label>
+                        <button
+                          aria-label={`Remove answer ${index + 1}`}
+                          className="guided-product-proof__remove"
+                          onClick={() =>
+                            setFaqs((current) =>
+                              current.filter(
+                                (candidate) => candidate.id !== faq.id,
+                              ),
+                            )
+                          }
+                          type="button"
+                        >
+                          <Trash2 aria-hidden size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="guided-product-media">
@@ -2756,6 +3333,15 @@ export function GuidedProductBuilder({
                 <small>Customer price</small>
                 <strong>{pricePreview}</strong>
               </span>
+              {editing && (
+                <button
+                  className="guided-offer-preview__edit-link"
+                  onClick={() => setStep(3)}
+                  type="button"
+                >
+                  Edit price
+                </button>
+              )}
             </div>
             <dl className="guided-offer-preview__details">
               {previewHighlights.map((highlight) => (
@@ -2832,9 +3418,18 @@ export function GuidedProductBuilder({
             </p>
           </div>
           <div className="guided-product-footer__actions">
-            {step < currentSteps.length - 1 ? (
+            {editing && (
               <button
                 className="hq-button hq-button--primary"
+                disabled={!editorSaveReady || pending}
+                type="submit"
+              >
+                {pending ? "Saving…" : "Save new private version"}
+              </button>
+            )}
+            {step < currentSteps.length - 1 ? (
+              <button
+                className="hq-button hq-button--secondary"
                 disabled={!canContinue || pending}
                 onClick={() =>
                   setStep((current) =>
@@ -2846,7 +3441,7 @@ export function GuidedProductBuilder({
                 Continue to {currentSteps[step + 1]}
                 <ArrowRight aria-hidden size={16} />
               </button>
-            ) : (
+            ) : !editing ? (
               <button
                 className="hq-button hq-button--primary"
                 disabled={!canContinue || pending}
@@ -2854,7 +3449,7 @@ export function GuidedProductBuilder({
               >
                 {pending ? "Creating…" : "Create private draft"}
               </button>
-            )}
+            ) : null}
           </div>
         </footer>
       </form>

@@ -22,6 +22,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { CatalogRecommendations } from "@/components/catalog-recommendations";
 import { EventDivisionExplorer } from "@/components/event-division-explorer";
 import {
   EventSectionNav,
@@ -173,13 +174,26 @@ export default async function EventPage({
           .pickupManagement({ pickupSessionId: event.id })
           .catch(() => undefined)
       : undefined;
-  const [videos, eventPredictionData, predictionWallet] = await Promise.all([
-    caller.public.videos({ eventId: event.id }).catch(() => []),
-    caller.public
-      .eventPredictionMarkets({ eventSlug: event.slug })
-      .catch(() => undefined),
-    caller.player.predictionWallet().catch(() => undefined),
-  ]);
+  const [videos, eventPredictionData, predictionWallet, recommendations] =
+    await Promise.all([
+      caller.public.videos({ eventId: event.id }).catch(() => []),
+      caller.public
+        .eventPredictionMarkets({ eventSlug: event.slug })
+        .catch(() => undefined),
+      caller.player.predictionWallet().catch(() => undefined),
+      event.organizationSlug
+        ? caller.public
+            .catalogRecommendations({
+              organizationSlug: event.organizationSlug,
+              title: event.title,
+              type: "event",
+              subtype: event.kind,
+              latitude: event.location?.latitude,
+              longitude: event.location?.longitude,
+            })
+            .catch(() => ({ sameOrganization: [], nearby: [] }))
+        : Promise.resolve({ sameOrganization: [], nearby: [] }),
+    ]);
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);
@@ -1041,6 +1055,19 @@ export default async function EventPage({
           </div>
         </aside>
       </section>
+
+      <CatalogRecommendations
+        cards={recommendations.sameOrganization}
+        description={`Duna matched these active ${hostName} services, plans, goods, and events to this experience and its likely next step.`}
+        eyebrow="Keep exploring with this host"
+        title={`Explore Other Aspects of ${hostName}`}
+      />
+      <CatalogRecommendations
+        cards={recommendations.nearby}
+        description="Comparable active events from other Duna organizations, ordered by distance and experience fit."
+        eyebrow="Around you"
+        title="Other Similar Events Near You"
+      />
 
       <SiteFooter />
     </main>

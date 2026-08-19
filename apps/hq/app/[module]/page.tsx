@@ -66,9 +66,18 @@ export default async function OperatorModulePage({
       ? caller.operator.scorableMatches()
       : Promise.resolve([]),
   ]);
+  const activeChild =
+    module === "products"
+      ? "all-products"
+      : module === "events"
+        ? "all-events"
+        : module === "leagues"
+          ? "leagues"
+          : undefined;
   return (
     <OperatorShell
-      active={module as OperatorModule}
+      active={module === "leagues" ? "events" : (module as OperatorModule)}
+      activeChild={activeChild}
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

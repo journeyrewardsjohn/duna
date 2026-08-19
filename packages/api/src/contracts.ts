@@ -3690,6 +3690,14 @@ export const operatorCatalogItemSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+export const catalogItemVersionSummarySchema = z.object({
+  id: z.string().uuid(),
+  version: z.number().int().positive(),
+  title: z.string(),
+  createdAt: z.iso.datetime(),
+  current: z.boolean(),
+});
+
 export const publicCatalogPriceSchema = operatorCatalogPriceSchema.pick({
   id: true,
   audience: true,
@@ -3736,6 +3744,34 @@ export const publicCatalogItemSchema = operatorCatalogItemSchema
   .extend({
     variants: z.array(publicCatalogVariantSchema).readonly(),
   });
+
+export const publicCatalogRecommendationCardSchema = z.object({
+  catalogItemId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  organizationSlug: z.string(),
+  organizationName: z.string(),
+  type: z.enum(["event", "service", "good", "plan"]),
+  subtype: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  shortSummary: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  priceMinor: z.number().int().nonnegative().optional(),
+  currency: currencySchema,
+  locality: z.string().optional(),
+  administrativeArea: z.string().optional(),
+  distanceMiles: z.number().nonnegative().optional(),
+  reason: z.string(),
+  href: z.string().startsWith("/"),
+});
+
+export const publicCatalogRecommendationsSchema = z.object({
+  sameOrganization: z
+    .array(publicCatalogRecommendationCardSchema)
+    .max(4)
+    .readonly(),
+  nearby: z.array(publicCatalogRecommendationCardSchema).max(4).readonly(),
+});
 
 export const operatorInventoryItemSchema = z.object({
   id: z.string().uuid(),
@@ -4896,6 +4932,18 @@ export const operatorWorkspaceSchema = z.object({
       }),
     )
     .readonly(),
+  productCustomers: z
+    .array(
+      z.object({
+        catalogItemId: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        purchaseCount: z.number().int().nonnegative(),
+        grossBookedMinor: z.number().int().nonnegative(),
+        lastPurchaseAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
   inventory: z.array(operatorInventoryItemSchema).readonly(),
   inventoryLocations: z.array(operatorInventoryLocationSchema).readonly(),
   calendar: z.object({
@@ -5111,6 +5159,9 @@ export type OperatorDivisionDetail = z.infer<
 export type OperatorSessionNote = z.infer<typeof operatorSessionNoteSchema>;
 export type EventDraftEditor = z.infer<typeof eventDraftEditorSchema>;
 export type PublicCatalogItem = z.infer<typeof publicCatalogItemSchema>;
+export type PublicCatalogRecommendations = z.infer<
+  typeof publicCatalogRecommendationsSchema
+>;
 export type PublicOrganizationStorefront = z.infer<
   typeof publicOrganizationStorefrontSchema
 >;

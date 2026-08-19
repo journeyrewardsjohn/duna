@@ -7,6 +7,7 @@ import {
   catalogEntitlements,
   catalogFulfillments,
   catalogItems,
+  catalogItemVersions,
   catalogMedia,
   catalogOptions,
   catalogPrices,
@@ -80,6 +81,7 @@ import type {
   OperatorMutationResult,
   OperatorWorkspace,
   PublicCoach,
+  PublicCatalogRecommendations,
   PublicOrganizationStorefront,
 } from "./contracts";
 import type { ApiActor } from "./context";
@@ -381,6 +383,7 @@ export function loadDemoCommerceWorkspace(): Pick<
   OperatorWorkspace,
   | "catalog"
   | "productPerformance"
+  | "productCustomers"
   | "inventory"
   | "inventoryLocations"
   | "people"
@@ -393,6 +396,7 @@ export function loadDemoCommerceWorkspace(): Pick<
   return {
     catalog: [],
     productPerformance: [],
+    productCustomers: [],
     inventory: [],
     inventoryLocations: [],
     people: [],
@@ -431,6 +435,7 @@ export async function loadOperatorCommerceWorkspace(
     OperatorWorkspace,
     | "catalog"
     | "productPerformance"
+    | "productCustomers"
     | "inventory"
     | "inventoryLocations"
     | "people"
@@ -713,7 +718,8 @@ export async function loadOperatorCommerceWorkspace(
       .select({
         catalogItemId: catalogFulfillments.catalogItemId,
         orderId: orders.id,
-        personId: orders.buyerPersonId,
+        personId: catalogFulfillments.personId,
+        displayName: people.displayName,
         orderStatus: orders.status,
         totalMinor: orders.totalMinor,
         subtotalMinor: orders.subtotalMinor,
@@ -721,6 +727,7 @@ export async function loadOperatorCommerceWorkspace(
       })
       .from(catalogFulfillments)
       .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
+      .innerJoin(people, eq(catalogFulfillments.personId, people.id))
       .where(eq(catalogFulfillments.organizationId, organizationId))
       .orderBy(desc(orders.createdAt))
       .limit(100_000),
@@ -901,6 +908,33 @@ export async function loadOperatorCommerceWorkspace(
         lastPurchaseAt: paidOrders[0]?.purchasedAt.toISOString(),
       };
     });
+  const productCustomers: OperatorWorkspace["productCustomers"] = [
+    ...productOrderRows
+      .filter((row) =>
+        ["paid", "partially-refunded", "refunded"].includes(row.orderStatus),
+      )
+      .reduce((customers, row) => {
+        const key = `${row.catalogItemId}:${row.personId}`;
+        const current = customers.get(key);
+        const purchasedAt = row.purchasedAt.toISOString();
+        customers.set(key, {
+          catalogItemId: row.catalogItemId,
+          personId: row.personId,
+          displayName: row.displayName,
+          purchaseCount: (current?.purchaseCount ?? 0) + 1,
+          grossBookedMinor:
+            (current?.grossBookedMinor ?? 0) + Math.max(0, row.subtotalMinor),
+          lastPurchaseAt:
+            current?.lastPurchaseAt && current.lastPurchaseAt > purchasedAt
+              ? current.lastPurchaseAt
+              : purchasedAt,
+        });
+        return customers;
+      }, new Map<string, OperatorWorkspace["productCustomers"][number]>())
+      .values(),
+  ].toSorted((left, right) =>
+    right.lastPurchaseAt.localeCompare(left.lastPurchaseAt),
+  );
 
   const inventory: OperatorWorkspace["inventory"] = stockRows.map((row) => {
     const receipt = receiptByStockId.get(row.stock.id);
@@ -1760,6 +1794,7 @@ export async function loadOperatorCommerceWorkspace(
   return {
     catalog,
     productPerformance,
+    productCustomers,
     inventory,
     inventoryLocations: locationRows.map((location) => ({
       id: location.id,
@@ -2111,6 +2146,338 @@ export async function loadPublicOrganizationStorefront(
         .length,
     })),
   };
+}
+
+function recommendationTokens(value: string): ReadonlySet<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, " ")
+      .split(" ")
+      .filter((token) => token.length > 2),
+  );
+}
+
+function sharedRecommendationTokens(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): number {
+  let matches = 0;
+  for (const token of left) if (right.has(token)) matches += 1;
+  return matches;
+}
+
+function distanceMiles(
+  from: { readonly latitude: number; readonly longitude: number },
+  to: { readonly latitude: number; readonly longitude: number },
+): number {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDelta = radians(to.longitude - from.longitude);
+  const fromLatitude = radians(from.latitude);
+  const toLatitude = radians(to.latitude);
+  const value =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(fromLatitude) *
+      Math.cos(toLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+export async function loadPublicCatalogRecommendations(input: {
+  readonly organizationSlug: string;
+  readonly catalogItemId?: string;
+  readonly title: string;
+  readonly type: CatalogItemType;
+  readonly subtype?: string;
+  readonly latitude?: number;
+  readonly longitude?: number;
+}): Promise<PublicCatalogRecommendations> {
+  requireDatabase();
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.slug, input.organizationSlug),
+  });
+  if (!organization) return { sameOrganization: [], nearby: [] };
+
+  const rows = await database
+    .select({
+      catalogItemId: catalogItems.id,
+      organizationId: organizations.id,
+      organizationSlug: organizations.slug,
+      organizationName: organizations.name,
+      type: catalogItems.type,
+      subtype: catalogItems.subtype,
+      slug: catalogItems.slug,
+      title: catalogItems.title,
+      shortSummary: catalogItems.shortSummary,
+      description: catalogItems.description,
+      configuration: catalogItems.configuration,
+      visibility: catalogItems.visibility,
+      currency: organizations.currency,
+      locality: organizations.locality,
+      administrativeArea: organizations.administrativeArea,
+      latitude: organizations.latitude,
+      longitude: organizations.longitude,
+    })
+    .from(catalogItems)
+    .innerJoin(organizations, eq(organizations.id, catalogItems.organizationId))
+    .where(
+      and(
+        eq(catalogItems.status, "active"),
+        inArray(catalogItems.visibility, ["public", "members"]),
+        isNull(organizations.systemKey),
+        or(
+          eq(organizations.id, organization.id),
+          eq(catalogItems.type, input.type),
+        ),
+      ),
+    );
+  const candidates = rows.filter(
+    (row) =>
+      row.catalogItemId !== input.catalogItemId &&
+      !(
+        row.organizationId === organization.id &&
+        row.title.trim().toLowerCase() === input.title.trim().toLowerCase()
+      ),
+  );
+  if (candidates.length === 0) {
+    return { sameOrganization: [], nearby: [] };
+  }
+
+  const itemIds = candidates.map((row) => row.catalogItemId);
+  const organizationIds = [
+    ...new Set(candidates.map((row) => row.organizationId)),
+  ];
+  const [mediaRows, priceRows, venueRows, currentItem] = await Promise.all([
+    database
+      .select()
+      .from(catalogMedia)
+      .where(inArray(catalogMedia.catalogItemId, itemIds))
+      .orderBy(asc(catalogMedia.sortOrder)),
+    database
+      .select()
+      .from(catalogPrices)
+      .where(
+        and(
+          inArray(catalogPrices.catalogItemId, itemIds),
+          eq(catalogPrices.active, true),
+        ),
+      ),
+    database
+      .select()
+      .from(venues)
+      .where(
+        and(
+          inArray(venues.organizationId, organizationIds),
+          eq(venues.status, "active"),
+        ),
+      )
+      .orderBy(asc(venues.name)),
+    input.catalogItemId
+      ? database.query.catalogItems.findFirst({
+          where: and(
+            eq(catalogItems.id, input.catalogItemId),
+            eq(catalogItems.organizationId, organization.id),
+          ),
+        })
+      : Promise.resolve(undefined),
+  ]);
+
+  const mediaByItem = new Map<string, (typeof mediaRows)[number]>();
+  for (const media of mediaRows) {
+    if (media.kind !== "image" || mediaByItem.has(media.catalogItemId))
+      continue;
+    mediaByItem.set(media.catalogItemId, media);
+  }
+  const priceByItem = new Map<string, number>();
+  for (const price of priceRows) {
+    if (price.amountMinor === null) continue;
+    const current = priceByItem.get(price.catalogItemId);
+    if (current === undefined || price.amountMinor < current) {
+      priceByItem.set(price.catalogItemId, price.amountMinor);
+    }
+  }
+  const venueByOrganization = new Map<string, (typeof venueRows)[number]>();
+  for (const venue of venueRows) {
+    if (!venueByOrganization.has(venue.organizationId)) {
+      venueByOrganization.set(venue.organizationId, venue);
+    }
+  }
+
+  const explicitIds = new Set(
+    Array.isArray(currentItem?.configuration.recommendedCatalogItemIds)
+      ? currentItem.configuration.recommendedCatalogItemIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+  );
+  const currentText = recommendationTokens(
+    [
+      input.title,
+      input.type,
+      input.subtype,
+      typeof currentItem?.configuration.bestFor === "string"
+        ? currentItem.configuration.bestFor
+        : undefined,
+      ...(Array.isArray(currentItem?.configuration.highlights)
+        ? currentItem.configuration.highlights
+        : []),
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join(" "),
+  );
+  const originVenue = venueRows.find(
+    (venue) => venue.organizationId === organization.id,
+  );
+  const origin =
+    input.latitude !== undefined && input.longitude !== undefined
+      ? { latitude: input.latitude, longitude: input.longitude }
+      : organization.latitude !== null && organization.longitude !== null
+        ? {
+            latitude: organization.latitude,
+            longitude: organization.longitude,
+          }
+        : originVenue &&
+            originVenue.latitude !== null &&
+            originVenue.longitude !== null
+          ? {
+              latitude: originVenue.latitude,
+              longitude: originVenue.longitude,
+            }
+          : undefined;
+  const originLocality =
+    organization.locality ?? originVenue?.locality ?? undefined;
+  const originAdministrativeArea =
+    organization.administrativeArea ??
+    originVenue?.administrativeArea ??
+    undefined;
+
+  const ranked = candidates.map((candidate) => {
+    const candidateText = recommendationTokens(
+      [
+        candidate.title,
+        candidate.shortSummary,
+        candidate.description,
+        candidate.type,
+        candidate.subtype,
+        typeof candidate.configuration.bestFor === "string"
+          ? candidate.configuration.bestFor
+          : undefined,
+      ]
+        .filter((value): value is string => typeof value === "string")
+        .join(" "),
+    );
+    const venue = venueByOrganization.get(candidate.organizationId);
+    const candidateLocation =
+      candidate.latitude !== null && candidate.longitude !== null
+        ? {
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+          }
+        : venue && venue.latitude !== null && venue.longitude !== null
+          ? { latitude: venue.latitude, longitude: venue.longitude }
+          : undefined;
+    const miles =
+      origin && candidateLocation
+        ? distanceMiles(origin, candidateLocation)
+        : undefined;
+    const candidateLocality = candidate.locality ?? venue?.locality;
+    const candidateAdministrativeArea =
+      candidate.administrativeArea ?? venue?.administrativeArea;
+    const sameRegion = Boolean(
+      (originLocality &&
+        candidateLocality &&
+        originLocality.toLowerCase() === candidateLocality.toLowerCase()) ||
+      (originAdministrativeArea &&
+        candidateAdministrativeArea &&
+        originAdministrativeArea.toLowerCase() ===
+          candidateAdministrativeArea.toLowerCase()),
+    );
+    const explicit = explicitIds.has(candidate.catalogItemId);
+    const sameSubtype = Boolean(
+      input.subtype && candidate.subtype === input.subtype,
+    );
+    const sameType = candidate.type === input.type;
+    const shared = sharedRecommendationTokens(currentText, candidateText);
+    const score =
+      (explicit ? 1_000 : 0) +
+      (sameSubtype ? 80 : 0) +
+      (sameType ? 35 : 0) +
+      (candidate.organizationId === organization.id && !sameType ? 24 : 0) +
+      shared * 6 -
+      (miles ?? 0) / 25;
+    return {
+      candidate,
+      explicit,
+      sameSubtype,
+      sameType,
+      sameRegion,
+      miles,
+      score,
+    };
+  });
+
+  const toCard = (
+    match: (typeof ranked)[number],
+  ): PublicCatalogRecommendations["sameOrganization"][number] => {
+    const { candidate } = match;
+    const venue = venueByOrganization.get(candidate.organizationId);
+    return {
+      catalogItemId: candidate.catalogItemId,
+      organizationId: candidate.organizationId,
+      organizationSlug: candidate.organizationSlug,
+      organizationName: candidate.organizationName,
+      type: candidate.type,
+      subtype: candidate.subtype,
+      slug: candidate.slug,
+      title: candidate.title,
+      shortSummary: candidate.shortSummary ?? undefined,
+      mediaUrl: mediaByItem.get(candidate.catalogItemId)?.url,
+      priceMinor: priceByItem.get(candidate.catalogItemId),
+      currency: playerMembershipCurrency(candidate.currency),
+      locality: candidate.locality ?? venue?.locality ?? undefined,
+      administrativeArea:
+        candidate.administrativeArea ?? venue?.administrativeArea ?? undefined,
+      distanceMiles:
+        match.miles === undefined ? undefined : Math.round(match.miles),
+      reason: match.explicit
+        ? "Selected by the organization"
+        : match.sameSubtype
+          ? "A close match for this experience"
+          : match.sameType
+            ? "Similar offer, different path"
+            : "Complements this part of the journey",
+      href:
+        candidate.type === "event"
+          ? `/events/${candidate.slug}`
+          : `/clubs/${candidate.organizationSlug}/products/${candidate.slug}`,
+    };
+  };
+
+  const sameOrganization = ranked
+    .filter((match) => match.candidate.organizationId === organization.id)
+    .toSorted((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map(toCard);
+  const nearby = ranked
+    .filter(
+      (match) =>
+        match.candidate.organizationId !== organization.id &&
+        match.candidate.visibility === "public" &&
+        match.sameType &&
+        (match.miles !== undefined ? match.miles <= 250 : match.sameRegion),
+    )
+    .toSorted((left, right) => {
+      if (left.miles !== undefined && right.miles !== undefined) {
+        const distanceDifference = left.miles - right.miles;
+        if (Math.abs(distanceDifference) > 10) return distanceDifference;
+      }
+      return right.score - left.score;
+    })
+    .slice(0, 4)
+    .map(toCard);
+  return { sameOrganization, nearby };
 }
 
 function catalogItemSupportsCoach(
@@ -3176,6 +3543,53 @@ export async function createCatalogItem(
     defaultFulfillment: defaultFulfillment(input.type, input.subtype),
     configuration: normalizedConfiguration,
   };
+  const versionId = crypto.randomUUID();
+  const versionSnapshot = {
+    item: values,
+    options: optionValues.map(({ code, name, values: optionValues }) => ({
+      code,
+      name,
+      values: optionValues,
+    })),
+    variants: variantValues.map(
+      ({ sku, title, optionCoordinates, status }) => ({
+        sku,
+        title,
+        optionCoordinates,
+        status,
+      }),
+    ),
+    prices: prices.map(
+      ({
+        audience,
+        paymentKind,
+        amountMinor,
+        currency,
+        creditAmount,
+        recurringInterval,
+        recurringIntervalCount,
+      }) => ({
+        audience,
+        paymentKind,
+        amountMinor,
+        currency,
+        creditAmount,
+        recurringInterval,
+        recurringIntervalCount,
+      }),
+    ),
+    media: mediaValues.map(
+      ({ kind, url, posterUrl, alt, sortOrder, catalogVariantId }) => ({
+        kind,
+        url,
+        posterUrl,
+        alt,
+        sortOrder,
+        catalogVariantId,
+      }),
+    ),
+    entitlements: planEntitlementValues,
+  };
   await database.batch([
     database.insert(catalogItems).values({
       id: itemId,
@@ -3183,6 +3597,7 @@ export async function createCatalogItem(
       ...values,
       createdByPersonId: input.actor.personId,
       status: "draft",
+      currentVersionId: versionId,
     }),
     optionValues.length > 0
       ? database.insert(catalogOptions).values(optionValues)
@@ -3290,6 +3705,15 @@ export async function createCatalogItem(
           .update(catalogItems)
           .set({ updatedAt: input.now })
           .where(sql`false`),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: itemId,
+      version: 1,
+      snapshot: versionSnapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -3312,6 +3736,496 @@ export async function createCatalogItem(
     }),
   ]);
   return { id: itemId, entity: "catalog-item", status: "draft" };
+}
+
+/**
+ * Replaces the sellable projection of an offer while preserving every prior
+ * checkout reference. Existing variants are reused where their option
+ * coordinates match so inventory remains connected; retired variants and
+ * prices are archived instead of deleted.
+ */
+export async function replaceCatalogItem(
+  input: CreateCatalogItemInput & { readonly catalogItemId: string },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const [organization, item, existingVariants, versions] = await Promise.all([
+    database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }),
+    database.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.id, input.catalogItemId),
+        eq(catalogItems.organizationId, organizationId),
+      ),
+    }),
+    database
+      .select()
+      .from(catalogVariants)
+      .where(
+        and(
+          eq(catalogVariants.catalogItemId, input.catalogItemId),
+          eq(catalogVariants.organizationId, organizationId),
+        ),
+      ),
+    database
+      .select({ version: catalogItemVersions.version })
+      .from(catalogItemVersions)
+      .where(eq(catalogItemVersions.catalogItemId, input.catalogItemId))
+      .orderBy(desc(catalogItemVersions.version))
+      .limit(1),
+  ]);
+  if (!organization || !item) {
+    throw new Error("Product was not found in this organization.");
+  }
+  if (item.type !== input.type || item.subtype !== input.subtype) {
+    throw new Error("Create a clone to change an offer's family or type.");
+  }
+  if (input.initialInventory) {
+    throw new Error(
+      "Receive additional stock from Inventory so its movement history stays append-only.",
+    );
+  }
+  if (
+    input.type === "good" &&
+    !input.media.some((media) => media.kind === "image")
+  ) {
+    throw new Error("Add at least one image before saving a good.");
+  }
+  const inventoryOnlyGood =
+    input.type === "good" &&
+    input.configuration.inventoryTracked === true &&
+    input.configuration.saleEnabled === false;
+  if (
+    !inventoryOnlyGood &&
+    !input.allowCard &&
+    !input.allowCash &&
+    !input.allowCredits
+  ) {
+    throw new Error("Choose at least one way customers can pay.");
+  }
+  if (
+    !inventoryOnlyGood &&
+    (input.allowCard || input.allowCash) &&
+    input.priceMinor === undefined
+  ) {
+    throw new Error("Add a cash price when card or cash payment is enabled.");
+  }
+  if (input.allowCredits && (!input.creditCost || input.creditCost <= 0)) {
+    throw new Error("Add a positive credit cost when credits are enabled.");
+  }
+
+  const coordinates = variantMatrix(input.options);
+  const existingByCoordinate = new Map(
+    existingVariants.map((variant) => [
+      stableHash(variant.optionCoordinates),
+      variant,
+    ]),
+  );
+  const nextVariants = coordinates.map((optionCoordinates, index) => {
+    const existing = existingByCoordinate.get(stableHash(optionCoordinates));
+    return {
+      id: existing?.id ?? crypto.randomUUID(),
+      existing: Boolean(existing),
+      organizationId,
+      catalogItemId: item.id,
+      sku:
+        input.type === "good"
+          ? `${item.slug.toUpperCase().replaceAll("-", "_")}-${String(index + 1).padStart(3, "0")}`
+          : undefined,
+      title: variantTitle(input.title.trim(), optionCoordinates),
+      optionCoordinates,
+      status: "active" as const,
+    };
+  });
+  const variantById = new Map(
+    nextVariants.map((variant) => [variant.id, variant]),
+  );
+  const priceRows = nextVariants.flatMap((variant) => {
+    const money = (
+      [
+        input.allowCard ? "card" : undefined,
+        input.allowCash ? "cash" : undefined,
+      ] as const
+    )
+      .filter((kind): kind is "card" | "cash" => Boolean(kind))
+      .map((paymentKind) => ({
+        id: crypto.randomUUID(),
+        organizationId,
+        catalogItemId: item.id,
+        catalogVariantId: variant.id,
+        audience: "everyone" as const,
+        paymentKind,
+        amountMinor: input.priceMinor ?? 0,
+        currency: organization.currency,
+        recurringInterval: input.recurringInterval,
+        recurringIntervalCount: input.recurringIntervalCount,
+      }));
+    return input.allowCredits && input.creditCost
+      ? [
+          ...money,
+          {
+            id: crypto.randomUUID(),
+            organizationId,
+            catalogItemId: item.id,
+            catalogVariantId: variant.id,
+            audience: "everyone" as const,
+            paymentKind: "credit" as const,
+            creditAmount: input.creditCost,
+          },
+        ]
+      : money;
+  });
+  const optionRows = input.options.map((option, sortOrder) => ({
+    id: crypto.randomUUID(),
+    organizationId,
+    catalogItemId: item.id,
+    code: optionCode(option.name),
+    name: option.name.trim(),
+    values: [
+      ...new Set(option.values.map((value) => value.trim()).filter(Boolean)),
+    ],
+    required: true,
+    sortOrder,
+  }));
+  const mediaRows = input.media.map((media, sortOrder) => {
+    const variant =
+      media.variantIndex === undefined
+        ? undefined
+        : nextVariants[media.variantIndex];
+    if (media.variantIndex !== undefined && !variant) {
+      throw new Error("Product media points to a variant that does not exist.");
+    }
+    return {
+      id: crypto.randomUUID(),
+      organizationId,
+      catalogItemId: item.id,
+      catalogVariantId: variant?.id,
+      kind: media.kind,
+      url: media.url.trim(),
+      posterUrl: media.posterUrl?.trim() || undefined,
+      alt: media.alt?.trim() || input.title.trim(),
+      sortOrder,
+    };
+  });
+  const values = {
+    title: input.title.trim(),
+    shortSummary: input.shortSummary?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    visibility: input.visibility,
+    taxable: input.taxable,
+    stripeTaxCode: input.stripeTaxCode?.trim() || undefined,
+    allowCard: input.allowCard,
+    allowCash: input.allowCash,
+    allowCredits: input.allowCredits,
+    membershipRequired: input.membershipRequired,
+    configuration: input.configuration,
+    status: "draft" as const,
+    updatedAt: input.now,
+  };
+  const versionId = crypto.randomUUID();
+  const version = (versions[0]?.version ?? 0) + 1;
+  const snapshot = {
+    item: {
+      type: item.type,
+      subtype: item.subtype,
+      slug: item.slug,
+      ...values,
+    },
+    options: optionRows.map(({ code, name, values: optionValues }) => ({
+      code,
+      name,
+      values: optionValues,
+    })),
+    variants: nextVariants.map(({ sku, title, optionCoordinates, status }) => ({
+      sku,
+      title,
+      optionCoordinates,
+      status,
+    })),
+    prices: priceRows,
+    media: mediaRows.map(
+      ({ kind, url, posterUrl, alt, sortOrder, catalogVariantId }) => ({
+        kind,
+        url,
+        posterUrl,
+        alt,
+        sortOrder,
+        catalogVariantId,
+      }),
+    ),
+  };
+  const retiredVariantIds = existingVariants
+    .filter((variant) => !variantById.has(variant.id))
+    .map((variant) => variant.id);
+  await database.batch([
+    database
+      .update(catalogItems)
+      .set({ ...values, currentVersionId: versionId })
+      .where(
+        and(
+          eq(catalogItems.id, item.id),
+          eq(catalogItems.organizationId, organizationId),
+        ),
+      ),
+    database
+      .delete(catalogOptions)
+      .where(eq(catalogOptions.catalogItemId, item.id)),
+    database
+      .delete(catalogMedia)
+      .where(eq(catalogMedia.catalogItemId, item.id)),
+    database
+      .update(catalogPrices)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(catalogPrices.catalogItemId, item.id),
+          eq(catalogPrices.organizationId, organizationId),
+          eq(catalogPrices.active, true),
+        ),
+      ),
+    ...(retiredVariantIds.length > 0
+      ? [
+          database
+            .update(catalogVariants)
+            .set({ status: "archived", updatedAt: input.now })
+            .where(inArray(catalogVariants.id, retiredVariantIds)),
+        ]
+      : []),
+    ...nextVariants
+      .filter((variant) => variant.existing)
+      .map((variant) =>
+        database
+          .update(catalogVariants)
+          .set({
+            title: variant.title,
+            sku: variant.sku,
+            status: "active",
+            updatedAt: input.now,
+          })
+          .where(eq(catalogVariants.id, variant.id)),
+      ),
+    ...(nextVariants.some((variant) => !variant.existing)
+      ? [
+          database.insert(catalogVariants).values(
+            nextVariants
+              .filter((variant) => !variant.existing)
+              .map((variant) => ({
+                id: variant.id,
+                organizationId: variant.organizationId,
+                catalogItemId: variant.catalogItemId,
+                sku: variant.sku,
+                title: variant.title,
+                optionCoordinates: variant.optionCoordinates,
+                status: variant.status,
+              })),
+          ),
+        ]
+      : []),
+    optionRows.length > 0
+      ? database.insert(catalogOptions).values(optionRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    priceRows.length > 0
+      ? database.insert(catalogPrices).values(priceRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    mediaRows.length > 0
+      ? database.insert(catalogMedia).values(mediaRows)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: item.id,
+      version,
+      snapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "catalog.item_version_created",
+      entityType: "catalog-item",
+      entityId: item.id,
+      beforeHash: stableHash(item),
+      afterHash: stableHash(snapshot),
+      reason: `Operator saved product version ${version} as a private draft.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  return { id: item.id, entity: "catalog-item", status: "draft" };
+}
+
+export async function loadCatalogItemVersions(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+}) {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const [item, rows] = await Promise.all([
+    database.query.catalogItems.findFirst({
+      where: and(
+        eq(catalogItems.id, input.catalogItemId),
+        eq(catalogItems.organizationId, organizationId),
+      ),
+    }),
+    database
+      .select()
+      .from(catalogItemVersions)
+      .where(
+        and(
+          eq(catalogItemVersions.catalogItemId, input.catalogItemId),
+          eq(catalogItemVersions.organizationId, organizationId),
+        ),
+      )
+      .orderBy(desc(catalogItemVersions.version)),
+  ]);
+  if (!item) throw new Error("Product was not found in this organization.");
+  return rows.map((row) => {
+    const snapshotItem = row.snapshot.item as
+      Record<string, unknown> | undefined;
+    return {
+      id: row.id,
+      version: row.version,
+      title:
+        typeof snapshotItem?.title === "string"
+          ? snapshotItem.title
+          : item.title,
+      createdAt: row.createdAt.toISOString(),
+      current: row.id === item.currentVersionId,
+    };
+  });
+}
+
+export async function revertCatalogItemVersion(input: {
+  readonly actor: ApiActor;
+  readonly catalogItemId: string;
+  readonly versionId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const database = getDatabase();
+  const version = await database.query.catalogItemVersions.findFirst({
+    where: and(
+      eq(catalogItemVersions.id, input.versionId),
+      eq(catalogItemVersions.catalogItemId, input.catalogItemId),
+      eq(catalogItemVersions.organizationId, organizationId),
+    ),
+  });
+  if (!version) throw new Error("That product version was not found.");
+  const snapshot = version.snapshot as Record<string, unknown>;
+  const item = snapshot.item as Record<string, unknown> | undefined;
+  const options = Array.isArray(snapshot.options)
+    ? snapshot.options.map((option) => option as Record<string, unknown>)
+    : [];
+  const media = Array.isArray(snapshot.media)
+    ? snapshot.media.map((entry) => entry as Record<string, unknown>)
+    : [];
+  const prices = Array.isArray(snapshot.prices)
+    ? snapshot.prices.map((entry) => entry as Record<string, unknown>)
+    : [];
+  if (
+    !item ||
+    typeof item.type !== "string" ||
+    typeof item.subtype !== "string"
+  ) {
+    throw new Error("This historical version cannot be restored safely.");
+  }
+  const cardPrice = prices.find(
+    (price) => price.paymentKind === "card" || price.paymentKind === "cash",
+  );
+  const creditPrice = prices.find((price) => price.paymentKind === "credit");
+  return replaceCatalogItem({
+    actor: input.actor,
+    catalogItemId: input.catalogItemId,
+    type: item.type as CatalogItemType,
+    subtype: item.subtype,
+    title: String(item.title ?? "Untitled product"),
+    shortSummary:
+      typeof item.shortSummary === "string" ? item.shortSummary : undefined,
+    description:
+      typeof item.description === "string" ? item.description : undefined,
+    visibility:
+      item.visibility === "members" || item.visibility === "private"
+        ? item.visibility
+        : "public",
+    taxable: item.taxable === true,
+    stripeTaxCode:
+      typeof item.stripeTaxCode === "string" ? item.stripeTaxCode : undefined,
+    allowCard: item.allowCard === true,
+    allowCash: item.allowCash === true,
+    allowCredits: item.allowCredits === true,
+    membershipRequired: item.membershipRequired === true,
+    priceMinor:
+      typeof cardPrice?.amountMinor === "number"
+        ? cardPrice.amountMinor
+        : undefined,
+    creditCost:
+      typeof creditPrice?.creditAmount === "number"
+        ? creditPrice.creditAmount
+        : undefined,
+    recurringInterval:
+      cardPrice?.recurringInterval === "week" ||
+      cardPrice?.recurringInterval === "month" ||
+      cardPrice?.recurringInterval === "year"
+        ? cardPrice.recurringInterval
+        : undefined,
+    recurringIntervalCount:
+      typeof cardPrice?.recurringIntervalCount === "number"
+        ? cardPrice.recurringIntervalCount
+        : undefined,
+    options: options.flatMap((option) =>
+      typeof option.name === "string" && Array.isArray(option.values)
+        ? [
+            {
+              name: option.name,
+              values: option.values.filter(
+                (value): value is string => typeof value === "string",
+              ),
+            },
+          ]
+        : [],
+    ),
+    media: media.flatMap((entry) =>
+      (entry.kind === "image" || entry.kind === "video") &&
+      typeof entry.url === "string"
+        ? [
+            {
+              kind: entry.kind,
+              url: entry.url,
+              posterUrl:
+                typeof entry.posterUrl === "string"
+                  ? entry.posterUrl
+                  : undefined,
+              alt: typeof entry.alt === "string" ? entry.alt : undefined,
+            },
+          ]
+        : [],
+    ),
+    configuration:
+      item.configuration && typeof item.configuration === "object"
+        ? (item.configuration as Record<string, unknown>)
+        : {},
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
 }
 
 export async function updateCatalogItem(input: {
@@ -3439,26 +4353,68 @@ export async function updateCatalogItem(input: {
     configuration: normalizedConfiguration,
     updatedAt: input.now,
   };
+  const [latestVersion, options, variants, prices, media] = await Promise.all([
+    database
+      .select({ version: catalogItemVersions.version })
+      .from(catalogItemVersions)
+      .where(eq(catalogItemVersions.catalogItemId, item.id))
+      .orderBy(desc(catalogItemVersions.version))
+      .limit(1),
+    database
+      .select()
+      .from(catalogOptions)
+      .where(eq(catalogOptions.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogVariants)
+      .where(eq(catalogVariants.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogPrices)
+      .where(eq(catalogPrices.catalogItemId, item.id)),
+    database
+      .select()
+      .from(catalogMedia)
+      .where(eq(catalogMedia.catalogItemId, item.id)),
+  ]);
+  const versionId = crypto.randomUUID();
+  const version = (latestVersion[0]?.version ?? 0) + 1;
+  const snapshot = {
+    item: { ...item, ...changes },
+    options,
+    variants,
+    prices,
+    media,
+  };
   await database.batch([
     database
       .update(catalogItems)
-      .set(changes)
+      .set({ ...changes, currentVersionId: versionId })
       .where(
         and(
           eq(catalogItems.id, item.id),
           eq(catalogItems.organizationId, organizationId),
         ),
       ),
+    database.insert(catalogItemVersions).values({
+      id: versionId,
+      organizationId,
+      catalogItemId: item.id,
+      version,
+      snapshot,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    }),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
       actorType: "person",
-      action: "catalog.item_updated",
+      action: "catalog.item_version_created",
       entityType: "catalog-item",
       entityId: item.id,
       beforeHash: stableHash(item),
-      afterHash: stableHash({ ...item, ...changes }),
-      reason: "Operator updated a catalog offer and its coach assignment.",
+      afterHash: stableHash(snapshot),
+      reason: `Operator saved product version ${version} from the catalog editor.`,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

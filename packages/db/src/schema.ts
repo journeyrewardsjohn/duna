@@ -2152,6 +2152,10 @@ export const catalogItems = pgTable(
       .notNull()
       .$type<Record<string, unknown>>()
       .default({}),
+    // Points at the immutable offer definition used for new checkout attempts.
+    // It is deliberately not cascaded: a purchase must always be able to name
+    // the exact product revision it bought.
+    currentVersionId: uuid("current_version_id"),
     createdByPersonId: uuid("created_by_person_id").references(() => people.id),
     publishedAt: timestamp("published_at", {
       withTimezone: true,
@@ -2185,6 +2189,37 @@ export const catalogItems = pgTable(
     check(
       "catalog_item_payment_method",
       sql`${table.allowCard} OR ${table.allowCash} OR ${table.allowCredits} OR (${table.type} = 'good' AND ${table.configuration} ->> 'saleEnabled' = 'false')`,
+    ),
+  ],
+);
+
+// An append-only snapshot of a sellable offer. Catalog tables remain the
+// current working projection; this table is the historical source of truth
+// for purchases, audit, and reverting a product to an earlier definition.
+export const catalogItemVersions = pgTable(
+  "catalog_item_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").notNull().$type<Record<string, unknown>>(),
+    createdByPersonId: uuid("created_by_person_id").references(() => people.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_item_version_unique").on(
+      table.catalogItemId,
+      table.version,
+    ),
+    index("catalog_item_version_org_item_created_idx").on(
+      table.organizationId,
+      table.catalogItemId,
+      table.createdAt,
     ),
   ],
 );
@@ -7275,6 +7310,10 @@ export const catalogFulfillments = pgTable(
     catalogItemId: uuid("catalog_item_id")
       .notNull()
       .references(() => catalogItems.id, { onDelete: "restrict" }),
+    catalogItemVersionId: uuid("catalog_item_version_id").references(
+      () => catalogItemVersions.id,
+      { onDelete: "restrict" },
+    ),
     catalogVariantId: uuid("catalog_variant_id")
       .notNull()
       .references(() => catalogVariants.id, { onDelete: "restrict" }),
@@ -7301,6 +7340,7 @@ export const catalogFulfillments = pgTable(
       table.personId,
       table.status,
     ),
+    index("catalog_fulfillment_version_idx").on(table.catalogItemVersionId),
     check(
       "catalog_fulfillment_kind_valid",
       sql`${table.kind} IN ('registration', 'appointment', 'pickup', 'shipment', 'rental', 'membership', 'credit-grant', 'package')`,

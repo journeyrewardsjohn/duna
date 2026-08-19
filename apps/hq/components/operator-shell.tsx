@@ -6,7 +6,13 @@ import { Bell, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { loadWorkspaceOptions } from "@/lib/workspace-options";
-import { operatorModules, type OperatorModule } from "./navigation";
+import {
+  operatorModules,
+  operatorNavigationChildren,
+  type EventNavigationSlug,
+  type OperatorModule,
+  type ProductNavigationSlug,
+} from "./navigation";
 import { AuthControls } from "./auth-controls";
 import { OrganizationSwitcher } from "./organization-switcher";
 
@@ -17,6 +23,7 @@ export async function OperatorShell({
   organization,
   messageDraftCount = 0,
   messageUnreadCount = 0,
+  activeChild,
 }: {
   readonly active: OperatorModule;
   readonly children: ReactNode;
@@ -24,8 +31,12 @@ export async function OperatorShell({
   readonly organization: OrganizationSummary;
   readonly messageDraftCount?: number;
   readonly messageUnreadCount?: number;
+  readonly activeChild?: ProductNavigationSlug | EventNavigationSlug;
 }) {
   const workspaces = await loadWorkspaceOptions();
+  const navigableModules = operatorModules.filter(
+    (item) => !("hiddenFromNavigation" in item && item.hiddenFromNavigation),
+  );
   return (
     <div className={`hq-shell${immersive ? " hq-shell--immersive" : ""}`}>
       <aside className="hq-sidebar">
@@ -34,30 +45,49 @@ export async function OperatorShell({
           <small>HQ</small>
         </Link>
         <nav aria-label="Operator modules">
-          {operatorModules.map((item) => {
+          {navigableModules.map((item) => {
             const Icon = item.icon;
-            const index = operatorModules.indexOf(item);
+            const index = navigableModules.indexOf(item);
             const startsGroup =
-              operatorModules[index - 1]?.group !== item.group;
+              navigableModules[index - 1]?.group !== item.group;
+            const children = operatorNavigationChildren[item.slug] ?? [];
             return (
               <Fragment key={item.slug}>
                 {startsGroup && (
                   <span className="hq-sidebar__section">{item.group}</span>
                 )}
-                <Link
-                  className={active === item.slug ? "active" : undefined}
-                  href={item.slug === "overview" ? "/" : `/${item.slug}`}
-                  title={item.label}
-                >
-                  <Icon aria-hidden size={18} />
-                  <span>{item.label}</span>
-                  {item.slug === "messages" && messageUnreadCount > 0 && (
-                    <i>{messageUnreadCount}</i>
+                <div className="hq-sidebar__module">
+                  <Link
+                    className={active === item.slug ? "active" : undefined}
+                    href={item.slug === "overview" ? "/" : `/${item.slug}`}
+                    title={item.label}
+                  >
+                    <Icon aria-hidden size={18} />
+                    <span>{item.label}</span>
+                    {item.slug === "messages" && messageUnreadCount > 0 && (
+                      <i>{messageUnreadCount}</i>
+                    )}
+                    {item.slug === "marketing" && messageDraftCount > 0 && (
+                      <i>{messageDraftCount}</i>
+                    )}
+                  </Link>
+                  {children.length > 0 && (
+                    <div className="hq-sidebar__subnav">
+                      {children.map((child) => (
+                        <Link
+                          className={
+                            activeChild === child.slug ? "active" : undefined
+                          }
+                          href={child.href}
+                          key={child.slug}
+                        >
+                          <em aria-hidden />
+                          <span>{child.label}</span>
+                        </Link>
+                      ))}
+                    </div>
                   )}
-                  {item.slug === "marketing" && messageDraftCount > 0 && (
-                    <i>{messageDraftCount}</i>
-                  )}
-                </Link>
+                </div>
               </Fragment>
             );
           })}

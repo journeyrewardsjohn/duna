@@ -407,6 +407,114 @@ export async function createWaiverAction(
   }
 }
 
+export async function replaceCatalogItemAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const type = field(formData, "type");
+    if (
+      type !== "event" &&
+      type !== "service" &&
+      type !== "good" &&
+      type !== "plan"
+    ) {
+      throw new Error("Choose a valid product family.");
+    }
+    const visibility = field(formData, "visibility");
+    if (
+      visibility !== "public" &&
+      visibility !== "members" &&
+      visibility !== "private"
+    ) {
+      throw new Error("Choose who can see this product.");
+    }
+    const optionsValue = optionalField(formData, "options");
+    const mediaValue = optionalField(formData, "media");
+    const configurationValue = optionalField(formData, "configuration");
+    const recurringInterval = optionalField(formData, "recurringInterval");
+    const caller = await getServerCaller();
+    const saved = await caller.operator.replaceCatalogItem({
+      catalogItemId: field(formData, "catalogItemId"),
+      type,
+      subtype: field(formData, "subtype"),
+      title: field(formData, "title"),
+      shortSummary: optionalField(formData, "shortSummary"),
+      description: optionalField(formData, "description"),
+      visibility,
+      taxable: field(formData, "taxable") === "true",
+      allowCard: field(formData, "allowCard") === "true",
+      allowCash: field(formData, "allowCash") === "true",
+      allowCredits: field(formData, "allowCredits") === "true",
+      membershipRequired: field(formData, "membershipRequired") === "true",
+      priceMinor: optionalMoneyMinor(formData, "price"),
+      creditCost: optionalField(formData, "creditCost")
+        ? numberField(formData, "creditCost")
+        : undefined,
+      recurringInterval:
+        recurringInterval === "week" ||
+        recurringInterval === "month" ||
+        recurringInterval === "year"
+          ? recurringInterval
+          : undefined,
+      recurringIntervalCount: recurringInterval
+        ? numberField(formData, "recurringIntervalCount")
+        : undefined,
+      options: optionsValue
+        ? (JSON.parse(optionsValue) as { name: string; values: string[] }[])
+        : [],
+      media: mediaValue
+        ? (JSON.parse(mediaValue) as {
+            kind: "image" | "video";
+            url: string;
+            posterUrl?: string;
+            alt?: string;
+            variantIndex?: number;
+          }[])
+        : [],
+      configuration: configurationValue
+        ? (JSON.parse(configurationValue) as Record<string, unknown>)
+        : {},
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(`/products/${saved.id}`);
+    return result(
+      "success",
+      "Saved as a new private product version. Publish it when the revision is ready.",
+      undefined,
+      saved.id,
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function revertCatalogItemVersionAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const catalogItemId = field(formData, "catalogItemId");
+    const caller = await getServerCaller();
+    await caller.operator.revertCatalogItemVersion({
+      catalogItemId,
+      versionId: field(formData, "versionId"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(`/products/${catalogItemId}`);
+    return result(
+      "success",
+      "That version is now a new private draft. Publish it when it is ready.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function createInventoryStockAction(
   _previous: OperatorActionState,
   formData: FormData,

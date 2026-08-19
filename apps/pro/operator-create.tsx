@@ -78,6 +78,30 @@ function commaValues(value: string): string[] {
   ].slice(0, 24);
 }
 
+function lineValues(value: string): string[] {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function testimonialValues(value: string) {
+  return lineValues(value).flatMap((line) => {
+    const [quote, author, context] = line.split("|").map((item) => item.trim());
+    return quote
+      ? [{ quote, author: author ?? "", context: context ?? "", rating: 5 }]
+      : [];
+  });
+}
+
+function faqValues(value: string) {
+  return lineValues(value).flatMap((line) => {
+    const [question, answer] = line.split("|").map((item) => item.trim());
+    return question && answer ? [{ question, answer }] : [];
+  });
+}
+
 function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -212,6 +236,15 @@ export function OperatorCreateScreen({
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [bestFor, setBestFor] = useState("");
+  const [highlights, setHighlights] = useState("");
+  const [outcomeHeadline, setOutcomeHeadline] = useState("");
+  const [outcomeBody, setOutcomeBody] = useState("");
+  const [howItWorks, setHowItWorks] = useState("");
+  const [redemptionNotes, setRedemptionNotes] = useState("");
+  const [validityDays, setValidityDays] = useState("");
+  const [testimonials, setTestimonials] = useState("");
+  const [faqs, setFaqs] = useState("");
   const [price, setPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -263,6 +296,15 @@ export function OperatorCreateScreen({
     setStep(0);
     setTitle("");
     setDescription("");
+    setBestFor("");
+    setHighlights("");
+    setOutcomeHeadline("");
+    setOutcomeBody("");
+    setHowItWorks("");
+    setRedemptionNotes("");
+    setValidityDays("");
+    setTestimonials("");
+    setFaqs("");
     setPrice("");
     setPhotos([]);
     setForSale(true);
@@ -359,6 +401,19 @@ export function OperatorCreateScreen({
     setBusy(true);
     setError(undefined);
     try {
+      const sharedStory = {
+        bestFor: bestFor.trim() || undefined,
+        highlights: lineValues(highlights),
+        outcomeHeadline: outcomeHeadline.trim() || undefined,
+        outcomeBody: outcomeBody.trim() || undefined,
+        howItWorks: lineValues(howItWorks),
+        redemptionNotes: redemptionNotes.trim() || undefined,
+        validityDays: validityDays.trim()
+          ? positiveInteger(validityDays, 30)
+          : undefined,
+        testimonials: testimonialValues(testimonials),
+        faqs: faqValues(faqs),
+      };
       if (kind === "session") {
         let selectedVenueId = venueId;
         if (!selectedVenueId) {
@@ -414,6 +469,7 @@ export function OperatorCreateScreen({
             ? positiveInteger(serviceCredits, 1)
             : undefined,
           configuration: {
+            ...sharedStory,
             durationMinutes: positiveInteger(duration, 60),
             deliveryMode: serviceDelivery,
             mobileCreated: true,
@@ -489,6 +545,7 @@ export function OperatorCreateScreen({
               }
             : undefined,
           configuration: {
+            ...sharedStory,
             saleEnabled: forSale,
             inventoryTracked: trackInventory,
             costingMethod: "fifo",
@@ -514,6 +571,7 @@ export function OperatorCreateScreen({
             planType === "membership" ? planInterval : undefined,
           recurringIntervalCount: planType === "membership" ? 1 : undefined,
           configuration: {
+            ...sharedStory,
             creditsGranted:
               planType === "credit-pack"
                 ? positiveInteger(planCredits, 10)
@@ -966,6 +1024,81 @@ export function OperatorCreateScreen({
                 </View>
               </View>
             )}
+            {step === 1 && kind !== "session" && (
+              <View style={styles.storyCard}>
+                <Text style={styles.storyCardEyebrow}>OFFER STORY</Text>
+                <Text style={styles.storyCardTitle}>
+                  Help players understand the value.
+                </Text>
+                <Text style={styles.storyCardBody}>
+                  These details stay in sync with HQ, the public page, and Duna
+                  Player. Add only what helps someone decide.
+                </Text>
+                <View style={styles.storyFields}>
+                  <Field
+                    label="Best for (optional)"
+                    onChangeText={setBestFor}
+                    placeholder="New players who want a clear next step"
+                    value={bestFor}
+                  />
+                  <Field
+                    label="Highlights — one per line (optional)"
+                    multiline
+                    onChangeText={setHighlights}
+                    placeholder={"Personal feedback\nA clear action plan"}
+                    value={highlights}
+                  />
+                  <Field
+                    label="Outcome headline (optional)"
+                    onChangeText={setOutcomeHeadline}
+                    placeholder="Leave knowing exactly what to work on"
+                    value={outcomeHeadline}
+                  />
+                  <Field
+                    label="Outcome story (optional)"
+                    multiline
+                    onChangeText={setOutcomeBody}
+                    placeholder="Describe the result in one short paragraph."
+                    value={outcomeBody}
+                  />
+                  <Field
+                    label="How it works — one step per line (optional)"
+                    multiline
+                    onChangeText={setHowItWorks}
+                    placeholder={"Book a time\nMeet your coach\nGet your plan"}
+                    value={howItWorks}
+                  />
+                  <Field
+                    label="How to use it (optional)"
+                    multiline
+                    onChangeText={setRedemptionNotes}
+                    placeholder="What happens after purchase?"
+                    value={redemptionNotes}
+                  />
+                  <Field
+                    keyboardType="number-pad"
+                    label="Valid for days (optional)"
+                    onChangeText={setValidityDays}
+                    placeholder="30"
+                    value={validityDays}
+                  />
+                  <Field
+                    label="Customer stories — Quote | Name | Context (optional)"
+                    multiline
+                    onChangeText={setTestimonials}
+                    placeholder="I knew what to fix next. | Maya | Beach player"
+                    value={testimonials}
+                  />
+                  <Field
+                    label="Questions — Question | Answer (optional)"
+                    multiline
+                    onChangeText={setFaqs}
+                    placeholder="Can I reschedule? | Yes, with 24 hours notice."
+                    value={faqs}
+                  />
+                </View>
+              </View>
+            )}
             {step === 2 && (
               <View style={styles.formStack}>
                 {(kind !== "good" || forSale) && (
@@ -1128,6 +1261,34 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   formStack: { gap: 18, marginTop: 28 },
+  storyCard: {
+    backgroundColor: "#faf6f2",
+    borderColor: "#d3e3f0",
+    borderRadius: 22,
+    borderWidth: 1,
+    marginTop: 20,
+    padding: 18,
+  },
+  storyCardEyebrow: {
+    color: "#143d6b",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  storyCardTitle: {
+    color: "#143d6b",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+    marginTop: 8,
+  },
+  storyCardBody: {
+    color: "#5e6f82",
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 7,
+  },
+  storyFields: { gap: 16, marginTop: 20 },
   fieldWrap: { gap: 7 },
   label: { color: "#344054", fontSize: 12, fontWeight: "800" },
   inputWrap: {

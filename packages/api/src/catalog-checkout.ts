@@ -4,6 +4,7 @@ import {
   catalogEntitlements,
   catalogFulfillments,
   catalogItems,
+  catalogItemVersions,
   catalogPrices,
   catalogVariants,
   getDatabase,
@@ -36,7 +37,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   ensureLedgerAccount,
@@ -399,6 +400,44 @@ export async function releaseCatalogOrderInventory(
     );
 }
 
+async function versionForCatalogCheckout(input: {
+  readonly item: typeof catalogItems.$inferSelect;
+  readonly variant: typeof catalogVariants.$inferSelect;
+  readonly price: typeof catalogPrices.$inferSelect;
+  readonly now: Date;
+}): Promise<string> {
+  if (input.item.currentVersionId) return input.item.currentVersionId;
+  const database = getDatabase();
+  const id = crypto.randomUUID();
+  // A one-time compatibility snapshot for catalog rows created before product
+  // versioning. New edits and creations create richer revisions at save time.
+  await database.batch([
+    database.insert(catalogItemVersions).values({
+      id,
+      organizationId: input.item.organizationId,
+      catalogItemId: input.item.id,
+      version: 1,
+      snapshot: {
+        item: input.item,
+        variants: [input.variant],
+        prices: [input.price],
+        migration: "checkout-backfill",
+      },
+      createdAt: input.now,
+    }),
+    database
+      .update(catalogItems)
+      .set({ currentVersionId: id, updatedAt: input.now })
+      .where(
+        and(
+          eq(catalogItems.id, input.item.id),
+          isNull(catalogItems.currentVersionId),
+        ),
+      ),
+  ]);
+  return id;
+}
+
 export async function startCatalogCheckout(input: {
   readonly actor: ApiActor;
   readonly catalogItemId: string;
@@ -653,6 +692,12 @@ export async function startCatalogCheckout(input: {
     input.paymentMethod === "cash"
       ? cashReservationExpiresAt
       : checkoutExpiresAt;
+  const catalogItemVersionId = await versionForCatalogCheckout({
+    item: row.item,
+    variant: row.variant,
+    price,
+    now: input.now,
+  });
   const tracksInventory =
     row.item.type === "good" &&
     row.item.configuration.inventoryTracked !== false;
@@ -698,6 +743,7 @@ export async function startCatalogCheckout(input: {
       orderId,
       orderItemId,
       catalogItemId: row.item.id,
+      catalogItemVersionId,
       catalogVariantId: row.variant.id,
       personId: input.actor.personId,
       kind: fulfillmentKind(row.item),
