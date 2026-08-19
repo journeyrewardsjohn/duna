@@ -11,6 +11,7 @@ import {
   catalogMedia,
   catalogOptions,
   catalogPrices,
+  catalogSessionOccurrences,
   catalogVariants,
   courtBookingParticipants,
   courtBookings,
@@ -91,6 +92,13 @@ import {
   requireMembershipOfferCanDeactivate,
 } from "./organization-membership-policy";
 import { getStripeClient, isStripeConfigured, refundPayment } from "./payments";
+import {
+  generateBookableSessionOccurrences,
+  parseSessionDeliveryConfiguration,
+  validateSessionScheduleConfiguration,
+  virtualDeliveryConfigurationSchema,
+  type SessionCoachAvailability,
+} from "./session-delivery";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
 type CatalogItemSubtype = string;
@@ -1859,46 +1867,89 @@ export async function loadPublicOrganizationStorefront(
   });
   if (!organization) return undefined;
 
-  const [themeRow, itemRows, venueRows, communicationRow, courtRows] =
-    await Promise.all([
-      database.query.organizationThemes.findFirst({
-        where: and(
-          eq(organizationThemes.organizationId, organization.id),
-          sql`${organizationThemes.publishedAt} IS NOT NULL`,
+  const [
+    themeRow,
+    itemRows,
+    venueRows,
+    communicationRow,
+    courtRows,
+    staffRows,
+    coachBusyRows,
+  ] = await Promise.all([
+    database.query.organizationThemes.findFirst({
+      where: and(
+        eq(organizationThemes.organizationId, organization.id),
+        sql`${organizationThemes.publishedAt} IS NOT NULL`,
+      ),
+    }),
+    database
+      .select()
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.organizationId, organization.id),
+          eq(catalogItems.status, "active"),
+          inArray(catalogItems.visibility, ["public", "members"]),
         ),
-      }),
-      database
-        .select()
-        .from(catalogItems)
-        .where(
-          and(
-            eq(catalogItems.organizationId, organization.id),
-            eq(catalogItems.status, "active"),
-            inArray(catalogItems.visibility, ["public", "members"]),
-          ),
-        )
-        .orderBy(asc(catalogItems.type), asc(catalogItems.title)),
-      database
-        .select()
-        .from(venues)
-        .where(
-          and(
-            eq(venues.organizationId, organization.id),
-            eq(venues.status, "active"),
-          ),
-        )
-        .orderBy(asc(venues.name)),
-      database.query.organizationCommunicationSettings.findFirst({
-        where: eq(
-          organizationCommunicationSettings.organizationId,
-          organization.id,
+      )
+      .orderBy(asc(catalogItems.type), asc(catalogItems.title)),
+    database
+      .select()
+      .from(venues)
+      .where(
+        and(
+          eq(venues.organizationId, organization.id),
+          eq(venues.status, "active"),
         ),
-      }),
-      database
-        .select({ id: courts.id, venueId: courts.venueId })
-        .from(courts)
-        .where(eq(courts.status, "active")),
-    ]);
+      )
+      .orderBy(asc(venues.name)),
+    database.query.organizationCommunicationSettings.findFirst({
+      where: eq(
+        organizationCommunicationSettings.organizationId,
+        organization.id,
+      ),
+    }),
+    database
+      .select({ id: courts.id, venueId: courts.venueId })
+      .from(courts)
+      .where(eq(courts.status, "active")),
+    database
+      .select({
+        personId: organizationStaffProfiles.personId,
+        displayName: people.displayName,
+        email: people.email,
+        availability: organizationStaffProfiles.availability,
+      })
+      .from(organizationStaffProfiles)
+      .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
+      .where(
+        and(
+          eq(organizationStaffProfiles.organizationId, organization.id),
+          eq(organizationStaffProfiles.staffRole, "coach"),
+          eq(organizationStaffProfiles.active, true),
+        ),
+      ),
+    database
+      .select({
+        personId: calendarConnections.personId,
+        startsAt: calendarBusyBlocks.startsAt,
+        endsAt: calendarBusyBlocks.endsAt,
+      })
+      .from(calendarBusyBlocks)
+      .innerJoin(
+        calendarConnections,
+        eq(calendarBusyBlocks.calendarConnectionId, calendarConnections.id),
+      )
+      .where(
+        and(
+          eq(calendarBusyBlocks.organizationId, organization.id),
+          eq(calendarBusyBlocks.transparency, "busy"),
+          eq(calendarConnections.status, "active"),
+          gt(calendarBusyBlocks.endsAt, new Date()),
+        ),
+      )
+      .limit(10_000),
+  ]);
   const itemIds = itemRows.map((item) => item.id);
   const variantRows =
     itemIds.length === 0
@@ -1915,7 +1966,13 @@ export async function loadPublicOrganizationStorefront(
           )
           .orderBy(asc(catalogVariants.title));
   const variantIds = variantRows.map((variant) => variant.id);
-  const [priceRows, mediaRows, stockRows] = await Promise.all([
+  const [
+    priceRows,
+    mediaRows,
+    stockRows,
+    occurrenceRows,
+    occurrenceFulfillmentRows,
+  ] = await Promise.all([
     variantIds.length === 0
       ? Promise.resolve([])
       : database
@@ -1958,12 +2015,49 @@ export async function loadPublicOrganizationStorefront(
               inArray(inventoryStockItems.catalogVariantId, variantIds),
             ),
           ),
+    itemIds.length === 0
+      ? Promise.resolve([])
+      : database
+          .select()
+          .from(catalogSessionOccurrences)
+          .where(
+            and(
+              eq(catalogSessionOccurrences.organizationId, organization.id),
+              eq(catalogSessionOccurrences.status, "scheduled"),
+              gt(catalogSessionOccurrences.startsAt, new Date()),
+              inArray(catalogSessionOccurrences.catalogItemId, itemIds),
+            ),
+          )
+          .orderBy(asc(catalogSessionOccurrences.startsAt))
+          .limit(2_000),
+    itemIds.length === 0
+      ? Promise.resolve([])
+      : database
+          .select({
+            occurrenceId: catalogFulfillments.catalogSessionOccurrenceId,
+            details: catalogFulfillments.details,
+          })
+          .from(catalogFulfillments)
+          .where(
+            and(
+              eq(catalogFulfillments.organizationId, organization.id),
+              inArray(catalogFulfillments.catalogItemId, itemIds),
+              inArray(catalogFulfillments.status, [
+                "held",
+                "pending",
+                "ready",
+                "fulfilled",
+              ]),
+              sql`${catalogFulfillments.catalogSessionOccurrenceId} IS NOT NULL`,
+            ),
+          ),
   ]);
 
   const pricesByVariant = new Map<string, typeof priceRows>();
   const variantsByItem = new Map<string, typeof variantRows>();
   const mediaByItem = new Map<string, typeof mediaRows>();
   const availableByVariant = new Map<string, number>();
+  const bookedByOccurrence = new Map<string, number>();
   for (const price of priceRows) {
     if (!price.catalogVariantId) continue;
     pricesByVariant.set(price.catalogVariantId, [
@@ -1996,6 +2090,15 @@ export async function loadPublicOrganizationStorefront(
       stock.catalogVariantId,
       (availableByVariant.get(stock.catalogVariantId) ?? 0) +
         Math.max(0, stock.quantityOnHand - stock.quantityReserved),
+    );
+  }
+  for (const fulfillment of occurrenceFulfillmentRows) {
+    if (!fulfillment.occurrenceId) continue;
+    const quantity = Number(fulfillment.details.quantity ?? 1);
+    bookedByOccurrence.set(
+      fulfillment.occurrenceId,
+      (bookedByOccurrence.get(fulfillment.occurrenceId) ?? 0) +
+        (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1),
     );
   }
 
@@ -2040,61 +2143,149 @@ export async function loadPublicOrganizationStorefront(
       organization.stripeAccountId && organization.stripeChargesEnabled,
     ),
     theme,
-    catalog: itemRows.map((item) => ({
-      id: item.id,
-      type: item.type,
-      subtype: item.subtype,
-      slug: item.slug,
-      title: item.title,
-      shortSummary: item.shortSummary ?? undefined,
-      description: item.description ?? undefined,
-      visibility:
-        item.visibility === "members"
-          ? ("members" as const)
-          : ("public" as const),
-      taxable: item.taxable,
-      allowCard: item.allowCard,
-      allowCash: item.allowCash,
-      allowCredits: item.allowCredits,
-      membershipRequired: item.membershipRequired,
-      defaultFulfillment: item.defaultFulfillment,
-      configuration: item.configuration,
-      variants: (variantsByItem.get(item.id) ?? []).map((variant) => ({
-        id: variant.id,
-        title: variant.title,
-        sku: variant.sku ?? undefined,
-        optionCoordinates: variant.optionCoordinates,
-        prices: (pricesByVariant.get(variant.id) ?? []).map((price) => ({
-          id: price.id,
-          audience: price.audience,
-          paymentKind: price.paymentKind,
-          amountMinor: price.amountMinor ?? undefined,
-          currency: price.currency
-            ? (price.currency as PublicOrganizationStorefront["currency"])
-            : undefined,
-          creditAmount: price.creditAmount ?? undefined,
-          recurringInterval:
-            price.recurringInterval === "week" ||
-            price.recurringInterval === "month" ||
-            price.recurringInterval === "year"
-              ? price.recurringInterval
+    catalog: itemRows.map((item) => {
+      const deliveryConfiguration = parseSessionDeliveryConfiguration(
+        item.configuration,
+      );
+      const assignedCoachIds =
+        deliveryConfiguration?.coachAssignmentMode === "selected" &&
+        deliveryConfiguration.coachPersonIds.length > 0
+          ? deliveryConfiguration.coachPersonIds
+          : staffRows.map((coach) => coach.personId);
+      const coaches: SessionCoachAvailability[] = staffRows
+        .filter((coach) => assignedCoachIds.includes(coach.personId))
+        .map((coach) => ({
+          personId: coach.personId,
+          displayName: coach.displayName,
+          email: coach.email ?? undefined,
+          availability: coach.availability,
+          busyRanges: coachBusyRows
+            .filter((range) => range.personId === coach.personId)
+            .map((range) => ({
+              startsAt: range.startsAt.toISOString(),
+              endsAt: range.endsAt.toISOString(),
+            })),
+        }));
+      const generatedOccurrences = deliveryConfiguration
+        ? generateBookableSessionOccurrences({
+            configuration: deliveryConfiguration,
+            coaches,
+            now: new Date(),
+            horizonDays: 730,
+            limit: 2_000,
+          })
+        : [];
+      const generatedByStart = new Map(
+        generatedOccurrences.map((occurrence) => [
+          occurrence.startsAt,
+          occurrence,
+        ]),
+      );
+      const upcomingOccurrences = occurrenceRows
+        .filter(
+          (occurrence) =>
+            occurrence.catalogItemId === item.id &&
+            (bookedByOccurrence.get(occurrence.id) ?? 0) < occurrence.capacity,
+        )
+        .flatMap((occurrence) => {
+          const booked = bookedByOccurrence.get(occurrence.id) ?? 0;
+          if (booked > 0 && deliveryConfiguration) {
+            const assignedCoaches = staffRows
+              .filter((coach) =>
+                occurrence.coachPersonIds.includes(coach.personId),
+              )
+              .map((coach) => ({
+                personId: coach.personId,
+                displayName: coach.displayName,
+              }));
+            return assignedCoaches.length >=
+              deliveryConfiguration.requiredCoachCount
+              ? [
+                  {
+                    key: occurrence.id,
+                    startsAt: occurrence.startsAt.toISOString(),
+                    endsAt: occurrence.endsAt.toISOString(),
+                    localDate: occurrence.localDate,
+                    localTime: occurrence.localTime.slice(0, 5),
+                    timezone: occurrence.timezone,
+                    availableCoaches: assignedCoaches,
+                    requiredCoachCount:
+                      deliveryConfiguration.requiredCoachCount,
+                  },
+                ]
+              : [];
+          }
+          const generated = generatedByStart.get(
+            occurrence.startsAt.toISOString(),
+          );
+          return generated
+            ? [
+                {
+                  ...generated,
+                  key: occurrence.id,
+                },
+              ]
+            : [];
+        });
+      return {
+        id: item.id,
+        type: item.type,
+        subtype: item.subtype,
+        slug: item.slug,
+        title: item.title,
+        shortSummary: item.shortSummary ?? undefined,
+        description: item.description ?? undefined,
+        visibility:
+          item.visibility === "members"
+            ? ("members" as const)
+            : ("public" as const),
+        taxable: item.taxable,
+        allowCard: item.allowCard,
+        allowCash: item.allowCash,
+        allowCredits: item.allowCredits,
+        membershipRequired: item.membershipRequired,
+        defaultFulfillment: item.defaultFulfillment,
+        configuration: item.configuration,
+        upcomingOccurrences,
+        variants: (variantsByItem.get(item.id) ?? []).map((variant) => ({
+          id: variant.id,
+          title: variant.title,
+          sku: variant.sku ?? undefined,
+          optionCoordinates: variant.optionCoordinates,
+          prices: (pricesByVariant.get(variant.id) ?? []).map((price) => ({
+            id: price.id,
+            audience: price.audience,
+            paymentKind: price.paymentKind,
+            amountMinor: price.amountMinor ?? undefined,
+            currency: price.currency
+              ? (price.currency as PublicOrganizationStorefront["currency"])
               : undefined,
-          recurringIntervalCount: price.recurringIntervalCount ?? undefined,
+            creditAmount: price.creditAmount ?? undefined,
+            recurringInterval:
+              price.recurringInterval === "week" ||
+              price.recurringInterval === "month" ||
+              price.recurringInterval === "year"
+                ? price.recurringInterval
+                : undefined,
+            recurringIntervalCount: price.recurringIntervalCount ?? undefined,
+          })),
+          availableQuantity:
+            item.type === "good" &&
+            item.configuration.inventoryTracked !== false
+              ? (availableByVariant.get(variant.id) ?? 0)
+              : undefined,
         })),
-        availableQuantity:
-          item.type === "good" && item.configuration.inventoryTracked !== false
-            ? (availableByVariant.get(variant.id) ?? 0)
-            : undefined,
-      })),
-      media: (mediaByItem.get(item.id) ?? []).map((media) => ({
-        id: media.id,
-        catalogVariantId: media.catalogVariantId ?? undefined,
-        kind: media.kind === "video" ? ("video" as const) : ("image" as const),
-        url: media.url,
-        posterUrl: media.posterUrl ?? undefined,
-        alt: media.alt ?? undefined,
-      })),
-    })),
+        media: (mediaByItem.get(item.id) ?? []).map((media) => ({
+          id: media.id,
+          catalogVariantId: media.catalogVariantId ?? undefined,
+          kind:
+            media.kind === "video" ? ("video" as const) : ("image" as const),
+          url: media.url,
+          posterUrl: media.posterUrl ?? undefined,
+          alt: media.alt ?? undefined,
+        })),
+      };
+    }),
     contact: {
       ...(communicationRow?.emailDomainStatus === "verified" &&
       communicationRow.senderEmail
@@ -3238,6 +3429,24 @@ export async function createCatalogItem(
         input.configuration.customerCoachSelection !== false,
     };
   }
+  if (input.type === "service") {
+    const schedule = validateSessionScheduleConfiguration(
+      normalizedConfiguration.sessionSchedule,
+    );
+    if (normalizedConfiguration.deliveryMode === "online") {
+      virtualDeliveryConfigurationSchema.parse(
+        normalizedConfiguration.virtualDelivery,
+      );
+    }
+    normalizedConfiguration = {
+      ...normalizedConfiguration,
+      sessionSchedule: schedule,
+      virtualDelivery:
+        normalizedConfiguration.deliveryMode === "online"
+          ? normalizedConfiguration.virtualDelivery
+          : undefined,
+    };
+  }
   if (membershipConfiguration) {
     normalizedConfiguration = {
       ...normalizedConfiguration,
@@ -3462,6 +3671,68 @@ export async function createCatalogItem(
     ],
     sortOrder,
   }));
+  const deliveryConfiguration =
+    input.type === "service"
+      ? parseSessionDeliveryConfiguration(normalizedConfiguration)
+      : undefined;
+  let sessionOccurrenceValues: (typeof catalogSessionOccurrences.$inferInsert)[] =
+    [];
+  if (
+    deliveryConfiguration?.sessionSchedule &&
+    deliveryConfiguration.sessionSchedule.mode !== "flexible"
+  ) {
+    const coachRows = await database
+      .select({
+        personId: organizationStaffProfiles.personId,
+        displayName: people.displayName,
+        email: people.email,
+        availability: organizationStaffProfiles.availability,
+      })
+      .from(organizationStaffProfiles)
+      .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
+      .where(
+        and(
+          eq(organizationStaffProfiles.organizationId, organizationId),
+          eq(organizationStaffProfiles.active, true),
+          inArray(
+            organizationStaffProfiles.personId,
+            deliveryConfiguration.coachPersonIds,
+          ),
+        ),
+      );
+    const occurrences = generateBookableSessionOccurrences({
+      configuration: deliveryConfiguration,
+      coaches: coachRows.map((coach) => ({
+        personId: coach.personId,
+        displayName: coach.displayName,
+        email: coach.email ?? undefined,
+        availability: coach.availability,
+      })),
+      now: input.now,
+      horizonDays: 730,
+      limit: 2_000,
+    });
+    const capacity = Number(normalizedConfiguration.capacity ?? 1);
+    sessionOccurrenceValues = occurrences.map((occurrence) => ({
+      id: crypto.randomUUID(),
+      organizationId,
+      catalogItemId: itemId,
+      startsAt: new Date(occurrence.startsAt),
+      endsAt: new Date(occurrence.endsAt),
+      timezone: occurrence.timezone,
+      localDate: occurrence.localDate,
+      localTime: occurrence.localTime,
+      coachPersonIds: occurrence.availableCoaches
+        .slice(0, occurrence.requiredCoachCount)
+        .map((coach) => coach.personId),
+      capacity: Number.isSafeInteger(capacity) && capacity > 0 ? capacity : 1,
+    }));
+    if (sessionOccurrenceValues.length === 0) {
+      throw new Error(
+        "No configured session time overlaps the availability of the required coaches.",
+      );
+    }
+  }
   const membershipEntitlementValues =
     input.type === "plan" && input.subtype === "membership"
       ? [
@@ -3614,6 +3885,14 @@ export async function createCatalogItem(
           .where(sql`false`),
     mediaValues.length > 0
       ? database.insert(catalogMedia).values(mediaValues)
+      : database
+          .update(catalogItems)
+          .set({ updatedAt: input.now })
+          .where(sql`false`),
+    sessionOccurrenceValues.length > 0
+      ? database
+          .insert(catalogSessionOccurrences)
+          .values(sessionOccurrenceValues)
       : database
           .update(catalogItems)
           .set({ updatedAt: input.now })

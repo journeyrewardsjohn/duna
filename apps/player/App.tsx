@@ -159,6 +159,9 @@ const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
+type PlayerVirtualSession = NonNullable<
+  PlayerRuntime["virtualSessions"]
+>[number];
 type MobilePredictionDiscoveryItem = NonNullable<
   PlayerRuntime["predictionDiscovery"]
 >["items"][number];
@@ -1567,6 +1570,63 @@ function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
   );
 }
 
+function VirtualSessionCard({
+  session,
+}: {
+  readonly session: PlayerVirtualSession;
+}) {
+  const primaryUrl = session.joinUrl ?? session.recording?.url;
+  const upcoming = Boolean(session.joinUrl);
+  return (
+    <View style={styles.coachingNoteCard}>
+      <View style={styles.coachingNoteAccent} />
+      <View style={styles.coachingNoteTop}>
+        <View style={styles.coachingNoteMark}>
+          <Text style={styles.coachingNoteMarkText}>
+            {upcoming ? "▶" : "✦"}
+          </Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.coachingNoteEyebrow}>
+            {upcoming ? "GOOGLE MEET READY" : "SESSION RECORD"}
+          </Text>
+          <Text style={styles.coachingNoteTitle}>{session.title}</Text>
+          <Text style={styles.coachingNoteMeta}>
+            {new Date(session.startsAt).toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+      </View>
+      {session.summary && (
+        <Text style={styles.coachingNoteSummary}>{session.summary}</Text>
+      )}
+      {session.actionItems.slice(0, 3).map((item, index) => (
+        <Text
+          key={`${item.ownerRole}-${index}`}
+          style={styles.coachingNoteSession}
+        >
+          • {item.text}
+        </Text>
+      ))}
+      {primaryUrl && (
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => void Linking.openURL(primaryUrl)}
+          style={styles.virtualSessionAction}
+        >
+          <Text style={styles.virtualSessionActionText}>
+            {upcoming ? "Join Google Meet" : "Watch recording"}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 type HomeQuickAction =
   | "upload-score"
   | "find-match"
@@ -1811,8 +1871,15 @@ function HomeScreen({
     organizationWallets,
     people,
     predictionDiscovery,
+    virtualSessions,
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
+  const highlightedVirtualSession =
+    virtualSessions?.find(
+      (session) =>
+        Boolean(session.joinUrl) && new Date(session.endsAt) > new Date(),
+    ) ??
+    [...(virtualSessions ?? [])].reverse().find((session) => session.summary);
   const previewNextActivity = useMemo(() => {
     const startsAt = new Date();
     startsAt.setDate(startsAt.getDate() + 1);
@@ -2455,6 +2522,19 @@ function HomeScreen({
               title="Carry the session forward."
             />
             <CoachingNoteCard note={coachingNotes[0]} />
+          </>
+        )}
+        {highlightedVirtualSession && (
+          <>
+            <SectionHeader
+              eyebrow="VIRTUAL COACHING"
+              title={
+                highlightedVirtualSession.joinUrl
+                  ? "Your next session is ready."
+                  : "Your session record."
+              }
+            />
+            <VirtualSessionCard session={highlightedVirtualSession} />
           </>
         )}
         {homeCoaches.length > 0 && (
@@ -16792,6 +16872,21 @@ function createStyles(palette: Palette) {
       color: colors.muted,
       fontSize: 12,
       fontWeight: "700",
+    },
+    virtualSessionAction: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 17,
+      paddingVertical: 10,
+    },
+    virtualSessionActionText: {
+      color: colors.depth,
+      fontSize: 13,
+      fontWeight: "900",
     },
     coachCardRow: {
       flexDirection: "row",

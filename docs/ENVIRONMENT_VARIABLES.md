@@ -167,6 +167,7 @@ AI_GATEWAY_EVENT_RESEARCH_MODEL
 AI_GATEWAY_PLAYER_RESEARCH_MODEL
 AI_GATEWAY_PROFILE_MODEL
 AI_GATEWAY_SPORTSWRITER_MODEL
+AI_GATEWAY_VIRTUAL_COACHING_MODEL
 AI_GATEWAY_TOURNAMENT_ANALYTICS_MODEL
 AI_GATEWAY_VENUE_LAYOUT_MODEL
 ```
@@ -177,13 +178,17 @@ selector or URL variable.
 
 ## Maps, places, routes, and weather
 
-| Name                      | Class                            | Purpose                                                                     |
-| ------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
-| `GOOGLE_PLACES_API_KEY`   | Server secret                    | Places autocomplete/detail/venue validation through server routes           |
-| `GOOGLE_ROUTES_API_KEY`   | Server secret                    | Bounded arrival distance/ETA route service; may fall back per service logic |
-| `MAPBOX_API_TOKEN_PUBLIC` | Public config stored server-side | Preferred public `pk` token returned by the Web/HQ token proxy              |
-| `MAPBOX_API_TOKEN`        | Public-or-server token           | Compatibility fallback; route accepts only a public `pk` token for clients  |
-| `TOMORROW_IO_API_KEY`     | Server secret                    | Weather/daylight context                                                    |
+| Name                                     | Class                            | Purpose                                                                     |
+| ---------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| `GOOGLE_PLACES_API_KEY`                  | Server secret                    | Places autocomplete/detail/venue validation through server routes           |
+| `GOOGLE_ROUTES_API_KEY`                  | Server secret                    | Bounded arrival distance/ETA route service; may fall back per service logic |
+| `GOOGLE_WORKSPACE_SERVICE_ACCOUNT_EMAIL` | Server secret                    | Service-account identity used only for delegated Workspace authorization    |
+| `GOOGLE_WORKSPACE_PRIVATE_KEY`           | Server secret                    | PEM key for the delegated Workspace service account                         |
+| `GOOGLE_WORKSPACE_MEET_ORGANIZER_EMAIL`  | Server config                    | Licensed Duna Workspace user impersonated as Calendar/Meet organizer        |
+| `GOOGLE_WORKSPACE_MEET_CALENDAR_ID`      | Server config                    | Optional organizer-owned calendar ID; defaults to the organizer email       |
+| `MAPBOX_API_TOKEN_PUBLIC`                | Public config stored server-side | Preferred public `pk` token returned by the Web/HQ token proxy              |
+| `MAPBOX_API_TOKEN`                       | Public-or-server token           | Compatibility fallback; route accepts only a public `pk` token for clients  |
+| `TOMORROW_IO_API_KEY`                    | Server secret                    | Weather/daylight context                                                    |
 
 Use `EXPO_PUBLIC_MAPBOX_API_TOKEN` only for the restricted native public token.
 Secret-scope Mapbox tokens never belong in Expo.

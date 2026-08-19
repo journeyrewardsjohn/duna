@@ -905,6 +905,14 @@ export function renderProductMarkdown(input: {
   ];
   if (item.description)
     lines.push("", "## Description", "", item.description.trim());
+  if (item.upcomingOccurrences.length) {
+    lines.push("", "## Upcoming sessions", "");
+    for (const occurrence of item.upcomingOccurrences) {
+      lines.push(
+        `- ${date(occurrence.startsAt)} — ${clean(occurrence.timezone)} — ${occurrence.availableCoaches.map((coach) => clean(coach.displayName)).join(", ")}`,
+      );
+    }
+  }
   if (item.variants.length) {
     lines.push("", "## Options and prices", "");
     for (const variant of item.variants) {

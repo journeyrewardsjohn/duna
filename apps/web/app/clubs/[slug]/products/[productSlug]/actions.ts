@@ -20,6 +20,8 @@ export async function startCatalogCheckoutAction(input: {
   readonly catalogPriceId?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
   readonly quantity: number;
+  readonly catalogSessionOccurrenceId?: string;
+  readonly recordingConsentAccepted?: boolean;
   readonly idempotencyKey: string;
   readonly returnProductSlug?: string;
   readonly checkoutRole?: "product" | "membership";
@@ -38,6 +40,8 @@ export async function startCatalogCheckoutAction(input: {
       catalogPriceId: input.catalogPriceId,
       paymentMethod: input.paymentMethod,
       quantity: input.quantity,
+      catalogSessionOccurrenceId: input.catalogSessionOccurrenceId,
+      recordingConsentAccepted: input.recordingConsentAccepted,
       successUrl: membershipStep
         ? `${origin}${productPath}?membership_checkout=success&membership_session_id={CHECKOUT_SESSION_ID}`
         : `${origin}${productPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,

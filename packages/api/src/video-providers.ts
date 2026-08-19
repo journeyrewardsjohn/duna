@@ -5,9 +5,11 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import Mux from "@mux/mux-node";
 
@@ -139,6 +141,37 @@ export async function readPrivateR2JsonObject(
     throw new Error("The private R2 JSON object is unavailable or too large.");
   }
   return JSON.parse(body) as unknown;
+}
+
+export async function storePrivateR2Response(input: {
+  readonly objectKey: string;
+  readonly response: Response;
+  readonly contentType: string;
+  readonly metadata: Readonly<Record<string, string>>;
+}): Promise<void> {
+  if (
+    !input.objectKey ||
+    input.objectKey.startsWith("/") ||
+    input.objectKey.includes("..") ||
+    !input.response.body
+  ) {
+    throw new Error("The private R2 source or object key is invalid.");
+  }
+  const { client, configuration } = getR2Client();
+  const contentLength = Number(input.response.headers.get("content-length"));
+  await client.send(
+    new PutObjectCommand({
+      Bucket: configuration.bucket,
+      Key: input.objectKey,
+      Body: Readable.fromWeb(input.response.body as never),
+      ContentType: input.contentType,
+      ...(Number.isSafeInteger(contentLength) && contentLength >= 0
+        ? { ContentLength: contentLength }
+        : {}),
+      CacheControl: "private, max-age=0, no-store",
+      Metadata: { ...input.metadata },
+    }),
+  );
 }
 
 export async function createR2VideoUpload(input: {

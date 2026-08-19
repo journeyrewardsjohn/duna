@@ -101,6 +101,7 @@ import {
   playerCoachingNoteSchema,
   playerAdmissionPassesSchema,
   playerDashboardSchema,
+  playerVirtualSessionRecordsSchema,
   playerMemberCardSchema,
   playerRegistrationScanResultSchema,
   playerOrganizationAccessSchema,
@@ -378,6 +379,7 @@ import {
   updateVideoQuotaPolicy,
   VideoServiceError,
 } from "./video-service";
+import { loadPlayerVirtualSessionRecords } from "./virtual-session-service";
 import {
   createVideoAnalysisMarker,
   loadVideoAnalysisReport,
@@ -2238,6 +2240,10 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  virtualSessions: protectedProcedure
+    .use(requireScope("profile:read"))
+    .output(playerVirtualSessionRecordsSchema)
+    .query(({ ctx }) => loadPlayerVirtualSessionRecords(ctx.actor!.personId)),
   memberCard: protectedProcedure
     .use(requireScope("profile:read"))
     .output(playerMemberCardSchema)
@@ -4181,6 +4187,8 @@ const playerRouter = router({
         paymentMethod: z.enum(["card", "credit", "cash"]),
         paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
         quantity: z.number().int().min(1).max(50),
+        catalogSessionOccurrenceId: z.string().uuid().optional(),
+        recordingConsentAccepted: z.boolean().optional(),
         successUrl: z.url(),
         cancelUrl: z.url(),
         idempotencyKey: z.string().uuid(),

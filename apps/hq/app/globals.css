@@ -33225,3 +33225,83 @@ body {
 .guided-product-builder .operator-money-input input {
   padding-left: 2.55rem;
 }
+
+.guided-session-schedule,
+.guided-session-lines,
+.guided-virtual-delivery {
+  background: var(--hq-surface-muted);
+  border: 1px solid var(--hq-border);
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.guided-session-lines {
+  align-items: stretch;
+}
+
+.guided-session-lines > span,
+.guided-weekday-picker legend {
+  color: var(--hq-ink);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.guided-session-lines > small,
+.guided-virtual-delivery > article small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.guided-weekday-picker {
+  border: 0;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+}
+
+.guided-weekday-picker > div {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.guided-weekday-picker button {
+  background: var(--hq-surface);
+  border: 1px solid var(--hq-border);
+  border-radius: 999px;
+  color: var(--hq-muted);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.guided-weekday-picker button.active {
+  background: var(--hq-ink);
+  color: var(--hq-surface);
+}
+
+.guided-virtual-delivery > article {
+  align-items: center;
+  background: var(--hq-surface);
+  border: 1px solid var(--hq-border);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem;
+}
+
+.guided-virtual-delivery > article > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+@media (max-width: 720px) {
+  .guided-weekday-picker > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

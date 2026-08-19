@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Boxes,
+  CalendarClock,
   Check,
   CircleHelp,
   Clock3,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   Star,
   Users,
+  Video,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
@@ -477,6 +479,41 @@ export default async function CatalogProductPage({
                     </article>
                   )}
                 </div>
+              )}
+              {item.upcomingOccurrences.length > 0 && (
+                <section className="catalog-upcoming-sessions">
+                  <span className="section__eyebrow">Upcoming sessions</span>
+                  <div>
+                    {item.upcomingOccurrences.map((occurrence) => (
+                      <article key={occurrence.key}>
+                        <CalendarClock aria-hidden size={18} />
+                        <span>
+                          <strong>
+                            {new Intl.DateTimeFormat("en-US", {
+                              weekday: "long",
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              timeZone: occurrence.timezone,
+                            }).format(new Date(occurrence.startsAt))}
+                          </strong>
+                          <small>
+                            {occurrence.availableCoaches
+                              .map((coach) => coach.displayName)
+                              .join(", ")}
+                            {item.configuration.deliveryMode === "online"
+                              ? " · Google Meet"
+                              : ""}
+                          </small>
+                        </span>
+                        {item.configuration.deliveryMode === "online" && (
+                          <Video aria-label="Online session" size={17} />
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
               )}
             </div>
 

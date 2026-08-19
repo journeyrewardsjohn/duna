@@ -12,6 +12,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -2478,6 +2479,57 @@ export const catalogSessionLinks = pgTable(
     check(
       "catalog_session_link_relationship_valid",
       sql`${table.relationship} IN ('primary', 'entry', 'ticket', 'upsell')`,
+    ),
+  ],
+);
+
+export const catalogSessionOccurrences = pgTable(
+  "catalog_session_occurrences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    timezone: varchar("timezone", { length: 80 }).notNull(),
+    localDate: date("local_date", { mode: "string" }).notNull(),
+    localTime: time("local_time", { precision: 0 }).notNull(),
+    coachPersonIds: uuid("coach_person_ids").array().notNull().default([]),
+    capacity: integer("capacity").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("scheduled"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_session_occurrence_item_time_unique").on(
+      table.catalogItemId,
+      table.startsAt,
+    ),
+    index("catalog_session_occurrence_org_time_idx").on(
+      table.organizationId,
+      table.startsAt,
+    ),
+    check(
+      "catalog_session_occurrence_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "catalog_session_occurrence_capacity_valid",
+      sql`${table.capacity} > 0`,
+    ),
+    check(
+      "catalog_session_occurrence_status_valid",
+      sql`${table.status} IN ('scheduled', 'cancelled', 'complete')`,
     ),
   ],
 );
@@ -7317,6 +7369,9 @@ export const catalogFulfillments = pgTable(
     catalogVariantId: uuid("catalog_variant_id")
       .notNull()
       .references(() => catalogVariants.id, { onDelete: "restrict" }),
+    catalogSessionOccurrenceId: uuid(
+      "catalog_session_occurrence_id",
+    ).references(() => catalogSessionOccurrences.id, { onDelete: "restrict" }),
     personId: uuid("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
@@ -7348,6 +7403,208 @@ export const catalogFulfillments = pgTable(
     check(
       "catalog_fulfillment_status_valid",
       sql`${table.status} IN ('held', 'pending', 'ready', 'fulfilled', 'cancelled', 'refunded')`,
+    ),
+  ],
+);
+
+// One durable delivery record per scheduled online occurrence. Google remains the
+// conference provider, while this row is Duna's source of truth for who the
+// session belongs to, when it occurs, and whether its artifacts were ingested.
+export const virtualSessionMeetings = pgTable(
+  "virtual_session_meetings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    catalogSessionOccurrenceId: uuid("catalog_session_occurrence_id")
+      .notNull()
+      .unique()
+      .references(() => catalogSessionOccurrences.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    coachPersonIds: uuid("coach_person_ids").array().notNull().default([]),
+    participantSnapshot: jsonb("participant_snapshot")
+      .notNull()
+      .$type<
+        readonly {
+          readonly personId: string;
+          readonly role: "coach" | "player";
+          readonly displayName: string;
+          readonly email: string;
+        }[]
+      >()
+      .default([]),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    timezone: varchar("timezone", { length: 80 }).notNull(),
+    provider: varchar("provider", { length: 32 })
+      .notNull()
+      .default("google-meet"),
+    organizerEmail: text("organizer_email"),
+    calendarEventId: text("calendar_event_id"),
+    calendarHtmlUrl: text("calendar_html_url"),
+    meetSpaceName: text("meet_space_name"),
+    meetingCode: varchar("meeting_code", { length: 128 }),
+    joinUrl: text("join_url"),
+    conferenceRecordName: text("conference_record_name"),
+    autoRecord: boolean("auto_record").notNull().default(false),
+    autoTranscribe: boolean("auto_transcribe").notNull().default(false),
+    generateAiSummary: boolean("generate_ai_summary").notNull().default(false),
+    recordingConsentRequired: boolean("recording_consent_required")
+      .notNull()
+      .default(true),
+    status: varchar("status", { length: 32 }).notNull().default("provisioning"),
+    attempts: integer("attempts").notNull().default(0),
+    lastAttemptAt: timestamp("last_attempt_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    artifactsSyncedAt: timestamp("artifacts_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("virtual_session_catalog_time_idx").on(
+      table.catalogItemId,
+      table.startsAt,
+    ),
+    index("virtual_session_processing_idx").on(table.status, table.endsAt),
+    index("virtual_session_calendar_event_idx").on(table.calendarEventId),
+    check(
+      "virtual_session_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "virtual_session_provider_valid",
+      sql`${table.provider} IN ('google-meet')`,
+    ),
+    check(
+      "virtual_session_status_valid",
+      sql`${table.status} IN ('provisioning', 'scheduled', 'in-progress', 'awaiting-artifacts', 'complete', 'failed', 'cancelled')`,
+    ),
+  ],
+);
+
+export const virtualSessionMeetingParticipants = pgTable(
+  "virtual_session_meeting_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    virtualSessionMeetingId: uuid("virtual_session_meeting_id")
+      .notNull()
+      .references(() => virtualSessionMeetings.id, { onDelete: "cascade" }),
+    fulfillmentId: uuid("fulfillment_id").references(
+      () => catalogFulfillments.id,
+      { onDelete: "cascade" },
+    ),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    role: varchar("role", { length: 16 }).notNull(),
+    emailSnapshot: text("email_snapshot"),
+    displayNameSnapshot: text("display_name_snapshot").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("virtual_session_participant_meeting_person_unique").on(
+      table.virtualSessionMeetingId,
+      table.personId,
+      table.role,
+    ),
+    index("virtual_session_participant_person_idx").on(
+      table.personId,
+      table.createdAt,
+    ),
+    check(
+      "virtual_session_participant_role_valid",
+      sql`${table.role} IN ('coach', 'player')`,
+    ),
+  ],
+);
+
+export const virtualSessionArtifacts = pgTable(
+  "virtual_session_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    virtualSessionMeetingId: uuid("virtual_session_meeting_id")
+      .notNull()
+      .references(() => virtualSessionMeetings.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    providerArtifactName: text("provider_artifact_name").notNull(),
+    providerFileId: text("provider_file_id"),
+    providerExportUri: text("provider_export_uri"),
+    storageObjectKey: text("storage_object_key"),
+    state: varchar("state", { length: 24 }).notNull().default("pending"),
+    transcriptText: text("transcript_text"),
+    aiSummary: text("ai_summary"),
+    actionItems: jsonb("action_items")
+      .notNull()
+      .$type<
+        readonly {
+          readonly ownerRole: "coach" | "player" | "shared";
+          readonly text: string;
+        }[]
+      >()
+      .default([]),
+    participantRoles: jsonb("participant_roles")
+      .notNull()
+      .$type<
+        readonly {
+          readonly providerParticipantName: string;
+          readonly displayName: string;
+          readonly role: "coach" | "player" | "unknown";
+        }[]
+      >()
+      .default([]),
+    aiModel: varchar("ai_model", { length: 160 }),
+    generatedAt: timestamp("generated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("virtual_session_artifact_provider_unique").on(
+      table.virtualSessionMeetingId,
+      table.providerArtifactName,
+    ),
+    index("virtual_session_artifact_meeting_kind_idx").on(
+      table.virtualSessionMeetingId,
+      table.kind,
+    ),
+    check(
+      "virtual_session_artifact_kind_valid",
+      sql`${table.kind} IN ('recording', 'transcript')`,
+    ),
+    check(
+      "virtual_session_artifact_state_valid",
+      sql`${table.state} IN ('pending', 'available', 'stored', 'summarized', 'failed')`,
     ),
   ],
 );

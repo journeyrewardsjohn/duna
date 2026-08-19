@@ -113,6 +113,42 @@ function. Stripe ingress remains safe if Inngest is unavailable because the
 signed payload and workflow job are committed to Neon first. Production dispatch
 requires both `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 
+## Google Workspace virtual sessions
+
+Online scheduled services provision one Google Calendar event and Meet space
+per occurrence after the first paid purchase. The Duna Workspace organizer owns
+the event and Meet artifacts; players and assigned coaches are attendees.
+Additional purchases for the same group occurrence update that attendee list.
+
+Activation requires a licensed Duna Google Workspace organizer, Calendar API,
+Meet REST API, and Drive API. Create a service account with domain-wide
+delegation and authorize these OAuth scopes in Workspace Admin:
+
+```text
+https://www.googleapis.com/auth/calendar.events
+https://www.googleapis.com/auth/drive.readonly
+https://www.googleapis.com/auth/meetings.space.created
+https://www.googleapis.com/auth/meetings.space.readonly
+https://www.googleapis.com/auth/meetings.space.settings
+```
+
+Set the `GOOGLE_WORKSPACE_*` variables documented in
+`ENVIRONMENT_VARIABLES.md`. Private R2 credentials are required when recording
+is enabled, and AI Gateway credentials are required when Duna summaries are
+enabled. Do not activate auto-record/transcribe in production until the
+Workspace edition, admin artifact policy, participant notice/consent language,
+retention, and youth privacy policy are approved. Meet's in-call artifact
+notices do not replace Duna's consent and retention work. Assigned coaches are
+Calendar attendees; making them Meet co-hosts depends on Google's preview
+membership API and is intentionally outside this production path.
+
+The protected `/api/cron/virtual-sessions` route retries provisioning and,
+after a conference ends, copies generated recordings from the organizer's
+Drive to private R2, imports transcript entries, labels recognized invitees as
+coach or player, and runs Duna's AI Gateway summary/action-item extraction.
+Google retains transcript entries for a limited window, so keep the two-minute
+cron active and alert on repeated `virtual_session_meetings.last_error` values.
+
 ## Duna Video delivery
 
 Live streaming uses Mux RTMPS ingest and signed/public playback. Native uploads

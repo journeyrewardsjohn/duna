@@ -1,11 +1,14 @@
 import {
   appliedFees,
   auditLog,
+  calendarBusyBlocks,
+  calendarConnections,
   catalogEntitlements,
   catalogFulfillments,
   catalogItems,
   catalogItemVersions,
   catalogPrices,
+  catalogSessionOccurrences,
   catalogVariants,
   getDatabase,
   inventoryMovements,
@@ -20,6 +23,7 @@ import {
   orderTaxContexts,
   organizationCreditGrants,
   organizationParticipants,
+  organizationStaffProfiles,
   organizationWallets,
   organizations,
   people,
@@ -37,7 +41,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   ensureLedgerAccount,
@@ -53,6 +57,91 @@ import {
   getOrCreatePlayerStripeCustomer,
   getStripePublishableKey,
 } from "./payments";
+import { queueVirtualSessionDelivery } from "./virtual-session-service";
+import {
+  generateBookableSessionOccurrences,
+  parseSessionDeliveryConfiguration,
+} from "./session-delivery";
+
+async function resolveAvailableOccurrenceCoaches(input: {
+  readonly organizationId: string;
+  readonly itemConfiguration: Readonly<Record<string, unknown>>;
+  readonly startsAt: Date;
+  readonly now: Date;
+}): Promise<readonly string[]> {
+  const configuration = parseSessionDeliveryConfiguration(
+    input.itemConfiguration,
+  );
+  if (!configuration?.sessionSchedule) return [];
+  const database = getDatabase();
+  const [staff, busy] = await Promise.all([
+    database
+      .select({
+        personId: organizationStaffProfiles.personId,
+        displayName: people.displayName,
+        email: people.email,
+        availability: organizationStaffProfiles.availability,
+      })
+      .from(organizationStaffProfiles)
+      .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
+      .where(
+        and(
+          eq(organizationStaffProfiles.organizationId, input.organizationId),
+          eq(organizationStaffProfiles.staffRole, "coach"),
+          eq(organizationStaffProfiles.active, true),
+        ),
+      ),
+    database
+      .select({
+        personId: calendarConnections.personId,
+        startsAt: calendarBusyBlocks.startsAt,
+        endsAt: calendarBusyBlocks.endsAt,
+      })
+      .from(calendarBusyBlocks)
+      .innerJoin(
+        calendarConnections,
+        eq(calendarBusyBlocks.calendarConnectionId, calendarConnections.id),
+      )
+      .where(
+        and(
+          eq(calendarBusyBlocks.organizationId, input.organizationId),
+          eq(calendarBusyBlocks.transparency, "busy"),
+          eq(calendarConnections.status, "active"),
+          gt(calendarBusyBlocks.endsAt, input.now),
+        ),
+      )
+      .limit(10_000),
+  ]);
+  const assignedCoachIds =
+    configuration.coachAssignmentMode === "selected" &&
+    configuration.coachPersonIds.length > 0
+      ? configuration.coachPersonIds
+      : staff.map((coach) => coach.personId);
+  const occurrences = generateBookableSessionOccurrences({
+    configuration,
+    coaches: staff
+      .filter((coach) => assignedCoachIds.includes(coach.personId))
+      .map((coach) => ({
+        ...coach,
+        email: coach.email ?? undefined,
+        busyRanges: busy
+          .filter((range) => range.personId === coach.personId)
+          .map((range) => ({
+            startsAt: range.startsAt.toISOString(),
+            endsAt: range.endsAt.toISOString(),
+          })),
+      })),
+    now: input.now,
+    horizonDays: 730,
+    limit: 2_000,
+  });
+  return (
+    occurrences
+      .find((candidate) => candidate.startsAt === input.startsAt.toISOString())
+      ?.availableCoaches.slice(0, configuration.requiredCoachCount)
+      .map((coach) => coach.personId) ?? []
+  );
+}
 
 export class CatalogCheckoutError extends Error {
   constructor(
@@ -446,6 +535,8 @@ export async function startCatalogCheckout(input: {
   readonly paymentMethod: "card" | "credit" | "cash";
   readonly paymentSurface?: "hosted" | "native";
   readonly quantity: number;
+  readonly catalogSessionOccurrenceId?: string;
+  readonly recordingConsentAccepted?: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
@@ -511,6 +602,103 @@ export async function startCatalogCheckout(input: {
       "CATALOG_ITEM_UNAVAILABLE",
       "Plans must be purchased one at a time.",
     );
+  }
+  const scheduleConfiguration =
+    row.item.configuration.sessionSchedule &&
+    typeof row.item.configuration.sessionSchedule === "object" &&
+    !Array.isArray(row.item.configuration.sessionSchedule)
+      ? (row.item.configuration.sessionSchedule as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const fixedSession =
+    row.item.type === "service" &&
+    (scheduleConfiguration?.mode === "one-off" ||
+      scheduleConfiguration?.mode === "recurring");
+  const virtualDeliveryConfiguration =
+    row.item.configuration.virtualDelivery &&
+    typeof row.item.configuration.virtualDelivery === "object" &&
+    !Array.isArray(row.item.configuration.virtualDelivery)
+      ? (row.item.configuration.virtualDelivery as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const recordingConsentRequired =
+    row.item.type === "service" &&
+    row.item.configuration.deliveryMode === "online" &&
+    (virtualDeliveryConfiguration?.autoRecord === true ||
+      virtualDeliveryConfiguration?.autoTranscribe === true);
+  if (recordingConsentRequired && !input.recordingConsentAccepted) {
+    throw new CatalogCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "Acknowledge the recording and transcript notice before purchasing this virtual session.",
+    );
+  }
+  let occurrence = input.catalogSessionOccurrenceId
+    ? await database.query.catalogSessionOccurrences.findFirst({
+        where: and(
+          eq(catalogSessionOccurrences.id, input.catalogSessionOccurrenceId),
+          eq(catalogSessionOccurrences.catalogItemId, row.item.id),
+          eq(catalogSessionOccurrences.organizationId, row.organization.id),
+          eq(catalogSessionOccurrences.status, "scheduled"),
+          gt(catalogSessionOccurrences.startsAt, input.now),
+        ),
+      })
+    : undefined;
+  if (fixedSession && !occurrence) {
+    throw new CatalogCheckoutError(
+      "CATALOG_ITEM_UNAVAILABLE",
+      "Choose an upcoming session that still has coach availability.",
+    );
+  }
+  if (occurrence) {
+    const existing = await database
+      .select({ details: catalogFulfillments.details })
+      .from(catalogFulfillments)
+      .where(
+        and(
+          eq(catalogFulfillments.catalogSessionOccurrenceId, occurrence.id),
+          inArray(catalogFulfillments.status, [
+            "held",
+            "pending",
+            "ready",
+            "fulfilled",
+          ]),
+        ),
+      );
+    const reserved = existing.reduce((total, entry) => {
+      const quantity = Number(entry.details.quantity ?? 1);
+      return (
+        total + (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1)
+      );
+    }, 0);
+    if (reserved + input.quantity > occurrence.capacity) {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "That session no longer has enough open places.",
+      );
+    }
+    if (reserved === 0) {
+      const coachPersonIds = [
+        ...(await resolveAvailableOccurrenceCoaches({
+          organizationId: row.organization.id,
+          itemConfiguration: row.item.configuration,
+          startsAt: occurrence.startsAt,
+          now: input.now,
+        })),
+      ];
+      if (coachPersonIds.length === 0) {
+        throw new CatalogCheckoutError(
+          "CATALOG_ITEM_UNAVAILABLE",
+          "That session no longer overlaps an assigned coach's availability.",
+        );
+      }
+      await database
+        .update(catalogSessionOccurrences)
+        .set({ coachPersonIds, updatedAt: input.now })
+        .where(eq(catalogSessionOccurrences.id, occurrence.id));
+      occurrence = { ...occurrence, coachPersonIds, updatedAt: input.now };
+    }
   }
   // Participation waivers are intentionally collected after a successful
   // purchase. They protect participation, never the ability to pay.
@@ -745,6 +933,7 @@ export async function startCatalogCheckout(input: {
       catalogItemId: row.item.id,
       catalogItemVersionId,
       catalogVariantId: row.variant.id,
+      catalogSessionOccurrenceId: occurrence?.id,
       personId: input.actor.personId,
       kind: fulfillmentKind(row.item),
       status: tracksInventory ? "held" : "pending",
@@ -763,6 +952,17 @@ export async function startCatalogCheckout(input: {
         membershipIncluded: Boolean(membershipInclusion),
         membershipId: membershipInclusion?.membershipId,
         membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
+        sessionOccurrenceId: occurrence?.id,
+        sessionStartsAt: occurrence?.startsAt.toISOString(),
+        sessionEndsAt: occurrence?.endsAt.toISOString(),
+        sessionTimezone: occurrence?.timezone,
+        coachPersonIds: occurrence?.coachPersonIds,
+        deliveryMode: row.item.configuration.deliveryMode,
+        virtualDelivery: row.item.configuration.virtualDelivery,
+        recordingConsentAccepted: recordingConsentRequired,
+        recordingConsentAcceptedAt: recordingConsentRequired
+          ? input.now.toISOString()
+          : undefined,
       },
     }),
     database.insert(orderTaxContexts).values({
@@ -1418,17 +1618,17 @@ export async function fulfillPaidCatalogOrder(
   const fulfillment = await database.query.catalogFulfillments.findFirst({
     where: eq(catalogFulfillments.orderId, order.id),
   });
-  if (
-    !fulfillment ||
-    fulfillment.status === "fulfilled" ||
-    fulfillment.status === "ready"
-  ) {
-    return;
-  }
+  if (!fulfillment) return;
   const item = await database.query.catalogItems.findFirst({
     where: eq(catalogItems.id, fulfillment.catalogItemId),
   });
   if (!item) throw new Error("Paid catalog item was not found.");
+  if (fulfillment.status === "fulfilled" || fulfillment.status === "ready") {
+    if (item.type === "service" && fulfillment.catalogSessionOccurrenceId) {
+      await queueVirtualSessionDelivery({ fulfillmentId: fulfillment.id, now });
+    }
+    return;
+  }
   await postPaidCatalogOrderJournal({ order, fulfillment, item, now });
 
   if (item.type === "good") {
@@ -1577,6 +1777,13 @@ export async function fulfillPaidCatalogOrder(
     traceId: order.id,
     createdAt: now,
   });
+
+  if (item.type === "service" && fulfillment.catalogSessionOccurrenceId) {
+    await queueVirtualSessionDelivery({
+      fulfillmentId: fulfillment.id,
+      now,
+    });
+  }
 }
 
 export async function getCatalogCheckoutStatus(
