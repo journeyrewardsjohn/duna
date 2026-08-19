@@ -41,6 +41,16 @@ type Storefront = Awaited<
 type CatalogItem = Storefront["catalog"][number];
 type CatalogVariant = CatalogItem["variants"][number];
 type CatalogPrice = CatalogVariant["prices"][number];
+type CatalogTestimonial = {
+  readonly quote: string;
+  readonly author?: string;
+  readonly context?: string;
+  readonly rating?: number;
+};
+type CatalogFaq = {
+  readonly question: string;
+  readonly answer: string;
+};
 type Coach = Awaited<
   ReturnType<DunaApiClient["public"]["coaches"]["query"]>
 >[number];
@@ -123,6 +133,48 @@ function configurationList(item: CatalogItem, key: string): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
     : [];
+}
+
+function configurationTestimonials(item: CatalogItem): CatalogTestimonial[] {
+  const value = item.configuration.testimonials;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    const quote = typeof record.quote === "string" ? record.quote.trim() : "";
+    if (!quote) return [];
+    return [
+      {
+        quote,
+        author:
+          typeof record.author === "string" && record.author.trim()
+            ? record.author.trim()
+            : undefined,
+        context:
+          typeof record.context === "string" && record.context.trim()
+            ? record.context.trim()
+            : undefined,
+        rating:
+          typeof record.rating === "number" && Number.isFinite(record.rating)
+            ? record.rating
+            : undefined,
+      },
+    ];
+  });
+}
+
+function configurationFaqs(item: CatalogItem): CatalogFaq[] {
+  const value = item.configuration.faqs;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    const question =
+      typeof record.question === "string" ? record.question.trim() : "";
+    const answer =
+      typeof record.answer === "string" ? record.answer.trim() : "";
+    return question && answer ? [{ question, answer }] : [];
+  });
 }
 
 function productHighlights(item: CatalogItem): string[] {
@@ -712,6 +764,22 @@ export function OrganizationExperienceModal({
     : [];
   const selectedMedia = selectedItem?.media[0];
   const highlights = selectedItem ? productHighlights(selectedItem) : [];
+  const outcomeHeadline = selectedItem
+    ? configurationString(selectedItem, "outcomeHeadline")
+    : undefined;
+  const outcomeBody = selectedItem
+    ? configurationString(selectedItem, "outcomeBody")
+    : undefined;
+  const howItWorks = selectedItem
+    ? configurationList(selectedItem, "howItWorks")
+    : [];
+  const testimonials = selectedItem
+    ? configurationTestimonials(selectedItem)
+    : [];
+  const faqs = selectedItem ? configurationFaqs(selectedItem) : [];
+  const validityDays = selectedItem
+    ? Number(selectedItem.configuration.validityDays)
+    : 0;
   const requiresMembership = Boolean(
     selectedItem &&
     (selectedItem.membershipRequired ||
@@ -1034,12 +1102,102 @@ export function OrganizationExperienceModal({
                 </Text>
               </View>
             ) : null}
-            {configurationString(selectedItem, "redemptionNotes") ? (
+            {outcomeHeadline || outcomeBody ? (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailEyebrow}>THE OUTCOME</Text>
+                {outcomeHeadline ? (
+                  <Text style={styles.detailLead}>{outcomeHeadline}</Text>
+                ) : null}
+                {outcomeBody ? (
+                  <Text
+                    style={[
+                      styles.detailBody,
+                      outcomeHeadline && styles.detailBodySpaced,
+                    ]}
+                  >
+                    {outcomeBody}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {howItWorks.length ? (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailEyebrow}>HOW IT WORKS</Text>
+                {howItWorks.map((item, index) => (
+                  <View key={`${index}-${item}`} style={styles.storyStep}>
+                    <View
+                      style={[
+                        styles.storyStepNumber,
+                        { backgroundColor: primary },
+                      ]}
+                    >
+                      <DunaNumericText
+                        style={[
+                          styles.storyStepNumberText,
+                          { color: onPrimary },
+                        ]}
+                      >
+                        {String(index + 1)}
+                      </DunaNumericText>
+                    </View>
+                    <Text style={styles.storyStepCopy}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {configurationString(selectedItem, "redemptionNotes") ||
+            (Number.isFinite(validityDays) && validityDays > 0) ? (
               <View style={styles.detailSection}>
                 <Text style={styles.detailEyebrow}>HOW TO USE IT</Text>
-                <Text style={styles.detailBody}>
-                  {configurationString(selectedItem, "redemptionNotes")}
-                </Text>
+                {configurationString(selectedItem, "redemptionNotes") ? (
+                  <Text style={styles.detailBody}>
+                    {configurationString(selectedItem, "redemptionNotes")}
+                  </Text>
+                ) : null}
+                {Number.isFinite(validityDays) && validityDays > 0 ? (
+                  <Text style={styles.validityText}>
+                    Valid for {validityDays} day{validityDays === 1 ? "" : "s"}
+                    after purchase.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {testimonials.length ? (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailEyebrow}>CUSTOMER STORIES</Text>
+                {testimonials.map((testimonial, index) => (
+                  <View
+                    key={`${index}-${testimonial.quote}`}
+                    style={styles.proofCard}
+                  >
+                    {testimonial.rating ? (
+                      <Text style={[styles.proofRating, { color: primary }]}>
+                        {"★".repeat(
+                          Math.max(1, Math.min(5, testimonial.rating)),
+                        )}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.proofQuote}>“{testimonial.quote}”</Text>
+                    {testimonial.author || testimonial.context ? (
+                      <Text style={styles.proofAttribution}>
+                        {[testimonial.author, testimonial.context]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {faqs.length ? (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailEyebrow}>COMMON QUESTIONS</Text>
+                {faqs.map((faq, index) => (
+                  <View key={`${index}-${faq.question}`} style={styles.faqCard}>
+                    <Text style={styles.faqQuestion}>{faq.question}</Text>
+                    <Text style={styles.faqAnswer}>{faq.answer}</Text>
+                  </View>
+                ))}
               </View>
             ) : null}
           </ScrollView>
@@ -1693,6 +1851,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     content: { paddingBottom: 64 },
     detailBody: { color: token.text2, fontSize: 17, lineHeight: 27 },
+    detailBodySpaced: { marginTop: 12 },
     detailEyebrow: {
       color: token.text2,
       fontSize: 12,
@@ -1712,6 +1871,21 @@ function createStyles(token: ResolvedDunaTokens) {
       marginHorizontal: 20,
       paddingVertical: 28,
     },
+    faqAnswer: {
+      color: token.text2,
+      fontSize: 15,
+      lineHeight: 23,
+      marginTop: 7,
+    },
+    faqCard: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 16,
+    },
+    faqQuestion: { color: token.text1, fontSize: 17, fontWeight: "800" },
     disabled: { opacity: 0.42 },
     eventCard: {
       backgroundColor: token.surface1,
@@ -1804,6 +1978,53 @@ function createStyles(token: ResolvedDunaTokens) {
       flex: 1,
       fontSize: 17,
       lineHeight: 24,
+    },
+    proofAttribution: {
+      color: token.text2,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 12,
+    },
+    proofCard: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 20,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 18,
+    },
+    proofQuote: {
+      color: token.text1,
+      fontSize: 18,
+      lineHeight: 27,
+      marginTop: 7,
+    },
+    proofRating: { fontSize: 15, letterSpacing: 2 },
+    storyStep: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 13,
+      marginTop: 18,
+    },
+    storyStepCopy: {
+      color: token.text1,
+      flex: 1,
+      fontSize: 17,
+      lineHeight: 25,
+    },
+    storyStepNumber: {
+      alignItems: "center",
+      borderRadius: 17,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    storyStepNumberText: { fontSize: 14, fontWeight: "900" },
+    validityText: {
+      color: token.text1,
+      fontSize: 14,
+      fontWeight: "800",
+      marginTop: 12,
     },
     iconButton: {
       alignItems: "center",
