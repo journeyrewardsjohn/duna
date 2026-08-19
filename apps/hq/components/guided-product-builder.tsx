@@ -915,7 +915,7 @@ export function GuidedProductBuilder({
 
   useEffect(() => {
     if (state.status === "success" && state.entityId) {
-      router.push(`/products/${state.entityId}?created=1`);
+      router.push(`/products/${state.entityId}/draft-ready`);
     }
   }, [router, state.entityId, state.status]);
 
@@ -1210,7 +1210,6 @@ export function GuidedProductBuilder({
         ));
   const bookingReady =
     (deliveryMode !== "venue" || Boolean(venueId)) &&
-    (deliveryMode !== "online" || sessionScheduleMode !== "flexible") &&
     (coachMode !== "selected" || selectedCoachIds.length > 0) &&
     assignedCoachIds.length >= requiredCoachCount &&
     scheduleReady;
@@ -1250,6 +1249,14 @@ export function GuidedProductBuilder({
           ];
   const canContinue = stepReadiness[step] ?? false;
   const editorSaveReady = stepReadiness.slice(0, -1).every((ready) => ready);
+  const draftSaveReady = editorSaveReady && confirmed;
+  const showDraftSaveBlockers =
+    step === currentSteps.length - 1 && !draftSaveReady;
+  const incompleteSaveSteps = currentSteps.flatMap((name, index) =>
+    index < currentSteps.length - 1 && !stepReadiness[index]
+      ? [{ index, name }]
+      : [],
+  );
   const activeProductType = productTypes.find(
     (productType) => productType.value === type,
   )!;
@@ -1329,7 +1336,9 @@ export function GuidedProductBuilder({
   const continueHint = canContinue
     ? step < currentSteps.length - 1
       ? `Ready for ${currentSteps[step + 1]?.toLowerCase() ?? "the next step"}.`
-      : "Ready to create the private draft."
+      : draftSaveReady
+        ? "Ready to save this private draft."
+        : "Confirm that you reviewed this setup before saving."
     : step === 0
       ? "Choose at least one purpose to continue."
       : (type !== "good" && step === 1) || (type === "good" && step === 2)
@@ -1570,7 +1579,10 @@ export function GuidedProductBuilder({
         </div>
       </section>
 
-      <form action={action} className="guided-product-form">
+      <form
+        action={action}
+        className={`guided-product-form${showDraftSaveBlockers ? " guided-product-form--save-blocked" : ""}`}
+      >
         {editing && initialItem && (
           <input name="catalogItemId" type="hidden" value={initialItem.id} />
         )}
@@ -1659,7 +1671,7 @@ export function GuidedProductBuilder({
         <input
           name="confirmed"
           type="hidden"
-          value={editing || confirmed ? "true" : "false"}
+          value={confirmed ? "true" : "false"}
         />
 
         <aside className="guided-product-guide">
@@ -2950,9 +2962,10 @@ export function GuidedProductBuilder({
               )}
               {deliveryMode === "online" &&
                 sessionScheduleMode === "flexible" && (
-                  <p className="guided-product-warning" role="alert">
-                    Choose specific dates or a recurring schedule so Duna knows
-                    when to create the Meet and Calendar invitation.
+                  <p className="guided-product-note" role="status">
+                    Flexible booking does not need preset session dates. Duna
+                    creates the calendar invitation and Google Meet link only
+                    after a session time is confirmed.
                   </p>
                 )}
               <div className="operator-form-grid operator-form-grid--two">
@@ -4291,7 +4304,9 @@ export function GuidedProductBuilder({
           </div>
         </aside>
 
-        <footer className="guided-product-footer">
+        <footer
+          className={`guided-product-footer${showDraftSaveBlockers ? " guided-product-footer--blocked" : ""}`}
+        >
           <button
             className="hq-button hq-button--secondary"
             disabled={step === 0 || pending}
@@ -4302,20 +4317,43 @@ export function GuidedProductBuilder({
           </button>
           <div className="guided-product-footer__status">
             <ActionNotice state={state} />
-            <p className={canContinue ? "ready" : undefined}>
-              {canContinue ? (
-                <Check aria-hidden size={15} />
-              ) : (
-                <CircleAlert aria-hidden size={15} />
-              )}
-              {continueHint}
-            </p>
+            {state.status === "error" ? null : showDraftSaveBlockers ? (
+              <div className="guided-product-save-blockers" role="alert">
+                <strong>Before you can save</strong>
+                <div>
+                  {incompleteSaveSteps.map((blocker) => (
+                    <button
+                      key={blocker.name}
+                      onClick={() => setStep(blocker.index)}
+                      type="button"
+                    >
+                      Complete {blocker.name}
+                      <ArrowRight aria-hidden size={14} />
+                    </button>
+                  ))}
+                  {!confirmed && (
+                    <span>
+                      Check <strong>“I reviewed this setup”</strong> below.
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className={canContinue ? "ready" : undefined}>
+                {canContinue ? (
+                  <Check aria-hidden size={15} />
+                ) : (
+                  <CircleAlert aria-hidden size={15} />
+                )}
+                {continueHint}
+              </p>
+            )}
           </div>
           <div className="guided-product-footer__actions">
-            {editing && (
+            {editing && step === currentSteps.length - 1 && (
               <button
                 className="hq-button hq-button--primary"
-                disabled={!editorSaveReady || pending}
+                disabled={!draftSaveReady || pending}
                 type="submit"
               >
                 {pending ? "Saving…" : "Save new private version"}
@@ -4338,7 +4376,7 @@ export function GuidedProductBuilder({
             ) : !editing ? (
               <button
                 className="hq-button hq-button--primary"
-                disabled={!canContinue || pending}
+                disabled={!draftSaveReady || pending}
                 type="submit"
               >
                 {pending ? "Creating…" : "Create private draft"}
