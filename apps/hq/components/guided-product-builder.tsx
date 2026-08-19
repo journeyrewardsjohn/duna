@@ -459,6 +459,10 @@ export function GuidedProductBuilder({
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedType = searchParams.get("type");
+  const hasRequestedType =
+    requestedType === "good" ||
+    requestedType === "plan" ||
+    requestedType === "service";
   const initialType: ProductType =
     initialItem?.type === "good" ||
     initialItem?.type === "plan" ||
@@ -500,7 +504,9 @@ export function GuidedProductBuilder({
     }));
   }, [initialItem]);
   const [type, setType] = useState<ProductType>(initialType);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(
+    mode === "create" && hasRequestedType ? 1 : 0,
+  );
   const [subtype, setSubtype] = useState(
     initialItem?.subtype ??
       (initialType === "good"

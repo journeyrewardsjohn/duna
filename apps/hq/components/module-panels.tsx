@@ -489,7 +489,9 @@ export function ProductCatalogPanel({
                 <h2>{group.label}</h2>
                 <p>{group.detail}</p>
                 <Link href={`/products/create?type=${group.type}`}>
-                  Add {group.label.toLowerCase()} <ArrowRight size={15} />
+                  Create a{" "}
+                  {group.type === "good" ? "Good" : group.label.slice(0, -1)}{" "}
+                  <ArrowRight size={15} />
                 </Link>
               </article>
             );
