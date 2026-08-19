@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  calendarMonthFromDate,
   calendarMonthDays,
   combineLocalDateTime,
   formatLocalDate,
@@ -25,18 +26,6 @@ const presets: readonly {
   { key: "next-month", label: "Next month" },
   { key: "this-quarter", label: "This quarter" },
 ];
-
-function monthFromDate(value: string): {
-  readonly year: number;
-  readonly month: number;
-} {
-  const [year, month] = value.split("-").map(Number);
-  const now = new Date();
-  return {
-    year: Number.isFinite(year) ? year! : now.getFullYear(),
-    month: Number.isFinite(month) ? month! - 1 : now.getMonth(),
-  };
-}
 
 function offsetMonth(
   value: { readonly year: number; readonly month: number },
@@ -99,7 +88,7 @@ export function SmartDateRangePicker({
     (timeMode === "optional" &&
       (timeEnabled ?? Boolean(start.time || end.time)));
   const [visibleMonth, setVisibleMonth] = useState(() =>
-    monthFromDate(start.date),
+    calendarMonthFromDate(start.date),
   );
   const [selectionPhase, setSelectionPhase] = useState<"start" | "end">(
     "start",
@@ -180,7 +169,7 @@ export function SmartDateRangePicker({
   function applyPreset(preset: SmartDatePreset) {
     const range = quickDateRange(preset, today);
     updateRange(range.start, range.end);
-    setVisibleMonth(monthFromDate(range.start));
+    setVisibleMonth(calendarMonthFromDate(range.start));
     setSelectionPhase("start");
     setExclusionMode(false);
     setExclusionStart(undefined);

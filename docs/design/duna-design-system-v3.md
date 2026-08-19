@@ -505,3 +505,85 @@ Partner, teammates, similar players, upcoming events. Visually quieter than Zone
 - Zone 3 keeps the trajectory chart and the AI narrative exactly as built — they are the best things on the page.
 - Fix `city-not-listed` in slugs.
 - Move `Unclaimed profile` out of the top-left. A negative state should not be the first thing a visitor reads.
+
+---
+
+# PART 10 — HQ WORKSPACE AND FIELD STANDARDS
+
+Duna HQ is a desktop operating workspace. It is not a public landing page and
+it is not a stack of centered cards. An operator should be able to scan the
+state, change it confidently, and keep relevant context in view without
+scrolling through decorative empty space.
+
+## 10.1 Workspace geometry
+
+- **Anchor work to the left.** HQ pages use the available desktop width from
+  the navigation rail outward. Page content may cap at a broad `112rem`, but
+  it never recenters itself into a narrow editorial column.
+- **Constrain the reading task, not the whole page.** Narrative inputs and
+  descriptions may have a readable measure. Supporting context, a schedule,
+  a review panel, or a live preview uses the remaining column.
+- **Use columns to preserve context.** On wide screens, the primary task,
+  guidance, and a live summary can sit beside one another. At intermediate
+  widths, move the summary below the task. Never keep a narrow center column
+  just to preserve a desktop composition.
+- **Headers describe a job.** One clear title, a short operational description,
+  and actions grouped at the edge. Page titles and settings content are left
+  aligned. Centering is reserved for deliberate public/editorial moments, not
+  HQ configuration.
+
+## 10.2 A field represents the decision, not the database shape
+
+The control must match the mental model of the information being collected.
+Raw storage notation is never an acceptable shortcut when Duna already has a
+structured control.
+
+| Decision                                           | Required HQ control                                                                                | Never use                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| One date, a date range, or unavailable dates       | Duna calendar/range picker with a clear applied state                                              | A text field asking for YYYY-MM-DD                      |
+| Time on a known day                                | Duna date-and-time picker in the schedule context                                                  | A line such as `2026-09-08 17:00`                       |
+| Recurring sessions                                 | Start/end calendar window, weekday selection, time, timezone, and calendar blackout exceptions     | Comma-separated rules or a multiline recurrence string  |
+| A collection of sessions, quotes, FAQs, or options | A vertical repeater with a named item header, one clear remove action, and fields in reading order | A single wide "spreadsheet" row or a blank tile grid    |
+| A relationship or recommended offer                | Compact selectable rows with type, name, state, and any selection limit                            | Image-sized empty cards whose only action is a checkbox |
+| A constrained choice                               | A labelled select, segmented control, or short choice set with a description                       | Free text that later needs parsing                      |
+| Narrative copy                                     | A single clearly labelled text area with useful example copy and the content format stated         | A multiline area pretending to be a structured editor   |
+
+For a repeating record, ask for the most meaningful field first: quote before
+attribution, question before answer, session date and time before internal
+metadata. A field set should read in the same order an operator would explain
+it aloud.
+
+## 10.3 Field anatomy and states
+
+- Every input has a visible label. Supporting help explains the consequence or
+  gives an example; it does not repeat the label.
+- Form labels are at least 14px. Text entered into a control is at least 16px.
+  Standard interactive controls are at least 48px high unless they are compact
+  inline actions inside a clearly larger row.
+- Requiredness, default values, timezone, capacity, and selection limits are
+  visible at the moment the decision is made.
+- Empty collections get an honest empty state and the exact action that starts
+  them. Existing records keep their own edit and remove actions; nothing is
+  hidden behind an unlabeled hover state.
+- Destructive actions are explicit, local to the record they affect, and use a
+  clear name. `Remove quote 2` is better than an anonymous icon.
+- Keyboard focus, native input semantics, and readable error text are part of
+  the component definition. Color never carries the only state signal.
+
+## 10.4 Responsive is a hierarchy change, not a scaled desktop
+
+Desktop HQ is the primary authoring experience. At smaller widths, preserve
+the same decision sequence: stack supporting panels after the task, make
+choice rows full width, and expose all current state without horizontal
+clipping. A complex authoring flow that cannot remain clear on a phone should
+offer a deliberate desktop handoff rather than collapse into raw fields.
+
+## 10.5 Review checklist for every HQ field
+
+1. Can an operator understand what will happen before they enter a value?
+2. Does the control visually represent the thing being chosen?
+3. Is the current value, default, validation, and applied state observable?
+4. Does the layout use desktop width to preserve context rather than create
+   blank margins?
+5. Can the same task be completed with keyboard navigation and at a narrower
+   width without clipping or hidden actions?

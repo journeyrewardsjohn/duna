@@ -2,7 +2,11 @@
 
 import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { productMediaForKind } from "@duna/core";
-import { Badge } from "@duna/ui";
+import {
+  Badge,
+  SmartDateRangePicker,
+  type SmartDateRangeValue,
+} from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   ArrowRight,
@@ -58,6 +62,7 @@ import {
   createProductMediaPath,
   optimizeImageUpload,
 } from "@/lib/media-storage";
+import { DunaDateTimePicker } from "./duna-date-time-picker";
 
 const initialActionState: OperatorActionState = {
   status: "idle",
@@ -86,6 +91,73 @@ type StoryFaq = {
   readonly question: string;
   readonly answer: string;
 };
+
+type StoryListItem = {
+  readonly id: string;
+  readonly value: string;
+};
+
+type ScheduledSession = {
+  readonly id: string;
+  readonly date: string;
+  readonly startsAt: string;
+};
+
+function isDateKey(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isTimeKey(value: string): boolean {
+  return /^\d{2}:\d{2}$/.test(value);
+}
+
+function formatScheduleDate(value: string): string {
+  if (!isDateKey(value)) return value || "Choose a date";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatScheduleTime(value: string): string {
+  if (!isTimeKey(value)) return value || "Choose a time";
+  const [hours, minutes] = value.split(":").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(2026, 0, 1, hours, minutes));
+}
+
+function datesInRange(range: SmartDateRangeValue): readonly string[] {
+  if (!isDateKey(range.start) || !isDateKey(range.end)) return [];
+  const [start, end] =
+    range.start <= range.end
+      ? [range.start, range.end]
+      : [range.end, range.start];
+  const dates: string[] = [];
+  let cursor = new Date(`${start}T12:00:00`);
+  const last = new Date(`${end}T12:00:00`);
+  while (cursor <= last) {
+    dates.push(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`,
+    );
+    cursor = new Date(cursor);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function storyListItems(value: unknown): readonly StoryListItem[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) =>
+        typeof entry === "string"
+          ? [{ id: crypto.randomUUID(), value: entry }]
+          : [],
+      )
+    : [];
+}
 
 function productMediaPreviewUrl(url: string): string {
   const libraryPrefix = "https://duna.coach/media/product-library/";
@@ -546,12 +618,8 @@ export function GuidedProductBuilder({
       ? initialConfiguration.bestFor
       : "",
   );
-  const [highlights, setHighlights] = useState(
-    Array.isArray(initialConfiguration.highlights)
-      ? initialConfiguration.highlights
-          .filter((value): value is string => typeof value === "string")
-          .join("\n")
-      : "",
+  const [highlights, setHighlights] = useState<readonly StoryListItem[]>(() =>
+    storyListItems(initialConfiguration.highlights),
   );
   const [outcomeHeadline, setOutcomeHeadline] = useState(
     typeof initialConfiguration.outcomeHeadline === "string"
@@ -563,12 +631,8 @@ export function GuidedProductBuilder({
       ? initialConfiguration.outcomeBody
       : "",
   );
-  const [howItWorks, setHowItWorks] = useState(
-    Array.isArray(initialConfiguration.howItWorks)
-      ? initialConfiguration.howItWorks
-          .filter((value): value is string => typeof value === "string")
-          .join("\n")
-      : "",
+  const [howItWorks, setHowItWorks] = useState<readonly StoryListItem[]>(() =>
+    storyListItems(initialConfiguration.howItWorks),
   );
   const [recommendedCatalogItemIds, setRecommendedCatalogItemIds] = useState<
     readonly string[]
@@ -716,6 +780,8 @@ export function GuidedProductBuilder({
     Record<string, unknown> | undefined;
   const virtualDelivery = serviceConfiguration?.virtualDelivery as
     Record<string, unknown> | undefined;
+  const membershipConfiguration = initialConfiguration.membership as
+    Record<string, unknown> | undefined;
   const [requiredCoachCount, setRequiredCoachCount] = useState(
     typeof serviceConfiguration?.requiredCoachCount === "number"
       ? serviceConfiguration.requiredCoachCount
@@ -748,27 +814,39 @@ export function GuidedProductBuilder({
       ? sessionSchedule.startTime
       : "17:00",
   );
-  const [oneOffSessions, setOneOffSessions] = useState(
+  const [oneOffSessions, setOneOffSessions] = useState<
+    readonly ScheduledSession[]
+  >(
     Array.isArray(sessionSchedule?.oneOffSessions)
-      ? sessionSchedule.oneOffSessions
-          .flatMap((value) => {
-            if (!value || typeof value !== "object") return [];
-            const session = value as Record<string, unknown>;
-            return typeof session.date === "string" &&
-              typeof session.startsAt === "string"
-              ? [`${session.date} ${session.startsAt}`]
-              : [];
-          })
-          .join("\n")
-      : "",
+      ? sessionSchedule.oneOffSessions.flatMap((value, index) => {
+          if (!value || typeof value !== "object") return [];
+          const session = value as Record<string, unknown>;
+          return typeof session.date === "string" &&
+            typeof session.startsAt === "string"
+            ? [
+                {
+                  id: `${session.date}-${session.startsAt}-${index}`,
+                  date: session.date,
+                  startsAt: session.startsAt,
+                },
+              ]
+            : [];
+        })
+      : [],
   );
-  const [sessionBlackouts, setSessionBlackouts] = useState(
+  const [sessionBlackouts, setSessionBlackouts] = useState<readonly string[]>(
     Array.isArray(sessionSchedule?.blackoutDates)
-      ? sessionSchedule.blackoutDates
-          .filter((value): value is string => typeof value === "string")
-          .join("\n")
-      : "",
+      ? sessionSchedule.blackoutDates.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
   );
+  const [oneOffSessionDraft, setOneOffSessionDraft] = useState({
+    date: "",
+    time: "17:00",
+  });
+  const [blackoutRangeDraft, setBlackoutRangeDraft] =
+    useState<SmartDateRangeValue>({ start: "", end: "" });
   const [autoRecordVirtualSession, setAutoRecordVirtualSession] = useState(
     virtualDelivery?.autoRecord !== false,
   );
@@ -782,7 +860,9 @@ export function GuidedProductBuilder({
   const [creditsGranted, setCreditsGranted] = useState(10);
   const [membershipCredits, setMembershipCredits] = useState(0);
   const [membershipBookingLimit, setMembershipBookingLimit] = useState(0);
-  const [benefits, setBenefits] = useState("");
+  const [benefits, setBenefits] = useState<readonly StoryListItem[]>(() =>
+    storyListItems(membershipConfiguration?.benefits),
+  );
   const [includedCatalogItemIds, setIncludedCatalogItemIds] = useState<
     readonly string[]
   >([]);
@@ -907,16 +987,13 @@ export function GuidedProductBuilder({
     }
   }, [isMembership, membershipConfigured, visibility]);
   const parsedBenefits = benefits
-    .split("\n")
-    .map((benefit) => benefit.trim())
+    .map((benefit) => benefit.value.trim())
     .filter(Boolean);
   const parsedHighlights = highlights
-    .split("\n")
-    .map((highlight) => highlight.trim())
+    .map((highlight) => highlight.value.trim())
     .filter(Boolean);
   const parsedHowItWorks = howItWorks
-    .split("\n")
-    .map((step) => step.trim())
+    .map((storyStep) => storyStep.value.trim())
     .filter(Boolean);
   const publishedTestimonials = testimonials
     .map((testimonial) => ({
@@ -933,19 +1010,12 @@ export function GuidedProductBuilder({
     }))
     .filter((faq) => faq.question.length > 0 && faq.answer.length > 0);
   const parsedOneOffSessions = oneOffSessions
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .flatMap((line) => {
-      const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})$/.exec(line);
-      return match?.[1] && match[2]
-        ? [{ date: match[1], startsAt: match[2] }]
-        : [];
-    });
-  const parsedSessionBlackouts = sessionBlackouts
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => /^\d{4}-\d{2}-\d{2}$/.test(line));
+    .filter((session) => isDateKey(session.date) && isTimeKey(session.startsAt))
+    .map((session) => ({
+      date: session.date,
+      startsAt: session.startsAt,
+    }));
+  const parsedSessionBlackouts = sessionBlackouts.filter(isDateKey);
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
     receiptTotalMinor === undefined
@@ -972,6 +1042,44 @@ export function GuidedProductBuilder({
           : "private-lesson",
     );
     if (nextType === "plan") setAllowCredits(false);
+  };
+
+  const addOneOffSession = () => {
+    const { date, time } = oneOffSessionDraft;
+    if (!isDateKey(date) || !isTimeKey(time)) return;
+    setOneOffSessions((current) => {
+      if (
+        current.some(
+          (session) => session.date === date && session.startsAt === time,
+        )
+      ) {
+        return current;
+      }
+      return [
+        ...current,
+        { id: crypto.randomUUID(), date, startsAt: time },
+      ].sort((first, second) =>
+        `${first.date}T${first.startsAt}`.localeCompare(
+          `${second.date}T${second.startsAt}`,
+        ),
+      );
+    });
+    setOneOffSessionDraft((current) => ({ ...current, date: "" }));
+  };
+
+  const addBlackoutRange = () => {
+    const dates = datesInRange(blackoutRangeDraft);
+    if (dates.length === 0) return;
+    setSessionBlackouts((current) =>
+      [...new Set([...current, ...dates])].sort(),
+    );
+    setBlackoutRangeDraft({ start: "", end: "" });
+  };
+
+  const updateRecurringBlackouts = (ranges: readonly SmartDateRangeValue[]) => {
+    setSessionBlackouts(
+      [...new Set(ranges.flatMap((range) => datesInRange(range)))].sort(),
+    );
   };
 
   const addHostedMedia = () => {
@@ -1754,19 +1862,86 @@ export function GuidedProductBuilder({
                     value={bestFor}
                   />
                 </label>
-                <label className="operator-field--wide">
-                  <span>What they get · one benefit per line</span>
-                  <textarea
-                    onChange={(event) => setHighlights(event.target.value)}
-                    placeholder={
-                      isCreditPack
-                        ? "20 club credits\nUse across eligible court and lesson bookings\nBalance appears instantly in Duna"
-                        : "Priority booking\nMember pricing\nA welcoming club community"
-                    }
-                    rows={4}
-                    value={highlights}
-                  />
-                </label>
+                <section className="operator-field--wide guided-product-structured-list">
+                  <header>
+                    <div>
+                      <span className="hq-eyebrow">What they get</span>
+                      <strong>Make the value concrete.</strong>
+                      <small>
+                        Add the benefits a player can actually expect after they
+                        purchase.
+                      </small>
+                    </div>
+                    <button
+                      className="hq-button hq-button--secondary"
+                      onClick={() =>
+                        setHighlights((current) => [
+                          ...current,
+                          { id: crypto.randomUUID(), value: "" },
+                        ])
+                      }
+                      type="button"
+                    >
+                      <Plus aria-hidden size={15} /> Add benefit
+                    </button>
+                  </header>
+                  {highlights.length > 0 ? (
+                    <div className="guided-product-structured-list__rows">
+                      {highlights.map((highlight, index) => (
+                        <article key={highlight.id}>
+                          <span>{index + 1}</span>
+                          <label>
+                            <span>Benefit {index + 1}</span>
+                            <input
+                              maxLength={220}
+                              onChange={(event) =>
+                                setHighlights((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === highlight.id
+                                      ? {
+                                          ...candidate,
+                                          value: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              placeholder={
+                                isCreditPack
+                                  ? "Use across eligible court and lesson bookings"
+                                  : "Priority booking"
+                              }
+                              value={highlight.value}
+                            />
+                          </label>
+                          <button
+                            aria-label={`Remove benefit ${index + 1}`}
+                            className="guided-product-proof__remove"
+                            onClick={() =>
+                              setHighlights((current) =>
+                                current.filter(
+                                  (candidate) => candidate.id !== highlight.id,
+                                ),
+                              )
+                            }
+                            type="button"
+                          >
+                            <Trash2 aria-hidden size={16} /> Remove
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="guided-product-structured-list__empty">
+                      <PackageCheck aria-hidden size={18} />
+                      <span>
+                        <strong>No benefits yet</strong>
+                        Start with the first concrete thing this purchase
+                        unlocks.
+                      </span>
+                    </div>
+                  )}
+                </section>
                 <label className="operator-field--wide">
                   <span>Outcome headline · optional</span>
                   <input
@@ -1789,16 +1964,87 @@ export function GuidedProductBuilder({
                     value={outcomeBody}
                   />
                 </label>
-                <label className="operator-field--wide">
-                  <span>How it works · one step per line</span>
-                  <textarea
-                    maxLength={1_200}
-                    onChange={(event) => setHowItWorks(event.target.value)}
-                    placeholder="Purchase and choose your preferred time\nMeet your coach and complete the experience\nFind your notes and next steps in Duna"
-                    rows={4}
-                    value={howItWorks}
-                  />
-                </label>
+                <section className="operator-field--wide guided-product-structured-list">
+                  <header>
+                    <div>
+                      <span className="hq-eyebrow">How it works</span>
+                      <strong>Show the journey in clear moments.</strong>
+                      <small>
+                        Duna presents these steps in order on the offer page.
+                      </small>
+                    </div>
+                    <button
+                      className="hq-button hq-button--secondary"
+                      onClick={() =>
+                        setHowItWorks((current) => [
+                          ...current,
+                          { id: crypto.randomUUID(), value: "" },
+                        ])
+                      }
+                      type="button"
+                    >
+                      <Plus aria-hidden size={15} /> Add step
+                    </button>
+                  </header>
+                  {howItWorks.length > 0 ? (
+                    <div className="guided-product-structured-list__rows">
+                      {howItWorks.map((storyStep, index) => (
+                        <article key={storyStep.id}>
+                          <span>{index + 1}</span>
+                          <label>
+                            <span>Step {index + 1}</span>
+                            <input
+                              maxLength={280}
+                              onChange={(event) =>
+                                setHowItWorks((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === storyStep.id
+                                      ? {
+                                          ...candidate,
+                                          value: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              placeholder={
+                                index === 0
+                                  ? "Purchase and choose your preferred time"
+                                  : index === 1
+                                    ? "Meet your coach and complete the experience"
+                                    : "Find your notes and next steps in Duna"
+                              }
+                              value={storyStep.value}
+                            />
+                          </label>
+                          <button
+                            aria-label={`Remove step ${index + 1}`}
+                            className="guided-product-proof__remove"
+                            onClick={() =>
+                              setHowItWorks((current) =>
+                                current.filter(
+                                  (candidate) => candidate.id !== storyStep.id,
+                                ),
+                              )
+                            }
+                            type="button"
+                          >
+                            <Trash2 aria-hidden size={16} /> Remove
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="guided-product-structured-list__empty">
+                      <Route aria-hidden size={18} />
+                      <span>
+                        <strong>No journey steps yet</strong>
+                        Add the first moment a customer experiences after
+                        purchase.
+                      </span>
+                    </div>
+                  )}
+                </section>
                 <label>
                   <span>Valid for · days · optional</span>
                   <input
@@ -1822,23 +2068,30 @@ export function GuidedProductBuilder({
                 </label>
               </div>
 
-              <div className="guided-product-recommendations">
+              <section className="guided-product-recommendations">
                 <header>
                   <div>
-                    <strong>Continue the customer journey</strong>
+                    <span className="hq-eyebrow">Customer journey</span>
+                    <strong>What should they discover next?</strong>
                     <small>
-                      Duna automatically ranks related active offers. Select up
-                      to four offers to guarantee they appear first.
+                      Pick up to four active offers to place immediately after
+                      this one. Duna still ranks other relevant offers.
                     </small>
                   </div>
                   <Badge>{recommendedCatalogItemIds.length} selected</Badge>
                 </header>
                 {recommendationCandidates.length > 0 ? (
-                  <div>
+                  <div className="guided-product-recommendations__list">
                     {recommendationCandidates.map((candidate) => {
                       const checked = recommendedCatalogItemIds.includes(
                         candidate.id,
                       );
+                      const CandidateIcon =
+                        candidate.type === "service"
+                          ? CalendarClock
+                          : candidate.type === "plan"
+                            ? CreditCard
+                            : ShoppingBag;
                       return (
                         <label
                           className={checked ? "active" : undefined}
@@ -1858,13 +2111,24 @@ export function GuidedProductBuilder({
                             }
                             type="checkbox"
                           />
-                          <span>
+                          <span className="guided-product-recommendations__icon">
+                            <CandidateIcon aria-hidden size={17} />
+                          </span>
+                          <span className="guided-product-recommendations__copy">
                             <strong>{candidate.title}</strong>
                             <small>
                               {candidate.type} ·{" "}
-                              {candidate.subtype.replaceAll("-", " ")} ·{" "}
-                              {candidate.status}
+                              {candidate.subtype.replaceAll("-", " ")}
                             </small>
+                          </span>
+                          <span className="guided-product-recommendations__state">
+                            {checked ? (
+                              <>
+                                <Check aria-hidden size={14} /> Included
+                              </>
+                            ) : (
+                              "Add"
+                            )}
                           </span>
                         </label>
                       );
@@ -1876,12 +2140,15 @@ export function GuidedProductBuilder({
                     to this customer journey.
                   </p>
                 )}
-              </div>
+              </section>
 
-              <div className="guided-product-proof">
+              <section className="guided-product-proof">
                 <header>
                   <div>
-                    <strong>Customer proof · optional</strong>
+                    <span className="hq-eyebrow">
+                      Customer proof · optional
+                    </span>
+                    <strong>Give the offer a real voice.</strong>
                     <small>
                       Add approved customer quotes that make the value feel
                       real. These are shown as testimonials on the offer page.
@@ -1903,126 +2170,147 @@ export function GuidedProductBuilder({
                     }
                     type="button"
                   >
-                    <Quote aria-hidden size={15} /> Add quote
+                    <Plus aria-hidden size={15} /> Add quote
                   </button>
                 </header>
                 {testimonials.length > 0 && (
                   <div className="guided-product-proof__rows">
                     {testimonials.map((testimonial, index) => (
                       <article key={testimonial.id}>
-                        <span className="guided-product-proof__number">
-                          {index + 1}
-                        </span>
-                        <label className="operator-field--wide">
-                          <span>Quote</span>
-                          <textarea
-                            maxLength={500}
-                            onChange={(event) =>
+                        <header>
+                          <span>
+                            <Quote aria-hidden size={15} /> Customer quote{" "}
+                            {index + 1}
+                          </span>
+                          <button
+                            aria-label={`Remove customer quote ${index + 1}`}
+                            className="guided-product-proof__remove"
+                            onClick={() =>
                               setTestimonials((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === testimonial.id
-                                    ? {
-                                        ...candidate,
-                                        quote: event.target.value,
-                                      }
-                                    : candidate,
+                                current.filter(
+                                  (candidate) =>
+                                    candidate.id !== testimonial.id,
                                 ),
                               )
                             }
-                            placeholder="A specific result, feeling, or reason they would recommend it."
-                            rows={3}
-                            value={testimonial.quote}
-                          />
-                        </label>
-                        <label>
-                          <span>Name</span>
-                          <input
-                            maxLength={100}
-                            onChange={(event) =>
-                              setTestimonials((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === testimonial.id
-                                    ? {
-                                        ...candidate,
-                                        author: event.target.value,
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                            placeholder="Avery R."
-                            value={testimonial.author}
-                          />
-                        </label>
-                        <label>
-                          <span>Context</span>
-                          <input
-                            maxLength={120}
-                            onChange={(event) =>
-                              setTestimonials((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === testimonial.id
-                                    ? {
-                                        ...candidate,
-                                        context: event.target.value,
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                            placeholder="Parent of a 15U player"
-                            value={testimonial.context}
-                          />
-                        </label>
-                        <label>
-                          <span>Rating</span>
-                          <select
-                            aria-label={`Rating for customer quote ${index + 1}`}
-                            onChange={(event) =>
-                              setTestimonials((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === testimonial.id
-                                    ? {
-                                        ...candidate,
-                                        rating: Number(event.target.value),
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                            value={testimonial.rating}
+                            type="button"
                           >
-                            {[5, 4, 3, 2, 1].map((rating) => (
-                              <option key={rating} value={rating}>
-                                {rating} star{rating === 1 ? "" : "s"}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          aria-label={`Remove customer quote ${index + 1}`}
-                          className="guided-product-proof__remove"
-                          onClick={() =>
-                            setTestimonials((current) =>
-                              current.filter(
-                                (candidate) => candidate.id !== testimonial.id,
-                              ),
-                            )
-                          }
-                          type="button"
-                        >
-                          <Trash2 aria-hidden size={16} />
-                        </button>
+                            <Trash2 aria-hidden size={16} /> Remove
+                          </button>
+                        </header>
+                        <div className="guided-product-proof__fields">
+                          <label className="operator-field--wide">
+                            <span>Quote</span>
+                            <textarea
+                              maxLength={500}
+                              onChange={(event) =>
+                                setTestimonials((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === testimonial.id
+                                      ? {
+                                          ...candidate,
+                                          quote: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              placeholder="A specific result, feeling, or reason they would recommend it."
+                              rows={3}
+                              value={testimonial.quote}
+                            />
+                          </label>
+                          <div className="guided-product-proof__metadata">
+                            <label>
+                              <span>Name</span>
+                              <input
+                                maxLength={100}
+                                onChange={(event) =>
+                                  setTestimonials((current) =>
+                                    current.map((candidate) =>
+                                      candidate.id === testimonial.id
+                                        ? {
+                                            ...candidate,
+                                            author: event.target.value,
+                                          }
+                                        : candidate,
+                                    ),
+                                  )
+                                }
+                                placeholder="Avery R."
+                                value={testimonial.author}
+                              />
+                            </label>
+                            <label>
+                              <span>Context</span>
+                              <input
+                                maxLength={120}
+                                onChange={(event) =>
+                                  setTestimonials((current) =>
+                                    current.map((candidate) =>
+                                      candidate.id === testimonial.id
+                                        ? {
+                                            ...candidate,
+                                            context: event.target.value,
+                                          }
+                                        : candidate,
+                                    ),
+                                  )
+                                }
+                                placeholder="Parent of a 15U player"
+                                value={testimonial.context}
+                              />
+                            </label>
+                            <label>
+                              <span>Rating</span>
+                              <select
+                                aria-label={`Rating for customer quote ${index + 1}`}
+                                onChange={(event) =>
+                                  setTestimonials((current) =>
+                                    current.map((candidate) =>
+                                      candidate.id === testimonial.id
+                                        ? {
+                                            ...candidate,
+                                            rating: Number(event.target.value),
+                                          }
+                                        : candidate,
+                                    ),
+                                  )
+                                }
+                                value={testimonial.rating}
+                              >
+                                {[5, 4, 3, 2, 1].map((rating) => (
+                                  <option key={rating} value={rating}>
+                                    {rating} star{rating === 1 ? "" : "s"}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        </div>
                       </article>
                     ))}
                   </div>
                 )}
-              </div>
+                {testimonials.length === 0 && (
+                  <div className="guided-product-proof__empty">
+                    <Quote aria-hidden size={18} />
+                    <span>
+                      <strong>No quotes yet</strong>
+                      Start with a specific result a parent or player approved
+                      for publication.
+                    </span>
+                  </div>
+                )}
+              </section>
 
-              <div className="guided-product-proof guided-product-proof--faq">
+              <section className="guided-product-proof guided-product-proof--faq">
                 <header>
                   <div>
-                    <strong>Helpful answers · optional</strong>
+                    <span className="hq-eyebrow">
+                      Helpful answers · optional
+                    </span>
+                    <strong>Remove the last reasons to hesitate.</strong>
                     <small>
                       Answer the questions that usually slow someone down before
                       they reach checkout.
@@ -2038,76 +2326,91 @@ export function GuidedProductBuilder({
                     }
                     type="button"
                   >
-                    <CircleHelp aria-hidden size={15} /> Add answer
+                    <Plus aria-hidden size={15} /> Add answer
                   </button>
                 </header>
                 {faqs.length > 0 && (
                   <div className="guided-product-proof__rows">
                     {faqs.map((faq, index) => (
                       <article key={faq.id}>
-                        <span className="guided-product-proof__number">
-                          {index + 1}
-                        </span>
-                        <label className="operator-field--wide">
-                          <span>Question</span>
-                          <input
-                            maxLength={180}
-                            onChange={(event) =>
+                        <header>
+                          <span>
+                            <CircleHelp aria-hidden size={15} /> Answer{" "}
+                            {index + 1}
+                          </span>
+                          <button
+                            aria-label={`Remove answer ${index + 1}`}
+                            className="guided-product-proof__remove"
+                            onClick={() =>
                               setFaqs((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === faq.id
-                                    ? {
-                                        ...candidate,
-                                        question: event.target.value,
-                                      }
-                                    : candidate,
+                                current.filter(
+                                  (candidate) => candidate.id !== faq.id,
                                 ),
                               )
                             }
-                            placeholder="What happens after I purchase?"
-                            value={faq.question}
-                          />
-                        </label>
-                        <label className="operator-field--wide">
-                          <span>Answer</span>
-                          <textarea
-                            maxLength={600}
-                            onChange={(event) =>
-                              setFaqs((current) =>
-                                current.map((candidate) =>
-                                  candidate.id === faq.id
-                                    ? {
-                                        ...candidate,
-                                        answer: event.target.value,
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                            placeholder="Give a calm, specific answer in the customer’s language."
-                            rows={3}
-                            value={faq.answer}
-                          />
-                        </label>
-                        <button
-                          aria-label={`Remove answer ${index + 1}`}
-                          className="guided-product-proof__remove"
-                          onClick={() =>
-                            setFaqs((current) =>
-                              current.filter(
-                                (candidate) => candidate.id !== faq.id,
-                              ),
-                            )
-                          }
-                          type="button"
-                        >
-                          <Trash2 aria-hidden size={16} />
-                        </button>
+                            type="button"
+                          >
+                            <Trash2 aria-hidden size={16} /> Remove
+                          </button>
+                        </header>
+                        <div className="guided-product-proof__fields">
+                          <label className="operator-field--wide">
+                            <span>Question</span>
+                            <input
+                              maxLength={180}
+                              onChange={(event) =>
+                                setFaqs((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === faq.id
+                                      ? {
+                                          ...candidate,
+                                          question: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              placeholder="What happens after I purchase?"
+                              value={faq.question}
+                            />
+                          </label>
+                          <label className="operator-field--wide">
+                            <span>Answer</span>
+                            <textarea
+                              maxLength={600}
+                              onChange={(event) =>
+                                setFaqs((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === faq.id
+                                      ? {
+                                          ...candidate,
+                                          answer: event.target.value,
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                              placeholder="Give a calm, specific answer in the customer’s language."
+                              rows={3}
+                              value={faq.answer}
+                            />
+                          </label>
+                        </div>
                       </article>
                     ))}
                   </div>
                 )}
-              </div>
+                {faqs.length === 0 && (
+                  <div className="guided-product-proof__empty">
+                    <CircleHelp aria-hidden size={18} />
+                    <span>
+                      <strong>No answers yet</strong>
+                      Add the question a player or parent is most likely to ask
+                      before checkout.
+                    </span>
+                  </div>
+                )}
+              </section>
 
               <div className="guided-product-media">
                 <header>
@@ -2396,8 +2699,16 @@ export function GuidedProductBuilder({
                   onClick={() => setSchedulingStyle("request-to-book")}
                 />
               </ChoiceGrid>
-              <div className="guided-product-subsection">
-                <strong>Is this flexible, one-off, or recurring?</strong>
+              <div className="guided-product-subsection guided-product-subsection--schedule">
+                <div className="guided-product-subsection__heading">
+                  <div>
+                    <strong>How should players find a session?</strong>
+                    <small>
+                      Choose the schedule pattern, then use Duna’s calendar to
+                      set the actual dates and exceptions.
+                    </small>
+                  </div>
+                </div>
                 <ChoiceGrid>
                   <ChoiceCard
                     active={sessionScheduleMode === "flexible"}
@@ -2421,30 +2732,49 @@ export function GuidedProductBuilder({
               </div>
               {sessionScheduleMode === "recurring" && (
                 <div className="guided-session-schedule">
-                  <div className="operator-form-grid operator-form-grid--two">
-                    <label>
-                      <span>Schedule starts</span>
-                      <input
-                        onChange={(event) =>
-                          setScheduleStartsOn(event.target.value)
-                        }
-                        type="date"
-                        value={scheduleStartsOn}
-                      />
-                    </label>
-                    <label>
-                      <span>Schedule ends</span>
-                      <input
-                        min={scheduleStartsOn || undefined}
-                        onChange={(event) =>
-                          setScheduleEndsOn(event.target.value)
-                        }
-                        type="date"
-                        value={scheduleEndsOn}
-                      />
-                    </label>
-                    <label>
-                      <span>Start time</span>
+                  <SmartDateRangePicker
+                    allowExclusions
+                    exclusions={sessionBlackouts.map((date) => ({
+                      start: date,
+                      end: date,
+                    }))}
+                    label="Schedule window and blackout dates"
+                    onChange={(range) => {
+                      setScheduleStartsOn(range.start);
+                      setScheduleEndsOn(range.end);
+                    }}
+                    onExclusionsChange={updateRecurringBlackouts}
+                    timeMode="hidden"
+                    value={{ start: scheduleStartsOn, end: scheduleEndsOn }}
+                  />
+                  <div className="guided-session-schedule__rules">
+                    <fieldset className="guided-weekday-picker">
+                      <legend>Repeats on</legend>
+                      <div>
+                        {weekdayChoices.map(([weekday, label]) => {
+                          const active = scheduleWeekdays.includes(weekday);
+                          return (
+                            <button
+                              aria-pressed={active}
+                              className={active ? "active" : undefined}
+                              key={weekday}
+                              onClick={() =>
+                                setScheduleWeekdays((current) =>
+                                  active
+                                    ? current.filter((day) => day !== weekday)
+                                    : [...current, weekday].sort(),
+                                )
+                              }
+                              type="button"
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                    <label className="guided-session-schedule__time">
+                      <span>Session starts</span>
                       <input
                         onChange={(event) =>
                           setScheduleStartTime(event.target.value)
@@ -2453,64 +2783,170 @@ export function GuidedProductBuilder({
                         value={scheduleStartTime}
                       />
                     </label>
-                    <label>
-                      <span>Timezone</span>
-                      <input disabled value={workspace.organization.timezone} />
-                    </label>
+                    <p>
+                      <CalendarClock aria-hidden size={16} /> Times are shown in{" "}
+                      {workspace.organization.timezone}.
+                    </p>
                   </div>
-                  <fieldset className="guided-weekday-picker">
-                    <legend>Days of week</legend>
+                </div>
+              )}
+              {sessionScheduleMode === "one-off" && (
+                <section className="guided-session-schedule guided-session-schedule--one-off">
+                  <header>
                     <div>
-                      {weekdayChoices.map(([weekday, label]) => {
-                        const active = scheduleWeekdays.includes(weekday);
-                        return (
+                      <span className="hq-eyebrow">Specific sessions</span>
+                      <strong>
+                        Publish the dates players can actually book.
+                      </strong>
+                      <small>
+                        Add, edit, or remove each session from the same calendar
+                        your coaching team uses.
+                      </small>
+                    </div>
+                  </header>
+                  <div className="guided-session-schedule__add">
+                    <DunaDateTimePicker
+                      label="Add a session"
+                      onChange={setOneOffSessionDraft}
+                      value={oneOffSessionDraft}
+                    />
+                    <button
+                      className="hq-button hq-button--primary"
+                      disabled={
+                        !isDateKey(oneOffSessionDraft.date) ||
+                        !isTimeKey(oneOffSessionDraft.time)
+                      }
+                      onClick={addOneOffSession}
+                      type="button"
+                    >
+                      <Plus aria-hidden size={16} /> Add session
+                    </button>
+                  </div>
+                  <div
+                    aria-label="Scheduled sessions"
+                    className="guided-session-list"
+                    role="list"
+                  >
+                    {oneOffSessions.length > 0 ? (
+                      oneOffSessions.map((session, index) => (
+                        <article key={session.id} role="listitem">
+                          <span className="guided-session-list__number">
+                            {index + 1}
+                          </span>
+                          <DunaDateTimePicker
+                            label={`Session ${index + 1}`}
+                            onChange={(value) =>
+                              setOneOffSessions((current) =>
+                                current
+                                  .map((candidate) =>
+                                    candidate.id === session.id
+                                      ? {
+                                          ...candidate,
+                                          date: value.date,
+                                          startsAt: value.time,
+                                        }
+                                      : candidate,
+                                  )
+                                  .sort((first, second) =>
+                                    `${first.date}T${first.startsAt}`.localeCompare(
+                                      `${second.date}T${second.startsAt}`,
+                                    ),
+                                  ),
+                              )
+                            }
+                            value={{
+                              date: session.date,
+                              time: session.startsAt,
+                            }}
+                          />
+                          <span className="guided-session-list__summary">
+                            <strong>{formatScheduleDate(session.date)}</strong>
+                            <small>
+                              {formatScheduleTime(session.startsAt)}
+                            </small>
+                          </span>
                           <button
-                            aria-pressed={active}
-                            className={active ? "active" : undefined}
-                            key={weekday}
+                            aria-label={`Remove session ${index + 1}`}
+                            className="guided-product-proof__remove"
                             onClick={() =>
-                              setScheduleWeekdays((current) =>
-                                active
-                                  ? current.filter((day) => day !== weekday)
-                                  : [...current, weekday].sort(),
+                              setOneOffSessions((current) =>
+                                current.filter(
+                                  (candidate) => candidate.id !== session.id,
+                                ),
                               )
                             }
                             type="button"
                           >
-                            {label}
+                            <Trash2 aria-hidden size={16} />
                           </button>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="guided-session-list__empty">
+                        <CalendarClock aria-hidden size={18} />
+                        <span>
+                          <strong>No sessions yet</strong>
+                          Choose a date and time above to add the first one.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </section>
               )}
               {sessionScheduleMode === "one-off" && (
-                <label className="operator-field--wide guided-session-lines">
-                  <span>Specific sessions · one per line</span>
-                  <textarea
-                    onChange={(event) => setOneOffSessions(event.target.value)}
-                    placeholder={"2026-09-08 17:00\n2026-09-15 17:00"}
-                    rows={4}
-                    value={oneOffSessions}
-                  />
-                  <small>
-                    Use YYYY-MM-DD HH:mm in {workspace.organization.timezone}.
-                  </small>
-                </label>
-              )}
-              {sessionScheduleMode !== "flexible" && (
-                <label className="operator-field--wide guided-session-lines">
-                  <span>Blackout dates · optional · one per line</span>
-                  <textarea
-                    onChange={(event) =>
-                      setSessionBlackouts(event.target.value)
+                <section className="guided-session-blackouts">
+                  <header>
+                    <div>
+                      <span className="hq-eyebrow">
+                        Availability exceptions
+                      </span>
+                      <strong>
+                        Black out dates without editing every session.
+                      </strong>
+                      <small>
+                        Select a single day or a date range in the Duna
+                        calendar.
+                      </small>
+                    </div>
+                    <Badge>
+                      {sessionBlackouts.length} blackout
+                      {sessionBlackouts.length === 1 ? "" : "s"}
+                    </Badge>
+                  </header>
+                  <SmartDateRangePicker
+                    applyLabel="Add blackout"
+                    label="Add unavailable dates"
+                    onApply={addBlackoutRange}
+                    onCancel={() =>
+                      setBlackoutRangeDraft({ start: "", end: "" })
                     }
-                    placeholder={"2026-11-26\n2026-12-24"}
-                    rows={3}
-                    value={sessionBlackouts}
+                    onChange={setBlackoutRangeDraft}
+                    timeMode="hidden"
+                    value={blackoutRangeDraft}
                   />
-                </label>
+                  {sessionBlackouts.length > 0 && (
+                    <div className="guided-session-blackouts__list">
+                      {sessionBlackouts.map((date) => (
+                        <span key={date}>
+                          {formatScheduleDate(date)}
+                          <button
+                            aria-label={`Remove blackout ${formatScheduleDate(date)}`}
+                            onClick={() =>
+                              setSessionBlackouts((current) =>
+                                current.filter(
+                                  (candidate) => candidate !== date,
+                                ),
+                              )
+                            }
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </section>
               )}
               {deliveryMode === "online" &&
                 sessionScheduleMode === "flexible" && (
@@ -2762,17 +3198,90 @@ export function GuidedProductBuilder({
                         value={membershipBookingLimit || ""}
                       />
                     </label>
-                    <label className="operator-field--wide">
-                      <span>Benefits · one per line</span>
-                      <textarea
-                        onChange={(event) => setBenefits(event.target.value)}
-                        placeholder={
-                          "Priority booking\n10% member pricing\nMonthly community meetup"
-                        }
-                        rows={5}
-                        value={benefits}
-                      />
-                    </label>
+                    <section className="operator-field--wide guided-product-structured-list">
+                      <header>
+                        <div>
+                          <span className="hq-eyebrow">
+                            Membership benefits
+                          </span>
+                          <strong>Make every member benefit specific.</strong>
+                          <small>
+                            Add only the promises this membership can reliably
+                            deliver each cycle.
+                          </small>
+                        </div>
+                        <button
+                          className="hq-button hq-button--secondary"
+                          onClick={() =>
+                            setBenefits((current) => [
+                              ...current,
+                              { id: crypto.randomUUID(), value: "" },
+                            ])
+                          }
+                          type="button"
+                        >
+                          <Plus aria-hidden size={15} /> Add benefit
+                        </button>
+                      </header>
+                      {benefits.length > 0 ? (
+                        <div className="guided-product-structured-list__rows">
+                          {benefits.map((benefit, index) => (
+                            <article key={benefit.id}>
+                              <span>{index + 1}</span>
+                              <label>
+                                <span>Member benefit {index + 1}</span>
+                                <input
+                                  maxLength={220}
+                                  onChange={(event) =>
+                                    setBenefits((current) =>
+                                      current.map((candidate) =>
+                                        candidate.id === benefit.id
+                                          ? {
+                                              ...candidate,
+                                              value: event.target.value,
+                                            }
+                                          : candidate,
+                                      ),
+                                    )
+                                  }
+                                  placeholder={
+                                    index === 0
+                                      ? "Priority booking"
+                                      : index === 1
+                                        ? "10% member pricing"
+                                        : "Monthly community meetup"
+                                  }
+                                  value={benefit.value}
+                                />
+                              </label>
+                              <button
+                                aria-label={`Remove member benefit ${index + 1}`}
+                                className="guided-product-proof__remove"
+                                onClick={() =>
+                                  setBenefits((current) =>
+                                    current.filter(
+                                      (candidate) =>
+                                        candidate.id !== benefit.id,
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                <Trash2 aria-hidden size={16} /> Remove
+                              </button>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="guided-product-structured-list__empty">
+                          <Crown aria-hidden size={18} />
+                          <span>
+                            <strong>No member benefits yet</strong>
+                            Add the first reason someone should join and stay.
+                          </span>
+                        </div>
+                      )}
+                    </section>
                   </div>
                   <div className="membership-inclusion-picker">
                     <span>Required waivers &amp; releases</span>
