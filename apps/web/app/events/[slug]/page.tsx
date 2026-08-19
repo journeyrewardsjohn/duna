@@ -181,31 +181,30 @@ export default async function EventPage({
     predictionWallet,
     recommendations,
     tournamentCompetition,
-  ] =
-    await Promise.all([
-      caller.public.videos({ eventId: event.id }).catch(() => []),
-      caller.public
-        .eventPredictionMarkets({ eventSlug: event.slug })
-        .catch(() => undefined),
-      caller.player.predictionWallet().catch(() => undefined),
-      event.organizationSlug
-        ? caller.public
-            .catalogRecommendations({
-              organizationSlug: event.organizationSlug,
-              title: event.title,
-              type: "event",
-              subtype: event.kind,
-              latitude: event.location?.latitude,
-              longitude: event.location?.longitude,
-            })
-            .catch(() => ({ sameOrganization: [], nearby: [] }))
-        : Promise.resolve({ sameOrganization: [], nearby: [] }),
-      event.kind === "tournament"
-        ? caller.public
-            .tournamentCompetition({ slug: event.slug })
-            .catch(() => undefined)
-        : Promise.resolve(undefined),
-    ]);
+  ] = await Promise.all([
+    caller.public.videos({ eventId: event.id }).catch(() => []),
+    caller.public
+      .eventPredictionMarkets({ eventSlug: event.slug })
+      .catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+    event.organizationSlug
+      ? caller.public
+          .catalogRecommendations({
+            organizationSlug: event.organizationSlug,
+            title: event.title,
+            type: "event",
+            subtype: event.kind,
+            latitude: event.location?.latitude,
+            longitude: event.location?.longitude,
+          })
+          .catch(() => ({ sameOrganization: [], nearby: [] }))
+      : Promise.resolve({ sameOrganization: [], nearby: [] }),
+    event.kind === "tournament"
+      ? caller.public
+          .tournamentCompetition({ slug: event.slug })
+          .catch(() => undefined)
+      : Promise.resolve(undefined),
+  ]);
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);

@@ -20919,7 +20919,7 @@ a.play-day__booking {
 
 .pro-event-hero__result span {
   color: var(--color-bone-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -20943,7 +20943,7 @@ a.play-day__booking {
   border-radius: 999px;
   color: inherit;
   display: inline-flex;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
   padding: 0.52rem 0.7rem;
   text-decoration: none;

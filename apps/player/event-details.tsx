@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   back: { color: "#17324d", fontSize: 16, fontWeight: "800" },
   status: {
     color: "#59636e",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
