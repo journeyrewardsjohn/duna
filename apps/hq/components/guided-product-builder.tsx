@@ -713,11 +713,9 @@ export function GuidedProductBuilder({
     initialConfiguration.customerCoachSelection !== false,
   );
   const sessionSchedule = serviceConfiguration?.sessionSchedule as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const virtualDelivery = serviceConfiguration?.virtualDelivery as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const [requiredCoachCount, setRequiredCoachCount] = useState(
     typeof serviceConfiguration?.requiredCoachCount === "number"
       ? serviceConfiguration.requiredCoachCount
@@ -731,7 +729,9 @@ export function GuidedProductBuilder({
       : "flexible",
   );
   const [scheduleStartsOn, setScheduleStartsOn] = useState(
-    typeof sessionSchedule?.startsOn === "string" ? sessionSchedule.startsOn : "",
+    typeof sessionSchedule?.startsOn === "string"
+      ? sessionSchedule.startsOn
+      : "",
   );
   const [scheduleEndsOn, setScheduleEndsOn] = useState(
     typeof sessionSchedule?.endsOn === "string" ? sessionSchedule.endsOn : "",
@@ -744,7 +744,9 @@ export function GuidedProductBuilder({
       : [],
   );
   const [scheduleStartTime, setScheduleStartTime] = useState(
-    typeof sessionSchedule?.startTime === "string" ? sessionSchedule.startTime : "17:00",
+    typeof sessionSchedule?.startTime === "string"
+      ? sessionSchedule.startTime
+      : "17:00",
   );
   const [oneOffSessions, setOneOffSessions] = useState(
     Array.isArray(sessionSchedule?.oneOffSessions)
@@ -752,7 +754,8 @@ export function GuidedProductBuilder({
           .flatMap((value) => {
             if (!value || typeof value !== "object") return [];
             const session = value as Record<string, unknown>;
-            return typeof session.date === "string" && typeof session.startsAt === "string"
+            return typeof session.date === "string" &&
+              typeof session.startsAt === "string"
               ? [`${session.date} ${session.startsAt}`]
               : [];
           })
@@ -761,13 +764,14 @@ export function GuidedProductBuilder({
   );
   const [sessionBlackouts, setSessionBlackouts] = useState(
     Array.isArray(sessionSchedule?.blackoutDates)
-      ? sessionSchedule.blackoutDates.filter(
-          (value): value is string => typeof value === "string",
-        ).join("\n")
+      ? sessionSchedule.blackoutDates
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
       : "",
   );
-  const [autoRecordVirtualSession, setAutoRecordVirtualSession] =
-    useState(virtualDelivery?.autoRecord !== false);
+  const [autoRecordVirtualSession, setAutoRecordVirtualSession] = useState(
+    virtualDelivery?.autoRecord !== false,
+  );
   const [autoTranscribeVirtualSession, setAutoTranscribeVirtualSession] =
     useState(virtualDelivery?.autoTranscribe !== false);
   const [summarizeVirtualSession, setSummarizeVirtualSession] = useState(
