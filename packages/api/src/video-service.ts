@@ -54,6 +54,7 @@ import type {
   VideoSummary,
   VideoUsage,
 } from "./contracts";
+import { courtCalibrationSchema } from "./contracts";
 import { getDunaPlusEntitlement } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import { loadPublicMatchScoringState } from "./match-service";
@@ -121,6 +122,30 @@ type VideoCategory = "practice" | "event" | "match" | "social";
 type LiveVisibility = "public" | "link-only";
 type RecordingVisibility = "public" | "private";
 type CourtCalibration = NonNullable<VideoSummary["courtCalibration"]>;
+
+export function normalizeStoredCourtCalibration(
+  value: unknown,
+): CourtCalibration | undefined {
+  const parsed = courtCalibrationSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const calibratedAt = (value as { readonly calibratedAt?: unknown })
+    .calibratedAt;
+  if (typeof calibratedAt !== "string") return undefined;
+
+  const timestamp = new Date(calibratedAt);
+  if (Number.isNaN(timestamp.getTime())) return undefined;
+
+  const normalized = courtCalibrationSchema.safeParse({
+    ...value,
+    calibratedAt: timestamp.toISOString(),
+  });
+  return normalized.success ? normalized.data : undefined;
+}
 
 export class VideoServiceError extends Error {
   constructor(
@@ -393,8 +418,9 @@ async function loadVideoSummaries(
           video.musicRemovalStatus as VideoSummary["musicRemovalStatus"],
         durationSeconds: video.durationSeconds ?? undefined,
         bytes: video.bytes ?? undefined,
-        courtCalibration:
-          (video.courtCalibration as CourtCalibration | null) ?? undefined,
+        courtCalibration: normalizeStoredCourtCalibration(
+          video.courtCalibration,
+        ),
         startedAt: video.startedAt?.toISOString(),
         endedAt: video.endedAt?.toISOString(),
         readyAt: video.readyAt?.toISOString(),
