@@ -48,8 +48,11 @@ export function ProductInventoryReceiver({
   );
 
   return (
-    <section className="hq-card product-inventory-receiver">
-      <header className="hq-card-heading">
+    <section className="hq-card product-detail-card product-inventory-receiver">
+      <header className="product-detail-card__header">
+        <span className="product-detail-card__icon" aria-hidden>
+          <Boxes size={19} />
+        </span>
         <div>
           <span className="hq-eyebrow">Inventory · Receive stock</span>
           <h2>Add the exact option that arrived.</h2>
@@ -58,7 +61,6 @@ export function ProductInventoryReceiver({
             remains its own append-only quantity and cost layer.
           </p>
         </div>
-        <Boxes aria-hidden size={24} />
       </header>
       <form action={action}>
         <input name="purpose" type="hidden" value="sale" />

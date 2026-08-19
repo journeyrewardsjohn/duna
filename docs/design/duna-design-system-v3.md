@@ -578,7 +578,28 @@ choice rows full width, and expose all current state without horizontal
 clipping. A complex authoring flow that cannot remain clear on a phone should
 offer a deliberate desktop handoff rather than collapse into raw fields.
 
-## 10.5 Review checklist for every HQ field
+## 10.5 Detail management surfaces
+
+- **Use a management rail for supporting controls.** Lifecycle, inventory,
+  history, and recovery actions follow the primary editor in a left-aligned,
+  readable-width workspace. They do not each stretch across a 2K desktop.
+- **Give every operational card the same anatomy.** A compact icon, an
+  eyebrow, a clear action-oriented title, explanatory copy, and a padded work
+  area. A status or destructive action belongs beside the decision it affects,
+  never isolated at the far edge of a mostly empty panel.
+- **History is a record list, not a placeholder box.** Each revision shows its
+  version, meaning, time, current state, and recovery action. When no record
+  exists yet, explain exactly what will appear and why instead of rendering an
+  empty bordered rectangle.
+- **Saving a draft ends in a decision screen.** Show the saved customer-facing
+  summary, then make **Publish Live** the primary action, **Edit draft** the
+  secondary action, and **See all products** a quiet escape hatch. Do not drop
+  an operator back into a long editor with a small publish link.
+- **A validation bar has one truthful state.** Never present “ready” beside an
+  invalid warning. Name each remaining step and let the operator jump directly
+  to it; a review acknowledgement must both visibly and actually gate saving.
+
+## 10.6 Review checklist for every HQ field
 
 1. Can an operator understand what will happen before they enter a value?
 2. Does the control visually represent the thing being chosen?

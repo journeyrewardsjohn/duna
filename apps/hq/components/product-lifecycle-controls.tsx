@@ -4,10 +4,12 @@ import {
   Archive,
   Check,
   CircleAlert,
+  Rocket,
   RotateCcw,
   ToggleLeft,
 } from "lucide-react";
-import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect } from "react";
 import {
   setCatalogItemStatusAction,
   type OperatorActionState,
@@ -28,11 +30,39 @@ export function ProductLifecycleControls({
     setCatalogItemStatusAction,
     initialState,
   );
+  const router = useRouter();
   const isArchived = item.status === "archived";
+  const lifecycle =
+    item.status === "active"
+      ? {
+          label: "Live at checkout",
+          detail: "Players can currently discover and purchase this offer.",
+        }
+      : item.status === "draft"
+        ? {
+            label: "Private draft",
+            detail:
+              "This offer is off while you refine its customer experience.",
+          }
+        : {
+            label: "Archived",
+            detail:
+              "It is kept for records, without appearing in checkout or discovery.",
+          };
+
+  useEffect(() => {
+    if (state.status === "success") router.refresh();
+  }, [router, state.status]);
 
   return (
-    <section className="hq-card product-lifecycle-controls">
-      <header className="hq-card-heading">
+    <section
+      className="hq-card product-detail-card product-lifecycle-controls"
+      data-status={item.status}
+    >
+      <header className="product-detail-card__header">
+        <span className="product-detail-card__icon" aria-hidden>
+          <Archive size={19} />
+        </span>
         <div>
           <span className="hq-eyebrow">Offer lifecycle</span>
           <h2>
@@ -44,8 +74,13 @@ export function ProductLifecycleControls({
               : "Turn an offer off while you refine it, or archive it when it should leave the catalog without losing history."}
           </p>
         </div>
-        <Archive aria-hidden size={24} />
       </header>
+      <div className="product-lifecycle-controls__status">
+        <span className="product-detail-status" data-status={item.status}>
+          {lifecycle.label}
+        </span>
+        <p>{lifecycle.detail}</p>
+      </div>
       <div className="product-lifecycle-controls__actions">
         {isArchived ? (
           <form action={action}>
@@ -62,6 +97,20 @@ export function ProductLifecycleControls({
           </form>
         ) : (
           <>
+            {item.status === "draft" && (
+              <form action={action}>
+                <input name="catalogItemId" type="hidden" value={item.id} />
+                <input name="status" type="hidden" value="active" />
+                <input name="confirmed" type="hidden" value="true" />
+                <button
+                  className="hq-button hq-button--primary"
+                  disabled={pending}
+                  type="submit"
+                >
+                  <Rocket aria-hidden size={16} /> Publish Live
+                </button>
+              </form>
+            )}
             {item.status === "active" && (
               <form action={action}>
                 <input name="catalogItemId" type="hidden" value={item.id} />
@@ -81,7 +130,7 @@ export function ProductLifecycleControls({
               <input name="status" type="hidden" value="archived" />
               <input name="confirmed" type="hidden" value="true" />
               <button
-                className="catalog-archive-button"
+                className="product-lifecycle-controls__archive"
                 disabled={pending}
                 type="submit"
               >
