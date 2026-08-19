@@ -21,12 +21,34 @@ import {
   muxDataEnvironmentKey,
   R2_VIDEO_PART_SIZE_BYTES,
 } from "./video-providers";
+import { normalizeStoredCourtCalibration } from "./video-service";
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
 describe("Duna Video contracts", () => {
+  it("normalizes persisted database timestamps before returning video summaries", () => {
+    const calibration = normalizeStoredCourtCalibration({
+      courtWidthMeters: 8,
+      courtLengthMeters: 16,
+      netHeightMeters: 2.43,
+      qualityGrade: "good",
+      qualityScore: 84,
+      confidence: 0.82,
+      warnings: [],
+      calibratedAt: "2026-08-18 02:28:50.443084+00",
+    });
+
+    expect(calibration?.calibratedAt).toBe("2026-08-18T02:28:50.443Z");
+    expect(
+      normalizeStoredCourtCalibration({
+        ...calibration,
+        calibratedAt: "not-a-date",
+      }),
+    ).toBeUndefined();
+  });
+
   it("accepts calibrated full-court geometry and rejects impossible grades", () => {
     const calibration = {
       courtWidthMeters: 8,
