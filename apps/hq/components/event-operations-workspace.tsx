@@ -24,6 +24,7 @@ import {
   RotateCcw,
   ShieldCheck,
   UserCheck,
+  UserPlus,
   UserRoundX,
   UsersRound,
   Trophy,
@@ -32,6 +33,7 @@ import {
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
+  addCalendarParticipantAction,
   cancelCalendarSessionAction,
   createSessionNoteAction,
   publishSessionNoteAction,
@@ -59,6 +61,52 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
       )}
       {state.message}
     </p>
+  );
+}
+
+function RosterAddControl({
+  candidates,
+  sessionId,
+}: {
+  readonly candidates: readonly OperatorWorkspace["people"][number][];
+  readonly sessionId: string;
+}) {
+  const [state, action, pending] = useActionState(
+    addCalendarParticipantAction,
+    initialState,
+  );
+  if (!candidates.length) return null;
+  return (
+    <form action={action} className="event-roster-add">
+      <input name="sessionId" type="hidden" value={sessionId} />
+      <input
+        name="reason"
+        type="hidden"
+        value="Added directly to the event roster by an organization operator."
+      />
+      <label>
+        <span className="sr-only">Add a connected player</span>
+        <select defaultValue="" name="personId" required>
+          <option disabled value="">
+            Add a connected player
+          </option>
+          {candidates.map((person) => (
+            <option key={person.personId} value={person.personId}>
+              {person.displayName}
+              {person.membershipName ? ` · ${person.membershipName}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="hq-button hq-button--secondary"
+        disabled={pending}
+        type="submit"
+      >
+        <UserPlus aria-hidden size={15} /> {pending ? "Adding…" : "Add player"}
+      </button>
+      <ActionNotice state={state} />
+    </form>
   );
 }
 
@@ -486,6 +534,7 @@ export function EventOperationsWorkspace({
   const [transcript, setTranscript] = useState("");
   const [visibility, setVisibility] = useState<"private" | "player">("private");
   const [usedVoice, setUsedVoice] = useState(false);
+  const [noteMode, setNoteMode] = useState<"voice" | "written">();
   const session = detail.session;
   const attended = detail.attendees.filter(
     (attendee) => attendee.attendanceStatus === "attended",
@@ -559,6 +608,15 @@ export function EventOperationsWorkspace({
       : undefined;
   const weather = detail.operations.weather;
   const isTeamSession = detail.teams.length > 0;
+  const isLeague = session.kind === "league";
+  const rosterCandidates = workspace.people.filter(
+    (person) =>
+      person.status === "active" &&
+      person.roles.includes("player") &&
+      !detail.attendees.some(
+        (attendee) => attendee.personId === person.personId,
+      ),
+  );
   const weatherHeading = weather
     ? weather.condition
     : detail.operations.weatherStatus === "forecast-pending"
@@ -807,6 +865,44 @@ export function EventOperationsWorkspace({
 
       <section className="event-operations-layout">
         <div className="event-operations-main">
+          {isLeague && (
+            <section className="hq-card league-session-overview">
+              <header className="member-section-heading">
+                <span>
+                  <small>League control center</small>
+                  <h2>Run this league session with the roster in view.</h2>
+                </span>
+                <Badge
+                  tone={session.status === "completed" ? "neutral" : "positive"}
+                >
+                  {session.status === "completed"
+                    ? "Past session"
+                    : "Roster open"}
+                </Badge>
+              </header>
+              <div>
+                <span>
+                  <strong>{detail.attendees.length}</strong>
+                  <small>on the session roster</small>
+                </span>
+                <span>
+                  <strong>
+                    {Math.max(0, session.capacity - detail.attendees.length)}
+                  </strong>
+                  <small>spots remaining</small>
+                </span>
+                <span>
+                  <strong>{detail.teams.length}</strong>
+                  <small>teams in play</small>
+                </span>
+              </div>
+              <p>
+                Directors, managers, and assigned coaches can add a connected
+                player below. Duna records the change and sends the player their
+                session update.
+              </p>
+            </section>
+          )}
           {detail.teams.length > 0 && (
             <section
               className="hq-card event-team-operations"
@@ -998,7 +1094,13 @@ export function EventOperationsWorkspace({
                 <small>Attendance + customer care</small>
                 <h2>Roster</h2>
               </span>
-              <Badge>{detail.attendees.length} people</Badge>
+              <span className="event-roster-card__tools">
+                <Badge>{detail.attendees.length} people</Badge>
+                <RosterAddControl
+                  candidates={rosterCandidates}
+                  sessionId={session.id}
+                />
+              </span>
             </header>
             <div className="event-roster-list">
               {detail.attendees.map((attendee) => (
@@ -1055,7 +1157,7 @@ export function EventOperationsWorkspace({
                   <UsersRound aria-hidden size={22} />
                   <strong>No one is registered yet.</strong>
                   <span>
-                    Add players from their People profile or the calendar.
+                    Add a connected player with the roster control above.
                   </span>
                 </div>
               )}
@@ -1079,13 +1181,87 @@ export function EventOperationsWorkspace({
                 type="hidden"
                 value={usedVoice ? "livekit-voice" : "typed"}
               />
-              <SessionNoteRecorder
-                configured={liveKitConfigured}
-                onChange={setTranscript}
-                onVoiceStarted={() => setUsedVoice(true)}
-                sessionId={session.id}
-                transcript={transcript}
-              />
+              {!noteMode ? (
+                <div
+                  className="event-note-choice"
+                  role="group"
+                  aria-label="Choose how to create a note"
+                >
+                  <button onClick={() => setNoteMode("voice")} type="button">
+                    <Mic aria-hidden size={20} />
+                    <span>
+                      <strong>Record a voice note</strong>
+                      <small>
+                        Talk it through. Duna turns it into an editable draft.
+                      </small>
+                    </span>
+                  </button>
+                  <button onClick={() => setNoteMode("written")} type="button">
+                    <FileText aria-hidden size={20} />
+                    <span>
+                      <strong>Write a note</strong>
+                      <small>
+                        Capture a clear thought without extra setup.
+                      </small>
+                    </span>
+                  </button>
+                </div>
+              ) : noteMode === "voice" ? (
+                <>
+                  <button
+                    className="event-note-change-mode"
+                    onClick={() => {
+                      setNoteMode(undefined);
+                      setUsedVoice(false);
+                      setTranscript("");
+                    }}
+                    type="button"
+                  >
+                    Choose a different note type
+                  </button>
+                  <SessionNoteRecorder
+                    configured={liveKitConfigured}
+                    onChange={setTranscript}
+                    onVoiceStarted={() => setUsedVoice(true)}
+                    sessionId={session.id}
+                    transcript={transcript}
+                  />
+                </>
+              ) : (
+                <div className="event-note-written">
+                  <div>
+                    <span aria-hidden>
+                      <FileText size={20} />
+                    </span>
+                    <span>
+                      <strong>Write it while it is fresh.</strong>
+                      <small>
+                        Save privately first. You can refine recipients and
+                        sharing after review.
+                      </small>
+                    </span>
+                    <button
+                      onClick={() => {
+                        setNoteMode(undefined);
+                        setTranscript("");
+                      }}
+                      type="button"
+                    >
+                      Change type
+                    </button>
+                  </div>
+                  <label>
+                    <span>Your note</span>
+                    <textarea
+                      name="transcript"
+                      onChange={(event) => setTranscript(event.target.value)}
+                      placeholder="What changed, what should be repeated, and what needs attention next time?"
+                      rows={7}
+                      value={transcript}
+                    />
+                  </label>
+                </div>
+              )}
               <div className="event-note-form-grid">
                 <label>
                   <span>Short title · optional</span>

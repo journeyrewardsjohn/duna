@@ -127,6 +127,7 @@ import {
   ticketApprovalSummarySchema,
   ticketScanResultSchema,
   tournamentScheduleSchema,
+  tournamentCompetitionSnapshotSchema,
   venueSummarySchema,
   venueLayoutAssetSchema,
   venueLayoutCourtAssignmentPlanSchema,
@@ -186,6 +187,7 @@ import {
   createSessionNote,
   loadDemoOperatorMemberProfile,
   loadDemoOperatorSessionDetail,
+  loadOperatorMemberHealthProfile,
   loadOperatorMemberProfile,
   loadOperatorSessionDetail,
   loadPlayerCoachingNotes,
@@ -281,9 +283,12 @@ import {
   updateOrganizationTheme,
 } from "./catalog-service";
 import {
+  addManualDivisionEntry,
   cancelEventWithRefunds,
   expandDivisionField,
+  launchDivisionTournament,
   loadOperatorDivisionDetail,
+  loadTournamentCompetitionSnapshot,
   persistDivisionBracket,
   reconcileDivisionSelection,
   reconcileRegistrationDivisionSelection,
@@ -453,12 +458,14 @@ import {
   applyVenueLayoutCourtAssignments,
   createCourtFromVenueLayout,
   createVenueLayout,
+  deleteVenueLayoutDraft,
   loadPublicVenueLayout,
   loadVenueLayoutWorkspace,
   planVenueLayoutCourtAssignments,
   publishVenueLayout,
   saveVenueLayout,
   saveVenueLayoutEventSettings,
+  unpublishVenueLayout,
 } from "./venue-layout-service";
 import {
   loadPlayerOrganizationAccess,
@@ -543,6 +550,7 @@ import {
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
   refreshAvpLeague,
+  refreshAvpTournaments,
   refreshActiveFivbEvents,
   refreshFivbEventIndex,
   refreshWorldRankings,
@@ -577,9 +585,11 @@ import {
   placePredictionOrder,
   placePredictionSellOrder,
   PredictionMarketError,
+  recordManualProMatchResult,
   setPredictionMarketTradingStatus,
   settleDeterminedMatchPredictionMarket,
   settlePredictionMarket,
+  settleResolvedPredictionMarkets,
   updatePredictionMarketRules,
 } from "./prediction-market";
 import {
@@ -1593,6 +1603,18 @@ const publicRouter = router({
       const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       return attachEventWeather(event, ctx.now);
+    }),
+  tournamentCompetition: publicProcedure
+    .input(z.object({ slug: z.string().min(1) }))
+    .output(tournamentCompetitionSnapshotSchema)
+    .query(async ({ input }) => {
+      const event = await getRepository().public.eventBySlug(input.slug);
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      try {
+        return await loadTournamentCompetitionSnapshot({ sessionId: event.id });
+      } catch (error) {
+        return throwDomainError(error);
+      }
     }),
   venues: publicProcedure
     .output(z.array(venueSummarySchema).readonly())
@@ -3891,6 +3913,19 @@ const playerRouter = router({
   dashboard: protectedProcedure
     .output(playerDashboardSchema)
     .query(({ ctx }) => getRepository().player.dashboard(ctx.actor!.personId)),
+  tournamentCompetition: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(tournamentCompetitionSnapshotSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTournamentCompetitionSnapshot({
+          sessionId: input.sessionId,
+          personId: ctx.actor!.personId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   admissionPasses: protectedProcedure
     .output(playerAdmissionPassesSchema)
     .query(({ ctx }) =>
@@ -7426,6 +7461,23 @@ const operatorRouter = router({
             ipAddress: ctx.ipAddress,
           }),
     ),
+  memberHealthProfile: organizationProcedure("members:read")
+    .input(z.object({ personId: z.string().uuid() }))
+    .output(healthProfileSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadOperatorMemberHealthProfile({
+          actor: ctx.actor!,
+          organizationId: ctx.actor!.organizationId!,
+          personId: input.personId,
+          now: ctx.now,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   sessionArrivalBoard: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))
     .output(sessionArrivalBoardSchema)
@@ -7598,6 +7650,78 @@ const operatorRouter = router({
       loadOperatorDivisionDetail({
         organizationId: ctx.actor!.organizationId!,
         divisionId: input.divisionId,
+      }),
+    ),
+  addManualDivisionEntry: organizationProcedure("sessions:write")
+    .input(
+      z
+        .object({
+          divisionId: z.string().uuid(),
+          playerIds: z.array(z.string().uuid()).min(1).max(6),
+          payment: z.enum(["complimentary", "cash"]),
+          cashAmountMinor: z.number().int().positive().optional(),
+          cashReference: z.string().trim().max(160).optional(),
+          reason: z.string().trim().min(3).max(500),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .superRefine((value, ctx) => {
+          if (value.payment === "cash" && !value.cashAmountMinor) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["cashAmountMinor"],
+              message: "Record the verified cash amount.",
+            });
+          }
+        }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addManualDivisionEntry",
+        request: input,
+        ctx,
+        execute: () =>
+          addManualDivisionEntry({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            playerIds: input.playerIds,
+            payment: input.payment,
+            cashAmountMinor: input.cashAmountMinor,
+            cashReference: input.cashReference,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  launchDivisionTournament: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.launchDivisionTournament",
+        request: input,
+        ctx,
+        execute: () =>
+          launchDivisionTournament({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
   updateEventSession: organizationProcedure("sessions:write")
@@ -9359,6 +9483,16 @@ const operatorRouter = router({
               weekday: z.number().int().min(0).max(6),
               startsAt: z.string().regex(/^\d{2}:\d{2}$/),
               endsAt: z.string().regex(/^\d{2}:\d{2}$/),
+              scheduleId: z.string().uuid().optional(),
+              scheduleName: z.string().trim().min(1).max(80).optional(),
+              effectiveFrom: z
+                .string()
+                .regex(/^\d{4}-\d{2}-\d{2}$/)
+                .optional(),
+              effectiveTo: z
+                .string()
+                .regex(/^\d{4}-\d{2}-\d{2}$/)
+                .optional(),
             }),
           )
           .max(28),
@@ -9710,6 +9844,64 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await publishVenueLayout({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  deleteVenueLayoutDraft: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.deleteVenueLayoutDraft",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await deleteVenueLayoutDraft({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  unpublishVenueLayout: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        layoutId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.unpublishVenueLayout",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await unpublishVenueLayout({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,
@@ -10977,6 +11169,91 @@ const adminRouter = router({
         },
       }),
     ),
+  recordManualProMatchResult: superAdminProcedure
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        winnerSide: z.enum(["A", "B"]),
+        sets: z
+          .array(
+            z.object({
+              a: z.number().int().min(0).max(99),
+              b: z.number().int().min(0).max(99),
+            }),
+          )
+          .min(2)
+          .max(5),
+        sourceUrl: z.url().max(2_000).optional(),
+        reason: z.string().trim().min(10).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        matchId: z.string().uuid(),
+        winnerSide: z.enum(["A", "B"]),
+        settledMarkets: z.number().int().nonnegative(),
+        manualResult: z.object({
+          winnerSide: z.enum(["A", "B"]),
+          sets: z.array(z.object({ a: z.number(), b: z.number() })),
+          reason: z.string(),
+          sourceUrl: z.string().optional(),
+          submittedByPersonId: z.string().uuid(),
+          submittedAt: z.iso.datetime(),
+        }),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.recordManualProMatchResult",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordManualProMatchResult({
+              ...input,
+              actorPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  settleResolvedPredictionMarkets: superAdminProcedure
+    .input(
+      z.object({
+        reason: z.string().trim().min(10).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ settled: z.number().int().nonnegative() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.settleResolvedPredictionMarkets",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await settleResolvedPredictionMarkets({
+              limit: 1_000,
+              actorPersonId: ctx.actor!.personId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoOverview: adminProcedure
     .output(adminVideoOverviewSchema)
     .query(async ({ ctx }) => {
@@ -11561,6 +11838,7 @@ const adminRouter = router({
           "fivb-12ndr",
           "volleyball-world",
           "avp-league",
+          "avp-tournaments",
         ]),
         enabled: z.boolean(),
         engine: z.enum(["auto", "native", "firecrawl"]),
@@ -11627,6 +11905,7 @@ const adminRouter = router({
           "fivb-12ndr",
           "volleyball-world",
           "avp-league",
+          "avp-tournaments",
         ]),
       }),
     )
@@ -11936,6 +12215,7 @@ const adminRouter = router({
           "volleyball-life",
           "fivb-12ndr",
           "avp-league",
+          "avp-tournaments",
         ]),
         externalId: z.string().trim().min(1).max(400),
       }),
@@ -12045,6 +12325,32 @@ const adminRouter = router({
     .mutation(async ({ input, ctx }) => {
       try {
         return await refreshAvpLeague({
+          season: input?.season,
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  refreshAvpTournaments: adminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-avp-tournaments-refresh",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z
+        .object({
+          season: z.number().int().min(2000).max(2100).optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshAvpTournaments({
           season: input?.season,
           actor: ctx.actor!,
           now: ctx.now,

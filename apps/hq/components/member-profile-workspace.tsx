@@ -734,6 +734,12 @@ export function MemberProfileWorkspace({
                 : "not yet synced"}
               .
             </p>
+            <Link
+              className="hq-button hq-button--secondary hq-button--compact"
+              href={`/members/${person.personId}/health`}
+            >
+              <HeartPulse aria-hidden size={15} /> Open Health Details
+            </Link>
           </>
         ) : (
           <div className="member-health-empty">

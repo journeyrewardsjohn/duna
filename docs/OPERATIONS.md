@@ -9,7 +9,8 @@ and connected-workflow procedures; it never contains credential values.
 ## Connected environments
 
 - GitHub repository: `journeyrewardsjohn/duna`
-- Neon project: `beach-elite`
+- Neon organization: `Journey`
+- Neon project: `duna` (`polished-sky-03515868`)
 - Neon branch: `duna-production`
 - Neon database: `duna`
 - Stripe account: Beach Elite LLC, test mode
@@ -36,6 +37,14 @@ journeys across desktop, tablet, and phone.
 reads, tenant scope, atomic pickup/audit writes, idempotent replay, persistent AI
 confirmation, durable webhook processing, and database rate limiting. It removes
 the isolated records it creates.
+
+Production Web and HQ configure both `DATABASE_URL` and
+`NEON_READ_ONLY_REPLICA`. The former is the primary and stays active; the latter
+is the read-only compute used by `getReadOnlyDatabase()` for latency-tolerant
+queries. The connected smoke remains on the primary because it proves writes,
+transactions, idempotency, and immediate consistency. Monitor primary and
+replica load separately, and never route release migrations or repair work to
+the replica.
 
 Native JS bundles are checked with:
 

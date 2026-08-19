@@ -3258,6 +3258,92 @@ html[data-theme="dark"] body[data-zone="operator"] {
   }
 }
 
+.vision-model-admin {
+  display: grid;
+  gap: 1rem;
+}
+
+.vision-operator-guide {
+  background:
+    radial-gradient(
+      circle at 0% 0%,
+      color-mix(in srgb, var(--hq-core) 16%, transparent),
+      transparent 42%
+    ),
+    var(--hq-deep);
+  border-radius: 18px;
+  color: var(--hq-text-on-deep);
+  display: grid;
+  gap: 1.2rem;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(440px, 1.25fr);
+  padding: clamp(1rem, 2.4vw, 1.6rem);
+}
+
+.vision-operator-guide > div {
+  align-content: start;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.vision-operator-guide h2,
+.vision-operator-guide p {
+  margin: 0;
+}
+
+.vision-operator-guide h2 {
+  font-size: clamp(1.25rem, 2.2vw, 1.8rem);
+  letter-spacing: -0.03em;
+}
+
+.vision-operator-guide p,
+.vision-operator-guide small {
+  color: color-mix(in srgb, var(--hq-text-on-deep) 72%, transparent);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.vision-operator-guide .hq-button {
+  justify-self: start;
+  margin-top: 0.25rem;
+}
+
+.vision-operator-guide ol {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vision-operator-guide li {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-text-on-deep) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hq-text-on-deep) 11%, transparent);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.62rem 0.72rem;
+}
+
+.vision-operator-guide li > span {
+  align-items: center;
+  background: var(--hq-core);
+  border-radius: 999px;
+  display: flex;
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 900;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.vision-operator-guide li > div {
+  display: grid;
+  gap: 0.08rem;
+}
+
 .vision-evidence-card,
 .vision-evaluation-card,
 .vision-advanced-operations {
@@ -3750,6 +3836,10 @@ html[data-theme="dark"] body[data-zone="operator"] {
 }
 
 @media (max-width: 1100px) {
+  .vision-operator-guide {
+    grid-template-columns: 1fr;
+  }
+
   .vision-runtime-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

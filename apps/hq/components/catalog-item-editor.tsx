@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperatorWorkspace } from "@duna/api";
+import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
 import { Badge } from "@duna/ui";
 import {
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Pencil,
   Rocket,
   Search,
+  ShieldCheck,
   ShoppingBag,
   UserRound,
   Video,
@@ -75,10 +76,12 @@ function notice(state: OperatorActionState) {
 export function CatalogItemEditor({
   created,
   item,
+  waivers,
   workspace,
 }: {
   readonly created: boolean;
   readonly item: OperatorWorkspace["catalog"][number];
+  readonly waivers: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
   const configuration = item.configuration ?? {};
@@ -118,6 +121,10 @@ export function CatalogItemEditor({
   const [redemptionNotes, setRedemptionNotes] = useState(
     configurationString(configuration, "redemptionNotes"),
   );
+  const [membershipWaiverDocumentIds, setMembershipWaiverDocumentIds] =
+    useState<readonly string[]>(() =>
+      configurationStrings(configuration, "waiverDocumentIds"),
+    );
   const [state, action, pending] = useActionState(
     updateCatalogItemAction,
     initialState,
@@ -131,6 +138,7 @@ export function CatalogItemEditor({
     initialState,
   );
   const supportsCoaches = item.type === "event" || item.type === "service";
+  const isMembership = item.type === "plan" && item.subtype === "membership";
   const inventoryOnlyGood =
     item.type === "good" && configuration.saleEnabled === false;
   const assignedCoachIds =
@@ -157,6 +165,7 @@ export function CatalogItemEditor({
     highlights: parsedHighlights,
     validityDays: validityDays ? Math.max(0, Number(validityDays)) : undefined,
     redemptionNotes: redemptionNotes.trim() || undefined,
+    ...(isMembership ? { waiverDocumentIds: membershipWaiverDocumentIds } : {}),
     ...(supportsCoaches
       ? {
           coachAssignmentMode: coachMode,
@@ -189,7 +198,6 @@ export function CatalogItemEditor({
       candidate.subtype === "membership" &&
       candidate.status === "active",
   );
-  const isMembership = item.type === "plan" && item.subtype === "membership";
   const liveProductUrl = `https://duna.coach/clubs/${workspace.organization.slug}/products/${item.slug}`;
 
   return (
@@ -291,9 +299,12 @@ export function CatalogItemEditor({
           {primaryPrice?.recurringInterval && (
             <span>Renews every {primaryPrice.recurringInterval}</span>
           )}
-          <a className="hq-button hq-button--secondary" href="#edit-product">
+          <Link
+            className="hq-button hq-button--secondary"
+            href={`/products/${item.id}/builder`}
+          >
             <Pencil aria-hidden size={15} /> Edit draft
-          </a>
+          </Link>
           {item.status === "active" ? (
             <a
               className="hq-button hq-button--primary"
@@ -582,6 +593,74 @@ export function CatalogItemEditor({
                   </p>
                 )}
               </>
+            )}
+          </fieldset>
+        )}
+
+        {isMembership && (
+          <fieldset className="product-coach-assignment">
+            <legend>
+              <ShieldCheck aria-hidden size={18} /> Required agreements
+            </legend>
+            <p>
+              Customers must review and sign each selected active waiver before
+              this membership can be purchased. Duna records the exact version
+              they accepted; changing a waiver creates a new requirement.
+            </p>
+            {waivers.documents.some(
+              (waiver) => waiver.status === "active" && waiver.versionId,
+            ) ? (
+              <div className="product-coach-grid catalog-waiver-grid">
+                {waivers.documents
+                  .filter(
+                    (waiver) => waiver.status === "active" && waiver.versionId,
+                  )
+                  .map((waiver) => {
+                    const checked = membershipWaiverDocumentIds.includes(
+                      waiver.id,
+                    );
+                    return (
+                      <label
+                        className={checked ? "active" : undefined}
+                        key={waiver.id}
+                      >
+                        <input
+                          checked={checked}
+                          onChange={(event) =>
+                            setMembershipWaiverDocumentIds((current) =>
+                              event.target.checked
+                                ? [...current, waiver.id]
+                                : current.filter((id) => id !== waiver.id),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span className="product-coach-fallback">
+                          <ShieldCheck aria-hidden size={17} />
+                        </span>
+                        <span>
+                          <strong>{waiver.title}</strong>
+                          <small>
+                            Version {waiver.version} · valid{" "}
+                            {waiver.signatureValidityDays} days
+                          </small>
+                        </span>
+                        <i aria-hidden />
+                      </label>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="product-coach-empty">
+                <span>
+                  <strong>No active agreement is available.</strong>
+                  Create and publish a waiver in Settings before requiring it at
+                  checkout.
+                </span>
+                <Link href="/settings?section=waivers">
+                  Open waiver library
+                </Link>
+              </div>
             )}
           </fieldset>
         )}

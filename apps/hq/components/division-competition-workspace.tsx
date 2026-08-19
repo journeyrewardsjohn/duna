@@ -6,24 +6,31 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarClock,
+  Banknote,
   Check,
   CircleAlert,
+  Gift,
   MapPin,
+  Play,
   RefreshCw,
   ShieldCheck,
   Trophy,
+  UserPlus,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
+  addManualDivisionEntryAction,
   expandDivisionFieldAction,
+  launchDivisionTournamentAction,
   persistDivisionBracketAction,
   reconcileDivisionSelectionAction,
   setTeamSelectionAction,
   updateDivisionMatchScheduleAction,
   type OperatorActionState,
 } from "@/app/actions";
+import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -161,6 +168,182 @@ function MatchScheduleControl({
   );
 }
 
+function ManualTeamEntryControl({
+  detail,
+}: {
+  readonly detail: OperatorDivisionDetail;
+}) {
+  const [state, action, pending] = useActionState(
+    addManualDivisionEntryAction,
+    initialState,
+  );
+  const [payment, setPayment] = useState<"complimentary" | "cash">(
+    "complimentary",
+  );
+  const people = useMemo<readonly PlayerComboboxOption[]>(() => {
+    const options = detail.teams.flatMap((team) =>
+      team.roster.flatMap((member) =>
+        member.personId
+          ? [
+              {
+                id: member.personId,
+                displayName: member.displayName,
+                handle: member.displayName.toLowerCase().replace(/\s+/g, "-"),
+                rating: member.ratingDisplay,
+              },
+            ]
+          : [],
+      ),
+    );
+    return [...new Map(options.map((option) => [option.id, option])).values()];
+  }, [detail.teams]);
+  return (
+    <details className="division-manual-entry">
+      <summary>
+        <UserPlus aria-hidden size={17} /> Add a team manually
+        <small>Complimentary or verified cash</small>
+      </summary>
+      <form action={action}>
+        <input name="divisionId" type="hidden" value={detail.division.id} />
+        <div className="division-manual-entry__players">
+          {Array.from({ length: detail.division.teamSize }, (_, index) => (
+            <PlayerCombobox
+              initialOptions={people}
+              key={index}
+              label={index === 0 ? "Captain" : `Player ${index + 1}`}
+              name="playerIds"
+              placeholder={
+                index === 0 ? "Find the captain…" : `Find player ${index + 1}…`
+              }
+            />
+          ))}
+        </div>
+        <fieldset>
+          <legend>Entry treatment</legend>
+          <label>
+            <input
+              checked={payment === "complimentary"}
+              name="payment"
+              onChange={() => setPayment("complimentary")}
+              type="radio"
+              value="complimentary"
+            />
+            <Gift aria-hidden size={16} /> Complimentary
+            <small>Added as a director-granted entry.</small>
+          </label>
+          <label>
+            <input
+              checked={payment === "cash"}
+              name="payment"
+              onChange={() => setPayment("cash")}
+              type="radio"
+              value="cash"
+            />
+            <Banknote aria-hidden size={16} /> Cash verified
+            <small>Record what was received at the desk.</small>
+          </label>
+        </fieldset>
+        {payment === "cash" && (
+          <div className="division-manual-entry__cash">
+            <label>
+              <span>Cash received</span>
+              <input
+                defaultValue={
+                  detail.division.entryFeeMinor
+                    ? (detail.division.entryFeeMinor / 100).toFixed(2)
+                    : undefined
+                }
+                inputMode="decimal"
+                min="0.01"
+                name="cashAmount"
+                placeholder="0.00"
+                required
+                step="0.01"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Receipt or desk reference</span>
+              <input name="cashReference" placeholder="Optional" />
+            </label>
+          </div>
+        )}
+        <label className="division-manual-entry__reason">
+          <span>Why is this entry being added?</span>
+          <input
+            defaultValue={
+              payment === "cash"
+                ? "Cash received and verified at tournament desk."
+                : "Director-granted complimentary entry."
+            }
+            name="reason"
+            required
+          />
+        </label>
+        <label className="division-manual-entry__confirm">
+          <input name="confirmed" required type="checkbox" value="true" />I
+          verified this roster and its entry treatment.
+        </label>
+        <button disabled={pending} type="submit">
+          {pending ? "Adding team…" : "Add to confirmed field"}
+        </button>
+        <Notice state={state} />
+      </form>
+    </details>
+  );
+}
+
+function TournamentLaunchControl({
+  detail,
+}: {
+  readonly detail: OperatorDivisionDetail;
+}) {
+  const [state, action, pending] = useActionState(
+    launchDivisionTournamentAction,
+    initialState,
+  );
+  const live =
+    detail.session.status === "live" || Boolean(detail.bracket?.liveAt);
+  return (
+    <section className={`tournament-launch-control${live ? " is-live" : ""}`}>
+      <span className="tournament-launch-control__mark" aria-hidden>
+        <Play size={20} />
+      </span>
+      <div>
+        <small>{live ? "Tournament live" : "Ready to operate"}</small>
+        <strong>
+          {live
+            ? "Courts are running on the official draw."
+            : "Launch the tournament when the field is final."}
+        </strong>
+        <p>
+          {live
+            ? "Score entries and schedule changes now operate against this versioned field."
+            : detail.bracket
+              ? "Duna will make this bracket version the live operational source of truth."
+              : "Build pools or a bracket first. You can still refine teams and seeds before launch."}
+        </p>
+      </div>
+      {!live && (
+        <form action={action}>
+          <input name="divisionId" type="hidden" value={detail.division.id} />
+          <input
+            name="reason"
+            type="hidden"
+            value="Director launched tournament operations."
+          />
+          <input name="confirmed" type="hidden" value="true" />
+          <button disabled={!detail.bracket || pending} type="submit">
+            <Play aria-hidden size={16} />{" "}
+            {pending ? "Launching…" : "Launch tournament"}
+          </button>
+        </form>
+      )}
+      <Notice state={state} />
+    </section>
+  );
+}
+
 export function DivisionCompetitionWorkspace({
   detail,
 }: {
@@ -244,6 +427,8 @@ export function DivisionCompetitionWorkspace({
           <Badge>{detail.matches.length} matches</Badge>
         </span>
       </header>
+
+      <TournamentLaunchControl detail={detail} />
 
       <section className="division-control-grid">
         <form action={seedAction} className="hq-card division-control-card">
@@ -388,6 +573,7 @@ export function DivisionCompetitionWorkspace({
             awaiting full payment and cannot qualify yet.
           </footer>
         )}
+        <ManualTeamEntryControl detail={detail} />
       </section>
 
       <section className="hq-card division-bracket-builder">

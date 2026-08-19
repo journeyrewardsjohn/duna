@@ -29,6 +29,7 @@ import {
   type EventSectionNavItem,
 } from "@/components/event-section-nav";
 import { EventTicketSelector } from "@/components/event-ticket-selector";
+import { EventTournamentDesk } from "@/components/event-tournament-desk";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ProEventDetail } from "@/components/pro-event-detail";
@@ -82,7 +83,7 @@ export async function generateMetadata({
     (proEvent
       ? professionalOgImageUrl({
           title: proEvent.name,
-          eyebrow: `${proEvent.source === "avp" ? "AVP League" : "Beach Pro Tour"} · ${proEvent.genderCategory}`,
+          eyebrow: `${proEvent.source === "avp" ? "AVP" : "Beach Pro Tour"} · ${proEvent.genderCategory}`,
           detail: [proEvent.category, proEvent.location, proEvent.startsOn]
             .filter(Boolean)
             .join(" · "),
@@ -174,26 +175,36 @@ export default async function EventPage({
           .pickupManagement({ pickupSessionId: event.id })
           .catch(() => undefined)
       : undefined;
-  const [videos, eventPredictionData, predictionWallet, recommendations] =
-    await Promise.all([
-      caller.public.videos({ eventId: event.id }).catch(() => []),
-      caller.public
-        .eventPredictionMarkets({ eventSlug: event.slug })
-        .catch(() => undefined),
-      caller.player.predictionWallet().catch(() => undefined),
-      event.organizationSlug
-        ? caller.public
-            .catalogRecommendations({
-              organizationSlug: event.organizationSlug,
-              title: event.title,
-              type: "event",
-              subtype: event.kind,
-              latitude: event.location?.latitude,
-              longitude: event.location?.longitude,
-            })
-            .catch(() => ({ sameOrganization: [], nearby: [] }))
-        : Promise.resolve({ sameOrganization: [], nearby: [] }),
-    ]);
+  const [
+    videos,
+    eventPredictionData,
+    predictionWallet,
+    recommendations,
+    tournamentCompetition,
+  ] = await Promise.all([
+    caller.public.videos({ eventId: event.id }).catch(() => []),
+    caller.public
+      .eventPredictionMarkets({ eventSlug: event.slug })
+      .catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+    event.organizationSlug
+      ? caller.public
+          .catalogRecommendations({
+            organizationSlug: event.organizationSlug,
+            title: event.title,
+            type: "event",
+            subtype: event.kind,
+            latitude: event.location?.latitude,
+            longitude: event.location?.longitude,
+          })
+          .catch(() => ({ sameOrganization: [], nearby: [] }))
+      : Promise.resolve({ sameOrganization: [], nearby: [] }),
+    event.kind === "tournament"
+      ? caller.public
+          .tournamentCompetition({ slug: event.slug })
+          .catch(() => undefined)
+      : Promise.resolve(undefined),
+  ]);
 
   const cover = event.media?.[0];
   const fallbackMedia = defaultEventMedia(event.kind, event.id);
@@ -266,6 +277,9 @@ export default async function EventPage({
       : []),
     ...(event.divisions?.length
       ? [{ id: "divisions", label: "Divisions" }]
+      : []),
+    ...(tournamentCompetition?.divisions.length
+      ? [{ id: "tournament", label: "Tournament" }]
       : []),
     ...(event.recurrence ? [{ id: "event-schedule", label: "Schedule" }] : []),
     { id: "event-players", label: "Players" },
@@ -441,6 +455,10 @@ export default async function EventPage({
               </MarkdownContent>
             )}
           </article>
+
+          {tournamentCompetition?.divisions.length ? (
+            <EventTournamentDesk snapshot={tournamentCompetition} />
+          ) : null}
 
           {event.features && event.features.length > 0 && (
             <section className="event-public__section" id="event-features">

@@ -636,6 +636,9 @@ export function ProEventDetail({
   readonly predictionWallet?: PredictionWallet;
 }) {
   const completedMatchCount = event.completedMatchCount;
+  const tournamentComplete = event.status === "completed" && !event.live;
+  const champion = event.podium.champion;
+  const runnerUp = event.podium.runnerUp;
   const topMatches = event.matches
     .filter(
       (match) =>
@@ -960,6 +963,23 @@ export function ProEventDetail({
               {event.teamCount || event.liveStandings.length} teams
             </span>
           </div>
+          {tournamentComplete && (
+            <div className="pro-event-hero__result">
+              <Trophy aria-hidden size={19} />
+              <div>
+                <span>Final result</span>
+                <strong>
+                  {champion
+                    ? `${champion.label} won ${event.name}`
+                    : "Tournament complete"}
+                </strong>
+                {runnerUp && champion && (
+                  <small>Defeated {runnerUp.label} in the final</small>
+                )}
+              </div>
+              {champion && <a href="#event-podium">View podium</a>}
+            </div>
+          )}
           {event.editorial.summary && (
             <p className="pro-event-hero__summary">{event.editorial.summary}</p>
           )}

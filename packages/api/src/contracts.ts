@@ -485,6 +485,99 @@ export const eventSummarySchema = z.object({
   tags: z.array(z.string()).readonly(),
 });
 export type EventSummary = z.infer<typeof eventSummarySchema>;
+
+const tournamentCompetitionTeamSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  seed: z.number().int().positive().optional(),
+});
+
+const tournamentCompetitionMatchSchema = z.object({
+  id: z.string().uuid(),
+  logicalId: z.string(),
+  bracket: z.enum(["winners", "losers", "final", "pool", "consolation"]),
+  round: z.number().int().positive(),
+  position: z.number().int().positive(),
+  label: z.string(),
+  status: z.string(),
+  teamA: tournamentCompetitionTeamSchema.optional(),
+  teamB: tournamentCompetitionTeamSchema.optional(),
+  winnerTeamId: z.string().uuid().optional(),
+  courtName: z.string().optional(),
+  scheduledAt: z.iso.datetime().optional(),
+  startedAt: z.iso.datetime().optional(),
+  completedAt: z.iso.datetime().optional(),
+  score: z
+    .object({
+      status: z.enum(["not-started", "live", "complete", "forfeit"]),
+      sets: z.array(z.tuple([z.number().int(), z.number().int()])).readonly(),
+    })
+    .optional(),
+});
+
+export const tournamentCompetitionSnapshotSchema = z.object({
+  session: z.object({
+    id: z.string().uuid(),
+    title: z.string(),
+    status: z.string(),
+    timezone: z.string(),
+    updatedAt: z.iso.datetime(),
+  }),
+  divisions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        competitionVersion: z.number().int().positive(),
+        format: z.string(),
+        liveAt: z.iso.datetime().optional(),
+        pools: z
+          .array(
+            z.object({
+              key: z.string(),
+              teams: z.array(tournamentCompetitionTeamSchema).readonly(),
+              completedMatches: z.number().int().nonnegative(),
+              matchCount: z.number().int().nonnegative(),
+              standings: z
+                .array(
+                  z.object({
+                    team: tournamentCompetitionTeamSchema,
+                    wins: z.number().int().nonnegative(),
+                    losses: z.number().int().nonnegative(),
+                    setDifferential: z.number().int(),
+                    pointDifferential: z.number().int(),
+                  }),
+                )
+                .readonly(),
+            }),
+          )
+          .readonly(),
+        rounds: z
+          .array(
+            z.object({
+              key: z.string(),
+              label: z.string(),
+              bracket: z.enum([
+                "winners",
+                "losers",
+                "final",
+                "pool",
+                "consolation",
+              ]),
+              round: z.number().int().positive(),
+              matches: z.array(tournamentCompetitionMatchSchema).readonly(),
+            }),
+          )
+          .readonly(),
+        matches: z.array(tournamentCompetitionMatchSchema).readonly(),
+      }),
+    )
+    .readonly(),
+  myNextMatch: tournamentCompetitionMatchSchema.optional(),
+});
+export type TournamentCompetitionSnapshot = z.infer<
+  typeof tournamentCompetitionSnapshotSchema
+>;
 export const matchSummarySchema = z.object({
   id: z.string(),
   status: z
@@ -995,6 +1088,7 @@ export const predictionWalletSchema = z.object({
         marketId: z.string().uuid(),
         title: z.string(),
         selectedLabel: z.string(),
+        resolvedLabel: z.string().optional(),
         side: z.enum(["yes", "no"]),
         shares: z.number().nonnegative(),
         availableShares: z.number().nonnegative(),
@@ -1133,6 +1227,27 @@ export const adminPredictionOverviewSchema = z.object({
           )
           .readonly(),
         predictors: predictionMarketSchema.shape.predictors,
+      }),
+    )
+    .readonly(),
+  manualResultMatches: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        yesLabel: z.string(),
+        noLabel: z.string(),
+        playedAt: z.iso.datetime().optional(),
+        sets: z
+          .array(
+            z.object({
+              a: z.number().int().nonnegative(),
+              b: z.number().int().nonnegative(),
+            }),
+          )
+          .readonly(),
+        winnerSide: z.enum(["A", "B"]).optional(),
+        marketCount: z.number().int().positive(),
       }),
     )
     .readonly(),
@@ -2543,7 +2658,10 @@ export const visionUploadedVideoSchema = z.object({
       ]),
       modelVersion: z.string().optional(),
       pipelineVersion: z.string(),
-      calibrationQualityScore: z.number().min(0).max(1).optional(),
+      // Capture, analysis, and the worker all use the operator-facing 0-100
+      // calibration scale. Keeping the admin projection on the same scale
+      // prevents valid production analyses from failing output validation.
+      calibrationQualityScore: z.number().int().min(0).max(100).optional(),
       qualityDecision: z.enum(["passed", "failed", "unverified"]).optional(),
       eventCount: z.number().int().nonnegative(),
       completedAt: z.iso.datetime().optional(),
@@ -4352,6 +4470,7 @@ export const operatorDivisionDetailSchema = z.object({
     id: z.string().uuid(),
     title: z.string(),
     kind: z.string(),
+    status: z.string(),
     startsAt: z.iso.datetime(),
     timezone: z.string(),
     venueId: z.string().uuid().optional(),
@@ -4363,6 +4482,7 @@ export const operatorDivisionDetailSchema = z.object({
     teamSize: z.number().int().positive(),
     capacity: z.number().int().positive(),
     maximumTeams: z.number().int().positive().optional(),
+    entryFeeMinor: z.number().int().nonnegative(),
     seeding: z.string(),
     tournamentFormat: z.string(),
     poolPlay: z
@@ -4382,6 +4502,7 @@ export const operatorDivisionDetailSchema = z.object({
       version: z.number().int().positive(),
       format: z.string(),
       structure: z.record(z.string(), z.unknown()),
+      liveAt: z.iso.datetime().optional(),
       createdAt: z.iso.datetime(),
     })
     .optional(),

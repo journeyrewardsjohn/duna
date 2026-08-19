@@ -86,7 +86,7 @@ export default async function PredictionPortfolioPage() {
             </small>
           </article>
           <article>
-            <span>Order book</span>
+            <span>Open orders</span>
             <Numeric tier="block">{wallet.portfolio.openOrders}</Numeric>
             <small>{wallet.portfolio.openPositions} open positions</small>
           </article>
@@ -144,7 +144,7 @@ export default async function PredictionPortfolioPage() {
               <Coins aria-hidden size={20} />
               <span>
                 <strong>No open positions.</strong>
-                Your next matched prediction will appear here.
+                Your next prediction will appear here.
               </span>
             </div>
           )}
@@ -166,24 +166,31 @@ export default async function PredictionPortfolioPage() {
                 </span>
                 <div>
                   <strong>{position.title}</strong>
-                  <span>{position.selectedLabel}</span>
+                  <span>Picked: {position.selectedLabel}</span>
                   <small>
+                    {position.resolvedLabel
+                      ? `Final outcome: ${position.resolvedLabel}`
+                      : "Final outcome recorded"}
                     {position.determinedAt
-                      ? new Intl.DateTimeFormat("en-US", {
+                      ? ` · ${new Intl.DateTimeFormat("en-US", {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
-                        }).format(new Date(position.determinedAt))
-                      : "Final result recorded"}
+                        }).format(new Date(position.determinedAt))}`
+                      : ""}
                   </small>
                 </div>
                 <p>
                   <Badge
                     tone={position.status === "won" ? "positive" : "neutral"}
                   >
-                    {position.status}
+                    {position.status === "won"
+                      ? "Won"
+                      : position.status === "lost"
+                        ? "Lost"
+                        : "Voided"}
                   </Badge>
-                  <Numeric>{amount(position.payoutCredits)} paid</Numeric>
+                  <Numeric>{amount(position.payoutCredits)} returned</Numeric>
                   <span
                     data-tone={
                       position.netCredits >= 0 ? "positive" : "negative"
@@ -212,7 +219,7 @@ export default async function PredictionPortfolioPage() {
           <header>
             <div>
               <span className="page-eyebrow">Orders</span>
-              <h2>Still in the book</h2>
+              <h2>Open sell orders</h2>
             </div>
             <Badge>{wallet.openOrders.length}</Badge>
           </header>
@@ -249,8 +256,8 @@ export default async function PredictionPortfolioPage() {
             <div className="prediction-portfolio-empty">
               <BookOpenCheck aria-hidden size={20} />
               <span>
-                <strong>No unmatched orders.</strong>
-                Your order book is clear.
+                <strong>No open sell orders.</strong>
+                Your shares are available to hold or sell.
               </span>
             </div>
           )}

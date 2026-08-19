@@ -4,12 +4,14 @@ import type { OperatorWorkspace } from "@duna/api";
 import { Badge, Field, Input, Select } from "@duna/ui";
 import {
   CalendarDays,
+  Bot,
   Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
   Plus,
   ShieldCheck,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
@@ -26,6 +28,18 @@ interface AvailabilityBlock {
   readonly weekday: number;
   readonly startsAt: string;
   readonly endsAt: string;
+  readonly scheduleId?: string;
+  readonly scheduleName?: string;
+  readonly effectiveFrom?: string;
+  readonly effectiveTo?: string;
+}
+
+interface AvailabilitySchedule {
+  readonly id: string;
+  readonly name: string;
+  readonly effectiveFrom?: string;
+  readonly effectiveTo?: string;
+  readonly blocks: readonly AvailabilityBlock[];
 }
 
 interface BlackoutDate {
@@ -94,6 +108,62 @@ function normalizeAvailability(
   });
 }
 
+function normalizeSchedules(
+  value: StaffProfile["availability"],
+): AvailabilitySchedule[] {
+  const schedules = new Map<string, AvailabilitySchedule>();
+  for (const entry of value) {
+    if (entry.kind === "blackout") continue;
+    const weekday = Number(entry.weekday);
+    const startsAt = String(entry.startsAt ?? "");
+    const endsAt = String(entry.endsAt ?? "");
+    if (
+      !Number.isInteger(weekday) ||
+      weekday < 0 ||
+      weekday > 6 ||
+      !/^\d{2}:\d{2}$/.test(startsAt) ||
+      !/^\d{2}:\d{2}$/.test(endsAt)
+    )
+      continue;
+    const scheduleId =
+      typeof entry.scheduleId === "string" && entry.scheduleId
+        ? entry.scheduleId
+        : "usual";
+    const current = schedules.get(scheduleId) ?? {
+      id: scheduleId,
+      name:
+        typeof entry.scheduleName === "string" && entry.scheduleName.trim()
+          ? entry.scheduleName
+          : "Usual availability",
+      effectiveFrom:
+        typeof entry.effectiveFrom === "string"
+          ? entry.effectiveFrom
+          : undefined,
+      effectiveTo:
+        typeof entry.effectiveTo === "string" ? entry.effectiveTo : undefined,
+      blocks: [],
+    };
+    schedules.set(scheduleId, {
+      ...current,
+      blocks: [
+        ...current.blocks,
+        {
+          weekday,
+          startsAt,
+          endsAt,
+          scheduleId,
+          scheduleName: current.name,
+          effectiveFrom: current.effectiveFrom,
+          effectiveTo: current.effectiveTo,
+        },
+      ],
+    });
+  }
+  return schedules.size
+    ? [...schedules.values()]
+    : [{ id: "usual", name: "Usual availability", blocks: [] }];
+}
+
 function normalizeBlackouts(
   value: StaffProfile["availability"],
 ): BlackoutDate[] {
@@ -128,9 +198,13 @@ export function TeamMemberEditor({
   const [compensationModel, setCompensationModel] = useState(
     person.compensationModel,
   );
-  const [availability, setAvailability] = useState<AvailabilityBlock[]>(
-    normalizeAvailability(person.availability),
+  const [schedules, setSchedules] = useState<AvailabilitySchedule[]>(() =>
+    normalizeSchedules(person.availability),
   );
+  const [activeScheduleId, setActiveScheduleId] = useState(
+    () => normalizeSchedules(person.availability)[0]?.id ?? "usual",
+  );
+  const [schedulePrompt, setSchedulePrompt] = useState("");
   const [blackouts, setBlackouts] = useState<BlackoutDate[]>(
     normalizeBlackouts(person.availability),
   );
@@ -142,31 +216,106 @@ export function TeamMemberEditor({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const availabilityByDay = useMemo(
-    () => new Map(availability.map((block) => [block.weekday, block] as const)),
-    [availability],
-  );
+  const activeSchedule =
+    schedules.find((schedule) => schedule.id === activeScheduleId) ??
+    schedules[0];
 
-  function toggleDay(weekday: number, enabled: boolean) {
-    setAvailability((current) =>
-      enabled
-        ? current.some((block) => block.weekday === weekday)
-          ? current
-          : [...current, { weekday, startsAt: "09:00", endsAt: "17:00" }]
-        : current.filter((block) => block.weekday !== weekday),
+  function updateSchedule(
+    scheduleId: string,
+    updater: (schedule: AvailabilitySchedule) => AvailabilitySchedule,
+  ) {
+    setSchedules((current) =>
+      current.map((schedule) =>
+        schedule.id === scheduleId ? updater(schedule) : schedule,
+      ),
     );
   }
 
-  function updateDay(
+  function toggleDay(weekday: number, enabled: boolean) {
+    if (!activeSchedule) return;
+    updateSchedule(activeSchedule.id, (schedule) => ({
+      ...schedule,
+      blocks: enabled
+        ? schedule.blocks.some((block) => block.weekday === weekday)
+          ? schedule.blocks
+          : [
+              ...schedule.blocks,
+              { weekday, startsAt: "09:00", endsAt: "17:00" },
+            ]
+        : schedule.blocks.filter((block) => block.weekday !== weekday),
+    }));
+  }
+
+  function updateBlock(
+    index: number,
     weekday: number,
     field: "startsAt" | "endsAt",
     value: string,
   ) {
-    setAvailability((current) =>
-      current.map((block) =>
-        block.weekday === weekday ? { ...block, [field]: value } : block,
+    if (!activeSchedule) return;
+    updateSchedule(activeSchedule.id, (schedule) => ({
+      ...schedule,
+      blocks: schedule.blocks.map((block, blockIndex) =>
+        block.weekday === weekday && blockIndex === index
+          ? { ...block, [field]: value }
+          : block,
       ),
+    }));
+  }
+
+  function createScheduleFromPrompt() {
+    const text = schedulePrompt.toLowerCase();
+    const weekdayRange = text.match(
+      /(sun|mon|tue|wed|thu|fri|sat)[a-z]*\s*(?:-|to|through)\s*(sun|mon|tue|wed|thu|fri|sat)/,
     );
+    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const selectedDays = weekdayRange
+      ? (() => {
+          const start = dayKeys.findIndex((day) =>
+            (weekdayRange[1] ?? "").startsWith(day),
+          );
+          const end = dayKeys.findIndex((day) =>
+            (weekdayRange[2] ?? "").startsWith(day),
+          );
+          return start <= end
+            ? dayKeys.slice(start, end + 1).map((_, index) => start + index)
+            : [];
+        })()
+      : dayKeys.flatMap((day, index) => (text.includes(day) ? [index] : []));
+    const times = [
+      ...text.matchAll(
+        /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|-|–)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/g,
+      ),
+    ].map((match) => {
+      const asTime = (
+        hour: string,
+        minute: string | undefined,
+        meridiem: string,
+      ) => {
+        const normalizedHour =
+          (Number(hour) % 12) + (meridiem === "pm" ? 12 : 0);
+        return `${String(normalizedHour).padStart(2, "0")}:${minute ?? "00"}`;
+      };
+      return {
+        startsAt: asTime(match[1] ?? "", match[2], match[3] ?? ""),
+        endsAt: asTime(match[4] ?? "", match[5], match[6] ?? ""),
+      };
+    });
+    if (!selectedDays.length || !times.length) return;
+    const id = crypto.randomUUID();
+    const name = "New availability schedule";
+    setSchedules((current) => [
+      ...current,
+      {
+        id,
+        name,
+        blocks: selectedDays.flatMap((weekday) =>
+          times.map((time) => ({ weekday, ...time })),
+        ),
+      },
+    ]);
+    setActiveScheduleId(id);
+    setSchedulePrompt("");
   }
 
   function addBlackout() {
@@ -243,7 +392,17 @@ export function TeamMemberEditor({
       <input
         name="availability"
         type="hidden"
-        value={JSON.stringify(availability)}
+        value={JSON.stringify(
+          schedules.flatMap((schedule) =>
+            schedule.blocks.map((block) => ({
+              ...block,
+              scheduleId: schedule.id,
+              scheduleName: schedule.name,
+              effectiveFrom: schedule.effectiveFrom,
+              effectiveTo: schedule.effectiveTo,
+            })),
+          ),
+        )}
       />
       <input
         name="blackoutDates"
@@ -580,10 +739,20 @@ export function TeamMemberEditor({
                       }
                       const dateKey = localDateKey(date);
                       const blackout = dateIsBlackout(dateKey, blackouts);
+                      const available = schedules.some(
+                        (schedule) =>
+                          (!schedule.effectiveFrom ||
+                            dateKey >= schedule.effectiveFrom) &&
+                          (!schedule.effectiveTo ||
+                            dateKey <= schedule.effectiveTo) &&
+                          schedule.blocks.some(
+                            (block) => block.weekday === date.getDay(),
+                          ),
+                      );
                       const tone = coverageTone(date);
                       return (
                         <button
-                          className={`team-calendar-day team-calendar-day--${tone}${blackout ? " team-calendar-day--blackout" : ""}`}
+                          className={`team-calendar-day team-calendar-day--${tone}${available ? " team-calendar-day--available" : " team-calendar-day--unavailable"}${blackout ? " team-calendar-day--blackout" : ""}`}
                           key={dateKey}
                           onClick={() =>
                             blackout
@@ -609,7 +778,9 @@ export function TeamMemberEditor({
                           title={
                             blackout
                               ? "Remove all-day blackout"
-                              : "Add all-day blackout"
+                              : available
+                                ? "Available in this coach's selected schedule. Add all-day blackout"
+                                : "Unavailable in this coach's schedules. Add all-day blackout"
                           }
                           type="button"
                         >
@@ -630,6 +801,14 @@ export function TeamMemberEditor({
               <span>
                 <i className="team-calendar-legend__balanced" />
                 Balanced
+              </span>
+              <span>
+                <i className="team-calendar-legend__available" />
+                Coach available
+              </span>
+              <span>
+                <i className="team-calendar-legend__unavailable" />
+                Coach unavailable
               </span>
               <span>
                 <i className="team-calendar-legend__needed" />
@@ -732,17 +911,123 @@ export function TeamMemberEditor({
           </section>
           <section className="team-recurring-availability">
             <header>
-              <span className="hq-eyebrow">Recurring rhythm</span>
-              <h3>Usual weekly availability</h3>
+              <span>
+                <span className="hq-eyebrow">Availability schedules</span>
+                <h3>Named shifts, seasons, and split days</h3>
+              </span>
+              <button
+                className="hq-button hq-button--secondary hq-button--compact"
+                onClick={() => {
+                  const id = crypto.randomUUID();
+                  setSchedules((current) => [
+                    ...current,
+                    { id, name: "New schedule", blocks: [] },
+                  ]);
+                  setActiveScheduleId(id);
+                }}
+                type="button"
+              >
+                <Plus aria-hidden size={15} /> New schedule
+              </button>
             </header>
+            <div className="team-schedule-ai">
+              <Bot aria-hidden size={18} />
+              <span>
+                <strong>Create a schedule with Duna AI</strong>
+                <small>
+                  Try “Mon–Fri 9am to 1pm and 3pm to 7pm.” Review the draft
+                  before saving.
+                </small>
+              </span>
+              <input
+                onChange={(event) => setSchedulePrompt(event.target.value)}
+                placeholder="Describe the weekly rhythm…"
+                value={schedulePrompt}
+              />
+              <button
+                className="hq-button hq-button--secondary hq-button--compact"
+                disabled={!schedulePrompt.trim()}
+                onClick={createScheduleFromPrompt}
+                type="button"
+              >
+                <Sparkles aria-hidden size={15} /> Create draft
+              </button>
+            </div>
+            <div className="team-schedule-tabs" role="tablist">
+              {schedules.map((schedule) => (
+                <button
+                  aria-selected={schedule.id === activeSchedule?.id}
+                  className={
+                    schedule.id === activeSchedule?.id ? "active" : undefined
+                  }
+                  key={schedule.id}
+                  onClick={() => setActiveScheduleId(schedule.id)}
+                  role="tab"
+                  type="button"
+                >
+                  <strong>{schedule.name}</strong>
+                  <small>
+                    {schedule.effectiveFrom
+                      ? `${displayDate(schedule.effectiveFrom)}${schedule.effectiveTo ? ` – ${displayDate(schedule.effectiveTo)}` : " onward"}`
+                      : "No date range"}
+                  </small>
+                </button>
+              ))}
+            </div>
+            {activeSchedule && (
+              <div className="team-schedule-details">
+                <label>
+                  <span>Schedule name</span>
+                  <input
+                    onChange={(event) =>
+                      updateSchedule(activeSchedule.id, (schedule) => ({
+                        ...schedule,
+                        name: event.target.value,
+                      }))
+                    }
+                    value={activeSchedule.name}
+                  />
+                </label>
+                <label>
+                  <span>Applies from · optional</span>
+                  <input
+                    onChange={(event) =>
+                      updateSchedule(activeSchedule.id, (schedule) => ({
+                        ...schedule,
+                        effectiveFrom: event.target.value || undefined,
+                      }))
+                    }
+                    type="date"
+                    value={activeSchedule.effectiveFrom ?? ""}
+                  />
+                </label>
+                <label>
+                  <span>Through · optional</span>
+                  <input
+                    min={activeSchedule.effectiveFrom}
+                    onChange={(event) =>
+                      updateSchedule(activeSchedule.id, (schedule) => ({
+                        ...schedule,
+                        effectiveTo: event.target.value || undefined,
+                      }))
+                    }
+                    type="date"
+                    value={activeSchedule.effectiveTo ?? ""}
+                  />
+                </label>
+              </div>
+            )}
             <div className="team-availability">
               {days.map((day, weekday) => {
-                const block = availabilityByDay.get(weekday);
+                const blocks =
+                  activeSchedule?.blocks
+                    .map((block, index) => ({ block, index }))
+                    .filter(({ block }) => block.weekday === weekday) ?? [];
                 return (
                   <div className="team-availability__day" key={day}>
                     <label className="team-availability__toggle">
                       <input
-                        checked={Boolean(block)}
+                        checked={blocks.length > 0}
                         onChange={(event) =>
                           toggleDay(weekday, event.target.checked)
                         }
@@ -750,25 +1035,75 @@ export function TeamMemberEditor({
                       />
                       <strong>{day}</strong>
                     </label>
-                    {block ? (
+                    {blocks.length > 0 ? (
                       <span className="team-availability__times">
-                        <input
-                          aria-label={`${day} start`}
-                          onChange={(event) =>
-                            updateDay(weekday, "startsAt", event.target.value)
+                        {blocks.map(({ block, index }) => (
+                          <span
+                            className="team-availability__block"
+                            key={`${weekday}-${index}`}
+                          >
+                            <input
+                              aria-label={`${day} block ${index + 1} start`}
+                              onChange={(event) =>
+                                updateBlock(
+                                  index,
+                                  weekday,
+                                  "startsAt",
+                                  event.target.value,
+                                )
+                              }
+                              type="time"
+                              value={block.startsAt}
+                            />
+                            <small>to</small>
+                            <input
+                              aria-label={`${day} block ${index + 1} end`}
+                              onChange={(event) =>
+                                updateBlock(
+                                  index,
+                                  weekday,
+                                  "endsAt",
+                                  event.target.value,
+                                )
+                              }
+                              type="time"
+                              value={block.endsAt}
+                            />
+                            <button
+                              aria-label={`Remove ${day} block ${index + 1}`}
+                              onClick={() =>
+                                updateSchedule(
+                                  activeSchedule!.id,
+                                  (schedule) => ({
+                                    ...schedule,
+                                    blocks: schedule.blocks.filter(
+                                      (candidate, candidateIndex) =>
+                                        candidateIndex !== index,
+                                    ),
+                                  }),
+                                )
+                              }
+                              type="button"
+                            >
+                              <X aria-hidden size={14} />
+                            </button>
+                          </span>
+                        ))}
+                        <button
+                          className="team-availability__add-block"
+                          onClick={() =>
+                            updateSchedule(activeSchedule!.id, (schedule) => ({
+                              ...schedule,
+                              blocks: [
+                                ...schedule.blocks,
+                                { weekday, startsAt: "13:00", endsAt: "17:00" },
+                              ],
+                            }))
                           }
-                          type="time"
-                          value={block.startsAt}
-                        />
-                        <small>to</small>
-                        <input
-                          aria-label={`${day} end`}
-                          onChange={(event) =>
-                            updateDay(weekday, "endsAt", event.target.value)
-                          }
-                          type="time"
-                          value={block.endsAt}
-                        />
+                          type="button"
+                        >
+                          <Plus aria-hidden size={14} /> Add block
+                        </button>
                       </span>
                     ) : (
                       <small>Unavailable</small>

@@ -571,26 +571,46 @@ export async function reviewVisionCalibrationSampleAction(
   const sampleId = String(formData.get("sampleId") ?? "");
   const decision = String(formData.get("decision") ?? "");
   const notes = String(formData.get("notes") ?? "").trim();
+  const courtLabel = String(formData.get("courtLabel") ?? "");
+  const netLabel = String(formData.get("netLabel") ?? "");
+  const framingLabel = String(formData.get("framingLabel") ?? "");
   const confirmed = formData.get("confirmed") === "true";
   if (
     !sampleId ||
     !["approved", "rejected"].includes(decision) ||
+    !["accurate", "inaccurate", "unclear"].includes(courtLabel) ||
+    !["accurate", "inaccurate", "not-visible", "unclear"].includes(netLabel) ||
+    !["usable", "unusable", "unclear"].includes(framingLabel) ||
     notes.length < 8 ||
     !confirmed
   ) {
     return {
       status: "error",
       message:
-        "Choose approve or reject, add review notes of at least 8 characters, and confirm the decision.",
+        "Label the court, net, and framing; add review notes; then confirm approve or reject.",
     };
   }
+  if (
+    decision === "approved" &&
+    (courtLabel !== "accurate" ||
+      !["accurate", "not-visible"].includes(netLabel) ||
+      framingLabel !== "usable")
+  ) {
+    return {
+      status: "error",
+      message:
+        "This example contains an incorrect or unclear label. Reject it so the model does not learn from unreliable geometry.",
+    };
+  }
+
+  const labeledNotes = `[court=${courtLabel}; net=${netLabel}; framing=${framingLabel}] ${notes}`;
 
   try {
     const caller = await getServerCaller();
     const sample = await caller.admin.reviewVisionCalibrationSample({
       sampleId,
       decision: decision as "approved" | "rejected",
-      notes,
+      notes: labeledNotes,
       idempotencyKey: crypto.randomUUID(),
     });
     revalidatePath("/admin/video");
@@ -802,6 +822,104 @@ export async function determinePredictionMarketAction(
         error instanceof Error
           ? error.message
           : "The market could not be determined.",
+    };
+  }
+}
+
+export async function recordPredictionMatchResultAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const matchId = String(formData.get("matchId") ?? "");
+  const winnerSide = String(formData.get("winnerSide") ?? "");
+  const sourceUrl = String(formData.get("sourceUrl") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const sets = [1, 2, 3, 4, 5].flatMap((setNo) => {
+    const aValue = String(formData.get(`set${setNo}A`) ?? "").trim();
+    const bValue = String(formData.get(`set${setNo}B`) ?? "").trim();
+    if (!aValue && !bValue) return [];
+    const a = Number(aValue);
+    const b = Number(bValue);
+    return Number.isInteger(a) && Number.isInteger(b) ? [{ a, b }] : [];
+  });
+  if (
+    !matchId ||
+    (winnerSide !== "A" && winnerSide !== "B") ||
+    sets.length < 2 ||
+    reason.length < 10 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Enter the final set scores, choose the winning team, document the verified source, and confirm the result.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.recordManualProMatchResult({
+      matchId,
+      winnerSide,
+      sets,
+      sourceUrl: sourceUrl || undefined,
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    revalidatePath("/events");
+    revalidatePath("/events/[slug]", "page");
+    return {
+      status: "success",
+      message: `Final score saved. ${result.settledMarkets} linked ${result.settledMarkets === 1 ? "market was" : "markets were"} determined.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The final score could not be saved.",
+    };
+  }
+}
+
+export async function settleVerifiedPredictionMarketsAction(
+  _previous: PredictionAdminActionState,
+  formData: FormData,
+): Promise<PredictionAdminActionState> {
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (reason.length < 10 || !confirmed) {
+    return {
+      status: "error",
+      message:
+        "Add an operator reason and confirm the verified-result settlement run.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.admin.settleResolvedPredictionMarkets({
+      reason,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/admin/predictions");
+    revalidatePath("/events");
+    revalidatePath("/events/[slug]", "page");
+    return {
+      status: "success",
+      message:
+        result.settled > 0
+          ? `${result.settled} verified ${result.settled === 1 ? "market was" : "markets were"} determined.`
+          : "No open markets currently have a verified result to determine.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Verified markets could not be determined.",
     };
   }
 }

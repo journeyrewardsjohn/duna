@@ -102,7 +102,9 @@ import { PlayerCalendarAutoSync } from "./player-calendar-sync";
 import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
+import { NativeEventDetails } from "./event-details";
 import { OrganizationExperienceModal } from "./organization-experience";
+import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import {
@@ -11112,6 +11114,38 @@ function BookingModal({
         ) <
           15 * 60_000),
   );
+  if (existingBooking && !complete && selectedEvent.kind === "tournament") {
+    return (
+      <Modal
+        animationType="slide"
+        onRequestClose={close}
+        presentationStyle="pageSheet"
+        visible={eventIndex !== null}
+      >
+        <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+          <ScrollView contentContainerStyle={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Pressable accessibilityLabel="Close tournament" onPress={close}>
+                <Text style={styles.closeText}>×</Text>
+              </Pressable>
+              <Text style={styles.modalHeaderTitle}>Tournament day</Text>
+              <Text style={styles.rowMeta}>Updates stay here</Text>
+            </View>
+            <Text style={styles.checkoutTitle}>{selectedEvent.title}</Text>
+            <Text style={styles.checkoutMeta}>
+              {selectedEvent.venueName} ·{" "}
+              {formatVenueTime(selectedEvent.startsAt, selectedEvent.timezone)}
+            </Text>
+            <LocalTournamentPanel
+              client={client}
+              sessionId={selectedEvent.id}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
+
   if (existingBooking && !complete) {
     return (
       <BookingManagementModal
@@ -11449,6 +11483,12 @@ function BookingModal({
               <Text style={styles.checkoutSummaryText}>
                 {event.shortSummary}
               </Text>
+            )}
+            {selectedEvent.kind === "tournament" && (
+              <LocalTournamentPanel
+                client={client}
+                sessionId={selectedEvent.id}
+              />
             )}
             {event.divisions?.length && event.tickets?.length ? (
               <View style={styles.purchaseKindRow}>
@@ -13634,6 +13674,7 @@ function DunaApp() {
     useState<string>();
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [eventDetailIndex, setEventDetailIndex] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
   const [courtBookingRequest, setCourtBookingRequest] =
@@ -13857,7 +13898,7 @@ function DunaApp() {
                 {tab === "home" && (
                   <HomeScreen
                     onAction={openHomeAction}
-                    onBook={setEventIndex}
+                    onBook={setEventDetailIndex}
                     onOpenBooking={setBookingId}
                     onPredictions={() => setTab("predictions")}
                   />
@@ -13957,6 +13998,30 @@ function DunaApp() {
               <BookingModal
                 eventIndex={eventIndex}
                 onClose={() => setEventIndex(null)}
+              />
+              <NativeEventDetails
+                client={runtime.client}
+                event={
+                  eventDetailIndex === null
+                    ? undefined
+                    : (runtime.dashboard?.events ?? demoEvents)[
+                        eventDetailIndex
+                      ]
+                }
+                onClose={() => setEventDetailIndex(null)}
+                onRegister={() => {
+                  setEventIndex(eventDetailIndex);
+                  setEventDetailIndex(null);
+                }}
+                onScore={() => {
+                  setEventDetailIndex(null);
+                  setTab("score");
+                }}
+                onVideo={() => {
+                  setEventDetailIndex(null);
+                  setTab("video");
+                }}
+                visible={eventDetailIndex !== null}
               />
               <ProfileEditorModal
                 onClose={() => setProfileEditorOpen(false)}

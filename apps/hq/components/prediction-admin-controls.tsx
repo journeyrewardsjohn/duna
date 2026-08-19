@@ -5,6 +5,7 @@ import { Badge, Numeric } from "@duna/ui";
 import {
   BadgeCheck,
   BookOpenCheck,
+  ClipboardCheck,
   Check,
   CircleAlert,
   Clock3,
@@ -12,11 +13,14 @@ import {
   ExternalLink,
   FileClock,
   LockKeyhole,
+  Trophy,
   UsersRound,
 } from "lucide-react";
 import { useActionState } from "react";
 import {
   determinePredictionMarketAction,
+  recordPredictionMatchResultAction,
+  settleVerifiedPredictionMarketsAction,
   setPredictionMarketTradingStatusAction,
   updatePredictionMarketRulesAction,
   type PredictionAdminActionState,
@@ -428,6 +432,195 @@ function MarketControl({
   );
 }
 
+function ManualResultControl({
+  canManage,
+  match,
+}: {
+  readonly canManage: boolean;
+  readonly match: AdminPredictionOverview["manualResultMatches"][number];
+}) {
+  const [state, action, pending] = useActionState(
+    recordPredictionMatchResultAction,
+    initialState,
+  );
+  return (
+    <details className="prediction-admin-result">
+      <summary>
+        <span className="prediction-admin-result__status">
+          <ClipboardCheck aria-hidden size={17} /> Needs final score
+        </span>
+        <span>
+          <strong>{match.title}</strong>
+          <small>
+            {match.yesLabel} vs {match.noLabel}
+            {match.playedAt
+              ? ` · ${new Intl.DateTimeFormat("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                }).format(new Date(match.playedAt))}`
+              : ""}
+          </small>
+        </span>
+        <span>
+          {match.marketCount} linked market{match.marketCount === 1 ? "" : "s"}
+        </span>
+      </summary>
+      <form
+        action={action}
+        className="operator-form prediction-admin-result__form"
+      >
+        <input name="matchId" type="hidden" value={match.id} />
+        <header>
+          <div>
+            <span className="hq-eyebrow">Scraper fallback</span>
+            <h3>Record the verified final</h3>
+            <p>
+              This preserves the source-backed result, stops this match from
+              appearing unresolved, and determines every linked market.
+            </p>
+          </div>
+          <Trophy aria-hidden size={21} />
+        </header>
+        <fieldset disabled={!canManage || pending}>
+          <legend>Winning team</legend>
+          <label className="prediction-admin-result__winner">
+            <input name="winnerSide" required type="radio" value="A" />
+            <span>{match.yesLabel}</span>
+          </label>
+          <label className="prediction-admin-result__winner">
+            <input name="winnerSide" required type="radio" value="B" />
+            <span>{match.noLabel}</span>
+          </label>
+        </fieldset>
+        <div
+          className="prediction-admin-result__sets"
+          role="group"
+          aria-label="Final set scores"
+        >
+          {[1, 2, 3].map((setNo) => (
+            <label key={setNo}>
+              <span>Set {setNo}</span>
+              <input
+                aria-label={`Set ${setNo}, ${match.yesLabel}`}
+                min="0"
+                name={`set${setNo}A`}
+                type="number"
+              />
+              <b>–</b>
+              <input
+                aria-label={`Set ${setNo}, ${match.noLabel}`}
+                min="0"
+                name={`set${setNo}B`}
+                type="number"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="operator-form-grid operator-form-grid--two">
+          <label>
+            <span>Official result link (optional)</span>
+            <input
+              disabled={!canManage || pending}
+              name="sourceUrl"
+              placeholder="https://…"
+              type="url"
+            />
+          </label>
+          <label>
+            <span>Verification note</span>
+            <input
+              disabled={!canManage || pending}
+              minLength={10}
+              name="reason"
+              placeholder="Official result confirmed at…"
+              required
+            />
+          </label>
+        </div>
+        <label className="operator-confirmation">
+          <input
+            disabled={!canManage || pending}
+            name="confirmed"
+            required
+            type="checkbox"
+            value="true"
+          />
+          <span>
+            <strong>I verified this final score and winning team.</strong>
+            This is audit-recorded and settles all linked positions.
+          </span>
+        </label>
+        <footer className="operator-form-footer">
+          <ActionNotice state={state} />
+          <button
+            className="hq-button hq-button--primary"
+            disabled={!canManage || pending}
+            type="submit"
+          >
+            <Trophy aria-hidden size={15} />
+            {pending ? "Saving final…" : "Save score + determine markets"}
+          </button>
+        </footer>
+      </form>
+    </details>
+  );
+}
+
+function VerifiedSettlementRun({ canManage }: { readonly canManage: boolean }) {
+  const [state, action, pending] = useActionState(
+    settleVerifiedPredictionMarketsAction,
+    initialState,
+  );
+  return (
+    <section className="prediction-admin-settle">
+      <div>
+        <span className="hq-eyebrow">Verified result sweep</span>
+        <h2>Determine every market with a reported final</h2>
+        <p>
+          Rechecks all open and closed match markets against their stored
+          verified results. It never guesses a winner or touches markets still
+          waiting on a result.
+        </p>
+      </div>
+      <form action={action} className="operator-form">
+        <label>
+          <span>Operator reason</span>
+          <input
+            disabled={!canManage || pending}
+            minLength={10}
+            name="reason"
+            placeholder="Verified results reviewed after source refresh"
+            required
+          />
+        </label>
+        <label className="operator-confirmation">
+          <input
+            disabled={!canManage || pending}
+            name="confirmed"
+            required
+            type="checkbox"
+            value="true"
+          />
+          <span>
+            <strong>I reviewed the available final results.</strong>
+            Every eligible market will settle immediately and be audit-recorded.
+          </span>
+        </label>
+        <ActionNotice state={state} />
+        <button
+          className="hq-button hq-button--secondary"
+          disabled={!canManage || pending}
+          type="submit"
+        >
+          <BadgeCheck aria-hidden size={15} />
+          {pending ? "Checking results…" : "Determine verified markets"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 export function PredictionAdminControls({
   overview,
 }: {
@@ -456,6 +649,34 @@ export function PredictionAdminControls({
           </article>
         ))}
       </section>
+      <VerifiedSettlementRun canManage={overview.canManage} />
+      {overview.manualResultMatches.length > 0 && (
+        <section className="prediction-admin-list prediction-admin-results">
+          <header>
+            <div>
+              <span className="hq-eyebrow">Result recovery</span>
+              <h2>Markets waiting on a score</h2>
+              <p>
+                Use a verified final when a professional scraper has not
+                reported one. The score becomes the protected fallback for the
+                public match result and settles linked markets together.
+              </p>
+            </div>
+            <Badge tone="warning">
+              {overview.manualResultMatches.length} waiting
+            </Badge>
+          </header>
+          <div>
+            {overview.manualResultMatches.map((match) => (
+              <ManualResultControl
+                canManage={overview.canManage}
+                key={match.id}
+                match={match}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <section className="prediction-admin-list">
         <header>
           <div>

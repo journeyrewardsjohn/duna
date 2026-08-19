@@ -24,7 +24,17 @@ import {
   type MatchFormat,
   type ScoreEvent,
 } from "@duna/league-engine";
-import { and, asc, desc, eq, inArray, isNotNull, max, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  max,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type {
   OperatorMutationResult,
@@ -1075,6 +1085,117 @@ export async function publishVenueLayout(
     });
   });
   return { id: layout.id, entity: "venue-layout", status: "published" };
+}
+
+export async function deleteVenueLayoutDraft(
+  input: MutationContext & { readonly layoutId: string },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const layout = await ownedLayout(organizationId, input.layoutId);
+  if (layout.status !== "draft") {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Only an unpublished draft can be deleted. Published layouts can be moved back to draft first.",
+    );
+  }
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    const assetRows = await transaction
+      .select({ id: venueLayoutAssets.id })
+      .from(venueLayoutAssets)
+      .where(eq(venueLayoutAssets.layoutId, layout.id));
+    const assetIds = assetRows.map((asset) => asset.id);
+    if (assetIds.length) {
+      await transaction
+        .delete(venueLayoutDivisionPriorities)
+        .where(inArray(venueLayoutDivisionPriorities.layoutAssetId, assetIds));
+    }
+    await transaction
+      .delete(venueLayoutAssets)
+      .where(eq(venueLayoutAssets.layoutId, layout.id));
+    await transaction
+      .delete(venueLayouts)
+      .where(eq(venueLayouts.id, layout.id));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "venue-layout.draft_deleted",
+      entityType: "venue-layout",
+      entityId: layout.id,
+      beforeHash: stableHash({
+        status: layout.status,
+        isPrimary: layout.isPrimary,
+      }),
+      reason: "Operator deleted an unpublished venue layout draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: layout.id, entity: "venue-layout", status: "deleted" };
+}
+
+export async function unpublishVenueLayout(
+  input: MutationContext & { readonly layoutId: string },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const layout = await ownedLayout(organizationId, input.layoutId);
+  if (layout.status !== "published") {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "This layout is already a draft.",
+    );
+  }
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    await transaction
+      .update(venueLayouts)
+      .set({ status: "draft", isPrimary: false, updatedAt: input.now })
+      .where(eq(venueLayouts.id, layout.id));
+    if (layout.isPrimary) {
+      const fallback = await transaction
+        .select({ id: venueLayouts.id })
+        .from(venueLayouts)
+        .where(
+          and(
+            eq(venueLayouts.venueId, layout.venueId),
+            eq(venueLayouts.status, "published"),
+            ne(venueLayouts.id, layout.id),
+          ),
+        )
+        .orderBy(desc(venueLayouts.version))
+        .limit(1)
+        .then((rows) => rows[0]);
+      if (fallback) {
+        await transaction
+          .update(venueLayouts)
+          .set({ isPrimary: true, updatedAt: input.now })
+          .where(eq(venueLayouts.id, fallback.id));
+      }
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "venue-layout.unpublished",
+      entityType: "venue-layout",
+      entityId: layout.id,
+      beforeHash: stableHash({
+        status: layout.status,
+        isPrimary: layout.isPrimary,
+      }),
+      afterHash: stableHash({ status: "draft", isPrimary: false }),
+      reason:
+        "Operator returned a published venue layout to an editable draft.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: layout.id, entity: "venue-layout", status: "draft" };
 }
 
 export async function saveVenueLayoutEventSettings(

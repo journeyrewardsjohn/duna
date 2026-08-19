@@ -737,9 +737,9 @@ function VenuePortfolioPanel({
           key={venue.id}
           style={
             venue.heroImageTreatmentUrl || venue.heroImageUrl
-              ? {
-                  backgroundImage: `linear-gradient(110deg, rgba(7, 24, 37, .92), rgba(7, 24, 37, .35)), url(${venue.heroImageTreatmentUrl ?? venue.heroImageUrl})`,
-                }
+              ? ({
+                  "--venue-portfolio-image": `url("${venue.heroImageTreatmentUrl ?? venue.heroImageUrl}")`,
+                } as CSSProperties & Record<"--venue-portfolio-image", string>)
               : undefined
           }
         >
@@ -1345,7 +1345,9 @@ export function ModulePanel({
                         : undefined;
 
   return (
-    <main className="hq-page module-page">
+    <main
+      className={`hq-page module-page${module === "leagues" ? " module-page--leagues" : ""}`}
+    >
       <header className="hq-page-heading">
         <div>
           <span className="hq-eyebrow">{copy.eyebrow}</span>

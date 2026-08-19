@@ -1,6 +1,7 @@
 "use client";
 
 import type { PredictionMarketView, PredictionWallet } from "@duna/api";
+import { predictionMarketLiquidityQuote } from "@duna/core";
 import {
   ArrowRight,
   BadgeCheck,
@@ -230,7 +231,7 @@ export function PredictionMarketChart({
         <footer>
           <span>
             <TrendingUp aria-hidden size={14} />{" "}
-            {compactCredits(market.volumeCredits)} credits matched
+            {compactCredits(market.volumeCredits)} credits positioned
           </span>
           <div>
             {(["1H", "6H", "1D", "1W", "ALL"] as const).map((option) => (
@@ -569,7 +570,7 @@ export function PredictionMarketCommunity({
           ))}
         </div>
       ) : (
-        <p>No matched positions yet. Be the first handle on the board.</p>
+        <p>No positions yet. Be the first handle on the board.</p>
       )}
       <footer>
         Prediction activity is public by handle because credits have no cash
@@ -645,11 +646,22 @@ export function PredictionOrderTicket({
   const selectedLabel = side === "yes" ? market.yesLabel : market.noLabel;
   const currentPriceBps =
     side === "yes" ? market.yesPriceBps : market.noPriceBps;
+  const liquidityQuote = predictionMarketLiquidityQuote({
+    currentYesPriceBps: market.yesPriceBps,
+    side,
+    credits,
+  });
+  const communityAskBps =
+    side === "yes"
+      ? (market.yesAskBps ?? currentPriceBps)
+      : (market.noAskBps ?? currentPriceBps);
+  const buyLimitPriceBps = Math.min(
+    9_900,
+    Math.max(communityAskBps, liquidityQuote.executionSidePriceBps + 25),
+  );
   const priceBps =
     mode === "buy"
-      ? side === "yes"
-        ? (market.yesAskBps ?? currentPriceBps)
-        : (market.noAskBps ?? currentPriceBps)
+      ? buyLimitPriceBps
       : side === "yes"
         ? (market.bestYesBidBps ?? currentPriceBps)
         : (market.bestNoBidBps ?? currentPriceBps);
@@ -664,7 +676,10 @@ export function PredictionOrderTicket({
       .reduce((sum, position) => sum + position.availableShares, 0);
   const selectedAvailableShares = availableShares(side);
   const totalAvailableShares = availableShares("yes") + availableShares("no");
-  const estimatedShares = credits / (priceBps / 10_000);
+  const estimatedShares =
+    credits /
+    ((mode === "buy" ? liquidityQuote.executionSidePriceBps : priceBps) /
+      10_000);
   const estimatedProceeds = shares * (priceBps / 10_000);
   const chooseMode = (nextMode: "buy" | "sell") => {
     setMode(nextMode);
@@ -763,7 +778,7 @@ export function PredictionOrderTicket({
         title: `${credits} credits · ${selectedLabel}`,
         detail: [
           result.result.filledShares > 0
-            ? `${formatPredictionAmount(result.result.filledShares)} shares matched`
+            ? `${formatPredictionAmount(result.result.filledShares)} shares positioned`
             : undefined,
           result.result.openShares > 0
             ? `${formatPredictionAmount(result.result.openShares)} shares open`
@@ -773,9 +788,9 @@ export function PredictionOrderTicket({
           .join(" · "),
         status:
           result.result.status === "filled"
-            ? "Position matched"
+            ? "Position confirmed"
             : result.result.status === "partially-filled"
-              ? "Position partially matched"
+              ? "Position partially confirmed"
               : "Position open in order book",
       });
       setAvailableOverride(result.result.availableCredits);
@@ -971,7 +986,7 @@ export function PredictionOrderTicket({
         </strong>
         <small>
           {mode === "buy"
-            ? "Each correct share settles at 1 prediction credit."
+            ? `Estimated fill at ${percentage(liquidityQuote.executionSidePriceBps)}. Your ${side === "yes" ? "Yes" : "No"} position moves this market to ${percentage(side === "yes" ? liquidityQuote.nextYesPriceBps : 10_000 - liquidityQuote.nextYesPriceBps)}.`
             : "Proceeds depend on matching demand at this price."}
         </small>
       </div>
@@ -1056,7 +1071,7 @@ export function PredictionMarketDetail({
               <h2>Winner probability</h2>
             </div>
             <span>
-              <Sparkles aria-hidden size={15} /> Order-book price
+              <Sparkles aria-hidden size={15} /> Live market probability
             </span>
           </header>
           {market.status !== "open" && (

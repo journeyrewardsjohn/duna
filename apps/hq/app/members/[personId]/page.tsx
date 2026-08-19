@@ -12,14 +12,14 @@ export default async function MemberProfilePage({
 }) {
   const { personId } = await params;
   const caller = await getServerCaller();
-  const [dashboard, workspace] = await Promise.all([
+  const [dashboard, workspace, profile] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
+    caller.operator.memberProfile({ personId }),
   ]);
   if (!workspace.people.some((person) => person.personId === personId)) {
     notFound();
   }
-  const profile = await caller.operator.memberProfile({ personId });
   return (
     <OperatorShell
       active="members"

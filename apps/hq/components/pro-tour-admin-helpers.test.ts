@@ -51,6 +51,15 @@ describe("professional event administration filters", () => {
         event({ id: "avp", name: "AVP Dallas", sourceSlug: "avp-league" }),
       ),
     ).toBe("avp");
+    expect(
+      professionalEventTour(
+        event({
+          id: "avp-tournament",
+          name: "AVP Manhattan Beach Open",
+          sourceSlug: "avp-tournaments",
+        }),
+      ),
+    ).toBe("avp");
   });
 
   it("labels event divisions clearly in duplicated tour stops", () => {

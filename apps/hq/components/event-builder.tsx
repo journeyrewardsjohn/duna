@@ -277,6 +277,47 @@ function Toggle({
   );
 }
 
+function ChoiceTiles<Value extends string>({
+  detail,
+  disabled = false,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  readonly detail?: string;
+  readonly disabled?: boolean;
+  readonly label: string;
+  readonly onChange: (value: Value) => void;
+  readonly options: readonly {
+    readonly value: Value;
+    readonly label: string;
+    readonly detail?: string;
+  }[];
+  readonly value: Value;
+}) {
+  return (
+    <fieldset className="event-choice-tiles" disabled={disabled}>
+      <legend>{label}</legend>
+      {detail && <p>{detail}</p>}
+      <div>
+        {options.map((option) => (
+          <button
+            aria-pressed={value === option.value}
+            className={value === option.value ? "selected" : undefined}
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            type="button"
+          >
+            <strong>{option.label}</strong>
+            {option.detail && <small>{option.detail}</small>}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function DivisionEditor({
   canRemove,
   division,
@@ -334,20 +375,17 @@ function DivisionEditor({
             value={division.name}
           />
         </label>
-        <label>
-          <span>Gender</span>
-          <select
-            onChange={(event) =>
-              set("gender", event.target.value as DivisionDraft["gender"])
-            }
-            value={division.gender}
-          >
-            <option value="open">Open</option>
-            <option value="mens">Men&apos;s</option>
-            <option value="womens">Women&apos;s</option>
-            <option value="coed">CoEd</option>
-          </select>
-        </label>
+        <ChoiceTiles<DivisionDraft["gender"]>
+          label="Who can enter?"
+          onChange={(value) => set("gender", value)}
+          options={[
+            { value: "open", label: "Open", detail: "Any eligible team" },
+            { value: "mens", label: "Men's" },
+            { value: "womens", label: "Women's" },
+            { value: "coed", label: "Coed" },
+          ]}
+          value={division.gender}
+        />
         <label className="event-field--full">
           <span>Description</span>
           <textarea
@@ -357,58 +395,54 @@ function DivisionEditor({
             value={division.description}
           />
         </label>
-        <label>
-          <span>Team format</span>
-          <select
-            disabled={division.teamFormatLocked}
-            onChange={(event) =>
-              set(
-                "teamFormat",
-                event.target.value as DivisionDraft["teamFormat"],
-              )
-            }
-            value={division.teamFormat}
-          >
-            <option value="solo">Solo</option>
-            <option value="doubles">Doubles</option>
-            <option value="three-person">3 person</option>
-            <option value="four-person">4 person</option>
-            <option value="six-person">6 person</option>
-          </select>
-          {division.teamFormatLocked && (
-            <small>Locked after players or teams join</small>
-          )}
-        </label>
-        <label>
-          <span>Venue type</span>
-          <select
-            onChange={(event) =>
-              set("surface", event.target.value as DivisionDraft["surface"])
-            }
-            value={division.surface}
-          >
-            <option value="sand">Sand</option>
-            <option value="grass">Grass</option>
-            <option value="water">Water</option>
-            <option value="indoor-sand">Indoor sand</option>
-          </select>
-        </label>
-        <label>
-          <span>Seeding</span>
-          <select
-            disabled={division.competitionLocked}
-            onChange={(event) =>
-              set("seeding", event.target.value as DivisionDraft["seeding"])
-            }
-            value={division.seeding}
-          >
-            <option value="first-come">First come</option>
-            <option value="sand-rating-score">Sand Rating score</option>
-            <option value="sand-rating-best-8">Sand Rating best 8</option>
-            <option value="sand-rating-ttm">Sand Rating TTM</option>
-            <option value="manual">Manual</option>
-          </select>
-        </label>
+        <ChoiceTiles<DivisionDraft["teamFormat"]>
+          detail={
+            division.teamFormatLocked
+              ? "Locked after players or teams join."
+              : "This sets roster size and entry capacity."
+          }
+          disabled={division.teamFormatLocked}
+          label="Team size"
+          onChange={(value) => set("teamFormat", value)}
+          options={[
+            { value: "solo", label: "Solo", detail: "1 player" },
+            { value: "doubles", label: "Doubles", detail: "2 players" },
+            { value: "three-person", label: "Triples", detail: "3 players" },
+            { value: "four-person", label: "Fours", detail: "4 players" },
+            { value: "six-person", label: "Sixes", detail: "6 players" },
+          ]}
+          value={division.teamFormat}
+        />
+        <ChoiceTiles<DivisionDraft["surface"]>
+          label="Playing surface"
+          onChange={(value) => set("surface", value)}
+          options={[
+            { value: "sand", label: "Sand" },
+            { value: "grass", label: "Grass" },
+            { value: "water", label: "Water" },
+            { value: "indoor-sand", label: "Indoor sand" },
+          ]}
+          value={division.surface}
+        />
+        <ChoiceTiles<DivisionDraft["seeding"]>
+          detail={
+            division.competitionLocked
+              ? "Locked after a bracket or match is created."
+              : "Use a visible order players can understand."
+          }
+          disabled={division.competitionLocked}
+          label="How should Duna seed the field?"
+          onChange={(value) => set("seeding", value)}
+          options={[
+            { value: "first-come", label: "Paid first" },
+            { value: "sand-rating-score", label: "Current Sand Rating" },
+            { value: "sand-rating-best-8", label: "Best 8 rating" },
+            { value: "sand-rating-ttm", label: "52-week peak" },
+            { value: "manual", label: "Director sets seeds" },
+          ]}
+          value={division.seeding}
+        />
+        {/* The capacity inputs stay compact; the choices above establish the division. */}
         <label>
           <span>Minimum teams</span>
           <input
@@ -437,35 +471,37 @@ function DivisionEditor({
             value={division.maximumTeams}
           />
         </label>
-        <label className="event-field--span-two">
-          <span>
-            {eventKind === "league"
-              ? "Playoff / finals format"
-              : "Tournament format"}
-          </span>
-          <select
-            disabled={division.competitionLocked}
-            onChange={(event) =>
-              set(
-                "tournamentFormat",
-                event.target.value as DivisionDraft["tournamentFormat"],
-              )
-            }
-            value={division.tournamentFormat}
-          >
-            <option value="kob-qob">KOB / QOB</option>
-            <option value="single-elimination">Single elimination</option>
-            <option value="double-elimination-true">
-              Double elimination (true)
-            </option>
-            <option value="double-elimination-crossover">
-              Double elimination (cross-over)
-            </option>
-          </select>
-          {division.competitionLocked && (
-            <small>Locked after a bracket or match is created</small>
-          )}
-        </label>
+        <ChoiceTiles<DivisionDraft["tournamentFormat"]>
+          detail={
+            division.competitionLocked
+              ? "Locked after a bracket or match is created."
+              : "Duna will use this to build the live draw."
+          }
+          disabled={division.competitionLocked}
+          label={
+            eventKind === "league"
+              ? "How should playoffs run?"
+              : "How should the tournament run?"
+          }
+          onChange={(value) => set("tournamentFormat", value)}
+          options={[
+            {
+              value: "kob-qob",
+              label: "KOB / QOB",
+              detail: "Classic beach flow",
+            },
+            { value: "single-elimination", label: "Single elimination" },
+            {
+              value: "double-elimination-true",
+              label: "True double elimination",
+            },
+            {
+              value: "double-elimination-crossover",
+              label: "Crossover double elimination",
+            },
+          ]}
+          value={division.tournamentFormat}
+        />
       </div>
 
       <div className="division-eligibility">

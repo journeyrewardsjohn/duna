@@ -3,7 +3,8 @@ export type SandDataSource =
   | "bvbinfo"
   | "fivb-12ndr"
   | "volleyball-world"
-  | "avp-league";
+  | "avp-league"
+  | "avp-tournaments";
 
 export interface ExternalPlayerRecord {
   readonly externalPersonId: string;

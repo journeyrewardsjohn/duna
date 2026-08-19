@@ -1410,6 +1410,66 @@ export async function persistDivisionBracketAction(
   }
 }
 
+export async function addManualDivisionEntryAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const payment = field(formData, "payment");
+    if (payment !== "complimentary" && payment !== "cash") {
+      throw new Error("Choose complimentary entry or verified cash.");
+    }
+    const playerIds = formData
+      .getAll("playerIds")
+      .map((value) => String(value).trim())
+      .filter(Boolean);
+    const caller = await getServerCaller();
+    await caller.operator.addManualDivisionEntry({
+      divisionId: field(formData, "divisionId"),
+      playerIds,
+      payment,
+      cashAmountMinor:
+        payment === "cash" ? moneyMinor(formData, "cashAmount") : undefined,
+      cashReference: optionalField(formData, "cashReference"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      payment === "cash"
+        ? "Cash verified and team added to the confirmed field."
+        : "Complimentary entry added to the confirmed field.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function launchDivisionTournamentAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.launchDivisionTournament({
+      divisionId: field(formData, "divisionId"),
+      reason:
+        field(formData, "reason") || "Director launched tournament operations.",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Tournament is live. Courts can start scoring and players can follow the official draw.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function updateDivisionMatchScheduleAction(
   _previous: OperatorActionState,
   formData: FormData,
@@ -1759,6 +1819,10 @@ export async function updateStaffProfileAction(
           weekday: number;
           startsAt: string;
           endsAt: string;
+          scheduleId?: string;
+          scheduleName?: string;
+          effectiveFrom?: string;
+          effectiveTo?: string;
         }[])
       : [];
     const blackoutDatesValue = field(formData, "blackoutDates");
@@ -2037,6 +2101,50 @@ export async function publishVenueLayoutAction(
       field(formData, "makePrimary") === "true"
         ? "Layout published and set as the player-facing default."
         : "Layout version published.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function deleteVenueLayoutDraftAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.deleteVenueLayoutDraft({
+      layoutId: field(formData, "layoutId"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Draft layout deleted.",
+      undefined,
+      field(formData, "layoutId"),
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function unpublishVenueLayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.unpublishVenueLayout({
+      layoutId: field(formData, "layoutId"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Layout moved back to draft. The newest other published layout became the default when one was available.",
+      undefined,
+      field(formData, "layoutId"),
     );
   } catch (error) {
     return errorState(error);

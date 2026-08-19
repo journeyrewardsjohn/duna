@@ -61,8 +61,15 @@ checks should distinguish “provider not configured” from “provider healthy
 
 `packages/db/src/client.ts` exposes:
 
-- a Neon HTTP Drizzle client for ordinary reads/writes;
+- a primary Neon HTTP Drizzle client for writes and consistency-sensitive
+  reads;
+- a read-only Neon HTTP Drizzle client for eligible latency-tolerant reads,
+  using `NEON_READ_ONLY_REPLICA` with a local fallback to `DATABASE_URL`;
 - a Neon serverless transactional client for atomic multi-step mutations.
+
+Replica lag is an explicit architectural boundary. Permission, guardian,
+payment, inventory/capacity, registration, live-state, messaging-cursor, and
+read-after-write decisions stay on the primary even when their SQL is read-only.
 
 The schema groups identity/guardianship, organizations, venues/schedules,
 catalog/inventory, registrations/operations, competition/rating/imports,

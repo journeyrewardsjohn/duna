@@ -180,9 +180,14 @@ forward-only SQL migrations live in `packages/db`.
 | Workflows            | Deduplicated webhook events and durable job state                                           |
 | Administration       | Immutable audit records and scoped feature flags                                            |
 
-Ordinary access uses the Neon HTTP Drizzle client. Atomic multi-step changes use
-the serverless transactional client. Audit evidence that explains a mutation is
-committed with that mutation.
+Primary access uses the Neon HTTP Drizzle client exposed by `getDatabase()`.
+Atomic multi-step changes use the serverless transactional client. Eligible
+latency-tolerant reads use `getReadOnlyDatabase()`, which connects through
+`NEON_READ_ONLY_REPLICA` and falls back to the primary outside production when
+the replica is not configured. Because a replica can lag, authorization,
+payments, inventory/capacity, registration, live state, messaging cursors, and
+read-after-write flows remain on the primary. Audit evidence that explains a
+mutation is committed with that mutation.
 
 ## Deterministic engines
 
