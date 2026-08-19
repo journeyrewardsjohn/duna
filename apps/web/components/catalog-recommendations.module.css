@@ -35,7 +35,7 @@
   color: #101828;
   font-family: var(--font-display);
   font-size: clamp(2rem, 4.2vw, 4.5rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }
