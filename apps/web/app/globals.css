@@ -3066,6 +3066,40 @@
   border-color: var(--catalog-primary);
 }
 
+.catalog-recording-consent {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--catalog-accent) 18%, var(--surface-1));
+  border: 1px solid var(--hairline-strong);
+  border-radius: 19px;
+  color: var(--text-1);
+  cursor: pointer;
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.catalog-recording-consent.active {
+  border-color: var(--catalog-primary);
+}
+
+.catalog-recording-consent.active .catalog-membership-check {
+  background: var(--catalog-primary);
+  border-color: var(--catalog-primary);
+}
+
+.catalog-recording-consent > span:last-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.catalog-recording-consent small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
 .catalog-checkout-total strong {
   color: var(--text-1);
   font-family: var(--font-display);
@@ -3091,6 +3125,63 @@
 
 .catalog-sign-in-link {
   color: var(--catalog-primary);
+  font-size: 0.75rem;
+}
+
+.catalog-session-choice > span {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.catalog-session-choice > small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.catalog-upcoming-sessions {
+  border-top: 1px solid var(--hairline-strong);
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.catalog-upcoming-sessions > div {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-upcoming-sessions article {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.85rem;
+}
+
+.catalog-upcoming-sessions article > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.catalog-upcoming-sessions strong,
+.catalog-upcoming-sessions small {
+  line-height: 1.4;
+}
+
+.catalog-upcoming-sessions strong {
+  color: var(--color-ink);
+  font-size: 0.82rem;
+}
+
+.catalog-upcoming-sessions small {
+  color: var(--text-2);
   font-size: 0.75rem;
 }
 
@@ -29658,6 +29749,10 @@ html {
   }
 
   .catalog-product-benefits {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-upcoming-sessions > div {
     grid-template-columns: 1fr;
   }
 }

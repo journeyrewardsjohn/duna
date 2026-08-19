@@ -129,6 +129,25 @@ const stepNames: Record<ProductType, readonly string[]> = {
   good: ["Purpose", "Variants", "Story + media", "Stock + price", "Review"],
 };
 
+const virtualServiceSteps = [
+  "Shape",
+  "Story",
+  "Booking",
+  "Virtual delivery",
+  "Price",
+  "Review",
+] as const;
+
+const weekdayChoices = [
+  [0, "Sun"],
+  [1, "Mon"],
+  [2, "Tue"],
+  [3, "Wed"],
+  [4, "Thu"],
+  [5, "Fri"],
+  [6, "Sat"],
+] as const;
+
 const stepGuidance: Record<
   ProductType,
   readonly {
@@ -693,6 +712,67 @@ export function GuidedProductBuilder({
   const [customerCoachSelection, setCustomerCoachSelection] = useState(
     initialConfiguration.customerCoachSelection !== false,
   );
+  const sessionSchedule = serviceConfiguration?.sessionSchedule as
+    | Record<string, unknown>
+    | undefined;
+  const virtualDelivery = serviceConfiguration?.virtualDelivery as
+    | Record<string, unknown>
+    | undefined;
+  const [requiredCoachCount, setRequiredCoachCount] = useState(
+    typeof serviceConfiguration?.requiredCoachCount === "number"
+      ? serviceConfiguration.requiredCoachCount
+      : 1,
+  );
+  const [sessionScheduleMode, setSessionScheduleMode] = useState<
+    "flexible" | "one-off" | "recurring"
+  >(
+    sessionSchedule?.mode === "one-off" || sessionSchedule?.mode === "recurring"
+      ? sessionSchedule.mode
+      : "flexible",
+  );
+  const [scheduleStartsOn, setScheduleStartsOn] = useState(
+    typeof sessionSchedule?.startsOn === "string" ? sessionSchedule.startsOn : "",
+  );
+  const [scheduleEndsOn, setScheduleEndsOn] = useState(
+    typeof sessionSchedule?.endsOn === "string" ? sessionSchedule.endsOn : "",
+  );
+  const [scheduleWeekdays, setScheduleWeekdays] = useState<readonly number[]>(
+    Array.isArray(sessionSchedule?.weekdays)
+      ? sessionSchedule.weekdays.filter(
+          (value): value is number => typeof value === "number",
+        )
+      : [],
+  );
+  const [scheduleStartTime, setScheduleStartTime] = useState(
+    typeof sessionSchedule?.startTime === "string" ? sessionSchedule.startTime : "17:00",
+  );
+  const [oneOffSessions, setOneOffSessions] = useState(
+    Array.isArray(sessionSchedule?.oneOffSessions)
+      ? sessionSchedule.oneOffSessions
+          .flatMap((value) => {
+            if (!value || typeof value !== "object") return [];
+            const session = value as Record<string, unknown>;
+            return typeof session.date === "string" && typeof session.startsAt === "string"
+              ? [`${session.date} ${session.startsAt}`]
+              : [];
+          })
+          .join("\n")
+      : "",
+  );
+  const [sessionBlackouts, setSessionBlackouts] = useState(
+    Array.isArray(sessionSchedule?.blackoutDates)
+      ? sessionSchedule.blackoutDates.filter(
+          (value): value is string => typeof value === "string",
+        ).join("\n")
+      : "",
+  );
+  const [autoRecordVirtualSession, setAutoRecordVirtualSession] =
+    useState(virtualDelivery?.autoRecord !== false);
+  const [autoTranscribeVirtualSession, setAutoTranscribeVirtualSession] =
+    useState(virtualDelivery?.autoTranscribe !== false);
+  const [summarizeVirtualSession, setSummarizeVirtualSession] = useState(
+    virtualDelivery?.summarize !== false,
+  );
 
   const [billingMode, setBillingMode] = useState<"month" | "year">("month");
   const [creditsGranted, setCreditsGranted] = useState(10);
@@ -796,7 +876,10 @@ export function GuidedProductBuilder({
     coachMode === "all"
       ? eligibleCoaches.map((coach) => coach.personId)
       : selectedCoachIds;
-  const currentSteps = stepNames[type];
+  const currentSteps =
+    type === "service" && deliveryMode === "online"
+      ? virtualServiceSteps
+      : stepNames[type];
   const isMembership = type === "plan" && subtype === "membership";
   const isCreditPack = type === "plan" && subtype === "credit-pack";
   const isBundle = type === "plan" && subtype === "bundle";
@@ -845,6 +928,20 @@ export function GuidedProductBuilder({
       answer: faq.answer.trim(),
     }))
     .filter((faq) => faq.question.length > 0 && faq.answer.length > 0);
+  const parsedOneOffSessions = oneOffSessions
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})$/.exec(line);
+      return match?.[1] && match[2]
+        ? [{ date: match[1], startsAt: match[2] }]
+        : [];
+    });
+  const parsedSessionBlackouts = sessionBlackouts
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\d{4}-\d{2}-\d{2}$/.test(line));
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
     receiptTotalMinor === undefined
@@ -989,9 +1086,26 @@ export function GuidedProductBuilder({
   const storyReady = title.trim().length >= 2;
   const storyMediaReady =
     storyReady && media.some((item) => item.kind === "image");
+  const scheduleReady =
+    sessionScheduleMode === "flexible" ||
+    (sessionScheduleMode === "one-off"
+      ? parsedOneOffSessions.length > 0
+      : Boolean(
+          scheduleStartsOn &&
+          scheduleEndsOn &&
+          scheduleStartsOn <= scheduleEndsOn &&
+          scheduleWeekdays.length > 0,
+        ));
   const bookingReady =
     (deliveryMode !== "venue" || Boolean(venueId)) &&
-    (coachMode !== "selected" || selectedCoachIds.length > 0);
+    (deliveryMode !== "online" || sessionScheduleMode !== "flexible") &&
+    (coachMode !== "selected" || selectedCoachIds.length > 0) &&
+    assignedCoachIds.length >= requiredCoachCount &&
+    scheduleReady;
+  const virtualDeliveryReady =
+    deliveryMode !== "online" ||
+    !summarizeVirtualSession ||
+    autoTranscribeVirtualSession;
   const planStructureReady = isCreditPack
     ? creditsGranted > 0
     : isBundle
@@ -1003,7 +1117,16 @@ export function GuidedProductBuilder({
     (!allowCredits || creditCost > 0);
   const stepReadiness: readonly boolean[] =
     type === "service"
-      ? [true, storyMediaReady, bookingReady, checkoutReady, confirmed]
+      ? deliveryMode === "online"
+        ? [
+            true,
+            storyMediaReady,
+            bookingReady,
+            virtualDeliveryReady,
+            checkoutReady,
+            confirmed,
+          ]
+        : [true, storyMediaReady, bookingReady, checkoutReady, confirmed]
       : type === "plan"
         ? [true, storyMediaReady, planStructureReady, checkoutReady, confirmed]
         : [
@@ -1024,7 +1147,16 @@ export function GuidedProductBuilder({
       (choice: { readonly value: string; readonly label: string }) =>
         choice.value === subtype,
     )?.label ?? subtype.replaceAll("-", " ");
-  const currentGuidance = stepGuidance[type][step] ?? stepGuidance[type][0]!;
+  const guidanceForStep = (index: number) =>
+    type === "service" && deliveryMode === "online" && index >= 3
+      ? index === 3
+        ? {
+            detail: "Create and preserve the online session",
+            tip: "Duna creates the Meet link after purchase, invites the coach and player, and keeps recording and transcript consent explicit.",
+          }
+        : stepGuidance.service[index - 1]!
+      : (stepGuidance[type][index] ?? stepGuidance[type][0]!);
+  const currentGuidance = guidanceForStep(step);
   const reachedReadiness = stepReadiness.reduce(
     (total, ready, index) => total + (ready && index <= step ? 1 : 0),
     0,
@@ -1130,7 +1262,42 @@ export function GuidedProductBuilder({
           venueId: deliveryMode === "venue" ? venueId : undefined,
           coachAssignmentMode: coachMode,
           coachPersonIds: assignedCoachIds,
-          requiredCoachCount: 1,
+          requiredCoachCount,
+          durationMinutes,
+          capacity,
+          sessionSchedule: {
+            mode: sessionScheduleMode,
+            timezone: workspace.organization.timezone,
+            startsOn:
+              sessionScheduleMode === "recurring"
+                ? scheduleStartsOn
+                : undefined,
+            endsOn:
+              sessionScheduleMode === "recurring" ? scheduleEndsOn : undefined,
+            weekly:
+              sessionScheduleMode === "recurring"
+                ? scheduleWeekdays.map((weekday) => ({
+                    weekday,
+                    startsAt: scheduleStartTime,
+                  }))
+                : [],
+            oneOff:
+              sessionScheduleMode === "one-off" ? parsedOneOffSessions : [],
+            blackoutDates: parsedSessionBlackouts,
+          },
+          virtualDelivery:
+            deliveryMode === "online"
+              ? {
+                  provider: "google-meet",
+                  createMeetingOnPurchase: true,
+                  inviteCoach: true,
+                  invitePlayer: true,
+                  autoRecord: autoRecordVirtualSession,
+                  autoTranscribe: autoTranscribeVirtualSession,
+                  generateAiSummary: summarizeVirtualSession,
+                  recordingConsentRequired: true,
+                }
+              : undefined,
           customerCoachSelection,
         }
       : {}),
@@ -1424,7 +1591,7 @@ export function GuidedProductBuilder({
                 <i>{index < step ? <Check size={13} /> : index + 1}</i>
                 <span>
                   <strong>{name}</strong>
-                  <small>{stepGuidance[type][index]?.detail}</small>
+                  <small>{guidanceForStep(index).detail}</small>
                 </span>
               </button>
             ))}
@@ -2225,6 +2392,129 @@ export function GuidedProductBuilder({
                   onClick={() => setSchedulingStyle("request-to-book")}
                 />
               </ChoiceGrid>
+              <div className="guided-product-subsection">
+                <strong>Is this flexible, one-off, or recurring?</strong>
+                <ChoiceGrid>
+                  <ChoiceCard
+                    active={sessionScheduleMode === "flexible"}
+                    detail="Customers choose from the overlap of coach availability."
+                    label="Flexible booking"
+                    onClick={() => setSessionScheduleMode("flexible")}
+                  />
+                  <ChoiceCard
+                    active={sessionScheduleMode === "one-off"}
+                    detail="Publish one or more specific session dates."
+                    label="Specific dates"
+                    onClick={() => setSessionScheduleMode("one-off")}
+                  />
+                  <ChoiceCard
+                    active={sessionScheduleMode === "recurring"}
+                    detail="Repeat on selected weekdays between a start and end date."
+                    label="Recurring schedule"
+                    onClick={() => setSessionScheduleMode("recurring")}
+                  />
+                </ChoiceGrid>
+              </div>
+              {sessionScheduleMode === "recurring" && (
+                <div className="guided-session-schedule">
+                  <div className="operator-form-grid operator-form-grid--two">
+                    <label>
+                      <span>Schedule starts</span>
+                      <input
+                        onChange={(event) =>
+                          setScheduleStartsOn(event.target.value)
+                        }
+                        type="date"
+                        value={scheduleStartsOn}
+                      />
+                    </label>
+                    <label>
+                      <span>Schedule ends</span>
+                      <input
+                        min={scheduleStartsOn || undefined}
+                        onChange={(event) =>
+                          setScheduleEndsOn(event.target.value)
+                        }
+                        type="date"
+                        value={scheduleEndsOn}
+                      />
+                    </label>
+                    <label>
+                      <span>Start time</span>
+                      <input
+                        onChange={(event) =>
+                          setScheduleStartTime(event.target.value)
+                        }
+                        type="time"
+                        value={scheduleStartTime}
+                      />
+                    </label>
+                    <label>
+                      <span>Timezone</span>
+                      <input disabled value={workspace.organization.timezone} />
+                    </label>
+                  </div>
+                  <fieldset className="guided-weekday-picker">
+                    <legend>Days of week</legend>
+                    <div>
+                      {weekdayChoices.map(([weekday, label]) => {
+                        const active = scheduleWeekdays.includes(weekday);
+                        return (
+                          <button
+                            aria-pressed={active}
+                            className={active ? "active" : undefined}
+                            key={weekday}
+                            onClick={() =>
+                              setScheduleWeekdays((current) =>
+                                active
+                                  ? current.filter((day) => day !== weekday)
+                                  : [...current, weekday].sort(),
+                              )
+                            }
+                            type="button"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                </div>
+              )}
+              {sessionScheduleMode === "one-off" && (
+                <label className="operator-field--wide guided-session-lines">
+                  <span>Specific sessions · one per line</span>
+                  <textarea
+                    onChange={(event) => setOneOffSessions(event.target.value)}
+                    placeholder={"2026-09-08 17:00\n2026-09-15 17:00"}
+                    rows={4}
+                    value={oneOffSessions}
+                  />
+                  <small>
+                    Use YYYY-MM-DD HH:mm in {workspace.organization.timezone}.
+                  </small>
+                </label>
+              )}
+              {sessionScheduleMode !== "flexible" && (
+                <label className="operator-field--wide guided-session-lines">
+                  <span>Blackout dates · optional · one per line</span>
+                  <textarea
+                    onChange={(event) =>
+                      setSessionBlackouts(event.target.value)
+                    }
+                    placeholder={"2026-11-26\n2026-12-24"}
+                    rows={3}
+                    value={sessionBlackouts}
+                  />
+                </label>
+              )}
+              {deliveryMode === "online" &&
+                sessionScheduleMode === "flexible" && (
+                  <p className="guided-product-warning" role="alert">
+                    Choose specific dates or a recurring schedule so Duna knows
+                    when to create the Meet and Calendar invitation.
+                  </p>
+                )}
               <div className="operator-form-grid operator-form-grid--two">
                 <label>
                   <span>Duration</span>
@@ -2251,6 +2541,20 @@ export function GuidedProductBuilder({
                     }
                     type="number"
                     value={capacity}
+                  />
+                </label>
+                <label>
+                  <span>Coaches required</span>
+                  <input
+                    max={Math.max(1, assignedCoachIds.length)}
+                    min="1"
+                    onChange={(event) =>
+                      setRequiredCoachCount(
+                        Math.max(1, Number(event.target.value)),
+                      )
+                    }
+                    type="number"
+                    value={requiredCoachCount}
                   />
                 </label>
                 <label>
@@ -2693,160 +2997,236 @@ export function GuidedProductBuilder({
             </section>
           )}
 
-          {step === 3 && type !== "good" && (
+          {step === 3 && type === "service" && deliveryMode === "online" && (
             <section>
-              <span className="hq-eyebrow">Step 4 · Price</span>
-              <h3>Make checkout expectations explicit.</h3>
+              <span className="hq-eyebrow">Step 4 · Virtual delivery</span>
+              <h3>Let Duna run the Google Meet handoff.</h3>
               <p>
-                Payment choices stay tailored to this {type}; the draft remains
-                private until publication review.
+                After purchase, Duna creates a unique meeting from its Workspace
+                organizer, invites the player and coaching team, and adds the
+                event to their calendars.
               </p>
-              <ChoiceGrid>
-                <ChoiceCard
-                  active={allowCard}
-                  detail={
-                    isMembership
-                      ? "Secure recurring online billing."
-                      : "Secure online checkout."
-                  }
-                  label="Card"
-                  onClick={() => setAllowCard((current) => !current)}
-                />
-                <ChoiceCard
-                  active={allowCash}
-                  detail="Let staff record a payment collected in person."
-                  label="Cash"
-                  onClick={() => setAllowCash((current) => !current)}
-                />
-                {type === "service" && (
-                  <ChoiceCard
-                    active={allowCredits}
-                    detail="Accept credits issued by this organization."
-                    label="Organization credits"
-                    onClick={() => setAllowCredits((current) => !current)}
-                  />
-                )}
-              </ChoiceGrid>
-              <div className="operator-form-grid operator-form-grid--two">
-                <MoneyInput
-                  currency={workspace.organization.currency}
-                  label={
-                    isMembership
-                      ? `${billingMode === "month" ? "Monthly" : "Annual"} price`
-                      : "Price"
-                  }
-                  onChange={setPrice}
-                  placeholder={isCreditPack ? "250.00" : "80.00"}
-                  value={price}
-                />
-                {allowCredits && (
-                  <label>
-                    <span>Credit cost</span>
-                    <input
-                      min="1"
-                      onChange={(event) =>
-                        setCreditCost(Math.max(1, Number(event.target.value)))
-                      }
-                      type="number"
-                      value={creditCost}
-                    />
-                  </label>
-                )}
-              </div>
-              {!isMembership && allowCard && (
+              <div className="guided-virtual-delivery">
+                <article>
+                  <Video aria-hidden size={22} />
+                  <span>
+                    <strong>Google Meet created after purchase</strong>
+                    <small>
+                      The player and assigned coach receive the same calendar
+                      event.
+                    </small>
+                  </span>
+                  <Badge tone="positive">On</Badge>
+                </article>
                 <label className="operator-switch">
                   <input
-                    checked={allowInstallments}
+                    checked={autoRecordVirtualSession}
                     onChange={(event) =>
-                      setAllowInstallments(event.target.checked)
+                      setAutoRecordVirtualSession(event.target.checked)
                     }
                     type="checkbox"
                   />
                   <span>
-                    <strong>Offer monthly installments</strong>
-                    The customer acknowledges that future automatic payments may
-                    fail.
-                  </span>
-                </label>
-              )}
-              {allowInstallments && (
-                <label className="guided-inline-field">
-                  <span>Number of installments</span>
-                  <select
-                    onChange={(event) =>
-                      setInstallmentCount(Number(event.target.value))
-                    }
-                    value={installmentCount}
-                  >
-                    {[2, 3, 4, 6].map((count) => (
-                      <option key={count} value={count}>
-                        {count} payments
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <div className="guided-product-policy-grid">
-                <label className="operator-switch">
-                  <input
-                    checked={membershipRequired}
-                    disabled={isMembership || !membershipConfigured}
-                    onChange={(event) =>
-                      setMembershipRequired(event.target.checked)
-                    }
-                    type="checkbox"
-                  />
-                  <span>
-                    <strong>Membership required</strong>
-                    {isMembership
-                      ? "A membership cannot require another membership."
-                      : membershipConfigured
-                        ? "Only active members may purchase or book."
-                        : "Publish a membership first to make offers members-only."}
+                    <strong>Record the coaching session</strong>
+                    Recording is disclosed in the booking and Meet experience.
                   </span>
                 </label>
                 <label className="operator-switch">
                   <input
-                    checked={taxable}
-                    onChange={(event) => setTaxable(event.target.checked)}
+                    checked={autoTranscribeVirtualSession}
+                    onChange={(event) =>
+                      setAutoTranscribeVirtualSession(event.target.checked)
+                    }
                     type="checkbox"
                   />
                   <span>
-                    <strong>Taxable</strong>
-                    Use the organization or venue tax location.
+                    <strong>Create a transcript</strong>
+                    Duna uses signed-in participant identity to distinguish the
+                    invited coach and player where Google provides it.
                   </span>
                 </label>
-              </div>
-              <div className="guided-audience">
-                <strong>Who can see it?</strong>
-                <ChoiceGrid>
-                  <ChoiceCard
-                    active={visibility === "public"}
-                    detail="Visible to everyone."
-                    label="Public"
-                    onClick={() => setVisibility("public")}
-                  />
-                  <ChoiceCard
-                    active={visibility === "members"}
-                    detail={
-                      membershipConfigured
-                        ? "Visible to active members."
-                        : "Publish a membership before using this audience."
+                <label className="operator-switch">
+                  <input
+                    checked={summarizeVirtualSession}
+                    onChange={(event) =>
+                      setSummarizeVirtualSession(event.target.checked)
                     }
-                    disabled={!membershipConfigured}
-                    label="Members"
-                    onClick={() => setVisibility("members")}
+                    type="checkbox"
                   />
-                  <ChoiceCard
-                    active={visibility === "private"}
-                    detail="Staff or private-link access only."
-                    label="Private"
-                    onClick={() => setVisibility("private")}
-                  />
-                </ChoiceGrid>
+                  <span>
+                    <strong>Generate an AI summary and action items</strong>
+                    Duna’s AI harness reads the transcript after the meeting and
+                    stores a reviewable recap with the session.
+                  </span>
+                </label>
+                <div className="operator-legal-boundary">
+                  <CircleAlert aria-hidden size={18} />
+                  <p>
+                    Recording and transcription depend on the Duna Workspace
+                    edition, admin policy, and a recording-eligible organizer or
+                    co-host joining. Duna will never silently claim an artifact
+                    exists when Google has not produced it.
+                  </p>
+                </div>
               </div>
             </section>
           )}
+
+          {step === (type === "service" && deliveryMode === "online" ? 4 : 3) &&
+            type !== "good" && (
+              <section>
+                <span className="hq-eyebrow">Step {step + 1} · Price</span>
+                <h3>Make checkout expectations explicit.</h3>
+                <p>
+                  Payment choices stay tailored to this {type}; the draft
+                  remains private until publication review.
+                </p>
+                <ChoiceGrid>
+                  <ChoiceCard
+                    active={allowCard}
+                    detail={
+                      isMembership
+                        ? "Secure recurring online billing."
+                        : "Secure online checkout."
+                    }
+                    label="Card"
+                    onClick={() => setAllowCard((current) => !current)}
+                  />
+                  <ChoiceCard
+                    active={allowCash}
+                    detail="Let staff record a payment collected in person."
+                    label="Cash"
+                    onClick={() => setAllowCash((current) => !current)}
+                  />
+                  {type === "service" && (
+                    <ChoiceCard
+                      active={allowCredits}
+                      detail="Accept credits issued by this organization."
+                      label="Organization credits"
+                      onClick={() => setAllowCredits((current) => !current)}
+                    />
+                  )}
+                </ChoiceGrid>
+                <div className="operator-form-grid operator-form-grid--two">
+                  <MoneyInput
+                    currency={workspace.organization.currency}
+                    label={
+                      isMembership
+                        ? `${billingMode === "month" ? "Monthly" : "Annual"} price`
+                        : "Price"
+                    }
+                    onChange={setPrice}
+                    placeholder={isCreditPack ? "250.00" : "80.00"}
+                    value={price}
+                  />
+                  {allowCredits && (
+                    <label>
+                      <span>Credit cost</span>
+                      <input
+                        min="1"
+                        onChange={(event) =>
+                          setCreditCost(Math.max(1, Number(event.target.value)))
+                        }
+                        type="number"
+                        value={creditCost}
+                      />
+                    </label>
+                  )}
+                </div>
+                {!isMembership && allowCard && (
+                  <label className="operator-switch">
+                    <input
+                      checked={allowInstallments}
+                      onChange={(event) =>
+                        setAllowInstallments(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Offer monthly installments</strong>
+                      The customer acknowledges that future automatic payments
+                      may fail.
+                    </span>
+                  </label>
+                )}
+                {allowInstallments && (
+                  <label className="guided-inline-field">
+                    <span>Number of installments</span>
+                    <select
+                      onChange={(event) =>
+                        setInstallmentCount(Number(event.target.value))
+                      }
+                      value={installmentCount}
+                    >
+                      {[2, 3, 4, 6].map((count) => (
+                        <option key={count} value={count}>
+                          {count} payments
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="guided-product-policy-grid">
+                  <label className="operator-switch">
+                    <input
+                      checked={membershipRequired}
+                      disabled={isMembership || !membershipConfigured}
+                      onChange={(event) =>
+                        setMembershipRequired(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Membership required</strong>
+                      {isMembership
+                        ? "A membership cannot require another membership."
+                        : membershipConfigured
+                          ? "Only active members may purchase or book."
+                          : "Publish a membership first to make offers members-only."}
+                    </span>
+                  </label>
+                  <label className="operator-switch">
+                    <input
+                      checked={taxable}
+                      onChange={(event) => setTaxable(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Taxable</strong>
+                      Use the organization or venue tax location.
+                    </span>
+                  </label>
+                </div>
+                <div className="guided-audience">
+                  <strong>Who can see it?</strong>
+                  <ChoiceGrid>
+                    <ChoiceCard
+                      active={visibility === "public"}
+                      detail="Visible to everyone."
+                      label="Public"
+                      onClick={() => setVisibility("public")}
+                    />
+                    <ChoiceCard
+                      active={visibility === "members"}
+                      detail={
+                        membershipConfigured
+                          ? "Visible to active members."
+                          : "Publish a membership before using this audience."
+                      }
+                      disabled={!membershipConfigured}
+                      label="Members"
+                      onClick={() => setVisibility("members")}
+                    />
+                    <ChoiceCard
+                      active={visibility === "private"}
+                      detail="Staff or private-link access only."
+                      label="Private"
+                      onClick={() => setVisibility("private")}
+                    />
+                  </ChoiceGrid>
+                </div>
+              </section>
+            )}
 
           {step === 3 && type === "good" && (
             <section>
@@ -3162,9 +3542,10 @@ export function GuidedProductBuilder({
             </section>
           )}
 
-          {step === 4 && (
+          {step ===
+            (type === "service" && deliveryMode === "online" ? 5 : 4) && (
             <section>
-              <span className="hq-eyebrow">Step 5 · Review</span>
+              <span className="hq-eyebrow">Step {step + 1} · Review</span>
               <h3>Review the draft before Duna creates anything.</h3>
               <p>
                 Publishing remains a separate confirmed action after payment,

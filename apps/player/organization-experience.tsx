@@ -383,6 +383,9 @@ export function OrganizationExperienceModal({
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CatalogItem>();
   const [selectedVariantId, setSelectedVariantId] = useState<string>();
+  const [selectedOccurrenceId, setSelectedOccurrenceId] = useState<string>();
+  const [recordingConsentAccepted, setRecordingConsentAccepted] =
+    useState(false);
   const [paymentKind, setPaymentKind] = useState<"card" | "credit" | "cash">(
     "card",
   );
@@ -440,6 +443,8 @@ export function OrganizationExperienceModal({
       item?.allowCard ? "card" : item?.allowCredits ? "credit" : "cash",
     );
     setAddMembership(true);
+    setSelectedOccurrenceId(item?.upcomingOccurrences[0]?.key);
+    setRecordingConsentAccepted(false);
     setEligibility(undefined);
     if (!item || !client) return;
     let active = true;
@@ -542,6 +547,21 @@ export function OrganizationExperienceModal({
       itemEligibility?.isMember ?? false,
     );
     if (!price) throw new Error("That payment option is not available.");
+    const schedule =
+      item.configuration.sessionSchedule &&
+      typeof item.configuration.sessionSchedule === "object" &&
+      !Array.isArray(item.configuration.sessionSchedule)
+        ? (item.configuration.sessionSchedule as Readonly<
+            Record<string, unknown>
+          >)
+        : undefined;
+    const fixedSession =
+      item.type === "service" &&
+      (schedule?.mode === "one-off" || schedule?.mode === "recurring");
+    const purchasingSelectedItem = item.id === selectedItem?.id;
+    if (fixedSession && (!purchasingSelectedItem || !selectedOccurrenceId)) {
+      throw new Error("Choose an upcoming coach-supported session.");
+    }
     const path = `/clubs/${storefront.slug}/products/${item.slug}`;
     const result = await client.player.startCatalogCheckout.mutate({
       catalogItemId: item.id,
@@ -550,6 +570,12 @@ export function OrganizationExperienceModal({
       paymentMethod: requestedKind,
       paymentSurface: Platform.OS === "web" ? "hosted" : "native",
       quantity: 1,
+      catalogSessionOccurrenceId:
+        fixedSession && purchasingSelectedItem
+          ? selectedOccurrenceId
+          : undefined,
+      recordingConsentAccepted:
+        purchasingSelectedItem && recordingConsentAccepted,
       successUrl: `${dunaWebUrl}${path}?checkout=success`,
       cancelUrl: `${dunaWebUrl}${path}?checkout=cancelled`,
       idempotencyKey: Crypto.randomUUID(),
@@ -792,6 +818,32 @@ export function OrganizationExperienceModal({
       selectedItem.visibility === "members") &&
     eligibility === undefined,
   );
+  const selectedSchedule =
+    selectedItem?.configuration.sessionSchedule &&
+    typeof selectedItem.configuration.sessionSchedule === "object" &&
+    !Array.isArray(selectedItem.configuration.sessionSchedule)
+      ? (selectedItem.configuration.sessionSchedule as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const fixedSession = Boolean(
+    selectedItem?.type === "service" &&
+    (selectedSchedule?.mode === "one-off" ||
+      selectedSchedule?.mode === "recurring"),
+  );
+  const selectedVirtualDelivery =
+    selectedItem?.configuration.virtualDelivery &&
+    typeof selectedItem.configuration.virtualDelivery === "object" &&
+    !Array.isArray(selectedItem.configuration.virtualDelivery)
+      ? (selectedItem.configuration.virtualDelivery as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const requiresRecordingConsent = Boolean(
+    selectedItem?.configuration.deliveryMode === "online" &&
+    (selectedVirtualDelivery?.autoRecord === true ||
+      selectedVirtualDelivery?.autoTranscribe === true),
+  );
 
   return (
     <Modal
@@ -949,6 +1001,53 @@ export function OrganizationExperienceModal({
                 </ScrollView>
               ) : null}
 
+              {fixedSession ? (
+                <View style={styles.paymentRow}>
+                  <Text style={styles.purchaseLabel}>Choose your session</Text>
+                  {selectedItem.upcomingOccurrences.map((occurrence) => (
+                    <Pressable
+                      key={occurrence.key}
+                      onPress={() => setSelectedOccurrenceId(occurrence.key)}
+                      style={[
+                        styles.paymentChoice,
+                        selectedOccurrenceId === occurrence.key && {
+                          borderColor: primary,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.radio,
+                          selectedOccurrenceId === occurrence.key && {
+                            backgroundColor: primary,
+                            borderColor: primary,
+                          },
+                        ]}
+                      >
+                        {selectedOccurrenceId === occurrence.key ? (
+                          <CheckIcon color={onPrimary} />
+                        ) : null}
+                      </View>
+                      <Text style={styles.paymentChoiceText}>
+                        {new Date(occurrence.startsAt).toLocaleString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                          timeZone: occurrence.timezone,
+                        })}
+                      </Text>
+                    </Pressable>
+                  ))}
+                  {selectedItem.upcomingOccurrences.length === 0 ? (
+                    <Text style={styles.paymentNote}>
+                      No coach-supported sessions are available right now.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
               {paymentKinds.length > 1 ? (
                 <View style={styles.paymentRow}>
                   {paymentKinds.map((kind) => (
@@ -1024,12 +1123,49 @@ export function OrganizationExperienceModal({
                 </Pressable>
               ) : null}
 
+              {requiresRecordingConsent ? (
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: recordingConsentAccepted }}
+                  onPress={() =>
+                    setRecordingConsentAccepted((accepted) => !accepted)
+                  }
+                  style={[styles.membershipAdd, { backgroundColor: sand }]}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      recordingConsentAccepted && {
+                        backgroundColor: primary,
+                        borderColor: primary,
+                      },
+                    ]}
+                  >
+                    {recordingConsentAccepted ? (
+                      <CheckIcon color={onPrimary} />
+                    ) : null}
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.membershipAddTitle}>
+                      Recording and transcript notice
+                    </Text>
+                    <Text style={styles.membershipAddBody}>
+                      This Meet is configured to record and transcribe. Duna
+                      stores the recording, transcript, AI summary, and action
+                      items with your session record.
+                    </Text>
+                  </View>
+                </Pressable>
+              ) : null}
+
               <Pressable
                 accessibilityRole="button"
                 disabled={
                   checkoutBusy ||
                   checkingMembership ||
                   !selectedPrice ||
+                  (fixedSession && !selectedOccurrenceId) ||
+                  (requiresRecordingConsent && !recordingConsentAccepted) ||
                   (requiresMembership && !addMembership)
                 }
                 onPress={() => void completePurchase()}
@@ -1039,6 +1175,8 @@ export function OrganizationExperienceModal({
                   (checkoutBusy ||
                     checkingMembership ||
                     !selectedPrice ||
+                    (fixedSession && !selectedOccurrenceId) ||
+                    (requiresRecordingConsent && !recordingConsentAccepted) ||
                     (requiresMembership && !addMembership)) &&
                     styles.disabled,
                   pressed && styles.pressed,

@@ -62,6 +62,9 @@ type PlayerSettings = Awaited<
 type PlayerCoachingNotes = Awaited<
   ReturnType<DunaApiClient["player"]["coachingNotes"]["query"]>
 >;
+type PlayerVirtualSessions = Awaited<
+  ReturnType<DunaApiClient["player"]["virtualSessions"]["query"]>
+>;
 type PublicPeople = Awaited<
   ReturnType<DunaApiClient["public"]["players"]["query"]>
 >;
@@ -93,6 +96,7 @@ interface PlayerRuntimeSnapshot {
   readonly predictionDiscovery?: PredictionDiscovery;
   readonly settings: PlayerSettings;
   readonly coachingNotes: PlayerCoachingNotes;
+  readonly virtualSessions: PlayerVirtualSessions;
   readonly people: PublicPeople;
   readonly venues: PublicVenues;
   readonly proCoverage?: PublicProCoverage;
@@ -116,6 +120,7 @@ function isPlayerRuntimeSnapshot(
     Boolean(candidate.predictionWallet) &&
     Boolean(candidate.settings) &&
     Array.isArray(candidate.coachingNotes) &&
+    Array.isArray(candidate.virtualSessions) &&
     Array.isArray(candidate.people) &&
     Array.isArray(candidate.venues) &&
     Array.isArray(candidate.coaches) &&
@@ -138,6 +143,7 @@ export interface PlayerRuntime {
   readonly predictionDiscovery?: PredictionDiscovery;
   readonly settings?: PlayerSettings;
   readonly coachingNotes?: PlayerCoachingNotes;
+  readonly virtualSessions?: PlayerVirtualSessions;
   readonly people?: PublicPeople;
   readonly venues?: PublicVenues;
   readonly proCoverage?: PublicProCoverage;
@@ -408,6 +414,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     useState<PredictionDiscovery>();
   const [settings, setSettings] = useState<PlayerSettings>();
   const [coachingNotes, setCoachingNotes] = useState<PlayerCoachingNotes>();
+  const [virtualSessions, setVirtualSessions] =
+    useState<PlayerVirtualSessions>();
   const [people, setPeople] = useState<PublicPeople>();
   const [venues, setVenues] = useState<PublicVenues>();
   const [proCoverage, setProCoverage] = useState<PublicProCoverage>();
@@ -431,6 +439,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     setPredictionDiscovery(snapshot.predictionDiscovery);
     setSettings(snapshot.settings);
     setCoachingNotes(snapshot.coachingNotes);
+    setVirtualSessions(snapshot.virtualSessions);
     setPeople(snapshot.people);
     setVenues(snapshot.venues);
     setProCoverage(snapshot.proCoverage);
@@ -470,6 +479,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextPredictionDiscovery,
         nextSettings,
         nextCoachingNotes,
+        nextVirtualSessions,
         nextPeople,
         nextVenues,
         nextProCoverage,
@@ -487,6 +497,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
           .catch(() => undefined),
         client.player.settings.query(),
         client.player.coachingNotes.query().catch(() => []),
+        client.player.virtualSessions.query().catch(() => []),
         client.public.players.query({ limit: 50 }).catch(() => []),
         client.public.venues.query().catch(() => []),
         client.public.proCoverage.query().catch(() => undefined),
@@ -504,6 +515,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         predictionDiscovery: nextPredictionDiscovery,
         settings: nextSettings,
         coachingNotes: nextCoachingNotes,
+        virtualSessions: nextVirtualSessions,
         people: nextPeople,
         venues: nextVenues,
         proCoverage: nextProCoverage,
@@ -587,6 +599,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     predictionWallet &&
     settings &&
     coachingNotes &&
+    virtualSessions &&
     people &&
     venues &&
     coaches &&
@@ -619,6 +632,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         predictionDiscovery,
         settings,
         coachingNotes,
+        virtualSessions,
         people,
         venues,
         proCoverage,

@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/player-media",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/virtual-sessions",
+      "schedule": "*/2 * * * *"
     }
   ]
 }

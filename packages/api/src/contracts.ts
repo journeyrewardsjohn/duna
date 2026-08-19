@@ -745,6 +745,43 @@ export const playerDashboardSchema = z.object({
   walletBalanceMinor: z.number().int(),
   currency: z.literal("USD"),
 });
+export const playerVirtualSessionRecordsSchema = z
+  .array(
+    z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      startsAt: z.iso.datetime(),
+      endsAt: z.iso.datetime(),
+      timezone: z.string(),
+      status: z.enum([
+        "provisioning",
+        "scheduled",
+        "in-progress",
+        "awaiting-artifacts",
+        "complete",
+        "failed",
+        "cancelled",
+      ]),
+      joinUrl: z.string().url().optional(),
+      recording: z
+        .object({
+          stored: z.boolean(),
+          url: z.string().url().optional(),
+          expiresAt: z.iso.datetime().optional(),
+        })
+        .optional(),
+      summary: z.string().optional(),
+      actionItems: z
+        .array(
+          z.object({
+            ownerRole: z.enum(["coach", "player", "shared"]),
+            text: z.string(),
+          }),
+        )
+        .readonly(),
+    }),
+  )
+  .readonly();
 export const playerAdmissionPassSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
@@ -3743,6 +3780,27 @@ export const publicCatalogItemSchema = operatorCatalogItemSchema
   })
   .extend({
     variants: z.array(publicCatalogVariantSchema).readonly(),
+    upcomingOccurrences: z
+      .array(
+        z.object({
+          key: z.string(),
+          startsAt: z.iso.datetime(),
+          endsAt: z.iso.datetime(),
+          localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          localTime: z.string().regex(/^\d{2}:\d{2}$/),
+          timezone: z.string(),
+          requiredCoachCount: z.number().int().positive(),
+          availableCoaches: z
+            .array(
+              z.object({
+                personId: z.string().uuid(),
+                displayName: z.string(),
+              }),
+            )
+            .readonly(),
+        }),
+      )
+      .readonly(),
   });
 
 export const publicCatalogRecommendationCardSchema = z.object({

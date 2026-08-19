@@ -4,6 +4,7 @@ import type { PublicCatalogItem, WaiverRequirement } from "@duna/api";
 import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
 import {
   Banknote,
+  CalendarClock,
   Check,
   CreditCard,
   Minus,
@@ -67,6 +68,11 @@ export function CatalogCheckoutPanel({
   >(item.allowCard ? "card" : item.allowCredits ? "credit" : "cash");
   const [selectedPriceId, setSelectedPriceId] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [occurrenceId, setOccurrenceId] = useState(
+    item.upcomingOccurrences[0]?.key ?? "",
+  );
+  const [recordingConsentAccepted, setRecordingConsentAccepted] =
+    useState(false);
   const [notice, setNotice] = useState(initialNotice);
   const [memberActive, setMemberActive] = useState(isMember);
   const [addMembership, setAddMembership] = useState(true);
@@ -140,12 +146,37 @@ export function CatalogCheckoutPanel({
     item.type === "good" && item.configuration.inventoryTracked !== false;
   const available =
     !tracksInventory || (variant?.availableQuantity ?? 0) >= quantity;
+  const schedule =
+    item.configuration.sessionSchedule &&
+    typeof item.configuration.sessionSchedule === "object" &&
+    !Array.isArray(item.configuration.sessionSchedule)
+      ? (item.configuration.sessionSchedule as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const fixedSession =
+    item.type === "service" &&
+    (schedule?.mode === "recurring" || schedule?.mode === "one-off");
+  const virtualDelivery =
+    item.configuration.virtualDelivery &&
+    typeof item.configuration.virtualDelivery === "object" &&
+    !Array.isArray(item.configuration.virtualDelivery)
+      ? (item.configuration.virtualDelivery as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const requiresRecordingConsent =
+    item.configuration.deliveryMode === "online" &&
+    (virtualDelivery?.autoRecord === true ||
+      virtualDelivery?.autoTranscribe === true);
   const canPurchase =
     Boolean(variant && price) &&
     available &&
     (!requiresMembership || memberActive) &&
     (paymentMethod !== "card" || organization.paymentsReady) &&
-    (paymentMethod !== "credit" || walletCredits >= creditTotal);
+    (paymentMethod !== "credit" || walletCredits >= creditTotal) &&
+    (!fixedSession || Boolean(occurrenceId)) &&
+    (!requiresRecordingConsent || recordingConsentAccepted);
   const membershipStep = requiresMembership && !memberActive;
   const canStartMembership = Boolean(
     addMembership &&
@@ -264,6 +295,8 @@ export function CatalogCheckoutPanel({
         catalogPriceId: price?.id,
         paymentMethod,
         quantity,
+        catalogSessionOccurrenceId: occurrenceId || undefined,
+        recordingConsentAccepted,
         idempotencyKey: idempotencyKey.current,
       });
       if (!response.ok) {
@@ -353,6 +386,63 @@ export function CatalogCheckoutPanel({
             ))}
           </select>
         </label>
+      )}
+      {fixedSession && (
+        <label className="catalog-session-choice">
+          <span>
+            <CalendarClock aria-hidden size={17} /> Choose your session
+          </span>
+          <select
+            disabled={item.upcomingOccurrences.length === 0}
+            onChange={(event) => setOccurrenceId(event.target.value)}
+            value={occurrenceId}
+          >
+            {item.upcomingOccurrences.length === 0 ? (
+              <option value="">No coach-supported times available</option>
+            ) : (
+              item.upcomingOccurrences.map((occurrence) => (
+                <option key={occurrence.key} value={occurrence.key}>
+                  {new Intl.DateTimeFormat("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZone: occurrence.timezone,
+                    timeZoneName: "short",
+                  }).format(new Date(occurrence.startsAt))}
+                  {occurrence.availableCoaches.length === 1
+                    ? ` · ${occurrence.availableCoaches[0]?.displayName}`
+                    : ""}
+                </option>
+              ))
+            )}
+          </select>
+          <small>
+            Times only appear when the required coaching team is available.
+          </small>
+        </label>
+      )}
+      {requiresRecordingConsent && (
+        <button
+          aria-checked={recordingConsentAccepted}
+          className={`catalog-recording-consent ${recordingConsentAccepted ? "active" : ""}`}
+          onClick={() => setRecordingConsentAccepted((accepted) => !accepted)}
+          role="checkbox"
+          type="button"
+        >
+          <span className="catalog-membership-check">
+            {recordingConsentAccepted && <Check size={16} />}
+          </span>
+          <span>
+            <strong>Recording and transcript notice</strong>
+            <small>
+              I understand this coaching session is configured to record and
+              transcribe the Google Meet. Duna stores the recording, transcript,
+              AI summary, and action items with this session record.
+            </small>
+          </span>
+        </button>
       )}
       {!membershipIncluded &&
         paymentMethod === "card" &&
