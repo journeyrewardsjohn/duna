@@ -17,9 +17,6 @@
         "dark": "./assets/icon.png",
         "tinted": "./assets/icon-tinted.png"
       },
-      "entitlements": {
-        "com.apple.developer.proximity-reader.payment.acceptance": true
-      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true,
