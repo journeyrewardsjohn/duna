@@ -19,6 +19,11 @@ export type CalendarDay = {
   readonly inMonth: boolean;
 };
 
+export type CalendarMonth = {
+  readonly year: number;
+  readonly month: number;
+};
+
 function dateAtNoon(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year!, month! - 1, day!, 12, 0, 0, 0);
@@ -45,6 +50,23 @@ export function splitLocalDateTime(value: string): {
   return {
     date,
     time: /^\d{2}:\d{2}/.test(rawTime) ? rawTime.slice(0, 5) : "",
+  };
+}
+
+export function calendarMonthFromDate(
+  value: string,
+  now = new Date(),
+): CalendarMonth {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { year: now.getFullYear(), month: now.getMonth() };
+  }
+  const [year, month] = value.split("-").map(Number);
+  return {
+    year: Number.isFinite(year) ? year! : now.getFullYear(),
+    month:
+      Number.isFinite(month) && month! >= 1 && month! <= 12
+        ? month! - 1
+        : now.getMonth(),
   };
 }
 

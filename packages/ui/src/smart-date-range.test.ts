@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarMonthFromDate,
   calendarMonthDays,
   normalizeDateRange,
   quickDateRange,
@@ -7,6 +8,23 @@ import {
 } from "./smart-date-range";
 
 describe("smart date range", () => {
+  it("opens an empty range on the current calendar month", () => {
+    const today = new Date(2026, 7, 19, 12);
+
+    expect(calendarMonthFromDate("", today)).toEqual({
+      year: 2026,
+      month: 7,
+    });
+    expect(calendarMonthFromDate("2026-00-19", today)).toEqual({
+      year: 2026,
+      month: 7,
+    });
+    expect(calendarMonthFromDate("2027-02-19", today)).toEqual({
+      year: 2027,
+      month: 1,
+    });
+  });
+
   it("builds an inclusive six-week calendar grid", () => {
     const days = calendarMonthDays(2026, 7);
     expect(days).toHaveLength(42);

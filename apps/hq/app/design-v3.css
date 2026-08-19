@@ -6968,3 +6968,835 @@ body[data-zone="operator"]
 body[data-zone="operator"] :is(.schedule-dropzone, .team-blackouts__form) {
   background: var(--surface-2);
 }
+
+/*
+ * HQ workspace layout system
+ *
+ * HQ is primarily used at a desk. These rules deliberately anchor work to the
+ * left edge of the available workspace, reserve broad horizontal room for
+ * operational context, and keep readable line lengths inside the controls
+ * themselves instead of centering an entire module in a narrow column.
+ */
+body[data-zone="operator"] .hq-content {
+  margin: 0;
+  max-width: none;
+  padding: clamp(1.25rem, 2.35vw, 2.75rem);
+  width: 100%;
+}
+
+body[data-zone="operator"] .hq-page {
+  margin-inline: 0;
+  max-width: 112rem;
+  width: 100%;
+}
+
+body[data-zone="operator"] :is(.hq-page-heading, .hq-page-header) {
+  align-items: end;
+  gap: 1rem 2.5rem;
+  margin-bottom: clamp(1.15rem, 2.2vw, 1.9rem);
+}
+
+body[data-zone="operator"] :is(.hq-page-heading, .hq-page-header) h1 {
+  font-size: clamp(2rem, 2.7vw, 3.45rem);
+  line-height: 0.98;
+  margin: 0.35rem 0 0.55rem;
+  max-width: 24ch;
+}
+
+body[data-zone="operator"] :is(.hq-page-heading, .hq-page-header) p {
+  max-width: 76ch;
+}
+
+body[data-zone="operator"] .hq-account-page {
+  margin-inline: 0;
+  max-width: 90rem;
+}
+
+body[data-zone="operator"] .hq-overview-heading,
+body[data-zone="operator"] .hq-overview-layout {
+  margin-inline: 0;
+  max-width: 106rem;
+}
+
+body[data-zone="operator"] .hq-overview-heading {
+  margin-bottom: 1.35rem;
+}
+
+body[data-zone="operator"] .hq-overview-heading h1 {
+  font-size: clamp(2.15rem, 3vw, 3.7rem);
+}
+
+body[data-zone="operator"] .operator-create-page__heading {
+  grid-template-columns: 44px minmax(0, 1fr);
+  margin-bottom: clamp(1.1rem, 2vw, 1.7rem);
+  max-width: 104rem;
+}
+
+body[data-zone="operator"]
+  .operator-create-page__heading
+  .operator-create-page__copy
+  h1 {
+  font-size: clamp(2.25rem, 3.7vw, 4.15rem);
+  line-height: 0.97;
+  margin-block: 0.35rem 0.6rem;
+  max-width: 18ch;
+}
+
+body[data-zone="operator"]
+  .operator-create-page__heading
+  .operator-create-page__copy
+  p {
+  max-width: 78ch;
+}
+
+/* Guided offer studio: a deliberate three-column desktop workspace. */
+body[data-zone="operator"] .guided-product-builder {
+  border-radius: 18px;
+  box-shadow: 0 18px 52px rgb(var(--ink-rgb) / 7%);
+}
+
+body[data-zone="operator"] .guided-product-builder__header {
+  gap: clamp(1.5rem, 3vw, 3.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.3fr);
+  padding: clamp(1.3rem, 2.4vw, 2.2rem);
+}
+
+body[data-zone="operator"] .guided-product-builder__header h2 {
+  font-size: clamp(2rem, 3vw, 3.35rem);
+  max-width: 20ch;
+}
+
+body[data-zone="operator"] .guided-product-form {
+  gap: clamp(0.9rem, 1.5vw, 1.35rem);
+  grid-template-columns: minmax(218px, 0.26fr) minmax(580px, 1fr) minmax(
+      250px,
+      0.31fr
+    );
+  padding: clamp(0.9rem, 1.4vw, 1.35rem);
+}
+
+body[data-zone="operator"] .guided-product-stage {
+  min-height: 560px;
+  padding: clamp(1.25rem, 2.2vw, 2rem);
+}
+
+body[data-zone="operator"] .guided-product-stage h3 {
+  font-size: clamp(1.75rem, 2.65vw, 2.8rem);
+  max-width: 24ch;
+}
+
+body[data-zone="operator"] .guided-product-stage > section > p {
+  font-size: 0.88rem;
+  max-width: 72ch;
+}
+
+/* A desk workflow still needs phone-grade legibility in every control. */
+body[data-zone="operator"] .guided-product-stage :is(input, select, textarea) {
+  font-size: 1rem;
+}
+
+body[data-zone="operator"] .guided-product-subsection--schedule {
+  display: grid;
+  gap: 0.8rem;
+}
+
+body[data-zone="operator"] .guided-product-subsection__heading > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+body[data-zone="operator"] .guided-product-subsection__heading strong {
+  font-size: 1rem;
+}
+
+body[data-zone="operator"] .guided-product-subsection__heading small {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  max-width: 72ch;
+}
+
+body[data-zone="operator"]
+  .guided-product-subsection--schedule
+  .guided-product-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body[data-zone="operator"] .guided-product-subsection--schedule .guided-choice {
+  min-height: 102px;
+  padding: 0.9rem;
+}
+
+body[data-zone="operator"] .guided-session-schedule,
+body[data-zone="operator"] .guided-session-blackouts {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.3rem;
+  padding: clamp(0.85rem, 1.5vw, 1.2rem);
+}
+
+body[data-zone="operator"] .guided-session-schedule .duna-date-range,
+body[data-zone="operator"] .guided-session-blackouts .duna-date-range {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+body[data-zone="operator"] .guided-session-schedule__rules {
+  align-items: end;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 0.32fr) minmax(
+      220px,
+      0.55fr
+    );
+}
+
+body[data-zone="operator"] .guided-session-schedule__time {
+  display: grid;
+  gap: 0.4rem;
+}
+
+body[data-zone="operator"] .guided-session-schedule__time > span,
+body[data-zone="operator"] .guided-weekday-picker legend {
+  color: var(--text-1);
+  font-size: 0.875rem;
+  font-weight: 760;
+}
+
+body[data-zone="operator"] .guided-session-schedule__time input {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  min-height: 48px;
+  padding-inline: 0.75rem;
+}
+
+body[data-zone="operator"] .guided-session-schedule__rules > p {
+  align-items: center;
+  color: var(--text-2);
+  display: flex;
+  font-size: 0.875rem;
+  gap: 0.45rem;
+  line-height: 1.45;
+  margin: 0 0 0.2rem;
+}
+
+body[data-zone="operator"] .guided-weekday-picker > div {
+  gap: 0.35rem;
+}
+
+body[data-zone="operator"] .guided-weekday-picker button {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  border-radius: 9px;
+  font-size: 0.875rem;
+  min-height: 46px;
+}
+
+body[data-zone="operator"] .guided-weekday-picker button.active {
+  background: var(--hq-deep);
+  border-color: var(--hq-deep);
+  color: var(--hq-tint);
+}
+
+body[data-zone="operator"] .guided-session-schedule--one-off > header,
+body[data-zone="operator"] .guided-session-blackouts > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+body[data-zone="operator"] .guided-session-schedule--one-off > header > div,
+body[data-zone="operator"] .guided-session-blackouts > header > div {
+  display: grid;
+  gap: 0.22rem;
+}
+
+body[data-zone="operator"] .guided-session-schedule--one-off > header strong,
+body[data-zone="operator"] .guided-session-blackouts > header strong {
+  font-size: 1rem;
+}
+
+body[data-zone="operator"] .guided-session-schedule--one-off > header small,
+body[data-zone="operator"] .guided-session-blackouts > header small {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-width: 68ch;
+}
+
+body[data-zone="operator"] .guided-session-schedule__add {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(260px, 430px) auto;
+}
+
+body[data-zone="operator"] .guided-session-schedule__add .hq-button {
+  min-height: 46px;
+  white-space: nowrap;
+}
+
+body[data-zone="operator"] .guided-session-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+body[data-zone="operator"] .guided-session-list > article {
+  align-items: end;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(240px, 1fr) minmax(160px, 0.42fr) auto;
+  padding: 0.7rem;
+}
+
+body[data-zone="operator"] .guided-session-list__number {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 14%, transparent);
+  border-radius: 50%;
+  color: var(--hq-deep);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  margin-bottom: 0.45rem;
+  width: 30px;
+}
+
+body[data-zone="operator"] .guided-session-list__summary {
+  display: grid;
+  gap: 0.14rem;
+  margin-bottom: 0.45rem;
+}
+
+body[data-zone="operator"] .guided-session-list__summary strong {
+  font-size: 0.875rem;
+}
+
+body[data-zone="operator"] .guided-session-list__summary small {
+  color: var(--text-2);
+  font-size: 0.78rem;
+}
+
+body[data-zone="operator"] .guided-session-list__empty,
+body[data-zone="operator"] .guided-product-proof__empty {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 5%, var(--surface-1));
+  border: 1px dashed color-mix(in srgb, var(--hq-core) 30%, var(--hairline));
+  border-radius: 12px;
+  color: var(--text-2);
+  display: flex;
+  gap: 0.65rem;
+  min-height: 78px;
+  padding: 0.85rem 1rem;
+}
+
+body[data-zone="operator"] .guided-session-list__empty > span,
+body[data-zone="operator"] .guided-product-proof__empty > span {
+  display: grid;
+  gap: 0.14rem;
+  font-size: 0.875rem;
+}
+
+body[data-zone="operator"]
+  :is(.guided-session-list__empty, .guided-product-proof__empty)
+  strong {
+  color: var(--text-1);
+  font-size: 0.86rem;
+}
+
+body[data-zone="operator"] .guided-session-blackouts__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+body[data-zone="operator"] .guided-session-blackouts__list > span {
+  align-items: center;
+  background: color-mix(in srgb, var(--loss) 9%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--loss) 26%, var(--hairline));
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.3rem;
+  padding: 0.26rem 0.3rem 0.26rem 0.62rem;
+}
+
+body[data-zone="operator"] .guided-session-blackouts__list button {
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-2);
+  font-size: 1.1rem;
+  height: 26px;
+  line-height: 1;
+  padding: 0;
+  width: 26px;
+}
+
+/* Compact selection rows make cross-sell decisions scannable, not card-shaped. */
+body[data-zone="operator"] .guided-product-recommendations {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  border-radius: 16px;
+  gap: 1rem;
+  padding: clamp(1rem, 1.5vw, 1.25rem);
+}
+
+body[data-zone="operator"] .guided-product-recommendations > header > div {
+  gap: 0.25rem;
+}
+
+body[data-zone="operator"] .guided-product-recommendations > header strong {
+  font-size: 1.06rem;
+}
+
+body[data-zone="operator"] .guided-product-recommendations small,
+body[data-zone="operator"] .guided-product-recommendations > p {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  max-width: 76ch;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__list {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+}
+
+body[data-zone="operator"] .guided-product-recommendations label {
+  align-items: center;
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 76px;
+  padding: 0.7rem;
+}
+
+body[data-zone="operator"] .guided-product-recommendations label:hover {
+  border-color: color-mix(in srgb, var(--hq-core) 45%, var(--hairline));
+}
+
+body[data-zone="operator"] .guided-product-recommendations label.active {
+  background: color-mix(in srgb, var(--hq-core) 9%, var(--surface-1));
+  border-color: var(--hq-core);
+}
+
+body[data-zone="operator"] .guided-product-recommendations label > input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 11%, transparent);
+  border-radius: 9px;
+  color: var(--hq-deep);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__copy strong {
+  font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__copy small {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-zone="operator"] .guided-product-recommendations__state {
+  align-items: center;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  gap: 0.25rem;
+}
+
+body[data-zone="operator"]
+  .guided-product-recommendations
+  label.active
+  .guided-product-recommendations__state {
+  color: var(--hq-deep);
+}
+
+/* Editorial repeaters retain reading order and give every field its own room. */
+body[data-zone="operator"] .guided-product-proof {
+  border-color: var(--hairline);
+  gap: 0.95rem;
+  margin-top: 1.6rem;
+  padding-top: 1.4rem;
+}
+
+body[data-zone="operator"] .guided-product-proof > header > div {
+  gap: 0.24rem;
+}
+
+body[data-zone="operator"] .guided-product-proof > header strong {
+  font-size: 1.06rem;
+}
+
+body[data-zone="operator"] .guided-product-proof > header small {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  max-width: 78ch;
+}
+
+body[data-zone="operator"] .guided-product-proof__rows {
+  gap: 0.75rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__rows article {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  border-radius: 14px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+}
+
+body[data-zone="operator"] .guided-product-proof__rows article > header {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 5%, var(--surface-1));
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 760;
+  gap: 0.45rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.85rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__rows article > header > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__fields {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__fields label,
+body[data-zone="operator"] .guided-product-proof__metadata label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__fields label > span,
+body[data-zone="operator"] .guided-product-proof__metadata label > span {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 760;
+}
+
+body[data-zone="operator"] .guided-product-proof__fields input,
+body[data-zone="operator"] .guided-product-proof__fields select,
+body[data-zone="operator"] .guided-product-proof__fields textarea {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  border-radius: 10px;
+  color: var(--text-1);
+  min-height: 46px;
+  padding: 0.7rem 0.78rem;
+}
+
+body[data-zone="operator"] .guided-product-proof__fields textarea {
+  min-height: 108px;
+}
+
+body[data-zone="operator"] .guided-product-proof__metadata {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(132px, 0.42fr);
+}
+
+body[data-zone="operator"] .guided-product-proof__remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--loss);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 720;
+  gap: 0.32rem;
+  margin: 0;
+  padding: 0.25rem 0.35rem;
+}
+
+/* Story lists are authored as meaningful records, never newline syntax. */
+body[data-zone="operator"] .guided-product-structured-list {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.95rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+body[data-zone="operator"] .guided-product-structured-list > header > div {
+  display: grid;
+  gap: 0.22rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list > header strong {
+  font-size: 1rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list > header small {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-width: 72ch;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__rows {
+  display: grid;
+  gap: 0.55rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__rows article {
+  align-items: end;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.68rem;
+}
+
+body[data-zone="operator"]
+  .guided-product-structured-list__rows
+  article
+  > span {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 14%, transparent);
+  border-radius: 50%;
+  color: var(--hq-deep);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+  width: 30px;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__rows label {
+  display: grid;
+  gap: 0.38rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__rows label > span {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 760;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__rows input {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+  border-radius: 10px;
+  min-height: 46px;
+  padding: 0.68rem 0.78rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__empty {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-core) 5%, var(--surface-1));
+  border: 1px dashed color-mix(in srgb, var(--hq-core) 30%, var(--hairline));
+  border-radius: 11px;
+  color: var(--text-2);
+  display: flex;
+  gap: 0.65rem;
+  min-height: 72px;
+  padding: 0.8rem 0.9rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__empty > span {
+  display: grid;
+  font-size: 0.875rem;
+  gap: 0.12rem;
+}
+
+body[data-zone="operator"] .guided-product-structured-list__empty strong {
+  color: var(--text-1);
+}
+
+@media (max-width: 1440px) {
+  body[data-zone="operator"] .guided-product-form {
+    grid-template-columns: minmax(214px, 0.3fr) minmax(0, 1fr);
+  }
+
+  body[data-zone="operator"] .guided-offer-preview {
+    grid-column: 1 / -1;
+  }
+
+  body[data-zone="operator"] .guided-session-schedule__rules {
+    grid-template-columns: minmax(250px, 1fr) minmax(150px, 0.35fr);
+  }
+
+  body[data-zone="operator"] .guided-session-schedule__rules > p {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  body[data-zone="operator"] .hq-page {
+    max-width: none;
+  }
+
+  body[data-zone="operator"] .guided-product-builder__header,
+  body[data-zone="operator"] .guided-product-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-zone="operator"] .guided-event-link {
+    max-width: none;
+  }
+
+  body[data-zone="operator"] .guided-product-guide,
+  body[data-zone="operator"] .guided-offer-preview__card {
+    position: static;
+  }
+
+  body[data-zone="operator"] .guided-offer-preview {
+    grid-column: auto;
+  }
+
+  body[data-zone="operator"]
+    .guided-product-subsection--schedule
+    .guided-product-choice-grid,
+  body[data-zone="operator"] .guided-session-schedule__rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-zone="operator"] .guided-session-schedule__rules > p {
+    grid-column: 1 / -1;
+  }
+
+  body[data-zone="operator"] .guided-session-list > article {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  body[data-zone="operator"] .guided-session-list__summary {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  body[data-zone="operator"] .hq-content {
+    padding: 1.1rem 1rem calc(6.5rem + env(safe-area-inset-bottom));
+  }
+
+  body[data-zone="operator"] :is(.hq-page-heading, .hq-page-header) {
+    align-items: stretch;
+  }
+
+  body[data-zone="operator"]
+    .operator-create-page__heading
+    .operator-create-page__copy
+    h1 {
+    font-size: clamp(2rem, 10vw, 3rem);
+  }
+
+  body[data-zone="operator"]
+    .guided-product-subsection--schedule
+    .guided-product-choice-grid,
+  body[data-zone="operator"] .guided-session-schedule__rules,
+  body[data-zone="operator"] .guided-product-proof__metadata {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-zone="operator"] .guided-session-schedule__add,
+  body[data-zone="operator"] .guided-session-list > article {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-zone="operator"] .guided-session-list__number {
+    display: none;
+  }
+
+  body[data-zone="operator"]
+    .guided-session-list
+    > article
+    .guided-product-proof__remove {
+    justify-self: start;
+  }
+
+  body[data-zone="operator"]
+    :is(.guided-session-schedule--one-off, .guided-session-blackouts)
+    > header,
+  body[data-zone="operator"] .guided-product-proof > header,
+  body[data-zone="operator"] .guided-product-structured-list > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body[data-zone="operator"] .guided-product-structured-list__rows article {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-zone="operator"]
+    .guided-product-structured-list__rows
+    article
+    > span {
+    display: none;
+  }
+
+  body[data-zone="operator"] .guided-product-recommendations__list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  body[data-zone="operator"] .guided-product-type-row {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: visible;
+  }
+
+  body[data-zone="operator"] .guided-product-type-row > button {
+    width: 100%;
+  }
+}
