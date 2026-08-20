@@ -79,10 +79,6 @@ describe("court checkout amount confirmation", () => {
       }),
     ).toThrow(/Nothing was charged/);
   });
-
-  it("keeps existing callers working when no amount is confirmed", () => {
-    expect(() => assertConfirmedCourtAmount({ quote: quote() })).not.toThrow();
-  });
 });
 
 describe("court booking invite de-duplication", () => {

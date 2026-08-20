@@ -22,6 +22,7 @@ import {
   loadCourtBookingInventory,
   processStripeWebhook,
   processWorkflowJobById,
+  quoteCourtCheckout,
   startCourtCheckout,
   venueWallTimeToUtc,
 } from "../packages/api/src";
@@ -42,6 +43,32 @@ async function project(event: Stripe.Event) {
   assert(accepted.workflowJobId, `${event.type} did not queue a workflow`);
   const result = await processWorkflowJobById(accepted.workflowJobId);
   assert(result?.status === "succeeded", `${event.type} projection failed`);
+}
+
+type StartCourtCheckoutInput = Parameters<typeof startCourtCheckout>[0];
+type ConfirmedCourtCheckoutInput = Omit<
+  StartCourtCheckoutInput,
+  "expectedPayNowMinor" | "expectedTotalMinor" | "paymentSurface"
+> & {
+  readonly paymentSurface?: "hosted" | "native";
+};
+
+async function startConfirmedCourtCheckout(input: ConfirmedCourtCheckoutInput) {
+  const quote = await quoteCourtCheckout({
+    actor: input.actor,
+    subjectPersonId: input.subjectPersonId,
+    courtId: input.courtId,
+    durationMinutes: input.durationMinutes,
+    paymentMode: input.paymentMode,
+    participants: input.participants,
+    now: input.now,
+  });
+  return startCourtCheckout({
+    ...input,
+    paymentSurface: input.paymentSurface ?? "hosted",
+    expectedPayNowMinor: quote.payNowMinor,
+    expectedTotalMinor: quote.totalMinor,
+  });
 }
 
 async function main() {
@@ -164,7 +191,7 @@ async function main() {
 
     let policyGateBlocked = false;
     try {
-      await startCourtCheckout({
+      await startConfirmedCourtCheckout({
         actor,
         courtId: freeCourtId,
         localStartsAt: "2030-09-01T09:00",
@@ -191,7 +218,7 @@ async function main() {
       "Court checkout bypassed the cancellation policy gate",
     );
 
-    const free = await startCourtCheckout({
+    const free = await startConfirmedCourtCheckout({
       actor,
       courtId: freeCourtId,
       localStartsAt: "2030-09-01T10:00",
@@ -217,7 +244,7 @@ async function main() {
     freeBookingId = free.bookingId;
     bookingIds.push(free.bookingId);
 
-    const bufferedConflict = await startCourtCheckout({
+    const bufferedConflict = await startConfirmedCourtCheckout({
       actor,
       courtId: freeCourtId,
       localStartsAt: "2030-09-01T11:00",
@@ -242,7 +269,7 @@ async function main() {
 
     let unconnectedPaidBlocked = false;
     try {
-      await startCourtCheckout({
+      await startConfirmedCourtCheckout({
         actor,
         courtId: paidCourtId,
         localStartsAt: "2030-09-01T13:00",

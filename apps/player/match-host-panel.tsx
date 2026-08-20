@@ -97,7 +97,7 @@ export function MatchHostPanel({
       });
       setNotice(
         decision === "approved"
-          ? "Approved. They now hold a confirmed place."
+          ? "Approved. They can now reserve a spot while one is still open."
           : "Declined. Duna told them the spot is not available.",
       );
       await load();

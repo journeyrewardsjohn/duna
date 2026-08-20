@@ -1212,20 +1212,18 @@ function formatMinor(amountMinor: number, currency: CurrencyCode): string {
 
 /**
  * Refuses the charge when the buyer confirmed a different amount than the one
- * this request would capture. Callers that omit the expectations keep the older
- * behavior, so no existing surface breaks.
+ * this request would capture. Both values are required: a payment surface must
+ * render an authoritative quote before it can create a hold or a charge.
  */
 export function assertConfirmedCourtAmount(input: {
   readonly quote: CourtCheckoutPricing;
-  readonly expectedPayNowMinor?: number;
-  readonly expectedTotalMinor?: number;
+  readonly expectedPayNowMinor: number;
+  readonly expectedTotalMinor: number;
 }): void {
   const { quote } = input;
   const mismatch =
-    (input.expectedPayNowMinor !== undefined &&
-      input.expectedPayNowMinor !== quote.payNowMinor) ||
-    (input.expectedTotalMinor !== undefined &&
-      input.expectedTotalMinor !== quote.totalMinor);
+    input.expectedPayNowMinor !== quote.payNowMinor ||
+    input.expectedTotalMinor !== quote.totalMinor;
   if (!mismatch) return;
   throw new CourtCheckoutError(
     "AMOUNT_MISMATCH",
@@ -1346,8 +1344,8 @@ export async function startCourtCheckout(input: {
   readonly paymentMode: "full" | "split";
   readonly paymentSurface: "hosted" | "native";
   readonly participants: readonly CourtBookingInviteInput[];
-  readonly expectedPayNowMinor?: number;
-  readonly expectedTotalMinor?: number;
+  readonly expectedPayNowMinor: number;
+  readonly expectedTotalMinor: number;
   readonly policyAccepted: boolean;
   readonly policyFullScrollConfirmed: boolean;
   readonly successUrl: string;
