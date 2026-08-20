@@ -402,6 +402,7 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
             src="/media/brand/duna-club-hero-v1.webp"
           />
         </div>
+        <div aria-hidden className={styles.heroTexture} />
         <div className={styles.heroInner}>
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}>Duna HQ · training</span>
