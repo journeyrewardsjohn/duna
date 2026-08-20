@@ -127,6 +127,20 @@ export const staticPublicPages = [
     ],
   },
   {
+    path: "/run-your-club/training",
+    title: "Training OS — Program, practice, and drill planning",
+    description:
+      "Plan programs, build practices, and create drills with natural-language prompts. Duna Training OS turns your coaching brief into structured sessions with contact estimates, animations, and a drill marketplace.",
+    sections: [
+      "Drill Studio: Describe a drill in natural language and Duna builds the structure, steps, coaching cues, contact estimates, and court animation. Review and edit before saving.",
+      "Practice Builder: Stack drills into a timeline with warmup, work blocks, and cooldown. Run courts in parallel when you have the space. Watch planned load and contact estimates update as you build.",
+      "Program Designer: Set your start date, end date, weekly schedule, and key tournaments. Duna drafts a periodized program with phases, load curves, and focus progressions.",
+      "Contact estimates: See expected touches and jumps per drill, per practice, and per week. Plan load, not just time.",
+      "Drill Marketplace: Keep drills private to your organization, share them free with the community, or sell organization licenses at your price.",
+      "Examples include serve-receive transition drills, block-defense call systems, setter release reps, parallel-court games, and multi-week competition build programs.",
+    ],
+  },
+  {
     path: "/safety",
     title: "Duna safety",
     description:
