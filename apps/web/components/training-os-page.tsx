@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   Clock3,
+  Columns2,
   Dumbbell,
   FileText,
   Gauge,
@@ -160,7 +161,7 @@ const practiceExample = {
       duration: 20,
       intensity: 7,
       focus: "Offensive Systems",
-      parallel: true,
+      lanes: "Court 1 + Court 2",
     },
     {
       time: "+64",
@@ -488,25 +489,42 @@ function PracticeTimeline() {
         </div>
       </header>
       <div className={styles.practiceBlocks}>
-        {practiceExample.blocks.map((block, index) => (
+        {practiceExample.blocks.map((block) => (
           <article
             key={block.title}
-            className={block.parallel ? styles.parallelBlock : undefined}
-            style={{ "--block-index": index } as CSSProperties}
+            className={block.lanes ? styles.parallelBlock : undefined}
           >
             <span className={styles.blockTime}>{block.time}</span>
             <div>
               <small>{block.kind}</small>
               <strong>{block.title}</strong>
-              {block.focus && <em>{block.focus}</em>}
+              <span className={styles.blockTaxonomy}>
+                {block.focus && <em>{block.focus}</em>}
+                {block.lanes && (
+                  <em className={styles.blockLanes}>
+                    <Columns2 aria-hidden size={12} />
+                    {block.lanes}
+                  </em>
+                )}
+              </span>
             </div>
             <div className={styles.blockMeta}>
-              <span>{block.duration}m</span>
-              <i
-                style={
-                  { "--intensity": `${block.intensity * 10}%` } as CSSProperties
-                }
-              />
+              <span>
+                <Numeric tier="chip">{block.duration}</Numeric> min
+              </span>
+              <span className={styles.blockIntensity}>
+                <span
+                  aria-hidden
+                  className={styles.intensityTrack}
+                  style={
+                    {
+                      "--intensity": `${block.intensity * 10}%`,
+                    } as CSSProperties
+                  }
+                />
+                <Numeric tier="chip">{block.intensity}</Numeric>
+                <span className={styles.intensityUnit}>/10</span>
+              </span>
             </div>
           </article>
         ))}
@@ -577,6 +595,9 @@ function ProgramOverview() {
                 <strong>{milestone.title}</strong>
                 <small>{milestone.date}</small>
               </span>
+              {milestone.priority === "key" && (
+                <span className={styles.milestonePriority}>Key</span>
+              )}
             </article>
           ))}
         </div>

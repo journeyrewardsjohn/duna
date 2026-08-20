@@ -1,8 +1,35 @@
 .page {
   --hero-progress: 0;
+  --training-parallel-wash: color-mix(
+    in srgb,
+    var(--hq-tint) 62%,
+    var(--surface-1)
+  );
+  --training-parallel-wash-hover: color-mix(
+    in srgb,
+    var(--hq-tint) 78%,
+    var(--surface-1)
+  );
+  --training-hq-label: var(--hq-ink);
   background: var(--ground);
   color: var(--text-1);
   overflow: clip;
+}
+
+/* HQ tokens are theme-invariant, so the wash has to invert deliberately:
+   a pale tint reads on light ground, a deep green on dark ground. */
+:global(:root[data-theme="dark"]) .page {
+  --training-parallel-wash: color-mix(
+    in srgb,
+    var(--hq-deep) 58%,
+    var(--surface-1)
+  );
+  --training-parallel-wash-hover: color-mix(
+    in srgb,
+    var(--hq-deep) 74%,
+    var(--surface-1)
+  );
+  --training-hq-label: var(--hq-core);
 }
 
 .page :where(a, button):focus-visible {
@@ -658,6 +685,7 @@
 .practiceBlocks article {
   align-items: center;
   background: var(--surface-1);
+  border-left: 3px solid transparent;
   display: grid;
   gap: 1rem;
   grid-template-columns: 4rem 1fr auto;
@@ -669,12 +697,15 @@
   background: var(--surface-2);
 }
 
-.parallelBlock {
-  background: color-mix(
-    in srgb,
-    var(--hq-tint) 20%,
-    var(--surface-1)
-  ) !important;
+/* Parallel courts carry an accent edge and an explicit lane label so the
+   meaning survives without color. */
+.practiceBlocks article.parallelBlock {
+  background: var(--training-parallel-wash);
+  border-left-color: var(--hq-core);
+}
+
+.practiceBlocks article.parallelBlock:hover {
+  background: var(--training-parallel-wash-hover);
 }
 
 .blockTime {
@@ -702,25 +733,48 @@
   font-weight: 600;
 }
 
-.practiceBlocks article > div:first-of-type em {
-  color: var(--hq-ink);
+.blockTaxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+}
+
+.blockTaxonomy em {
+  color: var(--training-hq-label);
   font-size: 0.78rem;
   font-style: normal;
+}
+
+.blockLanes {
+  align-items: center;
+  border: 1px solid var(--hq-core);
+  border-radius: 999px;
+  display: inline-flex;
+  font-weight: 500;
+  gap: 0.25rem;
+  padding: 0.05rem 0.45rem;
 }
 
 .blockMeta {
   align-items: center;
   display: flex;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-.blockMeta span {
+.blockMeta > span {
   color: var(--text-2);
   font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.blockMeta i {
+.blockIntensity {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.intensityTrack {
   background: var(--surface-2);
   border-radius: 999px;
   height: 6px;
@@ -728,12 +782,16 @@
   width: 60px;
 }
 
-.blockMeta i::after {
+.intensityTrack::after {
   background: var(--hq-core);
   content: "";
   display: block;
   height: 100%;
   width: var(--intensity, 50%);
+}
+
+.intensityUnit {
+  color: var(--text-3);
 }
 
 .practiceTimeline > footer {
@@ -977,8 +1035,21 @@
   color: var(--text-3);
 }
 
-.keyMilestone svg {
-  color: var(--flare) !important;
+.programMilestones article.keyMilestone {
+  border: 1px solid var(--hq-core);
+}
+
+.programMilestones article.keyMilestone svg {
+  color: var(--hq-core);
+}
+
+.milestonePriority {
+  align-self: flex-start;
+  color: var(--training-hq-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .programMilestones article span {
