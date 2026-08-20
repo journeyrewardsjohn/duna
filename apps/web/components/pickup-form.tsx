@@ -1009,7 +1009,7 @@ export function PickupForm({
               {FORMAT_OPTIONS.find((option) => option.value === format)
                 ?.label ?? format}
             </Badge>
-            <Numeric>Free in Duna</Numeric>
+            <span>Free in Duna</span>
           </div>
         </aside>
       </section>
