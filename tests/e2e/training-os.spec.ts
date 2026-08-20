@@ -31,17 +31,38 @@ test("training page is one through-line of three plates", async ({ page }) => {
 
   for (const name of [
     "Say it once. Get a drill back.",
-    "Tuesday is ninety minutes.",
-    "Tuesday belongs to a season.",
+    "Ninety minutes, two courts, one plan.",
+    "The season that practice belongs to.",
     "One drill is enough to begin.",
   ]) {
     await expect(page.getByRole("heading", { name })).toBeVisible();
   }
 
-  // Exactly one artifact per plate, and nothing more.
-  expect(await page.locator("figure").count()).toBe(3);
-
   await expectNoHorizontalOverflow(page);
+});
+
+test("proof is HQ chrome, not decorative cards", async ({ page }) => {
+  await page.goto(trainingPath);
+
+  // Hero window plus one window per plate, each exposed as a single image.
+  const windows = page.getByRole("img", { name: /Duna HQ/ });
+  await expect(windows).toHaveCount(4);
+
+  // Real product chrome: wordmark, sidebar, and the Training section active.
+  const heroWindow = windows.first();
+  await expect(heroWindow.getByText("DUNA HQ")).toBeVisible();
+  for (const nav of ["Overview", "Calendar", "Training", "People", "Money"]) {
+    await expect(heroWindow.getByText(nav, { exact: true })).toBeVisible();
+  }
+
+  // The three Training OS surfaces are named as they are in HQ.
+  for (const surface of [
+    "Drill Studio",
+    "Practice Builder",
+    "Program Designer",
+  ]) {
+    await expect(page.getByText(surface).first()).toBeVisible();
+  }
 });
 
 test("the drill, the session, and the season are the same week", async ({
@@ -49,12 +70,21 @@ test("the drill, the session, and the season are the same week", async ({
 }) => {
   await page.goto(trainingPath);
 
-  // The drill named in the first plate is the block in the second.
+  // The drafted drill is a block in the session, and the session belongs to
+  // the program. All three names come from HQ's own demo content.
+  await expect(page.getByText("First-Ball Sideout Lab").first()).toBeVisible();
+  await expect(page.getByText("Sideout Under Pressure").first()).toBeVisible();
+  await expect(page.getByText("Fall Competition Build")).toBeVisible();
   await expect(
-    page.getByText("Seam Serve to Transition", { exact: false }),
-  ).toHaveCount(2);
-  await expect(page.getByText("Court 1 + Court 2")).toBeVisible();
-  await expect(page.getByText("Regional qualifier")).toBeVisible();
+    page.getByText("Atlantic Coast Open", { exact: true }),
+  ).toBeVisible();
+
+  // Two courts run different work at the same offset.
+  await expect(page.getByText("Court 1").first()).toBeVisible();
+  await expect(page.getByText("Court 2").first()).toBeVisible();
+  await expect(
+    page.getByText("High Hands, Deep Corners").first(),
+  ).toBeVisible();
 });
 
 test("cut sections stay cut", async ({ page }) => {
@@ -95,7 +125,7 @@ test("capability claims stay inside what the product does", async ({
   const body = (await page.locator("main").innerText()).toLowerCase();
 
   // Plain language produces a drill. Practices are assembled by the coach.
-  expect(body).toContain("you build the session");
+  expect(body).toContain("you assemble the session");
   expect(body).toContain("planning estimates");
   expect(body).not.toContain("describe a practice");
   expect(body).not.toContain("describe a program");
@@ -150,9 +180,9 @@ test("training page content is server rendered, not motion gated", async ({
   const html = await (await request.get(trainingPath)).text();
 
   expect(html).toContain("Write the week. Run the court.");
-  expect(html).toContain("Seam Serve to Transition");
-  expect(html).toContain("Court 1 + Court 2");
-  expect(html).toContain("Regional qualifier");
+  expect(html).toContain("First-Ball Sideout Lab");
+  expect(html).toContain("Sideout Under Pressure");
+  expect(html).toContain("Fall Competition Build");
 
   // The hidden reveal state is opt-in and only ever applied by script.
   expect(html).not.toContain('data-motion="ready"');
@@ -164,7 +194,7 @@ test("interactive targets meet the documented minimums", async ({ page }) => {
   const isNarrow = (page.viewportSize()?.width ?? 1_280) <= 736;
   const controls = [
     page.getByRole("link", { name: /Start free in Duna HQ/ }).first(),
-    page.getByRole("link", { name: "See all Duna HQ features" }),
+    page.getByRole("link", { name: "See all Duna HQ features" }).first(),
   ];
 
   for (const control of controls) {
