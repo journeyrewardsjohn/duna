@@ -86,7 +86,7 @@
 
 .heroMedia {
   inset: 0;
-  opacity: 0.42;
+  opacity: 0.52;
   pointer-events: none;
   position: absolute;
 }
@@ -98,23 +98,47 @@
 }
 
 /* The hero image dissolves into the section ground rather than ending on an
-   edge. */
+   edge. Same two-layer dissolve as the parent hero. */
 .heroMedia::after {
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--ground) 12%, transparent),
-      color-mix(in srgb, var(--ground) 62%, transparent) 46%,
-      var(--ground) 76%
+      color-mix(in srgb, var(--ground) 8%, transparent),
+      color-mix(in srgb, var(--ground) 60%, transparent) 49%,
+      var(--ground) 78%
     ),
     linear-gradient(
       0deg,
       var(--ground) 0%,
-      color-mix(in srgb, var(--ground) 30%, transparent) 34%,
-      color-mix(in srgb, var(--ground) 46%, transparent) 100%
+      color-mix(in srgb, var(--ground) 64%, transparent) 24%,
+      transparent 54%
     );
   content: "";
   inset: 0;
+  position: absolute;
+}
+
+.heroTexture {
+  background:
+    repeating-radial-gradient(
+      ellipse at 15% 95%,
+      color-mix(in srgb, var(--sand-500) 18%, transparent) 0 1px,
+      transparent 1px 16px
+    ),
+    radial-gradient(
+      circle at 84% 55%,
+      color-mix(in srgb, var(--hq-tint) 54%, transparent),
+      transparent 28%
+    );
+  inset: 0;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 4%,
+    black 44%,
+    transparent 100%
+  );
+  opacity: 0.34;
+  pointer-events: none;
   position: absolute;
 }
 
