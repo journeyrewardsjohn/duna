@@ -64,4 +64,7 @@ export * from "./vision-service";
 export * from "./vision-model-service";
 export * from "./super-admin-people-service";
 export * from "./system-workspace-service";
+export * from "./training-contracts";
+export * from "./training-pdf";
+export * from "./training-service";
 export * from "./workflows";

@@ -13,6 +13,7 @@
     "./messaging-delivery": "./src/messaging-delivery.ts",
     "./messaging-wakeups": "./src/messaging-wakeups.ts",
     "./system-workspace-service": "./src/system-workspace-service.ts",
+    "./training-contracts": "./src/training-contracts.ts",
     "./webhooks": "./src/webhooks.ts"
   },
   "scripts": {

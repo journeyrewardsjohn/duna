@@ -143,6 +143,7 @@ import {
 } from "./policy-review";
 import { ResultPlayIcon } from "./result-play-icon";
 import { NativeMarkdownContent } from "./markdown-content";
+import { PlayerTrainingScreen } from "./training-screen";
 import {
   MobilePlacePicker,
   type MobilePlaceSelection,
@@ -512,6 +513,7 @@ type Tab =
   | "score"
   | "play"
   | "plans"
+  | "training"
   | "video"
   | "wallet"
   | "predictions"
@@ -8216,12 +8218,14 @@ function PlansScreen({
   onBook,
   onOpenBooking,
   onReserveCourtVenue,
+  onTraining,
 }: {
   readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
   readonly onReserveCourtVenue: (request: CourtBookingRequest) => void;
+  readonly onTraining: () => void;
 }) {
-  const { dashboard } = usePlayerRuntime();
+  const { dashboard, mode, training } = usePlayerRuntime();
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
   const [showHost, setShowHost] = useState(false);
@@ -8258,6 +8262,50 @@ function PlansScreen({
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
+        )}
+        {(mode === "preview" || training?.nextPractice) && (
+          <Pressable
+            accessibilityHint="Opens your assigned practice plan and Program"
+            accessibilityRole="button"
+            onPress={onTraining}
+            style={styles.trainingPlanCard}
+          >
+            <View style={styles.trainingPlanTopline}>
+              <Text style={styles.trainingPlanEyebrow}>YOUR TRAINING</Text>
+              <Text style={styles.trainingPlanPhase}>
+                {training?.programs[0]?.currentPhase ?? "Pressure + transfer"}
+              </Text>
+            </View>
+            <Text style={styles.trainingPlanTitle}>
+              {training?.nextPractice?.title ?? "Sideout Under Pressure"}
+            </Text>
+            <Text style={styles.trainingPlanBody}>
+              {training?.nextPractice
+                ? `${new Date(training.nextPractice.startsAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: training.nextPractice.timezone })} · ${new Date(training.nextPractice.startsAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: training.nextPractice.timezone })} · ${training.nextPractice.focusArea ?? "Training"} · load ${training.nextPractice.plannedLoad}`
+                : "Today · 5:00 PM · Ball Control · planned load 68"}
+            </Text>
+            <View style={styles.trainingPlanFooter}>
+              <View style={styles.trainingPlanProgress}>
+                <View
+                  style={[
+                    styles.trainingPlanProgressFill,
+                    {
+                      width: `${Math.max(
+                        4,
+                        ((training?.programs[0]?.completedSessionCount ?? 7) /
+                          Math.max(
+                            1,
+                            training?.programs[0]?.scheduledSessionCount ?? 16,
+                          )) *
+                          100,
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.trainingPlanAction}>Open practice →</Text>
+            </View>
+          </Pressable>
         )}
         <View style={styles.weekCard}>
           <View style={styles.cardTitleRow}>
@@ -13483,9 +13531,11 @@ function TabBar({
     active === "performance" ||
     active === "messages"
       ? "you"
-      : active === "score" || active === "video"
-        ? "play"
-        : active;
+      : active === "training"
+        ? "plans"
+        : active === "score" || active === "video"
+          ? "play"
+          : active;
   return (
     <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
       {tabs.map((tab) => (
@@ -13927,7 +13977,11 @@ function DunaApp() {
                     onBook={setEventIndex}
                     onOpenBooking={setBookingId}
                     onReserveCourtVenue={setCourtBookingRequest}
+                    onTraining={() => setTab("training")}
                   />
+                )}
+                {tab === "training" && (
+                  <PlayerTrainingScreen onBack={() => setTab("plans")} />
                 )}
                 <VideoStudioScreen
                   active={tab === "video"}
@@ -19597,6 +19651,68 @@ function createStyles(palette: Palette) {
     },
     successIcon: { color: colors.positive, fontSize: 16 },
     closeText: { color: colors.bone, fontSize: 28, fontWeight: "300" },
+    trainingPlanCard: {
+      backgroundColor: colors.navy,
+      borderColor: rgba(colors.accentRgb, 0.24),
+      borderRadius: 22,
+      borderWidth: 1,
+      gap: 7,
+      marginBottom: 14,
+      overflow: "hidden",
+      padding: 18,
+    },
+    trainingPlanTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    trainingPlanEyebrow: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    trainingPlanPhase: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    trainingPlanTitle: {
+      color: colors.bone,
+      fontSize: 23,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+      marginTop: 4,
+    },
+    trainingPlanBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    trainingPlanFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 14,
+      marginTop: 8,
+    },
+    trainingPlanProgress: {
+      backgroundColor: colors.navyLift,
+      borderRadius: 99,
+      flex: 1,
+      height: 6,
+      overflow: "hidden",
+    },
+    trainingPlanProgressFill: {
+      backgroundColor: colors.aqua,
+      borderRadius: 99,
+      height: "100%",
+      width: "44%",
+    },
+    trainingPlanAction: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+    },
     weekCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),

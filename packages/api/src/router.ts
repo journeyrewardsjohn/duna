@@ -386,6 +386,33 @@ import {
 } from "./video-service";
 import { loadPlayerVirtualSessionRecords } from "./virtual-session-service";
 import {
+  assignTrainingPracticePlanInputSchema,
+  createTrainingDrillInputSchema,
+  createTrainingPracticePlanInputSchema,
+  createTrainingProgramInputSchema,
+  draftTrainingDrillInputSchema,
+  draftTrainingProgramInputSchema,
+  recordTrainingOutcomeInputSchema,
+  playerTrainingWorkspaceSchema,
+  submitTrainingAthleteResponseInputSchema,
+  trainingDrillSchema,
+  trainingProgramDraftSchema,
+  trainingWorkspaceSchema,
+} from "./training-contracts";
+import {
+  assignTrainingPracticePlan,
+  createTrainingDrill,
+  createTrainingPracticePlan,
+  createTrainingProgram,
+  draftTrainingDrill,
+  draftTrainingProgram,
+  loadTrainingWorkspace,
+  loadPlayerTrainingWorkspace,
+  recordTrainingOutcome,
+  submitTrainingAthleteResponse,
+  TrainingServiceError,
+} from "./training-service";
+import {
   createVideoAnalysisMarker,
   loadVideoAnalysisReport,
   requestVideoAnalysis,
@@ -1049,6 +1076,20 @@ async function runIdempotentMutation<T extends object>(input: {
 }
 
 function throwDomainError(error: unknown): never {
+  if (error instanceof TrainingServiceError) {
+    const code =
+      error.code === "RESOURCE_NOT_FOUND" ||
+      error.code === "ORGANIZATION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "FORBIDDEN" ||
+            error.code === "RESOURCE_WRONG_ORGANIZATION"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_SCHEDULE" ||
+              error.code === "INVALID_CONFIGURATION"
+            ? "BAD_REQUEST"
+            : "INTERNAL_SERVER_ERROR";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof PredictionMarketError) {
     const code =
       error.code === "MARKET_NOT_FOUND"
@@ -2262,6 +2303,56 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  trainingWorkspace: protectedProcedure
+    .use(requireScope("profile:read"))
+    .output(playerTrainingWorkspaceSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadPlayerTrainingWorkspace({
+          actor: ctx.actor!,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  submitTrainingResponse: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-training-response",
+        capacity: 20,
+        refillPerMinute: 5,
+      }),
+    )
+    .input(submitTrainingAthleteResponseInputSchema)
+    .output(
+      z.object({
+        eventId: z.string().uuid(),
+        submittedAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.submitTrainingResponse",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await submitTrainingAthleteResponse({
+              actor: ctx.actor!,
+              response: input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   virtualSessions: protectedProcedure
     .use(requireScope("profile:read"))
     .output(playerVirtualSessionRecordsSchema)
@@ -7152,6 +7243,217 @@ const operatorRouter = router({
       ctx.actor!.isDemo && !process.env.DATABASE_URL
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
         : loadOperatorWorkspace(ctx.actor!.organizationId!),
+    ),
+  trainingWorkspace: organizationProcedure("training:read")
+    .output(trainingWorkspaceSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadTrainingWorkspace({
+          organizationId: ctx.actor!.organizationId!,
+          now: ctx.now,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  draftTrainingDrill: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-drill-draft",
+        capacity: 18,
+        refillPerMinute: 6,
+        scope: "organization",
+      }),
+    )
+    .input(draftTrainingDrillInputSchema)
+    .output(trainingDrillSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await draftTrainingDrill(input, ctx.now);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createTrainingDrill: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-drill-create",
+        capacity: 30,
+        refillPerMinute: 10,
+        scope: "organization",
+      }),
+    )
+    .input(createTrainingDrillInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        versionId: z.string().uuid(),
+        status: z.string(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createTrainingDrill",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createTrainingDrill({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  draftTrainingProgram: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-program-draft",
+        capacity: 10,
+        refillPerMinute: 3,
+        scope: "organization",
+      }),
+    )
+    .input(draftTrainingProgramInputSchema)
+    .output(trainingProgramDraftSchema)
+    .mutation(async ({ input }) => {
+      try {
+        return await draftTrainingProgram(input);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createTrainingProgram: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-program-create",
+        capacity: 12,
+        refillPerMinute: 4,
+        scope: "organization",
+      }),
+    )
+    .input(createTrainingProgramInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        sessionCount: z.number().int().nonnegative(),
+        status: z.literal("draft"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createTrainingProgram",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createTrainingProgram({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  createTrainingPracticePlan: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-plan-create",
+        capacity: 24,
+        refillPerMinute: 8,
+        scope: "organization",
+      }),
+    )
+    .input(createTrainingPracticePlanInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        versionId: z.string().uuid(),
+        status: z.literal("draft"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createTrainingPracticePlan",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createTrainingPracticePlan({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  assignTrainingPracticePlan: organizationProcedure("training:write")
+    .input(assignTrainingPracticePlanInputSchema)
+    .output(z.object({ id: z.string().uuid(), status: z.literal("assigned") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.assignTrainingPracticePlan",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await assignTrainingPracticePlan({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  recordTrainingOutcome: organizationProcedure("training:write")
+    .input(recordTrainingOutcomeInputSchema)
+    .output(z.object({ id: z.string().uuid(), status: z.literal("completed") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.recordTrainingOutcome",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await recordTrainingOutcome({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
     ),
   waiverWorkspace: organizationProcedure("sessions:read")
     .output(waiverWorkspaceSchema)
