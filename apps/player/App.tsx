@@ -95,6 +95,7 @@ import {
 } from "./booking-management";
 import {
   BookingConfirmationView,
+  type BookingReceiptRow,
   type ShareableBookingDetails,
 } from "./booking-share";
 import { PlayerCalendarModal } from "./player-calendar";
@@ -111,6 +112,7 @@ import {
   LivePlayerRail,
   PlayerPickerModal,
   PlayerProfileProvider,
+  PlayerProfileSheet,
   usePlayerProfileNavigation,
 } from "./player-social";
 import { DiscoveryMapModal, DiscoveryMapPreview } from "./discovery-map";
@@ -530,6 +532,9 @@ type CourtInventory = Awaited<
 type CourtAvailability = Awaited<
   ReturnType<DunaApiClient["public"]["courtAvailability"]["query"]>
 >;
+type CourtCheckoutQuote = Awaited<
+  ReturnType<DunaApiClient["player"]["courtCheckoutQuote"]["query"]>
+>;
 type ProEventDetail = Awaited<
   ReturnType<DunaApiClient["public"]["proEvent"]["query"]>
 >;
@@ -552,7 +557,24 @@ type BookingParticipant = {
   readonly name?: string;
   readonly email?: string;
   readonly phoneE164?: string;
+  /**
+   * Held so a selected Duna player survives a round trip through the picker.
+   * Re-deriving this from the cached public player list dropped anyone outside
+   * that list, which made their Add control look inert.
+   */
+  readonly person?: PersonSummary;
 };
+
+function courtCheckoutParticipants(
+  participants: readonly BookingParticipant[],
+) {
+  return participants.map((participant) => ({
+    ...(participant.personId ? { personId: participant.personId } : {}),
+    ...(participant.name ? { name: participant.name } : {}),
+    ...(participant.email ? { email: participant.email } : {}),
+    ...(participant.phoneE164 ? { phoneE164: participant.phoneE164 } : {}),
+  }));
+}
 
 type HostedMatchSeed = {
   readonly courtBookingId: string;
@@ -3484,7 +3506,7 @@ function VenueBookingModal({
   readonly onOpenMatch?: (matchId: string, matchSlug: string) => void;
 }) {
   const { width } = useWindowDimensions();
-  const { client, dashboard, mode, people, publicClient, refresh } =
+  const { client, dashboard, mode, publicClient, refresh } =
     usePlayerRuntime();
   const courtClient = publicClient ?? client;
   const [todayValue] = useState(() => localDateValue(new Date()));
@@ -3504,7 +3526,10 @@ function VenueBookingModal({
   );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
+  const [quote, setQuote] = useState<CourtCheckoutQuote>();
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
+  const [profilePerson, setProfilePerson] = useState<PersonSummary>();
   const [contactOptions, setContactOptions] = useState<BookingParticipant[]>(
     [],
   );
@@ -3526,6 +3551,8 @@ function VenueBookingModal({
     readonly label: string;
     readonly title: string;
     readonly body: string;
+    readonly receipt?: readonly BookingReceiptRow[];
+    readonly hostSeed?: HostedMatchSeed;
   }>();
   const bookingDateScrollRef = useRef<ScrollView>(null);
   const bookingDateScrollX = useRef(0);
@@ -3604,11 +3631,19 @@ function VenueBookingModal({
     : undefined;
   const policyReady =
     policyAccepted && (!policy?.requireFullScroll || policyRead);
-  const totalMinor = selectedSlot?.price?.amountMinor ?? 0;
-  const shareMinor =
-    paymentMode === "split"
-      ? Math.ceil(totalMinor / Math.max(1, participants.length + 1))
-      : totalMinor;
+  const listedMinor = selectedSlot?.price?.amountMinor ?? 0;
+  const listedCurrency = selectedSlot?.price?.currency ?? "USD";
+  /**
+   * The court slot price is the public non-member subtotal. Only the server can
+   * price this buyer, so the confirm surface waits for the quote rather than
+   * showing a number Stripe will not charge.
+   */
+  const priceCurrency = quote?.currency ?? listedCurrency;
+  const totalMinor = quote ? quote.totalMinor : undefined;
+  const shareMinor = quote ? quote.payNowMinor : undefined;
+  const participantShareMinor = quote?.participantShareMinor;
+  const priceReady = Boolean(quote) || !selectedSlot;
+  const freeReservation = quote?.totalMinor === 0;
   const selectedForecastDay = availability?.forecast?.days.find(
     (day) => day.date === selectedDate,
   );
@@ -3631,17 +3666,13 @@ function VenueBookingModal({
     (slot) => slot.localStartsAt === selectedLocalStart,
   );
   const selectedPlayWindow = selectedOpenMatches[0] ?? selectedStartSlots[0];
-  const selectedDunaPlayers = useMemo(() => {
-    const byId = new Map(
-      (people ?? demoPeople).map((person) => [person.id, person]),
-    );
-    return participants.flatMap((participant) => {
-      const person = participant.personId
-        ? byId.get(participant.personId)
-        : undefined;
-      return person ? [person] : [];
-    });
-  }, [participants, people]);
+  const selectedDunaPlayers = useMemo(
+    () =>
+      participants.flatMap((participant) =>
+        participant.person ? [participant.person] : [],
+      ),
+    [participants],
+  );
 
   useEffect(() => {
     if (
@@ -3785,6 +3816,45 @@ function VenueBookingModal({
     };
   }, [courtClient, durationMinutes, inventory, selectedDate, venueId, visible]);
 
+  useEffect(() => {
+    if (!client || !selectedSlot || mode === "preview") {
+      setQuote(undefined);
+      setQuoteLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuoteLoading(true);
+    void client.player.courtCheckoutQuote
+      .query({
+        courtId: selectedSlot.courtId,
+        durationMinutes,
+        paymentMode,
+        participants: courtCheckoutParticipants(participants),
+      })
+      .then((nextQuote) => {
+        if (!cancelled) setQuote(nextQuote);
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setQuote(undefined);
+        setError(displayError(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setQuoteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    client,
+    durationMinutes,
+    mode,
+    participants,
+    paymentMode,
+    selectedSlot?.courtId,
+    selectedSlot?.localStartsAt,
+  ]);
+
   function reviewSlot(
     slot: CourtAvailability["slots"][number],
     intent: "private" | "host",
@@ -3793,6 +3863,7 @@ function VenueBookingModal({
     setBookingIntent(intent);
     setPaymentMode("full");
     setParticipants([]);
+    setQuote(undefined);
     setPolicyAccepted(false);
     setPolicyRead(false);
     setPolicyReviewOpen(false);
@@ -3938,6 +4009,12 @@ function VenueBookingModal({
       setError("Add at least one player before splitting the payment.");
       return;
     }
+    if (!quote) {
+      setError(
+        "Duna is still confirming this court price. Try again in a moment.",
+      );
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
@@ -3947,7 +4024,9 @@ function VenueBookingModal({
         durationMinutes,
         paymentMode,
         paymentSurface: Platform.OS === "web" ? "hosted" : "native",
-        participants,
+        participants: courtCheckoutParticipants(participants),
+        expectedPayNowMinor: quote.payNowMinor,
+        expectedTotalMinor: quote.totalMinor,
         policyAccepted,
         policyFullScrollConfirmed: policyRead || !policy?.requireFullScroll,
         successUrl: `${dunaWebUrl}/app?court_checkout=success`,
@@ -4002,40 +4081,45 @@ function VenueBookingModal({
         }
         successHaptic();
         await refresh();
-        if (
-          bookingIntent === "host" &&
-          confirmed &&
-          result.bookingId &&
-          venueId &&
-          inventory
-        ) {
-          const seed: HostedMatchSeed = {
-            courtBookingId: result.bookingId,
-            venueId,
-            venueName: inventory.venue.name,
-            startsAt: selectedSlot.startsAt,
-            endsAt: selectedSlot.endsAt,
-            localStartsAt: selectedSlot.localStartsAt,
-            localEndsAt: selectedSlot.localEndsAt,
-            durationMinutes,
-            invitedPlayers: selectedDunaPlayers,
-            courtPaymentMode: paymentMode,
-          };
-          onClose();
-          onHostReady?.(seed);
-          return;
-        }
         if (result.bookingId && inventory) {
           const playerNames = result.participants?.map(
             (participant) => participant.displayName,
           ) ?? [
             dashboard?.player.displayName ?? "You",
-            ...participants.flatMap((participant) =>
-              participant.name ? [participant.name] : [],
+            ...participants.flatMap(
+              (participant) =>
+                participant.person?.displayName ??
+                participant.name ??
+                participant.email ??
+                participant.phoneE164 ??
+                [],
             ),
           ];
+          const paidMinor = result.pricing?.payNowMinor ?? quote.payNowMinor;
+          const paidCurrency = result.pricing?.currency ?? quote.currency;
+          /**
+           * Host reservations pay for the court before the match exists, so the
+           * receipt names the next step instead of dropping the host back into
+           * the builder with no acknowledgement that money moved.
+           */
+          const hostSeed: HostedMatchSeed | undefined =
+            bookingIntent === "host" && confirmed && venueId
+              ? {
+                  courtBookingId: result.bookingId,
+                  venueId,
+                  venueName: inventory.venue.name,
+                  startsAt: selectedSlot.startsAt,
+                  endsAt: selectedSlot.endsAt,
+                  localStartsAt: selectedSlot.localStartsAt,
+                  localEndsAt: selectedSlot.localEndsAt,
+                  durationMinutes,
+                  invitedPlayers: selectedDunaPlayers,
+                  courtPaymentMode: paymentMode,
+                }
+              : undefined;
           setConfirmation({
             bookingId: result.bookingId,
+            hostSeed,
             details: {
               title: `Court rental · ${selectedSlot.courtName}`,
               startsAt: result.startsAt,
@@ -4050,6 +4134,23 @@ function VenueBookingModal({
               playerNames,
               detailsUrl: `${dunaWebUrl}/venues/${inventory.venue.id}`,
             },
+            receipt: [
+              {
+                label: paymentMode === "split" ? "YOU PAID" : "PAID",
+                value: formatMoney(paidMinor, paidCurrency),
+              },
+              ...(paymentMode === "split" && result.pricing
+                ? [
+                    {
+                      label: "COURT TOTAL",
+                      value: formatMoney(
+                        result.pricing.totalMinor,
+                        paidCurrency,
+                      ),
+                    },
+                  ]
+                : []),
+            ],
             label: awaitingParticipants
               ? "Share paid"
               : confirmed
@@ -4064,9 +4165,11 @@ function VenueBookingModal({
                 : "Payment received.",
             body: awaitingParticipants
               ? "Your share is paid. Invited players have secure links for their shares; the booking confirms when everyone is paid."
-              : confirmed
-                ? "Everything you need is below and ready to share."
-                : "Duna is finishing the confirmation and will keep this booking in your Plans.",
+              : hostSeed
+                ? "Your court is paid and confirmed. Name the match next and Duna carries this court, time, and roster over."
+                : confirmed
+                  ? "Everything you need is below and ready to share."
+                  : "Duna is finishing the confirmation and will keep this booking in your Plans.",
           });
         } else {
           setNotice(
@@ -4086,29 +4189,6 @@ function VenueBookingModal({
   }
 
   if (!visible) return null;
-  if (showPlayerPicker) {
-    return (
-      <PlayerPickerModal
-        excludedPersonIds={[dashboard?.player.id ?? demoPlayer.id]}
-        maxSelected={11}
-        onChange={(players) =>
-          setParticipants((current) => [
-            ...current.filter((participant) => !participant.personId),
-            ...players.map((person) => ({
-              personId: person.id,
-              name: person.displayName,
-            })),
-          ])
-        }
-        onClose={() => setShowPlayerPicker(false)}
-        palette={colors}
-        presentationStyle="pageSheet"
-        selected={selectedDunaPlayers}
-        title="Add players"
-        visible
-      />
-    );
-  }
   return (
     <Modal
       animationType="slide"
@@ -4121,8 +4201,23 @@ function VenueBookingModal({
           <BookingConfirmationView
             body={confirmation.body}
             details={confirmation.details}
+            doneLabel={confirmation.hostSeed ? "Not now" : "Done"}
             label={confirmation.label}
             onDone={onClose}
+            primaryAction={
+              confirmation.hostSeed
+                ? () => {
+                    const seed = confirmation.hostSeed;
+                    setConfirmation(undefined);
+                    onClose();
+                    if (seed) onHostReady?.(seed);
+                  }
+                : undefined
+            }
+            primaryLabel={
+              confirmation.hostSeed ? "Continue to match details" : undefined
+            }
+            receipt={confirmation.receipt}
             title={confirmation.title}
           />
         ) : (
@@ -4803,6 +4898,10 @@ function VenueBookingModal({
                       <View style={styles.purchaseKindRow}>
                         {(["full", "split"] as const).map((modeOption) => (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{
+                              selected: paymentMode === modeOption,
+                            }}
                             key={modeOption}
                             onPress={() => setPaymentMode(modeOption)}
                             style={[
@@ -4819,11 +4918,109 @@ function VenueBookingModal({
                               ]}
                             >
                               {modeOption === "full"
-                                ? `Pay everything · ${formatMoney(totalMinor, "USD")}`
-                                : `Pay your part · ${formatMoney(shareMinor, "USD")}`}
+                                ? totalMinor === undefined
+                                  ? "Pay everything"
+                                  : `Pay everything · ${formatMoney(totalMinor, priceCurrency)}`
+                                : paymentMode === "split" &&
+                                    shareMinor !== undefined
+                                  ? `Pay your part · ${formatMoney(shareMinor, priceCurrency)}`
+                                  : "Pay your part"}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.purchaseKindMeta,
+                                paymentMode === modeOption &&
+                                  styles.purchaseKindTextActive,
+                              ]}
+                            >
+                              {modeOption === "full"
+                                ? "You cover the whole court."
+                                : participants.length === 0
+                                  ? "Add players to split it."
+                                  : `Split ${participants.length + 1} ways.`}
                             </Text>
                           </Pressable>
                         ))}
+                      </View>
+                      <View style={styles.checkoutSection}>
+                        <Text style={styles.eyebrow}>PRICE</Text>
+                        {quote ? (
+                          <>
+                            <View style={styles.checkoutPriceRow}>
+                              <Text style={styles.rowMeta}>
+                                Court · {durationMinutes} minutes
+                              </Text>
+                              <Text style={styles.checkoutPriceValue}>
+                                {formatMoney(
+                                  quote.subtotalMinor,
+                                  quote.currency,
+                                )}
+                              </Text>
+                            </View>
+                            {quote.feeTotalMinor > 0 && (
+                              <View style={styles.checkoutPriceRow}>
+                                <Text style={styles.rowMeta}>
+                                  Duna service fee
+                                </Text>
+                                <Text style={styles.checkoutPriceValue}>
+                                  {formatMoney(
+                                    quote.feeTotalMinor,
+                                    quote.currency,
+                                  )}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.checkoutPriceTotalRow}>
+                              <Text style={styles.rowTitle}>Court total</Text>
+                              <Text style={styles.checkoutPriceTotalValue}>
+                                {formatMoney(quote.totalMinor, quote.currency)}
+                              </Text>
+                            </View>
+                            {paymentMode === "split" && (
+                              <View style={styles.checkoutPriceTotalRow}>
+                                <Text style={styles.rowTitle}>You pay now</Text>
+                                <Text style={styles.checkoutPriceTotalValue}>
+                                  {formatMoney(
+                                    quote.payNowMinor,
+                                    quote.currency,
+                                  )}
+                                </Text>
+                              </View>
+                            )}
+                            {(quote.memberRateApplied ||
+                              quote.dunaPlusApplied) && (
+                              <Text style={styles.rowMeta}>
+                                {[
+                                  quote.memberRateApplied
+                                    ? "Member rate applied."
+                                    : undefined,
+                                  quote.dunaPlusApplied
+                                    ? "Duna Plus waives the service fee."
+                                    : undefined,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                              </Text>
+                            )}
+                            {listedMinor > 0 &&
+                              listedMinor !== quote.subtotalMinor && (
+                                <Text style={styles.rowMeta}>
+                                  This venue lists{" "}
+                                  {formatMoney(listedMinor, listedCurrency)} for
+                                  this slot. Your price above is what Duna
+                                  charges.
+                                </Text>
+                              )}
+                          </>
+                        ) : (
+                          <Text style={styles.rowMeta}>
+                            {mode === "preview"
+                              ? "Sign in to see your price for this court."
+                              : quoteLoading
+                                ? "Confirming your price for this court…"
+                                : "Duna could not confirm a price for this court yet."}
+                          </Text>
+                        )}
                       </View>
                       <View style={styles.checkoutSection}>
                         <View style={styles.rowBetween}>
@@ -4873,8 +5070,10 @@ function VenueBookingModal({
                             <View style={styles.bookingPartnerRow}>
                               {selectedDunaPlayers.map((person) => (
                                 <Pressable
+                                  accessibilityLabel={`Open ${person.displayName}'s profile`}
+                                  accessibilityRole="button"
                                   key={person.id}
-                                  onPress={() => setShowPlayerPicker(true)}
+                                  onPress={() => setProfilePerson(person)}
                                   style={styles.bookingPartner}
                                 >
                                   {person.avatarUrl ? (
@@ -4976,8 +5175,12 @@ function VenueBookingModal({
                               </Text>
                               <Text style={styles.rowMeta}>
                                 {paymentMode === "split"
-                                  ? `Pays ${formatMoney(shareMinor, "USD")}`
-                                  : "Included in your reservation"}
+                                  ? participantShareMinor === undefined
+                                    ? "Pays an equal share"
+                                    : `Pays ${formatMoney(participantShareMinor, priceCurrency)}`
+                                  : participant.personId
+                                    ? "Included in your reservation"
+                                    : "Invited by email or text · included in your reservation"}
                               </Text>
                             </View>
                             <Pressable
@@ -5017,8 +5220,9 @@ function VenueBookingModal({
                       busy ||
                       mode === "preview" ||
                       !policyReady ||
+                      !priceReady ||
                       (paymentMode === "split" && participants.length === 0) ||
-                      !inventory?.venue.paymentsReady
+                      (!freeReservation && !inventory?.venue.paymentsReady)
                     }
                     onPress={() => void checkout()}
                     style={[
@@ -5026,20 +5230,24 @@ function VenueBookingModal({
                       (busy ||
                         mode === "preview" ||
                         !policyReady ||
+                        !priceReady ||
                         (paymentMode === "split" &&
                           participants.length === 0) ||
-                        !inventory?.venue.paymentsReady) &&
+                        (!freeReservation &&
+                          !inventory?.venue.paymentsReady)) &&
                         styles.buttonDisabled,
                     ]}
                   >
                     <Text style={styles.payButtonText}>
                       {busy
                         ? "Opening secure checkout…"
-                        : bookingIntent === "host"
-                          ? paymentMode === "full"
-                            ? `Reserve full court · ${formatMoney(totalMinor, "USD")}`
-                            : `Reserve your share · ${formatMoney(shareMinor, "USD")}`
-                          : `Continue · ${formatMoney(shareMinor, "USD")}`}
+                        : shareMinor === undefined
+                          ? "Confirming price…"
+                          : bookingIntent === "host"
+                            ? paymentMode === "full"
+                              ? `Reserve full court · ${formatMoney(shareMinor, priceCurrency)}`
+                              : `Reserve your share · ${formatMoney(shareMinor, priceCurrency)}`
+                            : `Continue · ${formatMoney(shareMinor, priceCurrency)}`}
                     </Text>
                   </Pressable>
                 </>
@@ -5075,6 +5283,49 @@ function VenueBookingModal({
               read={policyRead}
               visible={policyReviewOpen}
             />
+            {profilePerson && (
+              <PlayerProfileSheet
+                onClose={() => setProfilePerson(undefined)}
+                palette={colors}
+                person={profilePerson}
+                primaryAction={{
+                  label: "Add Player",
+                  activeLabel: "Added · Remove player",
+                  active: true,
+                  onPress: () => {
+                    setParticipants((current) =>
+                      current.filter(
+                        (participant) =>
+                          participant.personId !== profilePerson.id,
+                      ),
+                    );
+                    setProfilePerson(undefined);
+                  },
+                }}
+              />
+            )}
+            {showPlayerPicker && (
+              <PlayerPickerModal
+                excludedPersonIds={[dashboard?.player.id ?? demoPlayer.id]}
+                maxSelected={11}
+                onChange={(players) =>
+                  setParticipants((current) => [
+                    ...current.filter((participant) => !participant.personId),
+                    ...players.map((person) => ({
+                      personId: person.id,
+                      name: person.displayName,
+                      person,
+                    })),
+                  ])
+                }
+                onClose={() => setShowPlayerPicker(false)}
+                palette={colors}
+                presentationStyle="pageSheet"
+                selected={selectedDunaPlayers}
+                title="Add players"
+                visible
+              />
+            )}
           </>
         )}
       </SafeAreaView>
@@ -22924,8 +23175,43 @@ function createStyles(palette: Palette) {
       color: colors.muted,
       fontSize: 12,
       fontWeight: "800",
+      textAlign: "center",
+    },
+    purchaseKindMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 3,
+      textAlign: "center",
     },
     purchaseKindTextActive: { color: colors.aqua },
+    checkoutPriceRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      paddingVertical: 6,
+    },
+    checkoutPriceValue: {
+      color: colors.bone,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    checkoutPriceTotalRow: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginTop: 6,
+      paddingTop: 10,
+    },
+    checkoutPriceTotalValue: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+    },
     checkoutSection: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.07),
