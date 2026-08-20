@@ -114,6 +114,7 @@ import {
   usePlayerProfileNavigation,
 } from "./player-social";
 import { DiscoveryMapModal, DiscoveryMapPreview } from "./discovery-map";
+import type { DiscoveryMapFilter } from "./discovery-filters";
 import {
   admissionPassReady,
   checkoutRosterComplete,
@@ -520,6 +521,7 @@ type Tab =
   | "you"
   | "health"
   | "performance"
+  | "coaches"
   | "messages";
 
 type CourtInventory = Awaited<
@@ -1026,6 +1028,52 @@ function coachInitials(name: string): string {
     .toUpperCase();
 }
 
+function coachExperienceLabel(
+  value?: MobileCoach["playingExperience"],
+): string {
+  if (!value || value === "not-set") return "Experience not listed";
+  if (value === "high-school") return "High school experience";
+  if (value === "collegiate") return "College experience";
+  return `${value[0]?.toUpperCase() ?? ""}${value.slice(1)} experience`;
+}
+
+function coachServicePrice(
+  service: MobileCoach["services"][number],
+): string | undefined {
+  const cardPrices = service.variants.flatMap((variant) =>
+    variant.prices.flatMap((price) =>
+      price.paymentKind === "card" && price.amountMinor !== undefined
+        ? [
+            {
+              amountMinor: price.amountMinor,
+              currency: price.currency ?? "USD",
+            },
+          ]
+        : [],
+    ),
+  );
+  const least = cardPrices.sort(
+    (left, right) => left.amountMinor - right.amountMinor,
+  )[0];
+  if (least) return `From ${formatMoney(least.amountMinor, least.currency)}`;
+  const credits = service.variants
+    .flatMap((variant) => variant.prices)
+    .find((price) => price.paymentKind === "credit" && price.creditAmount);
+  return credits?.creditAmount
+    ? `${credits.creditAmount} ${credits.creditAmount === 1 ? "credit" : "credits"}`
+    : undefined;
+}
+
+function coachSupportsVirtual(coach: MobileCoach): boolean {
+  return coach.services.some((service) => {
+    const searchable =
+      `${service.subtype} ${service.defaultFulfillment} ${JSON.stringify(service.configuration)}`.toLowerCase();
+    return ["virtual", "online", "remote", "google meet"].some((term) =>
+      searchable.includes(term),
+    );
+  });
+}
+
 function CoachCard({
   coach,
   preferred = false,
@@ -1141,6 +1189,24 @@ function CoachProfileModal({
               {coach.organizationName}
               {coach.homeMarket ? ` · ${coach.homeMarket}` : ""}
             </Text>
+            <View style={styles.coachProfileFacts}>
+              <Text style={styles.coachProfileFact}>
+                {coachExperienceLabel(coach.playingExperience)}
+              </Text>
+              {coach.genderCategory ? (
+                <Text style={styles.coachProfileFact}>
+                  {coach.genderCategory}
+                </Text>
+              ) : null}
+              {coach.yearsPlaying !== undefined ? (
+                <Text style={styles.coachProfileFact}>
+                  {coach.yearsPlaying} years playing
+                </Text>
+              ) : null}
+              {coachSupportsVirtual(coach) ? (
+                <Text style={styles.coachProfileFact}>Virtual available</Text>
+              ) : null}
+            </View>
             <Text style={styles.coachModalBio}>
               {coach.bio ??
                 `Book training and upcoming sessions with ${coach.displayName}.`}
@@ -1173,6 +1239,11 @@ function CoachProfileModal({
                     service.description ??
                     "See live availability and booking options."}
                 </Text>
+                {coachServicePrice(service) ? (
+                  <Text style={styles.coachServicePrice}>
+                    {coachServicePrice(service)}
+                  </Text>
+                ) : null}
                 <Text style={styles.coachServiceAction}>
                   View availability →
                 </Text>
@@ -1634,11 +1705,18 @@ function VirtualSessionCard({
 type HomeQuickAction =
   | "upload-score"
   | "find-match"
+  | "create-match"
   | "book-court"
   | "join-event"
+  | "find-coach"
   | "record-video"
   | "watch-pros"
   | "search";
+
+type DiscoverIntentKind = Exclude<
+  HomeQuickAction,
+  "record-video" | "upload-score" | "create-match" | "find-coach"
+>;
 
 function HomeResultStoryCard({
   match,
@@ -7283,13 +7361,15 @@ function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
 function DiscoverScreen({
   intent,
   onBook,
+  onCreateMatch,
   onOrganization,
 }: {
   readonly intent?: {
     readonly key: number;
-    readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
+    readonly kind: DiscoverIntentKind;
   };
   readonly onBook: (eventIndex: number) => void;
+  readonly onCreateMatch: () => void;
   readonly onOrganization: (slug: string) => void;
 }) {
   const { theme } = useContext(ThemeContext);
@@ -7299,6 +7379,8 @@ function DiscoverScreen({
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
   const [showDiscoveryMap, setShowDiscoveryMap] = useState(false);
+  const [discoveryMapInitialFilter, setDiscoveryMapInitialFilter] =
+    useState<DiscoveryMapFilter>("all");
   const [showDiscoverySearch, setShowDiscoverySearch] = useState(false);
   const [showSearchedMap, setShowSearchedMap] = useState(false);
   const [discoverySearchResult, setDiscoverySearchResult] =
@@ -7330,20 +7412,23 @@ function DiscoverScreen({
     }
     if (intent.kind === "find-match") {
       setFilter("Open play");
+      setDiscoveryMapInitialFilter("match");
+      setShowSearchedMap(false);
+      setShowDiscoveryMap(true);
       return;
     }
     if (intent.kind === "join-event") {
       setFilter("Events");
+      setDiscoveryMapInitialFilter("event");
+      setShowSearchedMap(false);
+      setShowDiscoveryMap(true);
       return;
     }
-    const firstVenue = venues?.[0];
-    if (firstVenue) {
-      setBookingVenueId(firstVenue.id);
-    } else {
-      setFilter("For you");
-      setShowDiscoveryMap(true);
-    }
-  }, [intent, venues]);
+    setFilter("For you");
+    setDiscoveryMapInitialFilter("venue");
+    setShowSearchedMap(false);
+    setShowDiscoveryMap(true);
+  }, [intent]);
   useEffect(() => {
     let mounted = true;
     const loadLocation = async () => {
@@ -7957,6 +8042,7 @@ function DiscoverScreen({
         <DiscoveryMapPreview
           items={visibleDiscoveryItems}
           onOpen={() => {
+            setDiscoveryMapInitialFilter("all");
             setShowSearchedMap(false);
             setShowDiscoveryMap(true);
           }}
@@ -8028,12 +8114,17 @@ function DiscoverScreen({
         )}
       </ScrollView>
       <DiscoveryMapModal
+        initialFilter={discoveryMapInitialFilter}
         items={
           showSearchedMap && discoverySearchResult
             ? discoverySearchResult.items
             : locationSortedDiscoveryItems
         }
         onClose={() => setShowDiscoveryMap(false)}
+        onCreateMatch={() => {
+          setShowDiscoveryMap(false);
+          onCreateMatch();
+        }}
         onSearch={() => {
           setShowDiscoveryMap(false);
           setShowDiscoverySearch(true);
@@ -8070,6 +8161,7 @@ function DiscoverScreen({
           setDiscoverySearchResult(result);
           setShowDiscoverySearch(false);
           setShowSearchedMap(true);
+          setDiscoveryMapInitialFilter("all");
           setShowDiscoveryMap(true);
         }}
         theme={theme}
@@ -8119,6 +8211,362 @@ function DiscoverScreen({
   );
 }
 
+function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
+  const { coaches = [], venues = [] } = usePlayerRuntime();
+  const [mode, setMode] = useState<"near" | "virtual">("near");
+  const [query, setQuery] = useState("");
+  const [gender, setGender] = useState("all");
+  const [experience, setExperience] = useState("all");
+  const [organizationId, setOrganizationId] = useState("all");
+  const [origin, setOrigin] = useState<DiscoveryCoordinates>();
+  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
+
+  useEffect(() => {
+    let mounted = true;
+    void Location.requestForegroundPermissionsAsync()
+      .then(async (permission) => {
+        if (!permission.granted) return undefined;
+        return Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      })
+      .then((position) => {
+        if (mounted && position) {
+          setOrigin({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const genders = [
+    ...new Set(
+      coaches.flatMap((coach) =>
+        coach.genderCategory ? [coach.genderCategory] : [],
+      ),
+    ),
+  ];
+  const experiences = [
+    ...new Set(
+      coaches.flatMap((coach) =>
+        coach.playingExperience && coach.playingExperience !== "not-set"
+          ? [coach.playingExperience]
+          : [],
+      ),
+    ),
+  ];
+  const organizations = [
+    ...new Map(
+      coaches.map((coach) => [
+        coach.organizationId,
+        { id: coach.organizationId, name: coach.organizationName },
+      ]),
+    ).values(),
+  ];
+  const coachVenue = (coach: MobileCoach) =>
+    venues.find((venue) => venue.organizationId === coach.organizationId);
+  const visibleCoaches = [...coaches]
+    .filter((coach) => {
+      const normalizedQuery = query.trim().toLowerCase();
+      if (
+        normalizedQuery &&
+        ![
+          coach.displayName,
+          coach.organizationName,
+          coach.homeMarket ?? "",
+          coach.bio ?? "",
+          ...coach.services.map((service) => service.title),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery)
+      ) {
+        return false;
+      }
+      if (mode === "virtual" && !coachSupportsVirtual(coach)) return false;
+      if (gender !== "all" && coach.genderCategory !== gender) return false;
+      if (experience !== "all" && coach.playingExperience !== experience) {
+        return false;
+      }
+      return (
+        organizationId === "all" || coach.organizationId === organizationId
+      );
+    })
+    .sort((left, right) => {
+      const leftVenue = coachVenue(left);
+      const rightVenue = coachVenue(right);
+      return (
+        discoveryDistance(origin, leftVenue ?? {}) -
+        discoveryDistance(origin, rightVenue ?? {})
+      );
+    });
+
+  const filterChip = (label: string, active: boolean, onPress: () => void) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      key={label}
+      onPress={onPress}
+      style={[
+        styles.coachFinderFilterChip,
+        active && styles.coachFinderFilterChipActive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.coachFinderFilterText,
+          active && styles.coachFinderFilterTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  return (
+    <>
+      <ScrollView
+        contentContainerStyle={styles.screenContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Pressable
+          accessibilityLabel="Back to Play"
+          accessibilityRole="button"
+          onPress={onBack}
+          style={styles.coachFinderBack}
+        >
+          <Text style={styles.coachFinderBackText}>‹ Play</Text>
+        </Pressable>
+        <Text style={styles.eyebrow}>COACHES ON DUNA</Text>
+        <Text style={styles.displayTitle}>Find your next level.</Text>
+        <Text style={styles.coachFinderIntro}>
+          Compare real profiles, experience, programs, availability, and price
+          before you book.
+        </Text>
+
+        <View style={styles.coachFinderModeRow}>
+          {(["near", "virtual"] as const).map((option) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === option }}
+              key={option}
+              onPress={() => setMode(option)}
+              style={[
+                styles.coachFinderMode,
+                mode === option && styles.coachFinderModeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.coachFinderModeEyebrow,
+                  mode === option && styles.coachFinderModeEyebrowActive,
+                ]}
+              >
+                {option === "near" ? "⌖ LOCAL" : "◉ ONLINE"}
+              </Text>
+              <Text
+                style={[
+                  styles.coachFinderModeTitle,
+                  mode === option && styles.coachFinderModeTitleActive,
+                ]}
+              >
+                {option === "near" ? "Near me" : "Virtual"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.coachFinderSearch}>
+          <Text style={styles.coachFinderSearchIcon}>⌕</Text>
+          <TextInput
+            autoCapitalize="none"
+            onChangeText={setQuery}
+            placeholder="Coach, skill, program, or organization"
+            placeholderTextColor={colors.muted}
+            style={styles.coachFinderSearchInput}
+            value={query}
+          />
+        </View>
+
+        {genders.length > 0 ? (
+          <>
+            <Text style={styles.coachFinderFilterLabel}>GENDER</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.coachFinderFilterRow}>
+                {filterChip("All", gender === "all", () => setGender("all"))}
+                {genders.map((value) =>
+                  filterChip(value, gender === value, () => setGender(value)),
+                )}
+              </View>
+            </ScrollView>
+          </>
+        ) : null}
+
+        {experiences.length > 0 ? (
+          <>
+            <Text style={styles.coachFinderFilterLabel}>
+              PLAYING EXPERIENCE
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.coachFinderFilterRow}>
+                {filterChip("All", experience === "all", () =>
+                  setExperience("all"),
+                )}
+                {experiences.map((value) =>
+                  filterChip(
+                    coachExperienceLabel(value).replace(" experience", ""),
+                    experience === value,
+                    () => setExperience(value),
+                  ),
+                )}
+              </View>
+            </ScrollView>
+          </>
+        ) : null}
+
+        {organizations.length > 1 ? (
+          <>
+            <Text style={styles.coachFinderFilterLabel}>ORGANIZATION</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.coachFinderFilterRow}>
+                {filterChip("All", organizationId === "all", () =>
+                  setOrganizationId("all"),
+                )}
+                {organizations.map((organization) =>
+                  filterChip(
+                    organization.name,
+                    organizationId === organization.id,
+                    () => setOrganizationId(organization.id),
+                  ),
+                )}
+              </View>
+            </ScrollView>
+          </>
+        ) : null}
+
+        <View style={styles.coachFinderResultsHeader}>
+          <Text style={styles.sectionTitle}>
+            {mode === "near" ? "Coaches near you." : "Train from anywhere."}
+          </Text>
+          <Text style={styles.sectionAction}>
+            {visibleCoaches.length} found
+          </Text>
+        </View>
+
+        <View style={styles.coachFinderResults}>
+          {visibleCoaches.map((coach) => {
+            const venue = coachVenue(coach);
+            const miles = discoveryDistance(origin, venue ?? {});
+            const firstService = coach.services[0];
+            const price = firstService
+              ? coachServicePrice(firstService)
+              : undefined;
+            return (
+              <Pressable
+                accessibilityLabel={`View ${coach.displayName}`}
+                accessibilityRole="button"
+                key={`${coach.organizationId}:${coach.personId}`}
+                onPress={() => setSelectedCoach(coach)}
+                style={({ pressed }) => [
+                  styles.coachFinderCard,
+                  pressed && styles.homeQuickActionPressed,
+                ]}
+              >
+                <View style={styles.coachFinderCardTop}>
+                  {coach.avatarUrl ? (
+                    <Image
+                      source={{ uri: coach.avatarUrl }}
+                      style={styles.coachFinderAvatar}
+                    />
+                  ) : (
+                    <View style={styles.coachFinderAvatarFallback}>
+                      <Text style={styles.coachFinderAvatarText}>
+                        {coachInitials(coach.displayName)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.flex}>
+                    <Text style={styles.coachFinderName}>
+                      {coach.displayName}
+                    </Text>
+                    <Text style={styles.coachFinderOrganization}>
+                      {coach.organizationName}
+                    </Text>
+                    <Text style={styles.coachFinderLocation}>
+                      {mode === "virtual" && coachSupportsVirtual(coach)
+                        ? "Virtual coaching available"
+                        : Number.isFinite(miles)
+                          ? `${miles.toFixed(miles < 10 ? 1 : 0)} mi away`
+                          : (coach.homeMarket ?? "Location on profile")}
+                    </Text>
+                  </View>
+                  <Text style={styles.coachFinderArrow}>›</Text>
+                </View>
+                <Text numberOfLines={3} style={styles.coachFinderBio}>
+                  {coach.bio ??
+                    `${coach.displayName} offers bookable coaching through ${coach.organizationName}.`}
+                </Text>
+                <View style={styles.coachFinderFacts}>
+                  <Text style={styles.coachFinderFact}>
+                    {coachExperienceLabel(coach.playingExperience)}
+                  </Text>
+                  <Text style={styles.coachFinderFact}>
+                    {coach.services.length} bookable
+                  </Text>
+                  {coach.upcomingSessions.length > 0 ? (
+                    <Text style={styles.coachFinderFact}>
+                      {coach.upcomingSessions.length} upcoming
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.coachFinderCardFooter}>
+                  <Text style={styles.coachFinderServicePreview}>
+                    {firstService?.title ?? "View coaching profile"}
+                  </Text>
+                  <Text style={styles.coachFinderPrice}>
+                    {price ?? "See options"}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+          {visibleCoaches.length === 0 ? (
+            <View style={styles.coachFinderEmpty}>
+              <Text style={styles.coachFinderEmptyTitle}>
+                No coaches match those filters yet.
+              </Text>
+              <Text style={styles.coachFinderEmptyBody}>
+                Try Near me, clear a profile filter, or search a broader skill.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setMode("near");
+                  setQuery("");
+                  setGender("all");
+                  setExperience("all");
+                  setOrganizationId("all");
+                }}
+                style={styles.coachFinderClear}
+              >
+                <Text style={styles.coachFinderClearText}>Clear filters</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+      <CoachProfileModal
+        coach={selectedCoach}
+        onClose={() => setSelectedCoach(undefined)}
+      />
+    </>
+  );
+}
+
 function PlayLauncherScreen({
   onAction,
 }: {
@@ -8132,15 +8580,27 @@ function PlayLauncherScreen({
   }[] = [
     {
       key: "upload-score",
-      icon: "↥",
-      title: "Upload a Score",
+      icon: "✓",
+      title: "Report a Score",
       detail: "Add a result and update your record",
     },
     {
       key: "find-match",
       icon: "⌖",
-      title: "Find a Match / Session",
-      detail: "See open play and training near you",
+      title: "Find a Match",
+      detail: "See every open match around you",
+    },
+    {
+      key: "create-match",
+      icon: "＋",
+      title: "Create a Match",
+      detail: "Pick a place, invite players, and open spots",
+    },
+    {
+      key: "join-event",
+      icon: "✦",
+      title: "Join an Event",
+      detail: "Tournaments, clinics, and community play",
     },
     {
       key: "book-court",
@@ -8149,10 +8609,10 @@ function PlayLauncherScreen({
       detail: "Find live court availability",
     },
     {
-      key: "join-event",
-      icon: "✦",
-      title: "Join an Event",
-      detail: "Tournaments, clinics, and community play",
+      key: "find-coach",
+      icon: "◇",
+      title: "Find a Coach",
+      detail: "Profiles, programs, sessions, and virtual training",
     },
     {
       key: "record-video",
@@ -8219,11 +8679,13 @@ function PlansScreen({
   onOpenBooking,
   onReserveCourtVenue,
   onTraining,
+  onSeeAllMatches,
 }: {
   readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
   readonly onReserveCourtVenue: (request: CourtBookingRequest) => void;
   readonly onTraining: () => void;
+  readonly onSeeAllMatches: () => void;
 }) {
   const { dashboard, mode, training } = usePlayerRuntime();
   const bookings = dashboard?.bookings ?? demoBookings;
@@ -8390,15 +8852,17 @@ function PlansScreen({
           ))}
         </View>
         <SectionHeader
-          eyebrow="HOSTED MATCHES NEARBY"
-          title="Jump into something."
           action="See all"
+          eyebrow="HOSTED MATCHES NEARBY"
+          onAction={onSeeAllMatches}
+          title="Jump into something."
         />
         <View style={styles.listCard}>
           {events
             .filter(
               (event) => event.kind === "pickup" || event.kind === "open-play",
             )
+            .slice(0, 8)
             .map((event) => (
               <Pressable
                 key={event.id}
@@ -8406,7 +8870,7 @@ function PlansScreen({
                 style={styles.pickupRow}
               >
                 <View style={styles.pickupDate}>
-                  <Text style={styles.pickupDay}>
+                  <Text numberOfLines={1} style={styles.pickupDay}>
                     {new Date(event.startsAt)
                       .toLocaleDateString("en-US", { weekday: "short" })
                       .toUpperCase()}
@@ -8437,8 +8901,8 @@ function PlansScreen({
           </View>
           <Text style={styles.sectionTitle}>Your court. Your people.</Text>
           <Text style={styles.bodyText}>
-            Create a match with a clear time, format, level, and cost to join.
-            Add your partner now or leave spots open for nearby players.
+            Create a match with a clear time, format, and level. Add your
+            partner now or leave spots open for nearby players.
           </Text>
           <Pressable
             onPress={() => setShowHost(true)}
@@ -12319,7 +12783,7 @@ function PickupModal({
   readonly initialCourtBooking?: HostedMatchSeed;
   readonly onReserveCourtVenue?: (request: CourtBookingRequest) => void;
 }) {
-  const { client, dashboard, mode, refresh } = usePlayerRuntime();
+  const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [venueName, setVenueName] = useState("");
@@ -12341,8 +12805,6 @@ function PickupModal({
   const [ratingEnabled, setRatingEnabled] = useState(true);
   const [ratingMinimum, setRatingMinimum] = useState("1.00");
   const [ratingMaximum, setRatingMaximum] = useState("8.00");
-  const [cost, setCost] = useState("0");
-  const [costMode, setCostMode] = useState<"free" | "paid">("free");
   const [note, setNote] = useState("");
   const [recordMatches, setRecordMatches] = useState(true);
   const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
@@ -12479,14 +12941,20 @@ function PickupModal({
     setVenueName(value?.name ?? "");
     setVenueId(value?.venueId);
     setCourtBookingId(undefined);
+    if (value?.venueId && onReserveCourtVenue) {
+      close();
+      onReserveCourtVenue({
+        venueId: value.venueId,
+        date: startsAt.slice(0, 10),
+        durationMinutes,
+      });
+    }
   }
 
   function close() {
     setError(undefined);
     setShowPlayerPicker(false);
     setPlaceSelection(undefined);
-    setCostMode("free");
-    setCost("0");
     onClose();
   }
 
@@ -12522,15 +12990,10 @@ function PickupModal({
 
   async function publish() {
     if (!client || mode === "preview") return;
-    const dollars = Number(cost);
     const ratingMin = Number(ratingMinimum);
     const ratingMax = Number(ratingMaximum);
     if (!Number.isFinite(start.getTime())) {
       setError("Enter the start as YYYY-MM-DDTHH:MM.");
-      return;
-    }
-    if (!Number.isFinite(dollars) || dollars < 0 || dollars > 1_000) {
-      setError("Enter a valid price from $0 to $1,000.");
       return;
     }
     if (
@@ -12563,7 +13026,7 @@ function PickupModal({
         genderPreference,
         note: note.trim() || undefined,
         visibility,
-        costMinor: Math.round(dollars * 100),
+        costMinor: 0,
         currency: "USD",
         recordMatches,
         participantPersonIds: selectedPlayers.map((player) => player.id),
@@ -12583,8 +13046,6 @@ function PickupModal({
       setCourtBookingId(undefined);
       setVenueId(undefined);
       setPlaceSelection(undefined);
-      setCostMode("free");
-      setCost("0");
     } catch (reason) {
       setError(displayError(reason));
     } finally {
@@ -12836,6 +13297,7 @@ function PickupModal({
                       <MobilePlacePicker
                         baseUrl={dunaWebUrl}
                         description="Search Duna venues first, or choose any beach, club, or address with Google Places."
+                        dunaVenues={venues}
                         label="Venue, beach, or court"
                         lockedLabel={
                           placeSelection?.venueId
@@ -12849,6 +13311,12 @@ function PickupModal({
                       {placeSelection?.latitude !== undefined &&
                         placeSelection.longitude !== undefined && (
                           <View style={styles.hostFlowPlaceMapPreview}>
+                            <Image
+                              source={{
+                                uri: `${dunaWebUrl}/api/places/map?latitude=${encodeURIComponent(String(placeSelection.latitude))}&longitude=${encodeURIComponent(String(placeSelection.longitude))}`,
+                              }}
+                              style={StyleSheet.absoluteFill}
+                            />
                             <View style={styles.hostFlowPlaceMapGrid} />
                             <View style={styles.hostFlowPlaceMapPin}>
                               <Text style={styles.hostFlowPlaceMapPinText}>
@@ -12863,6 +13331,22 @@ function PickupModal({
                             </View>
                           </View>
                         )}
+                      {placeSelection && !placeSelection.venueId && (
+                        <View style={styles.hostFlowLocationNotice}>
+                          <Text style={styles.hostFlowLocationNoticeMark}>
+                            ✓
+                          </Text>
+                          <View style={styles.flex}>
+                            <Text style={styles.hostFlowLocationNoticeTitle}>
+                              CONFIRMED WITH GOOGLE
+                            </Text>
+                            <Text style={styles.hostFlowLocationNoticeBody}>
+                              This is not a Duna venue. Duna does not reserve or
+                              guarantee court availability at this location.
+                            </Text>
+                          </View>
+                        </View>
+                      )}
                       {venueId && (
                         <Pressable
                           accessibilityLabel={`Reserve a court at ${venueName}`}
@@ -12971,7 +13455,8 @@ function PickupModal({
                       </Text>
                       <Text style={styles.hostFlowDatePickerBody}>
                         This is a non-Duna location, so you can choose any
-                        future date, time, and duration.
+                        future date, time, and duration. Joining this match is
+                        free in Duna.
                       </Text>
                       <DateTimePicker
                         accentColor={colors.aqua}
@@ -13246,8 +13731,8 @@ function PickupModal({
                 <>
                   <Text style={styles.hostFlowTitle}>Access and details</Text>
                   <Text style={styles.hostFlowBody}>
-                    Set the level, cost to join, and whether the match is
-                    discoverable.
+                    Set the level and whether the match is discoverable. Court
+                    payment is handled only through a Duna venue reservation.
                   </Text>
                   <Text style={styles.hostFlowLabel}>VISIBILITY</Text>
                   <View style={styles.hostFlowChoiceGrid}>
@@ -13316,66 +13801,20 @@ function PickupModal({
                     </>
                   )}
                   <Text style={styles.hostFlowLabel}>COST TO JOIN</Text>
-                  <View style={styles.hostFlowCostChoiceRow}>
-                    {(["free", "paid"] as const).map((option) => (
-                      <Pressable
-                        key={option}
-                        onPress={() => {
-                          setCostMode(option);
-                          setCost(
-                            option === "free"
-                              ? "0"
-                              : cost === "0"
-                                ? "10"
-                                : cost,
-                          );
-                        }}
-                        style={[
-                          styles.hostFlowCostChoice,
-                          costMode === option &&
-                            styles.hostFlowCostChoiceActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.hostFlowCostChoiceTitle,
-                            costMode === option &&
-                              styles.hostFlowCostChoiceTitleActive,
-                          ]}
-                        >
-                          {option === "free" ? "Free" : "Paid"}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.hostFlowCostChoiceBody,
-                            costMode === option &&
-                              styles.hostFlowCostChoiceBodyActive,
-                          ]}
-                        >
-                          {option === "free"
-                            ? "No payment needed"
-                            : "Each player pays to join"}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  {costMode === "paid" && (
-                    <View style={styles.hostFlowPriceInput}>
-                      <Text style={styles.hostFlowPricePrefix}>$</Text>
-                      <TextInput
-                        keyboardType="decimal-pad"
-                        onChangeText={(value) => {
-                          setCost(value);
-                          if (value !== "0") setCostMode("paid");
-                        }}
-                        placeholder="10.00"
-                        placeholderTextColor={colors.muted}
-                        style={styles.hostFlowPriceField}
-                        value={cost}
-                      />
-                      <Text style={styles.hostFlowPriceSuffix}>per player</Text>
+                  <View style={styles.hostFlowFreeMatchCard}>
+                    <View style={styles.hostFlowFreeMatchMark}>
+                      <Text style={styles.hostFlowFreeMatchMarkText}>✓</Text>
                     </View>
-                  )}
+                    <View style={styles.flex}>
+                      <Text style={styles.hostFlowToggleTitle}>
+                        Free in Duna
+                      </Text>
+                      <Text style={styles.hostFlowToggleBody}>
+                        Players join without a match fee. A connected Duna venue
+                        reservation handles any court cost separately.
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={styles.hostFlowLabel}>NOTE</Text>
                   <TextInput
                     multiline
@@ -13455,11 +13894,9 @@ function PickupModal({
                         </Text>
                       </View>
                       <View>
-                        <Text style={styles.hostFlowReviewLabel}>PRICE</Text>
+                        <Text style={styles.hostFlowReviewLabel}>JOIN</Text>
                         <Text style={styles.hostFlowReviewValue}>
-                          {costMode === "paid" && Number(cost) > 0
-                            ? `$${Number(cost).toFixed(2)} / place`
-                            : "Free"}
+                          Free in Duna
                         </Text>
                       </View>
                     </View>
@@ -13533,7 +13970,7 @@ function TabBar({
       ? "you"
       : active === "training"
         ? "plans"
-        : active === "score" || active === "video"
+        : active === "score" || active === "video" || active === "coaches"
           ? "play"
           : active;
   return (
@@ -13741,7 +14178,7 @@ function DunaApp() {
   const [videoTransfer, setVideoTransfer] = useState<VideoTransferStatus>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
-    readonly kind: Exclude<HomeQuickAction, "record-video" | "upload-score">;
+    readonly kind: DiscoverIntentKind;
   }>();
   const [themePreference, setThemePreference] =
     useState<ThemePreference>("light");
@@ -13881,8 +14318,12 @@ function DunaApp() {
       setTab("video");
       return;
     }
-    if (action === "book-court") {
-      setCourtFinderOpen(true);
+    if (action === "create-match") {
+      setCreateMatchOpen(true);
+      return;
+    }
+    if (action === "find-coach") {
+      setTab("coaches");
       return;
     }
     setDiscoverIntent({ key: Date.now(), kind: action });
@@ -13957,6 +14398,7 @@ function DunaApp() {
                   <DiscoverScreen
                     intent={discoverIntent}
                     onBook={setEventIndex}
+                    onCreateMatch={() => setCreateMatchOpen(true)}
                     onOrganization={setOrganizationSlug}
                   />
                 )}
@@ -13972,12 +14414,22 @@ function DunaApp() {
                 {tab === "play" && (
                   <PlayLauncherScreen onAction={openHomeAction} />
                 )}
+                {tab === "coaches" && (
+                  <FindCoachScreen onBack={() => setTab("play")} />
+                )}
                 {tab === "plans" && (
                   <PlansScreen
                     onBook={setEventIndex}
                     onOpenBooking={setBookingId}
                     onReserveCourtVenue={setCourtBookingRequest}
                     onTraining={() => setTab("training")}
+                    onSeeAllMatches={() => {
+                      setDiscoverIntent({
+                        key: Date.now(),
+                        kind: "find-match",
+                      });
+                      setTab("discover");
+                    }}
                   />
                 )}
                 {tab === "training" && (
@@ -14179,6 +14631,10 @@ function DunaApp() {
                 onCreated={() => {
                   setCreateMatchOpen(false);
                   setOrganizationHostSeed(undefined);
+                }}
+                onReserveCourtVenue={(request) => {
+                  setCreateMatchOpen(false);
+                  setCourtBookingRequest(request);
                 }}
                 visible={Boolean(organizationHostSeed) || createMatchOpen}
               />
@@ -15687,6 +16143,34 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
       letterSpacing: 0.55,
     },
+    hostFlowLocationNotice: {
+      alignItems: "flex-start",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 10,
+      padding: 13,
+    },
+    hostFlowLocationNoticeMark: {
+      color: colors.positive,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    hostFlowLocationNoticeTitle: {
+      color: colors.positive,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    hostFlowLocationNoticeBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
     hostFlowReserveVenue: {
       alignItems: "center",
       backgroundColor: rgba(colors.accentRgb, 0.09),
@@ -16049,6 +16533,30 @@ function createStyles(palette: Palette) {
       marginTop: 5,
     },
     hostFlowCostChoiceBodyActive: { color: colors.bone },
+    hostFlowFreeMatchCard: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.08),
+      borderColor: rgba(colors.positiveRgb, 0.24),
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 84,
+      padding: 14,
+    },
+    hostFlowFreeMatchMark: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.positiveRgb, 0.14),
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    hostFlowFreeMatchMarkText: {
+      color: colors.positive,
+      fontSize: 17,
+      fontWeight: "900",
+    },
     hostFlowTextarea: {
       minHeight: 112,
       paddingTop: 15,
@@ -16379,6 +16887,223 @@ function createStyles(palette: Palette) {
     homeQuickLabelPrimary: { color: colors.onAccent },
     homeQuickMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
     homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
+    coachFinderBack: {
+      alignSelf: "flex-start",
+      marginBottom: 18,
+      minHeight: 40,
+      paddingRight: 16,
+      paddingTop: 8,
+    },
+    coachFinderBackText: {
+      color: colors.aqua,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    coachFinderIntro: {
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 8,
+      maxWidth: 430,
+    },
+    coachFinderModeRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 22,
+    },
+    coachFinderMode: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 19,
+      borderWidth: 1,
+      flex: 1,
+      minHeight: 84,
+      padding: 15,
+    },
+    coachFinderModeActive: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
+    },
+    coachFinderModeEyebrow: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+    coachFinderModeEyebrowActive: { color: colors.onAccent },
+    coachFinderModeTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 8,
+    },
+    coachFinderModeTitleActive: { color: colors.onAccent },
+    coachFinderSearch: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 12,
+      minHeight: 60,
+      paddingHorizontal: 14,
+    },
+    coachFinderSearchIcon: { color: colors.aqua, fontSize: 22 },
+    coachFinderSearchInput: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 14,
+      minHeight: 58,
+    },
+    coachFinderFilterLabel: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+      marginBottom: 8,
+      marginTop: 17,
+    },
+    coachFinderFilterRow: { flexDirection: "row", gap: 8 },
+    coachFinderFilterChip: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 16,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    coachFinderFilterChipActive: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderColor: colors.aqua,
+    },
+    coachFinderFilterText: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    coachFinderFilterTextActive: { color: colors.aqua, fontWeight: "900" },
+    coachFinderResultsHeader: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 13,
+      marginTop: 28,
+    },
+    coachFinderResults: { gap: 12 },
+    coachFinderCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 16,
+    },
+    coachFinderCardTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    coachFinderAvatar: { borderRadius: 30, height: 60, width: 60 },
+    coachFinderAvatarFallback: {
+      alignItems: "center",
+      backgroundColor: colors.navyLift,
+      borderRadius: 30,
+      height: 60,
+      justifyContent: "center",
+      width: 60,
+    },
+    coachFinderAvatarText: {
+      color: colors.aqua,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    coachFinderName: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      letterSpacing: -0.4,
+    },
+    coachFinderOrganization: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 3,
+    },
+    coachFinderLocation: { color: colors.muted, fontSize: 12, marginTop: 3 },
+    coachFinderArrow: { color: colors.aqua, fontSize: 28 },
+    coachFinderBio: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 14,
+    },
+    coachFinderFacts: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 12,
+    },
+    coachFinderFact: {
+      backgroundColor: rgba(colors.accentRgb, 0.08),
+      borderRadius: 12,
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "800",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    coachFinderCardFooter: {
+      alignItems: "center",
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 14,
+      paddingTop: 13,
+    },
+    coachFinderServicePreview: {
+      color: colors.bone,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "800",
+      marginRight: 10,
+    },
+    coachFinderPrice: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
+    coachFinderEmpty: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 26,
+    },
+    coachFinderEmptyTitle: {
+      color: colors.bone,
+      fontSize: 18,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    coachFinderEmptyBody: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    coachFinderClear: {
+      backgroundColor: colors.aqua,
+      borderRadius: 18,
+      marginTop: 15,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    coachFinderClearText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
     playLauncherIntro: {
       color: colors.muted,
       fontSize: 13,
@@ -17225,6 +17950,25 @@ function createStyles(palette: Palette) {
       marginTop: 5,
       textAlign: "center",
     },
+    coachProfileFacts: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      justifyContent: "center",
+      marginTop: 11,
+    },
+    coachProfileFact: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderColor: rgba(colors.accentRgb, 0.2),
+      borderRadius: 14,
+      borderWidth: 1,
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "800",
+      overflow: "hidden",
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
     coachModalBio: {
       color: colors.muted,
       fontSize: 12,
@@ -17257,6 +18001,12 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       lineHeight: 16,
       marginTop: 6,
+    },
+    coachServicePrice: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "900",
+      marginTop: 10,
     },
     coachServiceAction: {
       color: colors.aqua,
@@ -19791,9 +20541,15 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.overlayRgb, 0.05),
       borderRadius: 9,
       padding: 6,
-      width: 38,
+      width: 46,
     },
-    pickupDay: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
+    pickupDay: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.25,
+      textAlign: "center",
+    },
     pickupNumber: {
       color: colors.bone,
       fontFamily: "Archivo-Table",

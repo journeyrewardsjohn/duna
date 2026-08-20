@@ -59,6 +59,27 @@ describe("tRPC contract surface", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
+  it("keeps community-location hosted matches free", async () => {
+    const caller = createCaller(
+      createApiContext({ requestId: crypto.randomUUID() }),
+    );
+    await expect(
+      caller.player.createPickup({
+        title: "Paid public beach match",
+        startsAt: "2030-08-01T22:00:00.000Z",
+        endsAt: "2030-08-02T00:00:00.000Z",
+        venueName: "Public beach",
+        capacity: 4,
+        format: "2s",
+        visibility: "public",
+        costMinor: 1_000,
+        currency: "USD",
+        recordMatches: true,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
   it("blocks unknown-age identities from adult money and public-hosting flows", async () => {
     const actor = { ...createDemoActor(), ageBand: "unknown" as const };
     const caller = createCaller(createApiContext({ actor }));

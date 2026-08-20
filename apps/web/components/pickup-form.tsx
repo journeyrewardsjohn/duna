@@ -162,8 +162,6 @@ export function PickupForm({
         )
       : 90,
   );
-  const [costMode, setCostMode] = useState<"free" | "split" | "fixed">("free");
-  const [costDollars, setCostDollars] = useState("10.00");
   const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
   const [note, setNote] = useState(
     "Good energy, competitive games, easy rotation. Bring your own water.",
@@ -559,52 +557,18 @@ export function PickupForm({
                 </>
               )}
               <fieldset className="pickup-choice-section">
-                <legend>Amount per player</legend>
+                <legend>Cost to join</legend>
                 <div className="pickup-cost-options">
-                  {(
-                    [
-                      ["free", "Free", "No payment needed"],
-                      ["split", "Split the court", "Each player pays a share"],
-                      ["fixed", "Fixed price", "One price per player"],
-                    ] as const
-                  ).map(([value, label, detail]) => (
-                    <button
-                      aria-pressed={costMode === value}
-                      className={costMode === value ? "selected" : undefined}
-                      key={value}
-                      onClick={() => setCostMode(value)}
-                      type="button"
-                    >
-                      <span className="choice-radio" />
-                      <strong>{label}</strong>
-                      <small>{detail}</small>
-                    </button>
-                  ))}
+                  <button aria-pressed className="selected" type="button">
+                    <span className="choice-radio" />
+                    <strong>Free in Duna</strong>
+                    <small>
+                      Court payment is handled through the connected Duna venue
+                      reservation, never as a separate match fee.
+                    </small>
+                  </button>
                 </div>
               </fieldset>
-              {costMode !== "free" && (
-                <div className="field-group pickup-amount-field">
-                  <label htmlFor="pickup-cost-amount">
-                    Amount per player (USD)
-                  </label>
-                  <div>
-                    <span>$</span>
-                    <input
-                      id="pickup-cost-amount"
-                      inputMode="decimal"
-                      min="0.50"
-                      onChange={(event) => setCostDollars(event.target.value)}
-                      step="0.01"
-                      type="number"
-                      value={costDollars}
-                    />
-                  </div>
-                  <small>
-                    Paid pickup is available only through a connected club or
-                    facility payment account; Duna never holds host funds.
-                  </small>
-                </div>
-              )}
             </>
           )}
 
@@ -950,19 +914,6 @@ export function PickupForm({
                     );
                     return;
                   }
-                  const costMinor =
-                    costMode === "free"
-                      ? 0
-                      : Math.round(Number(costDollars) * 100);
-                  if (
-                    !Number.isSafeInteger(costMinor) ||
-                    (costMode !== "free" && costMinor < 50)
-                  ) {
-                    setError(
-                      "Enter a valid per-player amount of at least $0.50.",
-                    );
-                    return;
-                  }
                   startTransition(async () => {
                     const result = await createPickupAction({
                       title,
@@ -995,7 +946,7 @@ export function PickupForm({
                           Math.max(2, minimumAttendance),
                         ),
                       },
-                      costMinor,
+                      costMinor: 0,
                       currency: "USD",
                       recordMatches,
                       ratingMinimum:
@@ -1058,11 +1009,7 @@ export function PickupForm({
               {FORMAT_OPTIONS.find((option) => option.value === format)
                 ?.label ?? format}
             </Badge>
-            <Numeric>
-              {costMode === "free"
-                ? "Free"
-                : `$${Number(costDollars || 0).toFixed(2)} / player`}
-            </Numeric>
+            <span>Free in Duna</span>
           </div>
         </aside>
       </section>

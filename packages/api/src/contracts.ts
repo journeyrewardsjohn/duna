@@ -4906,6 +4906,11 @@ export const publicCoachSchema = z.object({
   avatarUrl: z.string().optional(),
   homeMarket: z.string().optional(),
   bio: z.string().optional(),
+  genderCategory: z.string().optional(),
+  playingExperience: z
+    .enum(["not-set", "amateur", "high-school", "collegiate", "professional"])
+    .optional(),
+  yearsPlaying: z.number().int().min(0).max(100).optional(),
   availability: z.array(z.record(z.string(), z.unknown())).readonly(),
   services: z.array(publicCatalogItemSchema).readonly(),
   upcomingSessions: z

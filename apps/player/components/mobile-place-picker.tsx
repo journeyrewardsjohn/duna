@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import {
   SatoshiText as Text,
@@ -11,6 +11,16 @@ interface PlaceSuggestion {
   readonly text: string;
   readonly mainText: string;
   readonly secondaryText: string;
+}
+
+interface DunaVenueSuggestion {
+  readonly id: string;
+  readonly name: string;
+  readonly city: string;
+  readonly region: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly courtCount: number;
 }
 
 export interface MobilePlaceSelection {
@@ -61,6 +71,7 @@ function MapPinGlyph({
 export function MobilePlacePicker({
   baseUrl,
   description = "Search once, then Duna locks the map-ready place to this video.",
+  dunaVenues = [],
   label = "Venue",
   lockedLabel = "LOCATION LOCKED · GOOGLE",
   onChange,
@@ -69,6 +80,7 @@ export function MobilePlacePicker({
 }: {
   readonly baseUrl: string;
   readonly description?: string;
+  readonly dunaVenues?: readonly DunaVenueSuggestion[];
   readonly label?: string;
   readonly lockedLabel?: string;
   readonly value?: MobilePlaceSelection;
@@ -80,6 +92,18 @@ export function MobilePlacePicker({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const requestNumber = useRef(0);
+  const dunaOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (normalized.length < 2) return [];
+    return dunaVenues
+      .filter((venue) =>
+        [venue.name, venue.city, venue.region]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalized),
+      )
+      .slice(0, 5);
+  }, [dunaVenues, query]);
 
   useEffect(() => {
     if (value || query.trim().length < 3) {
@@ -109,7 +133,7 @@ export function MobilePlacePicker({
         .then((suggestions) => {
           if (currentRequest === requestNumber.current) {
             setOptions(suggestions);
-            if (suggestions.length === 0) {
+            if (suggestions.length === 0 && dunaOptions.length === 0) {
               setError(
                 "No matching places yet. Try a venue, beach, or address.",
               );
@@ -137,7 +161,20 @@ export function MobilePlacePicker({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [baseUrl, query, value]);
+  }, [baseUrl, dunaOptions.length, query, value]);
+
+  const selectDunaVenue = (venue: DunaVenueSuggestion) => {
+    onChange({
+      venueId: venue.id,
+      name: venue.name,
+      address: `${venue.city}, ${venue.region}`,
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+    });
+    setQuery("");
+    setOptions([]);
+    setError(undefined);
+  };
 
   const select = async (option: PlaceSuggestion) => {
     setLoading(true);
@@ -263,6 +300,82 @@ export function MobilePlacePicker({
               />
             )}
           </View>
+          {dunaOptions.length > 0 && (
+            <View
+              style={[
+                styles.results,
+                palette && {
+                  backgroundColor: palette.depth,
+                  borderColor: palette.aqua,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dunaResultHeading,
+                  palette && { color: palette.aqua },
+                ]}
+              >
+                DUNA VENUES · LIVE COURTS + AVAILABILITY
+              </Text>
+              {dunaOptions.map((venue) => (
+                <Pressable
+                  accessibilityLabel={`Choose Duna venue ${venue.name}`}
+                  accessibilityRole="button"
+                  key={venue.id}
+                  onPress={() => selectDunaVenue(venue)}
+                  style={({ pressed }) => [
+                    styles.result,
+                    pressed && styles.resultPressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.dunaVenueMark,
+                      palette && { backgroundColor: palette.aqua },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dunaVenueMarkText,
+                        palette && { color: palette.onAccent },
+                      ]}
+                    >
+                      D
+                    </Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.placeName,
+                        palette && { color: palette.bone },
+                      ]}
+                    >
+                      {venue.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.placeAddress,
+                        palette && { color: palette.muted },
+                      ]}
+                    >
+                      {venue.city}, {venue.region} · {venue.courtCount}{" "}
+                      {venue.courtCount === 1 ? "court" : "courts"}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.dunaVenueAction,
+                      palette && { color: palette.aqua },
+                    ]}
+                  >
+                    See times ›
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           {options.length > 0 && (
             <View
               style={[
@@ -397,6 +510,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resultPressed: { backgroundColor: "#f5f7fa" },
+  dunaResultHeading: {
+    color: "#3d6672",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  dunaVenueMark: {
+    alignItems: "center",
+    backgroundColor: "#3d6672",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  dunaVenueMarkText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  dunaVenueAction: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
   powered: {
     color: "#8b96a7",
     fontSize: 12,

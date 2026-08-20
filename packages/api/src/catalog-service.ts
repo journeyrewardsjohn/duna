@@ -2714,6 +2714,9 @@ export async function loadPublicCoaches(
             avatarUrl: person.avatarUrl,
             homeMarket: person.homeMarket,
             bio: `${person.displayName} coaches technical development, game decisions, and confident beach-volleyball habits for every level.`,
+            genderCategory: undefined,
+            playingExperience: "professional",
+            yearsPlaying: undefined,
             availability: [
               { weekday: 2, startsAt: "16:00", endsAt: "20:00" },
               { weekday: 4, startsAt: "16:00", endsAt: "20:00" },
@@ -2736,6 +2739,9 @@ export async function loadPublicCoaches(
       avatarUrl: people.avatarUrl,
       homeMarket: people.homeMarket,
       bio: people.experienceSummary,
+      genderCategory: people.genderCategory,
+      playingExperience: people.playingExperience,
+      yearsPlaying: people.yearsPlaying,
       isMinor: people.isMinor,
       profileVisibility: people.profileVisibility,
       profileClaimStatus: people.profileClaimStatus,
@@ -2844,6 +2850,17 @@ export async function loadPublicCoaches(
       avatarUrl: row.avatarUrl ?? undefined,
       homeMarket: row.homeMarket ?? undefined,
       bio: row.bio ?? undefined,
+      genderCategory: row.genderCategory ?? undefined,
+      playingExperience: [
+        "not-set",
+        "amateur",
+        "high-school",
+        "collegiate",
+        "professional",
+      ].includes(row.playingExperience)
+        ? (row.playingExperience as PublicCoach["playingExperience"])
+        : undefined,
+      yearsPlaying: row.yearsPlaying ?? undefined,
       availability: row.profile.availability,
       services: (storefront?.catalog ?? []).filter(
         (item) =>
