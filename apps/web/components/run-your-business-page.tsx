@@ -165,7 +165,7 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   [WalletCards, "Money", "Orders, credits, refunds, payouts, and ledger state"],
   [
     Dumbbell,
-    "Training OS",
+    "Training",
     "Season programs, practice plans, and drills you describe in your own words",
   ],
   [
@@ -1194,19 +1194,18 @@ export function RunYourBusinessPage({
         <div className={styles.trainingPromoInner} data-reveal>
           <div className={styles.trainingPromoContent}>
             <Dumbbell aria-hidden size={24} />
-            <span className={styles.eyebrow}>Training OS</span>
-            <h2>The practice plan writes itself up to a point.</h2>
+            <span className={styles.eyebrow}>Training</span>
+            <h2>Write the week. Run the court.</h2>
             <p>
               Describe a drill the way you&rsquo;d explain it to another coach
-              and Duna drafts the steps, cues, scoring, and an animated court
-              for you to correct. Build the session around it, phase a season
-              around your tournaments, then run it courtside.
+              and Duna drafts the steps, cues, and scoring for you to correct.
+              Build the session around it, then set the season it belongs to.
             </p>
             <Link
               className={styles.secondaryButton}
               href="/run-your-club/training"
             >
-              Explore Training OS <ArrowRight />
+              See training planning <ArrowRight />
             </Link>
           </div>
           <div className={styles.trainingPromoVisual}>
@@ -1215,20 +1214,17 @@ export function RunYourBusinessPage({
                 <span>Ball Control</span>
                 <small>Build, then compete</small>
               </header>
-              <strong>Seam-to-Transition Wash</strong>
+              <strong>Seam Serve to Transition</strong>
               <div>
                 <span>14 min</span>
-                <span>6–12 players</span>
-                <span>~44 touches</span>
+                <span>6 to 12 players</span>
               </div>
             </div>
             <div className={styles.trainingPromoPractice}>
-              <span>Sideout Under Pressure</span>
+              <span>Tuesday</span>
               <div>
                 <Numeric tier="table">90</Numeric>
                 <small>min</small>
-                <Numeric tier="table">~118</Numeric>
-                <small>contacts</small>
               </div>
             </div>
           </div>
