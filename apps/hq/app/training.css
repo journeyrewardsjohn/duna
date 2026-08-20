@@ -936,7 +936,7 @@
 
 .training-lifecycle > header .hq-button {
   flex: 0 0 auto;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   min-height: 38px;
   padding: 0.5rem 0.65rem;
 }
@@ -973,7 +973,7 @@
   background: color-mix(in srgb, var(--training-success) 18%, var(--surface-1));
   border-radius: 99px;
   color: var(--hq-ink);
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   font-weight: 800;
   justify-self: start;
   padding: 0.18rem 0.4rem;
@@ -986,7 +986,7 @@
 
 .training-lifecycle__history .hq-button {
   flex: 0 0 auto;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   min-height: 34px;
   padding: 0.42rem 0.55rem;
 }
@@ -1003,7 +1003,7 @@
   align-items: start;
   border-radius: 10px;
   display: flex;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   gap: 0.45rem;
   line-height: 1.45;
   margin: 0;
