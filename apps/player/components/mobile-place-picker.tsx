@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
   resultPressed: { backgroundColor: "#f5f7fa" },
   dunaResultHeading: {
     color: "#3d6672",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1,
     paddingHorizontal: 14,

@@ -1678,7 +1678,7 @@ function createStyles(token: ResolvedDunaTokens) {
     },
     createMatchEyebrow: {
       color: environmentalColors.marine900,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },

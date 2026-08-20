@@ -16161,7 +16161,7 @@ function createStyles(palette: Palette) {
     },
     hostFlowLocationNoticeTitle: {
       color: colors.positive,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -16926,7 +16926,7 @@ function createStyles(palette: Palette) {
     },
     coachFinderModeEyebrow: {
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
@@ -16959,7 +16959,7 @@ function createStyles(palette: Palette) {
     },
     coachFinderFilterLabel: {
       color: colors.muted,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.2,
       marginBottom: 8,
@@ -17030,7 +17030,7 @@ function createStyles(palette: Palette) {
       fontWeight: "800",
       marginTop: 3,
     },
-    coachFinderLocation: { color: colors.muted, fontSize: 11, marginTop: 3 },
+    coachFinderLocation: { color: colors.muted, fontSize: 12, marginTop: 3 },
     coachFinderArrow: { color: colors.aqua, fontSize: 28 },
     coachFinderBio: {
       color: colors.muted,
@@ -17048,7 +17048,7 @@ function createStyles(palette: Palette) {
       backgroundColor: rgba(colors.accentRgb, 0.08),
       borderRadius: 12,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       overflow: "hidden",
       paddingHorizontal: 8,
@@ -17963,7 +17963,7 @@ function createStyles(palette: Palette) {
       borderRadius: 14,
       borderWidth: 1,
       color: colors.aqua,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "800",
       overflow: "hidden",
       paddingHorizontal: 9,
@@ -20545,7 +20545,7 @@ function createStyles(palette: Palette) {
     },
     pickupDay: {
       color: colors.aqua,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.25,
       textAlign: "center",
