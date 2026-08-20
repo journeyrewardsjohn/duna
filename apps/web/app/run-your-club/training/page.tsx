@@ -4,7 +4,7 @@ import { DUNA_HQ_URL } from "@/lib/site-urls";
 
 export const metadata: Metadata = {
   title:
-    "Training OS — Program, practice, and drill planning for beach volleyball coaches",
+    "Training OS: program, practice, and drill planning for beach volleyball coaches",
   description:
     "Describe a drill in plain language and Duna returns a structured, animated plan you can edit. Stack drills into practices, phase a season around your tournament calendar, and run it courtside in Duna HQ.",
   alternates: {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     types: { "text/markdown": "/run-your-club/training.md" },
   },
   openGraph: {
-    title: "Training OS — Duna for coaches",
+    title: "Training OS: Duna for coaches",
     description:
       "Drill planning, practice planning, and season programs for beach volleyball coaches, with contact estimates and a drill marketplace.",
     images: ["/media/brand/duna-club-hero-v1.webp"],
@@ -27,7 +27,7 @@ const structuredData = {
       "@type": "WebPage",
       "@id": "https://duna.coach/run-your-club/training#webpage",
       url: "https://duna.coach/run-your-club/training",
-      name: "Training OS — Program, practice, and drill planning",
+      name: "Training OS: program, practice, and drill planning",
       description:
         "Duna Training OS covers drill creation from a plain-language description, practice assembly, season program planning, courtside execution, and drill sharing for beach volleyball coaches.",
       inLanguage: "en-US",
