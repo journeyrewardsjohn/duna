@@ -26,6 +26,7 @@ export default async function TrainingProgramPage({
     <OperatorShell
       active="training"
       immersive
+      immersiveScrollable
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}
     >
