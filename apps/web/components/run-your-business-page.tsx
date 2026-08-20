@@ -166,7 +166,7 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   [
     Dumbbell,
     "Training OS",
-    "Program, practice, and drill planning with natural-language prompts",
+    "Season programs, practice plans, and drills you describe in your own words",
   ],
   [
     Megaphone,
@@ -1195,12 +1195,12 @@ export function RunYourBusinessPage({
           <div className={styles.trainingPromoContent}>
             <Dumbbell aria-hidden size={24} />
             <span className={styles.eyebrow}>Training OS</span>
-            <h2>Describe the drill. Duna builds the plan.</h2>
+            <h2>The practice plan writes itself up to a point.</h2>
             <p>
-              Turn a coaching brief into structured programs, daily practices,
-              and animated drills. See expected contacts and load before anyone
-              touches a ball. Keep your work private, share it free, or sell
-              organization licenses.
+              Describe a drill the way you&rsquo;d explain it to another coach
+              and Duna drafts the steps, cues, scoring, and an animated court
+              for you to correct. Build the session around it, phase a season
+              around your tournaments, then run it courtside.
             </p>
             <Link
               className={styles.secondaryButton}
