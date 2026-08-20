@@ -5987,6 +5987,10 @@ const playerRouter = router({
           "Pickup must end after it begins",
         )
         .refine(
+          (value) => value.costMinor === 0 || Boolean(value.courtBookingId),
+          "Paid hosted matches require a confirmed Duna court reservation",
+        )
+        .refine(
           (value) =>
             new Set(value.participantPersonIds).size ===
               value.participantPersonIds.length &&

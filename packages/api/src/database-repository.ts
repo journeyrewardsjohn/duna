@@ -3375,6 +3375,11 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       "Choose a confirmed court reservation that belongs to your Duna account.",
     );
   }
+  if (input.costMinor > 0 && !linkedCourtBooking) {
+    throw new Error(
+      "Paid hosted matches require a confirmed Duna court reservation. Community locations are free to join in Duna.",
+    );
+  }
   const matchingVenue = await database.query.venues.findFirst({
     where: linkedCourtBooking
       ? eq(venues.id, linkedCourtBooking.venueId)

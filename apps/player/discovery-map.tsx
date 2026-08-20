@@ -39,12 +39,15 @@ import {
   type MeasurementSystem,
   type TravelEstimate,
 } from "./discovery-travel";
+import {
+  discoveryItemMatchesFilter,
+  type DiscoveryMapFilter,
+} from "./discovery-filters";
 
-type DiscoveryFilter = "all" | DiscoveryEntityType;
 type MapBounds = MapState["properties"]["bounds"];
 type SheetPosition = "list" | "split" | "map";
 
-const filterOptions: readonly { value: DiscoveryFilter; label: string }[] = [
+const filterOptions: readonly { value: DiscoveryMapFilter; label: string }[] = [
   { value: "all", label: "Everything" },
   { value: "organization", label: "Clubs" },
   { value: "venue", label: "Courts" },
@@ -715,9 +718,11 @@ function closestSnap(
 }
 
 export function DiscoveryMapModal({
+  initialFilter = "all",
   items,
   measurementSystem = "imperial",
   onClose,
+  onCreateMatch,
   onSearch,
   onSelect,
   origin,
@@ -727,10 +732,12 @@ export function DiscoveryMapModal({
   theme = "light",
   visible,
 }: {
+  readonly initialFilter?: DiscoveryMapFilter;
   readonly items: readonly DiscoveryMapItem[];
   readonly measurementSystem?: MeasurementSystem;
   readonly visible: boolean;
   readonly onClose: () => void;
+  readonly onCreateMatch?: () => void;
   readonly onSearch: () => void;
   readonly onSelect: (item: DiscoveryMapItem) => void;
   readonly origin?: DiscoveryCoordinates;
@@ -748,7 +755,7 @@ export function DiscoveryMapModal({
   const cameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const firstIdle = useRef(true);
   const listScrollY = useRef(0);
-  const [filter, setFilter] = useState<DiscoveryFilter>("all");
+  const [filter, setFilter] = useState<DiscoveryMapFilter>(initialFilter);
   const [bounds, setBounds] = useState<MapBounds>();
   const [areaIds, setAreaIds] = useState<readonly string[]>();
   const [mapMoved, setMapMoved] = useState(false);
@@ -773,10 +780,7 @@ export function DiscoveryMapModal({
   const gestureStart = useRef(positions.split);
 
   const filtered = useMemo(
-    () =>
-      filter === "all"
-        ? items
-        : items.filter((item) => item.entityType === filter),
+    () => items.filter((item) => discoveryItemMatchesFilter(item, filter)),
     [filter, items],
   );
   const listItems = useMemo(() => {
@@ -876,9 +880,9 @@ export function DiscoveryMapModal({
     setAreaIds(undefined);
     setMapMoved(false);
     setSelectedId(undefined);
-    setFilter("all");
+    setFilter(initialFilter);
     firstIdle.current = true;
-  }, [positions.split, sheetY, visible]);
+  }, [initialFilter, positions.split, sheetY, visible]);
 
   useEffect(() => {
     setAreaIds(undefined);
@@ -1183,6 +1187,30 @@ export function DiscoveryMapModal({
                 </Text>
                 <Pressable onPress={onSearch} style={styles.emptyButton}>
                   <Text style={styles.emptyButtonText}>Edit search</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {filter === "match" && onCreateMatch ? (
+              <View style={styles.createMatchCard}>
+                <View style={styles.createMatchMark}>
+                  <Text style={styles.createMatchMarkText}>＋</Text>
+                </View>
+                <Text style={styles.createMatchEyebrow}>CREATE YOUR OWN</Text>
+                <Text style={styles.createMatchTitle}>
+                  Your court. Your people.
+                </Text>
+                <Text style={styles.createMatchBody}>
+                  Pick a place and invite your crew, or leave spots open for
+                  nearby players.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={onCreateMatch}
+                  style={styles.createMatchButton}
+                >
+                  <Text style={styles.createMatchButtonText}>
+                    Create your own match
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1624,5 +1652,62 @@ function createStyles(token: ResolvedDunaTokens) {
       paddingVertical: spacing[3],
     },
     emptyButtonText: { color: token.text1, fontSize: 12, fontWeight: "800" },
+    createMatchCard: {
+      alignItems: "center",
+      backgroundColor: token.groundWarm,
+      borderColor: token.hairlineStrong,
+      borderRadius: radii.large,
+      borderWidth: 1,
+      marginTop: spacing[3],
+      paddingHorizontal: spacing[5],
+      paddingVertical: spacing[6],
+    },
+    createMatchMark: {
+      alignItems: "center",
+      backgroundColor: token.surface2,
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      marginBottom: spacing[3],
+      width: 48,
+    },
+    createMatchMarkText: {
+      color: environmentalColors.marine900,
+      fontSize: 25,
+      fontWeight: "500",
+    },
+    createMatchEyebrow: {
+      color: environmentalColors.marine900,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    createMatchTitle: {
+      color: environmentalColors.ink,
+      fontSize: 22,
+      fontWeight: "900",
+      marginTop: spacing[2],
+      textAlign: "center",
+    },
+    createMatchBody: {
+      color: token.text2,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: spacing[2],
+      maxWidth: 310,
+      textAlign: "center",
+    },
+    createMatchButton: {
+      backgroundColor: environmentalColors.marine900,
+      borderRadius: radii.pill,
+      marginTop: spacing[4],
+      paddingHorizontal: spacing[5],
+      paddingVertical: spacing[3],
+    },
+    createMatchButtonText: {
+      color: environmentalColors.white,
+      fontSize: 13,
+      fontWeight: "900",
+    },
   });
 }
