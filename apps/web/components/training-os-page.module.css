@@ -639,7 +639,11 @@
 }
 
 .parallelBlock {
-  background: color-mix(in srgb, var(--hq-tint) 20%, var(--surface-1)) !important;
+  background: color-mix(
+    in srgb,
+    var(--hq-tint) 20%,
+    var(--surface-1)
+  ) !important;
 }
 
 .blockTime {

@@ -565,10 +565,7 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
     <main className={styles.page} data-zone="editorial" ref={pageRef}>
       <SiteHeader />
 
-      <nav
-        aria-label="Training OS navigation"
-        className={styles.productNav}
-      >
+      <nav aria-label="Training OS navigation" className={styles.productNav}>
         <Link className={styles.productIdentity} href="/run-your-club">
           <span>Duna</span>
           <strong>HQ</strong>
@@ -653,11 +650,7 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
 
         <div className={styles.drillExamples} data-reveal>
           {drillExamples.map((drill, index) => (
-            <DrillCard
-              drill={drill}
-              expanded={index === 0}
-              key={drill.id}
-            />
+            <DrillCard drill={drill} expanded={index === 0} key={drill.id} />
           ))}
         </div>
 
