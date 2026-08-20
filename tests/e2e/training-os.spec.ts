@@ -216,6 +216,82 @@ test("training page stays readable in both grounds", async ({ page }) => {
   }
 });
 
+test("training page content is server rendered, not motion gated", async ({
+  request,
+}) => {
+  // Readers and agents that never run the reveal observer still need the whole
+  // chapter set, so no content may depend on motion to exist.
+  const html = await (await request.get(trainingPath)).text();
+
+  expect(html).toContain("Describe the drill");
+  expect(html).toContain("A plan is only worth what happens on the sand.");
+  expect(html).toContain("Court 1 + Court 2");
+  expect(html).toContain("About those numbers");
+
+  // The hidden reveal state is opt-in and only ever applied by script, so
+  // server-rendered markup is never delivered pre-hidden.
+  expect(html).not.toContain('data-motion="ready"');
+});
+
+test("reduced motion still condenses the nav clear of anchors", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(trainingPath);
+
+  const nav = page.getByRole("navigation", { name: "Training OS navigation" });
+  test.skip(
+    !(await nav.getByRole("link", { name: "Programs" }).isVisible()),
+    "product nav links are hidden at this width",
+  );
+
+  // Content stays visible: reduced motion opts out of the reveal entirely.
+  await expect(
+    page.getByRole("heading", {
+      name: "Plan the season. Duna phases the work.",
+    }),
+  ).toBeVisible();
+
+  await nav.getByRole("link", { name: "Programs" }).click();
+  await waitForScrollToSettle(page);
+
+  const heading = page.getByRole("heading", {
+    name: "Plan the season. Duna phases the work.",
+  });
+  const navBox = await getBox(nav);
+  const headingBox = await getBox(heading);
+
+  expect(headingBox.y).toBeGreaterThanOrEqual(navBox.y + navBox.height - 1);
+});
+
+test("interactive targets meet the documented minimums", async ({ page }) => {
+  await page.goto(trainingPath);
+
+  const nav = page.getByRole("navigation", { name: "Training OS navigation" });
+  const isNarrow = (page.viewportSize()?.width ?? 1_280) <= 700;
+
+  // Scoped to the controls this page owns. The shared site header is checked
+  // where it lives.
+  const controls = [
+    page.getByRole("link", { name: /Start in Duna HQ/ }),
+    page.getByRole("link", { name: "See examples" }),
+    nav.getByRole("link", { name: "Open Duna HQ" }),
+    page.getByRole("link", { name: /Open Training OS/ }),
+  ];
+
+  for (const control of controls) {
+    expect((await getBox(control)).height).toBeGreaterThanOrEqual(48);
+  }
+
+  if (isNarrow) {
+    // Primary mobile actions carry the larger minimum.
+    for (const name of [/Start in Duna HQ/, /Open Training OS/]) {
+      const box = await getBox(page.getByRole("link", { name }));
+      expect(box.height).toBeGreaterThanOrEqual(56);
+    }
+  }
+});
+
 test("run-your-club links into the training feature page", async ({ page }) => {
   await page.goto("/run-your-club");
 

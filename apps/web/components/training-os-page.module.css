@@ -99,9 +99,12 @@
 }
 
 .productNav > div a {
+  align-items: center;
   color: var(--text-2);
-  font-size: 0.78rem;
+  display: inline-flex;
+  font-size: 0.875rem;
   font-weight: 500;
+  min-height: 48px;
   text-decoration: none;
 }
 
@@ -119,7 +122,7 @@
   font-weight: 600;
   gap: 0.5rem;
   justify-content: center;
-  min-height: 50px;
+  min-height: 48px;
   padding: 0.8rem 1.15rem;
   text-decoration: none;
   transition:
@@ -135,7 +138,6 @@
 }
 
 .productCta {
-  min-height: 44px;
   padding-inline: 1rem;
 }
 
@@ -202,11 +204,21 @@
   gap: 1.25rem;
 }
 
+/* Tracking follows the size curve, so it has to change with the clamp band
+   rather than sit at one value. Word spacing compensates the negative track. */
 .heroCopy h1 {
   font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 700;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.012em;
   line-height: 1.08;
+  word-spacing: 0.02em;
+}
+
+@media (min-width: 800px) {
+  .heroCopy h1 {
+    letter-spacing: -0.018em;
+    word-spacing: 0.03em;
+  }
 }
 
 .heroCopy p {
@@ -297,10 +309,18 @@
   font-size: 0.78rem;
 }
 
-.heroResult h3 {
+.heroResultTitle {
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.006em;
+}
+
+.heroExampleLabel {
+  color: color-mix(in srgb, var(--text-2) 72%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .heroResultMeta {
@@ -345,22 +365,33 @@
   }
 }
 
-/* Sections */
+/* Sections. Chapter intros are left-aligned: centering is reserved for the
+   closing CTA. */
 .sectionIntro {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   margin: 0 auto;
+  max-width: 78rem;
+}
+
+.sectionIntro h2,
+.sectionIntro p {
   max-width: 48rem;
-  padding: 0 1.5rem;
-  text-align: center;
 }
 
 .sectionIntro h2 {
   font-size: clamp(1.5rem, 4vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.006em;
   line-height: 1.12;
+}
+
+@media (min-width: 700px) {
+  .sectionIntro h2 {
+    letter-spacing: -0.012em;
+    word-spacing: 0.02em;
+  }
 }
 
 .sectionIntro p {
@@ -391,8 +422,7 @@
 }
 
 .drillExampleFigure figcaption {
-  justify-content: center;
-  text-align: center;
+  justify-content: flex-start;
 }
 
 .drillExamples {
@@ -443,7 +473,6 @@
 .drillCard h3 {
   font-size: 1.15rem;
   font-weight: 700;
-  letter-spacing: -0.012em;
 }
 
 .drillCardPrompt {
@@ -463,7 +492,7 @@
 
 .drillCardPrompt blockquote {
   color: var(--text-2);
-  font-size: 0.88rem;
+  font-size: 1rem;
   font-style: italic;
   line-height: 1.5;
   margin: 0;
@@ -551,7 +580,7 @@
 
 .drillCardSection p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -600,7 +629,7 @@
 
 .drillFeatures p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -646,7 +675,7 @@
 
 .practiceTimeline > header p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
   max-width: 48ch;
 }
@@ -804,7 +833,7 @@
 
 .practiceTimeline > footer span {
   color: var(--text-2);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .practiceFeatures {
@@ -837,7 +866,7 @@
 
 .practiceFeatures p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -852,7 +881,7 @@
 
 .estimateNote p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -901,7 +930,7 @@
 
 .programOverview > header p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
   max-width: 48ch;
 }
@@ -1098,7 +1127,7 @@
 
 .programFeatures p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -1148,19 +1177,18 @@
 
 .runItFeatures p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .runItNote {
   margin: 2rem auto 0;
   max-width: 52rem;
-  text-align: center;
 }
 
 .runItNote p {
   color: var(--text-2);
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -1207,7 +1235,7 @@
 
 .marketplaceOptions p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -1217,12 +1245,11 @@
   gap: 1rem;
   margin: 2rem auto 0;
   max-width: 52rem;
-  text-align: center;
 }
 
 .marketplaceNote p {
   color: var(--text-2);
-  font-size: 0.92rem;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -1279,7 +1306,7 @@
 
 .capabilityGrid small {
   color: var(--text-2);
-  font-size: 0.88rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -1300,8 +1327,15 @@
 .closing h2 {
   font-size: clamp(1.5rem, 4vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.006em;
   line-height: 1.12;
+}
+
+@media (min-width: 700px) {
+  .closing h2 {
+    letter-spacing: -0.012em;
+    word-spacing: 0.02em;
+  }
 }
 
 .closing p {
@@ -1318,8 +1352,10 @@
   padding-top: 0.5rem;
 }
 
-/* Reveal animation */
-.page [data-reveal] {
+/* Reveal animation. Content is visible by default and only hides once
+   scripting has confirmed it can reveal it again, so the page is never blank
+   when JavaScript fails or is unavailable. */
+.page[data-motion="ready"] [data-reveal] {
   opacity: 0;
   transform: translateY(24px);
   transition:
@@ -1327,15 +1363,9 @@
     transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-.page [data-visible="true"] {
+.page[data-motion="ready"] [data-reveal][data-visible="true"] {
   opacity: 1;
   transform: translateY(0);
-}
-
-.page[data-reduced-motion="true"] [data-reveal] {
-  opacity: 1;
-  transform: none;
-  transition: none;
 }
 
 @media (max-width: 700px) {
@@ -1345,6 +1375,13 @@
 
   .productNav {
     grid-template-columns: 1fr auto;
+  }
+
+  /* Primary mobile actions carry the larger minimum. */
+  .primaryButton,
+  .secondaryButton {
+    min-height: 56px;
+    width: 100%;
   }
 
   .scrollCue {

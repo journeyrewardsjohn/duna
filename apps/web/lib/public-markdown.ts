@@ -129,7 +129,7 @@ export const staticPublicPages = [
   },
   {
     path: "/run-your-club/training",
-    title: "Training OS — Program, practice, and drill planning",
+    title: "Training OS: program, practice, and drill planning",
     description:
       "Describe a drill in plain language and Duna returns a structured, animated plan you can edit. Stack drills into practices, phase a season around your tournament calendar, run it courtside, and share drills through the marketplace.",
     sections: [

@@ -54,7 +54,7 @@ const drillExamples = [
     ],
     cues: [
       "Seam ownership call must happen before the serve crosses the net.",
-      "First-tempo attack read on transition—don't wait for a perfect set.",
+      "First-tempo attack read on transition. Do not wait for a perfect set.",
       "Serving team: treat the dig as your point. Reward intent, not just outcome.",
     ],
     scoring:
@@ -81,7 +81,7 @@ const drillExamples = [
     ],
     cues: [
       "Call timing: before the set peaks, not after the arm swing.",
-      "Defender trusts the call—stay committed to your zone.",
+      "Defender trusts the call. Stay committed to your zone.",
       "Transition: push tempo on offense to reward good defense.",
     ],
     scoring:
@@ -108,7 +108,7 @@ const drillExamples = [
     ],
     cues: [
       "Release timing: watch the pass, not the ball off the serve.",
-      "Footwork to the ball, not under it—create angle early.",
+      "Footwork to the ball, not under it. Create the angle early.",
       "Hittable = shoulder height, off the net, on tempo. Not perfect, just hittable.",
     ],
     scoring:
@@ -270,7 +270,7 @@ const runItFeatures: readonly [LucideIcon, string, string][] = [
   [
     History,
     "Nothing is lost",
-    "Practice plans and programs keep their recent versions. Restore an earlier one and it becomes the current version—the history stays intact.",
+    "Practice plans and programs keep their recent versions. Restore an earlier one and it becomes the current version. The history stays intact.",
   ],
 ];
 
@@ -278,7 +278,7 @@ const capabilities: readonly [LucideIcon, string, string][] = [
   [
     Wand2,
     "Natural-language drills",
-    "Describe the drill in your own words—Duna builds the structure, steps, and cues.",
+    "Describe the drill in your own words. Duna builds the structure, steps, and cues.",
   ],
   [
     CalendarRange,
@@ -334,7 +334,13 @@ function useTrainingPageMotion() {
       },
       { rootMargin: "0px 0px -8%", threshold: 0.08 },
     );
-    reveals.forEach((element) => revealObserver.observe(element));
+
+    // Only opt into the hidden starting state once we know we can reveal it,
+    // and never for readers who asked for less motion.
+    if (!reducedMotion && typeof IntersectionObserver !== "undefined") {
+      page.dataset.motion = "ready";
+      reveals.forEach((element) => revealObserver.observe(element));
+    }
 
     const storyObservers: IntersectionObserver[] = [];
     page.querySelectorAll<HTMLElement>("[data-story]").forEach((story) => {
@@ -359,6 +365,9 @@ function useTrainingPageMotion() {
     let frame = 0;
     const update = () => {
       frame = 0;
+      // The condensed nav is layout, not decoration: without it the nav stays
+      // tall enough to cover an anchor target. Reduced motion must still get it.
+      page.dataset.scrolled = scrollY > 48 ? "true" : "false";
       if (reducedMotion) return;
       const hero = page.querySelector<HTMLElement>("[data-training-hero]");
       if (!hero) return;
@@ -367,7 +376,6 @@ function useTrainingPageMotion() {
         -rect.top / Math.max(1, rect.height - innerHeight),
       );
       page.style.setProperty("--hero-progress", progress.toFixed(4));
-      page.dataset.scrolled = scrollY > 48 ? "true" : "false";
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -655,6 +663,7 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
             </div>
           </div>
           <div className={styles.heroVisual}>
+            <p className={styles.heroExampleLabel}>Illustrative example</p>
             <div className={styles.heroPrompt}>
               <Sparkles aria-hidden size={18} />
               <span>What the coach typed</span>
@@ -672,7 +681,9 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
                 <span>Ball Control</span>
                 <small>Build, then compete</small>
               </header>
-              <h3>Seam-to-Transition Wash</h3>
+              <strong className={styles.heroResultTitle}>
+                Seam-to-Transition Wash
+              </strong>
               <div className={styles.heroResultMeta}>
                 <span>14 min</span>
                 <span>6–12 players</span>
@@ -696,7 +707,7 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
             Describe the motion, rotation, scoring, and what good looks like.
             Duna interprets your words into a structured drill with steps,
             coaching cues, contact estimates, and court animation. You stay the
-            coach—edit anything before you save.
+            coach: edit anything before you save.
           </p>
         </div>
 
@@ -787,11 +798,11 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
         <div className={styles.estimateNote} data-reveal>
           <p>
             <strong>About those numbers.</strong> Contact and load figures are
-            planning estimates derived from how each drill is paced&mdash;ball
-            count, live-play ratio, and how much of the work is in the air. They
-            are coach planning context, not a measurement of any athlete and not
-            a health prediction. Duna shows the assumptions behind every
-            estimate so you can disagree with them.
+            planning estimates derived from how each drill is paced: ball count,
+            live-play ratio, and how much of the work is in the air. They are
+            coach planning context, not a measurement of any athlete and not a
+            health prediction. Duna shows the assumptions behind every estimate
+            so you can disagree with them.
           </p>
         </div>
       </section>
@@ -849,8 +860,8 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           <p>
             The practice you built opens in Coach Mode with a running clock, so
             you are coaching instead of managing a stopwatch. When it&rsquo;s
-            over, you record what actually happened&mdash;which is the part that
-            makes next week better.
+            over, you record what actually happened. That is the part that makes
+            next week better.
           </p>
         </div>
 
@@ -879,9 +890,9 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           <h2>Keep it private, share it free, or sell it.</h2>
           <p>
             Every drill starts private to your organization. When you&rsquo;re
-            ready, publish it&mdash;free for the coaching community, or priced
-            as an organization license. Practice plans and programs stay inside
-            your organization; the marketplace lists drills only.
+            ready, publish it: free for the coaching community, or priced as an
+            organization license. Practice plans and programs stay inside your
+            organization. The marketplace lists drills only.
           </p>
         </div>
 
@@ -898,8 +909,8 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
         <div className={styles.marketplaceNote} data-reveal>
           <p>
             <strong>Licenses are per organization, not per coach.</strong> One
-            purchase covers your whole staff&mdash;no per-seat fees, no
-            re-buying when an assistant joins.
+            purchase covers your whole staff. No per-seat fees, and no re-buying
+            when an assistant joins.
           </p>
           <p>
             <strong>Where a drill came from matters.</strong> If you adapted
