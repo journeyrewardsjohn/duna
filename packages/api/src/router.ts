@@ -54,6 +54,7 @@ import {
   courtAvailabilitySchema,
   courtBookingInviteSummarySchema,
   courtBookingInventorySchema,
+  courtCheckoutQuoteSchema,
   courtCheckoutResultSchema,
   courtCheckoutStatusSchema,
   courtHoldResultSchema,
@@ -219,6 +220,7 @@ import {
   loadCourtAvailability,
   loadCourtBookingInvite,
   loadCourtBookingInventory,
+  quoteCourtCheckout,
   resumeCourtBookingCheckout,
   startCourtCheckout,
   startParticipantShareCheckout,
@@ -932,6 +934,25 @@ const leagueRecurrenceInputSchema = z.object({
   substituteApprovalRequired: z.boolean(),
   teamAssignment: z.enum(["signup", "rating-balanced", "manual"]),
 });
+
+const courtCheckoutParticipantsSchema = z
+  .array(
+    z
+      .object({
+        personId: z.string().uuid().optional(),
+        name: z.string().trim().min(1).max(120).optional(),
+        email: z.email().optional(),
+        phoneE164: z
+          .string()
+          .regex(/^\+[1-9]\d{7,14}$/)
+          .optional(),
+      })
+      .refine(
+        (value) => Boolean(value.personId || value.email || value.phoneE164),
+        "Choose a Duna player or provide an email or phone number.",
+      ),
+  )
+  .default([]);
 
 const pickupRequestStatusSchema = z.enum([
   "requested",
@@ -6423,25 +6444,9 @@ const playerRouter = router({
         durationMinutes: z.number().int().min(15).max(480),
         paymentMode: z.enum(["full", "split"]).default("full"),
         paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
-        participants: z
-          .array(
-            z
-              .object({
-                personId: z.string().uuid().optional(),
-                name: z.string().trim().min(1).max(120).optional(),
-                email: z.email().optional(),
-                phoneE164: z
-                  .string()
-                  .regex(/^\+[1-9]\d{7,14}$/)
-                  .optional(),
-              })
-              .refine(
-                (value) =>
-                  Boolean(value.personId || value.email || value.phoneE164),
-                "Choose a Duna player or provide an email or phone number.",
-              ),
-          )
-          .default([]),
+        participants: courtCheckoutParticipantsSchema,
+        expectedPayNowMinor: z.number().int().nonnegative().optional(),
+        expectedTotalMinor: z.number().int().nonnegative().optional(),
         policyAccepted: z.boolean(),
         policyFullScrollConfirmed: z.boolean(),
         successUrl: z.url(),
@@ -6467,6 +6472,8 @@ const playerRouter = router({
               paymentMode: input.paymentMode,
               paymentSurface: input.paymentSurface,
               participants: input.participants,
+              expectedPayNowMinor: input.expectedPayNowMinor,
+              expectedTotalMinor: input.expectedTotalMinor,
               policyAccepted: input.policyAccepted,
               policyFullScrollConfirmed: input.policyFullScrollConfirmed,
               successUrl: input.successUrl,
@@ -6482,6 +6489,39 @@ const playerRouter = router({
         },
       }),
     ),
+  courtCheckoutQuote: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "court-checkout-quote",
+        capacity: 40,
+        refillPerMinute: 20,
+      }),
+    )
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        subjectPersonId: z.string().uuid().optional(),
+        durationMinutes: z.number().int().min(15).max(480),
+        paymentMode: z.enum(["full", "split"]).default("full"),
+        participants: courtCheckoutParticipantsSchema,
+      }),
+    )
+    .output(courtCheckoutQuoteSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await quoteCourtCheckout({
+          actor: ctx.actor!,
+          subjectPersonId: input.subjectPersonId,
+          courtId: input.courtId,
+          durationMinutes: input.durationMinutes,
+          paymentMode: input.paymentMode,
+          participants: input.participants,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   courtCheckoutStatus: protectedProcedure
     .input(
       z
