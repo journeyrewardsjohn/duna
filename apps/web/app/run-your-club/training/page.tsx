@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title:
     "Training OS — Program, practice, and drill planning for beach volleyball coaches",
   description:
-    "Plan programs, build practices, and create drills with natural-language prompts. Duna Training OS turns your coaching brief into structured sessions with contact estimates, animations, and a drill marketplace.",
+    "Describe a drill in plain language and Duna returns a structured, animated plan you can edit. Stack drills into practices, phase a season around your tournament calendar, and run it courtside in Duna HQ.",
   alternates: {
     canonical: "/run-your-club/training",
     types: { "text/markdown": "/run-your-club/training.md" },
@@ -14,8 +14,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Training OS — Duna for coaches",
     description:
-      "Turn your coaching brief into structured programs, daily practices, and animated drills. Share privately or publish to the marketplace.",
-    images: ["/media/brand/duna-training-os-hero-v1.webp"],
+      "Drill planning, practice planning, and season programs for beach volleyball coaches, with contact estimates and a drill marketplace.",
+    images: ["/media/brand/duna-club-hero-v1.webp"],
     type: "website",
   },
 };
@@ -29,7 +29,7 @@ const structuredData = {
       url: "https://duna.coach/run-your-club/training",
       name: "Training OS — Program, practice, and drill planning",
       description:
-        "Duna Training OS helps coaches plan programs, build practices, and create drills with natural-language prompts.",
+        "Duna Training OS covers drill creation from a plain-language description, practice assembly, season program planning, courtside execution, and drill sharing for beach volleyball coaches.",
       inLanguage: "en-US",
       isPartOf: { "@id": "https://duna.coach/run-your-club#webpage" },
       encoding: {
@@ -47,12 +47,14 @@ const structuredData = {
       operatingSystem: "Web",
       url: DUNA_HQ_URL,
       featureList: [
-        "Natural-language drill creation",
-        "Season and program planning",
+        "Drill creation from a plain-language description, reviewed by the coach before saving",
+        "Season program planning with training phases and milestone-aware load",
         "Practice plan builder with parallel court support",
-        "Contact and jump estimates per drill",
+        "Planning estimates for contacts and jumps per drill and per practice",
         "Court animation and visualization",
-        "Drill marketplace with organization licenses",
+        "Courtside Coach Mode with segment timer and post-practice debrief",
+        "Printable practice run sheet",
+        "Drill marketplace with per-organization licenses",
       ],
     },
   ],

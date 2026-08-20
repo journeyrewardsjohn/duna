@@ -7,13 +7,17 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
+  ClipboardCheck,
   Clock3,
   Dumbbell,
+  FileText,
   Gauge,
+  History,
   Layers3,
   Play,
   Sparkles,
   Target,
+  Timer,
   Trophy,
   UsersRound,
   Wand2,
@@ -230,21 +234,44 @@ const marketplaceOptions = [
     id: "private",
     title: "Private to organization",
     description:
-      "Keep drills, practices, and programs within your coaching staff. Build your library without sharing outside.",
+      "The default. Your staff sees the drill; nobody else does. Build the library your club actually runs without publishing any of it.",
   },
   {
     id: "free",
     title: "Publish free",
     description:
-      "Share your work with the coaching community. Other organizations can license and adapt your drill.",
+      "Put the drill in the shared library under your organization's name. Other clubs can run it and adapt it to their own practices.",
   },
   {
     id: "paid",
     title: "Publish paid",
     description:
-      "Set a price for an organization license. Coaches pay once and can adapt the drill to their programs.",
+      "Set the price. Coaches outside your organization see the setup and intent, but the steps, cues, and animation stay locked until they license it.",
   },
 ] as const;
+
+const runItFeatures: readonly [LucideIcon, string, string][] = [
+  [
+    Timer,
+    "Coach Mode",
+    "Open the plan courtside and run it. A segment timer moves you through the blocks, parallel courts sit side by side, and each drill's animation is one tap away.",
+  ],
+  [
+    FileText,
+    "Printed run sheet",
+    "Every practice plan prints. Hand a page to an assistant coach, or keep one in your bag for the days the phone stays in the car.",
+  ],
+  [
+    ClipboardCheck,
+    "Debrief while it's fresh",
+    "Mark each block completed, modified, or skipped. Record what the session actually cost and how hard it felt, so next week's plan starts from what happened.",
+  ],
+  [
+    History,
+    "Nothing is lost",
+    "Practice plans and programs keep their recent versions. Restore an earlier one and it becomes the current version—the history stays intact.",
+  ],
+];
 
 const capabilities: readonly [LucideIcon, string, string][] = [
   [
@@ -378,10 +405,10 @@ function DrillCard({
         </small>
       </header>
       <h3>{drill.title}</h3>
-      <p className={styles.drillCardPrompt}>
+      <div className={styles.drillCardPrompt}>
         <Sparkles aria-hidden size={14} />
-        <span>"{drill.prompt}"</span>
-      </p>
+        <blockquote>&ldquo;{drill.prompt}&rdquo;</blockquote>
+      </div>
       <div className={styles.drillCardMeta}>
         <span>
           <Clock3 aria-hidden size={14} />
@@ -571,10 +598,11 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           <strong>HQ</strong>
         </Link>
         <div>
-          <a href="#drills">Drills</a>
-          <a href="#practices">Practices</a>
-          <a href="#programs">Programs</a>
-          <a href="#marketplace">Marketplace</a>
+          <Link href="#drills">Drills</Link>
+          <Link href="#practices">Practices</Link>
+          <Link href="#programs">Programs</Link>
+          <Link href="#run-it">Courtside</Link>
+          <Link href="#marketplace">Marketplace</Link>
         </div>
         <a className={styles.productCta} href={hqHref}>
           Open Duna HQ
@@ -591,10 +619,10 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
               Duna builds the plan.
             </h1>
             <p>
-              Turn a coaching brief into structured programs, daily practices,
-              and animated drills. See expected contacts and load before anyone
-              touches a ball. Keep your work private, share it free, or sell
-              organization licenses.
+              Describe a drill in plain language and Duna returns a structured,
+              animated plan you can edit. Stack those drills into a practice,
+              then phase a full season around your tournament calendar. Nothing
+              publishes until you say so.
             </p>
             <div className={styles.heroActions}>
               <a className={styles.primaryButton} href={hqHref}>
@@ -608,14 +636,17 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           <div className={styles.heroVisual}>
             <div className={styles.heroPrompt}>
               <Sparkles aria-hidden size={18} />
-              <span>Coach brief</span>
-              <p>
-                "Three pairs. A server targets the seam, the receiving pair must
-                side out, then immediately solve a coach-entered transition
-                ball. Win both to score a wash point."
-              </p>
+              <span>What the coach typed</span>
+              <blockquote>
+                &ldquo;Three pairs. A server targets the seam, the receiving
+                pair must side out, then immediately solve a coach-entered
+                transition ball. Win both to score a wash point.&rdquo;
+              </blockquote>
             </div>
             <div className={styles.heroResult}>
+              <span className={styles.heroResultLabel}>
+                What Duna handed back
+              </span>
               <header>
                 <span>Ball Control</span>
                 <small>Build, then compete</small>
@@ -648,11 +679,16 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           </p>
         </div>
 
-        <div className={styles.drillExamples} data-reveal>
-          {drillExamples.map((drill, index) => (
-            <DrillCard drill={drill} expanded={index === 0} key={drill.id} />
-          ))}
-        </div>
+        <figure className={styles.drillExampleFigure} data-reveal>
+          <figcaption className={styles.eyebrow}>
+            Example drills, written the way a coach would say them
+          </figcaption>
+          <div className={styles.drillExamples}>
+            {drillExamples.map((drill, index) => (
+              <DrillCard drill={drill} expanded={index === 0} key={drill.id} />
+            ))}
+          </div>
+        </figure>
 
         <div className={styles.drillFeatures} data-reveal>
           <article>
@@ -726,6 +762,17 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
             </p>
           </article>
         </div>
+
+        <div className={styles.estimateNote} data-reveal>
+          <p>
+            <strong>About those numbers.</strong> Contact and load figures are
+            planning estimates derived from how each drill is paced&mdash;ball
+            count, live-play ratio, and how much of the work is in the air. They
+            are coach planning context, not a measurement of any athlete and not
+            a health prediction. Duna shows the assumptions behind every
+            estimate so you can disagree with them.
+          </p>
+        </div>
       </section>
 
       <section className={styles.programs} id="programs">
@@ -734,8 +781,10 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
           <h2>Plan the season. Duna phases the work.</h2>
           <p>
             Set your start date, end date, weekly schedule, and key tournaments.
-            Duna drafts a periodized program with phases, load curves, and focus
-            progressions. Assign practice plans to each session as you go.
+            Duna drafts the phases, tapers load around the dates that matter,
+            and writes every session onto the calendar with its focus area,
+            planned load, and the reason it sits where it does. Edit any
+            occurrence before you save.
           </p>
         </div>
 
@@ -772,14 +821,46 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
         </div>
       </section>
 
+      <section className={styles.runIt} id="run-it">
+        <div className={styles.sectionIntro} data-reveal>
+          <span className={styles.eyebrow}>Courtside</span>
+          <h2>A plan is only worth what happens on the sand.</h2>
+          <p>
+            The practice you built opens in Coach Mode with a running clock, so
+            you are coaching instead of managing a stopwatch. When it&rsquo;s
+            over, you record what actually happened&mdash;which is the part that
+            makes next week better.
+          </p>
+        </div>
+
+        <div className={styles.runItFeatures} data-reveal>
+          {runItFeatures.map(([Icon, title, description]) => (
+            <article key={title}>
+              <Icon aria-hidden size={20} />
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className={styles.runItNote} data-reveal>
+          <p>
+            Athletes see the practice on their phone and can log attendance and
+            how hard the session felt once it ends. Their answers sit next to
+            your plan, not on top of it.
+          </p>
+        </div>
+      </section>
+
       <section className={styles.marketplace} id="marketplace">
         <div className={styles.sectionIntro} data-reveal>
           <span className={styles.eyebrow}>Drill Marketplace</span>
           <h2>Keep it private, share it free, or sell it.</h2>
           <p>
-            Every drill, practice, and program starts private to your
-            organization. When you're ready, publish to the marketplace—free for
-            the community or paid with an organization license.
+            Every drill starts private to your organization. When you&rsquo;re
+            ready, publish it&mdash;free for the coaching community, or priced
+            as an organization license. Practice plans and programs stay inside
+            your organization; the marketplace lists drills only.
           </p>
         </div>
 
@@ -795,9 +876,15 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
 
         <div className={styles.marketplaceNote} data-reveal>
           <p>
-            <strong>Organization licenses.</strong> When a coach purchases a
-            paid drill, their entire organization can use and adapt it. One
-            purchase, unlimited staff access, no per-seat fees.
+            <strong>Licenses are per organization, not per coach.</strong> One
+            purchase covers your whole staff&mdash;no per-seat fees, no
+            re-buying when an assistant joins.
+          </p>
+          <p>
+            <strong>Where a drill came from matters.</strong> If you adapted
+            something, record the source and confirm you have the right to share
+            it. A web address on its own is not permission to republish someone
+            else&rsquo;s work.
           </p>
         </div>
       </section>

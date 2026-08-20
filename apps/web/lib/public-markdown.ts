@@ -114,14 +114,16 @@ export const staticPublicPages = [
     path: "/run-your-club/training",
     title: "Training OS — Program, practice, and drill planning",
     description:
-      "Plan programs, build practices, and create drills with natural-language prompts. Duna Training OS turns your coaching brief into structured sessions with contact estimates, animations, and a drill marketplace.",
+      "Describe a drill in plain language and Duna returns a structured, animated plan you can edit. Stack drills into practices, phase a season around your tournament calendar, run it courtside, and share drills through the marketplace.",
     sections: [
-      "Drill Studio: Describe a drill in natural language and Duna builds the structure, steps, coaching cues, contact estimates, and court animation. Review and edit before saving.",
-      "Practice Builder: Stack drills into a timeline with warmup, work blocks, and cooldown. Run courts in parallel when you have the space. Watch planned load and contact estimates update as you build.",
-      "Program Designer: Set your start date, end date, weekly schedule, and key tournaments. Duna drafts a periodized program with phases, load curves, and focus progressions.",
-      "Contact estimates: See expected touches and jumps per drill, per practice, and per week. Plan load, not just time.",
-      "Drill Marketplace: Keep drills private to your organization, share them free with the community, or sell organization licenses at your price.",
-      "Examples include serve-receive transition drills, block-defense call systems, setter release reps, parallel-court games, and multi-week competition build programs.",
+      "Drill Studio: Describe a drill in natural language and Duna drafts the structure, steps, coaching cues, scoring, tags, contact estimates, and a court animation. The coach reviews and edits before anything is saved.",
+      "Practice Builder: Assemble drills into a timed session with warmup, work blocks, and cool-down. Blocks can run on parallel courts. Planned load, focus balance, and contact estimates update as the plan changes. Practice plans are assembled by the coach rather than generated from a prompt.",
+      "Program Designer: Set the date window, weekly recurrence, and key milestones. Duna drafts training phases, tapers load around the dates that matter, and writes each session to the calendar with its phase, focus area, planned load, and rationale. Programs schedule sessions; they do not generate practice content for each session.",
+      "Contact estimates: Touch and jump figures are planning estimates derived from each drill's pacing assumptions. They are coach planning context, not a measurement of any athlete and not a health prediction. Duna shows the assumptions behind each estimate.",
+      "Courtside: A saved practice opens in Coach Mode with a segment timer, parallel-court view, and drill animations. Practice plans print as a run sheet. After the session, coaches record attendance, actual load, perceived effort, and whether each block was completed, modified, or skipped. Athletes can log attendance and perceived effort from the player app once the session ends.",
+      "Versioning: Practice plans and programs retain recent versions. Restoring an earlier version creates a new current version without overwriting history.",
+      "Drill Marketplace: Drills can stay private to an organization, publish free to the shared library, or publish as a paid organization license. A license covers the whole organization rather than individual coaches. Paid drills show a locked preview until licensed. Practice plans and programs are not listed on the marketplace.",
+      "Examples on the page are illustrative: a seam-to-transition wash drill, a block-and-adjust defensive drill, setter release reps, a 90-minute practice with a parallel-court block, and an eight-week competition build program.",
     ],
   },
   {

@@ -224,11 +224,12 @@
   text-transform: uppercase;
 }
 
-.heroPrompt p {
+.heroPrompt blockquote {
   color: var(--text-1);
   font-size: 1rem;
   font-style: italic;
   line-height: 1.55;
+  margin: 0;
 }
 
 .heroResult {
@@ -239,6 +240,14 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 1.25rem 1.5rem;
+}
+
+.heroResultLabel {
+  color: color-mix(in srgb, var(--text-2) 72%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .heroResult header {
@@ -294,16 +303,18 @@
 }
 
 .scrollCue svg {
-  animation: bounce 1.8s ease-in-out infinite;
+  animation: scroll-cue 1.8s ease-in-out infinite;
+  height: 18px;
+  width: 18px;
 }
 
-@keyframes bounce {
+@keyframes scroll-cue {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(6px);
+    transform: translateY(5px);
   }
 }
 
@@ -332,15 +343,34 @@
 }
 
 /* Drills */
+.drills,
+.practices,
+.programs,
+.runIt,
+.marketplace {
+  scroll-margin-top: 88px;
+}
+
 .drills {
   padding: 6rem 1.5rem;
+}
+
+.drillExampleFigure {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 3rem auto 0;
+  max-width: 78rem;
+}
+
+.drillExampleFigure figcaption {
+  justify-content: center;
+  text-align: center;
 }
 
 .drillExamples {
   display: grid;
   gap: 1.5rem;
-  margin: 3rem auto 0;
-  max-width: 78rem;
 }
 
 @media (min-width: 900px) {
@@ -404,11 +434,12 @@
   margin-top: 0.125rem;
 }
 
-.drillCardPrompt span {
+.drillCardPrompt blockquote {
   color: var(--text-2);
   font-size: 0.88rem;
   font-style: italic;
   line-height: 1.5;
+  margin: 0;
 }
 
 .drillCardMeta {
@@ -752,6 +783,25 @@
   line-height: 1.5;
 }
 
+.estimateNote {
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+  margin: 2.5rem auto 0;
+  max-width: 62rem;
+  padding: 1.5rem;
+}
+
+.estimateNote p {
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.estimateNote strong {
+  color: var(--text-1);
+}
+
 /* Programs */
 .programs {
   padding: 6rem 1.5rem;
@@ -981,9 +1031,70 @@
   line-height: 1.5;
 }
 
+/* Courtside */
+.runIt {
+  background: var(--surface-2);
+  padding: 6rem 1.5rem;
+}
+
+.runItFeatures {
+  display: grid;
+  gap: 1.5rem;
+  margin: 3rem auto 0;
+  max-width: 78rem;
+}
+
+@media (min-width: 620px) {
+  .runItFeatures {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1000px) {
+  .runItFeatures {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.runItFeatures article {
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+}
+
+.runItFeatures svg {
+  color: var(--hq-core);
+}
+
+.runItFeatures h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.runItFeatures p {
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.runItNote {
+  margin: 2rem auto 0;
+  max-width: 52rem;
+  text-align: center;
+}
+
+.runItNote p {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 /* Marketplace */
 .marketplace {
-  background: var(--surface-2);
   padding: 6rem 1.5rem;
 }
 
@@ -1030,8 +1141,11 @@
 }
 
 .marketplaceNote {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   margin: 2rem auto 0;
-  max-width: 48rem;
+  max-width: 52rem;
   text-align: center;
 }
 
@@ -1047,6 +1161,7 @@
 
 /* Capabilities */
 .capabilities {
+  background: var(--surface-2);
   padding: 6rem 1.5rem;
 }
 
@@ -1159,5 +1274,50 @@
 
   .productNav {
     grid-template-columns: 1fr auto;
+  }
+
+  .scrollCue {
+    display: none;
+  }
+
+  .practiceTimeline > header,
+  .programOverview > header {
+    gap: 1.25rem;
+  }
+
+  .practiceMeta,
+  .programMeta {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .practiceBlocks article {
+    grid-template-columns: 3.25rem 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .blockMeta {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollCue svg,
+  .page [data-reveal],
+  .productNav {
+    animation: none;
+    transition: none;
+  }
+
+  .page [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .productCta:hover,
+  .primaryButton:hover,
+  .secondaryButton:hover,
+  .primaryButton:hover svg {
+    transform: none;
   }
 }
