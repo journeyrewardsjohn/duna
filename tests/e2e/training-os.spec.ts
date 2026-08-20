@@ -19,283 +19,164 @@ async function getBox(locator: Locator) {
   return box!;
 }
 
-// Anchor navigation uses smooth scrolling, so measuring a heading's position
-// has to wait for the scroll to actually stop rather than for a fixed delay.
-async function waitForScrollToSettle(page: Page) {
-  await page.evaluate(() => {
-    const tracker = window as unknown as { __y?: number; __still?: number };
-    tracker.__y = undefined;
-    tracker.__still = 0;
-  });
-  await page.waitForFunction(
-    () => {
-      const tracker = window as unknown as { __y?: number; __still?: number };
-      const y = Math.round(window.scrollY);
-      tracker.__still = tracker.__y === y ? (tracker.__still ?? 0) + 1 : 0;
-      tracker.__y = y;
-      return (tracker.__still ?? 0) >= 3;
-    },
-    undefined,
-    { timeout: 10_000, polling: 100 },
-  );
-}
-
-test("training feature page explains each planning layer", async ({ page }) => {
+test("training page is one through-line of three plates", async ({ page }) => {
   await page.goto(trainingPath);
 
   await expect(
-    page.getByRole("heading", { level: 1, name: /Describe the drill/ }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Write the week. Run the court.",
+    }),
   ).toBeVisible();
 
   for (const name of [
-    "Tell Duna what you want. Review what it builds.",
-    "Stack drills into a session. See the load before you start.",
-    "Plan the season. Duna phases the work.",
-    "A plan is only worth what happens on the sand.",
-    "Keep it private, share it free, or sell it.",
+    "Say it once. Get a drill back.",
+    "Tuesday is ninety minutes.",
+    "Tuesday belongs to a season.",
+    "One drill is enough to begin.",
   ]) {
     await expect(page.getByRole("heading", { name })).toBeVisible();
   }
 
-  await expect(page.getByText("Seam-to-Transition Wash").first()).toBeVisible();
-  await expect(page.getByText("Sideout Under Pressure")).toBeVisible();
-  await expect(page.getByText("Fall Competition Build")).toBeVisible();
+  // Exactly one artifact per plate, and nothing more.
+  expect(await page.locator("figure").count()).toBe(3);
 
   await expectNoHorizontalOverflow(page);
 });
 
-test("parallel courts are labelled rather than only tinted", async ({
+test("the drill, the session, and the season are the same week", async ({
   page,
 }) => {
   await page.goto(trainingPath);
 
-  // A background tint alone cannot carry meaning, so the lane has to be named.
+  // The drill named in the first plate is the block in the second.
+  await expect(
+    page.getByText("Seam Serve to Transition", { exact: false }),
+  ).toHaveCount(2);
   await expect(page.getByText("Court 1 + Court 2")).toBeVisible();
+  await expect(page.getByText("Regional qualifier")).toBeVisible();
 });
 
-test("planning estimates are not presented as athlete measurement", async ({
+test("cut sections stay cut", async ({ page }) => {
+  await page.goto(trainingPath);
+
+  const body = (await page.locator("main").innerText()).toLowerCase();
+
+  // Execution and commerce belong to other surfaces.
+  for (const phrase of [
+    "courtside",
+    "coach mode",
+    "run sheet",
+    "marketplace",
+    "organization license",
+    "version history",
+  ]) {
+    expect(body, `page must not mention ${phrase}`).not.toContain(phrase);
+  }
+
+  // Internal model naming never reaches a public page. Matched on word
+  // boundaries so ordinary coaching words like "solve" are not false hits.
+  expect(body).not.toMatch(/\bsol\b/);
+  expect(body).not.toMatch(/gpt[\s-]?5/);
+
+  // No chapter nav, and no labelled example inventory.
+  await expect(
+    page.getByRole("navigation", { name: "Training OS navigation" }),
+  ).toHaveCount(0);
+  expect(body).not.toContain("example 1");
+  expect(body).not.toContain("illustrative example");
+});
+
+test("capability claims stay inside what the product does", async ({
   page,
 }) => {
   await page.goto(trainingPath);
 
   const body = (await page.locator("main").innerText()).toLowerCase();
 
+  // Plain language produces a drill. Practices are assembled by the coach.
+  expect(body).toContain("you build the session");
   expect(body).toContain("planning estimates");
-  expect(body).toContain("not a health prediction");
-
-  // Natural language produces drills only. Practices are assembled by the
-  // coach and programs come from the structured designer.
   expect(body).not.toContain("describe a practice");
   expect(body).not.toContain("describe a program");
-
-  // Only drills are listed on the marketplace.
-  expect(body).toContain("the marketplace lists drills only");
 });
 
-test("training page anchors clear the fixed product nav", async ({ page }) => {
+test("training page borrows the parent type scale", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const read = async (path: string, selector: string) => {
+    await page.goto(path);
+    return page.evaluate((target) => {
+      const element = document.querySelector(target);
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        family: style.fontFamily,
+      };
+    }, selector);
+  };
+
+  const parent = await read("/run-your-club", "h1");
+  const training = await read(trainingPath, "h1");
+
+  expect(parent).not.toBeNull();
+  expect(training).not.toBeNull();
+
+  // The display h1 must match the sibling rather than a smaller local scale.
+  expect(training!.fontSize).toBeCloseTo(parent!.fontSize, 0);
+  expect(training!.family).toBe(parent!.family);
+  expect(training!.fontSize).toBeGreaterThan(56);
+});
+
+test("chapters are left aligned", async ({ page }) => {
   await page.goto(trainingPath);
 
-  const nav = page.getByRole("navigation", { name: "Training OS navigation" });
-  const navLinksVisible = await nav
-    .getByRole("link", { name: "Drills" })
-    .isVisible();
+  const alignments = await page.evaluate(() =>
+    [...document.querySelectorAll("main h1, main h2")].map(
+      (heading) => getComputedStyle(heading).textAlign,
+    ),
+  );
 
-  // The middle links collapse on narrow viewports by design.
-  test.skip(!navLinksVisible, "product nav links are hidden at this width");
-
-  const targets = [
-    ["Drills", "Tell Duna what you want. Review what it builds."],
-    [
-      "Practices",
-      "Stack drills into a session. See the load before you start.",
-    ],
-    ["Programs", "Plan the season. Duna phases the work."],
-    ["Courtside", "A plan is only worth what happens on the sand."],
-    ["Marketplace", "Keep it private, share it free, or sell it."],
-  ] as const;
-
-  for (const [linkName, headingName] of targets) {
-    await nav.getByRole("link", { name: linkName }).click();
-    await waitForScrollToSettle(page);
-
-    const heading = page.getByRole("heading", { name: headingName });
-    await expect(heading).toBeVisible();
-
-    const navBox = await getBox(nav);
-    const headingBox = await getBox(heading);
-
-    expect(headingBox.y).toBeGreaterThanOrEqual(navBox.y + navBox.height - 1);
-  }
-});
-
-// HQ identity tokens are theme-invariant, so any pairing this page builds on
-// top of a theme-dependent surface has to be checked in both grounds.
-async function contrastRatio(page: Page, selector: string) {
-  return page.evaluate((target) => {
-    const channel = (value: number) => {
-      const ratio = value / 255;
-      return ratio <= 0.03928
-        ? ratio / 12.92
-        : Math.pow((ratio + 0.055) / 1.055, 2.4);
-    };
-    // Let the browser resolve whatever colour syntax it computed to, so
-    // color-mix() and color(srgb ...) are measured rather than mis-parsed.
-    const surface = document.createElement("canvas");
-    surface.width = 1;
-    surface.height = 1;
-    const context = surface.getContext("2d");
-    const parse = (value: string) => {
-      if (!context || !value) return null;
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = "#000";
-      context.fillStyle = value;
-      if (
-        context.fillStyle === "#000" &&
-        !/^(#000|black|rgb\(0, 0, 0\))/.test(value)
-      ) {
-        return null;
-      }
-      context.clearRect(0, 0, 1, 1);
-      context.fillRect(0, 0, 1, 1);
-      const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
-      return { r, g, b, a: a / 255 };
-    };
-    const luminance = (rgb: { r: number; g: number; b: number }) =>
-      0.2126 * channel(rgb.r) +
-      0.7152 * channel(rgb.g) +
-      0.0722 * channel(rgb.b);
-
-    const element = document.querySelector(target);
-    if (!element) return null;
-
-    const foreground = parse(getComputedStyle(element).color);
-    if (!foreground) return null;
-
-    let node: Element | null = element;
-    let background: { r: number; g: number; b: number } | null = null;
-    while (node) {
-      const parsed = parse(getComputedStyle(node).backgroundColor);
-      if (parsed && parsed.a > 0.95) {
-        background = parsed;
-        break;
-      }
-      node = node.parentElement;
-    }
-    if (!background) return null;
-
-    const light = Math.max(luminance(foreground), luminance(background));
-    const dark = Math.min(luminance(foreground), luminance(background));
-    return (light + 0.05) / (dark + 0.05);
-  }, selector);
-}
-
-test("training page stays readable in both grounds", async ({ page }) => {
-  const probes = [
-    '[class*="parallelBlock"] strong',
-    '[class*="blockLanes"]',
-    '[class*="drillCard"] header span',
-    '[class*="programPhases"] article > div em',
-    '[class*="estimateNote"] p',
-    '[class*="runItFeatures"] p',
-    '[class*="milestonePriority"]',
-  ];
-
-  for (const colorScheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme });
-    await page.goto(trainingPath);
-    await expect(page.locator("html")).toHaveAttribute(
-      "data-theme",
-      colorScheme,
-    );
-
-    for (const probe of probes) {
-      const ratio = await contrastRatio(page, probe);
-      expect(ratio, `${probe} in ${colorScheme}`).not.toBeNull();
-      expect(ratio!, `${probe} in ${colorScheme}`).toBeGreaterThanOrEqual(4.5);
-    }
+  expect(alignments.length).toBeGreaterThan(0);
+  for (const alignment of alignments) {
+    expect(["start", "left"]).toContain(alignment);
   }
 });
 
 test("training page content is server rendered, not motion gated", async ({
   request,
 }) => {
-  // Readers and agents that never run the reveal observer still need the whole
-  // chapter set, so no content may depend on motion to exist.
   const html = await (await request.get(trainingPath)).text();
 
-  expect(html).toContain("Describe the drill");
-  expect(html).toContain("A plan is only worth what happens on the sand.");
+  expect(html).toContain("Write the week. Run the court.");
+  expect(html).toContain("Seam Serve to Transition");
   expect(html).toContain("Court 1 + Court 2");
-  expect(html).toContain("About those numbers");
+  expect(html).toContain("Regional qualifier");
 
-  // The hidden reveal state is opt-in and only ever applied by script, so
-  // server-rendered markup is never delivered pre-hidden.
+  // The hidden reveal state is opt-in and only ever applied by script.
   expect(html).not.toContain('data-motion="ready"');
-});
-
-test("reduced motion still condenses the nav clear of anchors", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto(trainingPath);
-
-  const nav = page.getByRole("navigation", { name: "Training OS navigation" });
-  test.skip(
-    !(await nav.getByRole("link", { name: "Programs" }).isVisible()),
-    "product nav links are hidden at this width",
-  );
-
-  // Content stays visible: reduced motion opts out of the reveal entirely.
-  await expect(
-    page.getByRole("heading", {
-      name: "Plan the season. Duna phases the work.",
-    }),
-  ).toBeVisible();
-
-  await nav.getByRole("link", { name: "Programs" }).click();
-  await waitForScrollToSettle(page);
-
-  const heading = page.getByRole("heading", {
-    name: "Plan the season. Duna phases the work.",
-  });
-  const navBox = await getBox(nav);
-  const headingBox = await getBox(heading);
-
-  expect(headingBox.y).toBeGreaterThanOrEqual(navBox.y + navBox.height - 1);
 });
 
 test("interactive targets meet the documented minimums", async ({ page }) => {
   await page.goto(trainingPath);
 
-  const nav = page.getByRole("navigation", { name: "Training OS navigation" });
-  const isNarrow = (page.viewportSize()?.width ?? 1_280) <= 700;
-
-  // Scoped to the controls this page owns. The shared site header is checked
-  // where it lives.
+  const isNarrow = (page.viewportSize()?.width ?? 1_280) <= 736;
   const controls = [
-    page.getByRole("link", { name: /Start in Duna HQ/ }),
-    page.getByRole("link", { name: "See examples" }),
-    nav.getByRole("link", { name: "Open Duna HQ" }),
-    page.getByRole("link", { name: /Open Training OS/ }),
+    page.getByRole("link", { name: /Start free in Duna HQ/ }).first(),
+    page.getByRole("link", { name: "See all Duna HQ features" }),
   ];
 
   for (const control of controls) {
-    expect((await getBox(control)).height).toBeGreaterThanOrEqual(48);
-  }
-
-  if (isNarrow) {
-    // Primary mobile actions carry the larger minimum.
-    for (const name of [/Start in Duna HQ/, /Open Training OS/]) {
-      const box = await getBox(page.getByRole("link", { name }));
-      expect(box.height).toBeGreaterThanOrEqual(56);
-    }
+    const box = await getBox(control);
+    expect(box.height).toBeGreaterThanOrEqual(isNarrow ? 56 : 48);
   }
 });
 
-test("run-your-club links into the training feature page", async ({ page }) => {
+test("run-your-club links into the training page", async ({ page }) => {
   await page.goto("/run-your-club");
 
-  const promo = page.getByRole("link", { name: /Explore Training OS/ });
+  const promo = page.getByRole("link", { name: /See training planning/ });
   await expect(promo).toBeVisible();
   await expect(promo).toHaveAttribute("href", trainingPath);
 });
@@ -308,16 +189,23 @@ test("training markdown companion agrees with the page", async ({
   expect(response.headers()["content-type"]).toContain("markdown");
 
   const markdown = await response.text();
+  const lower = markdown.toLowerCase();
 
   expect(markdown).toContain(`https://duna.coach${trainingPath}`);
   expect(markdown).toContain(`https://duna.coach${trainingPath}.md`);
-  expect(markdown).toContain("Drill Studio");
-  expect(markdown).toContain("Practice Builder");
-  expect(markdown).toContain("Program Designer");
-  expect(markdown).toContain("not a health prediction");
-  expect(markdown).toContain(
-    "Practice plans and programs are not listed on the marketplace",
-  );
+  expect(lower).toContain("plain language");
+  expect(lower).toContain("assembles a timed session");
+  expect(lower).toContain("not a health prediction");
+
+  // The Markdown must lose the cut sections along with the page.
+  for (const phrase of [
+    "courtside",
+    "coach mode",
+    "marketplace",
+    "run sheet",
+  ]) {
+    expect(lower, `markdown must not mention ${phrase}`).not.toContain(phrase);
+  }
 });
 
 test("training page is discoverable through the public indexes", async ({
