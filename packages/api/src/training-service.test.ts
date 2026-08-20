@@ -10,6 +10,7 @@ import {
   estimateTrainingContacts,
   generateTrainingOccurrences,
   loadDemoTrainingWorkspace,
+  loadTrainingProgramEvents,
   loadPlayerTrainingWorkspace,
   normalizeTrainingTag,
   submitTrainingAthleteResponse,
@@ -17,6 +18,24 @@ import {
 } from "./training-service";
 
 describe("training schedule generation", () => {
+  it("loads a program calendar independently of the dashboard upcoming-event limit", async () => {
+    const now = new Date("2026-08-20T14:00:00.000Z");
+    const workspace = loadDemoTrainingWorkspace(demoOrganization.id, now);
+    const program = workspace.programs[0]!;
+    await expect(
+      loadTrainingProgramEvents({
+        organizationId: demoOrganization.id,
+        programId: program.id,
+        now,
+        demo: true,
+      }),
+    ).resolves.toEqual(
+      workspace.upcomingEvents.filter(
+        (event) => event.programId === program.id,
+      ),
+    );
+  });
+
   it("counts every Monday and Wednesday in a four-week program", () => {
     expect(
       countTrainingSessions({

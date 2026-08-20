@@ -596,6 +596,10 @@ export const createTrainingProgramInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
 });
 
+export const trainingProgramEventsInputSchema = z.object({
+  programId: z.string().uuid(),
+});
+
 export const updateTrainingProgramEventInputSchema = z.object({
   trainingEventId: z.string().uuid(),
   localDate: z.iso.date(),
