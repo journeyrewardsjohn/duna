@@ -1,9 +1,11 @@
 "use client";
 
-import type {
-  DraftTrainingProgramInput,
-  TrainingProgramDraft,
-  TrainingWeekday,
+import {
+  TRAINING_FOCUS_AREAS,
+  type DraftTrainingProgramInput,
+  type TrainingFocusArea,
+  type TrainingProgramDraft,
+  type TrainingWeekday,
 } from "@duna/api/training-contracts";
 import {
   ArrowRight,
@@ -15,6 +17,7 @@ import {
   Clock3,
   Lock,
   MapPin,
+  Pencil,
   Plane,
   Plus,
   RotateCcw,
@@ -26,7 +29,14 @@ import {
   WandSparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, useTransition, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
 import {
   generateTrainingProgramAction,
   saveTrainingProgramAction,
@@ -119,6 +129,7 @@ export function TrainingProgramDesigner({
   readonly timezone: string;
   readonly today: string;
 }) {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("Fall Competition Build");
   const [purpose, setPurpose] = useState(
@@ -152,12 +163,14 @@ export function TrainingProgramDesigner({
   });
   const [catalogItemId, setCatalogItemId] = useState("");
   const [draft, setDraft] = useState<TrainingProgramDraft>();
+  const [editingOccurrence, setEditingOccurrence] = useState<number>();
   const [notice, setNotice] = useState<{
     readonly status: "success" | "error";
     readonly message: string;
   }>();
   const [generating, startGenerating] = useTransition();
   const [saving, startSaving] = useTransition();
+  const saveIdempotencyKey = useRef(crypto.randomUUID());
   const objectives = objectivesText
     .split("\n")
     .map((value) => value.trim())
@@ -227,12 +240,44 @@ export function TrainingProgramDesigner({
     }));
   };
 
+  const renewSaveIdempotencyKey = () => {
+    saveIdempotencyKey.current = crypto.randomUUID();
+  };
+
+  const updateOccurrence = (
+    index: number,
+    patch: Partial<TrainingProgramDraft["occurrences"][number]>,
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+      const occurrences = current.occurrences.map(
+        (occurrence, occurrenceIndex) =>
+          occurrenceIndex === index ? { ...occurrence, ...patch } : occurrence,
+      );
+      return {
+        ...current,
+        occurrences,
+        scheduledSessionCount: occurrences.length,
+        plannedMinutes: occurrences.reduce(
+          (total, occurrence) => total + occurrence.durationMinutes,
+          0,
+        ),
+      };
+    });
+    renewSaveIdempotencyKey();
+    setNotice(undefined);
+  };
+
   const generate = () => {
     setNotice(undefined);
     startGenerating(async () => {
       const result = await generateTrainingProgramAction(brief);
       setNotice(result);
-      if (result.status === "success") setDraft(result.value);
+      if (result.status === "success") {
+        setDraft(result.value);
+        setEditingOccurrence(undefined);
+        renewSaveIdempotencyKey();
+      }
     });
   };
 
@@ -244,8 +289,12 @@ export function TrainingProgramDesigner({
         brief,
         draft,
         catalogItemId: catalogItemId || undefined,
+        idempotencyKey: saveIdempotencyKey.current,
       });
       setNotice(result);
+      if (result.status === "success") {
+        router.push(`/training/programs/${result.value.id}`);
+      }
     });
   };
 
@@ -734,49 +783,188 @@ export function TrainingProgramDesigner({
                 <section className="training-program-calendar-preview">
                   <header>
                     <div>
-                      <span className="hq-eyebrow">Every practice</span>
+                      <span className="hq-eyebrow">
+                        Editable practice calendar
+                      </span>
                       <h3>
                         {draft.scheduledSessionCount} sessions ·{" "}
-                        {draft.plannedMinutes / 60} hours
+                        {(draft.plannedMinutes / 60).toFixed(1)} hours
                       </h3>
                     </div>
-                    <small>Exact recurrence confirmed</small>
+                    <small>Review and edit every session</small>
                   </header>
+                  <p className="training-program-calendar-preview__help">
+                    Adjust the date, time, length, focus, load, and coaching
+                    intent for any practice. Your weekly rhythm remains the
+                    program default.
+                  </p>
                   <div>
-                    {draft.occurrences.map((occurrence, index) => (
-                      <article
-                        key={`${occurrence.localDate}-${occurrence.startsAt}`}
-                      >
-                        <time>
-                          <span>{formatDate(occurrence.localDate)}</span>
-                          <small>{occurrence.startsAt}</small>
-                        </time>
-                        <div>
-                          <span>{occurrence.phase}</span>
-                          <strong>{occurrence.title}</strong>
-                          <p>{occurrence.rationale}</p>
-                        </div>
-                        <aside>
-                          <small>Load</small>
-                          <strong>{occurrence.plannedLoad}</strong>
-                          <i>
-                            <b
-                              style={variableStyle(
-                                "--training-value",
-                                `${occurrence.plannedLoad}%`,
-                              )}
-                            />
-                          </i>
-                        </aside>
-                        <button
-                          aria-label={`Lock ${occurrence.title}`}
-                          type="button"
-                        >
-                          <Lock aria-hidden size={14} />
-                        </button>
-                        {index < draft.occurrences.length - 1 && <em />}
-                      </article>
-                    ))}
+                    {draft.occurrences.map((occurrence, index) => {
+                      const isEditing = editingOccurrence === index;
+                      return (
+                        <article key={`${index}-${occurrence.localDate}`}>
+                          <time>
+                            <span>{formatDate(occurrence.localDate)}</span>
+                            <small>{occurrence.startsAt}</small>
+                          </time>
+                          <div>
+                            <span>{occurrence.phase}</span>
+                            <strong>{occurrence.title}</strong>
+                            <p>{occurrence.rationale}</p>
+                          </div>
+                          <aside>
+                            <small>Load</small>
+                            <strong>{occurrence.plannedLoad}</strong>
+                            <i>
+                              <b
+                                style={variableStyle(
+                                  "--training-value",
+                                  `${occurrence.plannedLoad}%`,
+                                )}
+                              />
+                            </i>
+                          </aside>
+                          <button
+                            aria-expanded={isEditing}
+                            aria-label={`${isEditing ? "Close" : "Edit"} ${occurrence.title}`}
+                            className={isEditing ? "active" : undefined}
+                            onClick={() =>
+                              setEditingOccurrence((current) =>
+                                current === index ? undefined : index,
+                              )
+                            }
+                            type="button"
+                          >
+                            {isEditing ? (
+                              <Check aria-hidden size={15} />
+                            ) : (
+                              <Pencil aria-hidden size={15} />
+                            )}
+                            <span>{isEditing ? "Done" : "Edit"}</span>
+                          </button>
+                          {isEditing && (
+                            <section className="training-program-occurrence-editor">
+                              <label className="wide">
+                                <span>Practice title</span>
+                                <input
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      title: event.target.value,
+                                    })
+                                  }
+                                  value={occurrence.title}
+                                />
+                              </label>
+                              <label>
+                                <span>Date</span>
+                                <input
+                                  max={endDate}
+                                  min={startDate}
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      localDate: event.target.value,
+                                    })
+                                  }
+                                  type="date"
+                                  value={occurrence.localDate}
+                                />
+                              </label>
+                              <label>
+                                <span>Start time</span>
+                                <input
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      startsAt: event.target.value,
+                                    })
+                                  }
+                                  type="time"
+                                  value={occurrence.startsAt}
+                                />
+                              </label>
+                              <label>
+                                <span>Length</span>
+                                <select
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      durationMinutes: Number(
+                                        event.target.value,
+                                      ),
+                                    })
+                                  }
+                                  value={occurrence.durationMinutes}
+                                >
+                                  {[60, 75, 90, 105, 120, 150].map(
+                                    (minutes) => (
+                                      <option key={minutes} value={minutes}>
+                                        {minutes} minutes
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                              </label>
+                              <label>
+                                <span>Focus area</span>
+                                <select
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      focusArea: event.target
+                                        .value as TrainingFocusArea,
+                                    })
+                                  }
+                                  value={occurrence.focusArea}
+                                >
+                                  {TRAINING_FOCUS_AREAS.map((focus) => (
+                                    <option key={focus} value={focus}>
+                                      {focus}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="training-program-occurrence-editor__load">
+                                <span>
+                                  Estimated load · {occurrence.plannedLoad}
+                                </span>
+                                <input
+                                  max="100"
+                                  min="0"
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      plannedLoad: Number(event.target.value),
+                                    })
+                                  }
+                                  type="range"
+                                  value={occurrence.plannedLoad}
+                                />
+                              </label>
+                              <label>
+                                <span>Phase</span>
+                                <input
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      phase: event.target.value,
+                                    })
+                                  }
+                                  value={occurrence.phase}
+                                />
+                              </label>
+                              <label className="wide">
+                                <span>Coach rationale</span>
+                                <textarea
+                                  onChange={(event) =>
+                                    updateOccurrence(index, {
+                                      rationale: event.target.value,
+                                    })
+                                  }
+                                  rows={2}
+                                  value={occurrence.rationale}
+                                />
+                              </label>
+                            </section>
+                          )}
+                          {index < draft.occurrences.length - 1 && <em />}
+                        </article>
+                      );
+                    })}
                   </div>
                 </section>
                 {draft.warnings.length > 0 && (

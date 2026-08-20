@@ -566,18 +566,21 @@ export const trainingProgramDraftSchema = z.object({
       focusAreas: z.array(trainingFocusAreaSchema).min(1).max(4),
     }),
   ),
-  occurrences: z.array(
-    z.object({
-      localDate: z.iso.date(),
-      startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-      durationMinutes: z.number().int().positive(),
-      title: z.string(),
-      phase: z.string(),
-      focusArea: trainingFocusAreaSchema,
-      plannedLoad: z.number().int().min(0).max(100),
-      rationale: z.string(),
-    }),
-  ),
+  occurrences: z
+    .array(
+      z.object({
+        localDate: z.iso.date(),
+        startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        durationMinutes: z.number().int().min(15).max(720),
+        title: z.string().trim().min(2).max(180),
+        phase: z.string().trim().min(1).max(120),
+        focusArea: trainingFocusAreaSchema,
+        plannedLoad: z.number().int().min(0).max(100),
+        rationale: z.string().trim().min(2).max(2_000),
+      }),
+    )
+    .min(1)
+    .max(500),
   scheduledSessionCount: z.number().int().nonnegative(),
   plannedMinutes: z.number().int().nonnegative(),
   assumptions: z.array(z.string()),
@@ -590,6 +593,17 @@ export const createTrainingProgramInputSchema = z.object({
   brief: draftTrainingProgramInputSchema,
   draft: trainingProgramDraftSchema,
   catalogItemId: z.string().uuid().optional(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const updateTrainingProgramEventInputSchema = z.object({
+  trainingEventId: z.string().uuid(),
+  localDate: z.iso.date(),
+  startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  durationMinutes: z.number().int().min(15).max(720),
+  title: z.string().trim().min(2).max(180),
+  plannedLoad: z.number().int().min(0).max(100),
+  focusArea: trainingFocusAreaSchema.optional(),
   idempotencyKey: z.string().uuid(),
 });
 

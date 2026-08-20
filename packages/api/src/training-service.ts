@@ -46,6 +46,7 @@ import {
   trainingTagSchema,
   trainingWorkspaceSchema,
   touchEstimateInputSchema,
+  updateTrainingProgramEventInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
   type TrainingContactEstimate,
@@ -1972,6 +1973,15 @@ export async function loadTrainingWorkspace(input: {
     const program = row.programId
       ? programRows.find((candidate) => candidate.id === row.programId)
       : undefined;
+    const focusArea =
+      focusFromTagLabel(
+        row.focusAreaTagId ? tagLabelById.get(row.focusAreaTagId) : undefined,
+      ) ??
+      focusFromTagLabel(
+        typeof row.externalLoad.focusArea === "string"
+          ? row.externalLoad.focusArea
+          : undefined,
+      );
     return {
       id: row.id,
       ...(row.programId ? { programId: row.programId } : {}),
@@ -1984,17 +1994,7 @@ export async function loadTrainingWorkspace(input: {
       ...(plan
         ? { practicePlanId: plan.id, practicePlanTitle: plan.title }
         : {}),
-      ...(focusFromTagLabel(
-        row.focusAreaTagId ? tagLabelById.get(row.focusAreaTagId) : undefined,
-      )
-        ? {
-            focusArea: focusFromTagLabel(
-              row.focusAreaTagId
-                ? tagLabelById.get(row.focusAreaTagId)
-                : undefined,
-            ),
-          }
-        : {}),
+      ...(focusArea ? { focusArea } : {}),
       plannedLoad: row.plannedLoad,
       plannedIntensity: row.plannedIntensity,
       athleteCount: program?.athleteCount ?? 0,
@@ -2962,6 +2962,39 @@ export async function createTrainingPracticePlan(input: {
   return { id, versionId, status: "draft" };
 }
 
+export function validateTrainingProgramOccurrenceSchedule(
+  brief: Pick<DraftTrainingProgramInput, "startDate" | "endDate">,
+  occurrences: TrainingProgramDraft["occurrences"],
+): { readonly sessionCount: number; readonly plannedMinutes: number } {
+  const occurrenceKeys = new Set<string>();
+  for (const occurrence of occurrences) {
+    if (
+      occurrence.localDate < brief.startDate ||
+      occurrence.localDate > brief.endDate
+    ) {
+      throw new TrainingServiceError(
+        "INVALID_SCHEDULE",
+        "Every practice must stay inside the program date window.",
+      );
+    }
+    const key = `${occurrence.localDate}:${occurrence.startsAt}`;
+    if (occurrenceKeys.has(key)) {
+      throw new TrainingServiceError(
+        "INVALID_SCHEDULE",
+        "Each practice needs its own date and start time.",
+      );
+    }
+    occurrenceKeys.add(key);
+  }
+  return {
+    sessionCount: occurrences.length,
+    plannedMinutes: occurrences.reduce(
+      (total, occurrence) => total + occurrence.durationMinutes,
+      0,
+    ),
+  };
+}
+
 export async function createTrainingProgram(input: {
   readonly actor: ApiActor;
   readonly brief: unknown;
@@ -2991,25 +3024,11 @@ export async function createTrainingProgram(input: {
     idempotencyKey: input.idempotencyKey,
   });
   await assertCatalogProgramOwnership(organizationId, parsed.catalogItemId);
-  const expected = generateTrainingOccurrences(parsed.brief);
-  const expectedByKey = new Map(
-    expected.map((occurrence) => [
-      `${occurrence.localDate}:${occurrence.startsAt}`,
-      occurrence,
-    ]),
+  const schedule = validateTrainingProgramOccurrenceSchedule(
+    parsed.brief,
+    parsed.draft.occurrences,
   );
-  if (
-    parsed.draft.occurrences.length !== expected.length ||
-    parsed.draft.occurrences.some(
-      (occurrence) =>
-        !expectedByKey.has(`${occurrence.localDate}:${occurrence.startsAt}`),
-    )
-  ) {
-    throw new TrainingServiceError(
-      "INVALID_SCHEDULE",
-      "The program preview no longer matches its date window and recurrence. Generate it again before saving.",
-    );
-  }
+  const scheduledSessionCount = schedule.sessionCount;
   const id = crypto.randomUUID();
   const slug = `${slugify(parsed.brief.title)}-${id.slice(0, 6)}`;
   const database = getTransactionalDatabase();
@@ -3030,7 +3049,7 @@ export async function createTrainingProgram(input: {
       timezone: parsed.brief.timezone,
       recurrence: parsed.brief.recurrence,
       milestones: parsed.brief.milestones,
-      scheduledSessionCount: parsed.draft.occurrences.length,
+      scheduledSessionCount,
       defaultPracticeMinutes: parsed.brief.preferredPracticeMinutes,
       athleteCount: parsed.brief.athleteCount,
       createdByPersonId: input.actor.personId,
@@ -3082,7 +3101,10 @@ export async function createTrainingProgram(input: {
         Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1,
       );
       await transaction.insert(trainingEvents).values({
-        id: milestone.id,
+        // A milestone's client-side ID identifies the editable draft row. It
+        // must never become the persistent event ID: the same draft can be
+        // safely retried or reused to make another program.
+        id: crypto.randomUUID(),
         organizationId,
         programId: id,
         kind:
@@ -3133,7 +3155,146 @@ export async function createTrainingProgram(input: {
       createdAt: input.now,
     });
   });
-  return { id, sessionCount: parsed.draft.occurrences.length, status: "draft" };
+  return { id, sessionCount: scheduledSessionCount, status: "draft" };
+}
+
+export async function updateTrainingProgramEvent(input: {
+  readonly actor: ApiActor;
+  readonly trainingEventId: string;
+  readonly localDate: string;
+  readonly startsAt: string;
+  readonly durationMinutes: number;
+  readonly title: string;
+  readonly plannedLoad: number;
+  readonly focusArea?: TrainingFocusArea;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly programId: string }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot edit a program schedule.",
+    );
+  }
+  const parsed = updateTrainingProgramEventInputSchema.parse(input);
+  const database = getDatabase();
+  const [event] = await database
+    .select()
+    .from(trainingEvents)
+    .where(eq(trainingEvents.id, parsed.trainingEventId))
+    .limit(1);
+  if (!event || !event.programId) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program event is no longer available.",
+    );
+  }
+  if (event.organizationId !== organizationId) {
+    throw new TrainingServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "This program event belongs to another organization.",
+    );
+  }
+  if (event.status === "completed") {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "Completed sessions are historical records and cannot be rescheduled.",
+    );
+  }
+  const [program] = await database
+    .select({
+      id: trainingPrograms.id,
+      startDate: trainingPrograms.startDate,
+      endDate: trainingPrograms.endDate,
+      timezone: trainingPrograms.timezone,
+    })
+    .from(trainingPrograms)
+    .where(eq(trainingPrograms.id, event.programId))
+    .limit(1);
+  if (
+    !program ||
+    parsed.localDate < program.startDate ||
+    parsed.localDate > program.endDate
+  ) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "Keep this event inside the program date window.",
+    );
+  }
+  const startsAt = localTrainingTimeToUtc(
+    parsed.localDate,
+    parsed.startsAt,
+    program.timezone,
+  );
+  const endsAt = new Date(startsAt.getTime() + parsed.durationMinutes * 60_000);
+  // `focusArea` is optional because a coach can deliberately remove it.
+  // Remove the previous value before applying the optional new one so a
+  // "No focus area" choice does not silently retain stale reporting data.
+  const externalLoad = { ...(event.externalLoad ?? {}) };
+  delete externalLoad.focusArea;
+  if (parsed.focusArea) externalLoad.focusArea = parsed.focusArea;
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingEvents)
+      .set({
+        title: parsed.title,
+        startsAt,
+        endsAt,
+        timezone: program.timezone,
+        plannedLoad: parsed.plannedLoad,
+        plannedIntensity: clamp(Math.round(parsed.plannedLoad / 10), 1, 10),
+        externalLoad,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingEvents.id, event.id),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      );
+    await transaction
+      .update(trainingPrograms)
+      .set({ updatedAt: input.now })
+      .where(
+        and(
+          eq(trainingPrograms.id, program.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.event-updated",
+      entityType: "training-event",
+      entityId: event.id,
+      beforeHash: stableHash({
+        title: event.title,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        plannedLoad: event.plannedLoad,
+        externalLoad: event.externalLoad,
+      }),
+      afterHash: stableHash({
+        title: parsed.title,
+        startsAt,
+        endsAt,
+        plannedLoad: parsed.plannedLoad,
+        externalLoad,
+      }),
+      reason:
+        "Coach adjusted a program event while keeping the commercial offer and completed-session history intact.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: event.id, programId: event.programId };
 }
 
 export async function assignTrainingPracticePlan(input: {

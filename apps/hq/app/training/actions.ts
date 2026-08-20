@@ -7,6 +7,7 @@ import {
   recordTrainingOutcomeInputSchema,
   trainingDrillSchema,
   trainingProgramDraftSchema,
+  updateTrainingProgramEventInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
   type RecordTrainingOutcomeInput,
@@ -22,7 +23,14 @@ export type TrainingStudioResult<T> =
   | { readonly status: "error"; readonly message: string };
 
 function message(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
+  if (error instanceof Error && error.message.trim()) {
+    // Database drivers include full SQL and parameters in their error message.
+    // That is useful in logs, but it is neither safe nor useful coaching UI.
+    if (/failed query:|\b(insert|update|delete) into\b/i.test(error.message)) {
+      return "Duna could not save that change. Your existing program is still safe—refresh Training and try again.";
+    }
+    return error.message;
+  }
   return "Duna could not complete that training action.";
 }
 
@@ -126,6 +134,7 @@ export async function saveTrainingProgramAction(input: {
   readonly brief: DraftTrainingProgramInput;
   readonly draft: TrainingProgramDraft;
   readonly catalogItemId?: string;
+  readonly idempotencyKey: string;
 }): Promise<
   TrainingStudioResult<{ readonly id: string; readonly sessionCount: number }>
 > {
@@ -137,13 +146,42 @@ export async function saveTrainingProgramAction(input: {
       brief,
       draft,
       catalogItemId: input.catalogItemId,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: input.idempotencyKey,
     });
     revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.id}`);
     return {
       status: "success",
       message: `Program saved as a private draft with ${saved.sessionCount} practices.`,
       value: { id: saved.id, sessionCount: saved.sessionCount },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function updateTrainingProgramEventAction(input: {
+  readonly trainingEventId: string;
+  readonly localDate: string;
+  readonly startsAt: string;
+  readonly durationMinutes: number;
+  readonly title: string;
+  readonly plannedLoad: number;
+  readonly focusArea?: string;
+  readonly idempotencyKey: string;
+}): Promise<
+  TrainingStudioResult<{ readonly id: string; readonly programId: string }>
+> {
+  try {
+    const parsed = updateTrainingProgramEventInputSchema.parse(input);
+    const caller = await getServerCaller();
+    const saved = await caller.operator.updateTrainingProgramEvent(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.programId}`);
+    return {
+      status: "success",
+      message: "Program calendar updated.",
+      value: saved,
     };
   } catch (error) {
     return { status: "error", message: message(error) };

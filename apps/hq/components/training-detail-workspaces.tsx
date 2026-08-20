@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ClipboardList,
   FileDown,
-  Gauge,
   Layers3,
   Lock,
   Sparkles,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { TrainingProgramScheduleEditor } from "./training-program-schedule-editor";
 
 function variableStyle(name: string, value: string): CSSProperties {
   return { [name]: value } as CSSProperties;
@@ -37,13 +37,6 @@ function formatDate(value: string, timezone = "UTC"): string {
     year: "numeric",
     timeZone: timezone,
   }).format(date);
-}
-
-function eventTone(kind: TrainingEvent["kind"]): string {
-  if (kind === "tournament") return "milestone";
-  if (kind === "travel" || kind === "rest" || kind === "recovery")
-    return "recovery";
-  return "practice";
 }
 
 export function TrainingPracticePlanDetail({
@@ -295,52 +288,11 @@ export function TrainingProgramDetail({
       </section>
 
       <div className="training-detail__layout">
-        <section className="training-program-detail__calendar">
-          <header>
-            <span className="hq-eyebrow">Operational calendar</span>
-            <h2>Practice lives beside travel and competition.</h2>
-          </header>
-          <div>
-            {events.map((event) => (
-              <article className={eventTone(event.kind)} key={event.id}>
-                <time>
-                  <strong>
-                    {new Date(event.startsAt).toLocaleDateString("en-US", {
-                      day: "2-digit",
-                      timeZone: event.timezone,
-                    })}
-                  </strong>
-                  <span>
-                    {new Date(event.startsAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      timeZone: event.timezone,
-                    })}
-                  </span>
-                </time>
-                <i />
-                <div>
-                  <span>{event.kind.replace("-", " ")}</span>
-                  <h3>{event.title}</h3>
-                  <p>
-                    {new Date(event.startsAt).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                      timeZone: event.timezone,
-                    })}
-                    {event.practicePlanTitle
-                      ? ` · ${event.practicePlanTitle}`
-                      : ""}
-                  </p>
-                </div>
-                <aside>
-                  <Gauge aria-hidden size={15} />
-                  <strong>{event.plannedLoad}</strong>
-                  <small>load</small>
-                </aside>
-              </article>
-            ))}
-          </div>
-        </section>
+        <TrainingProgramScheduleEditor
+          events={events}
+          programEndDate={program.endDate}
+          programStartDate={program.startDate}
+        />
         <aside className="training-detail__rail">
           <section className="training-program-detail__objective">
             <span className="hq-eyebrow">Objectives</span>
