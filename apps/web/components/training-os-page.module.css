@@ -251,7 +251,7 @@
   background: var(--hq-tint);
   border-radius: 999px;
   color: var(--hq-ink);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.6rem;
 }
@@ -373,7 +373,7 @@
   background: var(--hq-tint);
   border-radius: 999px;
   color: var(--hq-ink);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.6rem;
 }
@@ -441,7 +441,7 @@
 
 .drillCardSection strong {
   color: var(--text-2);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -508,7 +508,7 @@
   background: var(--surface-2);
   border-radius: 999px;
   color: var(--text-2);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   padding: 0.25rem 0.6rem;
 }
 
@@ -607,7 +607,7 @@
 
 .practiceMeta small {
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -660,7 +660,7 @@
 
 .practiceBlocks article > div:first-of-type small {
   color: var(--text-2);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -811,7 +811,7 @@
 
 .programMeta small {
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -830,7 +830,7 @@
 .programPhases > strong {
   color: var(--text-2);
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   margin-bottom: 1rem;
@@ -882,7 +882,7 @@
   background: var(--hq-tint);
   border-radius: 999px;
   color: var(--hq-ink);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-style: normal;
   font-weight: 500;
   padding: 0.2rem 0.5rem;
@@ -901,7 +901,7 @@
 .programMilestones > strong {
   color: var(--text-2);
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   margin-bottom: 1rem;
