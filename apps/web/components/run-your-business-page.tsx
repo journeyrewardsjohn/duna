@@ -1325,7 +1325,10 @@ export function RunYourBusinessPage({
               touches a ball. Keep your work private, share it free, or sell
               organization licenses.
             </p>
-            <Link className={styles.secondaryButton} href="/run-your-club/training">
+            <Link
+              className={styles.secondaryButton}
+              href="/run-your-club/training"
+            >
               Explore Training OS <ArrowRight />
             </Link>
           </div>

@@ -3,7 +3,8 @@ import { TrainingOSPage } from "@/components/training-os-page";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 
 export const metadata: Metadata = {
-  title: "Training OS — Program, practice, and drill planning for beach volleyball coaches",
+  title:
+    "Training OS — Program, practice, and drill planning for beach volleyball coaches",
   description:
     "Plan programs, build practices, and create drills with natural-language prompts. Duna Training OS turns your coaching brief into structured sessions with contact estimates, animations, and a drill marketplace.",
   alternates: {
