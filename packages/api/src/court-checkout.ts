@@ -1172,8 +1172,7 @@ async function priceCourtCheckout(input: {
     (total, fee) => total + fee.amountMinor,
     0,
   );
-  const shareCount =
-    input.paymentMode === "split" ? input.invitedCount + 1 : 1;
+  const shareCount = input.paymentMode === "split" ? input.invitedCount + 1 : 1;
   const splitting = input.paymentMode === "split" && priced.totalMinor > 0;
   if (splitting && priced.totalMinor < shareCount) {
     throw new CourtCheckoutError(

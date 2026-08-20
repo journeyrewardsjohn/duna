@@ -782,9 +782,7 @@ function PlayerProfileModal({
               style={[
                 socialStyles.profileActionButtonText,
                 {
-                  color: primaryAction.active
-                    ? palette.aqua
-                    : palette.onAccent,
+                  color: primaryAction.active ? palette.aqua : palette.onAccent,
                 },
               ]}
             >

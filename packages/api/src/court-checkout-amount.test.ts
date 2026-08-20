@@ -81,9 +81,7 @@ describe("court checkout amount confirmation", () => {
   });
 
   it("keeps existing callers working when no amount is confirmed", () => {
-    expect(() =>
-      assertConfirmedCourtAmount({ quote: quote() }),
-    ).not.toThrow();
+    expect(() => assertConfirmedCourtAmount({ quote: quote() })).not.toThrow();
   });
 });
 

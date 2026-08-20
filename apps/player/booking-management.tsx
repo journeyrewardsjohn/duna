@@ -25,7 +25,9 @@ import {
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
 import { dunaWebUrl, type DunaApiClient } from "./mobile-api";
+import { MatchHostPanel } from "./match-host-panel";
 import { presentNativeEventPayment } from "./native-payments";
+import type { MobileSocialPalette } from "./player-social";
 import { shareBooking, type ShareableBookingDetails } from "./booking-share";
 
 export type ManagedBooking = {
@@ -145,12 +147,14 @@ export function BookingManagementModal({
   client,
   onClose,
   onUpdated,
+  palette,
   visible = true,
 }: {
   readonly booking?: ManagedBooking;
   readonly client?: DunaApiClient;
   readonly onClose: () => void;
   readonly onUpdated: () => Promise<void>;
+  readonly palette: MobileSocialPalette;
   readonly visible?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -949,6 +953,14 @@ export function BookingManagementModal({
                     ? " · only you can edit match details"
                     : " · you can invite or cover more players"}
                 </Text>
+                {booking.sessionId && (
+                  <MatchHostPanel
+                    client={client}
+                    onRosterChanged={() => void onUpdated()}
+                    palette={palette}
+                    pickupSessionId={booking.sessionId}
+                  />
+                )}
                 {booking.pickup.canReportAttendance &&
                   reportablePickupParticipants.length > 0 && (
                     <View style={styles.attendancePanel}>
