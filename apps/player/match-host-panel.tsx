@@ -1,15 +1,8 @@
 import type { PersonSummary } from "@duna/core";
-import { pickupInviteActionLabel, pickupInviteExplanation } from "@duna/core";
+import { pickupInviteActionLabel } from "@duna/core";
 import * as Crypto from "expo-crypto";
 import { useCallback, useEffect, useState } from "react";
-import {
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { DunaApiClient } from "./mobile-api";
 import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
@@ -186,7 +179,8 @@ export function MatchHostPanel({
       {invitePlayers.length > 0 && (
         <>
           <Text style={[styles.meta, { color: palette.muted }]}>
-            {pickupInviteExplanation(false)}
+            Each invited player accepts their own place and covers any match fee
+            themselves. Spots stay open until they accept.
           </Text>
           <Pressable
             accessibilityLabel={pickupInviteActionLabel(invitePlayers.length)}
@@ -334,8 +328,11 @@ export function MatchHostPanel({
   );
 }
 
-/** The host panel presented as its own scrollable sheet. */
-export function MatchHostSheet({
+/**
+ * Full-height host surface without a modal of its own, for callers that already
+ * own a modal and can swap their content.
+ */
+export function MatchHostView({
   client,
   matchTitle,
   onClose,
@@ -351,57 +348,50 @@ export function MatchHostSheet({
   readonly pickupSessionId: string;
 }) {
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="pageSheet"
-      visible
+    <SafeAreaView
+      edges={["top", "bottom"]}
+      style={[styles.sheet, { backgroundColor: palette.canvas }]}
     >
-      <SafeAreaView
-        edges={["top", "bottom"]}
-        style={[styles.sheet, { backgroundColor: palette.canvas }]}
+      <View
+        style={[
+          styles.sheetHeader,
+          { borderBottomColor: rgba(palette.overlayRgb, 0.1) },
+        ]}
       >
-        <View
-          style={[
-            styles.sheetHeader,
-            { borderBottomColor: rgba(palette.overlayRgb, 0.1) },
-          ]}
-        >
-          <View style={styles.flex}>
-            <Text style={[styles.eyebrow, { color: palette.aqua }]}>
-              MATCH HOSTING
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={[styles.title, { color: palette.bone }]}
-            >
-              {matchTitle}
-            </Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Close match hosting"
-            accessibilityRole="button"
-            onPress={onClose}
-            style={styles.sheetClose}
+        <View style={styles.flex}>
+          <Text style={[styles.eyebrow, { color: palette.aqua }]}>
+            MATCH HOSTING
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.title, { color: palette.bone }]}
           >
-            <Text style={[styles.sheetCloseText, { color: palette.bone }]}>
-              ×
-            </Text>
-          </Pressable>
+            {matchTitle}
+          </Text>
         </View>
-        <ScrollView
-          contentContainerStyle={styles.sheetContent}
-          showsVerticalScrollIndicator={false}
+        <Pressable
+          accessibilityLabel="Close match hosting"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.sheetClose}
         >
-          <MatchHostPanel
-            client={client}
-            onRosterChanged={onRosterChanged}
-            palette={palette}
-            pickupSessionId={pickupSessionId}
-          />
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+          <Text style={[styles.sheetCloseText, { color: palette.bone }]}>
+            ×
+          </Text>
+        </Pressable>
+      </View>
+      <ScrollView
+        contentContainerStyle={styles.sheetContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <MatchHostPanel
+          client={client}
+          onRosterChanged={onRosterChanged}
+          palette={palette}
+          pickupSessionId={pickupSessionId}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

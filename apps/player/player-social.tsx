@@ -969,18 +969,8 @@ export function PlayerPickerModal({
   const profileSelected = profilePerson
     ? selectedIds.has(profilePerson.id)
     : false;
-  /**
-   * Presented as its own sheet stacked over the picker. Swapping the picker out
-   * for the profile left the profile without a modal host, which rendered it
-   * inline underneath whatever screen was behind the picker.
-   */
-  const profileSheet = profilePerson ? (
-    <PlayerProfileModal
-      onClose={() => setProfilePerson(undefined)}
-      palette={palette}
-      person={profilePerson}
-      presentationStyle="pageSheet"
-      primaryAction={{
+  const profileAction: PlayerProfilePrimaryAction | undefined = profilePerson
+    ? {
         label: "Add Player",
         activeLabel: "Added · Remove player",
         active: profileSelected,
@@ -999,9 +989,35 @@ export function PlayerPickerModal({
           }
           setProfilePerson(undefined);
         },
-      }}
-    />
-  ) : null;
+      }
+    : undefined;
+  /**
+   * The profile needs a modal host. Returning it bare left it rendering inline
+   * beneath whatever screen sat behind the picker. When this picker owns a
+   * modal the profile stacks on top of it; when a parent owns the modal the
+   * profile takes over that host's content instead of opening a second one.
+   */
+  if (embedded && profilePerson) {
+    return (
+      <PlayerProfileModal
+        embedded
+        onClose={() => setProfilePerson(undefined)}
+        palette={palette}
+        person={profilePerson}
+        primaryAction={profileAction}
+      />
+    );
+  }
+  const profileSheet =
+    !embedded && profilePerson ? (
+      <PlayerProfileModal
+        onClose={() => setProfilePerson(undefined)}
+        palette={palette}
+        person={profilePerson}
+        presentationStyle="pageSheet"
+        primaryAction={profileAction}
+      />
+    ) : null;
 
   const content = (
     <SafeAreaView
@@ -1339,14 +1355,7 @@ export function PlayerPickerModal({
       </View>
     </SafeAreaView>
   );
-  if (embedded) {
-    return (
-      <>
-        {content}
-        {profileSheet}
-      </>
-    );
-  }
+  if (embedded) return content;
   return (
     <Modal
       animationType="slide"

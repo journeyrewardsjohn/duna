@@ -93,7 +93,7 @@ import {
   BookingManagementModal,
   type ManagedBooking,
 } from "./booking-management";
-import { MatchHostSheet } from "./match-host-panel";
+import { MatchHostView } from "./match-host-panel";
 import {
   BookingConfirmationView,
   type BookingReceiptRow,
@@ -5026,13 +5026,25 @@ function VenueBookingModal({
                               )}
                           </>
                         ) : (
-                          <Text style={styles.rowMeta}>
-                            {mode === "preview"
-                              ? "Sign in to see your price for this court."
-                              : quoteLoading
-                                ? "Confirming your price for this court…"
-                                : "Duna could not confirm a price for this court yet."}
-                          </Text>
+                          <>
+                            {listedMinor > 0 && (
+                              <View style={styles.checkoutPriceRow}>
+                                <Text style={styles.rowMeta}>
+                                  Venue lists this slot at
+                                </Text>
+                                <Text style={styles.checkoutPriceValue}>
+                                  {formatMoney(listedMinor, listedCurrency)}
+                                </Text>
+                              </View>
+                            )}
+                            <Text style={styles.rowMeta}>
+                              {mode === "preview"
+                                ? "Sign in to see your own price, including any member rate or Duna Plus benefit."
+                                : quoteLoading
+                                  ? "Confirming your price for this court…"
+                                  : "Duna could not confirm your price for this court yet."}
+                            </Text>
+                          </>
                         )}
                       </View>
                       <View style={styles.checkoutSection}>
@@ -8492,7 +8504,6 @@ function DiscoverScreen({
       <PickupModal
         initialCourtBooking={hostSeed}
         onClose={() => setHostSeed(undefined)}
-        onCreated={() => setHostSeed(undefined)}
         visible={Boolean(hostSeed)}
       />
       <ProTourModal
@@ -9214,10 +9225,7 @@ function PlansScreen({
       </ScrollView>
       <PickupModal
         onClose={() => setShowHost(false)}
-        onCreated={(title) => {
-          setHostedTitle(title);
-          setShowHost(false);
-        }}
+        onCreated={(title) => setHostedTitle(title)}
         onReserveCourtVenue={(request) => {
           setShowHost(false);
           onReserveCourtVenue(request);
@@ -13080,7 +13088,7 @@ function PickupModal({
 }: {
   readonly visible: boolean;
   readonly onClose: () => void;
-  readonly onCreated: (title: string) => void;
+  readonly onCreated?: (title: string) => void;
   readonly initialCourtBooking?: HostedMatchSeed;
   readonly onReserveCourtVenue?: (request: CourtBookingRequest) => void;
 }) {
@@ -13358,7 +13366,7 @@ function PickupModal({
         idempotencyKey: Crypto.randomUUID(),
       });
       await refresh();
-      onCreated(event.title);
+      onCreated?.(event.title);
       /**
        * The flow used to reset to step one here, which read as if the match had
        * not been created. It now ends on a receipt the host can act from.
@@ -13421,7 +13429,16 @@ function PickupModal({
         visible={visible}
       >
         {published ? (
-          <>
+          hostSheetOpen ? (
+            <MatchHostView
+              client={client}
+              matchTitle={published.title}
+              onClose={() => setHostSheetOpen(false)}
+              onRosterChanged={() => void refresh()}
+              palette={colors}
+              pickupSessionId={published.pickupSessionId}
+            />
+          ) : (
             <BookingConfirmationView
               body="Your match is live in Duna. Invite players and review anyone who asks to join."
               details={published.details}
@@ -13433,17 +13450,7 @@ function PickupModal({
               receipt={published.receipt}
               title={`${published.title} is on.`}
             />
-            {hostSheetOpen && (
-              <MatchHostSheet
-                client={client}
-                matchTitle={published.title}
-                onClose={() => setHostSheetOpen(false)}
-                onRosterChanged={() => void refresh()}
-                palette={colors}
-                pickupSessionId={published.pickupSessionId}
-              />
-            )}
-          </>
+          )
         ) : showPlayerPicker ? (
           <PlayerPickerModal
             embedded
@@ -15031,10 +15038,6 @@ function DunaApp() {
               <PickupModal
                 initialCourtBooking={organizationHostSeed}
                 onClose={() => {
-                  setCreateMatchOpen(false);
-                  setOrganizationHostSeed(undefined);
-                }}
-                onCreated={() => {
                   setCreateMatchOpen(false);
                   setOrganizationHostSeed(undefined);
                 }}
