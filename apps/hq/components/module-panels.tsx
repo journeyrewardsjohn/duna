@@ -69,6 +69,12 @@ const moduleCopy: Record<
     description:
       "Roles, availability, sessions, compensation setup, personal goals, and organization-controlled worker classifications.",
   },
+  training: {
+    eyebrow: "Coaching + athlete development",
+    title: "Training",
+    description:
+      "Programs, practice plans, drills, workload, and the athlete handoff in one connected coaching workspace.",
+  },
   products: {
     eyebrow: "What your organization offers",
     title: "Products",

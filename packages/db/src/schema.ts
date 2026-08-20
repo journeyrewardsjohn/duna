@@ -215,6 +215,41 @@ export const catalogStatusEnum = pgEnum("catalog_status", [
   "active",
   "archived",
 ]);
+export const trainingProgramStatusEnum = pgEnum("training_program_status", [
+  "draft",
+  "active",
+  "completed",
+  "archived",
+]);
+export const trainingEventKindEnum = pgEnum("training_event_kind", [
+  "practice",
+  "tournament",
+  "travel",
+  "recovery",
+  "strength",
+  "conditioning",
+  "plyometrics",
+  "film",
+  "meeting",
+  "assessment",
+  "rest",
+]);
+export const trainingEventStatusEnum = pgEnum("training_event_status", [
+  "planned",
+  "ready",
+  "completed",
+  "cancelled",
+]);
+export const trainingContentStatusEnum = pgEnum("training_content_status", [
+  "draft",
+  "review",
+  "published",
+  "archived",
+]);
+export const trainingVisibilityEnum = pgEnum("training_visibility", [
+  "organization",
+  "public",
+]);
 export const catalogAudienceEnum = pgEnum("catalog_audience", [
   "everyone",
   "member",
@@ -9095,6 +9130,767 @@ export const reports = pgTable("reports", {
   createdAt,
   updatedAt,
 });
+
+// Training operating system: reusable drills and practice plans remain
+// separate from the finite, scheduled program that delivers them. Immutable
+// versions preserve exactly what a coach published and what an athlete saw.
+export const trainingTags = pgTable(
+  "training_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    slug: varchar("slug", { length: 80 }).notNull(),
+    label: varchar("label", { length: 120 }).notNull(),
+    aliases: text("aliases")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    category: varchar("category", { length: 24 }).notNull().default("custom"),
+    isFocusArea: boolean("is_focus_area").notNull().default(false),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_tag_platform_slug_unique")
+      .on(table.slug)
+      .where(sql`${table.organizationId} IS NULL`),
+    uniqueIndex("training_tag_org_slug_unique")
+      .on(table.organizationId, table.slug)
+      .where(sql`${table.organizationId} IS NOT NULL`),
+    index("training_tag_org_category_idx").on(
+      table.organizationId,
+      table.category,
+    ),
+    check(
+      "training_tag_category_valid",
+      sql`${table.category} IN ('focus', 'skill', 'context', 'custom')`,
+    ),
+  ],
+);
+
+export const trainingDrills = pgTable(
+  "training_drills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Null is reserved for Duna-curated public library content. Organization
+    // authors always retain their tenant ownership even when sharing publicly.
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    slug: varchar("slug", { length: 96 }).notNull(),
+    title: text("title").notNull(),
+    status: trainingContentStatusEnum("status").notNull().default("draft"),
+    visibility: trainingVisibilityEnum("visibility")
+      .notNull()
+      .default("organization"),
+    activityKind: varchar("activity_kind", { length: 24 })
+      .notNull()
+      .default("drill"),
+    discipline: disciplineEnum("discipline").notNull().default("beach-2s"),
+    skillLevel: varchar("skill_level", { length: 32 })
+      .notNull()
+      .default("all-levels"),
+    mode: varchar("mode", { length: 24 }).notNull().default("cooperative"),
+    purpose: text("purpose").notNull(),
+    targetAudience: text("target_audience").notNull(),
+    summary: text("summary").notNull(),
+    descriptionMarkdown: text("description_markdown").notNull(),
+    minPlayers: integer("min_players").notNull().default(1),
+    maxPlayers: integer("max_players").notNull().default(12),
+    recommendedPlayers: integer("recommended_players").notNull().default(4),
+    durationMinutes: integer("duration_minutes").notNull().default(10),
+    intensity: integer("intensity").notNull().default(5),
+    ballCount: integer("ball_count").notNull().default(1),
+    equipment: text("equipment")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    setup: jsonb("setup")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    choreography: jsonb("choreography")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    scoring: jsonb("scoring")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    coaching: jsonb("coaching")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    estimateModel: jsonb("estimate_model")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    touchEstimateLow: integer("touch_estimate_low").notNull().default(0),
+    touchEstimateTypical: integer("touch_estimate_typical")
+      .notNull()
+      .default(0),
+    touchEstimateHigh: integer("touch_estimate_high").notNull().default(0),
+    jumpEstimateTypical: integer("jump_estimate_typical").notNull().default(0),
+    sourceName: text("source_name"),
+    sourceUrl: text("source_url"),
+    sourceLicense: text("source_license"),
+    sourceAttribution: text("source_attribution"),
+    currentVersionId: uuid("current_version_id"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    reviewedByPersonId: uuid("reviewed_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    reviewedAt: timestamp("reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    archivedAt: timestamp("archived_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_drill_platform_slug_unique")
+      .on(table.slug)
+      .where(sql`${table.organizationId} IS NULL`),
+    uniqueIndex("training_drill_org_slug_unique")
+      .on(table.organizationId, table.slug)
+      .where(sql`${table.organizationId} IS NOT NULL`),
+    index("training_drill_library_idx").on(
+      table.visibility,
+      table.status,
+      table.activityKind,
+    ),
+    index("training_drill_org_updated_idx").on(
+      table.organizationId,
+      table.updatedAt,
+    ),
+    check(
+      "training_drill_activity_valid",
+      sql`${table.activityKind} IN ('drill', 'warmup', 'cool-down', 'conditioning', 'strength', 'plyometrics', 'film', 'meeting', 'recovery', 'assessment', 'break', 'transition')`,
+    ),
+    check(
+      "training_drill_mode_valid",
+      sql`${table.mode} IN ('cooperative', 'competitive', 'hybrid', 'individual')`,
+    ),
+    check(
+      "training_drill_players_valid",
+      sql`${table.minPlayers} > 0 AND ${table.maxPlayers} >= ${table.minPlayers} AND ${table.recommendedPlayers} BETWEEN ${table.minPlayers} AND ${table.maxPlayers}`,
+    ),
+    check(
+      "training_drill_duration_valid",
+      sql`${table.durationMinutes} BETWEEN 1 AND 480`,
+    ),
+    check(
+      "training_drill_intensity_valid",
+      sql`${table.intensity} BETWEEN 1 AND 10`,
+    ),
+    check(
+      "training_drill_estimate_valid",
+      sql`${table.touchEstimateLow} >= 0 AND ${table.touchEstimateTypical} >= ${table.touchEstimateLow} AND ${table.touchEstimateHigh} >= ${table.touchEstimateTypical} AND ${table.jumpEstimateTypical} >= 0`,
+    ),
+  ],
+);
+
+export const trainingDrillVersions = pgTable(
+  "training_drill_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => trainingDrills.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").notNull().$type<Record<string, unknown>>(),
+    changeNote: text("change_note"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("training_drill_version_unique").on(
+      table.drillId,
+      table.version,
+    ),
+    index("training_drill_version_created_idx").on(
+      table.drillId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const trainingDrillTags = pgTable(
+  "training_drill_tags",
+  {
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => trainingDrills.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => trainingTags.id, { onDelete: "cascade" }),
+    isFocusArea: boolean("is_focus_area").notNull().default(false),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.drillId, table.tagId] }),
+    index("training_drill_tag_tag_idx").on(table.tagId, table.drillId),
+    uniqueIndex("training_drill_one_focus_unique")
+      .on(table.drillId)
+      .where(sql`${table.isFocusArea} = true`),
+  ],
+);
+
+export const trainingPracticePlans = pgTable(
+  "training_practice_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    slug: varchar("slug", { length: 96 }).notNull(),
+    title: text("title").notNull(),
+    purpose: text("purpose").notNull(),
+    targetAudience: text("target_audience").notNull(),
+    status: trainingContentStatusEnum("status").notNull().default("draft"),
+    visibility: trainingVisibilityEnum("visibility")
+      .notNull()
+      .default("organization"),
+    durationMinutes: integer("duration_minutes").notNull().default(90),
+    plannedLoad: integer("planned_load").notNull().default(50),
+    currentVersionId: uuid("current_version_id"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    archivedAt: timestamp("archived_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_plan_org_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("training_plan_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "training_plan_duration_valid",
+      sql`${table.durationMinutes} BETWEEN 1 AND 720`,
+    ),
+    check(
+      "training_plan_load_valid",
+      sql`${table.plannedLoad} BETWEEN 0 AND 100`,
+    ),
+  ],
+);
+
+export const trainingPracticePlanVersions = pgTable(
+  "training_practice_plan_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    practicePlanId: uuid("practice_plan_id")
+      .notNull()
+      .references(() => trainingPracticePlans.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").notNull().$type<Record<string, unknown>>(),
+    changeNote: text("change_note"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("training_plan_version_unique").on(
+      table.practicePlanId,
+      table.version,
+    ),
+    index("training_plan_version_created_idx").on(
+      table.practicePlanId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const trainingPracticePlanBlocks = pgTable(
+  "training_practice_plan_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    practicePlanVersionId: uuid("practice_plan_version_id")
+      .notNull()
+      .references(() => trainingPracticePlanVersions.id, {
+        onDelete: "cascade",
+      }),
+    drillVersionId: uuid("drill_version_id").references(
+      () => trainingDrillVersions.id,
+      { onDelete: "restrict" },
+    ),
+    sequence: integer("sequence").notNull(),
+    lane: varchar("lane", { length: 48 }).notNull().default("all"),
+    title: text("title").notNull(),
+    kind: varchar("kind", { length: 24 }).notNull().default("drill"),
+    startsAtMinute: integer("starts_at_minute").notNull().default(0),
+    durationMinutes: integer("duration_minutes").notNull(),
+    transitionMinutes: integer("transition_minutes").notNull().default(0),
+    intensity: integer("intensity").notNull().default(5),
+    plannedLoad: integer("planned_load").notNull().default(50),
+    instructionsMarkdown: text("instructions_markdown"),
+    estimates: jsonb("estimates")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    locked: boolean("locked").notNull().default(false),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("training_plan_block_sequence_unique").on(
+      table.practicePlanVersionId,
+      table.lane,
+      table.sequence,
+    ),
+    index("training_plan_block_timeline_idx").on(
+      table.practicePlanVersionId,
+      table.startsAtMinute,
+    ),
+    check(
+      "training_plan_block_time_valid",
+      sql`${table.startsAtMinute} >= 0 AND ${table.durationMinutes} > 0 AND ${table.transitionMinutes} >= 0`,
+    ),
+    check(
+      "training_plan_block_load_valid",
+      sql`${table.intensity} BETWEEN 1 AND 10 AND ${table.plannedLoad} BETWEEN 0 AND 100`,
+    ),
+  ],
+);
+
+export const trainingPracticePlanTags = pgTable(
+  "training_practice_plan_tags",
+  {
+    practicePlanId: uuid("practice_plan_id")
+      .notNull()
+      .references(() => trainingPracticePlans.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => trainingTags.id, { onDelete: "cascade" }),
+    isFocusArea: boolean("is_focus_area").notNull().default(false),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.practicePlanId, table.tagId] }),
+    uniqueIndex("training_plan_one_focus_unique")
+      .on(table.practicePlanId)
+      .where(sql`${table.isFocusArea} = true`),
+  ],
+);
+
+export const trainingPrograms = pgTable(
+  "training_programs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id").references(() => catalogItems.id, {
+      onDelete: "set null",
+    }),
+    slug: varchar("slug", { length: 96 }).notNull(),
+    title: text("title").notNull(),
+    purpose: text("purpose").notNull(),
+    targetAudience: text("target_audience").notNull(),
+    objectives: text("objectives")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    approach: text("approach").notNull(),
+    status: trainingProgramStatusEnum("status").notNull().default("draft"),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }).notNull(),
+    timezone: varchar("timezone", { length: 64 }).notNull(),
+    recurrence: jsonb("recurrence")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    milestones: jsonb("milestones")
+      .notNull()
+      .$type<readonly Record<string, unknown>[]>()
+      .default([]),
+    scheduledSessionCount: integer("scheduled_session_count")
+      .notNull()
+      .default(0),
+    defaultPracticeMinutes: integer("default_practice_minutes")
+      .notNull()
+      .default(90),
+    athleteCount: integer("athlete_count").notNull().default(1),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    activatedAt: timestamp("activated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    archivedAt: timestamp("archived_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_program_org_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("training_program_org_dates_idx").on(
+      table.organizationId,
+      table.startDate,
+      table.endDate,
+    ),
+    index("training_program_catalog_idx")
+      .on(table.catalogItemId)
+      .where(sql`${table.catalogItemId} IS NOT NULL`),
+    check(
+      "training_program_dates_valid",
+      sql`${table.endDate} >= ${table.startDate}`,
+    ),
+    check(
+      "training_program_session_count_valid",
+      sql`${table.scheduledSessionCount} >= 0`,
+    ),
+    check(
+      "training_program_defaults_valid",
+      sql`${table.defaultPracticeMinutes} BETWEEN 1 AND 720 AND ${table.athleteCount} > 0`,
+    ),
+  ],
+);
+
+export const trainingProgramParticipants = pgTable(
+  "training_program_participants",
+  {
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => trainingPrograms.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 24 }).notNull().default("athlete"),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    position: varchar("position", { length: 48 }),
+    joinedAt: timestamp("joined_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.programId, table.personId] }),
+    index("training_program_participant_person_idx").on(
+      table.personId,
+      table.status,
+    ),
+    check(
+      "training_program_participant_role_valid",
+      sql`${table.role} IN ('athlete', 'coach', 'assistant', 'director')`,
+    ),
+    check(
+      "training_program_participant_status_valid",
+      sql`${table.status} IN ('invited', 'active', 'paused', 'completed', 'removed')`,
+    ),
+  ],
+);
+
+export const trainingEvents = pgTable(
+  "training_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    programId: uuid("program_id").references(() => trainingPrograms.id, {
+      onDelete: "cascade",
+    }),
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    practicePlanVersionId: uuid("practice_plan_version_id").references(
+      () => trainingPracticePlanVersions.id,
+      { onDelete: "set null" },
+    ),
+    kind: trainingEventKindEnum("kind").notNull(),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    endsAt: timestamp("ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    timezone: varchar("timezone", { length: 64 }).notNull(),
+    status: trainingEventStatusEnum("status").notNull().default("planned"),
+    coachPersonId: uuid("coach_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    venueId: uuid("venue_id").references(() => venues.id, {
+      onDelete: "set null",
+    }),
+    courtId: uuid("court_id").references(() => courts.id, {
+      onDelete: "set null",
+    }),
+    focusAreaTagId: uuid("focus_area_tag_id").references(
+      () => trainingTags.id,
+      { onDelete: "set null" },
+    ),
+    objectives: text("objectives")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    plannedLoad: integer("planned_load").notNull().default(50),
+    plannedIntensity: integer("planned_intensity").notNull().default(5),
+    externalLoad: jsonb("external_load")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    notesMarkdown: text("notes_markdown"),
+    source: varchar("source", { length: 24 }).notNull().default("program"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("training_event_org_time_idx").on(
+      table.organizationId,
+      table.startsAt,
+    ),
+    index("training_event_program_time_idx").on(
+      table.programId,
+      table.startsAt,
+    ),
+    check(
+      "training_event_time_valid",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "training_event_load_valid",
+      sql`${table.plannedLoad} BETWEEN 0 AND 100 AND ${table.plannedIntensity} BETWEEN 1 AND 10`,
+    ),
+    check(
+      "training_event_source_valid",
+      sql`${table.source} IN ('program', 'manual', 'catalog', 'imported', 'ai-draft')`,
+    ),
+  ],
+);
+
+export const trainingPracticeOutcomes = pgTable(
+  "training_practice_outcomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    trainingEventId: uuid("training_event_id")
+      .notNull()
+      .references(() => trainingEvents.id, { onDelete: "cascade" }),
+    practicePlanVersionId: uuid("practice_plan_version_id").references(
+      () => trainingPracticePlanVersions.id,
+      { onDelete: "set null" },
+    ),
+    recordedByPersonId: uuid("recorded_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    actualStartsAt: timestamp("actual_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    actualEndsAt: timestamp("actual_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    actualLoad: integer("actual_load"),
+    coachRpe: integer("coach_rpe"),
+    attendanceCount: integer("attendance_count").notNull().default(0),
+    plannedBlockCount: integer("planned_block_count").notNull().default(0),
+    completedBlockCount: integer("completed_block_count").notNull().default(0),
+    blockOutcomes: jsonb("block_outcomes")
+      .notNull()
+      .$type<readonly Record<string, unknown>[]>()
+      .default([]),
+    notesMarkdown: text("notes_markdown"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_practice_outcome_event_unique").on(
+      table.trainingEventId,
+    ),
+    check(
+      "training_practice_outcome_time_valid",
+      sql`${table.actualEndsAt} IS NULL OR ${table.actualStartsAt} IS NULL OR ${table.actualEndsAt} > ${table.actualStartsAt}`,
+    ),
+    check(
+      "training_practice_outcome_load_valid",
+      sql`${table.actualLoad} IS NULL OR ${table.actualLoad} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "training_practice_outcome_rpe_valid",
+      sql`${table.coachRpe} IS NULL OR ${table.coachRpe} BETWEEN 1 AND 10`,
+    ),
+    check(
+      "training_practice_outcome_counts_valid",
+      sql`${table.attendanceCount} >= 0 AND ${table.plannedBlockCount} >= 0 AND ${table.completedBlockCount} BETWEEN 0 AND ${table.plannedBlockCount}`,
+    ),
+  ],
+);
+
+export const trainingAthleteResponses = pgTable(
+  "training_athlete_responses",
+  {
+    trainingEventId: uuid("training_event_id")
+      .notNull()
+      .references(() => trainingEvents.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    attendanceStatus: varchar("attendance_status", { length: 24 })
+      .notNull()
+      .default("attended"),
+    minutesParticipated: integer("minutes_participated"),
+    sessionRpe: integer("session_rpe"),
+    feedback: text("feedback"),
+    submittedAt: timestamp("submitted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.trainingEventId, table.personId] }),
+    index("training_athlete_response_person_idx").on(
+      table.personId,
+      table.submittedAt,
+    ),
+    check(
+      "training_athlete_response_attendance_valid",
+      sql`${table.attendanceStatus} IN ('planned', 'attended', 'partial', 'excused', 'absent')`,
+    ),
+    check(
+      "training_athlete_response_minutes_valid",
+      sql`${table.minutesParticipated} IS NULL OR ${table.minutesParticipated} >= 0`,
+    ),
+    check(
+      "training_athlete_response_rpe_valid",
+      sql`${table.sessionRpe} IS NULL OR ${table.sessionRpe} BETWEEN 1 AND 10`,
+    ),
+  ],
+);
+
+export const trainingMediaAssets = pgTable(
+  "training_media_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillVersionId: uuid("drill_version_id")
+      .notNull()
+      .references(() => trainingDrillVersions.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    provider: varchar("provider", { length: 48 }).notNull().default("duna"),
+    providerAssetId: text("provider_asset_id"),
+    url: text("url"),
+    posterUrl: text("poster_url"),
+    altText: text("alt_text").notNull(),
+    sceneSpec: jsonb("scene_spec")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    provenance: jsonb("provenance")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    approvedByPersonId: uuid("approved_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    approvedAt: timestamp("approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("training_media_drill_version_idx").on(
+      table.drillVersionId,
+      table.kind,
+      table.status,
+    ),
+    check(
+      "training_media_kind_valid",
+      sql`${table.kind} IN ('scene', 'diagram', 'animation', 'video', 'thumbnail')`,
+    ),
+    check(
+      "training_media_status_valid",
+      sql`${table.status} IN ('draft', 'generating', 'review', 'approved', 'failed', 'archived')`,
+    ),
+  ],
+);
 
 // Platform control plane, webhooks, idempotency, and AI risk gate
 export const adminRoles = pgTable(

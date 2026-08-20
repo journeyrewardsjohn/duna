@@ -149,6 +149,21 @@ function datesInRange(range: SmartDateRangeValue): readonly string[] {
   return dates;
 }
 
+function recurringSessionDates(input: {
+  readonly startsOn: string;
+  readonly endsOn: string;
+  readonly weekdays: readonly number[];
+  readonly blackoutDates: readonly string[];
+}): readonly string[] {
+  const selectedDays = new Set(input.weekdays);
+  const blackouts = new Set(input.blackoutDates);
+  return datesInRange({ start: input.startsOn, end: input.endsOn }).filter(
+    (date) =>
+      selectedDays.has(new Date(`${date}T12:00:00.000Z`).getUTCDay()) &&
+      !blackouts.has(date),
+  );
+}
+
 function storyListItems(value: unknown): readonly StoryListItem[] {
   return Array.isArray(value)
     ? value.flatMap((entry) =>
@@ -550,6 +565,7 @@ export function GuidedProductBuilder({
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestedType = searchParams.get("type");
+  const requestedSubtype = searchParams.get("subtype");
   const hasRequestedType =
     requestedType === "good" ||
     requestedType === "plan" ||
@@ -564,12 +580,27 @@ export function GuidedProductBuilder({
           requestedType === "service"
         ? requestedType
         : "service";
+  const defaultSubtype =
+    initialType === "good"
+      ? "equipment"
+      : initialType === "plan"
+        ? "membership"
+        : "private-lesson";
+  const initialSubtype =
+    initialItem?.subtype ??
+    (subtypeChoices[initialType].some(
+      (choice) => choice.value === requestedSubtype,
+    )
+      ? (requestedSubtype ?? defaultSubtype)
+      : defaultSubtype);
   const editing = Boolean(initialItem && mode !== "clone");
   const [state, action, pending] = useActionState(
     editing ? replaceCatalogItemAction : createCatalogItemAction,
     initialActionState,
   );
   const initialConfiguration = initialItem?.configuration ?? {};
+  const programConfiguration = initialConfiguration.program as
+    Record<string, unknown> | undefined;
   const initialCardPrice = initialItem?.variants
     .flatMap((variant) => variant.prices)
     .find(
@@ -598,14 +629,7 @@ export function GuidedProductBuilder({
   const [step, setStep] = useState(
     mode === "create" && hasRequestedType ? 1 : 0,
   );
-  const [subtype, setSubtype] = useState(
-    initialItem?.subtype ??
-      (initialType === "good"
-        ? "equipment"
-        : initialType === "plan"
-          ? "membership"
-          : "private-lesson"),
-  );
+  const [subtype, setSubtype] = useState(initialSubtype);
   const [title, setTitle] = useState(initialItem?.title ?? "");
   const [shortSummary, setShortSummary] = useState(
     initialItem?.shortSummary ?? "",
@@ -776,7 +800,8 @@ export function GuidedProductBuilder({
   const [customerCoachSelection, setCustomerCoachSelection] = useState(
     initialConfiguration.customerCoachSelection !== false,
   );
-  const sessionSchedule = serviceConfiguration?.sessionSchedule as
+  const sessionSchedule = (serviceConfiguration?.sessionSchedule ??
+    initialConfiguration.sessionSchedule) as
     Record<string, unknown> | undefined;
   const virtualDelivery = serviceConfiguration?.virtualDelivery as
     Record<string, unknown> | undefined;
@@ -792,7 +817,9 @@ export function GuidedProductBuilder({
   >(
     sessionSchedule?.mode === "one-off" || sessionSchedule?.mode === "recurring"
       ? sessionSchedule.mode
-      : "flexible",
+      : initialSubtype === "program"
+        ? "recurring"
+        : "flexible",
   );
   const [scheduleStartsOn, setScheduleStartsOn] = useState(
     typeof sessionSchedule?.startsOn === "string"
@@ -807,18 +834,34 @@ export function GuidedProductBuilder({
       ? sessionSchedule.weekdays.filter(
           (value): value is number => typeof value === "number",
         )
-      : [],
+      : Array.isArray(sessionSchedule?.weekly)
+        ? sessionSchedule.weekly.flatMap((entry) => {
+            if (!entry || typeof entry !== "object") return [];
+            const weekday = (entry as Record<string, unknown>).weekday;
+            return typeof weekday === "number" ? [weekday] : [];
+          })
+        : [],
   );
   const [scheduleStartTime, setScheduleStartTime] = useState(
     typeof sessionSchedule?.startTime === "string"
       ? sessionSchedule.startTime
-      : "17:00",
+      : Array.isArray(sessionSchedule?.weekly) &&
+          sessionSchedule.weekly[0] &&
+          typeof sessionSchedule.weekly[0] === "object" &&
+          typeof (sessionSchedule.weekly[0] as Record<string, unknown>)
+            .startsAt === "string"
+        ? ((sessionSchedule.weekly[0] as Record<string, unknown>)
+            .startsAt as string)
+        : "17:00",
   );
   const [oneOffSessions, setOneOffSessions] = useState<
     readonly ScheduledSession[]
   >(
-    Array.isArray(sessionSchedule?.oneOffSessions)
-      ? sessionSchedule.oneOffSessions.flatMap((value, index) => {
+    Array.isArray(sessionSchedule?.oneOffSessions ?? sessionSchedule?.oneOff)
+      ? (
+          (sessionSchedule?.oneOffSessions ??
+            sessionSchedule?.oneOff) as unknown[]
+        ).flatMap((value, index) => {
           if (!value || typeof value !== "object") return [];
           const session = value as Record<string, unknown>;
           return typeof session.date === "string" &&
@@ -841,6 +884,14 @@ export function GuidedProductBuilder({
         )
       : [],
   );
+  const [programIncludedCatalogItemIds, setProgramIncludedCatalogItemIds] =
+    useState<readonly string[]>(
+      Array.isArray(programConfiguration?.includedCatalogItemIds)
+        ? programConfiguration.includedCatalogItemIds.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : [],
+    );
   const [oneOffSessionDraft, setOneOffSessionDraft] = useState({
     date: "",
     time: "17:00",
@@ -967,6 +1018,7 @@ export function GuidedProductBuilder({
   const isMembership = type === "plan" && subtype === "membership";
   const isCreditPack = type === "plan" && subtype === "credit-pack";
   const isBundle = type === "plan" && subtype === "bundle";
+  const isProgram = type === "service" && subtype === "program";
   const membershipConfigured = workspace.catalog.some(
     (item) =>
       item.type === "plan" &&
@@ -1016,6 +1068,25 @@ export function GuidedProductBuilder({
       startsAt: session.startsAt,
     }));
   const parsedSessionBlackouts = sessionBlackouts.filter(isDateKey);
+  const parsedRecurringSessionDates = recurringSessionDates({
+    startsOn: scheduleStartsOn,
+    endsOn: scheduleEndsOn,
+    weekdays: scheduleWeekdays,
+    blackoutDates: parsedSessionBlackouts,
+  });
+  const programSessionDates =
+    sessionScheduleMode === "one-off"
+      ? parsedOneOffSessions.map((session) => session.date)
+      : sessionScheduleMode === "recurring"
+        ? parsedRecurringSessionDates
+        : [];
+  const programSessionCount = programSessionDates.length;
+  const programCoachedMinutes = programSessionCount * durationMinutes;
+  const programAddOnCandidates = recommendationCandidates.filter(
+    (candidate) =>
+      (candidate.type === "good" || candidate.type === "event") &&
+      candidate.status !== "archived",
+  );
   const receiptTotalMinor = moneyMinor(receiptTotalCost);
   const receiptUnitCostMinor =
     receiptTotalMinor === undefined
@@ -1198,16 +1269,17 @@ export function GuidedProductBuilder({
   const storyReady = title.trim().length >= 2;
   const storyMediaReady =
     storyReady && media.some((item) => item.kind === "image");
-  const scheduleReady =
-    sessionScheduleMode === "flexible" ||
-    (sessionScheduleMode === "one-off"
-      ? parsedOneOffSessions.length > 0
-      : Boolean(
-          scheduleStartsOn &&
-          scheduleEndsOn &&
-          scheduleStartsOn <= scheduleEndsOn &&
-          scheduleWeekdays.length > 0,
-        ));
+  const scheduleReady = isProgram
+    ? sessionScheduleMode !== "flexible" && programSessionCount > 0
+    : sessionScheduleMode === "flexible" ||
+      (sessionScheduleMode === "one-off"
+        ? parsedOneOffSessions.length > 0
+        : Boolean(
+            scheduleStartsOn &&
+            scheduleEndsOn &&
+            scheduleStartsOn <= scheduleEndsOn &&
+            scheduleWeekdays.length > 0,
+          ));
   const bookingReady =
     (deliveryMode !== "venue" || Boolean(venueId)) &&
     (coachMode !== "selected" || selectedCoachIds.length > 0) &&
@@ -1288,14 +1360,16 @@ export function GuidedProductBuilder({
       ? "Inventory only"
       : salePriceMinor === undefined
         ? "Price not set"
-        : `${moneyLabel(salePriceMinor, workspace.organization.currency)}${isMembership ? ` / ${billingMode}` : ""}`;
+        : `${moneyLabel(salePriceMinor, workspace.organization.currency)}${isMembership ? ` / ${billingMode}` : isProgram ? " total" : ""}`;
   const previewHighlights =
     type === "service"
       ? [
           { label: "Format", value: activeSubtypeLabel },
           {
-            label: "Session",
-            value: `${durationMinutes} min · ${capacity} max`,
+            label: isProgram ? "Program promise" : "Session",
+            value: isProgram
+              ? `${programSessionCount} practices · ${Math.round((programCoachedMinutes / 60) * 10) / 10} coached hours`
+              : `${durationMinutes} min · ${capacity} max`,
           },
           {
             label: "Delivery",
@@ -1357,6 +1431,31 @@ export function GuidedProductBuilder({
                   ? "Set a valid price and at least one payment method."
                   : "Confirm that you reviewed the setup.";
 
+  const savedSessionSchedule = {
+    mode: sessionScheduleMode,
+    timezone: workspace.organization.timezone,
+    startsOn:
+      sessionScheduleMode === "recurring" ? scheduleStartsOn : undefined,
+    endsOn: sessionScheduleMode === "recurring" ? scheduleEndsOn : undefined,
+    weekdays:
+      sessionScheduleMode === "recurring" ? scheduleWeekdays : ([] as const),
+    startTime:
+      sessionScheduleMode === "recurring" ? scheduleStartTime : undefined,
+    weekly:
+      sessionScheduleMode === "recurring"
+        ? scheduleWeekdays.map((weekday) => ({
+            weekday,
+            startsAt: scheduleStartTime,
+          }))
+        : [],
+    oneOffSessions:
+      sessionScheduleMode === "one-off" ? parsedOneOffSessions : [],
+    oneOff: sessionScheduleMode === "one-off" ? parsedOneOffSessions : [],
+    blackoutDates: parsedSessionBlackouts,
+    sessionCount: isProgram ? programSessionCount : undefined,
+    sessionDates: isProgram ? programSessionDates : undefined,
+  };
+
   const configuration = {
     source: "hq-guided-product-builder",
     flowVersion: 3,
@@ -1378,6 +1477,7 @@ export function GuidedProductBuilder({
             bookingLeadHours,
             bookingBufferMinutes,
             schedulingStyle,
+            sessionSchedule: savedSessionSchedule,
           },
           deliveryMode,
           venueId: deliveryMode === "venue" ? venueId : undefined,
@@ -1386,26 +1486,24 @@ export function GuidedProductBuilder({
           requiredCoachCount,
           durationMinutes,
           capacity,
-          sessionSchedule: {
-            mode: sessionScheduleMode,
-            timezone: workspace.organization.timezone,
-            startsOn:
-              sessionScheduleMode === "recurring"
-                ? scheduleStartsOn
-                : undefined,
-            endsOn:
-              sessionScheduleMode === "recurring" ? scheduleEndsOn : undefined,
-            weekly:
-              sessionScheduleMode === "recurring"
-                ? scheduleWeekdays.map((weekday) => ({
-                    weekday,
-                    startsAt: scheduleStartTime,
-                  }))
-                : [],
-            oneOff:
-              sessionScheduleMode === "one-off" ? parsedOneOffSessions : [],
-            blackoutDates: parsedSessionBlackouts,
-          },
+          sessionSchedule: savedSessionSchedule,
+          program: isProgram
+            ? {
+                pricingBasis: "whole-program",
+                includesAllSessions: true,
+                startDate: programSessionDates[0],
+                endDate: programSessionDates.at(-1),
+                sessionCount: programSessionCount,
+                sessionDates: programSessionDates,
+                sessionDurationMinutes: durationMinutes,
+                coachedMinutes: programCoachedMinutes,
+                includedCatalogItemIds: programIncludedCatalogItemIds,
+                trainingProgramId:
+                  typeof programConfiguration?.trainingProgramId === "string"
+                    ? programConfiguration.trainingProgramId
+                    : undefined,
+              }
+            : undefined,
           virtualDelivery:
             deliveryMode === "online"
               ? {
@@ -1763,6 +1861,9 @@ export function GuidedProductBuilder({
                             setCapacity(
                               choice.value === "private-lesson" ? 1 : 8,
                             );
+                            if (choice.value === "program") {
+                              setSessionScheduleMode("recurring");
+                            }
                           }
                         }}
                       />
@@ -2692,42 +2793,56 @@ export function GuidedProductBuilder({
           {step === 2 && type === "service" && (
             <section>
               <span className="hq-eyebrow">Step 3 · Booking</span>
-              <h3>Turn coach availability into bookable time.</h3>
+              <h3>
+                {isProgram
+                  ? "Define the complete Program promise."
+                  : "Turn coach availability into bookable time."}
+              </h3>
               <p>
-                These settings guide the customer experience without making you
-                build a schedule from generic rules.
+                {isProgram
+                  ? "Every scheduled practice is included in one Program price. Coaches can later operate and adapt the training plan without rewriting what the customer bought."
+                  : "These settings guide the customer experience without making you build a schedule from generic rules."}
               </p>
-              <ChoiceGrid>
-                <ChoiceCard
-                  active={schedulingStyle === "coach-availability"}
-                  detail="Show times only when the assigned coaching team is actually free."
-                  label="Live coach availability"
-                  onClick={() => setSchedulingStyle("coach-availability")}
-                />
-                <ChoiceCard
-                  active={schedulingStyle === "request-to-book"}
-                  detail="Collect a preferred time, then let staff confirm the booking."
-                  label="Request to book"
-                  onClick={() => setSchedulingStyle("request-to-book")}
-                />
-              </ChoiceGrid>
+              {!isProgram && (
+                <ChoiceGrid>
+                  <ChoiceCard
+                    active={schedulingStyle === "coach-availability"}
+                    detail="Show times only when the assigned coaching team is actually free."
+                    label="Live coach availability"
+                    onClick={() => setSchedulingStyle("coach-availability")}
+                  />
+                  <ChoiceCard
+                    active={schedulingStyle === "request-to-book"}
+                    detail="Collect a preferred time, then let staff confirm the booking."
+                    label="Request to book"
+                    onClick={() => setSchedulingStyle("request-to-book")}
+                  />
+                </ChoiceGrid>
+              )}
               <div className="guided-product-subsection guided-product-subsection--schedule">
                 <div className="guided-product-subsection__heading">
                   <div>
-                    <strong>How should players find a session?</strong>
+                    <strong>
+                      {isProgram
+                        ? "Which practices are included?"
+                        : "How should players find a session?"}
+                    </strong>
                     <small>
-                      Choose the schedule pattern, then use Duna’s calendar to
-                      set the actual dates and exceptions.
+                      {isProgram
+                        ? "Duna counts the exact dates. Blackouts reduce the count before the Program is priced."
+                        : "Choose the schedule pattern, then use Duna’s calendar to set the actual dates and exceptions."}
                     </small>
                   </div>
                 </div>
                 <ChoiceGrid>
-                  <ChoiceCard
-                    active={sessionScheduleMode === "flexible"}
-                    detail="Customers choose from the overlap of coach availability."
-                    label="Flexible booking"
-                    onClick={() => setSessionScheduleMode("flexible")}
-                  />
+                  {!isProgram && (
+                    <ChoiceCard
+                      active={sessionScheduleMode === "flexible"}
+                      detail="Customers choose from the overlap of coach availability."
+                      label="Flexible booking"
+                      onClick={() => setSessionScheduleMode("flexible")}
+                    />
+                  )}
                   <ChoiceCard
                     active={sessionScheduleMode === "one-off"}
                     detail="Publish one or more specific session dates."
@@ -2905,6 +3020,67 @@ export function GuidedProductBuilder({
                   </div>
                 </section>
               )}
+              {isProgram && (
+                <section aria-live="polite" className="guided-program-promise">
+                  <span>
+                    <Route aria-hidden size={22} /> Program promise
+                  </span>
+                  <strong>
+                    {programSessionCount || "No"} practice
+                    {programSessionCount === 1 ? "" : "s"} included
+                  </strong>
+                  <p>
+                    {programSessionCount > 0
+                      ? `${Math.round((programCoachedMinutes / 60) * 10) / 10} coached hours. The total price covers every listed practice.`
+                      : "Choose dates above so Duna can calculate the full Program before pricing."}
+                  </p>
+                  {programSessionCount > 0 && (
+                    <small>
+                      {formatScheduleDate(programSessionDates[0]!)} through{" "}
+                      {formatScheduleDate(programSessionDates.at(-1)!)}
+                    </small>
+                  )}
+                </section>
+              )}
+              {isProgram && programAddOnCandidates.length > 0 && (
+                <div className="membership-inclusion-picker guided-program-inclusions">
+                  <span>Anything else included?</span>
+                  <small>
+                    Practices are already included. Add physical goods or event
+                    access only when they are part of the same customer promise.
+                  </small>
+                  <div>
+                    {programAddOnCandidates.map((item) => {
+                      const checked = programIncludedCatalogItemIds.includes(
+                        item.id,
+                      );
+                      return (
+                        <label
+                          className={checked ? "active" : undefined}
+                          key={item.id}
+                        >
+                          <input
+                            checked={checked}
+                            onChange={(event) =>
+                              setProgramIncludedCatalogItemIds((current) =>
+                                event.target.checked
+                                  ? [...current, item.id]
+                                  : current.filter((id) => id !== item.id),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            <strong>{item.title}</strong>
+                            <small>{item.subtype.replaceAll("-", " ")}</small>
+                          </span>
+                          <Check aria-hidden size={15} />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {sessionScheduleMode === "one-off" && (
                 <section className="guided-session-blackouts">
                   <header>
@@ -2970,7 +3146,7 @@ export function GuidedProductBuilder({
                 )}
               <div className="operator-form-grid operator-form-grid--two">
                 <label>
-                  <span>Duration</span>
+                  <span>{isProgram ? "Practice length" : "Duration"}</span>
                   <select
                     onChange={(event) =>
                       setDurationMinutes(Number(event.target.value))
@@ -2985,7 +3161,11 @@ export function GuidedProductBuilder({
                   </select>
                 </label>
                 <label>
-                  <span>Players per booking</span>
+                  <span>
+                    {isProgram
+                      ? "Players in the Program"
+                      : "Players per booking"}
+                  </span>
                   <input
                     max="100"
                     min="1"
@@ -3602,10 +3782,15 @@ export function GuidedProductBuilder({
             type !== "good" && (
               <section>
                 <span className="hq-eyebrow">Step {step + 1} · Price</span>
-                <h3>Make checkout expectations explicit.</h3>
+                <h3>
+                  {isProgram
+                    ? `Price the complete ${programSessionCount}-practice Program.`
+                    : "Make checkout expectations explicit."}
+                </h3>
                 <p>
-                  Payment choices stay tailored to this {type}; the draft
-                  remains private until publication review.
+                  {isProgram
+                    ? "This is the total customer price for every included practice and selected add-on—not a per-session price."
+                    : `Payment choices stay tailored to this ${type}; the draft remains private until publication review.`}
                 </p>
                 <ChoiceGrid>
                   <ChoiceCard
@@ -3639,7 +3824,9 @@ export function GuidedProductBuilder({
                     label={
                       isMembership
                         ? `${billingMode === "month" ? "Monthly" : "Annual"} price`
-                        : "Price"
+                        : isProgram
+                          ? "Total Program price"
+                          : "Price"
                     }
                     onChange={setPrice}
                     placeholder={isCreditPack ? "250.00" : "80.00"}
@@ -4104,13 +4291,16 @@ export function GuidedProductBuilder({
                 </article>
                 {type === "service" && (
                   <article>
-                    <small>Booking</small>
+                    <small>{isProgram ? "Program promise" : "Booking"}</small>
                     <strong>
-                      {durationMinutes} minutes · up to {capacity}
+                      {isProgram
+                        ? `${programSessionCount} practices · ${Math.round((programCoachedMinutes / 60) * 10) / 10} hours`
+                        : `${durationMinutes} minutes · up to ${capacity}`}
                     </strong>
                     <span>
-                      {assignedCoachIds.length || "No"} eligible coach
-                      {assignedCoachIds.length === 1 ? "" : "es"}
+                      {isProgram
+                        ? `One total price includes all sessions${programIncludedCatalogItemIds.length ? ` + ${programIncludedCatalogItemIds.length} add-on${programIncludedCatalogItemIds.length === 1 ? "" : "s"}` : ""}`
+                        : `${assignedCoachIds.length || "No"} eligible coach${assignedCoachIds.length === 1 ? "" : "es"}`}
                     </span>
                   </article>
                 )}

@@ -10,6 +10,7 @@ import {
   Coins,
   CreditCard,
   DatabaseZap,
+  Dumbbell,
   Flag,
   FlaskConical,
   HeartHandshake,
@@ -46,6 +47,7 @@ export const operatorModules = [
   { slug: "locations", label: "Venues", icon: MapPinned, group: "Run" },
   { slug: "members", label: "People", icon: UsersRound, group: "Run" },
   { slug: "team", label: "Team", icon: UserRoundSearch, group: "Run" },
+  { slug: "training", label: "Training", icon: Dumbbell, group: "Run" },
   { slug: "products", label: "Products", icon: ShoppingBag, group: "Run" },
   { slug: "events", label: "Events", icon: Trophy, group: "Run" },
   {
@@ -88,10 +90,10 @@ export const productNavigationItems = [
   },
   {
     slug: "plans",
-    label: "Plans",
+    label: "Memberships + packs",
     href: "/products/types/plans",
     productType: "plan",
-    title: "Plans",
+    title: "Memberships + packs",
     description: "Memberships, credit packs, and recurring offers.",
   },
   {
