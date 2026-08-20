@@ -398,6 +398,7 @@ import {
   trainingDrillSchema,
   trainingProgramDraftSchema,
   trainingWorkspaceSchema,
+  updateTrainingProgramEventInputSchema,
 } from "./training-contracts";
 import {
   assignTrainingPracticePlan,
@@ -411,6 +412,7 @@ import {
   recordTrainingOutcome,
   submitTrainingAthleteResponse,
   TrainingServiceError,
+  updateTrainingProgramEvent,
 } from "./training-service";
 import {
   createVideoAnalysisMarker,
@@ -7361,6 +7363,38 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await createTrainingProgram({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateTrainingProgramEvent: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-program-event-update",
+        capacity: 36,
+        refillPerMinute: 12,
+        scope: "organization",
+      }),
+    )
+    .input(updateTrainingProgramEventInputSchema)
+    .output(z.object({ id: z.string().uuid(), programId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateTrainingProgramEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateTrainingProgramEvent({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

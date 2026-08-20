@@ -977,6 +977,174 @@
   gap: 0;
 }
 
+.training-program-schedule-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.training-program-schedule-editor > header {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.training-program-schedule-editor > header h2 {
+  color: var(--text-1);
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+  letter-spacing: -0.024em;
+  margin: 0.35rem 0;
+}
+
+.training-program-schedule-editor > header p {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 66ch;
+}
+
+.training-program-schedule-editor > header > span {
+  align-items: center;
+  color: var(--hq-ink);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.training-program-schedule-editor__events {
+  display: grid;
+}
+
+.training-program-schedule-editor__events > article {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 50px 10px minmax(0, 1fr) auto auto;
+  min-height: 110px;
+  padding: 1rem 0;
+}
+
+.training-program-schedule-editor__events > article > time {
+  display: grid;
+  text-align: center;
+}
+
+.training-program-schedule-editor__events > article > time strong {
+  color: var(--text-1);
+  font-family: var(--font-data);
+  font-size: 1.45rem;
+}
+
+.training-program-schedule-editor__events > article > time span,
+.training-program-schedule-editor__events > article > div > span {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.training-program-schedule-editor__events > article > i {
+  background: var(--hq-core);
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+}
+
+.training-program-schedule-editor__events > article.milestone > i {
+  background: var(--training-attention);
+}
+
+.training-program-schedule-editor__events > article.recovery > i {
+  background: var(--text-3);
+}
+
+.training-program-schedule-editor__events h3 {
+  color: var(--text-1);
+  font-size: 1rem;
+  margin: 0.25rem 0;
+}
+
+.training-program-schedule-editor__events p {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.training-program-schedule-editor__events > article > aside {
+  align-items: baseline;
+  color: var(--text-2);
+  display: flex;
+  gap: 0.25rem;
+}
+
+.training-program-schedule-editor__events > article > aside strong {
+  color: var(--text-1);
+  font-family: var(--font-data);
+  font-size: 1.2rem;
+}
+
+.training-program-schedule-editor__events > article > aside small {
+  font-size: 0.75rem;
+}
+
+.training-program-schedule-editor__form {
+  background: color-mix(in srgb, var(--hq-tint) 22%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--hq-core) 30%, var(--hairline));
+  border-radius: 12px;
+  display: grid;
+  gap: 0.8rem;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.25rem;
+  padding: 1rem;
+}
+
+.training-program-schedule-editor__form label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.training-program-schedule-editor__form label.wide,
+.training-program-schedule-editor__form footer {
+  grid-column: 1 / -1;
+}
+
+.training-program-schedule-editor__form input,
+.training-program-schedule-editor__form select {
+  font-size: 1rem;
+}
+
+.training-program-schedule-editor__load input {
+  accent-color: var(--hq-core);
+  min-height: 32px;
+  padding: 0;
+}
+
+.training-program-schedule-editor__form footer {
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--hq-core) 24%, var(--hairline));
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.8rem;
+}
+
+.training-program-schedule-editor__form footer > span {
+  align-items: center;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 0.35rem;
+}
+
+.training-program-schedule-editor > .training-studio-notice {
+  margin: 0;
+}
+
 .training-program-detail__calendar article {
   align-items: center;
   border-top: 1px solid var(--hairline);
@@ -3142,6 +3310,8 @@
 .training-date-window label,
 .training-milestone-picker label,
 .training-program-link label,
+.training-program-occurrence-editor label,
+.training-program-schedule-editor__form label,
 .training-practice-canvas > header label {
   display: grid;
   gap: 0.42rem;
@@ -3154,6 +3324,8 @@
 .training-date-window label > span,
 .training-milestone-picker label > span,
 .training-program-link label > span,
+.training-program-occurrence-editor label > span,
+.training-program-schedule-editor__form label > span,
 .training-practice-canvas > header label > span,
 .training-intensity-field b {
   color: var(--text-2);
@@ -3172,6 +3344,11 @@
 .training-milestone-picker input,
 .training-milestone-picker select,
 .training-program-link select,
+.training-program-occurrence-editor input,
+.training-program-occurrence-editor textarea,
+.training-program-occurrence-editor select,
+.training-program-schedule-editor__form input,
+.training-program-schedule-editor__form select,
 .training-practice-canvas > header input,
 .training-practice-canvas > header textarea,
 .training-practice-canvas > header select,
@@ -3194,6 +3371,11 @@
 .training-program-form-grid textarea:focus,
 .training-date-window input:focus,
 .training-milestone-picker input:focus,
+.training-program-occurrence-editor input:focus,
+.training-program-occurrence-editor textarea:focus,
+.training-program-occurrence-editor select:focus,
+.training-program-schedule-editor__form input:focus,
+.training-program-schedule-editor__form select:focus,
 .training-practice-canvas > header input:focus,
 .training-practice-canvas > header textarea:focus {
   border-color: var(--hq-core);
@@ -4365,6 +4547,16 @@
   font-size: 0.75rem;
 }
 
+.training-program-calendar-preview__help {
+  background: color-mix(in srgb, var(--hq-tint) 26%, var(--surface-1));
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.75rem 1rem;
+}
+
 .training-program-calendar-preview > div {
   max-height: 450px;
   overflow: auto;
@@ -4443,11 +4635,26 @@
 }
 
 .training-program-calendar-preview article > button {
+  align-items: center;
   background: transparent;
-  border: 0;
-  color: var(--text-3);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-2);
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  justify-content: center;
   min-height: 40px;
   min-width: 40px;
+  padding: 0.35rem 0.55rem;
+}
+
+.training-program-calendar-preview article > button.active {
+  background: var(--hq-tint);
+  border-color: color-mix(in srgb, var(--hq-core) 50%, var(--hairline));
+  color: var(--hq-ink);
 }
 
 .training-program-calendar-preview article > em {
@@ -4457,6 +4664,39 @@
   left: 0;
   position: absolute;
   width: 112px;
+}
+
+.training-program-occurrence-editor {
+  background: color-mix(in srgb, var(--hq-tint) 17%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--hq-core) 25%, var(--hairline));
+  border-radius: 12px;
+  display: grid;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0.2rem 0 0.6rem;
+  padding: 0.85rem;
+}
+
+.training-program-occurrence-editor label {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.training-program-occurrence-editor label.wide {
+  grid-column: 1 / -1;
+}
+
+.training-program-occurrence-editor input,
+.training-program-occurrence-editor select,
+.training-program-occurrence-editor textarea {
+  font-size: 1rem;
+}
+
+.training-program-occurrence-editor__load input {
+  accent-color: var(--hq-core);
+  min-height: 32px;
+  padding: 0;
 }
 
 .training-program-warnings {
@@ -5257,6 +5497,40 @@
     grid-column: 3;
   }
 
+  .training-program-schedule-editor > header,
+  .training-program-schedule-editor__form footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .training-program-schedule-editor > header > span {
+    white-space: normal;
+  }
+
+  .training-program-schedule-editor__events > article {
+    grid-template-columns: 42px 8px minmax(0, 1fr);
+  }
+
+  .training-program-schedule-editor__events > article > aside,
+  .training-program-schedule-editor__events > article > button {
+    grid-column: 3;
+  }
+
+  .training-program-schedule-editor__events > article > button {
+    justify-self: start;
+  }
+
+  .training-program-schedule-editor__form,
+  .training-program-occurrence-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .training-program-schedule-editor__form label.wide,
+  .training-program-schedule-editor__form footer,
+  .training-program-occurrence-editor label.wide {
+    grid-column: auto;
+  }
+
   .training-coach-mode__topbar {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -5409,6 +5683,14 @@
   .training-program-calendar-preview article > button {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .training-program-calendar-preview article > button span {
+    display: none;
+  }
+
+  .training-program-occurrence-editor {
+    grid-column: 1 / -1;
   }
 
   .training-practice-groups > section.parallel > div {

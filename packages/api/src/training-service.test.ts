@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { demoOrganization } from "@duna/core/demo";
 import { createDemoActor } from "./context";
-import { trainingDrillSchema } from "./training-contracts";
+import {
+  trainingDrillSchema,
+  type TrainingProgramDraft,
+} from "./training-contracts";
 import {
   countTrainingSessions,
   estimateTrainingContacts,
@@ -10,6 +13,7 @@ import {
   loadPlayerTrainingWorkspace,
   normalizeTrainingTag,
   submitTrainingAthleteResponse,
+  validateTrainingProgramOccurrenceSchedule,
 } from "./training-service";
 
 describe("training schedule generation", () => {
@@ -48,6 +52,57 @@ describe("training schedule generation", () => {
       "2026-10-28",
       "2026-11-09",
     ]);
+  });
+
+  it("keeps coach-edited sessions inside the program window without forcing them back to recurrence", () => {
+    const occurrences = [
+      {
+        localDate: "2026-09-08",
+        startsAt: "18:15",
+        durationMinutes: 105,
+        title: "Competition prep · serve receive",
+        phase: "Build",
+        focusArea: "Ball Control",
+        plannedLoad: 74,
+        rationale: "A coach shifted this practice after the tournament draw.",
+      },
+      {
+        localDate: "2026-09-10",
+        startsAt: "17:00",
+        durationMinutes: 75,
+        title: "Competition prep · transition",
+        phase: "Build",
+        focusArea: "Team Defense",
+        plannedLoad: 66,
+        rationale: "The session stays within the program window.",
+      },
+    ] satisfies TrainingProgramDraft["occurrences"];
+
+    expect(
+      validateTrainingProgramOccurrenceSchedule(
+        { startDate: "2026-09-07", endDate: "2026-09-20" },
+        occurrences,
+      ),
+    ).toEqual({ sessionCount: 2, plannedMinutes: 180 });
+  });
+
+  it("rejects duplicate edited practice slots", () => {
+    const occurrence = {
+      localDate: "2026-09-08",
+      startsAt: "17:00",
+      durationMinutes: 90,
+      title: "Foundation · Ball Control",
+      phase: "Foundation",
+      focusArea: "Ball Control" as const,
+      plannedLoad: 60,
+      rationale: "Keep first contact deliberate.",
+    };
+    expect(() =>
+      validateTrainingProgramOccurrenceSchedule(
+        { startDate: "2026-09-07", endDate: "2026-09-20" },
+        [occurrence, { ...occurrence, title: "Duplicate" }],
+      ),
+    ).toThrow("Each practice needs its own date and start time.");
   });
 });
 
