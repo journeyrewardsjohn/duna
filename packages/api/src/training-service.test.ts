@@ -10,7 +10,9 @@ import {
   estimateTrainingContacts,
   generateTrainingOccurrences,
   loadDemoTrainingWorkspace,
+  loadTrainingPracticePlanVersions,
   loadTrainingProgramEvents,
+  loadTrainingProgramVersions,
   loadPlayerTrainingWorkspace,
   normalizeTrainingTag,
   submitTrainingAthleteResponse,
@@ -34,6 +36,38 @@ describe("training schedule generation", () => {
         (event) => event.programId === program.id,
       ),
     );
+  });
+
+  it("gives coaches a bounded, current restore history for programs and practice plans", async () => {
+    const now = new Date("2026-08-20T14:00:00.000Z");
+    const workspace = loadDemoTrainingWorkspace(demoOrganization.id, now);
+    const [programHistory, practicePlanHistory] = await Promise.all([
+      loadTrainingProgramVersions({
+        organizationId: demoOrganization.id,
+        programId: workspace.programs[0]!.id,
+        now,
+        demo: true,
+      }),
+      loadTrainingPracticePlanVersions({
+        organizationId: demoOrganization.id,
+        practicePlanId: workspace.practicePlans[0]!.id,
+        now,
+        demo: true,
+      }),
+    ]);
+    expect(programHistory).toHaveLength(1);
+    expect(practicePlanHistory).toHaveLength(1);
+    expect(programHistory[0]).toMatchObject({
+      current: true,
+      version: 1,
+      title: workspace.programs[0]!.title,
+    });
+    expect(practicePlanHistory[0]).toMatchObject({
+      current: true,
+      title: workspace.practicePlans[0]!.title,
+    });
+    expect(programHistory.length).toBeLessThanOrEqual(5);
+    expect(practicePlanHistory.length).toBeLessThanOrEqual(5);
   });
 
   it("counts every Monday and Wednesday in a four-week program", () => {

@@ -582,6 +582,13 @@
       "when": 1787183971433,
       "tag": "0082_eager_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1787243318786,
+      "tag": "0083_silly_nightshade",
+      "breakpoints": true
     }
   ]
 }

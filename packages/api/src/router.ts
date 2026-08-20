@@ -386,6 +386,8 @@ import {
 } from "./video-service";
 import { loadPlayerVirtualSessionRecords } from "./virtual-session-service";
 import {
+  archiveTrainingPracticePlanInputSchema,
+  archiveTrainingProgramInputSchema,
   assignTrainingPracticePlanInputSchema,
   createTrainingDrillInputSchema,
   createTrainingPracticePlanInputSchema,
@@ -397,25 +399,42 @@ import {
   submitTrainingAthleteResponseInputSchema,
   trainingDrillSchema,
   trainingEventSchema,
+  trainingPracticePlanVersionsInputSchema,
   trainingProgramEventsInputSchema,
   trainingProgramDraftSchema,
+  trainingProgramVersionsInputSchema,
+  trainingVersionHistoryEntrySchema,
   trainingWorkspaceSchema,
+  restoreTrainingPracticePlanArchiveInputSchema,
+  restoreTrainingPracticePlanVersionInputSchema,
+  restoreTrainingProgramArchiveInputSchema,
+  restoreTrainingProgramVersionInputSchema,
   updateTrainingProgramEventInputSchema,
+  updateTrainingPracticePlanInputSchema,
 } from "./training-contracts";
 import {
+  archiveTrainingPracticePlan,
+  archiveTrainingProgram,
   assignTrainingPracticePlan,
   createTrainingDrill,
   createTrainingPracticePlan,
   createTrainingProgram,
   draftTrainingDrill,
   draftTrainingProgram,
+  loadTrainingPracticePlanVersions,
   loadTrainingProgramEvents,
+  loadTrainingProgramVersions,
   loadTrainingWorkspace,
   loadPlayerTrainingWorkspace,
   recordTrainingOutcome,
+  restoreTrainingPracticePlanArchive,
+  restoreTrainingPracticePlanVersion,
+  restoreTrainingProgramArchive,
+  restoreTrainingProgramVersion,
   submitTrainingAthleteResponse,
   TrainingServiceError,
   updateTrainingProgramEvent,
+  updateTrainingPracticePlan,
 } from "./training-service";
 import {
   createVideoAnalysisMarker,
@@ -7281,6 +7300,36 @@ const operatorRouter = router({
         return throwDomainError(error);
       }
     }),
+  trainingProgramVersions: organizationProcedure("training:read")
+    .input(trainingProgramVersionsInputSchema)
+    .output(z.array(trainingVersionHistoryEntrySchema))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTrainingProgramVersions({
+          organizationId: ctx.actor!.organizationId!,
+          programId: input.programId,
+          now: ctx.now,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  trainingPracticePlanVersions: organizationProcedure("training:read")
+    .input(trainingPracticePlanVersionsInputSchema)
+    .output(z.array(trainingVersionHistoryEntrySchema))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTrainingPracticePlanVersions({
+          organizationId: ctx.actor!.organizationId!,
+          practicePlanId: input.practicePlanId,
+          now: ctx.now,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   draftTrainingDrill: organizationProcedure("training:write")
     .use(
       rateLimitMiddleware({
@@ -7425,6 +7474,83 @@ const operatorRouter = router({
         },
       }),
     ),
+  archiveTrainingProgram: organizationProcedure("training:write")
+    .input(archiveTrainingProgramInputSchema)
+    .output(z.object({ id: z.string().uuid(), status: z.literal("archived") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.archiveTrainingProgram",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await archiveTrainingProgram({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  restoreTrainingProgramArchive: organizationProcedure("training:write")
+    .input(restoreTrainingProgramArchiveInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["draft", "active", "completed"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.restoreTrainingProgramArchive",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await restoreTrainingProgramArchive({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  restoreTrainingProgramVersion: organizationProcedure("training:write")
+    .input(restoreTrainingProgramVersionInputSchema)
+    .output(z.object({ id: z.string().uuid(), versionId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.restoreTrainingProgramVersion",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await restoreTrainingProgramVersion({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createTrainingPracticePlan: organizationProcedure("training:write")
     .use(
       rateLimitMiddleware({
@@ -7451,6 +7577,113 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await createTrainingPracticePlan({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  updateTrainingPracticePlan: organizationProcedure("training:write")
+    .input(updateTrainingPracticePlanInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        versionId: z.string().uuid(),
+        status: z.enum(["draft", "review", "published"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateTrainingPracticePlan",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateTrainingPracticePlan({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  archiveTrainingPracticePlan: organizationProcedure("training:write")
+    .input(archiveTrainingPracticePlanInputSchema)
+    .output(z.object({ id: z.string().uuid(), status: z.literal("archived") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.archiveTrainingPracticePlan",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await archiveTrainingPracticePlan({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  restoreTrainingPracticePlanArchive: organizationProcedure("training:write")
+    .input(restoreTrainingPracticePlanArchiveInputSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["draft", "review", "published"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.restoreTrainingPracticePlanArchive",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await restoreTrainingPracticePlanArchive({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  restoreTrainingPracticePlanVersion: organizationProcedure("training:write")
+    .input(restoreTrainingPracticePlanVersionInputSchema)
+    .output(z.object({ id: z.string().uuid(), versionId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.restoreTrainingPracticePlanVersion",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await restoreTrainingPracticePlanVersion({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

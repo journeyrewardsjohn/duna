@@ -1,13 +1,20 @@
 "use server";
 
 import {
+  archiveTrainingPracticePlanInputSchema,
+  archiveTrainingProgramInputSchema,
   createTrainingPracticePlanInputSchema,
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
   recordTrainingOutcomeInputSchema,
+  restoreTrainingPracticePlanArchiveInputSchema,
+  restoreTrainingPracticePlanVersionInputSchema,
+  restoreTrainingProgramArchiveInputSchema,
+  restoreTrainingProgramVersionInputSchema,
   trainingDrillSchema,
   trainingProgramDraftSchema,
   updateTrainingProgramEventInputSchema,
+  updateTrainingPracticePlanInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
   type RecordTrainingOutcomeInput,
@@ -203,22 +210,182 @@ export async function saveTrainingPracticePlanAction(
       TrainingPracticePlan["blocks"][number],
       "id"
     >[];
+    readonly practicePlanId?: string;
+    readonly changeNote?: string;
   },
 ): Promise<
   TrainingStudioResult<{ readonly id: string; readonly versionId: string }>
 > {
   try {
-    const parsed = createTrainingPracticePlanInputSchema.parse({
-      plan,
+    const { changeNote, practicePlanId, ...editorPlan } = plan;
+    const caller = await getServerCaller();
+    const saved = practicePlanId
+      ? await caller.operator.updateTrainingPracticePlan(
+          updateTrainingPracticePlanInputSchema.parse({
+            practicePlanId,
+            plan: editorPlan,
+            ...(changeNote ? { changeNote } : {}),
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        )
+      : await caller.operator.createTrainingPracticePlan(
+          createTrainingPracticePlanInputSchema.parse({
+            plan: editorPlan,
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        );
+    revalidatePath("/training");
+    revalidatePath(`/training/practice-plans/${saved.id}`);
+    return {
+      status: "success",
+      message: practicePlanId
+        ? "New practice-plan version saved. The prior version is still recoverable."
+        : "Practice plan saved as a private, versioned draft.",
+      value: { id: saved.id, versionId: saved.versionId },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function archiveTrainingProgramAction(
+  programId: string,
+): Promise<TrainingStudioResult<{ readonly id: string }>> {
+  try {
+    const parsed = archiveTrainingProgramInputSchema.parse({
+      programId,
       idempotencyKey: crypto.randomUUID(),
     });
     const caller = await getServerCaller();
-    const saved = await caller.operator.createTrainingPracticePlan(parsed);
+    const saved = await caller.operator.archiveTrainingProgram(parsed);
     revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.id}`);
     return {
       status: "success",
-      message: "Practice plan saved as a private, versioned draft.",
-      value: { id: saved.id, versionId: saved.versionId },
+      message:
+        "Program archived. Its schedule, completed sessions, and commercial offer are still preserved.",
+      value: { id: saved.id },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function restoreTrainingProgramArchiveAction(
+  programId: string,
+): Promise<TrainingStudioResult<{ readonly id: string }>> {
+  try {
+    const parsed = restoreTrainingProgramArchiveInputSchema.parse({
+      programId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved = await caller.operator.restoreTrainingProgramArchive(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.id}`);
+    return {
+      status: "success",
+      message: "Program restored as a private draft.",
+      value: { id: saved.id },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function restoreTrainingProgramVersionAction(input: {
+  readonly programId: string;
+  readonly versionId: string;
+}): Promise<
+  TrainingStudioResult<{ readonly id: string; readonly versionId: string }>
+> {
+  try {
+    const parsed = restoreTrainingProgramVersionInputSchema.parse({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved = await caller.operator.restoreTrainingProgramVersion(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.id}`);
+    return {
+      status: "success",
+      message:
+        "Earlier program version restored as the new current version. Completed sessions stayed intact.",
+      value: saved,
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function archiveTrainingPracticePlanAction(
+  practicePlanId: string,
+): Promise<TrainingStudioResult<{ readonly id: string }>> {
+  try {
+    const parsed = archiveTrainingPracticePlanInputSchema.parse({
+      practicePlanId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved = await caller.operator.archiveTrainingPracticePlan(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/practice-plans/${saved.id}`);
+    return {
+      status: "success",
+      message:
+        "Practice plan archived. Existing assigned sessions still retain their exact version.",
+      value: { id: saved.id },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function restoreTrainingPracticePlanArchiveAction(
+  practicePlanId: string,
+): Promise<TrainingStudioResult<{ readonly id: string }>> {
+  try {
+    const parsed = restoreTrainingPracticePlanArchiveInputSchema.parse({
+      practicePlanId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved =
+      await caller.operator.restoreTrainingPracticePlanArchive(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/practice-plans/${saved.id}`);
+    return {
+      status: "success",
+      message: "Practice plan restored as a private draft.",
+      value: { id: saved.id },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function restoreTrainingPracticePlanVersionAction(input: {
+  readonly practicePlanId: string;
+  readonly versionId: string;
+}): Promise<
+  TrainingStudioResult<{ readonly id: string; readonly versionId: string }>
+> {
+  try {
+    const parsed = restoreTrainingPracticePlanVersionInputSchema.parse({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved =
+      await caller.operator.restoreTrainingPracticePlanVersion(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/practice-plans/${saved.id}`);
+    return {
+      status: "success",
+      message:
+        "Earlier practice-plan version restored as a new current version. Assigned sessions stayed untouched.",
+      value: saved,
     };
   } catch (error) {
     return { status: "error", message: message(error) };

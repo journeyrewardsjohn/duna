@@ -9560,6 +9560,7 @@ export const trainingPrograms = pgTable(
       .notNull()
       .default(90),
     athleteCount: integer("athlete_count").notNull().default(1),
+    currentVersionId: uuid("current_version_id"),
     createdByPersonId: uuid("created_by_person_id").references(
       () => people.id,
       {
@@ -9605,6 +9606,34 @@ export const trainingPrograms = pgTable(
     check(
       "training_program_defaults_valid",
       sql`${table.defaultPracticeMinutes} BETWEEN 1 AND 720 AND ${table.athleteCount} > 0`,
+    ),
+  ],
+);
+
+export const trainingProgramVersions = pgTable(
+  "training_program_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => trainingPrograms.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").notNull().$type<Record<string, unknown>>(),
+    changeNote: text("change_note"),
+    createdByPersonId: uuid("created_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("training_program_version_unique").on(
+      table.programId,
+      table.version,
+    ),
+    index("training_program_version_created_idx").on(
+      table.programId,
+      table.createdAt,
     ),
   ],
 );
