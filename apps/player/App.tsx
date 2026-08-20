@@ -4148,10 +4148,12 @@ function VenueBookingModal({
               detailsUrl: `${dunaWebUrl}/venues/${inventory.venue.id}`,
             },
             receipt: [
-              {
-                label: paymentMode === "split" ? "YOU PAID" : "PAID",
-                value: formatMoney(paidMinor, paidCurrency),
-              },
+              paidMinor === 0
+                ? { label: "COST", value: "No charge" }
+                : {
+                    label: paymentMode === "split" ? "YOU PAID" : "PAID",
+                    value: formatMoney(paidMinor, paidCurrency),
+                  },
               ...(paymentMode === "split" && result.pricing
                 ? [
                     {
@@ -5000,21 +5002,22 @@ function VenueBookingModal({
                                 </Text>
                               </View>
                             )}
-                            {(quote.memberRateApplied ||
-                              quote.dunaPlusApplied) && (
-                              <Text style={styles.rowMeta}>
-                                {[
-                                  quote.memberRateApplied
-                                    ? "Member rate applied."
-                                    : undefined,
-                                  quote.dunaPlusApplied
-                                    ? "Duna Plus waives the service fee."
-                                    : undefined,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" ")}
-                              </Text>
-                            )}
+                            {quote.subtotalMinor > 0 &&
+                              (quote.memberRateApplied ||
+                                quote.dunaPlusApplied) && (
+                                <Text style={styles.rowMeta}>
+                                  {[
+                                    quote.memberRateApplied
+                                      ? "Member rate applied."
+                                      : undefined,
+                                    quote.dunaPlusApplied
+                                      ? "Duna Plus waives the service fee."
+                                      : undefined,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                </Text>
+                              )}
                             {listedMinor > 0 &&
                               listedMinor !== quote.subtotalMinor && (
                                 <Text style={styles.rowMeta}>
@@ -13397,7 +13400,7 @@ function PickupModal({
           },
           { label: "SPOTS", value: `${capacity} total` },
           { label: "MATCH FEE", value: "Free in Duna" },
-          ...(initialCourtBooking?.courtPaidMinor !== undefined
+          ...(initialCourtBooking?.courtPaidMinor
             ? [
                 {
                   label:
