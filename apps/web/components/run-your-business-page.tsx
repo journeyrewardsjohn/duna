@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Clock3,
   CreditCard,
+  Dumbbell,
   HeartPulse,
   LayoutDashboard,
   MapPinned,
@@ -162,6 +163,11 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   ],
   [PackageOpen, "Products", "Lessons, plans, goods, equipment, and bundles"],
   [WalletCards, "Money", "Orders, credits, refunds, payouts, and ledger state"],
+  [
+    Dumbbell,
+    "Training OS",
+    "Program, practice, and drill planning with natural-language prompts",
+  ],
   [
     Megaphone,
     "Marketing",
@@ -1181,6 +1187,48 @@ export function RunYourBusinessPage({
               </span>
             ),
           )}
+        </div>
+      </section>
+
+      <section className={styles.trainingPromo}>
+        <div className={styles.trainingPromoInner} data-reveal>
+          <div className={styles.trainingPromoContent}>
+            <Dumbbell aria-hidden size={24} />
+            <span className={styles.eyebrow}>Training OS</span>
+            <h2>Describe the drill. Duna builds the plan.</h2>
+            <p>
+              Turn a coaching brief into structured programs, daily practices,
+              and animated drills. See expected contacts and load before anyone
+              touches a ball. Keep your work private, share it free, or sell
+              organization licenses.
+            </p>
+            <Link className={styles.secondaryButton} href="/run-your-club/training">
+              Explore Training OS <ArrowRight />
+            </Link>
+          </div>
+          <div className={styles.trainingPromoVisual}>
+            <div className={styles.trainingPromoDrill}>
+              <header>
+                <span>Ball Control</span>
+                <small>Build, then compete</small>
+              </header>
+              <strong>Seam-to-Transition Wash</strong>
+              <div>
+                <span>14 min</span>
+                <span>6–12 players</span>
+                <span>~44 touches</span>
+              </div>
+            </div>
+            <div className={styles.trainingPromoPractice}>
+              <span>Sideout Under Pressure</span>
+              <div>
+                <Numeric tier="table">90</Numeric>
+                <small>min</small>
+                <Numeric tier="table">~118</Numeric>
+                <small>contacts</small>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
