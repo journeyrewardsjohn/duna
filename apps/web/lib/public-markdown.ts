@@ -104,6 +104,7 @@ export const staticPublicPages = [
       "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
       "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
       "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, court maps, and operating reports without inferring unavailable financial data.",
+      "Training OS covers season program planning, practice plans, and drill creation from a plain-language description, plus courtside execution and a drill marketplace. See /run-your-club/training for detail.",
       "Duna Vision is controlled per recording: players can help improve Duna Vision with de-identified setup and geometry signals while full video remains private and reviewed before any training use.",
       "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
       "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
