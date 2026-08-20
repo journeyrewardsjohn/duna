@@ -2,10 +2,15 @@ import { Agent, OpenAIProvider, run, setTracingDisabled } from "@openai/agents";
 import { demoOrganization } from "@duna/core/demo";
 import {
   auditLog,
+  catalogFulfillments,
+  catalogItemVersions,
   catalogItems,
+  catalogPrices,
+  catalogVariants,
   getDatabase,
   getTransactionalDatabase,
   trainingDrills,
+  trainingDrillLicenses,
   trainingDrillTags,
   trainingDrillVersions,
   trainingAthleteResponses,
@@ -44,6 +49,7 @@ import {
   TRAINING_FOCUS_AREAS,
   trainingContactEstimateSchema,
   trainingDrillSchema,
+  trainingDrillInterpretationSchema,
   trainingEventSchema,
   trainingFocusAreaSchema,
   trainingPracticePlanSchema,
@@ -64,6 +70,7 @@ import {
   type DraftTrainingProgramInput,
   type TrainingContactEstimate,
   type TrainingDrill,
+  type DrillEditorState,
   type TrainingEvent,
   type TrainingFocusArea,
   type TrainingPracticePlan,
@@ -449,6 +456,178 @@ function fallbackDrillTitle(description: string, focus: TrainingFocusArea) {
     : `${focus} Progression`;
 }
 
+function sceneFromEditor(
+  editor: DrillEditorState,
+  fallbackBallCount: number,
+): z.infer<typeof drillSceneSchema> {
+  const phase = editor.phases[0];
+  if (!phase) {
+    return sceneForFocus("Ball Control", 4, fallbackBallCount);
+  }
+  const positions = phase.objects
+    .filter((object) => ["player", "coach", "ball"].includes(object.kind))
+    .map((object) => ({
+      id: object.id,
+      label: object.label.slice(0, 12),
+      role: object.role || object.kind,
+      team:
+        object.kind === "coach"
+          ? ("coach" as const)
+          : object.team === "b"
+            ? ("b" as const)
+            : object.team === "a"
+              ? ("a" as const)
+              : ("queue" as const),
+      x: object.x,
+      y: object.y,
+    }));
+  const positionIds = new Set(positions.map((position) => position.id));
+  const destinationPositions = phase.actions.flatMap((action) => {
+    if (action.targetObjectId && positionIds.has(action.targetObjectId)) {
+      return [];
+    }
+    const id = `destination-${action.id}`;
+    positionIds.add(id);
+    return [
+      {
+        id,
+        label: String(action.order),
+        role: "Action destination",
+        team: "queue" as const,
+        x: action.toX,
+        y: action.toY,
+      },
+    ];
+  });
+  const allPositions = [...positions, ...destinationPositions].slice(0, 30);
+  const validPositionIds = new Set(allPositions.map((position) => position.id));
+  const movements = phase.actions.flatMap((action) => {
+    const targetId =
+      action.targetObjectId && validPositionIds.has(action.targetObjectId)
+        ? action.targetObjectId
+        : `destination-${action.id}`;
+    if (
+      !validPositionIds.has(action.actorId) ||
+      !validPositionIds.has(targetId)
+    ) {
+      return [];
+    }
+    const ballAction = [
+      "toss",
+      "pass",
+      "set",
+      "attack",
+      "serve",
+      "dig",
+      "freeball",
+      "hold",
+    ].includes(action.kind);
+    return [
+      {
+        id: action.id,
+        from: action.actorId,
+        to: targetId,
+        kind:
+          action.kind === "rotate"
+            ? ("rotation" as const)
+            : ballAction
+              ? ("ball" as const)
+              : ("player" as const),
+        label: action.intent || action.kind,
+        order: Math.min(99, action.order),
+      },
+    ];
+  });
+  return drillSceneSchema.parse({
+    court:
+      editor.court === "indoor-full"
+        ? "indoor-full"
+        : editor.court.endsWith("half")
+          ? "half-court"
+          : "beach-full",
+    perspective: "top",
+    positions: allPositions,
+    movements: movements.slice(0, 50),
+    ballCount: Math.max(
+      fallbackBallCount,
+      phase.objects.filter((object) => object.kind === "ball").length,
+    ),
+    loopSeconds: Math.min(60, Math.max(2, phase.durationSeconds)),
+  });
+}
+
+function fallbackInterpretation(input: {
+  readonly editor?: DrillEditorState;
+  readonly focusArea: TrainingFocusArea;
+}) {
+  const phases = input.editor?.phases ?? [];
+  const phaseSummaries = (
+    phases.length ? phases : [{ id: "phase-1", title: "Main drill", notes: "" }]
+  ).map((phase) => ({
+    phaseId: phase.id,
+    purpose:
+      phase.notes ||
+      `Build repeatable ${input.focusArea.toLowerCase()} decisions before adding pressure.`,
+    coachPosition:
+      "Stand outside the primary movement and landing lane with a clear view of first contact.",
+    successSignal:
+      "Athletes repeat the intended contact quality without losing tempo or role clarity.",
+  }));
+  const objects = phases.flatMap((phase) => phase.objects ?? []);
+  const actions = phases.flatMap((phase) =>
+    "actions" in phase
+      ? phase.actions.map((action) => ({ ...action, phaseId: phase.id }))
+      : [],
+  );
+  return trainingDrillInterpretationSchema.parse({
+    phaseSummaries,
+    roles: objects
+      .filter(
+        (object, index, all) =>
+          ["player", "coach"].includes(object.kind) &&
+          all.findIndex((candidate) => candidate.label === object.label) ===
+            index,
+      )
+      .slice(0, 12)
+      .map((object) => ({
+        label: object.label,
+        responsibility:
+          object.role ||
+          `Execute the assigned ${input.focusArea.toLowerCase()} role.`,
+        touchIntent:
+          "Create a controlled, intentional contact for the next player.",
+      })),
+    contactSequence: actions.slice(0, 40).map((action, index) => ({
+      order: index + 1,
+      phaseId: action.phaseId,
+      actor:
+        objects.find((object) => object.id === action.actorId)?.label ??
+        "Assigned athlete",
+      contact:
+        action.kind === "move" || action.kind === "rotate"
+          ? "movement"
+          : action.kind,
+      intent: action.intent || `Complete the ${action.kind} action on time.`,
+    })),
+    progression: {
+      prerequisites: [
+        `Athletes can execute the core ${input.focusArea.toLowerCase()} skill in a controlled pattern.`,
+      ],
+      simplify:
+        "Remove the scoring consequence, reduce movement, and allow a controlled coach entry.",
+      progress:
+        "Add a live read, a second ball, or a wash point after the intended quality is stable.",
+      programFit:
+        "Use after technical activation and before the most game-like segment of practice.",
+      nextDrill:
+        "Progress into a live scoring game that preserves the same first decision and role responsibilities.",
+    },
+    fidelityNotes: [
+      "Confirm every ball entry, contact order, and rotation before sharing the animation.",
+    ],
+  });
+}
+
 function buildFallbackDrill(
   rawInput: DraftTrainingDrillInput,
   now: Date,
@@ -480,6 +659,10 @@ function buildFallbackDrill(
       ? 0.22
       : 0.07,
     ...(roleWeights ? { roleWeights } : {}),
+  });
+  const interpretation = fallbackInterpretation({
+    editor: input.editor,
+    focusArea,
   });
   const steps = descriptionSentences.length
     ? descriptionSentences.slice(0, 8)
@@ -554,12 +737,28 @@ function buildFallbackDrill(
         ? "Build a shared streak, then finish with a short competitive round."
         : "First side to seven; win by two. Award one bonus point for the stated focus behavior.",
     estimate,
-    scene: sceneForFocus(focusArea, input.playerCount, input.ballCount),
+    scene: input.editor
+      ? sceneFromEditor(input.editor, input.ballCount)
+      : sceneForFocus(focusArea, input.playerCount, input.ballCount),
+    ...(input.editor ? { editor: input.editor } : {}),
+    interpretation,
     animation: {
       status: "ready",
       kind: "duna-scene",
       reviewed: false,
       altText: `Animated court diagram for ${title}, showing player rotations and ball paths.`,
+      renderModel: "gpt_image_2",
+      directorBrief:
+        "Render the coach-confirmed court, roles, contacts, and movement order without inventing players or ball paths.",
+      storyboardPrompt:
+        "Clean volleyball coaching storyboard with a readable court, ordered contacts, stable player identities, and one phase per frame.",
+      negativePrompt:
+        "basketball court, missing net, extra players, duplicate balls, changed uniforms, unreadable labels, impossible ball trajectory",
+      qaChecklist: [
+        "Every player and coach matches the editor.",
+        "Ball contacts appear in the specified order.",
+        "The net, court orientation, and phase continuity remain stable.",
+      ],
     },
     updatedAt: now.toISOString(),
   });
@@ -600,6 +799,14 @@ const aiDrillDraftSchema = z.object({
       }
     }
   }),
+  interpretation: trainingDrillInterpretationSchema,
+});
+
+const aiAnimationDirectorSchema = z.object({
+  directorBrief: z.string().trim().min(20).max(8_000),
+  storyboardPrompt: z.string().trim().min(20).max(12_000),
+  negativePrompt: z.string().trim().min(10).max(4_000),
+  qaChecklist: z.array(z.string().trim().min(3).max(300)).min(4).max(16),
 });
 
 function trainingAiRuntime() {
@@ -614,7 +821,8 @@ function trainingAiRuntime() {
       cacheResponsesWebSocketModels: false,
       useResponses: true,
     }),
-    model: process.env.DUNA_TRAINING_MODEL?.trim() || "openai/gpt-5.6-terra",
+    model: process.env.DUNA_TRAINING_MODEL?.trim() || "openai/gpt-5.6-sol",
+    imageModel: process.env.DUNA_TRAINING_IMAGE_MODEL?.trim() || "gpt_image_2",
   };
 }
 
@@ -627,7 +835,7 @@ export async function draftTrainingDrill(
   const runtime = trainingAiRuntime();
   if (!runtime) return fallback;
   const agent = new Agent({
-    name: "Duna Drill Designer",
+    name: "Duna Volleyball Methodologist",
     model: runtime.model,
     outputType: aiDrillDraftSchema,
     modelSettings: {
@@ -641,6 +849,8 @@ export async function draftTrainingDrill(
       "Steps must explain setup, motion, role rotation, and finish condition. Include concise coaching cues, court safety, scalable variations, equipment, and unambiguous scoring.",
       "Estimate only the pace, live-play ratio, and jump share. Duna computes touch ranges deterministically after your draft.",
       "Create an isometric court scene with stable position IDs, coordinates from 0 to 100, and ordered player, ball, and rotation paths that faithfully explain the coach's motion. Every movement endpoint must reference a position in the scene.",
+      "If an editor canvas is supplied, treat its phases, objects, player roles, ball entry type, initiator, ball order, action order, targets, and notes as authoritative. Never invent a contact that contradicts that canvas.",
+      "Explain how to run and coach every phase, identify each role and contact intent, and place the drill in a sensible progression with prerequisites, a simplification, a progression, program fit, and a next drill.",
       "Do not copy named third-party drills or source language. Produce original Duna coaching content.",
     ].join("\n"),
   });
@@ -661,7 +871,7 @@ export async function draftTrainingDrill(
       livePlayRatio: generated.livePlayRatio,
       jumpShare: generated.jumpShare,
     });
-    return trainingDrillSchema.parse({
+    const interpreted = trainingDrillSchema.parse({
       ...fallback,
       title: input.titleHint || generated.title,
       slug: slugify(input.titleHint || generated.title),
@@ -691,11 +901,70 @@ export async function draftTrainingDrill(
       ],
       estimate,
       scene: generated.scene,
+      ...(input.editor ? { editor: input.editor } : {}),
+      interpretation: generated.interpretation,
       animation: {
         ...fallback.animation,
         altText: `Animated court diagram for ${input.titleHint || generated.title}, showing player rotations and ball paths.`,
       },
     });
+    const animationAgent = new Agent({
+      name: "Duna Volleyball Animation Director",
+      model: runtime.model,
+      outputType: aiAnimationDirectorSchema,
+      modelSettings: {
+        reasoning: { effort: "high" },
+        text: { verbosity: "low" },
+      },
+      instructions: [
+        "Direct a technically exact volleyball drill storyboard for an image and animation model.",
+        "The supplied editor canvas and methodologist interpretation are authoritative. Preserve the court type, net, player count, coach positions, ball entry, ball ownership, contact order, movement order, roles, targets, and phase continuity.",
+        "Write a production-ready visual brief and storyboard prompt. Describe camera, court geometry, stable identities, ordered action beats, timing, labels, and transitions. Prefer a clean elevated three-quarter coaching view unless the canvas requests top-down.",
+        "The render must teach the drill at a glance. Do not add spectacle, crowds, text overlays, logos, anatomy closeups, extra athletes, extra balls, basketball markings, or physically impossible trajectories.",
+        "End with a concrete QA checklist a coach can use before publication.",
+      ].join("\n"),
+    });
+    try {
+      const animationResult = await run(
+        animationAgent,
+        JSON.stringify({
+          renderModel: runtime.imageModel,
+          coachBrief: input.description,
+          editor: input.editor,
+          drill: {
+            title: interpreted.title,
+            discipline: interpreted.discipline,
+            purpose: interpreted.purpose,
+            steps: interpreted.steps,
+            coachingCues: interpreted.coachingCues,
+            scene: interpreted.scene,
+            interpretation: interpreted.interpretation,
+          },
+        }),
+        {
+          maxTurns: 3,
+          ...(runtime.modelProvider
+            ? { modelProvider: runtime.modelProvider }
+            : {}),
+        },
+      );
+      const direction = aiAnimationDirectorSchema.parse(
+        animationResult.finalOutput,
+      );
+      return trainingDrillSchema.parse({
+        ...interpreted,
+        animation: {
+          ...interpreted.animation,
+          renderModel:
+            runtime.imageModel === "nano_banana_pro"
+              ? "nano_banana_pro"
+              : "gpt_image_2",
+          ...direction,
+        },
+      });
+    } catch {
+      return interpreted;
+    }
   } catch {
     return fallback;
   }
@@ -1671,7 +1940,7 @@ export function loadDemoTrainingWorkspace(
         catalogItemId: undefined,
         title: "Winter Technical Reset",
         slug: "winter-technical-reset",
-        status: "draft",
+        status: "active",
         startDate: isoDate(addDays(now, 55)),
         endDate: isoDate(addDays(now, 90)),
         scheduledSessionCount: 10,
@@ -2054,6 +2323,32 @@ export async function loadTrainingWorkspace(input: {
           .where(inArray(trainingPracticePlanVersions.id, planVersionIds))
       : Promise.resolve([]),
   ]);
+  const activeDrillLicenseRows = drillRows.length
+    ? await database
+        .select({ drillId: trainingDrillLicenses.drillId })
+        .from(trainingDrillLicenses)
+        .innerJoin(
+          catalogFulfillments,
+          eq(
+            trainingDrillLicenses.catalogFulfillmentId,
+            catalogFulfillments.id,
+          ),
+        )
+        .where(
+          and(
+            eq(trainingDrillLicenses.buyerOrganizationId, input.organizationId),
+            eq(trainingDrillLicenses.status, "active"),
+            eq(catalogFulfillments.status, "fulfilled"),
+            inArray(
+              trainingDrillLicenses.drillId,
+              drillRows.map((row) => row.id),
+            ),
+          ),
+        )
+    : [];
+  const licensedDrillIds = new Set(
+    activeDrillLicenseRows.map((row) => row.drillId),
+  );
   const drillVersionById = new Map(
     drillVersionRows.map((row) => [row.id, row]),
   );
@@ -2066,8 +2361,29 @@ export async function loadTrainingWorkspace(input: {
       ? drillVersionById.get(row.currentVersionId)
       : undefined;
     if (!version) return [];
+    const snapshot = version.snapshot as Record<string, unknown>;
+    const marketplace = snapshot.marketplace;
+    const marketplaceTerms =
+      marketplace &&
+      typeof marketplace === "object" &&
+      !Array.isArray(marketplace)
+        ? marketplace
+        : undefined;
+    const offer =
+      marketplaceTerms && "offer" in marketplaceTerms
+        ? marketplaceTerms.offer
+        : undefined;
+    const owner = row.organizationId === input.organizationId;
+    const access = owner
+      ? "owner"
+      : offer === "paid"
+        ? licensedDrillIds.has(row.id)
+          ? "purchased"
+          : "purchase-required"
+        : "free";
+    const locked = access === "purchase-required";
     const parsed = trainingDrillSchema.safeParse({
-      ...(version.snapshot as Record<string, unknown>),
+      ...snapshot,
       id: row.id,
       versionId: version.id,
       version: version.version,
@@ -2081,6 +2397,40 @@ export async function loadTrainingWorkspace(input: {
           : row.organizationId === input.organizationId
             ? "organization"
             : "shared",
+      ...(marketplaceTerms
+        ? { marketplace: { ...marketplaceTerms, access } }
+        : {}),
+      ...(locked
+        ? {
+            descriptionMarkdown:
+              "This paid drill is available to your organization after marketplace checkout.",
+            steps: [
+              "Purchase the organization license to unlock the complete drill.",
+            ],
+            coachingCues: [],
+            safety: [],
+            variations: [],
+            scoring: "Available with the organization license.",
+            equipment: [],
+            interpretation: undefined,
+            editor: undefined,
+            scene: {
+              court: "beach-full",
+              perspective: "top",
+              positions: [],
+              movements: [],
+              ballCount: 0,
+              loopSeconds: 12,
+            },
+            animation: {
+              status: "draft",
+              kind: "duna-scene",
+              reviewed: false,
+              altText: `Preview for ${row.title}. Purchase to unlock the complete court animation.`,
+              renderModel: "duna-scene",
+            },
+          }
+        : {}),
       updatedAt: row.updatedAt.toISOString(),
     });
     return parsed.success ? [parsed.data] : [];
@@ -3042,8 +3392,24 @@ export async function createTrainingDrill(input: {
   });
   const id = crypto.randomUUID();
   const versionId = crypto.randomUUID();
-  const status = parsed.draft.visibility === "public" ? "review" : "draft";
+  const status = parsed.draft.visibility === "public" ? "published" : "draft";
   const slug = `${slugify(parsed.draft.title)}-${id.slice(0, 6)}`;
+  const marketplace =
+    parsed.draft.visibility === "public"
+      ? (parsed.draft.marketplace ?? {
+          offer: "free" as const,
+          currency: "USD" as const,
+        })
+      : undefined;
+  const paidMarketplaceIds =
+    marketplace?.offer === "paid"
+      ? {
+          catalogItemId: crypto.randomUUID(),
+          catalogItemVersionId: crypto.randomUUID(),
+          catalogVariantId: crypto.randomUUID(),
+          catalogPriceId: crypto.randomUUID(),
+        }
+      : undefined;
   const saved = trainingDrillSchema.parse({
     ...parsed.draft,
     id,
@@ -3052,6 +3418,21 @@ export async function createTrainingDrill(input: {
     slug,
     status,
     ownership: "organization",
+    ...(marketplace
+      ? {
+          marketplace: {
+            ...marketplace,
+            ...(paidMarketplaceIds
+              ? {
+                  catalogItemId: paidMarketplaceIds.catalogItemId,
+                  catalogVariantId: paidMarketplaceIds.catalogVariantId,
+                  catalogPriceId: paidMarketplaceIds.catalogPriceId,
+                }
+              : {}),
+            access: "owner",
+          },
+        }
+      : { marketplace: undefined }),
     updatedAt: input.now.toISOString(),
   });
   const database = getTransactionalDatabase();
@@ -3109,6 +3490,88 @@ export async function createTrainingDrill(input: {
       createdByPersonId: input.actor.personId,
       createdAt: input.now,
     });
+    if (paidMarketplaceIds && saved.marketplace?.offer === "paid") {
+      const catalogSlug = `drill-${slug}`;
+      await transaction.insert(catalogItems).values({
+        id: paidMarketplaceIds.catalogItemId,
+        organizationId,
+        type: "good",
+        subtype: "digital-content",
+        slug: catalogSlug,
+        title: saved.title,
+        shortSummary: saved.summary,
+        description: saved.descriptionMarkdown,
+        status: "active",
+        visibility: "public",
+        taxable: true,
+        allowCard: true,
+        allowCash: false,
+        allowCredits: false,
+        membershipRequired: false,
+        defaultFulfillment: "digital-content",
+        configuration: {
+          trainingDrillId: id,
+          saleEnabled: true,
+          inventoryTracked: false,
+          delivery: "organization-license",
+        },
+        currentVersionId: paidMarketplaceIds.catalogItemVersionId,
+        createdByPersonId: input.actor.personId,
+        publishedAt: input.now,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+      await transaction.insert(catalogVariants).values({
+        id: paidMarketplaceIds.catalogVariantId,
+        organizationId,
+        catalogItemId: paidMarketplaceIds.catalogItemId,
+        sku: `DRILL-${id.slice(0, 8).toUpperCase()}`,
+        title: "Organization license",
+        optionCoordinates: {},
+        status: "active",
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+      await transaction.insert(catalogPrices).values({
+        id: paidMarketplaceIds.catalogPriceId,
+        organizationId,
+        catalogItemId: paidMarketplaceIds.catalogItemId,
+        catalogVariantId: paidMarketplaceIds.catalogVariantId,
+        audience: "everyone",
+        paymentKind: "card",
+        amountMinor: saved.marketplace.priceMinor!,
+        currency: saved.marketplace.currency,
+        taxBehavior: "exclusive",
+        active: true,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+      await transaction.insert(catalogItemVersions).values({
+        id: paidMarketplaceIds.catalogItemVersionId,
+        organizationId,
+        catalogItemId: paidMarketplaceIds.catalogItemId,
+        version: 1,
+        snapshot: {
+          type: "good",
+          subtype: "digital-content",
+          title: saved.title,
+          shortSummary: saved.summary,
+          description: saved.descriptionMarkdown,
+          visibility: "public",
+          defaultFulfillment: "digital-content",
+          configuration: {
+            trainingDrillId: id,
+            delivery: "organization-license",
+          },
+          price: {
+            amountMinor: saved.marketplace.priceMinor,
+            currency: saved.marketplace.currency,
+          },
+        },
+        createdByPersonId: input.actor.personId,
+        createdAt: input.now,
+      });
+    }
     for (const tag of saved.tags) {
       const normalized = normalizeTrainingTag(tag.label);
       const [existing] = await transaction
@@ -3155,8 +3618,8 @@ export async function createTrainingDrill(input: {
       entityId: id,
       afterHash: stableHash(saved),
       reason:
-        status === "review"
-          ? "Coach created a drill and submitted it for shared-library review."
+        status === "published"
+          ? "Coach published a drill to the shared Drill Marketplace."
           : "Coach created an organization-private drill draft.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,

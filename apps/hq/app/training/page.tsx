@@ -8,7 +8,16 @@ export const metadata = {
     "Design programs, run practices, and connect coaching work to athlete development.",
 };
 
-export default async function TrainingPage() {
+export default async function TrainingPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{
+    view?: string;
+    saved?: string;
+    purchase?: string;
+  }>;
+}) {
+  const params = await searchParams;
   const caller = await getServerCaller();
   const [dashboard, operatorWorkspace, trainingWorkspace] = await Promise.all([
     caller.operator.dashboard(),
@@ -23,7 +32,14 @@ export default async function TrainingPage() {
       organization={dashboard.organization}
     >
       <TrainingWorkspace
+        initialView={params.view === "drills" ? "drills" : undefined}
         organizationName={dashboard.organization.name}
+        purchaseStatus={
+          params.purchase === "success" || params.purchase === "cancelled"
+            ? params.purchase
+            : undefined
+        }
+        savedDrillId={params.saved}
         workspace={trainingWorkspace}
       />
     </OperatorShell>

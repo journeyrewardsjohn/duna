@@ -305,6 +305,7 @@ function defaultFulfillment(type: CatalogItemType, subtype: string): string {
   if (type === "event") return "registration";
   if (type === "service") return "appointment";
   if (type === "good") {
+    if (subtype === "digital-content") return "digital-content";
     return subtype === "rental" ? "rental" : "pickup-or-shipping";
   }
   if (subtype === "credit-pack") return "credit-grant";

@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, PanelsTopLeft } from "lucide-react";
 import Link from "next/link";
 import { OperatorShell } from "@/components/operator-shell";
 import { TrainingDrillStudio } from "@/components/training-drill-studio";
@@ -35,6 +35,12 @@ export default async function CreateTrainingDrillPage() {
               movement, scoring, tags, opportunity estimate, and animated
               court—then waits for your review.
             </p>
+            <Link
+              className="hq-button hq-button--secondary training-studio-page__advanced-link"
+              href="/training/drills/create/advanced"
+            >
+              <PanelsTopLeft aria-hidden size={17} /> Open advanced court editor
+            </Link>
           </div>
         </header>
         <TrainingDrillStudio />

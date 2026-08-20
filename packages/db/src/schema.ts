@@ -2220,7 +2220,7 @@ export const catalogItems = pgTable(
     ),
     check(
       "catalog_item_subtype_valid",
-      sql`(${table.type} = 'event' AND ${table.subtype} IN ('tournament', 'league', 'clinic', 'open-play', 'pickup')) OR (${table.type} = 'service' AND ${table.subtype} IN ('private-lesson', 'group-lesson', 'program', 'court-rental', 'assessment', 'other')) OR (${table.type} = 'good' AND ${table.subtype} IN ('apparel', 'equipment', 'rental', 'swag', 'consumable', 'other')) OR (${table.type} = 'plan' AND ${table.subtype} IN ('membership', 'credit-pack', 'bundle'))`,
+      sql`(${table.type} = 'event' AND ${table.subtype} IN ('tournament', 'league', 'clinic', 'open-play', 'pickup')) OR (${table.type} = 'service' AND ${table.subtype} IN ('private-lesson', 'group-lesson', 'program', 'court-rental', 'assessment', 'other')) OR (${table.type} = 'good' AND ${table.subtype} IN ('apparel', 'equipment', 'rental', 'swag', 'consumable', 'digital-content', 'other')) OR (${table.type} = 'plan' AND ${table.subtype} IN ('membership', 'credit-pack', 'bundle'))`,
     ),
     check(
       "catalog_item_payment_method",
@@ -7433,7 +7433,7 @@ export const catalogFulfillments = pgTable(
     index("catalog_fulfillment_version_idx").on(table.catalogItemVersionId),
     check(
       "catalog_fulfillment_kind_valid",
-      sql`${table.kind} IN ('registration', 'appointment', 'pickup', 'shipment', 'rental', 'membership', 'credit-grant', 'package')`,
+      sql`${table.kind} IN ('registration', 'appointment', 'pickup', 'shipment', 'rental', 'digital-content', 'membership', 'credit-grant', 'package')`,
     ),
     check(
       "catalog_fulfillment_status_valid",
@@ -9340,6 +9340,53 @@ export const trainingDrillVersions = pgTable(
     index("training_drill_version_created_idx").on(
       table.drillId,
       table.createdAt,
+    ),
+  ],
+);
+
+export const trainingDrillLicenses = pgTable(
+  "training_drill_licenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => trainingDrills.id, { onDelete: "restrict" }),
+    sellerOrganizationId: uuid("seller_organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    buyerOrganizationId: uuid("buyer_organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    catalogFulfillmentId: uuid("catalog_fulfillment_id")
+      .notNull()
+      .references(() => catalogFulfillments.id, { onDelete: "restrict" }),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    grantedAt: timestamp("granted_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("training_drill_license_buyer_unique").on(
+      table.drillId,
+      table.buyerOrganizationId,
+    ),
+    uniqueIndex("training_drill_license_fulfillment_unique").on(
+      table.catalogFulfillmentId,
+    ),
+    index("training_drill_license_buyer_status_idx").on(
+      table.buyerOrganizationId,
+      table.status,
+    ),
+    check(
+      "training_drill_license_status_valid",
+      sql`${table.status} IN ('active', 'revoked', 'refunded')`,
+    ),
+    check(
+      "training_drill_license_distinct_organizations",
+      sql`${table.sellerOrganizationId} <> ${table.buyerOrganizationId}`,
     ),
   ],
 );

@@ -21,6 +21,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   generateTrainingDrillAction,
   saveTrainingDrillAction,
@@ -39,6 +40,7 @@ type Notice = {
 };
 
 export function TrainingDrillStudio() {
+  const router = useRouter();
   const [description, setDescription] = useState<string>(examples[0]);
   const [titleHint, setTitleHint] = useState("");
   const [mode, setMode] = useState<
@@ -61,6 +63,7 @@ export function TrainingDrillStudio() {
   const [sourceAttribution, setSourceAttribution] = useState("");
   const [sourceRightsConfirmed, setSourceRightsConfirmed] = useState(false);
   const [draft, setDraft] = useState<TrainingDrill>();
+  const [marketplacePrice, setMarketplacePrice] = useState("9.00");
   const [notice, setNotice] = useState<Notice>();
   const [pending, startTransition] = useTransition();
   const [saving, startSaving] = useTransition();
@@ -121,10 +124,35 @@ export function TrainingDrillStudio() {
 
   const save = () => {
     if (!draft) return;
+    if (
+      draft.marketplace?.offer === "paid" &&
+      (!Number.isFinite(Number(marketplacePrice)) ||
+        Number(marketplacePrice) < 1)
+    ) {
+      setNotice({
+        status: "error",
+        message: "Set a marketplace price of at least $1.00.",
+      });
+      return;
+    }
     setNotice(undefined);
     startSaving(async () => {
-      const result = await saveTrainingDrillAction(draft);
+      const result = await saveTrainingDrillAction({
+        ...draft,
+        ...(draft.marketplace?.offer === "paid"
+          ? {
+              marketplace: {
+                ...draft.marketplace,
+                priceMinor: Math.round(Number(marketplacePrice) * 100),
+              },
+            }
+          : {}),
+      });
       setNotice(result);
+      if (result.status === "success") {
+        router.push(`/training?view=drills&saved=${result.value.id}`);
+        router.refresh();
+      }
     });
   };
 
@@ -384,8 +412,8 @@ export function TrainingDrillStudio() {
           <Eye aria-hidden size={17} />
           <p>
             <strong>You stay the coach.</strong> Duna makes a reviewable draft.
-            Public drills enter shared-library review; nothing is silently
-            published.
+            Public drills are published only when you choose a free or paid
+            marketplace option and save.
           </p>
         </aside>
       </section>
@@ -499,7 +527,11 @@ export function TrainingDrillStudio() {
                     draft.visibility === "organization" ? "active" : undefined
                   }
                   onClick={() =>
-                    setDraft({ ...draft, visibility: "organization" })
+                    setDraft({
+                      ...draft,
+                      visibility: "organization",
+                      marketplace: undefined,
+                    })
                   }
                   type="button"
                 >
@@ -507,14 +539,60 @@ export function TrainingDrillStudio() {
                 </button>
                 <button
                   className={
-                    draft.visibility === "public" ? "active" : undefined
+                    draft.visibility === "public" &&
+                    draft.marketplace?.offer !== "paid"
+                      ? "active"
+                      : undefined
                   }
-                  onClick={() => setDraft({ ...draft, visibility: "public" })}
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      visibility: "public",
+                      marketplace: { offer: "free", currency: "USD" },
+                    })
+                  }
                   type="button"
                 >
-                  Submit to public library
+                  Publish free
+                </button>
+                <button
+                  className={
+                    draft.visibility === "public" &&
+                    draft.marketplace?.offer === "paid"
+                      ? "active"
+                      : undefined
+                  }
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      visibility: "public",
+                      marketplace: {
+                        offer: "paid",
+                        priceMinor: Math.max(
+                          100,
+                          Math.round(Number(marketplacePrice) * 100),
+                        ),
+                        currency: "USD",
+                      },
+                    })
+                  }
+                  type="button"
+                >
+                  Publish paid
                 </button>
               </div>
+              {draft.marketplace?.offer === "paid" ? (
+                <label className="training-drill-preview__price">
+                  <span>Organization license · USD</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      setMarketplacePrice(event.target.value)
+                    }
+                    value={marketplacePrice}
+                  />
+                </label>
+              ) : null}
               <button
                 className="hq-button hq-button--primary"
                 disabled={saving}
@@ -524,9 +602,11 @@ export function TrainingDrillStudio() {
                 <Save aria-hidden size={17} />{" "}
                 {saving
                   ? "Saving…"
-                  : draft.visibility === "public"
-                    ? "Save + submit"
-                    : "Save private drill"}
+                  : draft.marketplace?.offer === "paid"
+                    ? "Save + publish paid"
+                    : draft.visibility === "public"
+                      ? "Save + publish free"
+                      : "Save private drill"}
               </button>
             </footer>
           </>
