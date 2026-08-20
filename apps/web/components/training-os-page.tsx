@@ -15,8 +15,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
-import { marketingPlayerGroup } from "@/lib/marketing-people";
-import { ProfileAvatarStack } from "./profile-avatar-stack";
+import { marketingPeople, marketingPlayerGroup } from "@/lib/marketing-people";
+import { ProfileAvatar, ProfileAvatarStack } from "./profile-avatar-stack";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 import styles from "./training-os-page.module.css";
@@ -114,6 +114,13 @@ const practice = {
   ],
 };
 
+// Staff on the session, the way the parent's HQ chrome shows people with roles.
+const practiceStaff = [
+  { person: marketingPeople.jordan, role: "Lead coach", lane: "Court 1" },
+  { person: marketingPeople.drew, role: "Assistant", lane: "Court 2" },
+  { person: marketingPeople.alex, role: "Strength", lane: "Warm-up" },
+] as const;
+
 const program = {
   title: "Fall Competition Build",
   purpose:
@@ -204,7 +211,13 @@ function HqChrome({
   );
 }
 
-function BlockBoard({ compact }: { readonly compact?: boolean }) {
+function BlockBoard({
+  compact,
+  showFocus,
+}: {
+  readonly compact?: boolean;
+  readonly showFocus?: boolean;
+}) {
   return (
     <div className={styles.blockBoard}>
       {practice.blocks.map((block) => (
@@ -217,6 +230,9 @@ function BlockBoard({ compact }: { readonly compact?: boolean }) {
             <strong>{block.title}</strong>
             {!compact && <small>{block.kind}</small>}
           </span>
+          {showFocus && (
+            <span className={styles.blockFocus}>{block.focusArea}</span>
+          )}
           <span className={styles.blockLane}>{block.lane}</span>
           <em>
             <Numeric tier="chip">{block.minutes}</Numeric> min
@@ -302,7 +318,19 @@ function PracticeWindow() {
           <span>estimate</span>
         </article>
       </div>
-      <BlockBoard />
+      <BlockBoard showFocus />
+      <div className={styles.staffBoard}>
+        {practiceStaff.map(({ person, role, lane }) => (
+          <article key={person.displayName}>
+            <ProfileAvatar person={person} size="sm" />
+            <span>
+              <strong>{person.displayName}</strong>
+              <small>{role}</small>
+            </span>
+            <em>{lane}</em>
+          </article>
+        ))}
+      </div>
       <div className={styles.hqFooterRow}>
         <ProfileAvatarStack
           label="Squad attending Sideout Under Pressure"
@@ -430,46 +458,46 @@ export function TrainingOSPage({ hqHref }: TrainingOSPageProps) {
       </section>
 
       <section className={styles.plate}>
-        <div className={styles.plateInner} data-reveal>
-          <div className={styles.plateCopy}>
-            <span className={styles.eyebrow}>Drill Studio</span>
-            <h2>Say it once. Get a drill back.</h2>
-            <p>
-              Describe the drill the way you would explain it to an assistant
-              coach. Duna returns the steps, the cues, and the scoring, and
-              nothing is saved until you have corrected it.
-            </p>
-          </div>
+        <div className={styles.plateIntro} data-reveal>
+          <span className={styles.eyebrow}>Drill Studio</span>
+          <h2>Say it once. Get a drill back.</h2>
+          <p>
+            Describe the drill the way you would explain it to an assistant
+            coach. Duna returns the steps, the cues, and the scoring, and
+            nothing is saved until you have corrected it.
+          </p>
+        </div>
+        <div className={styles.plateProof} data-reveal>
           <StudioWindow />
         </div>
       </section>
 
       <section className={`${styles.plate} ${styles.plateRaised}`}>
-        <div className={styles.plateInner} data-reveal>
-          <div className={styles.plateCopy}>
-            <span className={styles.eyebrow}>Practice Builder</span>
-            <h2>Ninety minutes, two courts, one plan.</h2>
-            <p>
-              You assemble the session from your own drills, and two courts can
-              run different work at the same time. Load and contact figures are
-              planning estimates, not a measurement of any athlete.
-            </p>
-          </div>
+        <div className={styles.plateIntro} data-reveal>
+          <span className={styles.eyebrow}>Practice Builder</span>
+          <h2>Ninety minutes, two courts, one plan.</h2>
+          <p>
+            You assemble the session from your own drills, and two courts can
+            run different work at the same time. Load and contact figures are
+            planning estimates, not a measurement of any athlete.
+          </p>
+        </div>
+        <div className={styles.plateProof} data-reveal>
           <PracticeWindow />
         </div>
       </section>
 
       <section className={styles.plate}>
-        <div className={styles.plateInner} data-reveal>
-          <div className={styles.plateCopy}>
-            <span className={styles.eyebrow}>Program Designer</span>
-            <h2>The season that practice belongs to.</h2>
-            <p>
-              Set the window, the weekly pattern, and the tournaments that
-              matter. Duna drafts the phases and the load that lead to them, and
-              you can edit any week before the program is saved.
-            </p>
-          </div>
+        <div className={styles.plateIntro} data-reveal>
+          <span className={styles.eyebrow}>Program Designer</span>
+          <h2>The season that practice belongs to.</h2>
+          <p>
+            Set the window, the weekly pattern, and the tournaments that matter.
+            Duna drafts the phases and the load that lead to them, and you can
+            edit any week before the program is saved.
+          </p>
+        </div>
+        <div className={styles.plateProof} data-reveal>
           <ProgramWindow />
         </div>
       </section>
