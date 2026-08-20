@@ -2,6 +2,7 @@ import type {
   TrainingEvent,
   TrainingPracticePlan,
   TrainingProgram,
+  TrainingVersionHistoryEntry,
   TrainingWorkspace,
 } from "@duna/api/training-contracts";
 import {
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { TrainingContentLifecycle } from "./training-content-lifecycle";
 import { TrainingProgramScheduleEditor } from "./training-program-schedule-editor";
 
 function variableStyle(name: string, value: string): CSSProperties {
@@ -41,8 +43,10 @@ function formatDate(value: string, timezone = "UTC"): string {
 
 export function TrainingPracticePlanDetail({
   plan,
+  versions,
 }: {
   readonly plan: TrainingPracticePlan;
+  readonly versions: readonly TrainingVersionHistoryEntry[];
 }) {
   const groups = [...new Set(plan.blocks.map((block) => block.startsAtMinute))]
     .sort((first, second) => first - second)
@@ -58,7 +62,8 @@ export function TrainingPracticePlanDetail({
         </Link>
         <div>
           <span className="hq-eyebrow">
-            Practice plan · immutable v{plan.version}
+            Practice plan ·{" "}
+            {plan.status === "archived" ? "Archived" : `v${plan.version}`}
           </span>
           <h1>{plan.title}</h1>
           <p>{plan.purpose}</p>
@@ -84,12 +89,18 @@ export function TrainingPracticePlanDetail({
           >
             <FileDown aria-hidden size={16} /> Run sheet
           </Link>
-          <Link
-            className="hq-button hq-button--primary"
-            href="/training/practice-plans/create"
-          >
-            <Sparkles aria-hidden size={16} /> Adapt a new plan
-          </Link>
+          {plan.status === "archived" ? (
+            <span className="hq-button hq-button--secondary" aria-disabled>
+              <Lock aria-hidden size={16} /> Restore to edit
+            </span>
+          ) : (
+            <Link
+              className="hq-button hq-button--primary"
+              href={`/training/practice-plans/create?from=${plan.id}`}
+            >
+              <Sparkles aria-hidden size={16} /> Edit plan
+            </Link>
+          )}
         </div>
       </header>
 
@@ -180,6 +191,12 @@ export function TrainingPracticePlanDetail({
               ))}
             </div>
           </section>
+          <TrainingContentLifecycle
+            contentId={plan.id}
+            kind="practice-plan"
+            status={plan.status}
+            versions={versions}
+          />
         </aside>
       </div>
     </main>
@@ -189,10 +206,12 @@ export function TrainingPracticePlanDetail({
 export function TrainingProgramDetail({
   events,
   program,
+  versions,
   workspace,
 }: {
   readonly events: readonly TrainingEvent[];
   readonly program: TrainingProgram;
+  readonly versions: readonly TrainingVersionHistoryEntry[];
   readonly workspace: TrainingWorkspace;
 }) {
   const progress = program.scheduledSessionCount
@@ -292,6 +311,7 @@ export function TrainingProgramDetail({
           events={events}
           programEndDate={program.endDate}
           programStartDate={program.startDate}
+          readOnly={program.status === "archived"}
         />
         <aside className="training-detail__rail">
           <section className="training-program-detail__objective">
@@ -327,6 +347,12 @@ export function TrainingProgramDetail({
               and competition.
             </p>
           </section>
+          <TrainingContentLifecycle
+            contentId={program.id}
+            kind="program"
+            status={program.status}
+            versions={versions}
+          />
         </aside>
       </div>
 

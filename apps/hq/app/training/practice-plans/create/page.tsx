@@ -9,15 +9,18 @@ export const metadata = { title: "Build a practice" };
 export default async function CreatePracticePlanPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ drill?: string }>;
+  readonly searchParams: Promise<{ drill?: string; from?: string }>;
 }) {
-  const { drill } = await searchParams;
+  const { drill, from } = await searchParams;
   const caller = await getServerCaller();
   const [dashboard, operatorWorkspace, trainingWorkspace] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     caller.operator.trainingWorkspace(),
   ]);
+  const initialPlan = from
+    ? trainingWorkspace.practicePlans.find((plan) => plan.id === from)
+    : undefined;
   return (
     <OperatorShell
       active="training"
@@ -35,17 +38,22 @@ export default async function CreatePracticePlanPage({
           </Link>
           <div>
             <span className="hq-eyebrow">Training · Practice Builder</span>
-            <h1>Compose the practice.</h1>
+            <h1>
+              {initialPlan ? "Refine the practice." : "Compose the practice."}
+            </h1>
             <p>
-              Balance time, load, focus, contact opportunity, transitions, and
-              parallel courts while the run sheet takes shape.
+              {initialPlan
+                ? `You are editing v${initialPlan.version}. Saving creates a new recoverable version and leaves the current plan intact.`
+                : "Balance time, load, focus, contact opportunity, transitions, and parallel courts while the run sheet takes shape."}
             </p>
           </div>
         </header>
         <TrainingPracticeBuilder
           initialDrillId={drill}
+          editingPlanId={initialPlan?.id}
           drills={trainingWorkspace.drills}
           focusAreas={trainingWorkspace.focusAreas}
+          initialPlan={initialPlan}
         />
       </main>
     </OperatorShell>

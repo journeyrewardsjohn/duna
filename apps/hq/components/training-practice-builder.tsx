@@ -4,6 +4,7 @@ import type {
   TrainingDrill,
   TrainingFocusArea,
   TrainingPracticeBlock,
+  TrainingPracticePlan,
 } from "@duna/api/training-contracts";
 import {
   ArrowDown,
@@ -109,6 +110,33 @@ function fromDrill(
   };
 }
 
+function fromPracticePlan(plan: TrainingPracticePlan): readonly BuilderBlock[] {
+  return [...plan.blocks]
+    .sort(
+      (first, second) =>
+        first.startsAtMinute - second.startsAtMinute ||
+        first.sequence - second.sequence ||
+        first.lane.localeCompare(second.lane),
+    )
+    .map((block) => ({
+      localId: block.id,
+      groupId: `restored-${block.startsAtMinute}`,
+      title: block.title,
+      kind: block.kind,
+      ...(block.drillId ? { drillId: block.drillId } : {}),
+      lane: block.lane,
+      durationMinutes: block.durationMinutes,
+      transitionMinutes: block.transitionMinutes,
+      intensity: block.intensity,
+      plannedLoad: block.plannedLoad,
+      ...(block.focusArea ? { focusArea: block.focusArea } : {}),
+      ...(block.instructions ? { instructions: block.instructions } : {}),
+      touchesTypical: block.touchesTypical,
+      jumpsTypical: block.jumpsTypical,
+      locked: block.locked,
+    }));
+}
+
 function groupBlocks(blocks: readonly BuilderBlock[]) {
   const groups: {
     readonly id: string;
@@ -155,36 +183,51 @@ export function TrainingPracticeBuilder({
   drills,
   focusAreas,
   initialDrillId,
+  initialPlan,
+  editingPlanId,
 }: {
   readonly drills: readonly TrainingDrill[];
   readonly focusAreas: readonly TrainingFocusArea[];
   readonly initialDrillId?: string;
+  readonly initialPlan?: TrainingPracticePlan;
+  readonly editingPlanId?: string;
 }) {
   const initialDrill = drills.find((drill) => drill.id === initialDrillId);
-  const [title, setTitle] = useState("Sideout Under Pressure");
+  const [title, setTitle] = useState(
+    initialPlan?.title ?? "Sideout Under Pressure",
+  );
   const [purpose, setPurpose] = useState(
-    "Carry first-contact quality through attack choice, transition, and late-practice serving pressure.",
+    initialPlan?.purpose ??
+      "Carry first-contact quality through attack choice, transition, and late-practice serving pressure.",
   );
   const [audience, setAudience] = useState(
-    "Competitive 16U–18U beach athletes; 8–12 players on two courts.",
+    initialPlan?.targetAudience ??
+      "Competitive 16U–18U beach athletes; 8–12 players on two courts.",
   );
-  const [focusArea, setFocusArea] =
-    useState<TrainingFocusArea>("Offensive Systems");
+  const [focusArea, setFocusArea] = useState<TrainingFocusArea>(
+    initialPlan?.focusArea ?? "Offensive Systems",
+  );
   const [visibility, setVisibility] = useState<"organization" | "public">(
-    "organization",
+    initialPlan?.visibility ?? "organization",
   );
-  const [blocks, setBlocks] = useState<readonly BuilderBlock[]>(() => [
-    warmup(),
-    ...(initialDrill
-      ? [fromDrill(initialDrill, "initial-drill")]
-      : drills
-          .slice(0, 2)
-          .map((drill, index) => fromDrill(drill, `starter-${index}`))),
-    cooldown(),
-  ]);
+  const [blocks, setBlocks] = useState<readonly BuilderBlock[]>(() =>
+    initialPlan
+      ? fromPracticePlan(initialPlan)
+      : [
+          warmup(),
+          ...(initialDrill
+            ? [fromDrill(initialDrill, "initial-drill")]
+            : drills
+                .slice(0, 2)
+                .map((drill, index) => fromDrill(drill, `starter-${index}`))),
+          cooldown(),
+        ],
+  );
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(
-    initialDrill?.id ?? drills[0]?.id,
+    initialDrill?.id ??
+      initialPlan?.blocks.find((block) => block.drillId)?.drillId ??
+      drills[0]?.id,
   );
   const [notice, setNotice] = useState<{
     readonly status: "success" | "error";
@@ -320,6 +363,7 @@ export function TrainingPracticeBuilder({
     };
     startSaving(async () => {
       const result = await saveTrainingPracticePlanAction({
+        ...(editingPlanId ? { practicePlanId: editingPlanId } : {}),
         title,
         slug: title
           .toLowerCase()
@@ -697,7 +741,11 @@ export function TrainingPracticeBuilder({
             type="button"
           >
             <Save aria-hidden size={16} />{" "}
-            {saving ? "Saving…" : "Save practice"}
+            {saving
+              ? "Saving…"
+              : editingPlanId
+                ? "Save new version"
+                : "Save practice"}
           </button>
         </div>
         {notice && (

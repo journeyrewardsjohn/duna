@@ -331,6 +331,56 @@ export const trainingProgramSchema = z.object({
 });
 export type TrainingProgram = z.infer<typeof trainingProgramSchema>;
 
+export const trainingVersionHistoryEntrySchema = z.object({
+  id: z.string().uuid(),
+  version: z.number().int().positive(),
+  title: z.string(),
+  createdAt: z.iso.datetime(),
+  current: z.boolean(),
+  changeNote: z.string().optional(),
+});
+export type TrainingVersionHistoryEntry = z.infer<
+  typeof trainingVersionHistoryEntrySchema
+>;
+
+export const trainingProgramVersionEventSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  kind: trainingEventSchema.shape.kind,
+  title: z.string().trim().min(2).max(180),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string().trim().min(1).max(80),
+  status: trainingEventSchema.shape.status,
+  practicePlanVersionId: z.string().uuid().optional(),
+  objectives: z.array(z.string().trim().max(2_000)).max(12),
+  plannedLoad: z.number().int().min(0).max(100),
+  plannedIntensity: z.number().int().min(1).max(10),
+  externalLoad: z.record(z.string(), z.unknown()),
+  source: z.enum(["program", "manual", "catalog", "imported", "ai-draft"]),
+});
+
+export const trainingProgramVersionSnapshotSchema = z.object({
+  program: z.object({
+    title: z.string().trim().min(2).max(180),
+    purpose: z.string().trim().min(10).max(2_000),
+    targetAudience: z.string().trim().min(3).max(500),
+    objectives: z.array(z.string().trim().min(2).max(240)).min(1).max(12),
+    approach: z.string().trim().min(3).max(2_000),
+    startDate: z.iso.date(),
+    endDate: z.iso.date(),
+    timezone: z.string().trim().min(1).max(80),
+    recurrence: trainingRecurrenceSchema,
+    milestones: z.array(trainingMilestoneSchema).max(50),
+    scheduledSessionCount: z.number().int().nonnegative(),
+    defaultPracticeMinutes: z.number().int().min(1).max(720),
+    athleteCount: z.number().int().positive().max(500),
+  }),
+  events: z.array(trainingProgramVersionEventSnapshotSchema).max(500),
+});
+export type TrainingProgramVersionSnapshot = z.infer<
+  typeof trainingProgramVersionSnapshotSchema
+>;
+
 export const trainingInsightSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -517,22 +567,31 @@ export const createTrainingDrillInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
 });
 
+export const trainingPracticePlanEditorSchema = trainingPracticePlanSchema
+  .omit({
+    id: true,
+    versionId: true,
+    version: true,
+    updatedAt: true,
+    totalTouchesTypical: true,
+    totalJumpsTypical: true,
+  })
+  .extend({
+    blocks: z
+      .array(trainingPracticeBlockSchema.omit({ id: true }))
+      .min(1)
+      .max(80),
+  });
+
 export const createTrainingPracticePlanInputSchema = z.object({
-  plan: trainingPracticePlanSchema
-    .omit({
-      id: true,
-      versionId: true,
-      version: true,
-      updatedAt: true,
-      totalTouchesTypical: true,
-      totalJumpsTypical: true,
-    })
-    .extend({
-      blocks: z
-        .array(trainingPracticeBlockSchema.omit({ id: true }))
-        .min(1)
-        .max(80),
-    }),
+  plan: trainingPracticePlanEditorSchema,
+  idempotencyKey: z.string().uuid(),
+});
+
+export const updateTrainingPracticePlanInputSchema = z.object({
+  practicePlanId: z.string().uuid(),
+  plan: trainingPracticePlanEditorSchema,
+  changeNote: z.string().trim().max(500).optional(),
   idempotencyKey: z.string().uuid(),
 });
 
@@ -608,6 +667,46 @@ export const updateTrainingProgramEventInputSchema = z.object({
   title: z.string().trim().min(2).max(180),
   plannedLoad: z.number().int().min(0).max(100),
   focusArea: trainingFocusAreaSchema.optional(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const trainingProgramVersionsInputSchema = z.object({
+  programId: z.string().uuid(),
+});
+
+export const trainingPracticePlanVersionsInputSchema = z.object({
+  practicePlanId: z.string().uuid(),
+});
+
+export const archiveTrainingProgramInputSchema = z.object({
+  programId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const restoreTrainingProgramArchiveInputSchema = z.object({
+  programId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const restoreTrainingProgramVersionInputSchema = z.object({
+  programId: z.string().uuid(),
+  versionId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const archiveTrainingPracticePlanInputSchema = z.object({
+  practicePlanId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const restoreTrainingPracticePlanArchiveInputSchema = z.object({
+  practicePlanId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const restoreTrainingPracticePlanVersionInputSchema = z.object({
+  practicePlanId: z.string().uuid(),
+  versionId: z.string().uuid(),
   idempotencyKey: z.string().uuid(),
 });
 

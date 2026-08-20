@@ -16,6 +16,7 @@ import {
   trainingPracticePlanTags,
   trainingPracticePlanVersions,
   trainingPrograms,
+  trainingProgramVersions,
   trainingProgramParticipants,
   trainingTags,
 } from "@duna/db";
@@ -24,6 +25,8 @@ import { z } from "zod";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import {
+  archiveTrainingPracticePlanInputSchema,
+  archiveTrainingProgramInputSchema,
   assignTrainingPracticePlanInputSchema,
   createTrainingDrillInputSchema,
   createTrainingPracticePlanInputSchema,
@@ -34,21 +37,29 @@ import {
   recordTrainingOutcomeInputSchema,
   playerTrainingEventSchema,
   playerTrainingWorkspaceSchema,
+  restoreTrainingPracticePlanArchiveInputSchema,
+  restoreTrainingPracticePlanVersionInputSchema,
+  restoreTrainingProgramArchiveInputSchema,
+  restoreTrainingProgramVersionInputSchema,
   TRAINING_FOCUS_AREAS,
   trainingContactEstimateSchema,
   trainingDrillSchema,
   trainingEventSchema,
   trainingFocusAreaSchema,
   trainingPracticePlanSchema,
+  trainingPracticePlanVersionsInputSchema,
   trainingProgramEventsInputSchema,
   submitTrainingAthleteResponseInputSchema,
   trainingProgramDraftSchema,
   trainingProgramSchema,
+  trainingProgramVersionSnapshotSchema,
+  trainingProgramVersionsInputSchema,
   trainingRecurrenceSchema,
   trainingTagSchema,
   trainingWorkspaceSchema,
   touchEstimateInputSchema,
   updateTrainingProgramEventInputSchema,
+  updateTrainingPracticePlanInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
   type TrainingContactEstimate,
@@ -59,7 +70,9 @@ import {
   type PlayerTrainingEvent,
   type PlayerTrainingWorkspace,
   type TrainingProgramDraft,
+  type TrainingProgramVersionSnapshot,
   type TrainingRecurrence,
+  type TrainingVersionHistoryEntry,
   type TrainingWeekday,
   type TrainingWorkspace,
 } from "./training-contracts";
@@ -109,6 +122,11 @@ function demoId(sequence: number): string {
 const BUILT_IN_DUNA_DRILL_IDS = new Set(
   Array.from({ length: 6 }, (_, index) => demoId(101 + index)),
 );
+
+const TRAINING_VERSION_RETENTION = 5;
+
+type TrainingProgramRecord = typeof trainingPrograms.$inferSelect;
+type TrainingEventRecord = typeof trainingEvents.$inferSelect;
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -1814,11 +1832,142 @@ function programReadiness(
   scheduled: number,
   completed: number,
 ) {
+  if (status === "archived") return "complete" as const;
   if (status === "completed") return "complete" as const;
   if (status === "draft") return "building" as const;
   if (scheduled > 0 && completed / scheduled < 0.25)
     return "attention" as const;
   return "on-track" as const;
+}
+
+function programVersionSnapshot(
+  program: Pick<
+    TrainingProgramRecord,
+    | "title"
+    | "purpose"
+    | "targetAudience"
+    | "objectives"
+    | "approach"
+    | "startDate"
+    | "endDate"
+    | "timezone"
+    | "recurrence"
+    | "milestones"
+    | "scheduledSessionCount"
+    | "defaultPracticeMinutes"
+    | "athleteCount"
+  >,
+  events: readonly Pick<
+    TrainingEventRecord,
+    | "id"
+    | "kind"
+    | "title"
+    | "startsAt"
+    | "endsAt"
+    | "timezone"
+    | "status"
+    | "practicePlanVersionId"
+    | "objectives"
+    | "plannedLoad"
+    | "plannedIntensity"
+    | "externalLoad"
+    | "source"
+  >[],
+): TrainingProgramVersionSnapshot {
+  return trainingProgramVersionSnapshotSchema.parse({
+    program: {
+      title: program.title,
+      purpose: program.purpose,
+      targetAudience: program.targetAudience,
+      objectives: program.objectives,
+      approach: program.approach,
+      startDate: program.startDate,
+      endDate: program.endDate,
+      timezone: program.timezone,
+      recurrence: program.recurrence,
+      milestones: program.milestones,
+      scheduledSessionCount: program.scheduledSessionCount,
+      defaultPracticeMinutes: program.defaultPracticeMinutes,
+      athleteCount: program.athleteCount,
+    },
+    events: events.map(programEventSnapshot),
+  });
+}
+
+function programEventSnapshot(
+  event: Pick<
+    TrainingEventRecord,
+    | "id"
+    | "kind"
+    | "title"
+    | "startsAt"
+    | "endsAt"
+    | "timezone"
+    | "status"
+    | "practicePlanVersionId"
+    | "objectives"
+    | "plannedLoad"
+    | "plannedIntensity"
+    | "externalLoad"
+    | "source"
+  >,
+): TrainingProgramVersionSnapshot["events"][number] {
+  return {
+    id: event.id,
+    kind: event.kind,
+    title: event.title,
+    startsAt: event.startsAt.toISOString(),
+    endsAt: event.endsAt.toISOString(),
+    timezone: event.timezone,
+    status: event.status,
+    ...(event.practicePlanVersionId
+      ? { practicePlanVersionId: event.practicePlanVersionId }
+      : {}),
+    objectives: event.objectives,
+    plannedLoad: event.plannedLoad,
+    plannedIntensity: event.plannedIntensity,
+    externalLoad: event.externalLoad,
+    source:
+      event.source === "program" ||
+      event.source === "manual" ||
+      event.source === "catalog" ||
+      event.source === "imported" ||
+      event.source === "ai-draft"
+        ? event.source
+        : "program",
+  };
+}
+
+function versionEntry(
+  row: {
+    readonly id: string;
+    readonly version: number;
+    readonly snapshot: Record<string, unknown>;
+    readonly changeNote: string | null;
+    readonly createdAt: Date;
+  },
+  currentVersionId: string | null,
+  fallbackTitle: string,
+  kind: "program" | "practice-plan",
+): TrainingVersionHistoryEntry {
+  let title = fallbackTitle;
+  if (kind === "program") {
+    const snapshot = trainingProgramVersionSnapshotSchema.safeParse(
+      row.snapshot,
+    );
+    if (snapshot.success) title = snapshot.data.program.title;
+  } else {
+    const snapshot = trainingPracticePlanSchema.safeParse(row.snapshot);
+    if (snapshot.success) title = snapshot.data.title;
+  }
+  return {
+    id: row.id,
+    version: row.version,
+    title,
+    createdAt: row.createdAt.toISOString(),
+    current: row.id === currentVersionId,
+    ...(row.changeNote ? { changeNote: row.changeNote } : {}),
+  };
 }
 
 function weekLabel(date: Date): string {
@@ -2047,9 +2196,11 @@ export async function loadTrainingWorkspace(input: {
       currentPhase:
         row.status === "draft"
           ? "Designing"
-          : row.status === "completed"
-            ? "Complete"
-            : "In progress",
+          : row.status === "archived"
+            ? "Archived"
+            : row.status === "completed"
+              ? "Complete"
+              : "In progress",
       ...(nextEvent ? { nextEventAt: nextEvent.startsAt } : {}),
       readiness: programReadiness(
         row.status,
@@ -2059,8 +2210,19 @@ export async function loadTrainingWorkspace(input: {
     });
     return parsed.success ? [parsed.data] : [];
   });
+  const archivedProgramIds = new Set(
+    programRows
+      .filter((program) => program.status === "archived" || program.archivedAt)
+      .map((program) => program.id),
+  );
+  const operationalEvents = events.filter(
+    (event) => !event.programId || !archivedProgramIds.has(event.programId),
+  );
+  const activePracticePlans = practicePlans.filter(
+    (plan) => plan.status !== "archived",
+  );
   const focusMinutes = new Map<TrainingFocusArea, number>();
-  for (const plan of practicePlans) {
+  for (const plan of activePracticePlans) {
     for (const block of plan.blocks) {
       if (!block.focusArea) continue;
       focusMinutes.set(
@@ -2076,7 +2238,7 @@ export async function loadTrainingWorkspace(input: {
   const weeklyLoad = Array.from({ length: 6 }, (_, index) => {
     const weekStart = addDays(now, (index - 3) * 7);
     const weekEnd = addDays(weekStart, 7);
-    const matching = events.filter((event) => {
+    const matching = operationalEvents.filter((event) => {
       const startsAt = new Date(event.startsAt);
       return startsAt >= weekStart && startsAt < weekEnd;
     });
@@ -2091,7 +2253,7 @@ export async function loadTrainingWorkspace(input: {
       tournament: matching.some((event) => event.kind === "tournament"),
     };
   });
-  const upcomingEvents = events
+  const upcomingEvents = operationalEvents
     .filter(
       (event) =>
         event.status !== "cancelled" &&
@@ -2117,7 +2279,7 @@ export async function loadTrainingWorkspace(input: {
         ),
       0,
     );
-  const totalTouchesTypical = practicePlans.reduce(
+  const totalTouchesTypical = activePracticePlans.reduce(
     (sum, plan) => sum + plan.totalTouchesTypical,
     0,
   );
@@ -2265,6 +2427,143 @@ export async function loadTrainingProgramEvents(input: {
       athleteCount: program.athleteCount,
     });
   });
+}
+
+/**
+ * Training revisions are intentionally a small operational history, not an
+ * unbounded audit log. The audit log captures every state transition; this
+ * list gives coaches the five content snapshots they can actually restore.
+ */
+export async function loadTrainingProgramVersions(input: {
+  readonly organizationId: string;
+  readonly programId: string;
+  readonly now?: Date;
+  readonly demo?: boolean;
+}): Promise<TrainingVersionHistoryEntry[]> {
+  const parsed = trainingProgramVersionsInputSchema.parse({
+    programId: input.programId,
+  });
+  if (input.demo && !process.env.DATABASE_URL) {
+    const program = loadDemoTrainingWorkspace(
+      input.organizationId,
+      input.now,
+    ).programs.find((entry) => entry.id === parsed.programId);
+    return program
+      ? [
+          {
+            id: demoId(780),
+            version: 1,
+            title: program.title,
+            createdAt: (input.now ?? new Date()).toISOString(),
+            current: true,
+            changeNote: "Initial coach-authored program calendar.",
+          },
+        ]
+      : [];
+  }
+  requireTrainingDatabase();
+  const database = getDatabase();
+  const [program] = await database
+    .select({
+      id: trainingPrograms.id,
+      title: trainingPrograms.title,
+      currentVersionId: trainingPrograms.currentVersionId,
+    })
+    .from(trainingPrograms)
+    .where(
+      and(
+        eq(trainingPrograms.id, parsed.programId),
+        eq(trainingPrograms.organizationId, input.organizationId),
+      ),
+    )
+    .limit(1);
+  if (!program) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program is no longer available.",
+    );
+  }
+  const versions = await database
+    .select({
+      id: trainingProgramVersions.id,
+      version: trainingProgramVersions.version,
+      snapshot: trainingProgramVersions.snapshot,
+      changeNote: trainingProgramVersions.changeNote,
+      createdAt: trainingProgramVersions.createdAt,
+    })
+    .from(trainingProgramVersions)
+    .where(eq(trainingProgramVersions.programId, program.id))
+    .orderBy(desc(trainingProgramVersions.version))
+    .limit(TRAINING_VERSION_RETENTION);
+  return versions.map((version) =>
+    versionEntry(version, program.currentVersionId, program.title, "program"),
+  );
+}
+
+export async function loadTrainingPracticePlanVersions(input: {
+  readonly organizationId: string;
+  readonly practicePlanId: string;
+  readonly now?: Date;
+  readonly demo?: boolean;
+}): Promise<TrainingVersionHistoryEntry[]> {
+  const parsed = trainingPracticePlanVersionsInputSchema.parse({
+    practicePlanId: input.practicePlanId,
+  });
+  if (input.demo && !process.env.DATABASE_URL) {
+    const plan = loadDemoTrainingWorkspace(
+      input.organizationId,
+      input.now,
+    ).practicePlans.find((entry) => entry.id === parsed.practicePlanId);
+    return plan
+      ? [
+          {
+            id: demoId(781),
+            version: plan.version,
+            title: plan.title,
+            createdAt: plan.updatedAt,
+            current: true,
+            changeNote: "Initial coach-authored practice plan.",
+          },
+        ]
+      : [];
+  }
+  requireTrainingDatabase();
+  const database = getDatabase();
+  const [plan] = await database
+    .select({
+      id: trainingPracticePlans.id,
+      title: trainingPracticePlans.title,
+      currentVersionId: trainingPracticePlans.currentVersionId,
+    })
+    .from(trainingPracticePlans)
+    .where(
+      and(
+        eq(trainingPracticePlans.id, parsed.practicePlanId),
+        eq(trainingPracticePlans.organizationId, input.organizationId),
+      ),
+    )
+    .limit(1);
+  if (!plan) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This practice plan is no longer available.",
+    );
+  }
+  const versions = await database
+    .select({
+      id: trainingPracticePlanVersions.id,
+      version: trainingPracticePlanVersions.version,
+      snapshot: trainingPracticePlanVersions.snapshot,
+      changeNote: trainingPracticePlanVersions.changeNote,
+      createdAt: trainingPracticePlanVersions.createdAt,
+    })
+    .from(trainingPracticePlanVersions)
+    .where(eq(trainingPracticePlanVersions.practicePlanId, plan.id))
+    .orderBy(desc(trainingPracticePlanVersions.version))
+    .limit(TRAINING_VERSION_RETENTION);
+  return versions.map((version) =>
+    versionEntry(version, plan.currentVersionId, plan.title, "practice-plan"),
+  );
 }
 
 function athletePractice(plan: TrainingPracticePlan | undefined) {
@@ -2471,7 +2770,10 @@ export async function loadPlayerTrainingWorkspace(input: {
       return parsed.success ? [[row.id, parsed.data] as const] : [];
     }),
   );
-  const programById = new Map(programRows.map((row) => [row.id, row]));
+  const activeProgramRows = programRows.filter(
+    (program) => program.status !== "archived" && !program.archivedAt,
+  );
+  const programById = new Map(activeProgramRows.map((row) => [row.id, row]));
   const responseByEventId = new Map(
     responseRows.map((row) => [row.trainingEventId, row]),
   );
@@ -2534,7 +2836,7 @@ export async function loadPlayerTrainingWorkspace(input: {
         new Date(first.startsAt).getTime(),
     )
     .slice(0, 8);
-  const programs = programRows.map((row) => {
+  const programs = activeProgramRows.map((row) => {
     const programEvents = events.filter((event) => event.programId === row.id);
     const completedSessionCount = programEvents.filter(
       (event) => event.kind === "practice" && event.status === "completed",
@@ -3057,6 +3359,709 @@ export async function createTrainingPracticePlan(input: {
   return { id, versionId, status: "draft" };
 }
 
+export async function updateTrainingPracticePlan(input: {
+  readonly actor: ApiActor;
+  readonly practicePlanId: string;
+  readonly plan: unknown;
+  readonly changeNote?: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly id: string;
+  readonly versionId: string;
+  readonly status: "draft" | "review" | "published";
+}> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot update practice plans.",
+    );
+  }
+  const parsed = updateTrainingPracticePlanInputSchema.parse(input);
+  const database = getDatabase();
+  const [existingPlan, existingVersions] = await Promise.all([
+    database
+      .select()
+      .from(trainingPracticePlans)
+      .where(
+        and(
+          eq(trainingPracticePlans.id, parsed.practicePlanId),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      )
+      .limit(1),
+    database
+      .select({
+        id: trainingPracticePlanVersions.id,
+        version: trainingPracticePlanVersions.version,
+      })
+      .from(trainingPracticePlanVersions)
+      .where(
+        eq(trainingPracticePlanVersions.practicePlanId, parsed.practicePlanId),
+      )
+      .orderBy(desc(trainingPracticePlanVersions.version)),
+  ]);
+  const plan = existingPlan[0];
+  if (!plan) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This practice plan is no longer available.",
+    );
+  }
+  if (plan.status === "archived" || plan.archivedAt) {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "Restore this archived practice plan before creating a new version.",
+    );
+  }
+  const blocks = parsed.plan.blocks.map((block) => ({
+    ...block,
+    id: crypto.randomUUID(),
+  }));
+  const versionId = crypto.randomUUID();
+  const version = (existingVersions[0]?.version ?? 0) + 1;
+  const saved = trainingPracticePlanSchema.parse({
+    ...parsed.plan,
+    id: plan.id,
+    versionId,
+    version,
+    slug: plan.slug,
+    status: plan.status,
+    blocks,
+    totalTouchesTypical: blocks.reduce(
+      (sum, block) => sum + block.touchesTypical,
+      0,
+    ),
+    totalJumpsTypical: blocks.reduce(
+      (sum, block) => sum + block.jumpsTypical,
+      0,
+    ),
+    updatedAt: input.now.toISOString(),
+  });
+  const drillIds = blocks
+    .map((block) => block.drillId)
+    .filter((value): value is string => Boolean(value));
+  const currentDrills = drillIds.length
+    ? await database
+        .select({
+          id: trainingDrills.id,
+          versionId: trainingDrills.currentVersionId,
+          organizationId: trainingDrills.organizationId,
+          visibility: trainingDrills.visibility,
+          status: trainingDrills.status,
+        })
+        .from(trainingDrills)
+        .where(inArray(trainingDrills.id, drillIds))
+    : [];
+  const drillVersionByDrillId = new Map(
+    currentDrills
+      .filter(
+        (drill) =>
+          drill.versionId &&
+          (drill.organizationId === organizationId ||
+            (drill.visibility === "public" && drill.status === "published")),
+      )
+      .map((drill) => [drill.id, drill.versionId!]),
+  );
+  if (
+    drillIds.some(
+      (drillId) =>
+        !BUILT_IN_DUNA_DRILL_IDS.has(drillId) &&
+        !drillVersionByDrillId.has(drillId),
+    )
+  ) {
+    throw new TrainingServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "A practice block uses a drill that is no longer available to this organization.",
+    );
+  }
+  const staleVersionIds = existingVersions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((entry) => entry.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPracticePlans)
+      .set({
+        title: saved.title,
+        purpose: saved.purpose,
+        targetAudience: saved.targetAudience,
+        visibility: saved.visibility,
+        durationMinutes: saved.durationMinutes,
+        plannedLoad: saved.plannedLoad,
+        currentVersionId: versionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPracticePlans.id, plan.id),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(trainingPracticePlanVersions).values({
+      id: versionId,
+      practicePlanId: plan.id,
+      version,
+      snapshot: saved,
+      changeNote:
+        parsed.changeNote ?? "Coach updated the practice-plan timeline.",
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    await transaction.insert(trainingPracticePlanBlocks).values(
+      blocks.map((block) => ({
+        id: block.id,
+        practicePlanVersionId: versionId,
+        drillVersionId: block.drillId
+          ? drillVersionByDrillId.get(block.drillId)
+          : undefined,
+        sequence: block.sequence,
+        lane: block.lane,
+        title: block.title,
+        kind: block.kind,
+        startsAtMinute: block.startsAtMinute,
+        durationMinutes: block.durationMinutes,
+        transitionMinutes: block.transitionMinutes,
+        intensity: block.intensity,
+        plannedLoad: block.plannedLoad,
+        instructionsMarkdown: block.instructions,
+        estimates: {
+          touchesTypical: block.touchesTypical,
+          jumpsTypical: block.jumpsTypical,
+          focusArea: block.focusArea,
+        },
+        locked: block.locked,
+        createdAt: input.now,
+      })),
+    );
+    await transaction
+      .delete(trainingPracticePlanTags)
+      .where(eq(trainingPracticePlanTags.practicePlanId, plan.id));
+    for (const tag of saved.tags) {
+      const normalized = normalizeTrainingTag(tag.label);
+      const [existingTag] = await transaction
+        .select({ id: trainingTags.id })
+        .from(trainingTags)
+        .where(
+          and(
+            eq(trainingTags.slug, normalized.slug),
+            or(
+              isNull(trainingTags.organizationId),
+              eq(trainingTags.organizationId, organizationId),
+            ),
+          ),
+        )
+        .limit(1);
+      const tagId = existingTag?.id ?? crypto.randomUUID();
+      if (!existingTag) {
+        await transaction.insert(trainingTags).values({
+          id: tagId,
+          organizationId,
+          slug: normalized.slug,
+          label: normalized.label,
+          aliases: [],
+          category: tag.isFocusArea ? "focus" : tag.category,
+          isFocusArea: tag.isFocusArea,
+          createdByPersonId: input.actor.personId,
+          createdAt: input.now,
+          updatedAt: input.now,
+        });
+      }
+      await transaction.insert(trainingPracticePlanTags).values({
+        practicePlanId: plan.id,
+        tagId,
+        isFocusArea: tag.isFocusArea,
+        createdAt: input.now,
+      });
+    }
+    if (staleVersionIds.length) {
+      const [eventReferences, outcomeReferences] = await Promise.all([
+        transaction
+          .select({ versionId: trainingEvents.practicePlanVersionId })
+          .from(trainingEvents)
+          .where(
+            inArray(trainingEvents.practicePlanVersionId, staleVersionIds),
+          ),
+        transaction
+          .select({ versionId: trainingPracticeOutcomes.practicePlanVersionId })
+          .from(trainingPracticeOutcomes)
+          .where(
+            inArray(
+              trainingPracticeOutcomes.practicePlanVersionId,
+              staleVersionIds,
+            ),
+          ),
+      ]);
+      const protectedVersionIds = new Set(
+        [...eventReferences, ...outcomeReferences]
+          .map((reference) => reference.versionId)
+          .filter((value): value is string => Boolean(value)),
+      );
+      const removableVersionIds = staleVersionIds.filter(
+        (entry) => !protectedVersionIds.has(entry),
+      );
+      if (removableVersionIds.length) {
+        await transaction
+          .delete(trainingPracticePlanVersions)
+          .where(inArray(trainingPracticePlanVersions.id, removableVersionIds));
+      }
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-practice-plan.version-created",
+      entityType: "training-practice-plan",
+      entityId: plan.id,
+      beforeHash: stableHash({ versionId: plan.currentVersionId }),
+      afterHash: stableHash(saved),
+      reason:
+        "Coach created a new restorable practice-plan version. Assigned session snapshots remain untouched.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: plan.id, versionId, status: plan.status };
+}
+
+export async function archiveTrainingPracticePlan(input: {
+  readonly actor: ApiActor;
+  readonly practicePlanId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly status: "archived" }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot archive practice plans.",
+    );
+  }
+  const parsed = archiveTrainingPracticePlanInputSchema.parse(input);
+  const database = getDatabase();
+  const [plan] = await database
+    .select()
+    .from(trainingPracticePlans)
+    .where(
+      and(
+        eq(trainingPracticePlans.id, parsed.practicePlanId),
+        eq(trainingPracticePlans.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!plan) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This practice plan is no longer available.",
+    );
+  }
+  if (plan.status === "archived" || plan.archivedAt) {
+    return { id: plan.id, status: "archived" };
+  }
+  const versions = await database
+    .select({ id: trainingPracticePlanVersions.id })
+    .from(trainingPracticePlanVersions)
+    .where(eq(trainingPracticePlanVersions.practicePlanId, plan.id))
+    .orderBy(desc(trainingPracticePlanVersions.version));
+  const staleVersionIds = versions
+    .slice(TRAINING_VERSION_RETENTION)
+    .map((version) => version.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPracticePlans)
+      .set({ status: "archived", archivedAt: input.now, updatedAt: input.now })
+      .where(
+        and(
+          eq(trainingPracticePlans.id, plan.id),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      );
+    if (staleVersionIds.length) {
+      const [eventReferences, outcomeReferences] = await Promise.all([
+        transaction
+          .select({ versionId: trainingEvents.practicePlanVersionId })
+          .from(trainingEvents)
+          .where(
+            inArray(trainingEvents.practicePlanVersionId, staleVersionIds),
+          ),
+        transaction
+          .select({ versionId: trainingPracticeOutcomes.practicePlanVersionId })
+          .from(trainingPracticeOutcomes)
+          .where(
+            inArray(
+              trainingPracticeOutcomes.practicePlanVersionId,
+              staleVersionIds,
+            ),
+          ),
+      ]);
+      const protectedVersionIds = new Set(
+        [...eventReferences, ...outcomeReferences]
+          .map((reference) => reference.versionId)
+          .filter((value): value is string => Boolean(value)),
+      );
+      const removableVersionIds = staleVersionIds.filter(
+        (versionId) => !protectedVersionIds.has(versionId),
+      );
+      if (removableVersionIds.length) {
+        await transaction
+          .delete(trainingPracticePlanVersions)
+          .where(inArray(trainingPracticePlanVersions.id, removableVersionIds));
+      }
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-practice-plan.archived",
+      entityType: "training-practice-plan",
+      entityId: plan.id,
+      beforeHash: stableHash({ status: plan.status }),
+      afterHash: stableHash({ status: "archived" }),
+      reason:
+        "Coach archived the reusable practice plan. Existing assigned session versions remain available to the session record.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: plan.id, status: "archived" };
+}
+
+export async function restoreTrainingPracticePlanArchive(input: {
+  readonly actor: ApiActor;
+  readonly practicePlanId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly id: string;
+  readonly status: "draft" | "review" | "published";
+}> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot restore practice plans.",
+    );
+  }
+  const parsed = restoreTrainingPracticePlanArchiveInputSchema.parse(input);
+  const database = getDatabase();
+  const [plan] = await database
+    .select()
+    .from(trainingPracticePlans)
+    .where(
+      and(
+        eq(trainingPracticePlans.id, parsed.practicePlanId),
+        eq(trainingPracticePlans.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!plan) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This practice plan is no longer available.",
+    );
+  }
+  if (plan.status !== "archived" && !plan.archivedAt) {
+    return { id: plan.id, status: plan.status };
+  }
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPracticePlans)
+      .set({ status: "draft", archivedAt: null, updatedAt: input.now })
+      .where(
+        and(
+          eq(trainingPracticePlans.id, plan.id),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-practice-plan.restored",
+      entityType: "training-practice-plan",
+      entityId: plan.id,
+      beforeHash: stableHash({ status: plan.status }),
+      afterHash: stableHash({ status: "draft" }),
+      reason:
+        "Coach restored the archived practice plan as a private draft. Assigned session history was not changed.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: plan.id, status: "draft" };
+}
+
+export async function restoreTrainingPracticePlanVersion(input: {
+  readonly actor: ApiActor;
+  readonly practicePlanId: string;
+  readonly versionId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly versionId: string }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot restore practice-plan versions.",
+    );
+  }
+  const parsed = restoreTrainingPracticePlanVersionInputSchema.parse(input);
+  const database = getDatabase();
+  const [plan, versions, target, sourceBlocks] = await Promise.all([
+    database
+      .select()
+      .from(trainingPracticePlans)
+      .where(
+        and(
+          eq(trainingPracticePlans.id, parsed.practicePlanId),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      )
+      .limit(1),
+    database
+      .select({
+        id: trainingPracticePlanVersions.id,
+        version: trainingPracticePlanVersions.version,
+      })
+      .from(trainingPracticePlanVersions)
+      .where(
+        eq(trainingPracticePlanVersions.practicePlanId, parsed.practicePlanId),
+      )
+      .orderBy(desc(trainingPracticePlanVersions.version)),
+    database
+      .select({
+        id: trainingPracticePlanVersions.id,
+        version: trainingPracticePlanVersions.version,
+        snapshot: trainingPracticePlanVersions.snapshot,
+      })
+      .from(trainingPracticePlanVersions)
+      .where(
+        and(
+          eq(trainingPracticePlanVersions.id, parsed.versionId),
+          eq(
+            trainingPracticePlanVersions.practicePlanId,
+            parsed.practicePlanId,
+          ),
+        ),
+      )
+      .limit(1),
+    database
+      .select({
+        id: trainingPracticePlanBlocks.id,
+        drillVersionId: trainingPracticePlanBlocks.drillVersionId,
+      })
+      .from(trainingPracticePlanBlocks)
+      .where(
+        eq(trainingPracticePlanBlocks.practicePlanVersionId, parsed.versionId),
+      ),
+  ]);
+  const currentPlan = plan[0];
+  const selectedVersion = target[0];
+  if (!currentPlan || !selectedVersion) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "That recoverable practice-plan version is no longer available.",
+    );
+  }
+  const restored = trainingPracticePlanSchema.safeParse(
+    selectedVersion.snapshot,
+  );
+  if (!restored.success) {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "This historical practice-plan version cannot be restored safely.",
+    );
+  }
+  const nextVersionId = crypto.randomUUID();
+  const nextVersion = (versions[0]?.version ?? 0) + 1;
+  const restoredStatus =
+    currentPlan.status === "archived" ? "draft" : currentPlan.status;
+  const newBlocks = restored.data.blocks.map((block) => ({
+    ...block,
+    id: crypto.randomUUID(),
+  }));
+  const saved = trainingPracticePlanSchema.parse({
+    ...restored.data,
+    id: currentPlan.id,
+    versionId: nextVersionId,
+    version: nextVersion,
+    slug: currentPlan.slug,
+    status: restoredStatus,
+    visibility: currentPlan.visibility,
+    blocks: newBlocks,
+    updatedAt: input.now.toISOString(),
+  });
+  const sourceBlockById = new Map(
+    sourceBlocks.map((block) => [block.id, block]),
+  );
+  const staleVersionIds = versions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((version) => version.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPracticePlans)
+      .set({
+        title: saved.title,
+        purpose: saved.purpose,
+        targetAudience: saved.targetAudience,
+        status: restoredStatus,
+        visibility: saved.visibility,
+        durationMinutes: saved.durationMinutes,
+        plannedLoad: saved.plannedLoad,
+        archivedAt: restoredStatus === "draft" ? null : currentPlan.archivedAt,
+        currentVersionId: nextVersionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPracticePlans.id, currentPlan.id),
+          eq(trainingPracticePlans.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(trainingPracticePlanVersions).values({
+      id: nextVersionId,
+      practicePlanId: currentPlan.id,
+      version: nextVersion,
+      snapshot: saved,
+      changeNote: `Restored from version ${selectedVersion.version}.`,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    await transaction.insert(trainingPracticePlanBlocks).values(
+      saved.blocks.map((block, index) => ({
+        id: block.id,
+        practicePlanVersionId: nextVersionId,
+        drillVersionId: sourceBlockById.get(restored.data.blocks[index]!.id)
+          ?.drillVersionId,
+        sequence: block.sequence,
+        lane: block.lane,
+        title: block.title,
+        kind: block.kind,
+        startsAtMinute: block.startsAtMinute,
+        durationMinutes: block.durationMinutes,
+        transitionMinutes: block.transitionMinutes,
+        intensity: block.intensity,
+        plannedLoad: block.plannedLoad,
+        instructionsMarkdown: block.instructions,
+        estimates: {
+          touchesTypical: block.touchesTypical,
+          jumpsTypical: block.jumpsTypical,
+          focusArea: block.focusArea,
+        },
+        locked: block.locked,
+        createdAt: input.now,
+      })),
+    );
+    await transaction
+      .delete(trainingPracticePlanTags)
+      .where(eq(trainingPracticePlanTags.practicePlanId, currentPlan.id));
+    for (const tag of saved.tags) {
+      const normalized = normalizeTrainingTag(tag.label);
+      const [existingTag] = await transaction
+        .select({ id: trainingTags.id })
+        .from(trainingTags)
+        .where(
+          and(
+            eq(trainingTags.slug, normalized.slug),
+            or(
+              isNull(trainingTags.organizationId),
+              eq(trainingTags.organizationId, organizationId),
+            ),
+          ),
+        )
+        .limit(1);
+      const tagId = existingTag?.id ?? crypto.randomUUID();
+      if (!existingTag) {
+        await transaction.insert(trainingTags).values({
+          id: tagId,
+          organizationId,
+          slug: normalized.slug,
+          label: normalized.label,
+          aliases: [],
+          category: tag.isFocusArea ? "focus" : tag.category,
+          isFocusArea: tag.isFocusArea,
+          createdByPersonId: input.actor.personId,
+          createdAt: input.now,
+          updatedAt: input.now,
+        });
+      }
+      await transaction.insert(trainingPracticePlanTags).values({
+        practicePlanId: currentPlan.id,
+        tagId,
+        isFocusArea: tag.isFocusArea,
+        createdAt: input.now,
+      });
+    }
+    if (staleVersionIds.length) {
+      const [eventReferences, outcomeReferences] = await Promise.all([
+        transaction
+          .select({ versionId: trainingEvents.practicePlanVersionId })
+          .from(trainingEvents)
+          .where(
+            inArray(trainingEvents.practicePlanVersionId, staleVersionIds),
+          ),
+        transaction
+          .select({ versionId: trainingPracticeOutcomes.practicePlanVersionId })
+          .from(trainingPracticeOutcomes)
+          .where(
+            inArray(
+              trainingPracticeOutcomes.practicePlanVersionId,
+              staleVersionIds,
+            ),
+          ),
+      ]);
+      const protectedVersionIds = new Set(
+        [...eventReferences, ...outcomeReferences]
+          .map((reference) => reference.versionId)
+          .filter((value): value is string => Boolean(value)),
+      );
+      const removableVersionIds = staleVersionIds.filter(
+        (versionId) => !protectedVersionIds.has(versionId),
+      );
+      if (removableVersionIds.length) {
+        await transaction
+          .delete(trainingPracticePlanVersions)
+          .where(inArray(trainingPracticePlanVersions.id, removableVersionIds));
+      }
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-practice-plan.version-restored",
+      entityType: "training-practice-plan",
+      entityId: currentPlan.id,
+      beforeHash: stableHash({ versionId: currentPlan.currentVersionId }),
+      afterHash: stableHash(saved),
+      reason:
+        "Coach restored a prior practice plan into a new current version. Assigned session snapshots remain untouched.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: currentPlan.id, versionId: nextVersionId };
+}
+
 export function validateTrainingProgramOccurrenceSchedule(
   brief: Pick<DraftTrainingProgramInput, "startDate" | "endDate">,
   occurrences: TrainingProgramDraft["occurrences"],
@@ -3125,7 +4130,102 @@ export async function createTrainingProgram(input: {
   );
   const scheduledSessionCount = schedule.sessionCount;
   const id = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
   const slug = `${slugify(parsed.brief.title)}-${id.slice(0, 6)}`;
+  const eventSnapshot = trainingProgramVersionSnapshotSchema.parse({
+    program: {
+      title: parsed.brief.title,
+      purpose: parsed.brief.purpose,
+      targetAudience: parsed.brief.targetAudience,
+      objectives: parsed.brief.objectives,
+      approach: parsed.brief.approach,
+      startDate: parsed.brief.startDate,
+      endDate: parsed.brief.endDate,
+      timezone: parsed.brief.timezone,
+      recurrence: parsed.brief.recurrence,
+      milestones: parsed.brief.milestones,
+      scheduledSessionCount,
+      defaultPracticeMinutes: parsed.brief.preferredPracticeMinutes,
+      athleteCount: parsed.brief.athleteCount,
+    },
+    events: [
+      ...parsed.draft.occurrences.map((occurrence) => {
+        const startsAt = localTrainingTimeToUtc(
+          occurrence.localDate,
+          occurrence.startsAt,
+          parsed.brief.timezone,
+        );
+        return {
+          id: crypto.randomUUID(),
+          kind: "practice" as const,
+          title: occurrence.title,
+          startsAt: startsAt.toISOString(),
+          endsAt: new Date(
+            startsAt.getTime() + occurrence.durationMinutes * 60_000,
+          ).toISOString(),
+          timezone: parsed.brief.timezone,
+          status: "planned" as const,
+          objectives: [occurrence.rationale],
+          plannedLoad: occurrence.plannedLoad,
+          plannedIntensity: clamp(
+            Math.round(occurrence.plannedLoad / 10),
+            1,
+            10,
+          ),
+          externalLoad: {
+            phase: occurrence.phase,
+            focusArea: occurrence.focusArea,
+            estimateKind: "coach-plan",
+          },
+          source: "ai-draft" as const,
+        };
+      }),
+      ...parsed.brief.milestones.map((milestone) => {
+        const startsAt = localTrainingTimeToUtc(
+          milestone.startsOn,
+          milestone.kind === "tournament" ? "08:00" : "12:00",
+          parsed.brief.timezone,
+        );
+        const endDate = new Date(`${milestone.endsOn}T12:00:00.000Z`);
+        const startDate = new Date(`${milestone.startsOn}T12:00:00.000Z`);
+        const daySpan = Math.max(
+          1,
+          Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) +
+            1,
+        );
+        return {
+          id: crypto.randomUUID(),
+          kind:
+            milestone.kind === "break"
+              ? ("rest" as const)
+              : milestone.kind === "assessment"
+                ? ("assessment" as const)
+                : milestone.kind,
+          title: milestone.title,
+          startsAt: startsAt.toISOString(),
+          endsAt: new Date(
+            startsAt.getTime() +
+              daySpan *
+                (milestone.kind === "tournament" ? 10 : 4) *
+                60 *
+                60_000,
+          ).toISOString(),
+          timezone: parsed.brief.timezone,
+          status: "planned" as const,
+          objectives: milestone.notes ? [milestone.notes] : [],
+          plannedLoad:
+            milestone.kind === "tournament"
+              ? 90
+              : milestone.kind === "travel"
+                ? 15
+                : 30,
+          plannedIntensity: milestone.kind === "tournament" ? 9 : 2,
+          externalLoad: { priority: milestone.priority },
+          source: "ai-draft" as const,
+        };
+      }),
+    ],
+  });
   const database = getTransactionalDatabase();
   await database.transaction(async (transaction) => {
     await transaction.insert(trainingPrograms).values({
@@ -3147,90 +4247,42 @@ export async function createTrainingProgram(input: {
       scheduledSessionCount,
       defaultPracticeMinutes: parsed.brief.preferredPracticeMinutes,
       athleteCount: parsed.brief.athleteCount,
+      currentVersionId: versionId,
       createdByPersonId: input.actor.personId,
       createdAt: input.now,
       updatedAt: input.now,
     });
-    for (const occurrence of parsed.draft.occurrences) {
-      const startsAt = localTrainingTimeToUtc(
-        occurrence.localDate,
-        occurrence.startsAt,
-        parsed.brief.timezone,
-      );
-      await transaction.insert(trainingEvents).values({
-        id: crypto.randomUUID(),
+    await transaction.insert(trainingEvents).values(
+      eventSnapshot.events.map((event) => ({
+        id: event.id,
         organizationId,
         programId: id,
-        kind: "practice",
-        title: occurrence.title,
-        startsAt,
-        endsAt: new Date(
-          startsAt.getTime() + occurrence.durationMinutes * 60_000,
-        ),
-        timezone: parsed.brief.timezone,
-        status: "planned",
-        objectives: [occurrence.rationale],
-        plannedLoad: occurrence.plannedLoad,
-        plannedIntensity: clamp(Math.round(occurrence.plannedLoad / 10), 1, 10),
-        externalLoad: {
-          phase: occurrence.phase,
-          focusArea: occurrence.focusArea,
-          estimateKind: "coach-plan",
-        },
-        source: "ai-draft",
+        kind: event.kind,
+        title: event.title,
+        startsAt: new Date(event.startsAt),
+        endsAt: new Date(event.endsAt),
+        timezone: event.timezone,
+        status: event.status,
+        practicePlanVersionId: event.practicePlanVersionId,
+        objectives: event.objectives,
+        plannedLoad: event.plannedLoad,
+        plannedIntensity: event.plannedIntensity,
+        externalLoad: event.externalLoad,
+        source: event.source,
         createdByPersonId: input.actor.personId,
         createdAt: input.now,
         updatedAt: input.now,
-      });
-    }
-    for (const milestone of parsed.brief.milestones) {
-      const startsAt = localTrainingTimeToUtc(
-        milestone.startsOn,
-        milestone.kind === "tournament" ? "08:00" : "12:00",
-        parsed.brief.timezone,
-      );
-      const endDate = new Date(`${milestone.endsOn}T12:00:00.000Z`);
-      const startDate = new Date(`${milestone.startsOn}T12:00:00.000Z`);
-      const daySpan = Math.max(
-        1,
-        Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1,
-      );
-      await transaction.insert(trainingEvents).values({
-        // A milestone's client-side ID identifies the editable draft row. It
-        // must never become the persistent event ID: the same draft can be
-        // safely retried or reused to make another program.
-        id: crypto.randomUUID(),
-        organizationId,
-        programId: id,
-        kind:
-          milestone.kind === "break"
-            ? "rest"
-            : milestone.kind === "assessment"
-              ? "assessment"
-              : milestone.kind,
-        title: milestone.title,
-        startsAt,
-        endsAt: new Date(
-          startsAt.getTime() +
-            daySpan * (milestone.kind === "tournament" ? 10 : 4) * 60 * 60_000,
-        ),
-        timezone: parsed.brief.timezone,
-        status: "planned",
-        objectives: milestone.notes ? [milestone.notes] : [],
-        plannedLoad:
-          milestone.kind === "tournament"
-            ? 90
-            : milestone.kind === "travel"
-              ? 15
-              : 30,
-        plannedIntensity: milestone.kind === "tournament" ? 9 : 2,
-        externalLoad: { priority: milestone.priority },
-        source: "ai-draft",
-        createdByPersonId: input.actor.personId,
-        createdAt: input.now,
-        updatedAt: input.now,
-      });
-    }
+      })),
+    );
+    await transaction.insert(trainingProgramVersions).values({
+      id: versionId,
+      programId: id,
+      version: 1,
+      snapshot: eventSnapshot,
+      changeNote: "Initial coach-authored program calendar.",
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
     await transaction.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -3301,14 +4353,14 @@ export async function updateTrainingProgramEvent(input: {
     );
   }
   const [program] = await database
-    .select({
-      id: trainingPrograms.id,
-      startDate: trainingPrograms.startDate,
-      endDate: trainingPrograms.endDate,
-      timezone: trainingPrograms.timezone,
-    })
+    .select()
     .from(trainingPrograms)
-    .where(eq(trainingPrograms.id, event.programId))
+    .where(
+      and(
+        eq(trainingPrograms.id, event.programId),
+        eq(trainingPrograms.organizationId, organizationId),
+      ),
+    )
     .limit(1);
   if (
     !program ||
@@ -3320,6 +4372,30 @@ export async function updateTrainingProgramEvent(input: {
       "Keep this event inside the program date window.",
     );
   }
+  if (program.status === "archived") {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "Restore this archived program before changing its calendar.",
+    );
+  }
+  const programEvents = await database
+    .select()
+    .from(trainingEvents)
+    .where(
+      and(
+        eq(trainingEvents.programId, program.id),
+        eq(trainingEvents.organizationId, organizationId),
+      ),
+    )
+    .orderBy(asc(trainingEvents.startsAt));
+  const programVersions = await database
+    .select({
+      id: trainingProgramVersions.id,
+      version: trainingProgramVersions.version,
+    })
+    .from(trainingProgramVersions)
+    .where(eq(trainingProgramVersions.programId, program.id))
+    .orderBy(desc(trainingProgramVersions.version));
   const startsAt = localTrainingTimeToUtc(
     parsed.localDate,
     parsed.startsAt,
@@ -3332,6 +4408,26 @@ export async function updateTrainingProgramEvent(input: {
   const externalLoad = { ...(event.externalLoad ?? {}) };
   delete externalLoad.focusArea;
   if (parsed.focusArea) externalLoad.focusArea = parsed.focusArea;
+  const nextProgramEvents = programEvents.map((candidate) =>
+    candidate.id === event.id
+      ? {
+          ...candidate,
+          title: parsed.title,
+          startsAt,
+          endsAt,
+          timezone: program.timezone,
+          plannedLoad: parsed.plannedLoad,
+          plannedIntensity: clamp(Math.round(parsed.plannedLoad / 10), 1, 10),
+          externalLoad,
+        }
+      : candidate,
+  );
+  const nextSnapshot = programVersionSnapshot(program, nextProgramEvents);
+  const nextVersionId = crypto.randomUUID();
+  const nextVersion = (programVersions[0]?.version ?? 0) + 1;
+  const staleVersionIds = programVersions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((version) => version.id);
   const transactional = getTransactionalDatabase();
   await transactional.transaction(async (transaction) => {
     await transaction
@@ -3354,13 +4450,27 @@ export async function updateTrainingProgramEvent(input: {
       );
     await transaction
       .update(trainingPrograms)
-      .set({ updatedAt: input.now })
+      .set({ currentVersionId: nextVersionId, updatedAt: input.now })
       .where(
         and(
           eq(trainingPrograms.id, program.id),
           eq(trainingPrograms.organizationId, organizationId),
         ),
       );
+    await transaction.insert(trainingProgramVersions).values({
+      id: nextVersionId,
+      programId: program.id,
+      version: nextVersion,
+      snapshot: nextSnapshot,
+      changeNote: `Calendar adjusted: ${parsed.title}.`,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    if (staleVersionIds.length) {
+      await transaction
+        .delete(trainingProgramVersions)
+        .where(inArray(trainingProgramVersions.id, staleVersionIds));
+    }
     await transaction.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -3390,6 +4500,466 @@ export async function updateTrainingProgramEvent(input: {
     });
   });
   return { id: event.id, programId: event.programId };
+}
+
+export async function archiveTrainingProgram(input: {
+  readonly actor: ApiActor;
+  readonly programId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly status: "archived" }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot archive training programs.",
+    );
+  }
+  const parsed = archiveTrainingProgramInputSchema.parse(input);
+  const database = getDatabase();
+  const [program, versions, events] = await Promise.all([
+    database
+      .select()
+      .from(trainingPrograms)
+      .where(
+        and(
+          eq(trainingPrograms.id, parsed.programId),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      )
+      .limit(1),
+    database
+      .select({
+        id: trainingProgramVersions.id,
+        version: trainingProgramVersions.version,
+      })
+      .from(trainingProgramVersions)
+      .where(eq(trainingProgramVersions.programId, parsed.programId))
+      .orderBy(desc(trainingProgramVersions.version)),
+    database
+      .select()
+      .from(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.programId, parsed.programId),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      )
+      .orderBy(asc(trainingEvents.startsAt)),
+  ]);
+  const currentProgram = program[0];
+  if (!currentProgram) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program is no longer available.",
+    );
+  }
+  if (currentProgram.status === "archived" || currentProgram.archivedAt) {
+    return { id: currentProgram.id, status: "archived" };
+  }
+  const storedCurrentVersionId = versions.some(
+    (version) => version.id === currentProgram.currentVersionId,
+  )
+    ? currentProgram.currentVersionId
+    : versions[0]?.id;
+  const baselineVersionId = storedCurrentVersionId ?? crypto.randomUUID();
+  const needsBaseline = !storedCurrentVersionId;
+  const staleVersionIds = versions
+    .slice(
+      needsBaseline
+        ? TRAINING_VERSION_RETENTION - 1
+        : TRAINING_VERSION_RETENTION,
+    )
+    .map((version) => version.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    if (needsBaseline) {
+      await transaction.insert(trainingProgramVersions).values({
+        id: baselineVersionId,
+        programId: currentProgram.id,
+        version: (versions[0]?.version ?? 0) + 1,
+        snapshot: programVersionSnapshot(currentProgram, events),
+        changeNote: "Baseline saved before archiving this program.",
+        createdByPersonId: input.actor.personId,
+        createdAt: input.now,
+      });
+    }
+    await transaction
+      .update(trainingPrograms)
+      .set({
+        status: "archived",
+        archivedAt: input.now,
+        currentVersionId: baselineVersionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPrograms.id, currentProgram.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    if (staleVersionIds.length) {
+      await transaction
+        .delete(trainingProgramVersions)
+        .where(inArray(trainingProgramVersions.id, staleVersionIds));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.archived",
+      entityType: "training-program",
+      entityId: currentProgram.id,
+      beforeHash: stableHash({ status: currentProgram.status }),
+      afterHash: stableHash({ status: "archived" }),
+      reason:
+        "Coach archived the operational program. Its offer, completed sessions, and recoverable calendar versions remain intact.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: currentProgram.id, status: "archived" };
+}
+
+export async function restoreTrainingProgramArchive(input: {
+  readonly actor: ApiActor;
+  readonly programId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly id: string;
+  readonly status: "draft" | "active" | "completed";
+}> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot restore training programs.",
+    );
+  }
+  const parsed = restoreTrainingProgramArchiveInputSchema.parse(input);
+  const database = getDatabase();
+  const [program] = await database
+    .select()
+    .from(trainingPrograms)
+    .where(
+      and(
+        eq(trainingPrograms.id, parsed.programId),
+        eq(trainingPrograms.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!program) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program is no longer available.",
+    );
+  }
+  if (program.status !== "archived" && !program.archivedAt) {
+    return { id: program.id, status: program.status };
+  }
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPrograms)
+      .set({
+        status: "draft",
+        archivedAt: null,
+        completedAt: null,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPrograms.id, program.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.restored",
+      entityType: "training-program",
+      entityId: program.id,
+      beforeHash: stableHash({ status: program.status }),
+      afterHash: stableHash({ status: "draft" }),
+      reason:
+        "Coach restored the archived program as a private draft. Commercial records were not changed.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: program.id, status: "draft" };
+}
+
+export async function restoreTrainingProgramVersion(input: {
+  readonly actor: ApiActor;
+  readonly programId: string;
+  readonly versionId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly versionId: string }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot restore program versions.",
+    );
+  }
+  const parsed = restoreTrainingProgramVersionInputSchema.parse(input);
+  const database = getDatabase();
+  const [program, versions, target, eventRows] = await Promise.all([
+    database
+      .select()
+      .from(trainingPrograms)
+      .where(
+        and(
+          eq(trainingPrograms.id, parsed.programId),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      )
+      .limit(1),
+    database
+      .select({
+        id: trainingProgramVersions.id,
+        version: trainingProgramVersions.version,
+      })
+      .from(trainingProgramVersions)
+      .where(eq(trainingProgramVersions.programId, parsed.programId))
+      .orderBy(desc(trainingProgramVersions.version)),
+    database
+      .select({
+        id: trainingProgramVersions.id,
+        version: trainingProgramVersions.version,
+        snapshot: trainingProgramVersions.snapshot,
+      })
+      .from(trainingProgramVersions)
+      .where(
+        and(
+          eq(trainingProgramVersions.id, parsed.versionId),
+          eq(trainingProgramVersions.programId, parsed.programId),
+        ),
+      )
+      .limit(1),
+    database
+      .select()
+      .from(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.programId, parsed.programId),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      )
+      .orderBy(asc(trainingEvents.startsAt)),
+  ]);
+  const currentProgram = program[0];
+  const selectedVersion = target[0];
+  if (!currentProgram || !selectedVersion) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "That recoverable program version is no longer available.",
+    );
+  }
+  const restored = trainingProgramVersionSnapshotSchema.safeParse(
+    selectedVersion.snapshot,
+  );
+  if (!restored.success) {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "This historical program version cannot be restored safely.",
+    );
+  }
+  const referencedPlanVersionIds = [
+    ...new Set(
+      restored.data.events
+        .map((event) => event.practicePlanVersionId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const availablePlanVersionIds = new Set(
+    referencedPlanVersionIds.length
+      ? (
+          await database
+            .select({ id: trainingPracticePlanVersions.id })
+            .from(trainingPracticePlanVersions)
+            .where(
+              inArray(
+                trainingPracticePlanVersions.id,
+                referencedPlanVersionIds,
+              ),
+            )
+        ).map((version) => version.id)
+      : [],
+  );
+  const currentEventById = new Map(eventRows.map((event) => [event.id, event]));
+  const restoredEvents = restored.data.events.map((event) => {
+    const current = currentEventById.get(event.id);
+    if (current?.status === "completed") return programEventSnapshot(current);
+    if (
+      event.practicePlanVersionId &&
+      !availablePlanVersionIds.has(event.practicePlanVersionId)
+    ) {
+      const safeEvent = { ...event };
+      delete safeEvent.practicePlanVersionId;
+      return safeEvent;
+    }
+    return event;
+  });
+  const restoredEventIds = new Set(restoredEvents.map((event) => event.id));
+  const preservedEvents = eventRows.flatMap((event) =>
+    !restoredEventIds.has(event.id) &&
+    (event.status === "completed" || event.status === "cancelled")
+      ? [programEventSnapshot(event)]
+      : [],
+  );
+  const nextSnapshot = trainingProgramVersionSnapshotSchema.parse({
+    program: restored.data.program,
+    events: [...restoredEvents, ...preservedEvents].sort((first, second) =>
+      first.startsAt.localeCompare(second.startsAt),
+    ),
+  });
+  const nextVersionId = crypto.randomUUID();
+  const nextVersion = (versions[0]?.version ?? 0) + 1;
+  const staleVersionIds = versions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((version) => version.id);
+  const restoredProgramStatus =
+    currentProgram.status === "archived" ? "draft" : currentProgram.status;
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .update(trainingPrograms)
+      .set({
+        title: nextSnapshot.program.title,
+        purpose: nextSnapshot.program.purpose,
+        targetAudience: nextSnapshot.program.targetAudience,
+        objectives: nextSnapshot.program.objectives,
+        approach: nextSnapshot.program.approach,
+        startDate: nextSnapshot.program.startDate,
+        endDate: nextSnapshot.program.endDate,
+        timezone: nextSnapshot.program.timezone,
+        recurrence: nextSnapshot.program.recurrence,
+        milestones: nextSnapshot.program.milestones,
+        scheduledSessionCount: nextSnapshot.program.scheduledSessionCount,
+        defaultPracticeMinutes: nextSnapshot.program.defaultPracticeMinutes,
+        athleteCount: nextSnapshot.program.athleteCount,
+        status: restoredProgramStatus,
+        archivedAt:
+          restoredProgramStatus === "draft" ? null : currentProgram.archivedAt,
+        currentVersionId: nextVersionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPrograms.id, currentProgram.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    for (const event of nextSnapshot.events) {
+      const current = currentEventById.get(event.id);
+      if (current?.status === "completed") continue;
+      if (current) {
+        await transaction
+          .update(trainingEvents)
+          .set({
+            kind: event.kind,
+            title: event.title,
+            startsAt: new Date(event.startsAt),
+            endsAt: new Date(event.endsAt),
+            timezone: event.timezone,
+            status: event.status,
+            practicePlanVersionId: event.practicePlanVersionId,
+            objectives: event.objectives,
+            plannedLoad: event.plannedLoad,
+            plannedIntensity: event.plannedIntensity,
+            externalLoad: event.externalLoad,
+            source: event.source,
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              eq(trainingEvents.id, current.id),
+              eq(trainingEvents.organizationId, organizationId),
+            ),
+          );
+      } else {
+        await transaction.insert(trainingEvents).values({
+          id: event.id,
+          organizationId,
+          programId: currentProgram.id,
+          kind: event.kind,
+          title: event.title,
+          startsAt: new Date(event.startsAt),
+          endsAt: new Date(event.endsAt),
+          timezone: event.timezone,
+          status: event.status,
+          practicePlanVersionId: event.practicePlanVersionId,
+          objectives: event.objectives,
+          plannedLoad: event.plannedLoad,
+          plannedIntensity: event.plannedIntensity,
+          externalLoad: event.externalLoad,
+          source: event.source,
+          createdByPersonId: input.actor.personId,
+          createdAt: input.now,
+          updatedAt: input.now,
+        });
+      }
+    }
+    for (const event of eventRows) {
+      if (restoredEventIds.has(event.id) || event.status === "completed")
+        continue;
+      await transaction
+        .update(trainingEvents)
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(
+          and(
+            eq(trainingEvents.id, event.id),
+            eq(trainingEvents.organizationId, organizationId),
+          ),
+        );
+    }
+    await transaction.insert(trainingProgramVersions).values({
+      id: nextVersionId,
+      programId: currentProgram.id,
+      version: nextVersion,
+      snapshot: nextSnapshot,
+      changeNote: `Restored from version ${selectedVersion.version}.`,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    if (staleVersionIds.length) {
+      await transaction
+        .delete(trainingProgramVersions)
+        .where(inArray(trainingProgramVersions.id, staleVersionIds));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.version-restored",
+      entityType: "training-program",
+      entityId: currentProgram.id,
+      beforeHash: stableHash({ versionId: currentProgram.currentVersionId }),
+      afterHash: stableHash(nextSnapshot),
+      reason:
+        "Coach restored a prior program calendar into a new current version. Completed sessions remain historical records.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: currentProgram.id, versionId: nextVersionId };
 }
 
 export async function assignTrainingPracticePlan(input: {

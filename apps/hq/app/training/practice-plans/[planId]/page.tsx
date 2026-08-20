@@ -21,6 +21,9 @@ export default async function PracticePlanPage({
     (candidate) => candidate.id === planId,
   );
   if (!plan) notFound();
+  const versions = await caller.operator.trainingPracticePlanVersions({
+    practicePlanId: planId,
+  });
   return (
     <OperatorShell
       active="training"
@@ -28,7 +31,7 @@ export default async function PracticePlanPage({
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <TrainingPracticePlanDetail plan={plan} />
+      <TrainingPracticePlanDetail plan={plan} versions={versions} />
     </OperatorShell>
   );
 }

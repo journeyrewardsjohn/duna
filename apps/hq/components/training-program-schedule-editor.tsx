@@ -83,10 +83,12 @@ export function TrainingProgramScheduleEditor({
   events,
   programEndDate,
   programStartDate,
+  readOnly = false,
 }: {
   readonly events: readonly TrainingEvent[];
   readonly programEndDate: string;
   readonly programStartDate: string;
+  readonly readOnly?: boolean;
 }) {
   const router = useRouter();
   const [editingEventId, setEditingEventId] = useState<string>();
@@ -160,7 +162,7 @@ export function TrainingProgramScheduleEditor({
         {events.map((event) => {
           const draft = draftFor(event);
           const isEditing = editingEventId === event.id;
-          const canEdit = event.status !== "completed";
+          const canEdit = !readOnly && event.status !== "completed";
           return (
             <article className={eventTone(event.kind)} key={event.id}>
               <time>
@@ -207,7 +209,13 @@ export function TrainingProgramScheduleEditor({
                 ) : (
                   <Pencil aria-hidden size={16} />
                 )}
-                {isEditing ? "Done" : canEdit ? "Edit" : "Recorded"}
+                {isEditing
+                  ? "Done"
+                  : canEdit
+                    ? "Edit"
+                    : readOnly
+                      ? "Archived"
+                      : "Recorded"}
               </button>
               {isEditing && (
                 <form

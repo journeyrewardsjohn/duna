@@ -203,11 +203,17 @@ function TodayView({
 }: {
   readonly workspace: TrainingWorkspaceData;
 }) {
+  const activePlans = workspace.practicePlans.filter(
+    (candidate) => candidate.status !== "archived",
+  );
+  const primaryProgram = workspace.programs.find(
+    (candidate) => candidate.status !== "archived",
+  );
   const plan = workspace.today?.practicePlanId
     ? workspace.practicePlans.find(
         (candidate) => candidate.id === workspace.today?.practicePlanId,
       )
-    : workspace.practicePlans[0];
+    : activePlans[0];
   const tournament = workspace.upcomingEvents.find(
     (event) => event.kind === "tournament",
   );
@@ -302,24 +308,24 @@ function TodayView({
       <aside className="training-today__rail">
         <section className="training-rail-card training-rail-card--program">
           <span className="hq-eyebrow">Program pulse</span>
-          <h3>{workspace.programs[0]?.title ?? "Current program"}</h3>
+          <h3>{primaryProgram?.title ?? "Current program"}</h3>
           <p>
-            {workspace.programs[0]?.currentPhase} phase ·{" "}
-            {workspace.programs[0]?.completedSessionCount} of{" "}
-            {workspace.programs[0]?.scheduledSessionCount} practices complete
+            {primaryProgram?.currentPhase} phase ·{" "}
+            {primaryProgram?.completedSessionCount} of{" "}
+            {primaryProgram?.scheduledSessionCount} practices complete
           </p>
           <div
             className="training-progress-ring"
             style={variableStyle(
               "--training-value",
-              `${workspace.programs[0] ? Math.round((workspace.programs[0].completedSessionCount / workspace.programs[0].scheduledSessionCount) * 100) : 0}%`,
+              `${primaryProgram ? Math.round((primaryProgram.completedSessionCount / primaryProgram.scheduledSessionCount) * 100) : 0}%`,
             )}
           >
             <strong>
-              {workspace.programs[0]
+              {primaryProgram
                 ? Math.round(
-                    (workspace.programs[0].completedSessionCount /
-                      workspace.programs[0].scheduledSessionCount) *
+                    (primaryProgram.completedSessionCount /
+                      primaryProgram.scheduledSessionCount) *
                       100,
                   )
                 : 0}
@@ -327,7 +333,7 @@ function TodayView({
             </strong>
             <small>complete</small>
           </div>
-          <Link href={`/training/programs/${workspace.programs[0]?.id}`}>
+          <Link href={`/training/programs/${primaryProgram?.id}`}>
             View program <ArrowRight aria-hidden size={15} />
           </Link>
         </section>
@@ -444,6 +450,12 @@ function ProgramsView({
 }: {
   readonly workspace: TrainingWorkspaceData;
 }) {
+  const activePrograms = workspace.programs.filter(
+    (program) => program.status !== "archived",
+  );
+  const archivedPrograms = workspace.programs.filter(
+    (program) => program.status === "archived",
+  );
   return (
     <div className="training-section-stack">
       <section className="training-section-heading">
@@ -463,10 +475,32 @@ function ProgramsView({
         </Link>
       </section>
       <div className="training-program-grid">
-        {workspace.programs.map((program) => (
+        {activePrograms.map((program) => (
           <ProgramCard key={program.id} program={program} />
         ))}
       </div>
+      {archivedPrograms.length > 0 && (
+        <section className="training-archive-shelf">
+          <header>
+            <div>
+              <span className="hq-eyebrow">Archive</span>
+              <h3>
+                {archivedPrograms.length} archived program
+                {archivedPrograms.length === 1 ? "" : "s"}
+              </h3>
+              <p>
+                Kept out of the active coaching calendar until a coach restores
+                them.
+              </p>
+            </div>
+          </header>
+          <div className="training-program-grid">
+            {archivedPrograms.map((program) => (
+              <ProgramCard key={program.id} program={program} />
+            ))}
+          </div>
+        </section>
+      )}
       <section className="training-program-explainer">
         <div>
           <BookOpenCheck aria-hidden size={23} />
@@ -644,6 +678,12 @@ function PlansView({
 }: {
   readonly workspace: TrainingWorkspaceData;
 }) {
+  const activePlans = workspace.practicePlans.filter(
+    (plan) => plan.status !== "archived",
+  );
+  const archivedPlans = workspace.practicePlans.filter(
+    (plan) => plan.status === "archived",
+  );
   return (
     <div className="training-section-stack">
       <section className="training-section-heading">
@@ -672,10 +712,32 @@ function PlansView({
         </div>
       </section>
       <div className="training-plan-grid">
-        {workspace.practicePlans.map((plan) => (
+        {activePlans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} />
         ))}
       </div>
+      {archivedPlans.length > 0 && (
+        <section className="training-archive-shelf">
+          <header>
+            <div>
+              <span className="hq-eyebrow">Archive</span>
+              <h3>
+                {archivedPlans.length} archived practice plan
+                {archivedPlans.length === 1 ? "" : "s"}
+              </h3>
+              <p>
+                Assigned sessions remain intact; restore a plan when it is ready
+                to reuse.
+              </p>
+            </div>
+          </header>
+          <div className="training-plan-grid">
+            {archivedPlans.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

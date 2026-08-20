@@ -21,7 +21,10 @@ export default async function TrainingProgramPage({
     (candidate) => candidate.id === programId,
   );
   if (!program) notFound();
-  const events = await caller.operator.trainingProgramEvents({ programId });
+  const [events, versions] = await Promise.all([
+    caller.operator.trainingProgramEvents({ programId }),
+    caller.operator.trainingProgramVersions({ programId }),
+  ]);
   return (
     <OperatorShell
       active="training"
@@ -33,6 +36,7 @@ export default async function TrainingProgramPage({
       <TrainingProgramDetail
         events={events}
         program={program}
+        versions={versions}
         workspace={trainingWorkspace}
       />
     </OperatorShell>
