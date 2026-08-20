@@ -3022,7 +3022,10 @@ function demoPlayerTrainingWorkspace(now: Date): PlayerTrainingWorkspace {
   return playerTrainingWorkspaceSchema.parse({
     generatedAt: now.toISOString(),
     programs: training.programs
-      .filter((candidate) => candidate.status !== "draft")
+      .filter(
+        (candidate) =>
+          candidate.id === program.id && candidate.status !== "draft",
+      )
       .map((candidate) => ({
         id: candidate.id,
         title: candidate.title,
