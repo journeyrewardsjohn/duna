@@ -19,6 +19,27 @@ async function getBox(locator: Locator) {
   return box!;
 }
 
+// Anchor navigation uses smooth scrolling, so measuring a heading's position
+// has to wait for the scroll to actually stop rather than for a fixed delay.
+async function waitForScrollToSettle(page: Page) {
+  await page.evaluate(() => {
+    const tracker = window as unknown as { __y?: number; __still?: number };
+    tracker.__y = undefined;
+    tracker.__still = 0;
+  });
+  await page.waitForFunction(
+    () => {
+      const tracker = window as unknown as { __y?: number; __still?: number };
+      const y = Math.round(window.scrollY);
+      tracker.__still = tracker.__y === y ? (tracker.__still ?? 0) + 1 : 0;
+      tracker.__y = y;
+      return (tracker.__still ?? 0) >= 3;
+    },
+    undefined,
+    { timeout: 10_000, polling: 100 },
+  );
+}
+
 test("training feature page explains each planning layer", async ({ page }) => {
   await page.goto(trainingPath);
 
@@ -95,7 +116,7 @@ test("training page anchors clear the fixed product nav", async ({ page }) => {
 
   for (const [linkName, headingName] of targets) {
     await nav.getByRole("link", { name: linkName }).click();
-    await page.waitForTimeout(600);
+    await waitForScrollToSettle(page);
 
     const heading = page.getByRole("heading", { name: headingName });
     await expect(heading).toBeVisible();
