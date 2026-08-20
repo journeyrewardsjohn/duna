@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { demoOrganization } from "@duna/core/demo";
 import { createDemoActor } from "./context";
 import {
+  draftTrainingDrillInputSchema,
   trainingDrillSchema,
+  trainingDrillMarketplaceSchema,
   type TrainingProgramDraft,
 } from "./training-contracts";
 import {
   countTrainingSessions,
+  draftTrainingDrill,
   estimateTrainingContacts,
   generateTrainingOccurrences,
   loadDemoTrainingWorkspace,
@@ -185,6 +188,120 @@ describe("training estimates", () => {
 });
 
 describe("training taxonomy and demo workspace", () => {
+  it("preserves a structured volleyball phase canvas for Sol interpretation and rendering", async () => {
+    const editor = {
+      court: "beach-full" as const,
+      orientation: "vertical" as const,
+      phases: [
+        {
+          id: "phase-1",
+          title: "Serve receive entry",
+          durationSeconds: 10,
+          notes: "Pass to target before the setter releases.",
+          objects: [
+            {
+              id: "coach-1",
+              kind: "coach" as const,
+              label: "C",
+              x: 12,
+              y: 20,
+              team: "neutral" as const,
+              role: "Server",
+              color: "sand" as const,
+            },
+            {
+              id: "player-1",
+              kind: "player" as const,
+              label: "1",
+              x: 38,
+              y: 72,
+              team: "a" as const,
+              role: "Passer",
+              color: "ink" as const,
+            },
+            {
+              id: "ball-1",
+              kind: "ball" as const,
+              label: "B1",
+              x: 14,
+              y: 22,
+              team: "neutral" as const,
+              color: "signal" as const,
+              ballEntry: "serve" as const,
+              initiatedBy: "coach" as const,
+              ballOrder: 1,
+            },
+          ],
+          actions: [
+            {
+              id: "serve-1",
+              order: 1,
+              kind: "serve" as const,
+              actorId: "coach-1",
+              targetObjectId: "player-1",
+              toX: 38,
+              toY: 72,
+              ballId: "ball-1",
+              withBall: true,
+              simultaneous: false,
+              intent: "serve the seam",
+            },
+          ],
+        },
+      ],
+      overallNotes: "Train a calm first contact under serve pressure.",
+      outputMarkdown: "",
+    };
+    const input = draftTrainingDrillInputSchema.parse({
+      description:
+        "Coach serves to the seam. The passer controls first contact to a target before rotating.",
+      editor,
+      focusArea: "Ball Control",
+    });
+    const previousKey = process.env.AI_GATEWAY_API_KEY;
+    const previousToken = process.env.VERCEL_OIDC_TOKEN;
+    delete process.env.AI_GATEWAY_API_KEY;
+    delete process.env.VERCEL_OIDC_TOKEN;
+    try {
+      const drill = await draftTrainingDrill(
+        input,
+        new Date("2026-08-20T14:00:00.000Z"),
+      );
+      expect(drill.editor).toEqual(editor);
+      expect(drill.scene.movements[0]).toMatchObject({
+        kind: "ball",
+        from: "coach-1",
+        to: "player-1",
+      });
+      expect(drill.interpretation?.contactSequence[0]).toMatchObject({
+        contact: "serve",
+        actor: "C",
+      });
+      expect(drill.animation.renderModel).toBe("gpt_image_2");
+    } finally {
+      if (previousKey === undefined) delete process.env.AI_GATEWAY_API_KEY;
+      else process.env.AI_GATEWAY_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.VERCEL_OIDC_TOKEN;
+      else process.env.VERCEL_OIDC_TOKEN = previousToken;
+    }
+  });
+
+  it("requires a real price for a paid drill marketplace listing", () => {
+    expect(
+      trainingDrillMarketplaceSchema.safeParse({
+        offer: "paid",
+        currency: "USD",
+      }).success,
+    ).toBe(false);
+    expect(
+      trainingDrillMarketplaceSchema.parse({
+        offer: "paid",
+        priceMinor: 900,
+        currency: "USD",
+      }),
+    ).toMatchObject({ offer: "paid", priceMinor: 900 });
+  });
+
   it("normalizes equivalent standard tags to one canonical focus area", () => {
     expect(normalizeTrainingTag("back row attacks")).toEqual({
       label: "Back-Row Attack",

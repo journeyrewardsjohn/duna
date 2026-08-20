@@ -27,6 +27,7 @@ import {
   organizationWallets,
   organizations,
   people,
+  trainingDrillLicenses,
   venues,
 } from "@duna/db";
 import {
@@ -235,12 +236,14 @@ function fulfillmentKind(
   | "appointment"
   | "pickup"
   | "rental"
+  | "digital-content"
   | "membership"
   | "credit-grant"
   | "package" {
   if (item.type === "event") return "registration";
   if (item.type === "service") return "appointment";
   if (item.type === "good") {
+    if (item.subtype === "digital-content") return "digital-content";
     return item.subtype === "rental" ? "rental" : "pickup";
   }
   if (item.subtype === "credit-pack") return "credit-grant";
@@ -587,6 +590,20 @@ export async function startCatalogCheckout(input: {
       "This product is not available for checkout.",
     );
   }
+  if (row.item.type === "good" && row.item.subtype === "digital-content") {
+    if (!input.actor.organizationId) {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "Choose an organization before purchasing this drill.",
+      );
+    }
+    if (input.actor.organizationId === row.organization.id) {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "Your organization already owns this drill.",
+      );
+    }
+  }
   if (
     !Number.isSafeInteger(input.quantity) ||
     input.quantity < 1 ||
@@ -890,16 +907,21 @@ export async function startCatalogCheckout(input: {
     row.item.type === "good" &&
     row.item.configuration.inventoryTracked !== false;
   await database.batch([
-    database
-      .insert(organizationParticipants)
-      .values({
-        organizationId: row.organization.id,
-        personId: input.actor.personId,
-        relationship: "player",
-        status: "active",
-        addedByPersonId: input.actor.personId,
-      })
-      .onConflictDoNothing(),
+    row.item.type === "good" && row.item.subtype === "digital-content"
+      ? database
+          .update(organizationParticipants)
+          .set({ updatedAt: input.now })
+          .where(sql`false`)
+      : database
+          .insert(organizationParticipants)
+          .values({
+            organizationId: row.organization.id,
+            personId: input.actor.personId,
+            relationship: "player",
+            status: "active",
+            addedByPersonId: input.actor.personId,
+          })
+          .onConflictDoNothing(),
     database.insert(orders).values({
       id: orderId,
       organizationId: row.organization.id,
@@ -958,6 +980,7 @@ export async function startCatalogCheckout(input: {
         sessionTimezone: occurrence?.timezone,
         coachPersonIds: occurrence?.coachPersonIds,
         deliveryMode: row.item.configuration.deliveryMode,
+        purchaserOrganizationId: input.actor.organizationId,
         virtualDelivery: row.item.configuration.virtualDelivery,
         recordingConsentAccepted: recordingConsentRequired,
         recordingConsentAcceptedAt: recordingConsentRequired
@@ -969,13 +992,15 @@ export async function startCatalogCheckout(input: {
       orderId,
       organizationId: row.organization.id,
       source:
-        row.item.type === "good"
-          ? "shipping"
-          : venue
-            ? "venue"
-            : row.item.configuration.deliveryMode === "online"
-              ? "online"
-              : "organization",
+        row.item.type === "good" && row.item.subtype === "digital-content"
+          ? "online"
+          : row.item.type === "good"
+            ? "shipping"
+            : venue
+              ? "venue"
+              : row.item.configuration.deliveryMode === "online"
+                ? "online"
+                : "organization",
       venueId: venue?.id,
       addressSnapshot: {
         line1: taxLocation.addressLine1 ?? undefined,
@@ -1631,7 +1656,55 @@ export async function fulfillPaidCatalogOrder(
   }
   await postPaidCatalogOrderJournal({ order, fulfillment, item, now });
 
-  if (item.type === "good") {
+  if (item.type === "good" && item.subtype === "digital-content") {
+    const trainingDrillId =
+      typeof item.configuration.trainingDrillId === "string"
+        ? item.configuration.trainingDrillId
+        : undefined;
+    const purchaserOrganizationId =
+      typeof fulfillment.details.purchaserOrganizationId === "string"
+        ? fulfillment.details.purchaserOrganizationId
+        : undefined;
+    if (!trainingDrillId || !purchaserOrganizationId) {
+      throw new Error(
+        "A drill marketplace purchase requires an active buyer organization.",
+      );
+    }
+    if (purchaserOrganizationId === order.organizationId) {
+      throw new Error("The publisher organization already owns this drill.");
+    }
+    await database.batch([
+      database
+        .insert(trainingDrillLicenses)
+        .values({
+          drillId: trainingDrillId,
+          sellerOrganizationId: order.organizationId!,
+          buyerOrganizationId: purchaserOrganizationId,
+          catalogFulfillmentId: fulfillment.id,
+          status: "active",
+          grantedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            trainingDrillLicenses.drillId,
+            trainingDrillLicenses.buyerOrganizationId,
+          ],
+          set: {
+            catalogFulfillmentId: fulfillment.id,
+            status: "active",
+            grantedAt: now,
+            revokedAt: null,
+            updatedAt: now,
+          },
+        }),
+      database
+        .update(catalogFulfillments)
+        .set({ status: "fulfilled", fulfilledAt: now, updatedAt: now })
+        .where(eq(catalogFulfillments.id, fulfillment.id)),
+    ]);
+  } else if (item.type === "good") {
     const reservations = await database
       .select({
         reservation: inventoryReservations,

@@ -11,6 +11,30 @@ export function TrainingCourtAnimation({
   readonly compact?: boolean;
   readonly drill: TrainingDrill;
 }) {
+  if (drill.animation.kind === "generated-image" && drill.animation.url) {
+    return (
+      <figure
+        aria-label={drill.animation.altText}
+        className={
+          "training-court training-court--image" +
+          (compact ? " training-court--compact" : "")
+        }
+      >
+        {/* This is generated from the coach-reviewed structured scene. */}
+        <img alt={drill.animation.altText} src={drill.animation.url} />
+        {!compact ? (
+          <figcaption>
+            <small>
+              {drill.animation.reviewed
+                ? "Coach-reviewed drill storyboard"
+                : "AI-generated storyboard · review before sharing"}
+            </small>
+          </figcaption>
+        ) : null}
+      </figure>
+    );
+  }
+
   if (drill.animation.kind === "generated-video" && drill.animation.url) {
     return (
       <figure

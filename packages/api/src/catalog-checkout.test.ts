@@ -7,6 +7,7 @@ describe("catalog transaction pricing", () => {
     [{ type: "event", subtype: "tournament" }, "registration"],
     [{ type: "service", subtype: "court-rental" }, "booking"],
     [{ type: "good", subtype: "apparel" }, "merchandise"],
+    [{ type: "good", subtype: "digital-content" }, "merchandise"],
     [{ type: "plan", subtype: "membership" }, "membership"],
     [{ type: "plan", subtype: "credit-pack" }, "package"],
     [{ type: "plan", subtype: "bundle" }, "package"],

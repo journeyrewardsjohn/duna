@@ -136,6 +136,141 @@ export const drillSceneSchema = z.object({
 });
 export type DrillScene = z.infer<typeof drillSceneSchema>;
 
+export const drillEditorObjectSchema = z.object({
+  id: z.string().min(1).max(80),
+  kind: z.enum(["player", "coach", "ball", "cone", "box", "target", "shape"]),
+  label: z.string().trim().min(1).max(24),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  team: z.enum(["a", "b", "neutral"]).default("neutral"),
+  role: z.string().trim().max(80).optional(),
+  color: z.enum(["ink", "marine", "sand", "flare", "signal"]).default("ink"),
+  ballEntry: z.enum(["toss", "held", "freeball", "serve"]).optional(),
+  initiatedBy: z.enum(["player", "coach"]).optional(),
+  ballOrder: z.number().int().min(1).max(99).optional(),
+});
+export type DrillEditorObject = z.infer<typeof drillEditorObjectSchema>;
+
+export const drillEditorActionSchema = z.object({
+  id: z.string().min(1).max(80),
+  order: z.number().int().min(1).max(999),
+  kind: z.enum([
+    "move",
+    "rotate",
+    "toss",
+    "pass",
+    "set",
+    "attack",
+    "serve",
+    "block",
+    "dig",
+    "freeball",
+    "hold",
+  ]),
+  actorId: z.string().min(1).max(80),
+  targetObjectId: z.string().min(1).max(80).optional(),
+  toX: z.number().min(0).max(100),
+  toY: z.number().min(0).max(100),
+  ballId: z.string().min(1).max(80).optional(),
+  withBall: z.boolean().default(false),
+  simultaneous: z.boolean().default(false),
+  intent: z.string().trim().max(160).optional(),
+});
+export type DrillEditorAction = z.infer<typeof drillEditorActionSchema>;
+
+export const drillEditorPhaseSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().trim().min(1).max(100),
+  durationSeconds: z.number().int().min(1).max(600).default(12),
+  notes: z.string().trim().max(4_000).default(""),
+  objects: z.array(drillEditorObjectSchema).max(80),
+  actions: z.array(drillEditorActionSchema).max(160),
+});
+export type DrillEditorPhase = z.infer<typeof drillEditorPhaseSchema>;
+
+export const drillEditorStateSchema = z.object({
+  court: z.enum(["beach-full", "beach-half", "indoor-full", "indoor-half"]),
+  orientation: z.enum(["vertical", "horizontal"]).default("vertical"),
+  phases: z.array(drillEditorPhaseSchema).min(1).max(24),
+  overallNotes: z.string().trim().max(8_000).default(""),
+  outputMarkdown: z.string().max(40_000).default(""),
+});
+export type DrillEditorState = z.infer<typeof drillEditorStateSchema>;
+
+export const trainingDrillInterpretationSchema = z.object({
+  phaseSummaries: z.array(
+    z.object({
+      phaseId: z.string().min(1).max(80),
+      purpose: z.string().trim().min(3).max(600),
+      coachPosition: z.string().trim().min(2).max(300),
+      successSignal: z.string().trim().min(2).max(300),
+    }),
+  ),
+  roles: z.array(
+    z.object({
+      label: z.string().trim().min(1).max(80),
+      responsibility: z.string().trim().min(3).max(400),
+      touchIntent: z.string().trim().min(2).max(240),
+    }),
+  ),
+  contactSequence: z.array(
+    z.object({
+      order: z.number().int().min(1).max(999),
+      phaseId: z.string().min(1).max(80),
+      actor: z.string().trim().min(1).max(80),
+      contact: z.enum([
+        "toss",
+        "pass",
+        "set",
+        "attack",
+        "serve",
+        "block",
+        "dig",
+        "freeball",
+        "hold",
+        "movement",
+      ]),
+      intent: z.string().trim().min(2).max(300),
+    }),
+  ),
+  progression: z.object({
+    prerequisites: z.array(z.string().trim().min(2).max(240)).max(8),
+    simplify: z.string().trim().min(3).max(500),
+    progress: z.string().trim().min(3).max(500),
+    programFit: z.string().trim().min(3).max(700),
+    nextDrill: z.string().trim().min(3).max(500),
+  }),
+  fidelityNotes: z.array(z.string().trim().min(2).max(300)).max(12),
+});
+export type TrainingDrillInterpretation = z.infer<
+  typeof trainingDrillInterpretationSchema
+>;
+
+export const trainingDrillMarketplaceSchema = z
+  .object({
+    offer: z.enum(["free", "paid"]),
+    priceMinor: z.number().int().min(100).max(100_000_00).optional(),
+    currency: z.enum(["USD", "CAD", "AUD", "BRL", "EUR"]).default("USD"),
+    catalogItemId: z.string().uuid().optional(),
+    catalogVariantId: z.string().uuid().optional(),
+    catalogPriceId: z.string().uuid().optional(),
+    access: z
+      .enum(["owner", "free", "purchased", "purchase-required"])
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.offer === "paid" && value.priceMinor === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["priceMinor"],
+        message: "Set a price for a paid drill.",
+      });
+    }
+  });
+export type TrainingDrillMarketplace = z.infer<
+  typeof trainingDrillMarketplaceSchema
+>;
+
 export const trainingDrillSchema = z.object({
   id: z.string().uuid(),
   versionId: z.string().uuid(),
@@ -169,6 +304,9 @@ export const trainingDrillSchema = z.object({
   scoring: z.string(),
   estimate: trainingContactEstimateSchema,
   scene: drillSceneSchema,
+  editor: drillEditorStateSchema.optional(),
+  interpretation: trainingDrillInterpretationSchema.optional(),
+  marketplace: trainingDrillMarketplaceSchema.optional(),
   source: z
     .object({
       name: z.string().trim().min(2).max(200),
@@ -180,10 +318,17 @@ export const trainingDrillSchema = z.object({
     .optional(),
   animation: z.object({
     status: z.enum(["ready", "draft", "generating", "review", "failed"]),
-    kind: z.enum(["duna-scene", "generated-video"]),
+    kind: z.enum(["duna-scene", "generated-image", "generated-video"]),
     reviewed: z.boolean(),
     altText: z.string(),
     url: z.string().url().optional(),
+    renderModel: z
+      .enum(["gpt_image_2", "nano_banana_pro", "duna-scene"])
+      .optional(),
+    directorBrief: z.string().max(8_000).optional(),
+    storyboardPrompt: z.string().max(12_000).optional(),
+    negativePrompt: z.string().max(4_000).optional(),
+    qaChecklist: z.array(z.string().max(300)).max(20).optional(),
   }),
   updatedAt: z.iso.datetime(),
 });
@@ -551,6 +696,7 @@ export const draftTrainingDrillInputSchema = z.object({
   ballCount: z.number().int().min(0).max(30).default(2),
   intensity: z.number().int().min(1).max(10).default(6),
   focusArea: trainingFocusAreaSchema.optional(),
+  editor: drillEditorStateSchema.optional(),
 });
 export type DraftTrainingDrillInput = z.input<
   typeof draftTrainingDrillInputSchema

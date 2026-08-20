@@ -3,9 +3,11 @@
 import {
   archiveTrainingPracticePlanInputSchema,
   archiveTrainingProgramInputSchema,
+  createHiggsfieldImage,
   createTrainingPracticePlanInputSchema,
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
+  getHiggsfieldJob,
   recordTrainingOutcomeInputSchema,
   restoreTrainingPracticePlanArchiveInputSchema,
   restoreTrainingPracticePlanVersionInputSchema,
@@ -17,12 +19,14 @@ import {
   updateTrainingPracticePlanInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
+  type HiggsfieldJob,
   type RecordTrainingOutcomeInput,
   type TrainingDrill,
   type TrainingPracticePlan,
   type TrainingProgramDraft,
 } from "@duna/api";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { getServerCaller } from "@/lib/api";
 
 export type TrainingStudioResult<T> =
@@ -55,6 +59,67 @@ export async function generateTrainingDrillAction(
       message:
         "Draft created. Review the court flow, scoring, estimates, and coaching language before saving.",
       value: draft,
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function generateTrainingDrillStoryboardAction(
+  draft: TrainingDrill,
+): Promise<TrainingStudioResult<HiggsfieldJob>> {
+  try {
+    const parsed = trainingDrillSchema.parse(draft);
+    const caller = await getServerCaller();
+    await caller.operator.trainingWorkspace();
+    const prompt = [
+      `Volleyball drill: ${parsed.title}.`,
+      parsed.animation.directorBrief,
+      parsed.animation.storyboardPrompt,
+      parsed.animation.negativePrompt
+        ? `Avoid: ${parsed.animation.negativePrompt}`
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const job = await createHiggsfieldImage({
+      jobType:
+        parsed.animation.renderModel === "nano_banana_pro"
+          ? "nano_banana_pro"
+          : "gpt_image_2",
+      prompt,
+      imageReferenceIds: [],
+      aspectRatio: "4:3",
+      resolution: "2k",
+      quality: "high",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return {
+      status: "success",
+      message: "The coach-directed storyboard is rendering.",
+      value: job,
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function trainingDrillStoryboardStatusAction(
+  jobId: string,
+): Promise<TrainingStudioResult<HiggsfieldJob>> {
+  try {
+    if (!/^[a-zA-Z0-9_-]{8,160}$/.test(jobId)) {
+      throw new Error("The storyboard job reference is invalid.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.trainingWorkspace();
+    const job = await getHiggsfieldJob(jobId);
+    return {
+      status: "success",
+      message: job.resultUrl
+        ? "Storyboard ready for coach review."
+        : "Storyboard is still rendering.",
+      value: job,
     };
   } catch (error) {
     return { status: "error", message: message(error) };
@@ -99,6 +164,9 @@ export async function saveTrainingDrillAction(
         scoring: parsed.scoring,
         estimate: parsed.estimate,
         scene: parsed.scene,
+        editor: parsed.editor,
+        interpretation: parsed.interpretation,
+        marketplace: parsed.marketplace,
         source: parsed.source,
         animation: parsed.animation,
       },
@@ -108,10 +176,54 @@ export async function saveTrainingDrillAction(
     return {
       status: "success",
       message:
-        saved.status === "review"
-          ? "Drill saved and submitted for shared-library review."
+        saved.status === "published"
+          ? "Drill saved and published to the Drill Marketplace."
           : "Private organization drill saved.",
       value: { id: saved.id, status: saved.status },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function startTrainingDrillCheckoutAction(input: {
+  readonly catalogItemId: string;
+  readonly catalogVariantId: string;
+  readonly catalogPriceId: string;
+}): Promise<
+  TrainingStudioResult<{
+    readonly checkoutUrl: string;
+    readonly orderId: string;
+  }>
+> {
+  try {
+    const incoming = await headers();
+    const protocol = incoming.get("x-forwarded-proto") ?? "https";
+    const host =
+      incoming.get("x-forwarded-host") ??
+      incoming.get("host") ??
+      "localhost:3001";
+    const origin = `${protocol}://${host.split(",")[0]!.trim()}`;
+    const caller = await getServerCaller();
+    await caller.operator.trainingWorkspace();
+    const checkout = await caller.player.startCatalogCheckout({
+      catalogItemId: input.catalogItemId,
+      catalogVariantId: input.catalogVariantId,
+      catalogPriceId: input.catalogPriceId,
+      paymentMethod: "card",
+      paymentSurface: "hosted",
+      quantity: 1,
+      successUrl: `${origin}/training?view=drills&purchase=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${origin}/training?view=drills&purchase=cancelled`,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (!checkout.checkoutUrl) {
+      throw new Error("Stripe did not return a secure checkout link.");
+    }
+    return {
+      status: "success",
+      message: "Secure checkout is ready.",
+      value: { checkoutUrl: checkout.checkoutUrl, orderId: checkout.orderId },
     };
   } catch (error) {
     return { status: "error", message: message(error) };

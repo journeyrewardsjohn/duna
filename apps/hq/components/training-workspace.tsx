@@ -15,6 +15,8 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
+  CircleAlert,
+  ClipboardPen,
   ClipboardList,
   Dumbbell,
   Eye,
@@ -34,7 +36,8 @@ import {
   WandSparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, useTransition, type CSSProperties } from "react";
+import { startTrainingDrillCheckoutAction } from "@/app/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 
 type TrainingView =
@@ -743,6 +746,34 @@ function PlansView({
 }
 
 function DrillDetail({ drill }: { readonly drill: TrainingDrill }) {
+  const [checkoutNotice, setCheckoutNotice] = useState<string>();
+  const [checkoutPending, startCheckout] = useTransition();
+  const locked = drill.marketplace?.access === "purchase-required";
+  const purchase = () => {
+    if (
+      !drill.marketplace?.catalogItemId ||
+      !drill.marketplace.catalogVariantId ||
+      !drill.marketplace.catalogPriceId
+    ) {
+      setCheckoutNotice(
+        "This marketplace listing is not ready for checkout yet.",
+      );
+      return;
+    }
+    setCheckoutNotice(undefined);
+    startCheckout(async () => {
+      const result = await startTrainingDrillCheckoutAction({
+        catalogItemId: drill.marketplace!.catalogItemId!,
+        catalogVariantId: drill.marketplace!.catalogVariantId!,
+        catalogPriceId: drill.marketplace!.catalogPriceId!,
+      });
+      if (result.status === "error") {
+        setCheckoutNotice(result.message);
+        return;
+      }
+      window.location.assign(result.value.checkoutUrl);
+    });
+  };
   return (
     <aside className="training-drill-detail">
       <TrainingCourtAnimation drill={drill} />
@@ -799,28 +830,55 @@ function DrillDetail({ drill }: { readonly drill: TrainingDrill }) {
         <p>{drill.estimate.basis.join(" · ")}</p>
       </section>
       <footer>
-        <Link
-          className="hq-button hq-button--primary"
-          href={`/training/practice-plans/create?drill=${drill.id}`}
-        >
-          <Plus aria-hidden size={16} /> Add to practice
-        </Link>
+        {locked ? (
+          <button
+            className="hq-button hq-button--primary"
+            disabled={checkoutPending}
+            onClick={purchase}
+            type="button"
+          >
+            {checkoutPending
+              ? "Opening secure checkout…"
+              : `Buy for ${new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: drill.marketplace?.currency ?? "USD",
+                }).format((drill.marketplace?.priceMinor ?? 0) / 100)}`}
+          </button>
+        ) : (
+          <Link
+            className="hq-button hq-button--primary"
+            href={`/training/practice-plans/create?drill=${drill.id}`}
+          >
+            <Plus aria-hidden size={16} /> Add to practice
+          </Link>
+        )}
         <button className="hq-button hq-button--secondary" type="button">
           Edit a copy
         </button>
+        {checkoutNotice ? (
+          <p className="training-drill-detail__checkout-notice" role="alert">
+            {checkoutNotice}
+          </p>
+        ) : null}
       </footer>
     </aside>
   );
 }
 
 function DrillsView({
+  purchaseStatus,
+  savedDrillId,
   workspace,
 }: {
+  readonly purchaseStatus?: "success" | "cancelled";
+  readonly savedDrillId?: string;
   readonly workspace: TrainingWorkspaceData;
 }) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "organization" | "public">("all");
-  const [selectedId, setSelectedId] = useState(workspace.drills[0]?.id);
+  const [selectedId, setSelectedId] = useState(
+    savedDrillId ?? workspace.drills[0]?.id,
+  );
   const drills = workspace.drills.filter((drill) => {
     const matchesQuery =
       `${drill.title} ${drill.focusArea} ${drill.tags.map((tag) => tag.label).join(" ")}`
@@ -833,6 +891,31 @@ function DrillsView({
     workspace.drills.find((drill) => drill.id === selectedId) ?? drills[0];
   return (
     <div className="training-section-stack">
+      {savedDrillId &&
+      workspace.drills.some((drill) => drill.id === savedDrillId) ? (
+        <p
+          className="training-studio-notice training-studio-notice--success"
+          role="status"
+        >
+          <Check aria-hidden size={15} /> Drill saved. It is selected below and
+          ready to use in a practice.
+        </p>
+      ) : null}
+      {purchaseStatus ? (
+        <p
+          className={`training-studio-notice training-studio-notice--${purchaseStatus === "success" ? "success" : "error"}`}
+          role="status"
+        >
+          {purchaseStatus === "success" ? (
+            <Check aria-hidden size={15} />
+          ) : (
+            <CircleAlert aria-hidden size={15} />
+          )}
+          {purchaseStatus === "success"
+            ? "Purchase confirmed. Your organization license will appear as soon as payment processing completes."
+            : "Checkout was cancelled. No drill license was added."}
+        </p>
+      ) : null}
       <section className="training-section-heading">
         <div>
           <span className="hq-eyebrow">
@@ -844,12 +927,20 @@ function DrillsView({
             describe your own in plain language and let Duna structure it.
           </p>
         </div>
-        <Link
-          className="hq-button hq-button--primary"
-          href="/training/drills/create"
-        >
-          <WandSparkles aria-hidden size={17} /> Create with AI
-        </Link>
+        <div className="training-section-heading__actions">
+          <Link
+            className="hq-button hq-button--secondary"
+            href="/training/drills/create/advanced"
+          >
+            <ClipboardPen aria-hidden size={17} /> Advanced editor
+          </Link>
+          <Link
+            className="hq-button hq-button--primary"
+            href="/training/drills/create"
+          >
+            <WandSparkles aria-hidden size={17} /> Create with AI
+          </Link>
+        </div>
       </section>
       <div className="training-drill-tools">
         <label>
@@ -900,7 +991,16 @@ function DrillsView({
                   {drill.maxPlayers} players · ~{drill.estimate.touchesTypical}{" "}
                   touches
                 </small>
-                <em>{drill.visibility === "public" ? "Public" : "Private"}</em>
+                <em>
+                  {drill.marketplace?.offer === "paid"
+                    ? new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: drill.marketplace.currency,
+                      }).format((drill.marketplace.priceMinor ?? 0) / 100)
+                    : drill.visibility === "public"
+                      ? "Free"
+                      : "Private"}
+                </em>
               </div>
               <ChevronRight aria-hidden size={18} />
             </button>
@@ -1055,13 +1155,19 @@ function InsightsView({
 }
 
 export function TrainingWorkspace({
+  initialView,
   organizationName,
+  purchaseStatus,
+  savedDrillId,
   workspace,
 }: {
+  readonly initialView?: TrainingView;
   readonly organizationName: string;
+  readonly purchaseStatus?: "success" | "cancelled";
+  readonly savedDrillId?: string;
   readonly workspace: TrainingWorkspaceData;
 }) {
-  const [view, setView] = useState<TrainingView>("today");
+  const [view, setView] = useState<TrainingView>(initialView ?? "today");
   return (
     <main className="hq-page training-workspace" data-zone="editorial">
       <header className="training-workspace__hero">
@@ -1127,7 +1233,13 @@ export function TrainingWorkspace({
         {view === "programs" ? <ProgramsView workspace={workspace} /> : null}
         {view === "calendar" ? <CalendarView workspace={workspace} /> : null}
         {view === "plans" ? <PlansView workspace={workspace} /> : null}
-        {view === "drills" ? <DrillsView workspace={workspace} /> : null}
+        {view === "drills" ? (
+          <DrillsView
+            purchaseStatus={purchaseStatus}
+            savedDrillId={savedDrillId}
+            workspace={workspace}
+          />
+        ) : null}
         {view === "insights" ? <InsightsView workspace={workspace} /> : null}
       </div>
     </main>
