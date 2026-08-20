@@ -34,12 +34,21 @@ function DetailRow({
   );
 }
 
+export interface BookingReceiptRow {
+  readonly label: string;
+  readonly value?: string;
+}
+
 export function BookingConfirmationView({
   body,
   children,
   details,
+  doneLabel = "Done",
   label = "Confirmed",
   onDone,
+  primaryAction,
+  primaryLabel,
+  receipt,
   secondaryAction,
   secondaryLabel,
   title = "You’re in.",
@@ -47,8 +56,12 @@ export function BookingConfirmationView({
   readonly body?: string;
   readonly children?: ReactNode;
   readonly details: ShareableBookingDetails;
+  readonly doneLabel?: string;
   readonly label?: string;
   readonly onDone: () => void;
+  readonly primaryAction?: () => void;
+  readonly primaryLabel?: string;
+  readonly receipt?: readonly BookingReceiptRow[];
   readonly secondaryAction?: () => void;
   readonly secondaryLabel?: string;
   readonly title?: string;
@@ -77,6 +90,9 @@ export function BookingConfirmationView({
           label="PLAYERS"
           value={details.playerNames?.filter(Boolean).join(", ")}
         />
+        {receipt?.map((row) => (
+          <DetailRow key={row.label} label={row.label} value={row.value} />
+        ))}
       </View>
       {children}
       <Pressable
@@ -87,13 +103,28 @@ export function BookingConfirmationView({
         <Text style={styles.shareIcon}>↗</Text>
         <Text style={styles.shareText}>Share booking</Text>
       </Pressable>
+      {primaryAction && primaryLabel ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={primaryAction}
+          style={styles.primary}
+        >
+          <Text style={styles.primaryText}>{primaryLabel}</Text>
+        </Pressable>
+      ) : null}
       {secondaryAction && secondaryLabel ? (
         <Pressable onPress={secondaryAction} style={styles.secondary}>
           <Text style={styles.secondaryText}>{secondaryLabel}</Text>
         </Pressable>
       ) : null}
-      <Pressable onPress={onDone} style={styles.done}>
-        <Text style={styles.doneText}>Done</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onDone}
+        style={primaryAction ? styles.secondary : styles.done}
+      >
+        <Text style={primaryAction ? styles.secondaryText : styles.doneText}>
+          {doneLabel}
+        </Text>
       </Pressable>
     </ScrollView>
   );
@@ -174,6 +205,16 @@ const styles = StyleSheet.create({
     width: 84,
   },
   iconText: { color: "#2f7445", fontSize: 42, fontWeight: "700" },
+  primary: {
+    alignItems: "center",
+    backgroundColor: "#203740",
+    borderRadius: 16,
+    justifyContent: "center",
+    marginTop: 12,
+    minHeight: 56,
+    width: "100%",
+  },
+  primaryText: { color: "#ffffff", fontSize: 16, fontWeight: "900" },
   secondary: {
     alignItems: "center",
     borderColor: "#203740",

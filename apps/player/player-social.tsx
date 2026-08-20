@@ -195,16 +195,37 @@ function Stat({
   );
 }
 
+export interface PlayerProfilePrimaryAction {
+  readonly label: string;
+  readonly activeLabel: string;
+  readonly active: boolean;
+  readonly disabled?: boolean;
+  readonly onPress: () => void;
+}
+
+export function PlayerProfileSheet(props: {
+  readonly onClose: () => void;
+  readonly palette: MobileSocialPalette;
+  readonly person?: PersonSummary;
+  readonly primaryAction?: PlayerProfilePrimaryAction;
+}) {
+  return <PlayerProfileModal {...props} presentationStyle="pageSheet" />;
+}
+
 function PlayerProfileModal({
   embedded = false,
   onClose,
   palette,
   person,
+  presentationStyle = "fullScreen",
+  primaryAction,
 }: {
   readonly embedded?: boolean;
   readonly onClose: () => void;
   readonly palette: MobileSocialPalette;
   readonly person?: PersonSummary;
+  readonly presentationStyle?: "fullScreen" | "pageSheet";
+  readonly primaryAction?: PlayerProfilePrimaryAction;
 }) {
   const { client, dashboard, mode } = usePlayerRuntime();
   const [intelligence, setIntelligence] = useState<PublicPlayerIntelligence>();
@@ -313,7 +334,10 @@ function PlayerProfileModal({
         <View style={socialStyles.iconButton} />
       </View>
       <ScrollView
-        contentContainerStyle={socialStyles.profileContent}
+        contentContainerStyle={[
+          socialStyles.profileContent,
+          primaryAction && socialStyles.profileContentWithAction,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={socialStyles.identityRow}>
@@ -725,6 +749,50 @@ function PlayerProfileModal({
           </Text>
         )}
       </ScrollView>
+      {primaryAction && (
+        <View
+          style={[
+            socialStyles.profileActionBar,
+            {
+              backgroundColor: palette.canvas,
+              borderTopColor: rgba(palette.overlayRgb, 0.1),
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled: Boolean(primaryAction.disabled),
+              selected: primaryAction.active,
+            }}
+            disabled={primaryAction.disabled}
+            onPress={primaryAction.onPress}
+            style={[
+              socialStyles.profileActionButton,
+              {
+                backgroundColor: primaryAction.active
+                  ? palette.depth
+                  : palette.aqua,
+                borderColor: palette.aqua,
+                opacity: primaryAction.disabled ? 0.42 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                socialStyles.profileActionButtonText,
+                {
+                  color: primaryAction.active ? palette.aqua : palette.onAccent,
+                },
+              ]}
+            >
+              {primaryAction.active
+                ? primaryAction.activeLabel
+                : primaryAction.label}
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
   const player = selectedVideo && client && (
@@ -747,7 +815,7 @@ function PlayerProfileModal({
       <Modal
         animationType="slide"
         onRequestClose={onClose}
-        presentationStyle="fullScreen"
+        presentationStyle={presentationStyle}
         visible
       >
         {content}
@@ -894,16 +962,62 @@ export function PlayerPickerModal({
   }
 
   if (!visible) return null;
-  if (profilePerson) {
+
+  const profileResult = profilePerson
+    ? candidates.find((result) => result.person.id === profilePerson.id)
+    : undefined;
+  const profileSelected = profilePerson
+    ? selectedIds.has(profilePerson.id)
+    : false;
+  const profileAction: PlayerProfilePrimaryAction | undefined = profilePerson
+    ? {
+        label: "Add Player",
+        activeLabel: "Added · Remove player",
+        active: profileSelected,
+        disabled:
+          !profileSelected &&
+          (selected.length >= maxSelected ||
+            (profileResult ? !profileResult.eligible : false)),
+        onPress: () => {
+          if (profileResult) toggleCandidate(profileResult);
+          else if (!profileSelected && selected.length < maxSelected) {
+            onChange([...selected, profilePerson]);
+          } else if (profileSelected) {
+            onChange(
+              selected.filter((person) => person.id !== profilePerson.id),
+            );
+          }
+          setProfilePerson(undefined);
+        },
+      }
+    : undefined;
+  /**
+   * The profile needs a modal host. Returning it bare left it rendering inline
+   * beneath whatever screen sat behind the picker. When this picker owns a
+   * modal the profile stacks on top of it; when a parent owns the modal the
+   * profile takes over that host's content instead of opening a second one.
+   */
+  if (embedded && profilePerson) {
     return (
       <PlayerProfileModal
         embedded
         onClose={() => setProfilePerson(undefined)}
         palette={palette}
         person={profilePerson}
+        primaryAction={profileAction}
       />
     );
   }
+  const profileSheet =
+    !embedded && profilePerson ? (
+      <PlayerProfileModal
+        onClose={() => setProfilePerson(undefined)}
+        palette={palette}
+        person={profilePerson}
+        presentationStyle="pageSheet"
+        primaryAction={profileAction}
+      />
+    ) : null;
 
   const content = (
     <SafeAreaView
@@ -996,12 +1110,24 @@ export function PlayerPickerModal({
               <View style={socialStyles.pickerPeopleRow}>
                 {frequentCandidates.map((result) => {
                   const isSelected = selectedIds.has(result.person.id);
+                  const cannotAdd =
+                    !isSelected &&
+                    (!result.eligible || selected.length >= maxSelected);
                   return (
                     <Pressable
                       accessibilityLabel={`${isSelected ? "Remove" : "Add"} ${result.person.displayName}`}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        disabled: cannotAdd,
+                        selected: isSelected,
+                      }}
+                      disabled={cannotAdd}
                       key={result.person.id}
                       onPress={() => toggleCandidate(result)}
-                      style={socialStyles.pickerPerson}
+                      style={[
+                        socialStyles.pickerPerson,
+                        cannotAdd && socialStyles.pickerPersonDisabled,
+                      ]}
                     >
                       <View
                         style={[
@@ -1238,6 +1364,7 @@ export function PlayerPickerModal({
       visible
     >
       {content}
+      {profileSheet}
     </Modal>
   );
 }
@@ -1531,6 +1658,7 @@ const socialStyles = StyleSheet.create({
   pickerPeopleRail: { marginHorizontal: -2 },
   pickerPeopleRow: { flexDirection: "row", gap: 12, paddingRight: 8 },
   pickerPerson: { alignItems: "center", width: 64 },
+  pickerPersonDisabled: { opacity: 0.42 },
   pickerPersonAvatar: { position: "relative" },
   pickerPersonAddMark: {
     alignItems: "center",
@@ -1580,7 +1708,17 @@ const socialStyles = StyleSheet.create({
   proBadge: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 4 },
   proBadgeText: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   proCard: { borderRadius: 22, marginTop: 20, padding: 18 },
+  profileActionBar: { borderTopWidth: 1, padding: 18 },
+  profileActionButton: {
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 56,
+  },
+  profileActionButtonText: { fontSize: 16, fontWeight: "800" },
   profileContent: { padding: 20, paddingBottom: 72 },
+  profileContentWithAction: { paddingBottom: 24 },
   profileHandle: { fontSize: 13, fontWeight: "800", marginTop: 5 },
   profileHeader: {
     alignItems: "center",

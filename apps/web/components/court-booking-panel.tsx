@@ -1,6 +1,10 @@
 "use client";
 
-import type { CourtAvailability, CourtBookingInventory } from "@duna/api";
+import type {
+  CourtAvailability,
+  CourtBookingInventory,
+  CourtCheckoutQuote,
+} from "@duna/api";
 import type { PersonSummary } from "@duna/core";
 import { formatMoney } from "@duna/core";
 import { priceConsumerOrder } from "@duna/pricing";
@@ -35,6 +39,7 @@ import {
   courtCheckoutStatusAction,
   createAvailabilityAlertAction,
   loadCourtAvailabilityAction,
+  quoteCourtCheckoutAction,
   startCourtCheckoutAction,
 } from "@/app/app/venues/[venueId]/actions";
 import { CalendarDatePicker } from "./calendar-date-picker";
@@ -158,6 +163,8 @@ export function CourtBookingPanel({
   const [checkoutSessionId, setCheckoutSessionId] = useState(
     initialCheckoutSessionId,
   );
+  const [quote, setQuote] = useState<CourtCheckoutQuote>();
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isPending, startTransition] = useTransition();
   const policyRef = useRef<HTMLDivElement>(null);
@@ -303,7 +310,7 @@ export function CourtBookingPanel({
     }
   }, [policy?.requireFullScroll, reviewOpen]);
 
-  const estimate = useMemo(() => {
+  const publicEstimate = useMemo(() => {
     if (!selectedCourt?.pricing) return undefined;
     const unitAmount =
       selectedCourt.pricing.nonMemberAmountMinor ??
@@ -330,12 +337,75 @@ export function CourtBookingPanel({
   }, [durationMinutes, isDunaPlus, selectedCourt]);
 
   useEffect(() => {
+    if (authenticationHref || !selectedCourt || !selectedSlot) {
+      setQuote(undefined);
+      setQuoteLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuote(undefined);
+    setQuoteLoading(true);
+    void quoteCourtCheckoutAction({
+      courtId: selectedCourt.id,
+      subjectPersonId: selectedSubject?.id,
+      durationMinutes,
+      paymentMode,
+      participants: players.map((player) => ({
+        personId: player.personId,
+        name: player.name,
+        email: player.email,
+        phoneE164: player.phoneE164,
+      })),
+    })
+      .then((response) => {
+        if (cancelled) return;
+        if (!response.ok) {
+          setNotice(response.error);
+          return;
+        }
+        setQuote(response.result);
+      })
+      .catch(() => {
+        if (!cancelled) setNotice("Duna could not confirm the court price.");
+      })
+      .finally(() => {
+        if (!cancelled) setQuoteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authenticationHref,
+    durationMinutes,
+    paymentMode,
+    players,
+    selectedCourt?.id,
+    selectedSlot?.courtId,
+    selectedSubject?.id,
+  ]);
+
+  // Guests can browse public prices, but a signed-in buyer always sees the
+  // server-owned quote that checkout will verify before charging.
+  const estimate = quote ?? publicEstimate;
+  const buyerPriceReady = Boolean(authenticationHref || quote);
+  const payNowMinor =
+    quote?.payNowMinor ??
+    (estimate
+      ? paymentMode === "split"
+        ? Math.floor(estimate.totalMinor / (players.length + 1)) +
+          (estimate.totalMinor % (players.length + 1))
+        : estimate.totalMinor
+      : undefined);
+  const dunaPlusApplied = quote?.dunaPlusApplied ?? isDunaPlus;
+
+  useEffect(() => {
     if (
       initialCheckoutIntent !== "host" ||
       initialCheckoutSessionId ||
       initialHostReviewOpened.current ||
       !selectedSlot ||
-      !estimate
+      !estimate ||
+      !buyerPriceReady
     ) {
       return;
     }
@@ -346,6 +416,7 @@ export function CourtBookingPanel({
     setPolicyScrolled(!policy?.requireFullScroll);
     setReviewOpen(true);
   }, [
+    buyerPriceReady,
     estimate,
     initialCheckoutIntent,
     initialCheckoutSessionId,
@@ -449,8 +520,12 @@ export function CourtBookingPanel({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedCourt || !selectedSlot || !estimate) {
-      setNotice("Choose an available time and court first.");
+    if (!selectedCourt || !selectedSlot || !estimate || !quote) {
+      setNotice(
+        quote
+          ? "Choose an available time and court first."
+          : "Duna is confirming your exact court price. Please try again in a moment.",
+      );
       return;
     }
     if (paymentMode === "split" && players.length === 0) {
@@ -476,6 +551,8 @@ export function CourtBookingPanel({
           email: player.email,
           phoneE164: player.phoneE164,
         })),
+        expectedPayNowMinor: quote.payNowMinor,
+        expectedTotalMinor: quote.totalMinor,
         policyAccepted,
         policyFullScrollConfirmed: !policy?.requireFullScroll || policyScrolled,
         checkoutIntent: bookingIntent,
@@ -901,8 +978,9 @@ export function CourtBookingPanel({
 
         {selectedCourt && selectedSlot && !estimate && (
           <p className="court-booking-notice" role="status">
-            This court is not on sale yet. The venue needs to publish a rate
-            plan before checkout opens.
+            {quoteLoading
+              ? "Confirming your exact court price…"
+              : "This court is not on sale yet. The venue needs to publish a rate plan before checkout opens."}
           </p>
         )}
 
@@ -929,7 +1007,12 @@ export function CourtBookingPanel({
                 <button
                   type="button"
                   className="primary-action"
-                  disabled={!selectedCourt || !selectedSlot || !estimate}
+                  disabled={
+                    !selectedCourt ||
+                    !selectedSlot ||
+                    !estimate ||
+                    !buyerPriceReady
+                  }
                   onClick={() => openReview("host")}
                 >
                   <Users aria-hidden size={17} /> Create an open match
@@ -937,7 +1020,12 @@ export function CourtBookingPanel({
                 <button
                   type="button"
                   className="secondary-action"
-                  disabled={!selectedCourt || !selectedSlot || !estimate}
+                  disabled={
+                    !selectedCourt ||
+                    !selectedSlot ||
+                    !estimate ||
+                    !buyerPriceReady
+                  }
                   onClick={() => openReview("private")}
                 >
                   {estimate
@@ -1103,8 +1191,9 @@ export function CourtBookingPanel({
                   </span>
                   <Numeric>
                     {formatMoney(
-                      splitShare +
-                        (estimate.totalMinor - splitShare * splitCount),
+                      payNowMinor ??
+                        splitShare +
+                          (estimate.totalMinor - splitShare * splitCount),
                       estimate.currency,
                     )}
                   </Numeric>
@@ -1262,19 +1351,28 @@ export function CourtBookingPanel({
                 <strong>
                   {paymentMode === "split"
                     ? formatMoney(
-                        splitShare +
-                          (estimate.totalMinor - splitShare * splitCount),
+                        payNowMinor ??
+                          splitShare +
+                            (estimate.totalMinor - splitShare * splitCount),
                         estimate.currency,
                       )
                     : formatMoney(estimate.totalMinor, estimate.currency)}
                 </strong>
               </span>
-              {isDunaPlus && (
+              {dunaPlusApplied && (
                 <Badge tone="positive">
                   <Sparkles aria-hidden size={13} /> Premium fee waived
                 </Badge>
               )}
             </section>
+
+            {!quote && !authenticationHref && (
+              <p className="court-booking-notice" role="status">
+                {quoteLoading
+                  ? "Updating your exact court price…"
+                  : "Duna could not confirm your exact court price yet."}
+              </p>
+            )}
 
             {notice && (
               <p
@@ -1291,6 +1389,7 @@ export function CourtBookingPanel({
               type="submit"
               disabled={
                 isPending ||
+                !quote ||
                 !policyAccepted ||
                 (paymentMode === "split" && players.length === 0) ||
                 !inventory.venue.paymentsReady

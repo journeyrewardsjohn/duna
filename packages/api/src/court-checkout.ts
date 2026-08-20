@@ -26,6 +26,7 @@ import {
   calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
   priceConsumerOrder,
+  type AppliedFee,
   type CurrencyCode,
 } from "@duna/pricing";
 import { solveAvailableSlots } from "@duna/scheduling";
@@ -72,6 +73,7 @@ export class CourtCheckoutError extends Error {
       | "POLICY_ACCEPTANCE_REQUIRED"
       | "ALERT_LIMIT_REACHED"
       | "PARTICIPANT_NOT_FOUND"
+      | "AMOUNT_MISMATCH"
       | "CHECKOUT_UNAVAILABLE",
     message: string,
   ) {
@@ -1081,6 +1083,198 @@ async function hasOrganizationMembership(input: {
   return Boolean(staff || member);
 }
 
+/**
+ * Duplicate invitees are collapsed the same way for quotes and for checkout so a
+ * displayed share and a charged share can never be computed from different
+ * participant counts.
+ */
+export function dedupeCourtBookingInvites(input: {
+  readonly participants: readonly CourtBookingInviteInput[];
+  readonly actorPersonId: string;
+  readonly subjectPersonId: string;
+}): readonly CourtBookingInviteInput[] {
+  const key = (participant: CourtBookingInviteInput) =>
+    participant.personId ??
+    participant.email?.trim().toLowerCase() ??
+    participant.phoneE164?.trim();
+  return input.participants.filter((participant, index, all) => {
+    const participantKey = key(participant);
+    return (
+      Boolean(participantKey) &&
+      all.findIndex((candidate) => key(candidate) === participantKey) ===
+        index &&
+      participant.personId !== input.actorPersonId &&
+      participant.personId !== input.subjectPersonId
+    );
+  });
+}
+
+export interface CourtCheckoutPricing {
+  readonly subtotalMinor: number;
+  readonly consumerFees: readonly AppliedFee[];
+  readonly feeTotalMinor: number;
+  readonly totalMinor: number;
+  readonly payNowMinor: number;
+  readonly organizerShareMinor: number;
+  readonly participantShareMinor: number;
+  readonly shareCount: number;
+  readonly currency: CurrencyCode;
+  readonly rateUnitMinutes: number;
+  readonly memberRateApplied: boolean;
+  readonly dunaPlusApplied: boolean;
+}
+
+/**
+ * The single source of truth for what a court reservation costs the buyer.
+ * `quoteCourtCheckout` and `startCourtCheckout` both price through this so the
+ * amount a player confirms is the amount Stripe is asked to charge.
+ */
+async function priceCourtCheckout(input: {
+  readonly resource: Awaited<ReturnType<typeof checkoutResource>>;
+  readonly buyerPersonId: string;
+  readonly subjectPersonId: string;
+  readonly durationMinutes: number;
+  readonly paymentMode: "full" | "split";
+  readonly invitedCount: number;
+  readonly now: Date;
+}): Promise<CourtCheckoutPricing> {
+  const { resource } = input;
+  const [organizationMember, hasDunaPlus] = await Promise.all([
+    hasOrganizationMembership({
+      personId: input.subjectPersonId,
+      organizationId: resource.organizationId,
+    }),
+    hasActiveDunaPlusMembership(input.buyerPersonId, input.now),
+  ]);
+  const rateAmountMinor = organizationMember
+    ? (resource.memberAmountMinor ?? resource.baseAmountMinor)
+    : (resource.nonMemberAmountMinor ?? resource.baseAmountMinor);
+  const subtotalMinor = Math.max(
+    rateAmountMinor === 0 ? 0 : 1,
+    Math.round(
+      (rateAmountMinor * input.durationMinutes) / resource.rateUnitMinutes,
+    ),
+  );
+  const priced = priceConsumerOrder({
+    currency: resource.currency,
+    isDunaPlus: hasDunaPlus,
+    items: [
+      {
+        id: resource.courtId,
+        kind: "booking",
+        description: `${resource.venueName} · ${resource.courtName}`,
+        quantity: 1,
+        unitAmountMinor: subtotalMinor,
+      },
+    ],
+  });
+  const feeTotalMinor = priced.fees.reduce(
+    (total, fee) => total + fee.amountMinor,
+    0,
+  );
+  const shareCount = input.paymentMode === "split" ? input.invitedCount + 1 : 1;
+  const splitting = input.paymentMode === "split" && priced.totalMinor > 0;
+  if (splitting && priced.totalMinor < shareCount) {
+    throw new CourtCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "There are too many payment shares for this booking total.",
+    );
+  }
+  const participantShareMinor = splitting
+    ? Math.floor(priced.totalMinor / shareCount)
+    : priced.totalMinor;
+  const organizerShareMinor = splitting
+    ? participantShareMinor +
+      (priced.totalMinor - participantShareMinor * shareCount)
+    : priced.totalMinor;
+  return {
+    subtotalMinor: priced.subtotalMinor,
+    consumerFees: priced.fees,
+    feeTotalMinor,
+    totalMinor: priced.totalMinor,
+    payNowMinor: organizerShareMinor,
+    organizerShareMinor,
+    participantShareMinor,
+    shareCount,
+    currency: priced.currency,
+    rateUnitMinutes: resource.rateUnitMinutes,
+    memberRateApplied:
+      organizationMember && resource.memberAmountMinor !== null,
+    dunaPlusApplied: hasDunaPlus,
+  };
+}
+
+function formatMinor(amountMinor: number, currency: CurrencyCode): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
+    amountMinor / 100,
+  );
+}
+
+/**
+ * Refuses the charge when the buyer confirmed a different amount than the one
+ * this request would capture. Both values are required: a payment surface must
+ * render an authoritative quote before it can create a hold or a charge.
+ */
+export function assertConfirmedCourtAmount(input: {
+  readonly quote: CourtCheckoutPricing;
+  readonly expectedPayNowMinor: number;
+  readonly expectedTotalMinor: number;
+}): void {
+  const { quote } = input;
+  const mismatch =
+    input.expectedPayNowMinor !== quote.payNowMinor ||
+    input.expectedTotalMinor !== quote.totalMinor;
+  if (!mismatch) return;
+  throw new CourtCheckoutError(
+    "AMOUNT_MISMATCH",
+    `This reservation now costs ${formatMinor(quote.payNowMinor, quote.currency)} of a ${formatMinor(quote.totalMinor, quote.currency)} total. Nothing was charged. Review the new price and confirm again.`,
+  );
+}
+
+/**
+ * Read-only price for the signed-in buyer. Clients render this and echo
+ * `payNowMinor` back through `startCourtCheckout` so a stale or public price can
+ * never be charged silently.
+ */
+export async function quoteCourtCheckout(input: {
+  readonly actor: ApiActor;
+  readonly subjectPersonId?: string;
+  readonly courtId: string;
+  readonly durationMinutes: number;
+  readonly paymentMode: "full" | "split";
+  readonly participants: readonly CourtBookingInviteInput[];
+  readonly now: Date;
+}): Promise<CourtCheckoutPricing> {
+  if (!process.env.DATABASE_URL) {
+    throw new CourtCheckoutError(
+      "DATABASE_REQUIRED",
+      "Court checkout requires the connected Duna database.",
+    );
+  }
+  const subjectPersonId = input.subjectPersonId ?? input.actor.personId;
+  await assertSubjectAuthority({ actor: input.actor, subjectPersonId });
+  const resource = await checkoutResource(input.courtId);
+  if (!resource.durationOptionsMinutes.includes(input.durationMinutes)) {
+    throw new CourtCheckoutError(
+      "INVALID_DURATION",
+      "Choose one of the rental lengths configured by this venue.",
+    );
+  }
+  return priceCourtCheckout({
+    resource,
+    buyerPersonId: input.actor.personId,
+    subjectPersonId,
+    durationMinutes: input.durationMinutes,
+    paymentMode: input.paymentMode,
+    invitedCount: dedupeCourtBookingInvites({
+      participants: input.participants,
+      actorPersonId: input.actor.personId,
+      subjectPersonId,
+    }).length,
+    now: input.now,
+  });
+}
+
 async function sendBookingInviteSms(input: {
   readonly participantRows: readonly {
     readonly id: string;
@@ -1150,6 +1344,8 @@ export async function startCourtCheckout(input: {
   readonly paymentMode: "full" | "split";
   readonly paymentSurface: "hosted" | "native";
   readonly participants: readonly CourtBookingInviteInput[];
+  readonly expectedPayNowMinor: number;
+  readonly expectedTotalMinor: number;
   readonly policyAccepted: boolean;
   readonly policyFullScrollConfirmed: boolean;
   readonly successUrl: string;
@@ -1219,23 +1415,10 @@ export async function startCourtCheckout(input: {
       policy,
     };
   }
-  const invitedPeople = input.participants.filter((participant, index, all) => {
-    const key =
-      participant.personId ??
-      participant.email?.trim().toLowerCase() ??
-      participant.phoneE164?.trim();
-    return (
-      Boolean(key) &&
-      all.findIndex((candidate) => {
-        const candidateKey =
-          candidate.personId ??
-          candidate.email?.trim().toLowerCase() ??
-          candidate.phoneE164?.trim();
-        return candidateKey === key;
-      }) === index &&
-      participant.personId !== input.actor.personId &&
-      participant.personId !== subjectPersonId
-    );
+  const invitedPeople = dedupeCourtBookingInvites({
+    participants: input.participants,
+    actorPersonId: input.actor.personId,
+    subjectPersonId,
   });
   const personIds = invitedPeople.flatMap((participant) =>
     participant.personId ? [participant.personId] : [],
@@ -1258,47 +1441,33 @@ export async function startCourtCheckout(input: {
       "One or more selected Duna players could not be found.",
     );
   }
-  const organizationMember = await hasOrganizationMembership({
-    personId: subjectPersonId,
-    organizationId: resource.organizationId,
+  const quote = await priceCourtCheckout({
+    resource,
+    buyerPersonId: input.actor.personId,
+    subjectPersonId,
+    durationMinutes: input.durationMinutes,
+    paymentMode: input.paymentMode,
+    invitedCount: invitedPeople.length,
+    now: input.now,
   });
-  const rateAmountMinor = organizationMember
-    ? (resource.memberAmountMinor ?? resource.baseAmountMinor)
-    : (resource.nonMemberAmountMinor ?? resource.baseAmountMinor);
-  const subtotalMinor = Math.max(
-    rateAmountMinor === 0 ? 0 : 1,
-    Math.round(
-      (rateAmountMinor * input.durationMinutes) / resource.rateUnitMinutes,
-    ),
-  );
-  const hasDunaPlus = await hasActiveDunaPlusMembership(
-    input.actor.personId,
-    input.now,
-  );
-  const priced = priceConsumerOrder({
-    currency: resource.currency,
-    isDunaPlus: hasDunaPlus,
-    items: [
-      {
-        id: resource.courtId,
-        kind: "booking",
-        description: `${resource.venueName} · ${resource.courtName}`,
-        quantity: 1,
-        unitAmountMinor: subtotalMinor,
-      },
-    ],
+  assertConfirmedCourtAmount({
+    quote,
+    expectedPayNowMinor: input.expectedPayNowMinor,
+    expectedTotalMinor: input.expectedTotalMinor,
   });
-  const feeTotalMinor = priced.fees.reduce(
-    (total, fee) => total + fee.amountMinor,
-    0,
-  );
+  const priced = {
+    subtotalMinor: quote.subtotalMinor,
+    fees: quote.consumerFees,
+    totalMinor: quote.totalMinor,
+    currency: quote.currency,
+  };
   const pricing = {
-    subtotalMinor: priced.subtotalMinor,
-    feeTotalMinor,
-    totalMinor: priced.totalMinor,
-    payNowMinor: priced.totalMinor,
-    currency: priced.currency,
-    rateUnitMinutes: resource.rateUnitMinutes,
+    subtotalMinor: quote.subtotalMinor,
+    feeTotalMinor: quote.feeTotalMinor,
+    totalMinor: quote.totalMinor,
+    payNowMinor: quote.payNowMinor,
+    currency: quote.currency,
+    rateUnitMinutes: quote.rateUnitMinutes,
   };
   if (
     priced.totalMinor > 0 &&
@@ -1347,26 +1516,9 @@ export async function startCourtCheckout(input: {
     );
   }
   const orderId = priced.totalMinor > 0 ? crypto.randomUUID() : undefined;
-  const participantCount =
-    input.paymentMode === "split" ? invitedPeople.length + 1 : 1;
-  if (
-    input.paymentMode === "split" &&
-    priced.totalMinor > 0 &&
-    priced.totalMinor < participantCount
-  ) {
-    throw new CourtCheckoutError(
-      "CHECKOUT_UNAVAILABLE",
-      "There are too many payment shares for this booking total.",
-    );
-  }
-  const baseShare =
-    input.paymentMode === "split" && priced.totalMinor > 0
-      ? Math.floor(priced.totalMinor / participantCount)
-      : priced.totalMinor;
-  const organizerShare =
-    input.paymentMode === "split" && priced.totalMinor > 0
-      ? baseShare + (priced.totalMinor - baseShare * participantCount)
-      : priced.totalMinor;
+  const participantCount = quote.shareCount;
+  const baseShare = quote.participantShareMinor;
+  const organizerShare = quote.organizerShareMinor;
   const participantRows = [
     {
       id: crypto.randomUUID(),

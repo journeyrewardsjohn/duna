@@ -25,6 +25,8 @@ export async function startCourtCheckoutAction(input: {
     readonly email?: string;
     readonly phoneE164?: string;
   }[];
+  readonly expectedPayNowMinor: number;
+  readonly expectedTotalMinor: number;
   readonly policyAccepted: boolean;
   readonly policyFullScrollConfirmed: boolean;
   readonly checkoutIntent: "private" | "host";
@@ -44,6 +46,8 @@ export async function startCourtCheckoutAction(input: {
       durationMinutes: input.durationMinutes,
       paymentMode: input.paymentMode,
       participants: [...input.participants],
+      expectedPayNowMinor: input.expectedPayNowMinor,
+      expectedTotalMinor: input.expectedTotalMinor,
       policyAccepted: input.policyAccepted,
       policyFullScrollConfirmed: input.policyFullScrollConfirmed,
       successUrl: `${origin}/app/venues/${input.venueId}?checkout=success&session_id={CHECKOUT_SESSION_ID}${intentQuery}`,
@@ -58,6 +62,39 @@ export async function startCourtCheckoutAction(input: {
         error instanceof Error
           ? error.message
           : "Court checkout could not start.",
+    };
+  }
+}
+
+export async function quoteCourtCheckoutAction(input: {
+  readonly courtId: string;
+  readonly subjectPersonId?: string;
+  readonly durationMinutes: number;
+  readonly paymentMode: "full" | "split";
+  readonly participants: readonly {
+    readonly personId?: string;
+    readonly name?: string;
+    readonly email?: string;
+    readonly phoneE164?: string;
+  }[];
+}) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.courtCheckoutQuote({
+      courtId: input.courtId,
+      subjectPersonId: input.subjectPersonId,
+      durationMinutes: input.durationMinutes,
+      paymentMode: input.paymentMode,
+      participants: [...input.participants],
+    });
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Duna could not confirm the court price.",
     };
   }
 }

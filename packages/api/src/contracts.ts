@@ -5889,6 +5889,20 @@ export const courtCheckoutResultSchema = z.object({
   participants: z.array(courtBookingParticipantSchema).readonly().optional(),
 });
 
+export const courtCheckoutQuoteSchema = z.object({
+  subtotalMinor: z.number().int().nonnegative(),
+  feeTotalMinor: z.number().int().nonnegative(),
+  totalMinor: z.number().int().nonnegative(),
+  payNowMinor: z.number().int().nonnegative(),
+  organizerShareMinor: z.number().int().nonnegative(),
+  participantShareMinor: z.number().int().nonnegative(),
+  shareCount: z.number().int().positive(),
+  currency: currencySchema,
+  rateUnitMinutes: z.number().int().positive(),
+  memberRateApplied: z.boolean(),
+  dunaPlusApplied: z.boolean(),
+});
+
 export const courtCheckoutStatusSchema = z.object({
   bookingId: z.string().uuid(),
   bookingStatus: z.enum([
@@ -6010,6 +6024,7 @@ export type WeatherForecastDay = z.infer<typeof weatherForecastDaySchema>;
 export type WeatherForecastPoint = z.infer<typeof weatherForecastPointSchema>;
 export type CourtCheckoutResult = z.infer<typeof courtCheckoutResultSchema>;
 export type CourtCheckoutStatus = z.infer<typeof courtCheckoutStatusSchema>;
+export type CourtCheckoutQuote = z.infer<typeof courtCheckoutQuoteSchema>;
 export type CourtCancellationPolicy = z.infer<
   typeof courtCancellationPolicySchema
 >;
