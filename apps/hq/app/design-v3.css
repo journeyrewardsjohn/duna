@@ -2023,6 +2023,14 @@ html[data-theme="dark"] body[data-zone="operator"] {
   overflow: hidden;
 }
 
+/* Program details keep the focused immersive view but can grow with the calendar. */
+.hq-shell--immersive.hq-shell--immersive-scrollable,
+.hq-shell--immersive.hq-shell--immersive-scrollable .hq-workspace {
+  height: auto;
+  min-height: 100svh;
+  overflow: visible;
+}
+
 .hq-shell--immersive .hq-content {
   max-width: none;
   min-height: 100svh;

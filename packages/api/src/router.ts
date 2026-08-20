@@ -396,6 +396,8 @@ import {
   playerTrainingWorkspaceSchema,
   submitTrainingAthleteResponseInputSchema,
   trainingDrillSchema,
+  trainingEventSchema,
+  trainingProgramEventsInputSchema,
   trainingProgramDraftSchema,
   trainingWorkspaceSchema,
   updateTrainingProgramEventInputSchema,
@@ -407,6 +409,7 @@ import {
   createTrainingProgram,
   draftTrainingDrill,
   draftTrainingProgram,
+  loadTrainingProgramEvents,
   loadTrainingWorkspace,
   loadPlayerTrainingWorkspace,
   recordTrainingOutcome,
@@ -7256,6 +7259,21 @@ const operatorRouter = router({
       try {
         return await loadTrainingWorkspace({
           organizationId: ctx.actor!.organizationId!,
+          now: ctx.now,
+          demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  trainingProgramEvents: organizationProcedure("training:read")
+    .input(trainingProgramEventsInputSchema)
+    .output(z.array(trainingEventSchema))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadTrainingProgramEvents({
+          organizationId: ctx.actor!.organizationId!,
+          programId: input.programId,
           now: ctx.now,
           demo: Boolean(ctx.actor!.isDemo && !process.env.DATABASE_URL),
         });

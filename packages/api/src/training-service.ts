@@ -37,8 +37,10 @@ import {
   TRAINING_FOCUS_AREAS,
   trainingContactEstimateSchema,
   trainingDrillSchema,
+  trainingEventSchema,
   trainingFocusAreaSchema,
   trainingPracticePlanSchema,
+  trainingProgramEventsInputSchema,
   submitTrainingAthleteResponseInputSchema,
   trainingProgramDraftSchema,
   trainingProgramSchema,
@@ -51,6 +53,7 @@ import {
   type DraftTrainingProgramInput,
   type TrainingContactEstimate,
   type TrainingDrill,
+  type TrainingEvent,
   type TrainingFocusArea,
   type TrainingPracticePlan,
   type PlayerTrainingEvent,
@@ -2169,6 +2172,98 @@ export async function loadTrainingWorkspace(input: {
       totalMinutes,
       totalTouchesTypical,
     },
+  });
+}
+
+/**
+ * The workspace feed deliberately limits its general upcoming list so the
+ * coaching home remains quick. A program detail must never inherit that
+ * display limit: its schedule is the source of truth for every session in the
+ * program, including completed and cancelled history.
+ */
+export async function loadTrainingProgramEvents(input: {
+  readonly organizationId: string;
+  readonly programId: string;
+  readonly now?: Date;
+  readonly demo?: boolean;
+}): Promise<TrainingEvent[]> {
+  const parsed = trainingProgramEventsInputSchema.parse({
+    programId: input.programId,
+  });
+  if (input.demo && !process.env.DATABASE_URL) {
+    return loadDemoTrainingWorkspace(
+      input.organizationId,
+      input.now,
+    ).upcomingEvents.filter((event) => event.programId === parsed.programId);
+  }
+  requireTrainingDatabase();
+  const database = getDatabase();
+  const [program] = await database
+    .select({
+      id: trainingPrograms.id,
+      athleteCount: trainingPrograms.athleteCount,
+    })
+    .from(trainingPrograms)
+    .where(
+      and(
+        eq(trainingPrograms.id, parsed.programId),
+        eq(trainingPrograms.organizationId, input.organizationId),
+      ),
+    )
+    .limit(1);
+  if (!program) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program is no longer available.",
+    );
+  }
+  const [eventRows, tagRows] = await Promise.all([
+    database
+      .select()
+      .from(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.organizationId, input.organizationId),
+          eq(trainingEvents.programId, program.id),
+        ),
+      )
+      .orderBy(asc(trainingEvents.startsAt)),
+    database
+      .select()
+      .from(trainingTags)
+      .where(
+        or(
+          eq(trainingTags.organizationId, input.organizationId),
+          isNull(trainingTags.organizationId),
+        ),
+      )
+      .limit(500),
+  ]);
+  const tagLabelById = new Map(tagRows.map((tag) => [tag.id, tag.label]));
+  return eventRows.map((row) => {
+    const focusArea =
+      focusFromTagLabel(
+        row.focusAreaTagId ? tagLabelById.get(row.focusAreaTagId) : undefined,
+      ) ??
+      focusFromTagLabel(
+        typeof row.externalLoad.focusArea === "string"
+          ? row.externalLoad.focusArea
+          : undefined,
+      );
+    return trainingEventSchema.parse({
+      id: row.id,
+      programId: program.id,
+      kind: row.kind,
+      title: row.title,
+      startsAt: row.startsAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
+      timezone: row.timezone,
+      status: row.status,
+      ...(focusArea ? { focusArea } : {}),
+      plannedLoad: row.plannedLoad,
+      plannedIntensity: row.plannedIntensity,
+      athleteCount: program.athleteCount,
+    });
   });
 }
 

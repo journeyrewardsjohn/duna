@@ -20,6 +20,7 @@ export async function OperatorShell({
   active,
   children,
   immersive = false,
+  immersiveScrollable = false,
   organization,
   messageDraftCount = 0,
   messageUnreadCount = 0,
@@ -28,6 +29,8 @@ export async function OperatorShell({
   readonly active: OperatorModule;
   readonly children: ReactNode;
   readonly immersive?: boolean;
+  /** Keeps immersive chrome while allowing the document to extend beyond the viewport. */
+  readonly immersiveScrollable?: boolean;
   readonly organization: OrganizationSummary;
   readonly messageDraftCount?: number;
   readonly messageUnreadCount?: number;
@@ -38,7 +41,9 @@ export async function OperatorShell({
     (item) => !("hiddenFromNavigation" in item && item.hiddenFromNavigation),
   );
   return (
-    <div className={`hq-shell${immersive ? " hq-shell--immersive" : ""}`}>
+    <div
+      className={`hq-shell${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
+    >
       <aside className="hq-sidebar">
         <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
           <DunaMark />

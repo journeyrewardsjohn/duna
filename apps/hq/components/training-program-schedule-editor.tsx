@@ -160,6 +160,7 @@ export function TrainingProgramScheduleEditor({
         {events.map((event) => {
           const draft = draftFor(event);
           const isEditing = editingEventId === event.id;
+          const canEdit = event.status !== "completed";
           return (
             <article className={eventTone(event.kind)} key={event.id}>
               <time>
@@ -197,15 +198,16 @@ export function TrainingProgramScheduleEditor({
               <button
                 aria-expanded={isEditing}
                 className="hq-button hq-button--secondary"
+                disabled={!canEdit}
                 onClick={() => editEvent(event)}
                 type="button"
               >
-                {isEditing ? (
+                {isEditing || !canEdit ? (
                   <Check aria-hidden size={16} />
                 ) : (
                   <Pencil aria-hidden size={16} />
                 )}
-                {isEditing ? "Done" : "Edit"}
+                {isEditing ? "Done" : canEdit ? "Edit" : "Recorded"}
               </button>
               {isEditing && (
                 <form

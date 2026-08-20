@@ -21,13 +21,12 @@ export default async function TrainingProgramPage({
     (candidate) => candidate.id === programId,
   );
   if (!program) notFound();
-  const events = trainingWorkspace.upcomingEvents.filter(
-    (event) => event.programId === program.id,
-  );
+  const events = await caller.operator.trainingProgramEvents({ programId });
   return (
     <OperatorShell
       active="training"
       immersive
+      immersiveScrollable
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}
     >
