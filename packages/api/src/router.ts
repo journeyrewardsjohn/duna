@@ -394,9 +394,11 @@ import {
   assignTrainingPracticePlanInputSchema,
   createTrainingDrillInputSchema,
   createTrainingPracticePlanInputSchema,
+  createTrainingProgramEventInputSchema,
   createTrainingProgramInputSchema,
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
+  importTrainingTournamentInputSchema,
   recordTrainingOutcomeInputSchema,
   removeTrainingProgramEventInputSchema,
   playerTrainingWorkspaceSchema,
@@ -408,6 +410,7 @@ import {
   trainingProgramDraftSchema,
   trainingProgramVersionsInputSchema,
   trainingVersionHistoryEntrySchema,
+  trainingTournamentImportSchema,
   trainingWorkspaceSchema,
   restoreTrainingPracticePlanArchiveInputSchema,
   restoreTrainingPracticePlanVersionInputSchema,
@@ -422,9 +425,11 @@ import {
   assignTrainingPracticePlan,
   createTrainingDrill,
   createTrainingPracticePlan,
+  createTrainingProgramEvent,
   createTrainingProgram,
   draftTrainingDrill,
   draftTrainingProgram,
+  importTrainingTournamentDetails,
   loadTrainingPracticePlanVersions,
   loadTrainingProgramEvents,
   loadTrainingProgramVersions,
@@ -7598,6 +7603,56 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await createTrainingProgram({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  importTrainingTournament: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-tournament-import",
+        capacity: 12,
+        refillPerMinute: 3,
+        scope: "organization",
+      }),
+    )
+    .input(importTrainingTournamentInputSchema)
+    .output(trainingTournamentImportSchema)
+    .mutation(async ({ input }) => {
+      try {
+        return await importTrainingTournamentDetails(input);
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createTrainingProgramEvent: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-program-event-create",
+        capacity: 36,
+        refillPerMinute: 12,
+        scope: "organization",
+      }),
+    )
+    .input(createTrainingProgramEventInputSchema)
+    .output(z.object({ id: z.string().uuid(), programId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createTrainingProgramEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createTrainingProgramEvent({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

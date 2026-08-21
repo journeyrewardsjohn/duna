@@ -1143,7 +1143,15 @@
   max-width: 66ch;
 }
 
-.training-program-schedule-editor > header > span {
+.training-program-schedule-editor__header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.training-program-schedule-editor__header-actions > span {
   align-items: center;
   color: var(--hq-ink);
   display: inline-flex;
@@ -1151,6 +1159,305 @@
   font-weight: 700;
   gap: 0.4rem;
   white-space: nowrap;
+}
+
+.training-calendar-composer {
+  background: var(--surface-1);
+  border: 1px solid color-mix(in srgb, var(--hq-core) 38%, var(--hairline));
+  border-radius: 18px;
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--text-1) 8%, transparent);
+  display: grid;
+  gap: 1rem;
+  overflow: visible;
+  padding: 1.1rem;
+}
+
+.training-calendar-composer > header,
+.training-calendar-composer__tournament > header,
+.training-calendar-composer > footer {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.training-calendar-composer > header h3,
+.training-calendar-composer__tournament h4 {
+  color: var(--text-1);
+  margin: 0.25rem 0;
+}
+
+.training-calendar-composer > header h3 {
+  font-size: 1.35rem;
+}
+
+.training-calendar-composer > header p {
+  color: var(--text-2);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.training-calendar-composer > header > svg {
+  color: var(--hq-ink);
+}
+
+.training-calendar-composer fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.training-calendar-composer legend,
+.training-calendar-composer label > span {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.42rem;
+}
+
+.training-calendar-composer__kinds > div {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.training-calendar-composer__kinds button {
+  align-items: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  color: var(--text-2);
+  display: flex;
+  gap: 0.55rem;
+  min-height: 76px;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.training-calendar-composer__kinds button.active {
+  background: color-mix(in srgb, var(--hq-tint) 58%, var(--surface-1));
+  border-color: var(--hq-core);
+  color: var(--hq-ink);
+}
+
+.training-calendar-composer__kinds button span {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.training-calendar-composer__kinds button strong {
+  color: var(--text-1);
+  font-size: 0.84rem;
+}
+
+.training-calendar-composer__kinds button small {
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.training-calendar-composer__tournament {
+  background: color-mix(in srgb, var(--hq-tint) 24%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--hq-core) 26%, var(--hairline));
+  border-radius: 14px;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.training-calendar-composer__source-toggle,
+.training-tournament-types > div {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+}
+
+.training-calendar-composer__source-toggle button,
+.training-tournament-types button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 0.76rem;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 0.55rem 0.8rem;
+}
+
+.training-calendar-composer__source-toggle button[aria-pressed="true"],
+.training-tournament-types button.active {
+  background: var(--hq-deep);
+  color: var(--hq-text-on-deep);
+}
+
+.training-tournament-search,
+.training-tournament-manual,
+.training-calendar-composer__fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.training-tournament-search label,
+.training-tournament-manual label,
+.training-calendar-composer__fields label {
+  display: grid;
+  min-width: 0;
+}
+
+.training-tournament-search label > div,
+.training-tournament-manual__url {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.training-tournament-search label > div {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0 0.75rem;
+}
+
+.training-tournament-search label input {
+  background: transparent;
+  border: 0;
+  min-height: 48px;
+  outline: 0;
+  padding-inline: 0;
+  width: 100%;
+}
+
+.training-tournament-search__results {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.training-tournament-search__results > button,
+.training-tournament-search__results > div {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  color: var(--text-2);
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  min-height: 66px;
+  padding: 0.7rem;
+  text-align: left;
+}
+
+.training-tournament-search__results > button[aria-pressed="true"] {
+  border-color: var(--hq-core);
+  box-shadow: inset 4px 0 0 var(--hq-core);
+}
+
+.training-tournament-search__results > button > span:first-child,
+.training-tournament-search__results > div > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.training-tournament-search__results strong {
+  color: var(--text-1);
+  font-size: 0.82rem;
+}
+
+.training-tournament-search__results small {
+  font-size: 0.75rem;
+}
+
+.training-tournament-search__results > button > span:last-child {
+  background: var(--hq-tint);
+  border-radius: 999px;
+  color: var(--hq-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.45rem;
+}
+
+.training-tournament-manual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.training-tournament-manual .wide,
+.training-tournament-types,
+.training-calendar-composer__fields .wide {
+  grid-column: 1 / -1;
+}
+
+.training-tournament-manual .place-search {
+  grid-column: 1 / -1;
+}
+
+.training-tournament-manual__url input {
+  flex: 1;
+  min-width: 0;
+}
+
+.training-tournament-types {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.training-tournament-types > div {
+  flex-wrap: wrap;
+  width: fit-content;
+}
+
+.training-calendar-composer__fields {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.training-calendar-composer input,
+.training-calendar-composer textarea {
+  font-size: 1rem;
+}
+
+.training-calendar-composer textarea {
+  resize: vertical;
+}
+
+.training-calendar-composer__load input {
+  accent-color: var(--hq-core);
+  min-height: 42px;
+  padding: 0;
+}
+
+.training-calendar-composer > footer {
+  border-top: 1px solid var(--hairline);
+  padding-top: 0.9rem;
+}
+
+.training-calendar-composer > footer > span {
+  align-items: center;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.35rem;
+}
+
+.training-program-schedule-editor__empty {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  color: var(--text-2);
+  display: flex;
+  gap: 0.7rem;
+  padding: 1.4rem 0;
+}
+
+.training-program-schedule-editor__empty span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.training-program-schedule-editor__empty strong {
+  color: var(--text-1);
 }
 
 .training-program-schedule-editor__events {
@@ -1211,6 +1518,32 @@
   color: var(--text-2);
   font-size: 0.82rem;
   margin: 0;
+}
+
+.training-program-schedule-editor__events
+  .training-program-schedule-editor__location {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.training-program-schedule-editor__events
+  .training-program-schedule-editor__summary {
+  line-height: 1.45;
+  margin-top: 0.4rem;
+  max-width: 72ch;
+}
+
+.training-program-schedule-editor__events article > div > a {
+  align-items: center;
+  color: var(--hq-ink);
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  text-decoration: none;
 }
 
 .training-program-schedule-editor__events > article > aside {
@@ -5667,13 +6000,44 @@
   }
 
   .training-program-schedule-editor > header,
+  .training-calendar-composer > header,
+  .training-calendar-composer__tournament > header,
+  .training-calendar-composer > footer,
+  .training-tournament-manual__url,
   .training-program-schedule-editor__form footer {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .training-program-schedule-editor > header > span {
+  .training-program-schedule-editor__header-actions > span {
     white-space: normal;
+  }
+
+  .training-program-schedule-editor__header-actions {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .training-calendar-composer__kinds > div,
+  .training-tournament-search__results,
+  .training-tournament-manual,
+  .training-calendar-composer__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .training-tournament-manual .wide,
+  .training-tournament-types,
+  .training-calendar-composer__fields .wide,
+  .training-tournament-manual .place-search {
+    grid-column: auto;
+  }
+
+  .training-calendar-composer__source-toggle {
+    width: 100%;
+  }
+
+  .training-calendar-composer__source-toggle button {
+    flex: 1;
   }
 
   .training-program-schedule-editor__events > article {

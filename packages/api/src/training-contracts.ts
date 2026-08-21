@@ -413,6 +413,62 @@ export const trainingMilestoneSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const trainingTournamentTypeSchema = z.enum([
+  "national",
+  "qualifying",
+  "pro",
+  "local",
+  "other",
+]);
+export type TrainingTournamentType = z.infer<
+  typeof trainingTournamentTypeSchema
+>;
+
+const trainingWebsiteUrlSchema = z
+  .url()
+  .max(2_000)
+  .refine((value) => {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const host = url.hostname.toLowerCase();
+    const privateIpv4 =
+      /^(?:0|10|127)\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(?:1[6-9]|2\d|3[01])\./.test(host) ||
+      /^100\.(?:6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(host);
+    const privateIpv6 = /^(?:\[)?(?:fc|fd|fe8|fe9|fea|feb|::1)/.test(host);
+    return (
+      !url.username &&
+      !url.password &&
+      host !== "localhost" &&
+      host !== "0.0.0.0" &&
+      host !== "127.0.0.1" &&
+      host !== "::1" &&
+      !host.endsWith(".local") &&
+      !privateIpv4 &&
+      !privateIpv6
+    );
+  }, "Enter a public http or https website address.");
+
+export const trainingCalendarItemDetailsSchema = z.object({
+  source: z.enum(["manual", "duna"]).default("manual"),
+  tournamentType: trainingTournamentTypeSchema.optional(),
+  dunaTournamentId: z.string().max(240).optional(),
+  dunaTournamentHref: z.string().startsWith("/").max(500).optional(),
+  websiteUrl: trainingWebsiteUrlSchema.optional(),
+  venueName: z.string().trim().max(180).optional(),
+  address: z.string().trim().max(500).optional(),
+  googlePlaceId: z.string().trim().max(300).optional(),
+  googleMapsUri: z.url().max(2_000).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  summary: z.string().trim().max(2_000).optional(),
+});
+export type TrainingCalendarItemDetails = z.infer<
+  typeof trainingCalendarItemDetailsSchema
+>;
+
 export const trainingEventSchema = z.object({
   id: z.string().uuid(),
   programId: z.string().uuid().optional(),
@@ -444,6 +500,7 @@ export const trainingEventSchema = z.object({
   athleteCount: z.number().int().nonnegative(),
   completion: z.number().min(0).max(1).optional(),
   actualRpe: z.number().min(1).max(10).optional(),
+  calendarDetails: trainingCalendarItemDetailsSchema.optional(),
 });
 export type TrainingEvent = z.infer<typeof trainingEventSchema>;
 
@@ -813,12 +870,71 @@ export const updateTrainingProgramEventInputSchema = z.object({
   trainingEventId: z.string().uuid(),
   localDate: z.iso.date(),
   startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-  durationMinutes: z.number().int().min(15).max(720),
+  durationMinutes: z.number().int().min(15).max(20_160),
   title: z.string().trim().min(2).max(180),
   plannedLoad: z.number().int().min(0).max(100),
   focusArea: trainingFocusAreaSchema.optional(),
   idempotencyKey: z.string().uuid(),
 });
+
+export const createTrainingProgramEventInputSchema = z
+  .object({
+    programId: z.string().uuid(),
+    kind: z.enum(["practice", "tournament", "travel", "assessment", "rest"]),
+    title: z.string().trim().min(2).max(180),
+    startsOn: z.iso.date(),
+    startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    endsOn: z.iso.date(),
+    endsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    plannedLoad: z.number().int().min(0).max(100),
+    focusArea: trainingFocusAreaSchema.optional(),
+    notes: z.string().trim().max(2_000).optional(),
+    calendarDetails: trainingCalendarItemDetailsSchema.optional(),
+    idempotencyKey: z.string().uuid(),
+  })
+  .superRefine((value, context) => {
+    if (
+      `${value.endsOn}T${value.endsAt}` <= `${value.startsOn}T${value.startsAt}`
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["endsOn"],
+        message: "The calendar item must end after it starts.",
+      });
+    }
+    if (value.kind === "tournament" && !value.calendarDetails?.tournamentType) {
+      context.addIssue({
+        code: "custom",
+        path: ["calendarDetails", "tournamentType"],
+        message: "Choose the tournament level.",
+      });
+    }
+  });
+export type CreateTrainingProgramEventInput = z.input<
+  typeof createTrainingProgramEventInputSchema
+>;
+
+export const importTrainingTournamentInputSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  websiteUrl: trainingWebsiteUrlSchema,
+  currentLocation: z.string().trim().max(500).optional(),
+});
+
+export const trainingTournamentImportSchema = z.object({
+  providerAvailable: z.boolean(),
+  sourceUrl: trainingWebsiteUrlSchema,
+  model: z.string().optional(),
+  title: z.string().trim().max(180).optional(),
+  startsOn: z.iso.date().optional(),
+  endsOn: z.iso.date().optional(),
+  venueName: z.string().trim().max(180).optional(),
+  address: z.string().trim().max(500).optional(),
+  summary: z.string().trim().max(2_000).optional(),
+  tournamentType: trainingTournamentTypeSchema.optional(),
+});
+export type TrainingTournamentImport = z.infer<
+  typeof trainingTournamentImportSchema
+>;
 
 export const removeTrainingProgramEventInputSchema = z.object({
   trainingEventId: z.string().uuid(),

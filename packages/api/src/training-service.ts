@@ -1,4 +1,5 @@
 import { Agent, OpenAIProvider, run, setTracingDisabled } from "@openai/agents";
+import { Firecrawl } from "@mendable/firecrawl-js";
 import { demoOrganization } from "@duna/core/demo";
 import {
   auditLog,
@@ -35,9 +36,11 @@ import {
   assignTrainingPracticePlanInputSchema,
   createTrainingDrillInputSchema,
   createTrainingPracticePlanInputSchema,
+  createTrainingProgramEventInputSchema,
   createTrainingProgramInputSchema,
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
+  importTrainingTournamentInputSchema,
   drillSceneSchema,
   recordTrainingOutcomeInputSchema,
   removeTrainingProgramEventInputSchema,
@@ -49,6 +52,7 @@ import {
   restoreTrainingProgramVersionInputSchema,
   TRAINING_FOCUS_AREAS,
   trainingContactEstimateSchema,
+  trainingCalendarItemDetailsSchema,
   trainingDrillSchema,
   trainingDrillInterpretationSchema,
   trainingEventSchema,
@@ -63,6 +67,7 @@ import {
   trainingProgramVersionsInputSchema,
   trainingRecurrenceSchema,
   trainingTagSchema,
+  trainingTournamentImportSchema,
   trainingWorkspaceSchema,
   touchEstimateInputSchema,
   updateTrainingProgramEventInputSchema,
@@ -70,6 +75,7 @@ import {
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
   type TrainingContactEstimate,
+  type TrainingCalendarItemDetails,
   type TrainingDrill,
   type DrillEditorState,
   type TrainingEvent,
@@ -79,6 +85,7 @@ import {
   type PlayerTrainingWorkspace,
   type TrainingProgramDraft,
   type TrainingProgramVersionSnapshot,
+  type TrainingTournamentImport,
   type TrainingRecurrence,
   type TrainingVersionHistoryEntry,
   type TrainingWeekday,
@@ -825,6 +832,102 @@ function trainingAiRuntime() {
     model: process.env.DUNA_TRAINING_MODEL?.trim() || "openai/gpt-5.6-sol",
     imageModel: process.env.DUNA_TRAINING_IMAGE_MODEL?.trim() || "gpt_image_2",
   };
+}
+
+const aiTournamentImportSchema = z.object({
+  title: z.string().trim().max(180),
+  startsOn: z.string().trim().max(10),
+  endsOn: z.string().trim().max(10),
+  venueName: z.string().trim().max(180),
+  address: z.string().trim().max(500),
+  summary: z.string().trim().max(2_000),
+  tournamentType: z.enum(["national", "qualifying", "pro", "local", "other"]),
+});
+
+export async function importTrainingTournamentDetails(
+  rawInput: unknown,
+): Promise<TrainingTournamentImport> {
+  const input = importTrainingTournamentInputSchema.parse(rawInput);
+  const runtime = trainingAiRuntime();
+  const firecrawlApiKey =
+    process.env.FIRECRAWL_API_KEY?.trim() || process.env.FIRECRAWL_API?.trim();
+  if (!runtime || !firecrawlApiKey) {
+    return trainingTournamentImportSchema.parse({
+      providerAvailable: false,
+      sourceUrl: input.websiteUrl,
+    });
+  }
+
+  const document = await new Firecrawl({
+    apiKey: firecrawlApiKey,
+    timeoutMs: 90_000,
+    maxRetries: 1,
+  }).scrape(input.websiteUrl, {
+    formats: ["markdown"],
+    onlyMainContent: true,
+    blockAds: true,
+    timeout: 60_000,
+    maxAge: 86_400_000,
+    storeInCache: true,
+  });
+  const markdown = document.markdown?.trim();
+  if (!markdown) {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "Duna could not find readable tournament details at that website.",
+    );
+  }
+
+  const agent = new Agent({
+    name: "Duna Tournament Calendar Researcher",
+    model: runtime.model,
+    outputType: aiTournamentImportSchema,
+    modelSettings: {
+      reasoning: { effort: "medium" },
+      text: { verbosity: "low" },
+    },
+    instructions: [
+      "Extract one volleyball tournament from the supplied official or organizer website content for a coach's private training calendar.",
+      "Use only the supplied page. Never infer a missing date, venue, address, or competition level.",
+      "Dates use YYYY-MM-DD. Use an empty string when a field is missing or ambiguous.",
+      "Classify tournamentType as national, qualifying, pro, local, or other. Qualifying means the event explicitly awards or determines a bid or qualification; national means a national championship; pro means a professional tour event; local means a local or regional amateur event; otherwise use other.",
+      "Keep summary factual, coach-useful, and below 160 words. Do not copy long passages or marketing language.",
+    ].join("\n"),
+  });
+  const result = await run(
+    agent,
+    JSON.stringify({
+      name: input.name,
+      sourceUrl: input.websiteUrl,
+      currentLocation: input.currentLocation,
+      pageMarkdown: markdown.slice(0, 45_000),
+    }),
+    {
+      maxTurns: 3,
+      ...(runtime.modelProvider
+        ? { modelProvider: runtime.modelProvider }
+        : {}),
+    },
+  );
+  const imported = aiTournamentImportSchema.parse(result.finalOutput);
+  const date = (value: string): string | undefined => {
+    const parsedDate = z.iso.date().safeParse(value);
+    return parsedDate.success ? parsedDate.data : undefined;
+  };
+  const text = (value: string): string | undefined =>
+    value.trim() ? value.trim() : undefined;
+  return trainingTournamentImportSchema.parse({
+    providerAvailable: true,
+    sourceUrl: input.websiteUrl,
+    model: runtime.model,
+    title: text(imported.title),
+    startsOn: date(imported.startsOn),
+    endsOn: date(imported.endsOn),
+    venueName: text(imported.venueName),
+    address: text(imported.address),
+    summary: text(imported.summary),
+    tournamentType: imported.tournamentType,
+  });
 }
 
 export async function draftTrainingDrill(
@@ -2763,6 +2866,9 @@ export async function loadTrainingProgramEvents(input: {
           ? row.externalLoad.focusArea
           : undefined,
       );
+    const calendarDetails = trainingCalendarItemDetailsSchema.safeParse(
+      row.externalLoad.calendarDetails,
+    );
     return trainingEventSchema.parse({
       id: row.id,
       programId: program.id,
@@ -2776,6 +2882,9 @@ export async function loadTrainingProgramEvents(input: {
       plannedLoad: row.plannedLoad,
       plannedIntensity: row.plannedIntensity,
       athleteCount: program.athleteCount,
+      ...(calendarDetails.success
+        ? { calendarDetails: calendarDetails.data }
+        : {}),
     });
   });
 }
@@ -4772,6 +4881,199 @@ export async function createTrainingProgram(input: {
   return { id, sessionCount: scheduledSessionCount, status: "draft" };
 }
 
+export async function createTrainingProgramEvent(input: {
+  readonly actor: ApiActor;
+  readonly programId: string;
+  readonly kind: "practice" | "tournament" | "travel" | "assessment" | "rest";
+  readonly title: string;
+  readonly startsOn: string;
+  readonly startsAt: string;
+  readonly endsOn: string;
+  readonly endsAt: string;
+  readonly plannedLoad: number;
+  readonly focusArea?: TrainingFocusArea;
+  readonly notes?: string;
+  readonly calendarDetails?: TrainingCalendarItemDetails;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly programId: string }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot add items to this program calendar.",
+    );
+  }
+  const parsed = createTrainingProgramEventInputSchema.parse(input);
+  const database = getDatabase();
+  const [program] = await database
+    .select()
+    .from(trainingPrograms)
+    .where(
+      and(
+        eq(trainingPrograms.id, parsed.programId),
+        eq(trainingPrograms.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!program) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This training program is no longer available.",
+    );
+  }
+  if (program.status === "archived") {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "Restore this archived program before changing its calendar.",
+    );
+  }
+  if (parsed.startsOn < program.startDate || parsed.endsOn > program.endDate) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "Keep this calendar item inside the program date window.",
+    );
+  }
+  const startsAt = localTrainingTimeToUtc(
+    parsed.startsOn,
+    parsed.startsAt,
+    program.timezone,
+  );
+  const endsAt = localTrainingTimeToUtc(
+    parsed.endsOn,
+    parsed.endsAt,
+    program.timezone,
+  );
+  if (endsAt <= startsAt) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "The calendar item must end after it starts.",
+    );
+  }
+  if (endsAt.getTime() - startsAt.getTime() > 14 * 86_400_000) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "A single calendar item can span at most 14 days.",
+    );
+  }
+
+  const [programEvents, programVersions] = await Promise.all([
+    database
+      .select()
+      .from(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.programId, program.id),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      )
+      .orderBy(asc(trainingEvents.startsAt)),
+    database
+      .select({
+        id: trainingProgramVersions.id,
+        version: trainingProgramVersions.version,
+      })
+      .from(trainingProgramVersions)
+      .where(eq(trainingProgramVersions.programId, program.id))
+      .orderBy(desc(trainingProgramVersions.version)),
+  ]);
+  const eventId = crypto.randomUUID();
+  const externalLoad: Record<string, unknown> = {
+    ...(parsed.focusArea ? { focusArea: parsed.focusArea } : {}),
+    ...(parsed.calendarDetails
+      ? { calendarDetails: parsed.calendarDetails }
+      : {}),
+  };
+  const nextEvent = {
+    id: eventId,
+    organizationId,
+    programId: program.id,
+    sessionId: null,
+    practicePlanVersionId: null,
+    kind: parsed.kind,
+    title: parsed.title,
+    startsAt,
+    endsAt,
+    timezone: program.timezone,
+    status: "planned" as const,
+    coachPersonId: null,
+    venueId: null,
+    courtId: null,
+    focusAreaTagId: null,
+    objectives: parsed.notes ? [parsed.notes] : [],
+    plannedLoad: parsed.plannedLoad,
+    plannedIntensity: clamp(Math.round(parsed.plannedLoad / 10), 1, 10),
+    externalLoad,
+    notesMarkdown: parsed.notes ?? null,
+    source: parsed.calendarDetails?.source === "duna" ? "catalog" : "manual",
+    createdByPersonId: input.actor.personId,
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+  const scheduledSessionCount =
+    program.scheduledSessionCount + (parsed.kind === "practice" ? 1 : 0);
+  const nextSnapshot = programVersionSnapshot(
+    { ...program, scheduledSessionCount },
+    [...programEvents, nextEvent].sort(
+      (left, right) => left.startsAt.getTime() - right.startsAt.getTime(),
+    ),
+  );
+  const nextVersionId = crypto.randomUUID();
+  const nextVersion = (programVersions[0]?.version ?? 0) + 1;
+  const staleVersionIds = programVersions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((version) => version.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction.insert(trainingEvents).values(nextEvent);
+    await transaction
+      .update(trainingPrograms)
+      .set({
+        scheduledSessionCount,
+        currentVersionId: nextVersionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPrograms.id, program.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(trainingProgramVersions).values({
+      id: nextVersionId,
+      programId: program.id,
+      version: nextVersion,
+      snapshot: nextSnapshot,
+      changeNote: `Added calendar item: ${parsed.title}.`,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    if (staleVersionIds.length) {
+      await transaction
+        .delete(trainingProgramVersions)
+        .where(inArray(trainingProgramVersions.id, staleVersionIds));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.event-created",
+      entityType: "training-event",
+      entityId: eventId,
+      afterHash: stableHash(programEventSnapshot(nextEvent)),
+      reason:
+        "Coach added an operational calendar item while preserving the commercial offer and prior program version.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: eventId, programId: program.id };
+}
+
 export async function updateTrainingProgramEvent(input: {
   readonly actor: ApiActor;
   readonly trainingEventId: string;
@@ -4869,6 +5171,17 @@ export async function updateTrainingProgramEvent(input: {
     program.timezone,
   );
   const endsAt = new Date(startsAt.getTime() + parsed.durationMinutes * 60_000);
+  const programEndsAt = localTrainingTimeToUtc(
+    program.endDate,
+    "23:59",
+    program.timezone,
+  );
+  if (endsAt > programEndsAt) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "Keep this event inside the program date window.",
+    );
+  }
   // `focusArea` is optional because a coach can deliberately remove it.
   // Remove the previous value before applying the optional new one so a
   // "No focus area" choice does not silently retain stale reporting data.

@@ -4,10 +4,12 @@ import {
   archiveTrainingPracticePlanInputSchema,
   archiveTrainingProgramInputSchema,
   createHiggsfieldImage,
+  createTrainingProgramEventInputSchema,
   createTrainingPracticePlanInputSchema,
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
   getHiggsfieldJob,
+  importTrainingTournamentInputSchema,
   recordTrainingOutcomeInputSchema,
   removeTrainingProgramEventInputSchema,
   restoreTrainingPracticePlanArchiveInputSchema,
@@ -15,16 +17,19 @@ import {
   restoreTrainingProgramArchiveInputSchema,
   restoreTrainingProgramVersionInputSchema,
   trainingDrillSchema,
+  trainingTournamentImportSchema,
   trainingProgramDraftSchema,
   updateTrainingProgramEventInputSchema,
   updateTrainingPracticePlanInputSchema,
   type DraftTrainingDrillInput,
   type DraftTrainingProgramInput,
+  type CreateTrainingProgramEventInput,
   type HiggsfieldJob,
   type RecordTrainingOutcomeInput,
   type TrainingDrill,
   type TrainingPracticePlan,
   type TrainingProgramDraft,
+  type TrainingTournamentImport,
 } from "@duna/api";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -274,6 +279,53 @@ export async function saveTrainingProgramAction(input: {
       status: "success",
       message: `Program saved as a private draft with ${saved.sessionCount} practices.`,
       value: { id: saved.id, sessionCount: saved.sessionCount },
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function importTrainingTournamentAction(input: {
+  readonly name: string;
+  readonly websiteUrl: string;
+  readonly currentLocation?: string;
+}): Promise<TrainingStudioResult<TrainingTournamentImport>> {
+  try {
+    const parsed = importTrainingTournamentInputSchema.parse(input);
+    const caller = await getServerCaller();
+    const imported = trainingTournamentImportSchema.parse(
+      await caller.operator.importTrainingTournament(parsed),
+    );
+    return {
+      status: "success",
+      message: imported.providerAvailable
+        ? "Duna found tournament details. Review every field before adding it."
+        : "AI import is not configured here yet. You can still add the tournament manually.",
+      value: imported,
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function createTrainingProgramEventAction(
+  input: Omit<CreateTrainingProgramEventInput, "idempotencyKey">,
+): Promise<
+  TrainingStudioResult<{ readonly id: string; readonly programId: string }>
+> {
+  try {
+    const parsed = createTrainingProgramEventInputSchema.parse({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const saved = await caller.operator.createTrainingProgramEvent(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/programs/${saved.programId}`);
+    return {
+      status: "success",
+      message: "Calendar item added and the prior program version preserved.",
+      value: saved,
     };
   } catch (error) {
     return { status: "error", message: message(error) };
