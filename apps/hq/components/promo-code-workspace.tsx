@@ -1158,6 +1158,10 @@ export function PromoCodeWorkspaceView({
           <div>
             <span className="hq-eyebrow">Campaigns</span>
             <h2 id="promo-list-title">Live performance, one code at a time.</h2>
+            <p className="promo-list__description">
+              Deactivate a code to stop future redemptions. Its history stays
+              here for reporting.
+            </p>
           </div>
           <span>{workspace.promoCodes.length} total</span>
         </header>
@@ -1236,11 +1240,13 @@ export function PromoCodeWorkspaceView({
                         className="hq-button hq-button--secondary"
                         type="submit"
                       >
-                        Deactivate
+                        Deactivate code
                       </button>
                     </form>
                   ) : (
-                    <span />
+                    <span className="promo-card__inactive-note">
+                      Deactivated · history retained
+                    </span>
                   )}
                   <details>
                     <summary>

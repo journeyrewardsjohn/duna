@@ -37,4 +37,21 @@ describe("promo code creation workspace", () => {
     expect(component).toContain("Limit total redemptions");
     expect(component).toContain("Limit uses per member");
   });
+
+  it("keeps direct promo inputs visibly bounded", () => {
+    expect(stylesheet).toMatch(
+      /\.promo-field > input\s*\{[^}]*background:\s*var\(--surface-1\);[^}]*border:\s*1px solid var\(--hairline-strong\);[^}]*border-radius:\s*10px;/s,
+    );
+    expect(stylesheet).not.toMatch(
+      /\.promo-field > input,[^{]*\{[^}]*border:\s*0;/s,
+    );
+  });
+
+  it("explains how deactivation preserves campaign history", () => {
+    expect(component).toContain(
+      "Deactivate a code to stop future redemptions. Its history stays",
+    );
+    expect(component).toContain("Deactivate code");
+    expect(component).toContain("Deactivated · history retained");
+  });
 });
