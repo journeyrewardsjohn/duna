@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { demoOrganization } from "@duna/core/demo";
 import { createDemoActor } from "./context";
 import {
+  createTrainingProgramEventInputSchema,
   draftTrainingDrillInputSchema,
+  importTrainingTournamentInputSchema,
   trainingDrillSchema,
   trainingDrillMarketplaceSchema,
   type TrainingProgramDraft,
@@ -21,6 +23,63 @@ import {
   submitTrainingAthleteResponse,
   validateTrainingProgramOccurrenceSchedule,
 } from "./training-service";
+
+describe("training program calendar items", () => {
+  const base = {
+    programId: "11000000-0000-4000-8000-000000000001",
+    kind: "tournament" as const,
+    title: "18U National Championships",
+    startsOn: "2026-06-20",
+    startsAt: "08:00",
+    endsOn: "2026-06-22",
+    endsAt: "18:00",
+    plannedLoad: 90,
+    calendarDetails: {
+      source: "manual" as const,
+      tournamentType: "national" as const,
+      websiteUrl: "https://example.org/tournaments/nationals",
+      venueName: "National Volleyball Center",
+      address: "100 Court Way, Dallas, TX",
+    },
+    idempotencyKey: "11000000-0000-4000-8000-000000000002",
+  };
+
+  it("accepts a multi-day tournament with coach-reviewed website and location details", () => {
+    expect(createTrainingProgramEventInputSchema.parse(base)).toMatchObject({
+      kind: "tournament",
+      calendarDetails: {
+        tournamentType: "national",
+        websiteUrl: "https://example.org/tournaments/nationals",
+      },
+    });
+  });
+
+  it("requires tournament level and an end after the start", () => {
+    expect(() =>
+      createTrainingProgramEventInputSchema.parse({
+        ...base,
+        endsOn: base.startsOn,
+        endsAt: "07:00",
+        calendarDetails: { source: "manual" },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts public tournament websites and rejects local network targets", () => {
+    expect(
+      importTrainingTournamentInputSchema.parse({
+        name: "Regional Open",
+        websiteUrl: "https://volleyball.example.com/regional-open",
+      }).websiteUrl,
+    ).toBe("https://volleyball.example.com/regional-open");
+    expect(() =>
+      importTrainingTournamentInputSchema.parse({
+        name: "Internal event",
+        websiteUrl: "http://localhost:3000/private",
+      }),
+    ).toThrow("public http or https");
+  });
+});
 
 describe("training schedule generation", () => {
   it("loads a program calendar independently of the dashboard upcoming-event limit", async () => {

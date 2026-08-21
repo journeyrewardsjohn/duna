@@ -22,7 +22,10 @@ import {
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { TrainingContentLifecycle } from "./training-content-lifecycle";
-import { TrainingProgramScheduleEditor } from "./training-program-schedule-editor";
+import {
+  TrainingProgramScheduleEditor,
+  type ProgramTournamentCandidate,
+} from "./training-program-schedule-editor";
 
 function variableStyle(name: string, value: string): CSSProperties {
   return { [name]: value } as CSSProperties;
@@ -206,11 +209,13 @@ export function TrainingPracticePlanDetail({
 export function TrainingProgramDetail({
   events,
   program,
+  tournamentCandidates,
   versions,
   workspace,
 }: {
   readonly events: readonly TrainingEvent[];
   readonly program: TrainingProgram;
+  readonly tournamentCandidates: readonly ProgramTournamentCandidate[];
   readonly versions: readonly TrainingVersionHistoryEntry[];
   readonly workspace: TrainingWorkspace;
 }) {
@@ -309,9 +314,12 @@ export function TrainingProgramDetail({
       <div className="training-detail__layout">
         <TrainingProgramScheduleEditor
           events={events}
+          programId={program.id}
           programEndDate={program.endDate}
           programStartDate={program.startDate}
+          programTimezone={program.timezone}
           readOnly={program.status === "archived"}
+          tournamentCandidates={tournamentCandidates}
         />
         <aside className="training-detail__rail">
           <section className="training-program-detail__objective">
