@@ -137,7 +137,7 @@ export const staticPublicPages = [
       "Practice: The coach assembles a timed session from their drills. Blocks can run on parallel courts. Practice plans are built by the coach rather than generated from a prompt.",
       "Program: Set the date window, weekly recurrence, and the tournaments that matter. Duna drafts the training phases and the load leading to them, and the coach can edit any week before the program is saved. Programs schedule sessions; they do not generate practice content for each session.",
       "Contact and load figures are planning estimates derived from each drill's pacing assumptions. They are coach planning context, not a measurement of any athlete and not a health prediction.",
-      "The page shows the Drill Studio, Practice Builder, and Program Designer screens from Duna HQ using the sample content the product ships: a First-Ball Sideout Lab drill, the 90-minute Sideout Under Pressure session that contains it across two courts, and the Fall Competition Build program that session belongs to.",
+      "The page shows the Drill Studio, Practice Builder, and Program Designer screens from Duna HQ using the sample content the product ships: a First-Ball Sideout Lab drill, the 90-minute Sideout Under Pressure session that contains it across two courts, and the Fall Competition Build program that session belongs to, drawn as an eight-week strip whose phases, weekly load, current week, and Atlantic Coast Open tournament come from the program's own scheduling logic.",
     ],
   },
   {

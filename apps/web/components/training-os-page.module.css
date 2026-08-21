@@ -349,12 +349,6 @@
   font-size: 0.75rem;
 }
 
-.phaseValue {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
 /* Studio */
 .studioField {
   background: color-mix(in srgb, var(--fog-100) 70%, var(--fog-50));
@@ -601,48 +595,114 @@
   font-style: normal;
 }
 
-/* Program */
-.programPurpose {
+/* Program. The season strip is the artifact, so the numbers stay quiet in the
+   chrome rather than becoming cards. */
+.programChromeLine {
   color: var(--mock-muted);
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
   margin: 0;
 }
 
-.programRows {
+.seasonStrip {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
-.programRows article {
-  background: var(--mock-surface);
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  border-radius: 10px;
+.phaseBands,
+.weekBars,
+.weekLabels,
+.milestoneTicks {
   display: grid;
-  gap: 0.1rem;
-  padding: 0.7rem 0.8rem;
+  gap: 0.35rem;
+  grid-template-columns: repeat(8, 1fr);
 }
 
-.programRows small {
-  color: var(--mock-muted);
+.phaseBands span {
+  border-top: 2px solid var(--hq-core);
+  color: var(--hq-ink);
   font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-right: 0.35rem;
+  overflow: hidden;
+  padding-top: 0.3rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.programRows strong {
-  font-size: 0.9375rem;
+.weekBars {
+  align-items: end;
+  block-size: 7.5rem;
+}
+
+.weekBar {
+  align-items: end;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 6px;
+  display: flex;
+  block-size: 100%;
+  overflow: hidden;
+}
+
+.weekBar i {
+  background: color-mix(in srgb, var(--hq-core) 52%, var(--fog-100));
+  display: block;
+  inline-size: 100%;
+}
+
+.weekBar[data-state="done"] i {
+  background: color-mix(in srgb, var(--hq-ink) 34%, var(--fog-100));
+}
+
+.weekBar[data-state="current"] {
+  background: var(--hq-tint);
+  outline: 2px solid var(--hq-core);
+  outline-offset: 0;
+}
+
+.weekBar[data-state="current"] i {
+  background: var(--hq-core);
+}
+
+.weekLabels span {
+  align-items: center;
+  color: var(--mock-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.weekLabels span[data-state="current"] {
+  color: var(--hq-ink);
   font-weight: 600;
 }
 
-.programMilestone {
-  border-color: var(--hq-core) !important;
+.weekLabels em {
+  font-size: 0.75rem;
+  font-style: normal;
+  line-height: 1.2;
 }
 
-.programMilestone em {
+.taperNote {
   color: var(--mock-muted);
+}
+
+/* The milestone is a tick on the strip plus a readable label, so the title is
+   never squeezed into one eighth of the width. */
+.milestoneTicks i {
+  background: var(--hq-ink);
+  border-radius: 2px;
+  block-size: 6px;
+  display: block;
+}
+
+.milestoneLabel {
+  color: var(--hq-ink);
   font-size: 0.8125rem;
-  font-style: normal;
+  font-weight: 600;
+  margin: 0;
 }
 
 /* Hero screen extras */
@@ -831,6 +891,15 @@
 
   .staffBoard {
     grid-template-columns: 1fr;
+  }
+
+  .weekBars {
+    block-size: 5.5rem;
+  }
+
+  .phaseBands span {
+    font-size: 0.75rem;
+    margin-right: 0.2rem;
   }
 }
 

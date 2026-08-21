@@ -121,17 +121,44 @@ const practiceStaff = [
   { person: marketingPeople.alex, role: "Strength", lane: "Warm-up" },
 ] as const;
 
+// The shipped demo program runs 56 days, Mondays and Wednesdays, 16 sessions,
+// with 7 complete and the Atlantic Coast Open ahead of it. Phase names and
+// their loads come from phaseForProgress() in training-service.ts, and the dip
+// in week six is milestoneLoadAdjustment() reducing load into a key
+// tournament. Nothing here is invented for the page.
+interface ProgramWeek {
+  readonly week: number;
+  readonly load: number;
+  readonly state: "done" | "current" | "ahead";
+  readonly taper?: boolean;
+}
+
+const programStrip: readonly ProgramWeek[] = [
+  { week: 1, load: 58, state: "done" },
+  { week: 2, load: 58, state: "done" },
+  { week: 3, load: 72, state: "done" },
+  { week: 4, load: 72, state: "current" },
+  { week: 5, load: 72, state: "ahead" },
+  { week: 6, load: 52, state: "ahead", taper: true },
+  { week: 7, load: 68, state: "ahead" },
+  { week: 8, load: 46, state: "ahead" },
+];
+
 const program = {
   title: "Fall Competition Build",
-  purpose:
-    "Build a reliable sideout identity while arriving fresh for the Atlantic Coast Open.",
-  currentPhase: "Pressure + transfer",
-  completedSessions: 7,
-  scheduledSessions: 16,
-  athletes: 12,
-  recurrence: "Mondays + Wednesdays · 5:00 PM · 90 minutes",
-  milestone: { title: "Atlantic Coast Open", kind: "Tournament", inDays: 17 },
-};
+  weeks: 8,
+  sessions: 16,
+  cadence: "Mondays + Wednesdays",
+  milestone: { title: "Atlantic Coast Open", week: 6 },
+} as const;
+
+// Phase bands span the weeks they cover, so the strip reads as a season.
+const programPhases = [
+  { name: "Foundation", from: 1, to: 2 },
+  { name: "Build", from: 3, to: 5 },
+  { name: "Integrate", from: 6, to: 7 },
+  { name: "Sharpen", from: 8, to: 8 },
+] as const;
 
 function useRevealOnScroll() {
   const pageRef = useRef<HTMLElement>(null);
@@ -354,37 +381,54 @@ function ProgramWindow() {
         <span>Program Designer</span>
         <strong>{program.title}</strong>
       </div>
-      <p className={styles.programPurpose}>{program.purpose}</p>
-      <div className={styles.hqMetrics}>
-        <article>
-          <small>Sessions</small>
-          <Numeric tier="block">
-            {program.completedSessions}/{program.scheduledSessions}
-          </Numeric>
-          <span>completed</span>
-        </article>
-        <article>
-          <small>Athletes</small>
-          <Numeric tier="block">{program.athletes}</Numeric>
-          <span>on the program</span>
-        </article>
-        <article>
-          <small>Current phase</small>
-          <strong className={styles.phaseValue}>{program.currentPhase}</strong>
-        </article>
-      </div>
-      <div className={styles.programRows}>
-        <article>
-          <small>Repeats</small>
-          <strong>{program.recurrence}</strong>
-        </article>
-        <article className={styles.programMilestone}>
-          <small>{program.milestone.kind}</small>
-          <strong>{program.milestone.title}</strong>
-          <em>
-            in <Numeric tier="chip">{program.milestone.inDays}</Numeric> days
-          </em>
-        </article>
+      <p className={styles.programChromeLine}>
+        <Numeric tier="chip">{program.weeks}</Numeric> weeks · {program.cadence}{" "}
+        · <Numeric tier="chip">{program.sessions}</Numeric> sessions
+      </p>
+
+      <div className={styles.seasonStrip}>
+        <div className={styles.phaseBands}>
+          {programPhases.map((phase) => (
+            <span
+              key={phase.name}
+              style={{
+                gridColumn: `${phase.from} / ${phase.to + 1}`,
+              }}
+            >
+              {phase.name}
+            </span>
+          ))}
+        </div>
+
+        <div className={styles.weekBars}>
+          {programStrip.map((week) => (
+            <span
+              className={styles.weekBar}
+              data-state={week.state}
+              key={week.week}
+            >
+              <i style={{ blockSize: `${week.load}%` }} />
+            </span>
+          ))}
+        </div>
+
+        <div className={styles.weekLabels}>
+          {programStrip.map((week) => (
+            <span data-state={week.state} key={week.week}>
+              <Numeric tier="chip">{week.week}</Numeric>
+              {week.state === "current" && <em>This week</em>}
+              {week.taper && <em className={styles.taperNote}>Taper</em>}
+            </span>
+          ))}
+        </div>
+
+        <div className={styles.milestoneTicks}>
+          <i style={{ gridColumn: `${program.milestone.week} / span 1` }} />
+        </div>
+        <p className={styles.milestoneLabel}>
+          Week <Numeric tier="chip">{program.milestone.week}</Numeric> ·{" "}
+          {program.milestone.title}
+        </p>
       </div>
     </HqChrome>
   );
