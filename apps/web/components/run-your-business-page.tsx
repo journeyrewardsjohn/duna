@@ -1241,18 +1241,6 @@ export function RunYourBusinessPage({
             </article>
           ))}
         </div>
-        <div className={styles.connectedFlow} data-reveal>
-          {["Publish", "Discover", "Book", "Serve", "Learn", "Return"].map(
-            (label, index) => (
-              <span key={label}>
-                <Numeric tier="chip">
-                  {String(index + 1).padStart(2, "0")}
-                </Numeric>
-                {label}
-              </span>
-            ),
-          )}
-        </div>
       </section>
 
       <section className={styles.assurance}>
