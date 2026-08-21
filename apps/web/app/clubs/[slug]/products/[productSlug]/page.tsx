@@ -86,6 +86,7 @@ export default async function CatalogProductPage({
     session_id?: string;
     membership_checkout?: string;
     membership_session_id?: string;
+    resume_checkout?: string;
   }>;
 }) {
   const [{ slug, productSlug }, query] = await Promise.all([
@@ -533,6 +534,7 @@ export default async function CatalogProductPage({
                   ? query.membership_session_id
                   : undefined
               }
+              resumeCheckout={query.resume_checkout === "1"}
               item={item}
               organization={{
                 id: storefront.organizationId,
