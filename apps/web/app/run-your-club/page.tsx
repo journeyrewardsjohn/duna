@@ -4,6 +4,7 @@ import {
   ORGANIZATION_VIDEO_ADD_ONS,
   ORGANIZATION_VIDEO_RATES,
 } from "@duna/core";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import type { Metadata } from "next";
 import { RunYourBusinessPage } from "@/components/run-your-business-page";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
@@ -114,6 +115,7 @@ export default function RunYourClubPage() {
         type="application/ld+json"
       />
       <RunYourBusinessPage
+        authConfigured={isWorkOSAuthKitConfigured()}
         hqHref={signupHref("coach")}
         plans={plans}
         videoPricing={videoPricing}
