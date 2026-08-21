@@ -459,6 +459,38 @@ export async function reviewPlayerSourceAction(input: {
   }
 }
 
+export async function retryPlayerSourceAction(input: { connectionId: string }) {
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.player.retryPlayerSource({
+      ...input,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    after(async () => {
+      try {
+        await processWorkflowJobById(result.jobId);
+      } catch (error) {
+        console.error("Retried player source import failed", {
+          jobId: result.jobId,
+          error,
+        });
+      }
+    });
+    revalidatePath("/app", "layout");
+    revalidatePath("/app/onboarding");
+    revalidatePath("/app/settings");
+    return { ok: true as const, result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The source history could not be retried.",
+    };
+  }
+}
+
 export async function transferFamilyCreditsAction(input: {
   dependentPersonId: string;
   organizationId: string;
