@@ -8,6 +8,7 @@ import {
   index,
   integer,
   jsonb,
+  foreignKey,
   pgEnum,
   pgTable,
   primaryKey,
@@ -8744,6 +8745,12 @@ export const promoCodes = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    // Promo codes are immutable commercial records. A revision is a new code
+    // that succeeds an earlier one; checkout and redemption rows therefore
+    // continue pointing at the exact rule set a customer used.
+    lineageRootId: uuid("lineage_root_id").notNull(),
+    supersedesPromoCodeId: uuid("supersedes_promo_code_id"),
+    revision: integer("revision").notNull().default(1),
     duplicatedFromId: uuid("duplicated_from_id"),
     deactivatedAt: timestamp("deactivated_at", {
       withTimezone: true,
@@ -8755,10 +8762,28 @@ export const promoCodes = pgTable(
   },
   (table) => [
     uniqueIndex("promo_org_code_unique").on(table.organizationId, table.code),
+    uniqueIndex("promo_lineage_revision_unique").on(
+      table.lineageRootId,
+      table.revision,
+    ),
+    uniqueIndex("promo_supersedes_unique")
+      .on(table.supersedesPromoCodeId)
+      .where(sql`${table.supersedesPromoCodeId} IS NOT NULL`),
+    foreignKey({
+      columns: [table.lineageRootId],
+      foreignColumns: [table.id],
+      name: "promo_codes_lineage_root_id_promo_codes_id_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.supersedesPromoCodeId],
+      foreignColumns: [table.id],
+      name: "promo_codes_supersedes_promo_code_id_promo_codes_id_fk",
+    }).onDelete("restrict"),
     check(
       "promo_discount_type_valid",
       sql`${table.discountType} IN ('percent', 'amount')`,
     ),
+    check("promo_revision_positive", sql`${table.revision} > 0`),
     check(
       "promo_discount_value_valid",
       sql`${table.discountValue} > 0 AND (${table.discountType} <> 'percent' OR ${table.discountValue} <= 10000)`,

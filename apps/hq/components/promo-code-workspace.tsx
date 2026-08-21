@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
+  History,
+  Pencil,
   Percent,
   Search,
   ShoppingBag,
@@ -42,6 +44,7 @@ type DiscountType = "percent" | "amount";
 type ScopeMode = "everything" | "categories" | "offers";
 type ScheduleMode = "always" | "window";
 type AudienceMode = "everyone" | "selected";
+type PromoCodeRecord = PromoCodeWorkspace["promoCodes"][number];
 
 function money(amountMinor: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -69,6 +72,23 @@ function displayDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function inputMoney(minor: number | null) {
+  return minor === null ? "" : (minor / 100).toFixed(2);
+}
+
+function localDateTime(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${formatLocalDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function nextRevisionCode(promo: PromoCodeRecord) {
+  const suffix = `-V${promo.revision + 1}`;
+  return `${promo.code.slice(0, 48 - suffix.length)}${suffix}`;
 }
 
 function ChoiceCard({
@@ -177,6 +197,9 @@ export function PromoCodeWorkspaceView({
   const [selectedMemberIds, setSelectedMemberIds] = useState<readonly string[]>(
     [],
   );
+  const [revisionSourceId, setRevisionSourceId] = useState<string | null>(null);
+
+  const isRevision = revisionSourceId !== null;
 
   const active = workspace.promoCodes.filter((promo) => promo.activeNow);
   const totals = workspace.promoCodes.reduce(
@@ -335,6 +358,52 @@ export function PromoCodeWorkspaceView({
     setStep(index);
   }
 
+  function startRevision(promo: PromoCodeRecord) {
+    const today = formatLocalDate(new Date());
+    const usesSchedule = Boolean(promo.startsAt || promo.endsAt);
+    const exactOffers = promo.catalogItems.length > 0;
+    setRevisionSourceId(promo.id);
+    setName(promo.name);
+    setCode(nextRevisionCode(promo));
+    setDiscountType(promo.discountType as DiscountType);
+    setDiscountValue(
+      promo.discountType === "percent"
+        ? String(promo.discountValue / 100)
+        : inputMoney(promo.discountValue),
+    );
+    setHasMinimumPurchase(promo.minimumPurchaseMinor !== null);
+    setMinimumPurchase(inputMoney(promo.minimumPurchaseMinor));
+    setHasMaximumDiscount(promo.maximumDiscountMinor !== null);
+    setMaximumDiscount(inputMoney(promo.maximumDiscountMinor));
+    setScopeMode(
+      promo.appliesToAllPlans &&
+        promo.appliesToAllServices &&
+        promo.appliesToAllProducts
+        ? "everything"
+        : exactOffers
+          ? "offers"
+          : "categories",
+    );
+    setAllPlans(promo.appliesToAllPlans);
+    setAllServices(promo.appliesToAllServices);
+    setAllProducts(promo.appliesToAllProducts);
+    setSelectedCatalogIds(promo.catalogItems.map((item) => item.id));
+    setScheduleMode(usesSchedule ? "window" : "always");
+    setSchedule({
+      start: localDateTime(promo.startsAt, `${today}T09:00`),
+      end: localDateTime(promo.endsAt, `${addLocalDays(today, 7)}T23:59`),
+    });
+    setRedemptionLimited(promo.redemptionCap !== null);
+    setRedemptionCap(promo.redemptionCap?.toString() ?? "");
+    setPerMemberLimited(promo.perPersonLimit !== null);
+    setPerPersonLimit(promo.perPersonLimit?.toString() ?? "1");
+    setAudienceMode(promo.members.length ? "selected" : "everyone");
+    setSelectedMemberIds(promo.members.map((member) => member.id));
+    setStep(0);
+    setFurthestStep(0);
+    setStepMessage("");
+  }
+
   return (
     <div className="promo-workspace">
       <section className="promo-metrics" aria-label="Promotion performance">
@@ -367,16 +436,23 @@ export function PromoCodeWorkspaceView({
       <section className="promo-creator" aria-labelledby="promo-creator-title">
         <header className="promo-creator__heading">
           <div>
-            <span className="hq-eyebrow">New promotion</span>
+            <span className="hq-eyebrow">
+              {isRevision ? "New promo revision" : "New promotion"}
+            </span>
             <h2 id="promo-creator-title">
-              Create a code customers understand.
+              {isRevision
+                ? "Create the next, traceable version."
+                : "Create a code customers understand."}
             </h2>
             <p>
-              Make one decision at a time. The live summary shows exactly what a
-              buyer will receive and every rule Duna will enforce.
+              {isRevision
+                ? "The prior code will be retained for reporting and retired only after this successor is ready."
+                : "Make one decision at a time. The live summary shows exactly what a buyer will receive and every rule Duna will enforce."}
             </p>
           </div>
-          <span className="promo-draft-chip">Draft</span>
+          <span className="promo-draft-chip">
+            {isRevision ? "Revision draft" : "Draft"}
+          </span>
         </header>
 
         <nav className="promo-stepper" aria-label="Promotion creation steps">
@@ -402,9 +478,28 @@ export function PromoCodeWorkspaceView({
 
         <form action={action} className="promo-creator__form">
           <input
+            name="sourcePromoCodeId"
+            type="hidden"
+            value={revisionSourceId ?? ""}
+          />
+          <input name="name" type="hidden" value={name} />
+          <input name="code" type="hidden" value={code} />
+          <input name="discountType" type="hidden" value={discountType} />
+          <input name="discountValue" type="hidden" value={discountValue} />
+          <input
             name="currency"
             type="hidden"
             value={workspace.organization.currency}
+          />
+          <input
+            name="minimumPurchase"
+            type="hidden"
+            value={hasMinimumPurchase ? minimumPurchase : ""}
+          />
+          <input
+            name="maximumDiscount"
+            type="hidden"
+            value={hasMaximumDiscount ? maximumDiscount : ""}
           />
           <input
             name="appliesToAllPlans"
@@ -467,7 +562,6 @@ export function PromoCodeWorkspaceView({
                     <span>Campaign name</span>
                     <input
                       autoComplete="off"
-                      name="name"
                       onChange={(event) => setName(event.target.value)}
                       placeholder="Fall membership push"
                       required
@@ -483,7 +577,6 @@ export function PromoCodeWorkspaceView({
                       <input
                         autoCapitalize="characters"
                         autoComplete="off"
-                        name="code"
                         onChange={(event) =>
                           setCode(
                             event.target.value
@@ -525,7 +618,7 @@ export function PromoCodeWorkspaceView({
                       <label>
                         <input
                           checked={discountType === "percent"}
-                          name="discountType"
+                          name="discountTypeChoice"
                           onChange={() => setDiscountType("percent")}
                           type="radio"
                           value="percent"
@@ -537,7 +630,7 @@ export function PromoCodeWorkspaceView({
                       <label>
                         <input
                           checked={discountType === "amount"}
-                          name="discountType"
+                          name="discountTypeChoice"
                           onChange={() => {
                             setDiscountType("amount");
                             setHasMaximumDiscount(false);
@@ -561,7 +654,6 @@ export function PromoCodeWorkspaceView({
                         <input
                           max={discountType === "percent" ? 100 : undefined}
                           min="0.01"
-                          name="discountValue"
                           onChange={(event) =>
                             setDiscountValue(event.target.value)
                           }
@@ -592,7 +684,6 @@ export function PromoCodeWorkspaceView({
                         <b>$</b>
                         <input
                           min="0.01"
-                          name="minimumPurchase"
                           onChange={(event) =>
                             setMinimumPurchase(event.target.value)
                           }
@@ -617,7 +708,6 @@ export function PromoCodeWorkspaceView({
                           <b>$</b>
                           <input
                             min="0.01"
-                            name="maximumDiscount"
                             onChange={(event) =>
                               setMaximumDiscount(event.target.value)
                             }
@@ -1036,10 +1126,15 @@ export function PromoCodeWorkspaceView({
                 <div className="promo-launch-note">
                   <CheckCircle2 aria-hidden size={21} />
                   <div>
-                    <strong>Ready to create</strong>
+                    <strong>
+                      {isRevision
+                        ? "Ready to create a successor"
+                        : "Ready to create"}
+                    </strong>
                     <p>
-                      The promotion will be active immediately unless you chose
-                      a future start. You can deactivate or duplicate it later.
+                      {isRevision
+                        ? "Duna creates a new code, preserves the prior record, and retires the prior code only after the successor is ready."
+                        : "The promotion will be active immediately unless you chose a future start. You can deactivate or duplicate it later."}
                     </p>
                   </div>
                 </div>
@@ -1093,7 +1188,11 @@ export function PromoCodeWorkspaceView({
                   type="submit"
                 >
                   <TicketPercent aria-hidden size={17} />
-                  {pending ? "Creating…" : "Create promo code"}
+                  {pending
+                    ? "Creating…"
+                    : isRevision
+                      ? "Create next version"
+                      : "Create promo code"}
                 </button>
               )}
             </footer>
@@ -1167,114 +1266,153 @@ export function PromoCodeWorkspaceView({
         </header>
         {workspace.promoCodes.length ? (
           <div className="promo-list__grid">
-            {workspace.promoCodes.map((promo) => (
-              <article className="hq-card promo-card" key={promo.id}>
-                <header>
-                  <div>
-                    <span
-                      className={`promo-status ${promo.lifecycle === "active" ? "active" : ""}`}
-                    >
-                      {promo.lifecycle === "active"
-                        ? "Active"
-                        : promo.lifecycle === "scheduled"
-                          ? "Scheduled"
-                          : promo.lifecycle === "expired"
-                            ? "Expired"
-                            : "Inactive"}
-                    </span>
-                    <h3>{promo.code}</h3>
-                    <p>{promo.name}</p>
-                  </div>
-                  <strong>
-                    {promo.discountType === "percent"
-                      ? `${promo.discountValue / 100}% off`
-                      : `${money(promo.discountValue, promo.currency)} off`}
-                  </strong>
-                </header>
-                <dl>
-                  <div>
-                    <dt>Redemptions</dt>
-                    <dd>
-                      {promo.metrics.redemptions}
-                      {promo.redemptionCap ? ` / ${promo.redemptionCap}` : ""}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Sales</dt>
-                    <dd>
-                      {money(promo.metrics.grossSalesMinor, promo.currency)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Discounts</dt>
-                    <dd>
-                      {money(promo.metrics.discountsMinor, promo.currency)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Stripe</dt>
-                    <dd>{promo.stripeSyncStatus}</dd>
-                  </div>
-                </dl>
-                <div className="promo-card__scope">
-                  <CalendarRange aria-hidden size={15} />
-                  <span>
-                    {promo.startsAt
-                      ? new Date(promo.startsAt).toLocaleDateString()
-                      : "Now"}{" "}
-                    –{" "}
-                    {promo.endsAt
-                      ? new Date(promo.endsAt).toLocaleDateString()
-                      : "No end date"}
-                  </span>
-                </div>
-                <footer>
-                  {promo.active ? (
-                    <form action={deactivatePromoCodeAction}>
-                      <input
-                        name="promoCodeId"
-                        type="hidden"
-                        value={promo.id}
-                      />
-                      <button
-                        className="hq-button hq-button--secondary"
-                        type="submit"
+            {workspace.promoCodes.map((promo) => {
+              const hasSuccessor = promo.lineage.some(
+                (version) => version.supersedesPromoCodeId === promo.id,
+              );
+              return (
+                <article className="hq-card promo-card" key={promo.id}>
+                  <header>
+                    <div>
+                      <span
+                        className={`promo-status ${promo.lifecycle === "active" ? "active" : ""}`}
                       >
-                        Deactivate code
-                      </button>
-                    </form>
-                  ) : (
-                    <span className="promo-card__inactive-note">
-                      Deactivated · history retained
+                        {promo.lifecycle === "active"
+                          ? "Active"
+                          : promo.lifecycle === "scheduled"
+                            ? "Scheduled"
+                            : promo.lifecycle === "expired"
+                              ? "Expired"
+                              : "Inactive"}
+                      </span>
+                      <h3>{promo.code}</h3>
+                      <p>{promo.name}</p>
+                    </div>
+                    <strong>
+                      {promo.discountType === "percent"
+                        ? `${promo.discountValue / 100}% off`
+                        : `${money(promo.discountValue, promo.currency)} off`}
+                    </strong>
+                  </header>
+                  <dl>
+                    <div>
+                      <dt>Redemptions</dt>
+                      <dd>
+                        {promo.metrics.redemptions}
+                        {promo.redemptionCap ? ` / ${promo.redemptionCap}` : ""}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Sales</dt>
+                      <dd>
+                        {money(promo.metrics.grossSalesMinor, promo.currency)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Discounts</dt>
+                      <dd>
+                        {money(promo.metrics.discountsMinor, promo.currency)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Stripe</dt>
+                      <dd>{promo.stripeSyncStatus}</dd>
+                    </div>
+                  </dl>
+                  <div className="promo-card__scope">
+                    <CalendarRange aria-hidden size={15} />
+                    <span>
+                      {promo.startsAt
+                        ? new Date(promo.startsAt).toLocaleDateString()
+                        : "Now"}{" "}
+                      –{" "}
+                      {promo.endsAt
+                        ? new Date(promo.endsAt).toLocaleDateString()
+                        : "No end date"}
                     </span>
-                  )}
-                  <details>
+                  </div>
+                  <details className="promo-card__history">
                     <summary>
-                      <Copy aria-hidden size={15} /> Duplicate
+                      <History aria-hidden size={15} /> Version history ·{" "}
+                      {promo.lineage.length}
                     </summary>
-                    <form action={duplicatePromoCodeAction}>
-                      <input
-                        name="promoCodeId"
-                        type="hidden"
-                        value={promo.id}
-                      />
-                      <input
-                        aria-label="New promo code"
-                        name="code"
-                        placeholder={`${promo.code}-COPY`}
-                        required
-                      />
-                      <button
-                        className="hq-button hq-button--secondary"
-                        type="submit"
-                      >
-                        Create copy
-                      </button>
-                    </form>
+                    <ol>
+                      {promo.lineage.map((version) => (
+                        <li
+                          className={
+                            version.id === promo.id ? "is-current" : ""
+                          }
+                          key={version.id}
+                        >
+                          <span>V{version.revision}</span>
+                          <strong>{version.code}</strong>
+                          <small>
+                            {version.lifecycle} ·{" "}
+                            {new Date(version.createdAt).toLocaleDateString()}
+                          </small>
+                        </li>
+                      ))}
+                    </ol>
                   </details>
-                </footer>
-              </article>
-            ))}
+                  <footer>
+                    <div className="promo-card__actions">
+                      {promo.active ? (
+                        <form action={deactivatePromoCodeAction}>
+                          <input
+                            name="promoCodeId"
+                            type="hidden"
+                            value={promo.id}
+                          />
+                          <button
+                            className="hq-button hq-button--secondary"
+                            type="submit"
+                          >
+                            Deactivate code
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="promo-card__inactive-note">
+                          Deactivated · history retained
+                        </span>
+                      )}
+                      {!hasSuccessor ? (
+                        <button
+                          className="hq-button hq-button--secondary"
+                          onClick={() => startRevision(promo)}
+                          type="button"
+                        >
+                          <Pencil aria-hidden size={15} /> Edit as new version
+                        </button>
+                      ) : null}
+                    </div>
+                    <details>
+                      <summary>
+                        <Copy aria-hidden size={15} /> Duplicate
+                      </summary>
+                      <form action={duplicatePromoCodeAction}>
+                        <input
+                          name="promoCodeId"
+                          type="hidden"
+                          value={promo.id}
+                        />
+                        <input
+                          aria-label="New promo code"
+                          name="code"
+                          placeholder={`${promo.code}-COPY`}
+                          required
+                        />
+                        <button
+                          className="hq-button hq-button--secondary"
+                          type="submit"
+                        >
+                          Create copy
+                        </button>
+                      </form>
+                    </details>
+                  </footer>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="hq-card promo-empty">

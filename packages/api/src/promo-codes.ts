@@ -38,6 +38,14 @@ export interface PromoCodeInput {
   readonly memberPersonIds: readonly string[];
 }
 
+type PromoStripeSyncStatus = "pending" | "synced" | "failed" | "not-applicable";
+
+interface PromoCodeLineage {
+  readonly lineageRootId: string;
+  readonly supersedesPromoCodeId?: string;
+  readonly revision: number;
+}
+
 export interface PromoCheckoutQuote {
   readonly promoCodeId: string;
   readonly code: string;
@@ -165,6 +173,7 @@ async function syncPromoToStripe(
   organizationIdValue: string,
   input: PromoCodeInput,
   now: Date,
+  active: boolean,
 ): Promise<void> {
   if (!isStripeConfigured()) {
     await getDatabase()
@@ -213,7 +222,7 @@ async function syncPromoToStripe(
       {
         promotion: { type: "coupon", coupon: coupon.id },
         code: normalizePromoCode(input.code),
-        active: true,
+        active,
         max_redemptions: input.redemptionCap,
         expires_at: input.endsAt
           ? Math.floor(input.endsAt.getTime() / 1_000)
@@ -298,16 +307,22 @@ export async function createPromoCode(input: {
   readonly promotion: PromoCodeInput;
   readonly requestId: string;
   readonly now: Date;
+  /** Internal callers can stage a successor before it becomes the live code. */
+  readonly initialActive?: boolean;
+  readonly lineage?: PromoCodeLineage;
 }): Promise<{
   readonly id: string;
   readonly code: string;
-  readonly stripeSyncStatus: "pending" | "synced" | "failed" | "not-applicable";
+  readonly stripeSyncStatus: PromoStripeSyncStatus;
 }> {
   const organizationIdValue = organizationId(input.actor);
   validateInput(input.promotion);
   await validateRelationships(organizationIdValue, input.promotion);
   const id = crypto.randomUUID();
   const code = normalizePromoCode(input.promotion.code);
+  const active = input.initialActive ?? true;
+  const lineageRootId = input.lineage?.lineageRootId ?? id;
+  const revision = input.lineage?.revision ?? 1;
   await getDatabase().batch([
     getDatabase().insert(promoCodes).values({
       id,
@@ -326,6 +341,10 @@ export async function createPromoCode(input: {
       appliesToAllServices: input.promotion.appliesToAllServices,
       startsAt: input.promotion.startsAt,
       endsAt: input.promotion.endsAt,
+      lineageRootId,
+      supersedesPromoCodeId: input.lineage?.supersedesPromoCodeId,
+      revision,
+      active,
       createdAt: input.now,
       updatedAt: input.now,
     }),
@@ -349,15 +368,25 @@ export async function createPromoCode(input: {
         organizationId: organizationIdValue,
         actorPersonId: input.actor.personId,
         actorType: "operator",
-        action: "promo_code.created",
+        action: input.lineage
+          ? "promo_code.revision_created"
+          : "promo_code.created",
         entityType: "promo-code",
         entityId: id,
-        reason: `Created ${code} with explicit eligibility and redemption controls.`,
+        reason: input.lineage
+          ? `Created revision ${revision} of ${code} as a staged successor.`
+          : `Created ${code} with explicit eligibility and redemption controls.`,
         traceId: input.requestId,
         createdAt: input.now,
       }),
   ]);
-  await syncPromoToStripe(id, organizationIdValue, input.promotion, input.now);
+  await syncPromoToStripe(
+    id,
+    organizationIdValue,
+    input.promotion,
+    input.now,
+    active,
+  );
   const synchronized = await getDatabase().query.promoCodes.findFirst({
     where: eq(promoCodes.id, id),
     columns: { stripeSyncStatus: true },
@@ -366,8 +395,7 @@ export async function createPromoCode(input: {
     id,
     code,
     stripeSyncStatus:
-      (synchronized?.stripeSyncStatus as
-        "pending" | "synced" | "failed" | "not-applicable") ?? "failed",
+      (synchronized?.stripeSyncStatus as PromoStripeSyncStatus) ?? "failed",
   };
 }
 
@@ -385,31 +413,180 @@ export async function deactivatePromoCode(input: {
     ),
   });
   if (!promo) throw new Error("Promo code was not found.");
-  if (promo.stripePromotionCodeId && isStripeConfigured()) {
-    await getStripeClient().promotionCodes.update(promo.stripePromotionCodeId, {
-      active: false,
-    });
+  await setPromoCodeActivity({
+    actor: input.actor,
+    active: false,
+    action: "promo_code.deactivated",
+    organizationId: organizationIdValue,
+    promo,
+    reason: `Deactivated ${promo.code} in Duna and Stripe.`,
+    requestId: input.requestId,
+    now: input.now,
+  });
+  return { id: promo.id, active: false };
+}
+
+async function setPromoCodeActivity(input: {
+  readonly actor: ApiActor;
+  readonly active: boolean;
+  readonly action: string;
+  readonly organizationId: string;
+  readonly promo: typeof promoCodes.$inferSelect;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<void> {
+  if (input.promo.stripePromotionCodeId && isStripeConfigured()) {
+    await getStripeClient().promotionCodes.update(
+      input.promo.stripePromotionCodeId,
+      { active: input.active },
+    );
   }
   await getDatabase().batch([
     getDatabase()
       .update(promoCodes)
-      .set({ active: false, deactivatedAt: input.now, updatedAt: input.now })
-      .where(eq(promoCodes.id, promo.id)),
-    getDatabase()
-      .insert(auditLog)
-      .values({
-        organizationId: organizationIdValue,
-        actorPersonId: input.actor.personId,
-        actorType: "operator",
-        action: "promo_code.deactivated",
-        entityType: "promo-code",
-        entityId: promo.id,
-        reason: `Deactivated ${promo.code} in Duna and Stripe.`,
-        traceId: input.requestId,
-        createdAt: input.now,
-      }),
+      .set({
+        active: input.active,
+        deactivatedAt: input.active ? null : input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(promoCodes.id, input.promo.id)),
+    getDatabase().insert(auditLog).values({
+      organizationId: input.organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "operator",
+      action: input.action,
+      entityType: "promo-code",
+      entityId: input.promo.id,
+      reason: input.reason,
+      traceId: input.requestId,
+      createdAt: input.now,
+    }),
   ]);
-  return { id: promo.id, active: false };
+}
+
+/**
+ * Creates a new, inactive Stripe-backed code, retires the predecessor, then
+ * activates the successor. Redemptions continue to reference the exact promo
+ * record a buyer used; the operator gets a clear, linear revision history.
+ */
+export async function revisePromoCode(input: {
+  readonly actor: ApiActor;
+  readonly promoCodeId: string;
+  readonly promotion: PromoCodeInput;
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<{
+  readonly id: string;
+  readonly code: string;
+  readonly predecessorRetired: boolean;
+  readonly stripeSyncStatus: PromoStripeSyncStatus;
+}> {
+  const organizationIdValue = organizationId(input.actor);
+  const [predecessor, existingSuccessor] = await Promise.all([
+    getDatabase().query.promoCodes.findFirst({
+      where: and(
+        eq(promoCodes.id, input.promoCodeId),
+        eq(promoCodes.organizationId, organizationIdValue),
+      ),
+    }),
+    getDatabase().query.promoCodes.findFirst({
+      where: eq(promoCodes.supersedesPromoCodeId, input.promoCodeId),
+    }),
+  ]);
+  if (!predecessor) throw new Error("Promo code was not found.");
+  if (existingSuccessor) {
+    throw new Error(
+      "This promo code already has a newer revision. Edit its latest revision instead.",
+    );
+  }
+  if (normalizePromoCode(input.promotion.code) === predecessor.code) {
+    throw new Error(
+      "Use a new customer code for a revision so the prior code remains traceable.",
+    );
+  }
+
+  const successor = await createPromoCode({
+    actor: input.actor,
+    promotion: input.promotion,
+    requestId: input.requestId,
+    now: input.now,
+    initialActive: false,
+    lineage: {
+      lineageRootId: predecessor.lineageRootId,
+      supersedesPromoCodeId: predecessor.id,
+      revision: predecessor.revision + 1,
+    },
+  });
+  if (successor.stripeSyncStatus === "failed") {
+    return { ...successor, predecessorRetired: false };
+  }
+
+  let retiredDuringRevision = false;
+  try {
+    if (predecessor.active) {
+      await setPromoCodeActivity({
+        actor: input.actor,
+        active: false,
+        action: "promo_code.superseded",
+        organizationId: organizationIdValue,
+        promo: predecessor,
+        reason: `Superseded by revision ${successor.code}.`,
+        requestId: input.requestId,
+        now: input.now,
+      });
+      retiredDuringRevision = true;
+    }
+    const successorRecord = await getDatabase().query.promoCodes.findFirst({
+      where: and(
+        eq(promoCodes.id, successor.id),
+        eq(promoCodes.organizationId, organizationIdValue),
+      ),
+    });
+    if (!successorRecord) {
+      throw new Error("The new promo revision could not be found.");
+    }
+    await setPromoCodeActivity({
+      actor: input.actor,
+      active: true,
+      action: "promo_code.revision_activated",
+      organizationId: organizationIdValue,
+      promo: successorRecord,
+      reason: `Activated revision ${successorRecord.revision} after retiring ${predecessor.code}.`,
+      requestId: input.requestId,
+      now: input.now,
+    });
+    return {
+      ...successor,
+      predecessorRetired: retiredDuringRevision || !predecessor.active,
+    };
+  } catch (error) {
+    if (retiredDuringRevision) {
+      try {
+        await setPromoCodeActivity({
+          actor: input.actor,
+          active: true,
+          action: "promo_code.revision_activation_rolled_back",
+          organizationId: organizationIdValue,
+          promo: predecessor,
+          reason: `Restored after ${successor.code} could not be activated.`,
+          requestId: input.requestId,
+          now: input.now,
+        });
+      } catch {
+        throw new Error(
+          "The successor was created, but activation needs attention. Both the revision and its predecessor are retained for reconciliation.",
+          { cause: error },
+        );
+      }
+    }
+    throw new Error(
+      error instanceof Error
+        ? `The successor was recorded, but the prior code remains active: ${error.message}`
+        : "The successor was recorded, but the prior code remains active.",
+      { cause: error },
+    );
+  }
 }
 
 export async function duplicatePromoCode(input: {
@@ -560,6 +737,20 @@ export async function loadPromoCodeWorkspace(input: {
   const metricByCode = new Map(
     metrics.map((entry) => [entry.promoCodeId, entry]),
   );
+  const lifecycleFor = (promo: typeof promoCodes.$inferSelect) =>
+    !promo.active
+      ? "inactive"
+      : promo.startsAt && promo.startsAt > input.now
+        ? "scheduled"
+        : promo.endsAt && promo.endsAt <= input.now
+          ? "expired"
+          : "active";
+  const lineageByRoot = new Map<string, (typeof promoCodes.$inferSelect)[]>();
+  for (const promo of codes) {
+    const lineage = lineageByRoot.get(promo.lineageRootId) ?? [];
+    lineage.push(promo);
+    lineageByRoot.set(promo.lineageRootId, lineage);
+  }
   return {
     organization: {
       id: organization.id,
@@ -574,13 +765,7 @@ export async function loadPromoCodeWorkspace(input: {
         promo.active &&
         (!promo.startsAt || promo.startsAt <= input.now) &&
         (!promo.endsAt || promo.endsAt > input.now);
-      const lifecycle = !promo.active
-        ? "inactive"
-        : promo.startsAt && promo.startsAt > input.now
-          ? "scheduled"
-          : promo.endsAt && promo.endsAt <= input.now
-            ? "expired"
-            : "active";
+      const lifecycle = lifecycleFor(promo);
       return {
         ...promo,
         activeNow,
@@ -591,6 +776,18 @@ export async function loadPromoCodeWorkspace(input: {
         deactivatedAt: promo.deactivatedAt?.toISOString(),
         createdAt: promo.createdAt.toISOString(),
         updatedAt: promo.updatedAt.toISOString(),
+        lineage: [...(lineageByRoot.get(promo.lineageRootId) ?? [])]
+          .sort((left, right) => left.revision - right.revision)
+          .map((version) => ({
+            id: version.id,
+            code: version.code,
+            name: version.name,
+            revision: version.revision,
+            supersedesPromoCodeId: version.supersedesPromoCodeId,
+            active: version.active,
+            lifecycle: lifecycleFor(version),
+            createdAt: version.createdAt.toISOString(),
+          })),
         catalogItems: itemLinks
           .filter(
             (row) => row.promo_code_catalog_items.promoCodeId === promo.id,
