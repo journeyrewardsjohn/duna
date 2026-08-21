@@ -6912,6 +6912,36 @@ export const memberships = pgTable(
     }),
     pauseMonthsUsed: integer("pause_months_used").notNull().default(0),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    stripeSubscriptionScheduleId: varchar("stripe_subscription_schedule_id", {
+      length: 128,
+    }).unique(),
+    subscriptionPolicySnapshot: jsonb("subscription_policy_snapshot").$type<{
+      readonly version: string;
+      readonly initialTermMonths?: number;
+      readonly renewalBehavior: "automatic" | "ends-after-term";
+      readonly cancellationTiming: "period-end" | "immediate";
+      readonly refundBehavior: "none" | "prorated" | "full-within-window";
+      readonly refundWindowDays?: number;
+      readonly trialDays: number;
+      readonly trialPaymentMethod: "required" | "optional";
+      readonly renewalReminderDays: number;
+    }>(),
+    trialEndsAt: timestamp("trial_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    initialTermEndsAt: timestamp("initial_term_ends_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancellationRequestedAt: timestamp("cancellation_requested_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancellationEffectiveAt: timestamp("cancellation_effective_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -6920,6 +6950,115 @@ export const memberships = pgTable(
     check(
       "membership_pause_months_valid",
       sql`${table.pauseMonthsUsed} >= 0 AND ${table.pauseMonthsUsed} <= 4`,
+    ),
+  ],
+);
+
+export const membershipPolicyAcceptances = pgTable(
+  "membership_policy_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    acceptanceKey: varchar("acceptance_key", { length: 128 })
+      .notNull()
+      .unique(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" })
+      .unique(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    policyVersion: varchar("policy_version", { length: 32 }).notNull(),
+    policySnapshot: jsonb("policy_snapshot")
+      .notNull()
+      .$type<Record<string, unknown>>(),
+    disclosureText: text("disclosure_text").notNull(),
+    disclosureTextHash: varchar("disclosure_text_hash", {
+      length: 128,
+    }).notNull(),
+    affirmativeConsent: boolean("affirmative_consent").notNull(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("membership_policy_acceptance_person_idx").on(
+      table.personId,
+      table.acceptedAt,
+    ),
+    index("membership_policy_acceptance_org_idx").on(
+      table.organizationId,
+      table.acceptedAt,
+    ),
+    check(
+      "membership_policy_acceptance_affirmative",
+      sql`${table.affirmativeConsent} = true`,
+    ),
+  ],
+);
+
+export const membershipInvoiceTransactions = pgTable(
+  "membership_invoice_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    membershipId: uuid("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "restrict" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    stripeSubscriptionId: varchar("stripe_subscription_id", {
+      length: 128,
+    }).notNull(),
+    stripeInvoiceId: varchar("stripe_invoice_id", { length: 128 })
+      .notNull()
+      .unique(),
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", {
+      length: 128,
+    }),
+    stripeTaxTransactionId: varchar("stripe_tax_transaction_id", {
+      length: 128,
+    }),
+    stripeTaxTransferReversalId: varchar("stripe_tax_transfer_reversal_id", {
+      length: 128,
+    }),
+    amountPaidMinor: integer("amount_paid_minor").notNull(),
+    taxAmountMinor: integer("tax_amount_minor").notNull().default(0),
+    refundedMinor: integer("refunded_minor").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("membership_invoice_membership_idx").on(
+      table.membershipId,
+      table.createdAt,
+    ),
+    index("membership_invoice_org_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    check(
+      "membership_invoice_amounts_valid",
+      sql`${table.amountPaidMinor} >= 0 AND ${table.taxAmountMinor} >= 0 AND ${table.refundedMinor} >= 0 AND ${table.refundedMinor} <= ${table.amountPaidMinor}`,
+    ),
+    check(
+      "membership_invoice_status_valid",
+      sql`${table.status} IN ('paid', 'partially-refunded', 'refunded', 'failed')`,
     ),
   ],
 );
@@ -7670,10 +7809,17 @@ export const orderTaxContexts = pgTable(
       .notNull()
       .$type<readonly { orderItemId: string; stripeTaxCode?: string }[]>()
       .default([]),
+    policyVersion: varchar("policy_version", { length: 32 }),
+    liability: varchar("liability", { length: 24 })
+      .notNull()
+      .default("platform"),
     stripeTaxCalculationId: varchar("stripe_tax_calculation_id", {
       length: 128,
     }),
     stripeTaxTransactionId: varchar("stripe_tax_transaction_id", {
+      length: 128,
+    }),
+    stripeTransferReversalId: varchar("stripe_transfer_reversal_id", {
       length: 128,
     }),
     taxAmountMinor: bigint("tax_amount_minor", { mode: "number" })
@@ -7682,6 +7828,10 @@ export const orderTaxContexts = pgTable(
     currency: varchar("currency", { length: 3 }).notNull(),
     status: varchar("status", { length: 24 }).notNull().default("estimated"),
     committedAt: timestamp("committed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    taxWithheldAt: timestamp("tax_withheld_at", {
       withTimezone: true,
       mode: "date",
     }),
@@ -7701,6 +7851,7 @@ export const orderTaxContexts = pgTable(
       "order_tax_status_valid",
       sql`${table.status} IN ('estimated', 'committed', 'voided', 'failed')`,
     ),
+    check("order_tax_liability_valid", sql`${table.liability} IN ('platform')`),
     check("order_tax_amount_nonnegative", sql`${table.taxAmountMinor} >= 0`),
   ],
 );
@@ -7831,6 +7982,188 @@ export const payouts = pgTable("payouts", {
   createdAt,
   updatedAt,
 });
+
+export const organizationRefundPolicies = pgTable(
+  "organization_refund_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    mode: varchar("mode", { length: 24 }).notNull().default("refundable"),
+    refundBeforeMinutes: integer("refund_before_minutes"),
+    terms: text("terms").notNull().default(""),
+    version: integer("version").notNull().default(1),
+    isDefault: boolean("is_default").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("organization_refund_policy_name_unique").on(
+      table.organizationId,
+      table.name,
+      table.version,
+    ),
+    uniqueIndex("organization_refund_policy_default_unique")
+      .on(table.organizationId)
+      .where(sql`${table.isDefault} = true AND ${table.active} = true`),
+    index("organization_refund_policy_active_idx").on(
+      table.organizationId,
+      table.active,
+    ),
+    check(
+      "organization_refund_policy_mode_valid",
+      sql`${table.mode} IN ('refundable', 'non-refundable')`,
+    ),
+    check(
+      "organization_refund_policy_window_valid",
+      sql`(${table.mode} = 'refundable' AND ${table.refundBeforeMinutes} IS NOT NULL AND ${table.refundBeforeMinutes} >= 0) OR (${table.mode} = 'non-refundable' AND ${table.refundBeforeMinutes} IS NULL)`,
+    ),
+    check(
+      "organization_refund_policy_version_valid",
+      sql`${table.version} > 0`,
+    ),
+  ],
+);
+
+export const organizationMoneySettings = pgTable(
+  "organization_money_settings",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    payoutInterval: varchar("payout_interval", { length: 16 })
+      .notNull()
+      .default("weekly"),
+    weeklyPayoutDay: varchar("weekly_payout_day", { length: 12 })
+      .notNull()
+      .default("friday"),
+    monthlyPayoutDay: integer("monthly_payout_day").notNull().default(1),
+    minimumPayoutMinor: integer("minimum_payout_minor").notNull().default(0),
+    statementDescriptor: varchar("statement_descriptor", { length: 22 }),
+    payoutStatementDescriptor: varchar("payout_statement_descriptor", {
+      length: 22,
+    }),
+    stripeSettingsStatus: varchar("stripe_settings_status", { length: 24 })
+      .notNull()
+      .default("not-synced"),
+    stripeSettingsSyncedAt: timestamp("stripe_settings_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    stripeSettingsError: text("stripe_settings_error"),
+    lastAutomaticPayoutAt: timestamp("last_automatic_payout_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "organization_money_payout_interval_valid",
+      sql`${table.payoutInterval} IN ('manual', 'daily', 'weekly', 'monthly')`,
+    ),
+    check(
+      "organization_money_weekly_day_valid",
+      sql`${table.weeklyPayoutDay} IN ('monday', 'tuesday', 'wednesday', 'thursday', 'friday')`,
+    ),
+    check(
+      "organization_money_monthly_day_valid",
+      sql`${table.monthlyPayoutDay} BETWEEN 1 AND 28`,
+    ),
+    check(
+      "organization_money_minimum_payout_valid",
+      sql`${table.minimumPayoutMinor} >= 0`,
+    ),
+  ],
+);
+
+export const paymentFundSchedules = pgTable(
+  "payment_fund_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" })
+      .unique(),
+    paymentId: uuid("payment_id").references(() => payments.id, {
+      onDelete: "set null",
+    }),
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "set null",
+    }),
+    payoutId: uuid("payout_id").references(() => payouts.id, {
+      onDelete: "set null",
+    }),
+    policyId: uuid("policy_id"),
+    policyName: text("policy_name").notNull(),
+    policyVersion: integer("policy_version").notNull().default(1),
+    policyMode: varchar("policy_mode", { length: 24 }).notNull(),
+    refundBeforeMinutes: integer("refund_before_minutes"),
+    eventStartsAt: timestamp("event_starts_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    policyReleaseAt: timestamp("policy_release_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    processorAvailableAt: timestamp("processor_available_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    availableAt: timestamp("available_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    grossMinor: integer("gross_minor").notNull(),
+    consumerFeeMinor: integer("consumer_fee_minor").notNull().default(0),
+    processingFeeMinor: integer("processing_fee_minor").notNull().default(0),
+    organizationFeeMinor: integer("organization_fee_minor")
+      .notNull()
+      .default(0),
+    taxMinor: integer("tax_minor").notNull().default(0),
+    netMinor: integer("net_minor").notNull(),
+    refundedMinor: integer("refunded_minor").notNull().default(0),
+    disputedMinor: integer("disputed_minor").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 24 })
+      .notNull()
+      .default("pending-clearance"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("payment_fund_schedule_release_idx").on(
+      table.organizationId,
+      table.status,
+      table.availableAt,
+    ),
+    index("payment_fund_schedule_payout_idx").on(table.payoutId),
+    check(
+      "payment_fund_schedule_policy_valid",
+      sql`${table.policyMode} IN ('refundable', 'non-refundable')`,
+    ),
+    check(
+      "payment_fund_schedule_status_valid",
+      sql`${table.status} IN ('pending-clearance', 'held', 'available', 'payout-pending', 'paid-out', 'partially-refunded', 'refunded', 'disputed')`,
+    ),
+    check(
+      "payment_fund_schedule_amounts_valid",
+      sql`${table.grossMinor} >= 0 AND ${table.consumerFeeMinor} >= 0 AND ${table.processingFeeMinor} >= 0 AND ${table.organizationFeeMinor} >= 0 AND ${table.taxMinor} >= 0 AND ${table.netMinor} >= 0 AND ${table.refundedMinor} >= 0 AND ${table.disputedMinor} >= 0`,
+    ),
+    check(
+      "payment_fund_schedule_policy_window_valid",
+      sql`(${table.policyMode} = 'refundable' AND ${table.refundBeforeMinutes} IS NOT NULL AND ${table.refundBeforeMinutes} >= 0) OR (${table.policyMode} = 'non-refundable' AND ${table.refundBeforeMinutes} IS NULL)`,
+    ),
+  ],
+);
 
 export const disputes = pgTable("disputes", {
   id: uuid("id").primaryKey().defaultRandom(),

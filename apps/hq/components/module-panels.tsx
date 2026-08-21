@@ -1,4 +1,5 @@
 import type {
+  OrganizationMoneyWorkspace,
   OperatorDashboard,
   OperatorScorableMatch,
   OperatorWorkspace,
@@ -34,6 +35,7 @@ import { PeopleWorkspace } from "./people-workspace";
 import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
+import { MoneyWorkspace } from "./money-workspace";
 import { VenueMatchOperations } from "./venue-match-operations";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
@@ -94,10 +96,10 @@ const moduleCopy: Record<
       "League sessions and the operational surfaces that support standings and scoring.",
   },
   payments: {
-    eyebrow: "Orders + processor state",
+    eyebrow: "Earnings + payouts",
     title: "Money",
     description:
-      "Connected paid-order totals and payment-account readiness without inferred economics.",
+      "Earnings, refund holds, bank payouts, transaction fees, disputes, and Stripe Connect health for this organization.",
   },
   marketing: {
     eyebrow: "Audience + lifecycle communication",
@@ -900,88 +902,16 @@ function TeamPanel({ workspace }: { readonly workspace: OperatorWorkspace }) {
 
 function PaymentsPanel({
   dashboard,
-  workspace,
+  money,
 }: {
   readonly dashboard: OperatorDashboard;
-  readonly workspace: OperatorWorkspace;
+  readonly money: OrganizationMoneyWorkspace;
 }) {
-  const grossSales = dashboard.metrics.find(
-    (metric) => metric.label === "Gross sales",
-  );
   return (
-    <div className="module-grid module-grid--two">
-      <section className="hq-card module-feature-card">
-        <CreditCard size={24} />
-        <span className="hq-eyebrow">Connected ledger</span>
-        <h2>{grossSales?.value ?? "Unavailable"}</h2>
-        <p>{grossSales?.change ?? "No paid connected orders."}</p>
-      </section>
-      <section className="hq-card module-feature-card">
-        <ShieldCheck size={24} />
-        <span className="hq-eyebrow">Balanced subledger</span>
-        <h2>{workspace.ledger.postedJournalCount} posted journals</h2>
-        <p>
-          {workspace.ledger.creditLiability} outstanding organization credits ·{" "}
-          {workspace.ledger.reconciliationStatus.replaceAll("-", " ")}
-        </p>
-      </section>
-      <section className="hq-card module-feature-card">
-        <ShieldCheck size={24} />
-        <span className="hq-eyebrow">Payment account</span>
-        <h2>{dashboard.organization.stripeStatus}</h2>
-        <p>
-          Payout timing, fees, and processor balances remain unavailable until
-          the connected-account feed is active.
-        </p>
-      </section>
-      <section className="hq-card connected-table module-grid-span">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Recurring payment recovery</span>
-            <h2>
-              {workspace.billingRecovery.length
-                ? `${workspace.billingRecovery.length} memberships need attention`
-                : "No recurring-payment issues"}
-            </h2>
-            <p>
-              Subscription retries follow the processor billing schedule. Duna
-              surfaces the member and next action without creating a second
-              renewal loop.
-            </p>
-          </div>
-          <Badge
-            tone={workspace.billingRecovery.length ? "warning" : "positive"}
-          >
-            {workspace.billingRecovery.length ? "recovery active" : "healthy"}
-          </Badge>
-        </header>
-        <div className="operator-compact-list">
-          {workspace.billingRecovery.map((item) => (
-            <article key={`${item.personId}-${item.membershipName}`}>
-              <span>
-                <strong>{item.displayName}</strong>
-                <small>
-                  {item.membershipName} ·{" "}
-                  {item.membershipStatus.replaceAll("_", " ")}
-                </small>
-              </span>
-              <span>
-                <Badge
-                  tone={
-                    item.retryState === "processor-managed"
-                      ? "neutral"
-                      : "warning"
-                  }
-                >
-                  {item.retryState.replaceAll("-", " ")}
-                </Badge>
-                <small>{item.detail}</small>
-              </span>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
+    <MoneyWorkspace
+      money={money}
+      organizationName={dashboard.organization.name}
+    />
   );
 }
 
@@ -1263,10 +1193,10 @@ function SettingsPanel({
             : "Business address incomplete"}
         </h2>
         <p>
-          Automatic tax is{" "}
-          {workspace.organization.stripeTaxEnabled ? "enabled" : "off"} ·{" "}
-          {workspace.organization.taxRegistrationStatus.replaceAll("-", " ")}.
-          Venue addresses are used for in-person taxable transactions.
+          Duna marketplace tax is{" "}
+          {workspace.organization.stripeTaxEnabled ? "required" : "pending"}.
+          The organization and venue addresses provide seller, ship-from, and
+          event location context.
         </p>
       </section>
       <section className="hq-card module-feature-card">
@@ -1291,6 +1221,7 @@ export function ModulePanel({
   pageCopy,
   productScope,
   workspace,
+  moneyWorkspace,
   ticketApprovals,
 }: {
   readonly module: OperatorModule;
@@ -1301,6 +1232,7 @@ export function ModulePanel({
   readonly pageCopy?: ModulePageCopy;
   readonly productScope?: ProductCatalogScope;
   readonly workspace: OperatorWorkspace;
+  readonly moneyWorkspace?: OrganizationMoneyWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
   if (module === "overview" || module === "messages") return null;
@@ -1440,7 +1372,9 @@ export function ModulePanel({
           <EventInventory dashboard={dashboard} kinds={["league"]} />
         </>
       ) : module === "payments" ? (
-        <PaymentsPanel dashboard={dashboard} workspace={workspace} />
+        moneyWorkspace ? (
+          <PaymentsPanel dashboard={dashboard} money={moneyWorkspace} />
+        ) : null
       ) : module === "marketing" ? (
         <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (

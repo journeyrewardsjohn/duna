@@ -2934,3 +2934,106 @@ export async function refreshStripeOnboardingAction(
     return errorState(error);
   }
 }
+
+export async function updateMoneySettingsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  try {
+    const payoutInterval = field(formData, "payoutInterval");
+    const weeklyPayoutDay = field(formData, "weeklyPayoutDay");
+    if (!["manual", "daily", "weekly", "monthly"].includes(payoutInterval)) {
+      throw new Error("Choose a valid payout frequency.");
+    }
+    if (
+      !["monday", "tuesday", "wednesday", "thursday", "friday"].includes(
+        weeklyPayoutDay,
+      )
+    ) {
+      throw new Error("Choose a valid weekly payout day.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.updateMoneySettings({
+      payoutInterval: payoutInterval as
+        "manual" | "daily" | "weekly" | "monthly",
+      weeklyPayoutDay: weeklyPayoutDay as
+        "monday" | "tuesday" | "wednesday" | "thursday" | "friday",
+      monthlyPayoutDay: numberField(formData, "monthlyPayoutDay"),
+      minimumPayoutMinor: optionalMoneyMinor(formData, "minimumPayout") ?? 0,
+      statementDescriptor: optionalField(formData, "statementDescriptor"),
+      payoutStatementDescriptor: optionalField(
+        formData,
+        "payoutStatementDescriptor",
+      ),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/payments");
+    revalidatePath("/payments/setup");
+    return result(
+      "success",
+      "Money settings saved. Stripe remains on manual rail payouts so Duna can enforce every refund hold before following your selected schedule.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createRefundPolicyAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  try {
+    const mode = field(formData, "mode");
+    if (mode !== "refundable" && mode !== "non-refundable") {
+      throw new Error("Choose refundable or non-refundable.");
+    }
+    const cutoffValue = Math.max(0, numberField(formData, "cutoffValue"));
+    const cutoffUnit = field(formData, "cutoffUnit");
+    if (cutoffUnit !== "hours" && cutoffUnit !== "days") {
+      throw new Error("Choose hours or days for the refund cutoff.");
+    }
+    const caller = await getServerCaller();
+    await caller.operator.createRefundPolicy({
+      name: field(formData, "name"),
+      mode,
+      refundBeforeMinutes:
+        mode === "refundable"
+          ? Math.round(cutoffValue * (cutoffUnit === "days" ? 1_440 : 60))
+          : undefined,
+      terms: field(formData, "terms"),
+      makeDefault: field(formData, "makeDefault") === "on",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/payments");
+    revalidatePath("/events/create");
+    return result(
+      "success",
+      "Refund policy saved and ready for new purchases.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function createManualPayoutAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  void _previous;
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.createManualPayout({
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath("/payments");
+    return result(
+      "success",
+      "Payout submitted to the organization’s connected bank. Refund-held funds were excluded.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}

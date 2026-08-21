@@ -91,6 +91,7 @@ import {
   operatorScorableMatchSchema,
   operatorSessionDetailSchema,
   operatorWorkspaceSchema,
+  organizationMoneyWorkspaceSchema,
   publicVenueLayoutSchema,
   publicCatalogRecommendationsSchema,
   organizationCommissionPolicySchema,
@@ -662,6 +663,13 @@ import {
   proposeAgentAction,
   toolRiskRegistry,
 } from "./risk";
+import {
+  createManualOrganizationPayout,
+  createOrganizationRefundPolicy,
+  loadDemoOrganizationMoneyWorkspace,
+  loadOrganizationMoneyWorkspace,
+  updateOrganizationMoneySettings,
+} from "./money-service";
 import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
 
 async function attachEventWeather(
@@ -1047,6 +1055,7 @@ const createEventDraftInputSchema = z
     policies: z.array(eventDraftPolicySchema).max(32),
     smartRules: z.object({
       waitlistEnabled: z.boolean(),
+      refundPolicyMode: z.enum(["refundable", "non-refundable"]),
       allowLateCancellation: z.boolean(),
       freeCancellationHours: z.number().int().min(0).max(8_760),
       bookingOpensDays: z.number().int().min(0).max(730),
@@ -4367,6 +4376,7 @@ const playerRouter = router({
         successUrl: z.url(),
         cancelUrl: z.url(),
         idempotencyKey: z.string().uuid(),
+        membershipPolicyAccepted: z.boolean().optional(),
       }),
     )
     .output(catalogCheckoutResultSchema)
@@ -7232,6 +7242,8 @@ const playerRouter = router({
         action: z.enum(["cancel", "resume"]),
         effectiveAt: z.iso.datetime().optional(),
         cancelAtPeriodEnd: z.boolean(),
+        refundAmountMinor: z.number().int().nonnegative().optional(),
+        refundId: z.string().startsWith("re_").optional(),
       }),
     )
     .mutation(({ input, ctx }) =>
@@ -7318,6 +7330,115 @@ const operatorRouter = router({
             ctx.actor!.organizationId!,
             ctx.actor!.personId,
           ),
+    ),
+  moneyWorkspace: organizationProcedure("payments:read")
+    .output(organizationMoneyWorkspaceSchema)
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? loadDemoOrganizationMoneyWorkspace(ctx.now)
+        : loadOrganizationMoneyWorkspace(ctx.actor!.organizationId!, ctx.now),
+    ),
+  updateMoneySettings: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        payoutInterval: z.enum(["manual", "daily", "weekly", "monthly"]),
+        weeklyPayoutDay: z.enum([
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+        ]),
+        monthlyPayoutDay: z.number().int().min(1).max(28),
+        minimumPayoutMinor: z.number().int().nonnegative(),
+        statementDescriptor: z.string().trim().max(22).optional(),
+        payoutStatementDescriptor: z.string().trim().max(22).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ status: z.literal("saved") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.updateMoneySettings",
+        request: input,
+        ctx,
+        execute: async () => {
+          await updateOrganizationMoneySettings({
+            actor: ctx.actor!,
+            payoutInterval: input.payoutInterval,
+            weeklyPayoutDay: input.weeklyPayoutDay,
+            monthlyPayoutDay: input.monthlyPayoutDay,
+            minimumPayoutMinor: input.minimumPayoutMinor,
+            statementDescriptor: input.statementDescriptor,
+            payoutStatementDescriptor: input.payoutStatementDescriptor,
+            now: ctx.now,
+          });
+          return { status: "saved" as const };
+        },
+      }),
+    ),
+  createRefundPolicy: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        mode: z.enum(["refundable", "non-refundable"]),
+        refundBeforeMinutes: z.number().int().min(0).max(525_600).optional(),
+        terms: z.string().trim().max(10_000),
+        makeDefault: z.boolean(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string().uuid(), status: z.literal("active") }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createRefundPolicy",
+        request: input,
+        ctx,
+        execute: async () => ({
+          id: await createOrganizationRefundPolicy({
+            actor: ctx.actor!,
+            name: input.name,
+            mode: input.mode,
+            refundBeforeMinutes: input.refundBeforeMinutes,
+            terms: input.terms,
+            makeDefault: input.makeDefault,
+            now: ctx.now,
+          }),
+          status: "active" as const,
+        }),
+      }),
+    ),
+  createManualPayout: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        amountMinor: z.number().int().positive(),
+        status: z.literal("submitted"),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createManualPayout",
+        request: input,
+        ctx,
+        execute: async () => ({
+          ...(await createManualOrganizationPayout({
+            actor: ctx.actor!,
+            idempotencyKey: input.idempotencyKey,
+            now: ctx.now,
+          })),
+          status: "submitted" as const,
+        }),
+      }),
     ),
   trainingWorkspace: organizationProcedure("training:read")
     .output(trainingWorkspaceSchema)

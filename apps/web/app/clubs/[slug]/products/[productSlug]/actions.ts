@@ -12,6 +12,20 @@ function applicationOrigin(headersValue: Headers): string {
   return `${protocol}://${host}`;
 }
 
+function publicCheckoutError(error: unknown): string {
+  if (!(error instanceof Error)) return "Checkout could not start.";
+  const message = error.message.toLowerCase();
+  if (
+    message.includes("head office") ||
+    message.includes("automatic tax") ||
+    message.includes("tax settings") ||
+    message.includes("taxable recurring")
+  ) {
+    return "Card checkout is temporarily unavailable while Duna finishes marketplace tax setup. No charge was made.";
+  }
+  return error.message;
+}
+
 export async function startCatalogCheckoutAction(input: {
   readonly organizationSlug: string;
   readonly productSlug: string;
@@ -26,6 +40,7 @@ export async function startCatalogCheckoutAction(input: {
   readonly idempotencyKey: string;
   readonly returnProductSlug?: string;
   readonly checkoutRole?: "product" | "membership";
+  readonly membershipPolicyAccepted?: boolean;
 }) {
   try {
     const incoming = await headers();
@@ -51,13 +66,13 @@ export async function startCatalogCheckoutAction(input: {
         ? `${origin}${productPath}?membership_checkout=cancelled`
         : `${origin}${productPath}?checkout=cancelled`,
       idempotencyKey: input.idempotencyKey,
+      membershipPolicyAccepted: input.membershipPolicyAccepted,
     });
     return { ok: true as const, result };
   } catch (error) {
     return {
       ok: false as const,
-      error:
-        error instanceof Error ? error.message : "Checkout could not start.",
+      error: publicCheckoutError(error),
     };
   }
 }

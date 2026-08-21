@@ -9,6 +9,7 @@ import {
   getDatabase,
   messages,
   orderItems,
+  orderTaxContexts,
   orders,
   organizations,
   people,
@@ -57,6 +58,10 @@ import {
   getStripePublishableKey,
   isStripeConfigured,
 } from "./payments";
+import {
+  MARKETPLACE_TAX_POLICY_VERSION,
+  resolveEventTaxCode,
+} from "./tax-policy";
 
 export class CheckoutError extends Error {
   constructor(
@@ -486,6 +491,15 @@ interface CheckoutEvent {
   readonly teamSize?: number;
   readonly priceBasis?: "per-person" | "per-team";
   readonly organization?: typeof organizations.$inferSelect;
+  readonly taxLocation?: {
+    readonly venueId: string;
+    readonly line1?: string;
+    readonly line2?: string;
+    readonly city?: string;
+    readonly region?: string;
+    readonly postalCode?: string;
+    readonly country: string;
+  };
 }
 
 export interface CheckoutPolicy {
@@ -702,6 +716,13 @@ async function loadCheckoutEvent(
           organizationFromProgram: programs.organizationId,
           organizationFromEventType: eventTypes.organizationId,
           organizationFromVenue: venues.organizationId,
+          venueId: venues.id,
+          venueAddressLine1: venues.addressLine1,
+          venueAddressLine2: venues.addressLine2,
+          venueLocality: venues.locality,
+          venueAdministrativeArea: venues.administrativeArea,
+          venuePostalCode: venues.postalCode,
+          venueCountryCode: venues.countryCode,
         })
         .from(ticketTypes)
         .innerJoin(sessions, eq(ticketTypes.sessionId, sessions.id))
@@ -778,6 +799,17 @@ async function loadCheckoutEvent(
       ticketTypeId: ticket.ticketTypeId,
       approvalRequired: ticket.approvalRequired,
       organization,
+      taxLocation: ticket.venueId
+        ? {
+            venueId: ticket.venueId,
+            line1: ticket.venueAddressLine1 ?? undefined,
+            line2: ticket.venueAddressLine2 ?? undefined,
+            city: ticket.venueLocality ?? undefined,
+            region: ticket.venueAdministrativeArea ?? undefined,
+            postalCode: ticket.venuePostalCode ?? undefined,
+            country: ticket.venueCountryCode ?? organization.countryCode,
+          }
+        : undefined,
     };
   }
 
@@ -791,6 +823,13 @@ async function loadCheckoutEvent(
         organizationFromProgram: programs.organizationId,
         organizationFromEventType: eventTypes.organizationId,
         organizationFromVenue: venues.organizationId,
+        venueId: venues.id,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
         priceMinor: eventTypes.priceMinor,
         currency: eventTypes.currency,
         divisionId: divisions.id,
@@ -874,6 +913,17 @@ async function loadCheckoutEvent(
       priceBasis:
         row.divisionPriceBasis === "per-person" ? "per-person" : "per-team",
       organization,
+      taxLocation: row.venueId
+        ? {
+            venueId: row.venueId,
+            line1: row.venueAddressLine1 ?? undefined,
+            line2: row.venueAddressLine2 ?? undefined,
+            city: row.venueLocality ?? undefined,
+            region: row.venueAdministrativeArea ?? undefined,
+            postalCode: row.venuePostalCode ?? undefined,
+            country: row.venueCountryCode ?? organization.countryCode,
+          }
+        : undefined,
     };
   }
 
@@ -887,6 +937,13 @@ async function loadCheckoutEvent(
         priceMinor: pickupSessions.costMinor,
         currency: pickupSessions.currency,
         approvalRequired: pickupSessions.approvalRequired,
+        venueId: venues.id,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
       })
       .from(pickupSessions)
       .leftJoin(venues, eq(pickupSessions.venueId, venues.id))
@@ -916,6 +973,17 @@ async function loadCheckoutEvent(
     teamSize: 2,
     priceBasis: "per-person",
     organization,
+    taxLocation: pickup.venueId
+      ? {
+          venueId: pickup.venueId,
+          line1: pickup.venueAddressLine1 ?? undefined,
+          line2: pickup.venueAddressLine2 ?? undefined,
+          city: pickup.venueLocality ?? undefined,
+          region: pickup.venueAdministrativeArea ?? undefined,
+          postalCode: pickup.venuePostalCode ?? undefined,
+          country: pickup.venueCountryCode ?? organization?.countryCode ?? "US",
+        }
+      : undefined,
   };
 }
 
@@ -1649,6 +1717,19 @@ export async function startEventCheckout(input: {
     source: commissionPolicy.source,
   });
   if (!existingOrder) {
+    const orderItemId = crypto.randomUUID();
+    const stripeTaxCode = resolveEventTaxCode({
+      spectatorTicket: Boolean(event.ticketTypeId),
+      eventKind: event.kind,
+    });
+    const taxAddress = event.taxLocation ?? {
+      line1: event.organization.addressLine1 ?? undefined,
+      line2: event.organization.addressLine2 ?? undefined,
+      city: event.organization.locality ?? undefined,
+      region: event.organization.administrativeArea ?? undefined,
+      postalCode: event.organization.postalCode ?? undefined,
+      country: event.organization.countryCode,
+    };
     await database.batch([
       database.insert(orders).values({
         id: orderId,
@@ -1664,6 +1745,7 @@ export async function startEventCheckout(input: {
         expiresAt: checkoutExpiresAt,
       }),
       database.insert(orderItems).values({
+        id: orderItemId,
         orderId,
         kind: itemKind,
         referenceId: event.itemReferenceId ?? event.id,
@@ -1671,6 +1753,16 @@ export async function startEventCheckout(input: {
         quantity: itemQuantity,
         unitAmountMinor,
         totalAmountMinor: unitAmountMinor * itemQuantity,
+      }),
+      database.insert(orderTaxContexts).values({
+        orderId,
+        organizationId: event.organization.id,
+        venueId: event.taxLocation?.venueId,
+        source: event.taxLocation ? "venue" : "organization",
+        addressSnapshot: taxAddress,
+        itemTaxCodes: [{ orderItemId, stripeTaxCode }],
+        policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
+        currency: priced.currency,
       }),
       ...[...priced.fees, operatorProcessingFee, organizationCommissionFee]
         .filter((fee) => fee.amountMinor > 0)
@@ -1904,7 +1996,10 @@ export async function startEventCheckout(input: {
         operatorProcessingFee.amountMinor +
         organizationCommissionFee.amountMinor,
     );
-    if (input.paymentSurface === "native") {
+    if (
+      input.paymentSurface === "native" &&
+      !event.organization.stripeTaxEnabled
+    ) {
       const publishableKey = getStripePublishableKey();
       const customerId = await getOrCreatePlayerStripeCustomer({
         personId: input.actor.personId,
@@ -1974,6 +2069,11 @@ export async function startEventCheckout(input: {
       organizationCommissionMinor: organizationCommissionFee.amountMinor,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: event.organization.stripeAccountId,
+      automaticTaxEnabled: event.organization.stripeTaxEnabled,
+      stripeTaxCode: resolveEventTaxCode({
+        spectatorTicket: Boolean(event.ticketTypeId),
+        eventKind: event.kind,
+      }),
       successUrl: teamClaimToken
         ? `${input.successUrl}&team=${encodeURIComponent(teamClaimToken)}`
         : input.successUrl,

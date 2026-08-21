@@ -263,6 +263,7 @@ export const eventPolicySchema = z.object({
 });
 export const eventDraftSmartRulesSchema = z.object({
   waitlistEnabled: z.boolean(),
+  refundPolicyMode: z.enum(["refundable", "non-refundable"]),
   allowLateCancellation: z.boolean(),
   freeCancellationHours: z.number().int().min(0).max(8_760),
   bookingOpensDays: z.number().int().min(0).max(730),
@@ -778,7 +779,7 @@ export const bookingSummarySchema = z.object({
 export const bookingCancellationResultSchema = z.object({
   id: z.string(),
   status: z.literal("cancelled"),
-  refundStatus: z.enum(["not-applicable", "review-required"]),
+  refundStatus: z.enum(["not-applicable", "submitted", "review-required"]),
   message: z.string(),
 });
 export const walletEntrySchema = z.object({
@@ -4984,7 +4985,187 @@ export const organizationWalletSummarySchema = z.object({
   membershipCurrency: currencySchema.optional(),
   membershipCurrentPeriodEndsAt: z.iso.datetime().optional(),
   membershipCancelAtPeriodEnd: z.boolean().optional(),
+  membershipTrialEndsAt: z.iso.datetime().optional(),
+  membershipInitialTermEndsAt: z.iso.datetime().optional(),
+  membershipCancellationEffectiveAt: z.iso.datetime().optional(),
+  membershipPolicy: z
+    .object({
+      version: z.string(),
+      initialTermMonths: z.number().int().positive().optional(),
+      renewalBehavior: z.enum(["automatic", "ends-after-term"]),
+      cancellationTiming: z.enum(["period-end", "immediate"]),
+      refundBehavior: z.enum(["none", "prorated", "full-within-window"]),
+      refundWindowDays: z.number().int().positive().optional(),
+      trialDays: z.number().int().nonnegative(),
+      trialPaymentMethod: z.enum(["required", "optional"]),
+      renewalReminderDays: z.number().int().positive(),
+    })
+    .optional(),
   membershipManageable: z.boolean().optional(),
+});
+
+export const organizationMoneyWorkspaceSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  currency: currencySchema,
+  balance: z.object({
+    totalMinor: z.number().int().nonnegative(),
+    availableMinor: z.number().int().nonnegative(),
+    heldMinor: z.number().int().nonnegative(),
+    pendingMinor: z.number().int().nonnegative(),
+    inTransitMinor: z.number().int().nonnegative(),
+    nextReleaseAt: z.iso.datetime().optional(),
+    nextReleaseMinor: z.number().int().nonnegative(),
+  }),
+  earnings: z.object({
+    grossMinor: z.number().int().nonnegative(),
+    netMinor: z.number().int().nonnegative(),
+    feesMinor: z.number().int().nonnegative(),
+    refundsMinor: z.number().int().nonnegative(),
+    points: z
+      .array(
+        z.object({
+          date: z.string(),
+          grossMinor: z.number().int().nonnegative(),
+          netMinor: z.number().int().nonnegative(),
+        }),
+      )
+      .readonly(),
+  }),
+  connect: z.object({
+    accountId: z.string().optional(),
+    connected: z.boolean(),
+    chargesEnabled: z.boolean(),
+    payoutsEnabled: z.boolean(),
+    bankStatus: z.enum(["connected", "missing", "unverified", "unavailable"]),
+    bankName: z.string().optional(),
+    bankLast4: z.string().optional(),
+    stripeAvailableMinor: z.number().int().nonnegative().optional(),
+    stripePendingMinor: z.number().int().nonnegative().optional(),
+    stripeReservedMinor: z.number().int().nonnegative().optional(),
+    bankAccounts: z
+      .array(
+        z.object({
+          id: z.string(),
+          type: z.enum(["bank-account", "debit-card"]),
+          name: z.string(),
+          last4: z.string(),
+          currency: currencySchema.optional(),
+          status: z.enum(["connected", "unverified", "unavailable"]),
+          defaultForCurrency: z.boolean(),
+        }),
+      )
+      .readonly(),
+    activity: z
+      .array(
+        z.object({
+          id: z.string(),
+          type: z.string(),
+          reportingCategory: z.string(),
+          description: z.string(),
+          amountMinor: z.number().int(),
+          feeMinor: z.number().int().nonnegative(),
+          netMinor: z.number().int(),
+          status: z.enum(["available", "pending"]),
+          availableAt: z.iso.datetime(),
+          occurredAt: z.iso.datetime(),
+        }),
+      )
+      .readonly(),
+    requirementsDue: z.array(z.string()).readonly(),
+    settingsUrl: z.url().optional(),
+    liveData: z.boolean(),
+  }),
+  settings: z.object({
+    payoutInterval: z.enum(["manual", "daily", "weekly", "monthly"]),
+    weeklyPayoutDay: z.enum([
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+    ]),
+    monthlyPayoutDay: z.number().int().min(1).max(28),
+    minimumPayoutMinor: z.number().int().nonnegative(),
+    statementDescriptor: z.string().optional(),
+    payoutStatementDescriptor: z.string().optional(),
+    stripeSettingsStatus: z.enum(["not-synced", "pending", "synced", "failed"]),
+    stripeSettingsSyncedAt: z.iso.datetime().optional(),
+    stripeSettingsError: z.string().optional(),
+    lastAutomaticPayoutAt: z.iso.datetime().optional(),
+  }),
+  refundPolicies: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        mode: z.enum(["refundable", "non-refundable"]),
+        refundBeforeMinutes: z.number().int().nonnegative().optional(),
+        terms: z.string(),
+        version: z.number().int().positive(),
+        isDefault: z.boolean(),
+        active: z.boolean(),
+      }),
+    )
+    .readonly(),
+  transactions: z
+    .array(
+      z.object({
+        id: z.string(),
+        orderId: z.string().uuid(),
+        description: z.string(),
+        customerName: z.string(),
+        grossMinor: z.number().int().nonnegative(),
+        consumerFeeMinor: z.number().int().nonnegative(),
+        processingFeeMinor: z.number().int().nonnegative(),
+        organizationFeeMinor: z.number().int().nonnegative(),
+        taxMinor: z.number().int().nonnegative(),
+        netMinor: z.number().int().nonnegative(),
+        refundedMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        status: z.enum([
+          "pending-clearance",
+          "held",
+          "available",
+          "payout-pending",
+          "paid-out",
+          "partially-refunded",
+          "refunded",
+          "disputed",
+        ]),
+        policyName: z.string(),
+        availableAt: z.iso.datetime().optional(),
+        occurredAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  payouts: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        stripePayoutId: z.string().optional(),
+        amountMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        status: z.string(),
+        expectedArrivalAt: z.iso.datetime().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
+  disputes: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        orderId: z.string().uuid().optional(),
+        stripeDisputeId: z.string().optional(),
+        kind: z.string(),
+        status: z.string(),
+        amountMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        dueAt: z.iso.datetime().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
 });
 
 export const waiverSectionSchema = z.object({
@@ -5298,6 +5479,9 @@ export const stripeOnboardingResultSchema = z.object({
 export const stripeAccountReadinessResultSchema = z.object({
   accountId: z.string(),
   chargesEnabled: z.boolean(),
+  marketplaceTaxStatus: z.enum(["active", "pending"]),
+  marketplaceTaxHeadOfficeConfigured: z.boolean(),
+  activeTaxRegistrationCount: z.number().int().nonnegative(),
 });
 
 export const ticketApprovalSummarySchema = z.object({
@@ -5321,6 +5505,9 @@ export const ticketApprovalResultSchema = z.object({
 });
 
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
+export type OrganizationMoneyWorkspace = z.infer<
+  typeof organizationMoneyWorkspaceSchema
+>;
 export type WaiverWorkspace = z.infer<typeof waiverWorkspaceSchema>;
 export type WaiverRequirement = z.infer<typeof waiverRequirementSchema>;
 export type VenueLayout = z.infer<typeof venueLayoutSchema>;

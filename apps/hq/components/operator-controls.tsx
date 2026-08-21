@@ -2291,11 +2291,12 @@ function StripeOnboarding({
     <section className="hq-card operator-control-card stripe-readiness-card">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">Direct settlement</span>
+          <span className="hq-eyebrow">Protected settlement</span>
           <h2>{ready ? "Stripe charges enabled" : "Finish Stripe Connect"}</h2>
           <p>
-            Player payments settle directly to your connected business account.
-            Duna does not custody club revenue.
+            Player payments settle into your connected Stripe balance. Duna
+            releases only cleared funds that are outside every refund window
+            before they can move to your bank.
           </p>
         </div>
         <CreditCard aria-hidden size={24} />

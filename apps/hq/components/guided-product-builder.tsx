@@ -932,6 +932,22 @@ export function GuidedProductBuilder({
   const [benefits, setBenefits] = useState<readonly StoryListItem[]>(() =>
     storyListItems(membershipConfiguration?.benefits),
   );
+  const [initialTermMonths, setInitialTermMonths] = useState(0);
+  const [renewalBehavior, setRenewalBehavior] = useState<
+    "automatic" | "ends-after-term"
+  >("automatic");
+  const [cancellationTiming, setCancellationTiming] = useState<
+    "period-end" | "immediate"
+  >("period-end");
+  const [refundBehavior, setRefundBehavior] = useState<
+    "none" | "prorated" | "full-within-window"
+  >("none");
+  const [refundWindowDays, setRefundWindowDays] = useState(7);
+  const [trialDays, setTrialDays] = useState(0);
+  const [trialPaymentMethod, setTrialPaymentMethod] = useState<
+    "required" | "optional"
+  >("required");
+  const [renewalReminderDays, setRenewalReminderDays] = useState(7);
   const [includedCatalogItemIds, setIncludedCatalogItemIds] = useState<
     readonly string[]
   >([]);
@@ -1554,6 +1570,21 @@ export function GuidedProductBuilder({
                   includedCatalogItemIds,
                   waiverDocumentIds: membershipWaiverDocumentIds,
                   benefits: parsedBenefits,
+                  subscriptionPolicy: {
+                    initialTermMonths:
+                      initialTermMonths > 0 ? initialTermMonths : undefined,
+                    renewalBehavior:
+                      initialTermMonths > 0 ? renewalBehavior : "automatic",
+                    cancellationTiming,
+                    refundBehavior,
+                    refundWindowDays:
+                      refundBehavior === "full-within-window"
+                        ? refundWindowDays
+                        : undefined,
+                    trialDays,
+                    trialPaymentMethod,
+                    renewalReminderDays,
+                  },
                 },
               }
             : {}),
@@ -3497,6 +3528,154 @@ export function GuidedProductBuilder({
                       )}
                     </section>
                   </div>
+                  <fieldset className="operator-form-grid operator-form-grid--two">
+                    <legend>Billing, renewal &amp; cancellation</legend>
+                    <label>
+                      <span>Initial term · months</span>
+                      <input
+                        min="0"
+                        onChange={(event) =>
+                          setInitialTermMonths(
+                            Math.max(0, Number(event.target.value)),
+                          )
+                        }
+                        placeholder="0 · ongoing"
+                        step={billingMode === "year" ? 12 : 1}
+                        type="number"
+                        value={initialTermMonths || ""}
+                      />
+                      <small>
+                        Leave blank for an ongoing membership. Annual terms must
+                        be in 12-month increments.
+                      </small>
+                    </label>
+                    <label>
+                      <span>After the initial term</span>
+                      <select
+                        disabled={initialTermMonths === 0}
+                        onChange={(event) =>
+                          setRenewalBehavior(
+                            event.target.value as
+                              "automatic" | "ends-after-term",
+                          )
+                        }
+                        value={
+                          initialTermMonths > 0 ? renewalBehavior : "automatic"
+                        }
+                      >
+                        <option value="automatic">Automatically renew</option>
+                        <option value="ends-after-term">
+                          End without renewal
+                        </option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Cancellation takes effect</span>
+                      <select
+                        onChange={(event) => {
+                          const value = event.target.value as
+                            "period-end" | "immediate";
+                          setCancellationTiming(value);
+                          if (value === "period-end") {
+                            setRefundBehavior("none");
+                          }
+                        }}
+                        value={cancellationTiming}
+                      >
+                        <option value="period-end">
+                          At the end of the paid period
+                        </option>
+                        <option value="immediate">Immediately</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Refund on cancellation</span>
+                      <select
+                        onChange={(event) =>
+                          setRefundBehavior(
+                            event.target.value as
+                              "none" | "prorated" | "full-within-window",
+                          )
+                        }
+                        value={refundBehavior}
+                      >
+                        <option value="none">No refund</option>
+                        <option
+                          disabled={cancellationTiming !== "immediate"}
+                          value="prorated"
+                        >
+                          Prorated unused time
+                        </option>
+                        <option
+                          disabled={cancellationTiming !== "immediate"}
+                          value="full-within-window"
+                        >
+                          Full refund within a window
+                        </option>
+                      </select>
+                    </label>
+                    {refundBehavior === "full-within-window" && (
+                      <label>
+                        <span>Full-refund window · days</span>
+                        <input
+                          max="30"
+                          min="1"
+                          onChange={(event) =>
+                            setRefundWindowDays(Number(event.target.value))
+                          }
+                          type="number"
+                          value={refundWindowDays}
+                        />
+                      </label>
+                    )}
+                    <label>
+                      <span>Free trial · days</span>
+                      <input
+                        max="90"
+                        min="0"
+                        onChange={(event) =>
+                          setTrialDays(Math.max(0, Number(event.target.value)))
+                        }
+                        type="number"
+                        value={trialDays}
+                      />
+                    </label>
+                    {trialDays > 0 && (
+                      <label>
+                        <span>Payment method during trial</span>
+                        <select
+                          onChange={(event) =>
+                            setTrialPaymentMethod(
+                              event.target.value as "required" | "optional",
+                            )
+                          }
+                          value={trialPaymentMethod}
+                        >
+                          <option value="required">Required at signup</option>
+                          <option value="optional">
+                            Optional · cancel if missing at trial end
+                          </option>
+                        </select>
+                      </label>
+                    )}
+                    <label>
+                      <span>Renewal reminder · days before</span>
+                      <input
+                        max="45"
+                        min="3"
+                        onChange={(event) =>
+                          setRenewalReminderDays(Number(event.target.value))
+                        }
+                        type="number"
+                        value={renewalReminderDays}
+                      />
+                    </label>
+                    <p className="operator-field--wide">
+                      Checkout shows these terms beside an unchecked consent box
+                      and Duna keeps the exact policy and disclosure accepted by
+                      the member.
+                    </p>
+                  </fieldset>
                   <div className="membership-inclusion-picker">
                     <span>Required waivers &amp; releases</span>
                     <small>

@@ -55,6 +55,7 @@ export * from "./rate-limit";
 export * from "./repository-contract";
 export * from "./router";
 export * from "./webhooks";
+export * from "./money-service";
 export * from "./weather";
 export * from "./video-providers";
 export * from "./video-analysis-service";

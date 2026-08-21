@@ -42,6 +42,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GetPaidScreen } from "./get-paid";
+import { MoneyScreen } from "./money-screen";
 import {
   connectProCalendar,
   loadProPersonalEvents,
@@ -4292,6 +4293,7 @@ function MoreScreen({
   onCalendar,
   onCreate,
   onGetPaid,
+  onMoney,
   onMessages,
   onPeople,
   onTournament,
@@ -4300,6 +4302,7 @@ function MoreScreen({
   readonly onCalendar: () => void;
   readonly onCreate: () => void;
   readonly onGetPaid: () => void;
+  readonly onMoney: () => void;
   readonly onMessages: () => void;
   readonly onPeople: () => void;
   readonly onTournament: () => void;
@@ -4444,7 +4447,9 @@ function MoreScreen({
       onVideo();
     } else if (item === "Venues + courts") {
       onCalendar();
-    } else if (["Money + tax", "Coach payroll support"].includes(item)) {
+    } else if (item === "Money + tax") {
+      onMoney();
+    } else if (item === "Coach payroll support") {
       onGetPaid();
     } else if (
       ["Messages", "Team + roles", "Policies + waivers"].includes(item)
@@ -4465,13 +4470,15 @@ function MoreScreen({
           ? "Open video"
           : selectedMenu === "Venues + courts"
             ? "Open schedule"
-            : ["Money + tax", "Coach payroll support"].includes(selectedMenu)
-              ? "Open Get Paid"
-              : ["Messages", "Team + roles", "Policies + waivers"].includes(
-                    selectedMenu,
-                  )
-                ? "Open People"
-                : undefined
+            : selectedMenu === "Money + tax"
+              ? "Open Money"
+              : selectedMenu === "Coach payroll support"
+                ? "Open Get Paid"
+                : ["Messages", "Team + roles", "Policies + waivers"].includes(
+                      selectedMenu,
+                    )
+                  ? "Open People"
+                  : undefined
     : undefined;
   return (
     <>
@@ -4678,6 +4685,7 @@ function ProApp() {
   const [surface, setSurface] = useState<
     | "create"
     | "get-paid"
+    | "money"
     | "messages"
     | "scan"
     | "score"
@@ -4724,7 +4732,7 @@ function ProApp() {
 
   const changeTab = (nextTab: NavDestination) => {
     if (nextTab === "paid") {
-      setSurface("get-paid");
+      setSurface("money");
       return;
     }
     if (nextTab === "calendar") setCalendarEntryId(undefined);
@@ -4864,6 +4872,25 @@ function ProApp() {
         <GetPaidScreen
           onClose={() => setSurface(undefined)}
           onCreate={() => setSurface("create")}
+        />
+      ) : surface === "money" ? (
+        <MoneyScreen
+          onClose={() => setSurface(undefined)}
+          onCollect={() => setSurface("get-paid")}
+          palette={{
+            canvas: colors.canvas,
+            surface: colors.depth,
+            surfaceAlt: colors.navyLift,
+            border: rgba(colors.overlayRgb, 0.12),
+            text: colors.bone,
+            muted: colors.muted,
+            accent: colors.aqua,
+            onAccent: colors.onAccent,
+            positive: colors.positive,
+            warning: colors.warning,
+            danger: colors.danger,
+            navy: colors.navy,
+          }}
         />
       ) : surface === "messages" ? (
         <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
@@ -5029,6 +5056,7 @@ function ProApp() {
                   onCalendar={() => openCalendar()}
                   onCreate={() => setSurface("create")}
                   onGetPaid={() => setSurface("get-paid")}
+                  onMoney={() => setSurface("money")}
                   onMessages={() => {
                     setMessagesConversationId(undefined);
                     setMessagesPersonId(undefined);

@@ -1,0 +1,1277 @@
+import {
+  appliedFees,
+  courtBookings,
+  disputes,
+  eventBlueprints,
+  getDatabase,
+  getTransactionalDatabase,
+  orderItems,
+  orders,
+  organizationMoneySettings,
+  organizationRefundPolicies,
+  organizations,
+  paymentFundSchedules,
+  payments,
+  payouts,
+  people,
+  registrations,
+  sessions,
+  ticketTypes,
+  tickets,
+} from "@duna/db";
+import { and, asc, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import type { OrganizationMoneyWorkspace } from "./contracts";
+import type { ApiActor } from "./context";
+import {
+  configureConnectedAccountMoney,
+  createConnectedAccountPayout,
+  loadConnectedAccountMoney,
+} from "./payments";
+
+type Currency = OrganizationMoneyWorkspace["currency"];
+type PayoutInterval = OrganizationMoneyWorkspace["settings"]["payoutInterval"];
+type Weekday = OrganizationMoneyWorkspace["settings"]["weeklyPayoutDay"];
+
+const DEFAULT_REFUND_MINUTES = 24 * 60;
+
+export function loadDemoOrganizationMoneyWorkspace(
+  now = new Date(),
+): OrganizationMoneyWorkspace {
+  const day = (offset: number) =>
+    new Date(now.getTime() + offset * 24 * 60 * 60_000).toISOString();
+  const transactions: OrganizationMoneyWorkspace["transactions"] = [
+    {
+      id: "demo-fund-1",
+      orderId: "91000000-0000-4000-8000-000000000001",
+      description: "Sunset doubles training",
+      customerName: "Maya Chen",
+      grossMinor: 9_675,
+      consumerFeeMinor: 675,
+      processingFeeMinor: 305,
+      organizationFeeMinor: 0,
+      taxMinor: 0,
+      netMinor: 8_695,
+      refundedMinor: 0,
+      currency: "USD",
+      status: "held",
+      policyName: "Flexible · 24 hours",
+      availableAt: day(1),
+      occurredAt: day(-2),
+    },
+    {
+      id: "demo-fund-2",
+      orderId: "91000000-0000-4000-8000-000000000002",
+      description: "Performance membership",
+      customerName: "Jordan Smith",
+      grossMinor: 18_500,
+      consumerFeeMinor: 0,
+      processingFeeMinor: 590,
+      organizationFeeMinor: 0,
+      taxMinor: 0,
+      netMinor: 17_910,
+      refundedMinor: 0,
+      currency: "USD",
+      status: "available",
+      policyName: "Non-refundable",
+      availableAt: day(-1),
+      occurredAt: day(-4),
+    },
+    {
+      id: "demo-fund-3",
+      orderId: "91000000-0000-4000-8000-000000000003",
+      description: "Summer beach camp",
+      customerName: "Ava Rodriguez",
+      grossMinor: 32_250,
+      consumerFeeMinor: 2_250,
+      processingFeeMinor: 935,
+      organizationFeeMinor: 0,
+      taxMinor: 0,
+      netMinor: 29_065,
+      refundedMinor: 0,
+      currency: "USD",
+      status: "pending-clearance",
+      policyName: "Flexible · 7 days",
+      availableAt: day(8),
+      occurredAt: day(-1),
+    },
+  ];
+  return {
+    generatedAt: now.toISOString(),
+    currency: "USD",
+    balance: {
+      totalMinor: transactions.reduce((sum, row) => sum + row.netMinor, 0),
+      availableMinor: 17_910,
+      heldMinor: 8_695,
+      pendingMinor: 29_065,
+      inTransitMinor: 24_800,
+      nextReleaseAt: day(1),
+      nextReleaseMinor: 8_695,
+    },
+    earnings: {
+      grossMinor: 60_425,
+      netMinor: 55_670,
+      feesMinor: 4_755,
+      refundsMinor: 0,
+      points: Array.from({ length: 30 }, (_, index) => ({
+        date: day(index - 29).slice(0, 10),
+        grossMinor:
+          index % 5 === 0 ? 9_675 + index * 110 : index % 3 === 0 ? 4_500 : 0,
+        netMinor:
+          index % 5 === 0 ? 8_695 + index * 100 : index % 3 === 0 ? 4_200 : 0,
+      })),
+    },
+    connect: {
+      accountId: "acct_demo",
+      connected: true,
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      bankStatus: "connected",
+      bankName: "First Sand Bank",
+      bankLast4: "1842",
+      stripeAvailableMinor: 26_605,
+      stripePendingMinor: 29_065,
+      stripeReservedMinor: 0,
+      bankAccounts: [
+        {
+          id: "ba_demo",
+          type: "bank-account",
+          name: "First Sand Bank",
+          last4: "1842",
+          currency: "USD",
+          status: "connected",
+          defaultForCurrency: true,
+        },
+      ],
+      activity: [
+        {
+          id: "txn_demo_transfer",
+          type: "transfer",
+          reportingCategory: "transfer",
+          description: "Duna order settlement",
+          amountMinor: 17_910,
+          feeMinor: 0,
+          netMinor: 17_910,
+          status: "available",
+          availableAt: day(-1),
+          occurredAt: day(-4),
+        },
+        {
+          id: "txn_demo_payout",
+          type: "payout",
+          reportingCategory: "payout",
+          description: "Payout to First Sand Bank •••• 1842",
+          amountMinor: -24_800,
+          feeMinor: 0,
+          netMinor: -24_800,
+          status: "available",
+          availableAt: day(-1),
+          occurredAt: day(-1),
+        },
+      ],
+      requirementsDue: [],
+      liveData: false,
+    },
+    settings: {
+      payoutInterval: "weekly",
+      weeklyPayoutDay: "friday",
+      monthlyPayoutDay: 1,
+      minimumPayoutMinor: 5_000,
+      statementDescriptor: "BEACH ELITE",
+      payoutStatementDescriptor: "DUNA BEACH ELITE",
+      stripeSettingsStatus: "synced",
+      stripeSettingsSyncedAt: day(-1),
+      lastAutomaticPayoutAt: day(-5),
+    },
+    refundPolicies: [
+      {
+        id: "92000000-0000-4000-8000-000000000001",
+        name: "Flexible · 24 hours",
+        mode: "refundable",
+        refundBeforeMinutes: 1_440,
+        terms: "Cancel at least 24 hours before start for an automatic refund.",
+        version: 1,
+        isDefault: true,
+        active: true,
+      },
+      {
+        id: "92000000-0000-4000-8000-000000000002",
+        name: "Non-refundable",
+        mode: "non-refundable",
+        terms:
+          "This purchase is final and becomes available after payment clears.",
+        version: 1,
+        isDefault: false,
+        active: true,
+      },
+    ],
+    transactions,
+    payouts: [
+      {
+        id: "93000000-0000-4000-8000-000000000001",
+        stripePayoutId: "po_demo",
+        amountMinor: 24_800,
+        currency: "USD",
+        status: "in_transit",
+        expectedArrivalAt: day(1),
+        createdAt: day(-1),
+      },
+    ],
+    disputes: [],
+  };
+}
+
+function currency(value: string): Currency {
+  if (["USD", "CAD", "AUD", "BRL", "EUR"].includes(value)) {
+    return value as Currency;
+  }
+  return "USD";
+}
+
+export function calculateFundAvailability(input: {
+  readonly policyMode: "refundable" | "non-refundable";
+  readonly refundBeforeMinutes?: number;
+  readonly eventStartsAt?: Date;
+  readonly orderCreatedAt: Date;
+  readonly processorAvailableAt: Date;
+  readonly now: Date;
+}): {
+  readonly policyReleaseAt: Date;
+  readonly availableAt: Date;
+  readonly status: "pending-clearance" | "held" | "available";
+} {
+  const policyReleaseAt =
+    input.policyMode === "non-refundable"
+      ? input.orderCreatedAt
+      : input.eventStartsAt
+        ? new Date(
+            input.eventStartsAt.getTime() -
+              (input.refundBeforeMinutes ?? 0) * 60_000,
+          )
+        : new Date(
+            input.orderCreatedAt.getTime() +
+              (input.refundBeforeMinutes ?? DEFAULT_REFUND_MINUTES) * 60_000,
+          );
+  const availableAt = new Date(
+    Math.max(input.processorAvailableAt.getTime(), policyReleaseAt.getTime()),
+  );
+  return {
+    policyReleaseAt,
+    availableAt,
+    status:
+      availableAt <= input.now
+        ? "available"
+        : input.processorAvailableAt > input.now
+          ? "pending-clearance"
+          : "held",
+  };
+}
+
+function descriptor(value: string | undefined): string | undefined {
+  const normalized = value
+    ?.trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9 .,&+-]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 22);
+  if (!normalized) return undefined;
+  if (normalized.length < 5 || !/[A-Z]/.test(normalized)) {
+    throw new Error(
+      "Statement descriptors need 5–22 characters and at least one letter.",
+    );
+  }
+  return normalized;
+}
+
+function status(
+  value: string,
+): OrganizationMoneyWorkspace["transactions"][number]["status"] {
+  const allowed = new Set([
+    "pending-clearance",
+    "held",
+    "available",
+    "payout-pending",
+    "paid-out",
+    "partially-refunded",
+    "refunded",
+    "disputed",
+  ]);
+  return allowed.has(value)
+    ? (value as OrganizationMoneyWorkspace["transactions"][number]["status"])
+    : "pending-clearance";
+}
+
+async function ensureMoneyDefaults(organizationId: string): Promise<void> {
+  const database = getDatabase();
+  await database.batch([
+    database
+      .insert(organizationMoneySettings)
+      .values({ organizationId })
+      .onConflictDoNothing(),
+    database
+      .insert(organizationRefundPolicies)
+      .values({
+        organizationId,
+        name: "Flexible · 24 hours",
+        mode: "refundable",
+        refundBeforeMinutes: DEFAULT_REFUND_MINUTES,
+        terms:
+          "Cancel at least 24 hours before the event begins for an automatic refund to the original payment method.",
+        isDefault: true,
+      })
+      .onConflictDoNothing(),
+  ]);
+}
+
+async function resolveOrderPolicy(orderId: string) {
+  const database = getDatabase();
+  const registrationEvent = await database
+    .select({
+      sessionId: sessions.id,
+      startsAt: sessions.startsAt,
+      registrationSettings: eventBlueprints.registrationSettings,
+    })
+    .from(registrations)
+    .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
+    .leftJoin(eventBlueprints, eq(eventBlueprints.sessionId, sessions.id))
+    .where(eq(registrations.orderId, orderId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  const ticketEvent = registrationEvent
+    ? undefined
+    : await database
+        .select({
+          sessionId: sessions.id,
+          startsAt: sessions.startsAt,
+          registrationSettings: eventBlueprints.registrationSettings,
+        })
+        .from(tickets)
+        .innerJoin(ticketTypes, eq(tickets.ticketTypeId, ticketTypes.id))
+        .innerJoin(sessions, eq(ticketTypes.sessionId, sessions.id))
+        .leftJoin(eventBlueprints, eq(eventBlueprints.sessionId, sessions.id))
+        .where(eq(tickets.orderId, orderId))
+        .limit(1)
+        .then((rows) => rows[0]);
+  const court =
+    registrationEvent || ticketEvent
+      ? undefined
+      : await database.query.courtBookings.findFirst({
+          where: eq(courtBookings.orderId, orderId),
+        });
+  const event = registrationEvent ?? ticketEvent;
+  if (event) {
+    const settings = event.registrationSettings as
+      { readonly smartRules?: Readonly<Record<string, unknown>> } | undefined;
+    const rules = settings?.smartRules;
+    const mode =
+      rules?.refundPolicyMode === "non-refundable"
+        ? ("non-refundable" as const)
+        : ("refundable" as const);
+    const hours =
+      typeof rules?.freeCancellationHours === "number" &&
+      Number.isFinite(rules.freeCancellationHours)
+        ? Math.max(0, Math.round(rules.freeCancellationHours))
+        : 24;
+    return {
+      sessionId: event.sessionId,
+      startsAt: event.startsAt,
+      mode,
+      refundBeforeMinutes: mode === "refundable" ? hours * 60 : undefined,
+      name:
+        mode === "non-refundable"
+          ? "Non-refundable"
+          : `Flexible · ${hours} hour${hours === 1 ? "" : "s"}`,
+      version: 1,
+    };
+  }
+  if (court) {
+    const snapshot = court.policySnapshot;
+    const hours = snapshot.refundBeforeHours;
+    const mode =
+      hours === undefined
+        ? ("non-refundable" as const)
+        : ("refundable" as const);
+    return {
+      sessionId: undefined,
+      startsAt: court.startsAt,
+      mode,
+      refundBeforeMinutes: hours === undefined ? undefined : hours * 60,
+      name:
+        mode === "non-refundable"
+          ? "Non-refundable"
+          : `Reservation · ${hours} hour${hours === 1 ? "" : "s"}`,
+      version: 1,
+    };
+  }
+  const order = await database.query.orders.findFirst({
+    where: eq(orders.id, orderId),
+  });
+  const defaultPolicy = order?.organizationId
+    ? await database.query.organizationRefundPolicies.findFirst({
+        where: and(
+          eq(organizationRefundPolicies.organizationId, order.organizationId),
+          eq(organizationRefundPolicies.isDefault, true),
+          eq(organizationRefundPolicies.active, true),
+        ),
+      })
+    : undefined;
+  return {
+    sessionId: undefined,
+    startsAt: undefined,
+    mode:
+      defaultPolicy?.mode === "non-refundable"
+        ? ("non-refundable" as const)
+        : ("refundable" as const),
+    refundBeforeMinutes:
+      defaultPolicy?.mode === "non-refundable"
+        ? undefined
+        : (defaultPolicy?.refundBeforeMinutes ?? DEFAULT_REFUND_MINUTES),
+    name: defaultPolicy?.name ?? "Flexible · 24 hours",
+    version: defaultPolicy?.version ?? 1,
+    policyId: defaultPolicy?.id,
+  };
+}
+
+export async function recordPaymentFundSchedule(input: {
+  readonly orderId: string;
+  readonly processorAvailableAt?: Date;
+  readonly policyOverride?: {
+    readonly mode: "refundable" | "non-refundable";
+    readonly refundBeforeMinutes?: number;
+    readonly releaseAt?: Date;
+    readonly name: string;
+    readonly version: number;
+  };
+  readonly now: Date;
+}): Promise<void> {
+  const database = getDatabase();
+  const order = await database.query.orders.findFirst({
+    where: eq(orders.id, input.orderId),
+  });
+  if (!order?.organizationId || order.totalMinor <= 0) return;
+  await ensureMoneyDefaults(order.organizationId);
+  const [payment, fees, resolvedPolicy] = await Promise.all([
+    database.query.payments.findFirst({
+      where: eq(payments.orderId, order.id),
+      orderBy: [desc(payments.createdAt)],
+    }),
+    database
+      .select()
+      .from(appliedFees)
+      .where(eq(appliedFees.orderId, order.id)),
+    resolveOrderPolicy(order.id),
+  ]);
+  const policy = input.policyOverride
+    ? {
+        sessionId: undefined,
+        startsAt: input.policyOverride.releaseAt,
+        mode: input.policyOverride.mode,
+        refundBeforeMinutes: input.policyOverride.refundBeforeMinutes,
+        name: input.policyOverride.name,
+        version: input.policyOverride.version,
+        policyId: undefined,
+      }
+    : resolvedPolicy;
+  const processingFeeMinor = fees
+    .filter(
+      (fee) =>
+        fee.payer === "operator" &&
+        (fee.ruleId.includes("processing") ||
+          fee.ruleId.includes("operator-online") ||
+          fee.ruleId.includes("operator-present") ||
+          fee.ruleId.includes("operator-ach")),
+    )
+    .reduce((sum, fee) => sum + fee.amountMinor, 0);
+  const organizationFeeMinor = fees
+    .filter(
+      (fee) =>
+        fee.payer === "operator" &&
+        !fee.ruleId.includes("processing") &&
+        !fee.ruleId.includes("operator-online") &&
+        !fee.ruleId.includes("operator-present") &&
+        !fee.ruleId.includes("operator-ach"),
+    )
+    .reduce((sum, fee) => sum + fee.amountMinor, 0);
+  const consumerFeeMinor = fees
+    .filter((fee) => fee.payer === "consumer")
+    .reduce((sum, fee) => sum + fee.amountMinor, 0);
+  const processorAvailableAt = input.processorAvailableAt ?? input.now;
+  const availability = calculateFundAvailability({
+    policyMode: policy.mode,
+    refundBeforeMinutes: policy.refundBeforeMinutes,
+    eventStartsAt: policy.startsAt,
+    orderCreatedAt: order.createdAt,
+    processorAvailableAt,
+    now: input.now,
+  });
+  await database
+    .insert(paymentFundSchedules)
+    .values({
+      organizationId: order.organizationId,
+      orderId: order.id,
+      paymentId: payment?.id,
+      sessionId: policy.sessionId,
+      policyId: policy.policyId,
+      policyName: policy.name,
+      policyVersion: policy.version,
+      policyMode: policy.mode,
+      refundBeforeMinutes: policy.refundBeforeMinutes,
+      eventStartsAt: policy.startsAt,
+      policyReleaseAt: availability.policyReleaseAt,
+      processorAvailableAt,
+      availableAt: availability.availableAt,
+      grossMinor: order.totalMinor,
+      consumerFeeMinor,
+      processingFeeMinor,
+      organizationFeeMinor,
+      taxMinor: order.taxTotalMinor,
+      netMinor: Math.max(
+        0,
+        order.totalMinor -
+          consumerFeeMinor -
+          processingFeeMinor -
+          organizationFeeMinor -
+          order.taxTotalMinor,
+      ),
+      currency: order.currency,
+      status: availability.status,
+      updatedAt: input.now,
+    })
+    .onConflictDoUpdate({
+      target: paymentFundSchedules.orderId,
+      set: {
+        paymentId: payment?.id,
+        policyName: policy.name,
+        policyVersion: policy.version,
+        policyMode: policy.mode,
+        refundBeforeMinutes: policy.refundBeforeMinutes,
+        eventStartsAt: policy.startsAt,
+        policyReleaseAt: availability.policyReleaseAt,
+        grossMinor: order.totalMinor,
+        consumerFeeMinor,
+        processingFeeMinor,
+        organizationFeeMinor,
+        taxMinor: order.taxTotalMinor,
+        netMinor: Math.max(
+          0,
+          order.totalMinor -
+            consumerFeeMinor -
+            processingFeeMinor -
+            organizationFeeMinor -
+            order.taxTotalMinor,
+        ),
+        processorAvailableAt,
+        availableAt: availability.availableAt,
+        status: availability.status,
+        updatedAt: input.now,
+      },
+    });
+}
+
+export async function releaseEligibleFunds(now = new Date()): Promise<number> {
+  return getDatabase()
+    .update(paymentFundSchedules)
+    .set({ status: "available", updatedAt: now })
+    .where(
+      and(
+        inArray(paymentFundSchedules.status, ["pending-clearance", "held"]),
+        lte(paymentFundSchedules.availableAt, now),
+      ),
+    )
+    .returning({ id: paymentFundSchedules.id })
+    .then((rows) => rows.length);
+}
+
+function emptyConnect(
+  organization: typeof organizations.$inferSelect,
+): OrganizationMoneyWorkspace["connect"] {
+  return {
+    accountId: organization.stripeAccountId ?? undefined,
+    connected: Boolean(organization.stripeAccountId),
+    chargesEnabled: organization.stripeChargesEnabled,
+    payoutsEnabled: false,
+    bankStatus: organization.stripeAccountId ? "unavailable" : "missing",
+    bankAccounts: [],
+    activity: [],
+    requirementsDue: [],
+    liveData: false,
+  };
+}
+
+export async function loadOrganizationMoneyWorkspace(
+  organizationId: string,
+  now = new Date(),
+): Promise<OrganizationMoneyWorkspace> {
+  await ensureMoneyDefaults(organizationId);
+  await releaseEligibleFunds(now);
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+  const [settings, refundPolicies, fundRows, payoutRows, disputeRows] =
+    await Promise.all([
+      database.query.organizationMoneySettings.findFirst({
+        where: eq(organizationMoneySettings.organizationId, organizationId),
+      }),
+      database
+        .select()
+        .from(organizationRefundPolicies)
+        .where(eq(organizationRefundPolicies.organizationId, organizationId))
+        .orderBy(
+          desc(organizationRefundPolicies.isDefault),
+          asc(organizationRefundPolicies.name),
+        ),
+      database
+        .select({
+          fund: paymentFundSchedules,
+          order: orders,
+          customerName: people.displayName,
+        })
+        .from(paymentFundSchedules)
+        .innerJoin(orders, eq(paymentFundSchedules.orderId, orders.id))
+        .innerJoin(people, eq(orders.buyerPersonId, people.id))
+        .where(eq(paymentFundSchedules.organizationId, organizationId))
+        .orderBy(desc(paymentFundSchedules.createdAt))
+        .limit(250),
+      database
+        .select()
+        .from(payouts)
+        .where(eq(payouts.organizationId, organizationId))
+        .orderBy(desc(payouts.createdAt))
+        .limit(100),
+      database
+        .select()
+        .from(disputes)
+        .where(eq(disputes.organizationId, organizationId))
+        .orderBy(desc(disputes.createdAt))
+        .limit(100),
+    ]);
+  if (!settings) throw new Error("Money settings could not be initialized.");
+  const orderIds = fundRows.map((row) => row.order.id);
+  const itemRows = orderIds.length
+    ? await database
+        .select()
+        .from(orderItems)
+        .where(inArray(orderItems.orderId, orderIds))
+    : [];
+  const descriptions = new Map<string, string>();
+  for (const item of itemRows) {
+    const current = descriptions.get(item.orderId);
+    descriptions.set(
+      item.orderId,
+      current ? `${current}, ${item.description}` : item.description,
+    );
+  }
+  let connect = emptyConnect(organization);
+  if (organization.stripeAccountId) {
+    try {
+      connect = await loadConnectedAccountMoney({
+        accountId: organization.stripeAccountId,
+        currency: organization.currency,
+      });
+    } catch {
+      connect = emptyConnect(organization);
+    }
+  }
+  const remaining = (fund: typeof paymentFundSchedules.$inferSelect) =>
+    Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor);
+  const availableMinor = fundRows
+    .filter((row) => row.fund.status === "available")
+    .reduce((sum, row) => sum + remaining(row.fund), 0);
+  const heldMinor = fundRows
+    .filter((row) => row.fund.status === "held")
+    .reduce((sum, row) => sum + remaining(row.fund), 0);
+  const pendingMinor = fundRows
+    .filter((row) => row.fund.status === "pending-clearance")
+    .reduce((sum, row) => sum + remaining(row.fund), 0);
+  const inTransitMinor = payoutRows
+    .filter((row) => ["pending", "in_transit"].includes(row.status))
+    .reduce((sum, row) => sum + row.amountMinor, 0);
+  const nextRelease = fundRows
+    .filter(
+      (row) =>
+        ["held", "pending-clearance"].includes(row.fund.status) &&
+        row.fund.availableAt,
+    )
+    .toSorted(
+      (left, right) =>
+        left.fund.availableAt!.getTime() - right.fund.availableAt!.getTime(),
+    )[0];
+  const chartStart = new Date(now.getTime() - 29 * 24 * 60 * 60_000);
+  chartStart.setUTCHours(0, 0, 0, 0);
+  const points = Array.from({ length: 30 }, (_, index) => {
+    const point = new Date(chartStart.getTime() + index * 24 * 60 * 60_000);
+    const date = point.toISOString().slice(0, 10);
+    const rows = fundRows.filter(
+      (row) => row.fund.createdAt.toISOString().slice(0, 10) === date,
+    );
+    return {
+      date,
+      grossMinor: rows.reduce((sum, row) => sum + row.fund.grossMinor, 0),
+      netMinor: rows.reduce((sum, row) => sum + row.fund.netMinor, 0),
+    };
+  });
+  return {
+    generatedAt: now.toISOString(),
+    currency: currency(organization.currency),
+    balance: {
+      totalMinor: availableMinor + heldMinor + pendingMinor,
+      availableMinor,
+      heldMinor,
+      pendingMinor,
+      inTransitMinor,
+      nextReleaseAt: nextRelease?.fund.availableAt?.toISOString(),
+      nextReleaseMinor: nextRelease ? remaining(nextRelease.fund) : 0,
+    },
+    earnings: {
+      grossMinor: fundRows.reduce((sum, row) => sum + row.fund.grossMinor, 0),
+      netMinor: fundRows.reduce((sum, row) => sum + row.fund.netMinor, 0),
+      feesMinor: fundRows.reduce(
+        (sum, row) =>
+          sum +
+          row.fund.consumerFeeMinor +
+          row.fund.processingFeeMinor +
+          row.fund.organizationFeeMinor,
+        0,
+      ),
+      refundsMinor: fundRows.reduce(
+        (sum, row) => sum + row.fund.refundedMinor,
+        0,
+      ),
+      points,
+    },
+    connect,
+    settings: {
+      payoutInterval: settings.payoutInterval as PayoutInterval,
+      weeklyPayoutDay: settings.weeklyPayoutDay as Weekday,
+      monthlyPayoutDay: settings.monthlyPayoutDay,
+      minimumPayoutMinor: settings.minimumPayoutMinor,
+      statementDescriptor: settings.statementDescriptor ?? undefined,
+      payoutStatementDescriptor:
+        settings.payoutStatementDescriptor ?? undefined,
+      stripeSettingsStatus: settings.stripeSettingsStatus as
+        "not-synced" | "pending" | "synced" | "failed",
+      stripeSettingsSyncedAt: settings.stripeSettingsSyncedAt?.toISOString(),
+      stripeSettingsError: settings.stripeSettingsError ?? undefined,
+      lastAutomaticPayoutAt: settings.lastAutomaticPayoutAt?.toISOString(),
+    },
+    refundPolicies: refundPolicies.map((policy) => ({
+      id: policy.id,
+      name: policy.name,
+      mode: policy.mode === "non-refundable" ? "non-refundable" : "refundable",
+      refundBeforeMinutes: policy.refundBeforeMinutes ?? undefined,
+      terms: policy.terms,
+      version: policy.version,
+      isDefault: policy.isDefault,
+      active: policy.active,
+    })),
+    transactions: fundRows.map(({ fund, order, customerName }) => ({
+      id: fund.id,
+      orderId: order.id,
+      description: descriptions.get(order.id) ?? "Duna purchase",
+      customerName,
+      grossMinor: fund.grossMinor,
+      consumerFeeMinor: fund.consumerFeeMinor,
+      processingFeeMinor: fund.processingFeeMinor,
+      organizationFeeMinor: fund.organizationFeeMinor,
+      taxMinor: fund.taxMinor,
+      netMinor: fund.netMinor,
+      refundedMinor: fund.refundedMinor,
+      currency: currency(fund.currency),
+      status: status(fund.status),
+      policyName: fund.policyName,
+      availableAt: fund.availableAt?.toISOString(),
+      occurredAt: fund.createdAt.toISOString(),
+    })),
+    payouts: payoutRows.map((row) => ({
+      id: row.id,
+      stripePayoutId: row.stripePayoutId ?? undefined,
+      amountMinor: Math.max(0, row.amountMinor),
+      currency: currency(row.currency),
+      status: row.status,
+      expectedArrivalAt: row.expectedArrivalAt?.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    })),
+    disputes: disputeRows.map((row) => ({
+      id: row.id,
+      orderId: row.orderId ?? undefined,
+      stripeDisputeId: row.stripeDisputeId ?? undefined,
+      kind: row.kind,
+      status: row.status,
+      amountMinor: Math.max(0, row.amountMinor ?? 0),
+      currency: currency(row.currency ?? organization.currency),
+      dueAt: row.dueAt?.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    })),
+  };
+}
+
+export async function updateOrganizationMoneySettings(input: {
+  readonly actor: ApiActor;
+  readonly payoutInterval: PayoutInterval;
+  readonly weeklyPayoutDay: Weekday;
+  readonly monthlyPayoutDay: number;
+  readonly minimumPayoutMinor: number;
+  readonly statementDescriptor?: string;
+  readonly payoutStatementDescriptor?: string;
+  readonly now: Date;
+}): Promise<void> {
+  const organizationId = input.actor.organizationId;
+  if (!organizationId) throw new Error("Choose an organization first.");
+  if (
+    !Number.isSafeInteger(input.minimumPayoutMinor) ||
+    input.minimumPayoutMinor < 0
+  ) {
+    throw new Error("Minimum payout must be a non-negative amount.");
+  }
+  if (
+    !Number.isSafeInteger(input.monthlyPayoutDay) ||
+    input.monthlyPayoutDay < 1 ||
+    input.monthlyPayoutDay > 28
+  ) {
+    throw new Error("Monthly payout day must be between 1 and 28.");
+  }
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+  const cardDescriptor = descriptor(input.statementDescriptor);
+  const bankDescriptor = descriptor(input.payoutStatementDescriptor);
+  await ensureMoneyDefaults(organizationId);
+  await database
+    .update(organizationMoneySettings)
+    .set({
+      payoutInterval: input.payoutInterval,
+      weeklyPayoutDay: input.weeklyPayoutDay,
+      monthlyPayoutDay: input.monthlyPayoutDay,
+      minimumPayoutMinor: input.minimumPayoutMinor,
+      statementDescriptor: cardDescriptor ?? null,
+      payoutStatementDescriptor: bankDescriptor ?? null,
+      stripeSettingsStatus: organization.stripeAccountId
+        ? "pending"
+        : "not-synced",
+      stripeSettingsError: null,
+      updatedAt: input.now,
+    })
+    .where(eq(organizationMoneySettings.organizationId, organizationId));
+  if (!organization.stripeAccountId) return;
+  try {
+    await configureConnectedAccountMoney({
+      accountId: organization.stripeAccountId,
+      statementDescriptor: cardDescriptor,
+      payoutStatementDescriptor: bankDescriptor,
+    });
+    await database
+      .update(organizationMoneySettings)
+      .set({
+        stripeSettingsStatus: "synced",
+        stripeSettingsSyncedAt: input.now,
+        stripeSettingsError: null,
+        updatedAt: input.now,
+      })
+      .where(eq(organizationMoneySettings.organizationId, organizationId));
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message.slice(0, 1_000)
+        : "Stripe settings could not be synchronized.";
+    await database
+      .update(organizationMoneySettings)
+      .set({
+        stripeSettingsStatus: "failed",
+        stripeSettingsError: message,
+        updatedAt: input.now,
+      })
+      .where(eq(organizationMoneySettings.organizationId, organizationId));
+    throw new Error(
+      `Money settings were saved, but Stripe needs attention: ${message}`,
+      { cause: error },
+    );
+  }
+}
+
+export async function createOrganizationRefundPolicy(input: {
+  readonly actor: ApiActor;
+  readonly name: string;
+  readonly mode: "refundable" | "non-refundable";
+  readonly refundBeforeMinutes?: number;
+  readonly terms: string;
+  readonly makeDefault: boolean;
+  readonly now: Date;
+}): Promise<string> {
+  const organizationId = input.actor.organizationId;
+  if (!organizationId) throw new Error("Choose an organization first.");
+  if (!input.name.trim()) throw new Error("Name the refund policy.");
+  const refundBeforeMinutes =
+    input.mode === "non-refundable" ? undefined : input.refundBeforeMinutes;
+  if (
+    input.mode === "refundable" &&
+    (!Number.isSafeInteger(refundBeforeMinutes) || refundBeforeMinutes! < 0)
+  ) {
+    throw new Error("Choose a valid refund cutoff.");
+  }
+  const id = crypto.randomUUID();
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    if (input.makeDefault) {
+      await transaction
+        .update(organizationRefundPolicies)
+        .set({ isDefault: false, updatedAt: input.now })
+        .where(eq(organizationRefundPolicies.organizationId, organizationId));
+    }
+    await transaction.insert(organizationRefundPolicies).values({
+      id,
+      organizationId,
+      name: input.name.trim(),
+      mode: input.mode,
+      refundBeforeMinutes,
+      terms: input.terms.trim(),
+      isDefault: input.makeDefault,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+  });
+  return id;
+}
+
+function payoutDue(
+  settings: typeof organizationMoneySettings.$inferSelect,
+  now: Date,
+): boolean {
+  if (settings.payoutInterval === "manual") return false;
+  const last = settings.lastAutomaticPayoutAt;
+  if (settings.payoutInterval === "daily") {
+    return (
+      !last ||
+      last.toISOString().slice(0, 10) !== now.toISOString().slice(0, 10)
+    );
+  }
+  if (settings.payoutInterval === "weekly") {
+    const weekdays = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+    return (
+      weekdays[now.getUTCDay()] === settings.weeklyPayoutDay &&
+      (!last || now.getTime() - last.getTime() >= 20 * 60 * 60_000)
+    );
+  }
+  return (
+    now.getUTCDate() === settings.monthlyPayoutDay &&
+    (!last ||
+      last.getUTCMonth() !== now.getUTCMonth() ||
+      last.getUTCFullYear() !== now.getUTCFullYear())
+  );
+}
+
+async function createEligibleOrganizationPayout(input: {
+  readonly organization: typeof organizations.$inferSelect;
+  readonly minimumPayoutMinor: number;
+  readonly idempotencyKey: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly amountMinor: number } | undefined> {
+  const stripeAccountId = input.organization.stripeAccountId;
+  if (!stripeAccountId) return undefined;
+  return getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`money-payout:${input.organization.id}`}))`,
+    );
+    const eligible = await transaction
+      .select()
+      .from(paymentFundSchedules)
+      .where(
+        and(
+          eq(paymentFundSchedules.organizationId, input.organization.id),
+          eq(paymentFundSchedules.status, "available"),
+        ),
+      )
+      .orderBy(asc(paymentFundSchedules.availableAt));
+    if (!eligible.length) return undefined;
+    const stripeMoney = await loadConnectedAccountMoney({
+      accountId: stripeAccountId,
+      currency: input.organization.currency,
+    });
+    let room = stripeMoney.stripeAvailableMinor ?? 0;
+    const selected: typeof eligible = [];
+    for (const fund of eligible) {
+      const amount = Math.max(
+        0,
+        fund.netMinor - fund.refundedMinor - fund.disputedMinor,
+      );
+      if (amount > 0 && amount <= room) {
+        selected.push(fund);
+        room -= amount;
+      }
+    }
+    const amountMinor = selected.reduce(
+      (sum, fund) =>
+        sum +
+        Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor),
+      0,
+    );
+    if (amountMinor < input.minimumPayoutMinor || amountMinor <= 0) {
+      return undefined;
+    }
+    const payout = await createConnectedAccountPayout({
+      accountId: stripeAccountId,
+      amountMinor,
+      currency: input.organization.currency,
+      idempotencyKey: input.idempotencyKey,
+    });
+    const payoutId = crypto.randomUUID();
+    await transaction.insert(payouts).values({
+      id: payoutId,
+      organizationId: input.organization.id,
+      stripePayoutId: payout.id,
+      amountMinor,
+      currency: input.organization.currency,
+      status: payout.status,
+      expectedArrivalAt: payout.expectedArrivalAt,
+      composition: Object.fromEntries(
+        selected.map((fund) => [
+          fund.id,
+          Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor),
+        ]),
+      ),
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+    await transaction
+      .update(paymentFundSchedules)
+      .set({
+        payoutId,
+        status: "payout-pending",
+        updatedAt: input.now,
+      })
+      .where(
+        inArray(
+          paymentFundSchedules.id,
+          selected.map((fund) => fund.id),
+        ),
+      );
+    return { id: payoutId, amountMinor };
+  });
+}
+
+export async function createManualOrganizationPayout(input: {
+  readonly actor: ApiActor;
+  readonly idempotencyKey: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly amountMinor: number }> {
+  const organizationId = input.actor.organizationId;
+  if (!organizationId) throw new Error("Choose an organization first.");
+  await releaseEligibleFunds(input.now);
+  const organization = await getDatabase().query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization?.stripeAccountId) {
+    throw new Error("Connect and verify a payout bank before paying out.");
+  }
+  const result = await createEligibleOrganizationPayout({
+    organization,
+    minimumPayoutMinor: 0,
+    idempotencyKey: `duna-manual-payout:${organizationId}:${input.idempotencyKey}`,
+    now: input.now,
+  });
+  if (!result) {
+    throw new Error("There are no cleared, refund-safe funds to pay out.");
+  }
+  return result;
+}
+
+export async function processAutomaticOrganizationPayouts(
+  now = new Date(),
+): Promise<{ readonly organizations: number; readonly payouts: number }> {
+  await releaseEligibleFunds(now);
+  const database = getDatabase();
+  const settingsRows = await database
+    .select({
+      settings: organizationMoneySettings,
+      organization: organizations,
+    })
+    .from(organizationMoneySettings)
+    .innerJoin(
+      organizations,
+      eq(organizationMoneySettings.organizationId, organizations.id),
+    )
+    .where(
+      or(
+        eq(organizationMoneySettings.payoutInterval, "daily"),
+        eq(organizationMoneySettings.payoutInterval, "weekly"),
+        eq(organizationMoneySettings.payoutInterval, "monthly"),
+      ),
+    );
+  let payoutCount = 0;
+  for (const row of settingsRows) {
+    if (!payoutDue(row.settings, now) || !row.organization.stripeAccountId)
+      continue;
+    const payout = await createEligibleOrganizationPayout({
+      organization: row.organization,
+      minimumPayoutMinor: row.settings.minimumPayoutMinor,
+      idempotencyKey: `duna-auto-payout:${row.organization.id}:${now.toISOString().slice(0, 10)}`,
+      now,
+    });
+    if (!payout) continue;
+    await database
+      .update(organizationMoneySettings)
+      .set({ lastAutomaticPayoutAt: now, updatedAt: now })
+      .where(eq(organizationMoneySettings.organizationId, row.organization.id));
+    payoutCount += 1;
+  }
+  return { organizations: settingsRows.length, payouts: payoutCount };
+}
+
+export async function synchronizeMoneyPayout(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly now: Date;
+}): Promise<void> {
+  const stripePayoutId =
+    typeof input.object.id === "string" ? input.object.id : undefined;
+  if (!stripePayoutId) return;
+  const nextStatus =
+    typeof input.object.status === "string" ? input.object.status : "pending";
+  const database = getDatabase();
+  const payout = await database.query.payouts.findFirst({
+    where: eq(payouts.stripePayoutId, stripePayoutId),
+  });
+  if (!payout) return;
+  await database.batch([
+    database
+      .update(payouts)
+      .set({ status: nextStatus, updatedAt: input.now })
+      .where(eq(payouts.id, payout.id)),
+    database
+      .update(paymentFundSchedules)
+      .set({
+        status:
+          nextStatus === "paid"
+            ? "paid-out"
+            : nextStatus === "failed" || nextStatus === "canceled"
+              ? "available"
+              : "payout-pending",
+        payoutId:
+          nextStatus === "failed" || nextStatus === "canceled"
+            ? null
+            : payout.id,
+        updatedAt: input.now,
+      })
+      .where(eq(paymentFundSchedules.payoutId, payout.id)),
+  ]);
+}
+
+export async function synchronizeMoneyRefund(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly now: Date;
+}): Promise<void> {
+  const paymentIntentId =
+    typeof input.object.payment_intent === "string"
+      ? input.object.payment_intent
+      : undefined;
+  const amount =
+    typeof input.object.amount === "number" ? input.object.amount : 0;
+  if (!paymentIntentId || amount <= 0) return;
+  const order = await getDatabase().query.orders.findFirst({
+    where: eq(orders.stripePaymentIntentId, paymentIntentId),
+  });
+  if (!order) return;
+  const fund = await getDatabase().query.paymentFundSchedules.findFirst({
+    where: eq(paymentFundSchedules.orderId, order.id),
+  });
+  if (!fund) return;
+  const refundedMinor = Math.min(fund.netMinor, fund.refundedMinor + amount);
+  await getDatabase()
+    .update(paymentFundSchedules)
+    .set({
+      refundedMinor,
+      status:
+        refundedMinor >= fund.netMinor ? "refunded" : "partially-refunded",
+      updatedAt: input.now,
+    })
+    .where(eq(paymentFundSchedules.id, fund.id));
+}
+
+export async function synchronizeMoneyDispute(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly now: Date;
+}): Promise<void> {
+  const stripeDisputeId =
+    typeof input.object.id === "string" ? input.object.id : undefined;
+  const chargeId =
+    typeof input.object.charge === "string" ? input.object.charge : undefined;
+  if (!stripeDisputeId || !chargeId) return;
+  const payment = await getDatabase().query.payments.findFirst({
+    where: eq(payments.stripeChargeId, chargeId),
+  });
+  const order = payment
+    ? await getDatabase().query.orders.findFirst({
+        where: eq(orders.id, payment.orderId),
+      })
+    : undefined;
+  if (!order?.organizationId) return;
+  const amount =
+    typeof input.object.amount === "number" ? input.object.amount : 0;
+  const disputeStatus =
+    typeof input.object.status === "string" ? input.object.status : "open";
+  const resolved = disputeStatus === "won" || disputeStatus === "lost";
+  const won = disputeStatus === "won";
+  const database = getDatabase();
+  await database
+    .insert(disputes)
+    .values({
+      organizationId: order.organizationId,
+      orderId: order.id,
+      stripeDisputeId,
+      kind:
+        typeof input.object.reason === "string"
+          ? input.object.reason
+          : "chargeback",
+      status: resolved ? "resolved" : "open",
+      amountMinor: amount,
+      currency:
+        typeof input.object.currency === "string"
+          ? input.object.currency.toUpperCase()
+          : order.currency,
+      evidence: { stripeStatus: disputeStatus },
+      dueAt:
+        typeof input.object.evidence_details === "object" &&
+        input.object.evidence_details &&
+        "due_by" in input.object.evidence_details &&
+        typeof input.object.evidence_details.due_by === "number"
+          ? new Date(input.object.evidence_details.due_by * 1_000)
+          : undefined,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoUpdate({
+      target: disputes.stripeDisputeId,
+      set: {
+        status: resolved ? "resolved" : "open",
+        evidence: { stripeStatus: disputeStatus },
+        amountMinor: amount,
+        updatedAt: input.now,
+      },
+    });
+  const fund = await database.query.paymentFundSchedules.findFirst({
+    where: eq(paymentFundSchedules.orderId, order.id),
+  });
+  if (!fund) return;
+  await database
+    .update(paymentFundSchedules)
+    .set({
+      disputedMinor: won ? 0 : Math.max(0, amount),
+      status: won
+        ? fund.availableAt && fund.availableAt <= input.now
+          ? "available"
+          : fund.processorAvailableAt && fund.processorAvailableAt <= input.now
+            ? "held"
+            : "pending-clearance"
+        : "disputed",
+      updatedAt: input.now,
+    })
+    .where(eq(paymentFundSchedules.id, fund.id));
+}

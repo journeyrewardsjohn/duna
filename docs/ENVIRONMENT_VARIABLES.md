@@ -106,15 +106,15 @@ available to the update command.
 
 ## Stripe, plans, identity, and wallet
 
-| Name/group                                                     | Class                | Purpose                                                           |
-| -------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------- |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PUBLISHABLE_KEY` | Public/server config | Browser/native-safe publishable key and server alias              |
-| `STRIPE_SECRET_KEY`                                            | Server secret        | Stripe server API                                                 |
-| `STRIPE_WEBHOOK_SECRET`                                        | Server secret        | Signature verification for the deployed Web webhook               |
-| `STRIPE_AUTOMATIC_TAX_ENABLED`                                 | Server config        | Explicit Tax switch; remains off until approved address/setup     |
-| `STRIPE_IDENTITY_REQUIRE_SELFIE`                               | Server config        | Stripe-hosted identity policy switch                              |
-| `DUNA_WALLET_CASH_ENABLED`                                     | Server config        | Fail-closed cash-wallet switch; organization credits are separate |
-| `STRIPE_DUNA_SERVICE_FEE_PRODUCT_ID`                           | Server config        | Canonical service-fee product reference when provisioned          |
+| Name/group                                                     | Class                | Purpose                                                                                                                           |
+| -------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PUBLISHABLE_KEY` | Public/server config | Browser/native-safe publishable key and server alias                                                                              |
+| `STRIPE_SECRET_KEY`                                            | Server secret        | Stripe server API                                                                                                                 |
+| `STRIPE_WEBHOOK_SECRET`                                        | Server secret        | Signature verification for the deployed Web webhook                                                                               |
+| `STRIPE_AUTOMATIC_TAX_ENABLED`                                 | Server config        | Tax switch for Duna-owned subscriptions; organization marketplace sales use required platform-liable Tax after Connect onboarding |
+| `STRIPE_IDENTITY_REQUIRE_SELFIE`                               | Server config        | Stripe-hosted identity policy switch                                                                                              |
+| `DUNA_WALLET_CASH_ENABLED`                                     | Server config        | Fail-closed cash-wallet switch; organization credits are separate                                                                 |
+| `STRIPE_DUNA_SERVICE_FEE_PRODUCT_ID`                           | Server config        | Canonical service-fee product reference when provisioned                                                                          |
 
 Consumer membership price map:
 
