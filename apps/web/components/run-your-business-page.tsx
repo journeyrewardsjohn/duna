@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Clock3,
   CreditCard,
+  Dumbbell,
   HeartPulse,
   LayoutDashboard,
   MapPinned,
@@ -178,6 +179,11 @@ const sharedCapabilities: readonly [LucideIcon, string, string][] = [
   ],
   [PackageOpen, "Products", "Lessons, plans, goods, equipment, and bundles"],
   [WalletCards, "Money", "Orders, credits, refunds, payouts, and ledger state"],
+  [
+    Dumbbell,
+    "Training",
+    "Season programs, practice plans, and drills you describe in your own words",
+  ],
   [
     Megaphone,
     "Marketing",
@@ -1304,6 +1310,47 @@ export function RunYourBusinessPage({
               </span>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className={styles.trainingPromo}>
+        <div className={styles.trainingPromoInner} data-reveal>
+          <div className={styles.trainingPromoContent}>
+            <Dumbbell aria-hidden size={24} />
+            <span className={styles.eyebrow}>Training</span>
+            <h2>Write the week. Run the court.</h2>
+            <p>
+              Describe a drill the way you&rsquo;d explain it to another coach
+              and Duna drafts the steps, cues, and scoring for you to correct.
+              Build the session around it, then set the season it belongs to.
+            </p>
+            <Link
+              className={styles.secondaryButton}
+              href="/run-your-club/training"
+            >
+              See training planning <ArrowRight />
+            </Link>
+          </div>
+          <div className={styles.trainingPromoVisual}>
+            <div className={styles.trainingPromoDrill}>
+              <header>
+                <span>Ball Control</span>
+                <small>Build, then compete</small>
+              </header>
+              <strong>Seam Serve to Transition</strong>
+              <div>
+                <span>14 min</span>
+                <span>6 to 12 players</span>
+              </div>
+            </div>
+            <div className={styles.trainingPromoPractice}>
+              <span>Tuesday</span>
+              <div>
+                <Numeric tier="table">90</Numeric>
+                <small>min</small>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
