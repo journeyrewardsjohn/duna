@@ -1663,36 +1663,6 @@
   line-height: 1.45;
 }
 
-.connectedFlow {
-  align-items: center;
-  display: grid;
-  gap: 0;
-  grid-template-columns: repeat(6, 1fr);
-  margin-top: clamp(4rem, 8vw, 8rem);
-}
-
-.connectedFlow span {
-  align-items: center;
-  border-top: 1px solid var(--hairline-strong);
-  display: grid;
-  font-size: 0.8rem;
-  gap: 0.8rem;
-  padding-top: 1rem;
-  position: relative;
-}
-
-.connectedFlow span::before {
-  background: var(--hq-core);
-  border: 5px solid var(--ground);
-  border-radius: 50%;
-  content: "";
-  height: 15px;
-  left: 0;
-  position: absolute;
-  top: -8px;
-  width: 15px;
-}
-
 .assurance {
   align-items: center;
   background: var(--business-hq-soft);
@@ -1745,6 +1715,7 @@
 
 .assuranceMock h3 {
   align-self: end;
+  color: var(--fog-50);
   font-size: clamp(2rem, 3.7vw, 3.8rem);
   font-weight: 700;
   letter-spacing: -0.018em;
@@ -2429,11 +2400,6 @@
 
   .capabilityGrid article:last-child {
     border-bottom: 0;
-  }
-
-  .connectedFlow {
-    grid-template-columns: repeat(3, 1fr);
-    row-gap: 2.5rem;
   }
 
   .videoPricing {
