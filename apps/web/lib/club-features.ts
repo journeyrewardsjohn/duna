@@ -712,80 +712,81 @@ export const clubFeatures: readonly ClubFeaturePageData[] = [
   feature({
     key: "venues",
     navLabel: "Venues",
-    navDescription: "Facilities, courts, settings, rentals, and utilization",
+    navDescription:
+      "Model the place, choose access, and publish it across Duna",
     category: "Run the operation",
-    eyebrow: "Venue management",
-    title: "Make every court a usable part of the business.",
+    eyebrow: "Venue network",
+    title: "Put your courts on the map—and open them to the world.",
     summary:
-      "Model facilities and courts, configure booking modes and rules, connect rentals, services, and events, and see how available time turns into real utilization.",
+      "Build the real venue over satellite imagery, decide exactly who can book each court, then publish availability into Duna Player so nearby players, members, and coaches can discover and act.",
     image: "/media/event-library/duna-event-court-rental.webp",
     imageAlt: "An open beach volleyball court prepared for a rental",
     accent: "sand",
     visual: "venues",
-    problemTitle: "A venue address does not explain how the place operates.",
+    problemTitle: "A pin on a map is not a bookable venue.",
     problem:
-      "Each court can have different hours, access, surfaces, dimensions, pricing, media, maintenance, and event commitments. A single calendar cannot carry that structure by itself.",
+      "Players need to know where the courts are, which setup is live, whether they are eligible, what time is actually open, and how to reserve it. Most venue software stops at an internal calendar and leaves discovery to chance.",
     problemSignals: [
-      "Court settings are repeated across offers",
-      "Rentals and events compete for the same time",
-      "Utilization is guessed from revenue alone",
+      "The real court layout is invisible to players",
+      "Access rules are rebuilt at every checkout",
+      "Open time never reaches new local demand",
     ],
     solutionTitle:
-      "Build the facility once, then let everything link through it.",
+      "Model the real place once, then distribute it through the Duna network.",
     solution:
-      "Duna gives facilities and courts their own settings, availability, rental lengths, access modes, media, booking rules, layouts, and 30-day utilization, then reuses that truth across services and events.",
+      "Duna turns precise satellite or floorplan geometry into a player-ready venue, applies court-level audience, schedule, rate, and cancellation rules, and carries the published result into nearby search, maps, club storefronts, services, and events.",
     outcomes: [
-      { value: "Court", label: "settings once" },
-      { value: "30d", label: "utilization view" },
-      { value: "Shared", label: "availability across offers" },
+      { value: "Metric", label: "satellite geometry" },
+      { value: "5 ways", label: "to control access" },
+      { value: "Network", label: "distribution through Duna" },
     ],
     capabilities: [
       {
-        title: "Facility hierarchy",
+        title: "Satellite layout studio",
         description:
-          "Represent clubs, academies, resorts, managed facilities, venues, and their courts.",
+          "Place courts, safety zones, amenities, guest spaces, and bookable blocks over Mapbox satellite imagery with meter-aware geometry.",
       },
       {
-        title: "Court settings",
+        title: "Versioned venue setups",
         description:
-          "Configure surface, dimensions, access, booking mode, rental lengths, hours, and exceptions.",
+          "Keep published layouts read-only, refine changes in a draft, preview the player experience, then publish or unpublish safely.",
       },
       {
-        title: "Court rentals",
+        title: "Booking audience controls",
         description:
-          "Publish bookable inventory with atomic holds, alternatives, member rules, checkout, and participant invitations.",
+          "Open a court to anyone, active members, selected membership tiers, coaches and staff, or keep it unavailable for independent booking.",
       },
       {
-        title: "Linked services and events",
+        title: "Court-level commerce",
         description:
-          "Use the same court and availability truth for lessons, programs, leagues, and tournaments.",
+          "Connect hours, booking increments, notice, advance windows, buffers, reusable rate plans, cancellations, checkout, and participant invitations.",
       },
       {
-        title: "Layout studio",
+        title: "Duna Player discovery",
         description:
-          "Place courts within the facility so staff can operate the venue the way it exists.",
+          "Publish eligible court inventory into location search, the Duna map, venue pages, and the club storefront where players around the world look to play.",
       },
       {
-        title: "Utilization",
+        title: "One source for every use",
         description:
-          "Review booked minutes, booking count, and 30-day utilization by venue and court.",
+          "Let rentals, private lessons, programs, leagues, tournaments, and utilization resolve against the same court and schedule truth.",
       },
     ],
     journey: [
       {
-        title: "Model the place",
+        title: "Build the real venue",
         description:
-          "Create the facility, add courts, and record the settings that make each one different.",
+          "Start with satellite imagery or an indoor floorplan, place every court and space, then inspect the same visual map a player will see.",
       },
       {
-        title: "Open the right time",
+        title: "Choose exactly who gets access",
         description:
-          "Set booking modes, hours, rental lengths, holds, member access, and schedule exceptions.",
+          "Make each court public, member-only, tier-specific, coach-and-staff-only, or not independently bookable—then attach time and price.",
       },
       {
-        title: "Learn from use",
+        title: "Publish into the network",
         description:
-          "Services, rentals, and events resolve to the same court utilization story.",
+          "Let local players—or someone planning a trip—find the venue in Duna Player, navigate the live setup, see eligible availability, and book alongside its services and events.",
       },
     ],
     related: ["products/services", "events", "leagues", "money"],

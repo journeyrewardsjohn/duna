@@ -12,15 +12,18 @@ import {
   CircleDollarSign,
   Dumbbell,
   Film,
+  Globe2,
   HeartPulse,
   Layers3,
   LockKeyhole,
   Mail,
+  LocateFixed,
   MapPinned,
   Megaphone,
   MessageCircleMore,
   PackageOpen,
   Radio,
+  Satellite,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -473,56 +476,164 @@ function OperationsVisual({
 }) {
   const sceneIndex = featureSceneIndex(scene);
   if (kind === "venues") {
-    const venueScenes = [
-      {
-        utilization: "68% utilized",
-        courts: [
-          "Lesson · 4 PM",
-          "Rental · 5 PM",
-          "League · 6 PM",
-          "Open · 6 PM",
-        ],
-        footer: "Rentals, services, and events share the same court truth.",
-      },
-      {
-        utilization: "4 settings live",
-        courts: [
-          "Lights · 9 PM",
-          "Member priority",
-          "Blocked · repair",
-          "Public rental",
-        ],
-        footer: "Court rules stay visible wherever someone books the place.",
-      },
-      {
-        utilization: "$1,840 this week",
-        courts: [
-          "82% utilized",
-          "74% utilized",
-          "61% utilized",
-          "48% utilized",
-        ],
-        footer: "Utilization connects time, product, revenue, and demand.",
-      },
-    ] as const;
-    const venueScene = venueScenes[sceneIndex];
+    if (sceneIndex === 0) {
+      return (
+        <div className={styles.venueLayoutVisual} data-scene={sceneIndex}>
+          <header>
+            <span>
+              <Satellite aria-hidden /> Satellite venue model
+            </span>
+            <b>Draft v3</b>
+            <button type="button">Player preview</button>
+          </header>
+          <div className={styles.venueSatelliteCanvas}>
+            <Image
+              alt=""
+              fill
+              sizes="(max-width: 900px) 100vw, 58vw"
+              src="/media/brand/duna-event-venue-hamburg-v1.webp"
+            />
+            <span className={styles.venueMapMode}>
+              <Satellite aria-hidden /> Mapbox satellite · metric geometry
+            </span>
+            <div className={styles.venueCourtGeometry}>
+              {["C1", "C2", "C3", "C4"].map((court, index) => (
+                <span data-selected={index === 2} key={court}>
+                  <i /> <b>{court}</b>
+                  <small>8 × 16m</small>
+                </span>
+              ))}
+            </div>
+            <aside>
+              <small>SELECTED SPACE</small>
+              <strong>Court 3 · Sand</strong>
+              <span>12 players · Lit after dark</span>
+              <button type="button">Create & place court</button>
+            </aside>
+          </div>
+          <footer>
+            <LocateFixed aria-hidden /> Courts, safety zones, amenities, and
+            guest spaces line up with the real venue.
+          </footer>
+        </div>
+      );
+    }
+    if (sceneIndex === 1) {
+      const audiences = [
+        ["Anyone", "Public discovery + checkout"],
+        ["Members", "Active members only"],
+        ["Selected tiers", "Choose eligible plans"],
+        ["Staff only", "Coaches and operators"],
+      ] as const;
+      return (
+        <div className={styles.venueBookingVisual} data-scene={sceneIndex}>
+          <header>
+            <span>Court 3 · Booking settings</span>
+            <b>Active</b>
+          </header>
+          <div className={styles.venueBookingGrid}>
+            <section>
+              <small>WHO CAN BOOK IT?</small>
+              <h3>Choose the audience.</h3>
+              <div>
+                {audiences.map(([label, detail], index) => (
+                  <span data-active={index === 0} key={label}>
+                    <i>{index === 0 ? <Check aria-hidden /> : index + 1}</i>
+                    <b>{label}</b>
+                    <small>{detail}</small>
+                  </span>
+                ))}
+              </div>
+            </section>
+            <aside>
+              <small>BOOKABLE COURT</small>
+              <strong>South Bay · Court 3</strong>
+              <span>
+                <CalendarDays aria-hidden /> Weekdays · 8 AM–10 PM
+              </span>
+              <span>
+                <CircleDollarSign aria-hidden /> $48 / 60 minutes
+              </span>
+              <span>
+                <UsersRound aria-hidden /> Anyone can book
+              </span>
+              <button type="button">Make it bookable</button>
+            </aside>
+          </div>
+          <footer>
+            <CheckCircle2 aria-hidden /> One audience rule follows discovery,
+            availability, pricing, checkout, and the reservation.
+          </footer>
+        </div>
+      );
+    }
     return (
-      <div className={styles.venueVisual} data-scene={sceneIndex}>
+      <div className={styles.venueNetworkVisual} data-scene={sceneIndex}>
         <header>
-          <span>South Bay Beach Club</span>
-          <strong>{venueScene.utilization}</strong>
+          <span>
+            <Globe2 aria-hidden /> Live across Duna
+          </span>
+          <b>Player-visible</b>
         </header>
-        <div className={styles.courtMap}>
-          {["Court 1", "Court 2", "Court 3", "Court 4"].map((court, index) => (
-            <article data-use={index} key={court}>
-              <span>{court}</span>
-              <small>{venueScene.courts[index]}</small>
+        <div className={styles.venueNetworkGrid}>
+          <section>
+            <small>DUNA PLAYER · DISCOVER</small>
+            <div className={styles.venueNetworkSearch}>
+              <span>
+                <small>WHERE</small>
+                <b>Manhattan Beach</b>
+              </span>
+              <span>
+                <small>WHEN</small>
+                <b>Today</b>
+              </span>
+              <span>
+                <small>WHAT</small>
+                <b>Court rentals</b>
+              </span>
+            </div>
+            <div className={styles.venueNetworkMap}>
+              <i />
+              <i />
+              <i />
+              <span>
+                <MapPinned aria-hidden /> 4 courts nearby
+              </span>
+            </div>
+            <article>
+              <Image
+                alt="South Bay Beach Club courts"
+                height={82}
+                src="/media/event-library/duna-event-court-rental.webp"
+                width={116}
+              />
+              <span>
+                <small>BOOK A COURT</small>
+                <strong>South Bay Beach Club</strong>
+                <b>From $48 · Open today</b>
+              </span>
             </article>
-          ))}
+          </section>
+          <aside>
+            <small>ONE PUBLISHED VENUE</small>
+            <h3>Findable wherever players search.</h3>
+            {[
+              "Nearby search",
+              "Duna map",
+              "Club storefront",
+              "Services + events",
+            ].map((label, index) => (
+              <span key={label}>
+                <i>{index + 1}</i>
+                <b>{label}</b>
+                <Check aria-hidden />
+              </span>
+            ))}
+          </aside>
         </div>
         <footer>
-          <MapPinned aria-hidden />
-          <span>{venueScene.footer}</span>
+          <Smartphone aria-hidden /> Players discover the place, understand the
+          setup, see eligible time, and book without leaving Duna.
         </footer>
       </div>
     );
