@@ -36,7 +36,22 @@ export interface WorkOSMobileOrganization {
   readonly role?: string;
 }
 
+export interface CreateWorkOSMobileOrganizationInput {
+  readonly name: string;
+  readonly plan: "coach" | "small-club" | "club";
+  readonly volleyballTypes: readonly ("beach" | "indoor")[];
+  readonly termsAccepted: boolean;
+}
+
+export interface CreateWorkOSMobileOrganizationResult {
+  readonly id: string;
+  readonly checkoutUrl?: string;
+}
+
 interface WorkOSMobileAuth {
+  readonly createOrganization: (
+    input: CreateWorkOSMobileOrganizationInput,
+  ) => Promise<CreateWorkOSMobileOrganizationResult>;
   readonly error?: string;
   readonly getToken: () => Promise<string | null>;
   readonly isLoaded: boolean;
@@ -46,6 +61,7 @@ interface WorkOSMobileAuth {
   readonly organizations: readonly WorkOSMobileOrganization[];
   readonly selectOrganization: (organizationId: string) => Promise<void>;
   readonly signIn: () => Promise<void>;
+  readonly signUp: () => Promise<void>;
   readonly signOut: () => Promise<void>;
 }
 
@@ -405,12 +421,61 @@ export function WorkOSMobileAuthProvider({
   }, [refreshSession]);
   const signIn = useCallback(async () => {
     setError(undefined);
-    if (!clientId || !request) {
+    if (!clientId || !request?.url) {
       setError("WorkOS is not configured for this build.");
       return;
     }
     await promptAsync();
   }, [clientId, promptAsync, request]);
+  const signUp = useCallback(async () => {
+    setError(undefined);
+    if (!clientId || !request?.url) {
+      setError("WorkOS is not configured for this build.");
+      return;
+    }
+    const url = new URL(request.url);
+    url.searchParams.set("screen_hint", "sign-up");
+    await promptAsync({ url: url.toString() });
+  }, [clientId, promptAsync, request]);
+  const createOrganization = useCallback(
+    async (
+      input: CreateWorkOSMobileOrganizationInput,
+    ): Promise<CreateWorkOSMobileOrganizationResult> => {
+      const current = sessionRef.current;
+      if (!current) throw new Error("Create your account before your club.");
+      setError(undefined);
+      const organizationResponse = await mobileAuthFetch(
+        `${baseUrl}/api/auth/mobile/organizations`,
+        {
+          body: JSON.stringify(input),
+          headers: {
+            authorization: `Bearer ${current.accessToken}`,
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const created =
+        await responseJson<CreateWorkOSMobileOrganizationResult>(
+          organizationResponse,
+        );
+      const refreshResponse = await mobileAuthFetch(
+        `${baseUrl}/api/auth/mobile/refresh`,
+        {
+          body: JSON.stringify({
+            organizationId: created.id,
+            refreshToken: current.refreshToken,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+      await commitSession(await responseJson<MobileSession>(refreshResponse));
+      await loadOrganizations(current.accessToken).catch(() => undefined);
+      return created;
+    },
+    [baseUrl, commitSession, loadOrganizations],
+  );
   const selectOrganization = useCallback(
     async (organizationId: string) => {
       const current = sessionRef.current;
@@ -459,6 +524,7 @@ export function WorkOSMobileAuthProvider({
 
   const value = useMemo<WorkOSMobileAuth>(
     () => ({
+      createOrganization,
       error,
       getToken,
       isLoaded,
@@ -468,10 +534,12 @@ export function WorkOSMobileAuthProvider({
       organizations,
       selectOrganization,
       signIn,
+      signUp,
       signOut,
     }),
     [
       error,
+      createOrganization,
       getToken,
       isLoaded,
       isSwitchingOrganization,
@@ -479,6 +547,7 @@ export function WorkOSMobileAuthProvider({
       selectOrganization,
       session,
       signIn,
+      signUp,
       signOut,
     ],
   );

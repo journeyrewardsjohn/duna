@@ -160,9 +160,7 @@ export function organizationPlanPriceId(
       : (process.env.STRIPE_HQ_FACILITY_ANNUAL_PRICE_ID ??
           process.env.STRIPE_CLUB_ANNUAL_PRICE_ID);
   }
-  return interval === "month"
-    ? process.env.STRIPE_HQ_NETWORK_MONTHLY_PRICE_ID
-    : process.env.STRIPE_HQ_NETWORK_ANNUAL_PRICE_ID;
+  return undefined;
 }
 
 export function isOrganizationPlanPriceConfigured(
@@ -172,17 +170,70 @@ export function isOrganizationPlanPriceConfigured(
   return Boolean(organizationPlanPriceId(plan, interval));
 }
 
+export type OrganizationVideoPriceKind =
+  "upload-pack" | "live-pack" | "upload-payg" | "live-payg";
+
+export function organizationVideoPriceId(
+  kind: OrganizationVideoPriceKind,
+  interval: OrganizationBillingInterval,
+): string | undefined {
+  if (kind === "upload-pack") {
+    return interval === "month"
+      ? process.env.STRIPE_HQ_UPLOAD_PACK_MONTHLY_PRICE_ID
+      : process.env.STRIPE_HQ_UPLOAD_PACK_ANNUAL_PRICE_ID;
+  }
+  if (kind === "live-pack") {
+    return interval === "month"
+      ? process.env.STRIPE_HQ_LIVE_PACK_MONTHLY_PRICE_ID
+      : process.env.STRIPE_HQ_LIVE_PACK_ANNUAL_PRICE_ID;
+  }
+  return kind === "upload-payg"
+    ? process.env.STRIPE_HQ_UPLOAD_PAYG_PRICE_ID
+    : process.env.STRIPE_HQ_LIVE_PAYG_PRICE_ID;
+}
+
+export function organizationVideoPriceKindForPriceId(
+  priceId: string,
+): OrganizationVideoPriceKind | undefined {
+  for (const kind of [
+    "upload-pack",
+    "live-pack",
+    "upload-payg",
+    "live-payg",
+  ] as const) {
+    for (const interval of ["month", "year"] as const) {
+      if (organizationVideoPriceId(kind, interval) === priceId) return kind;
+    }
+  }
+  return undefined;
+}
+
+export async function recordOrganizationVideoMeterEvent(input: {
+  readonly customerId: string;
+  readonly kind: "upload" | "live";
+  readonly overageSeconds: number;
+  readonly videoId: string;
+  readonly occurredAt: Date;
+}): Promise<void> {
+  if (input.overageSeconds <= 0) return;
+  await getStripeClient().billing.meterEvents.create({
+    event_name: `duna_hq_${input.kind}_overage_seconds`,
+    identifier: `duna-hq-${input.kind}-${input.videoId}`,
+    payload: {
+      stripe_customer_id: input.customerId,
+      value: String(input.overageSeconds),
+    },
+    timestamp: Math.floor(input.occurredAt.getTime() / 1_000),
+  });
+}
+
 export function organizationPlanForPriceId(priceId: string):
   | {
       readonly plan: PaidOrganizationPlanId;
       readonly interval: OrganizationBillingInterval;
     }
   | undefined {
-  const plans: readonly PaidOrganizationPlanId[] = [
-    "small-club",
-    "club",
-    "multi-venue",
-  ];
+  const plans: readonly PaidOrganizationPlanId[] = ["small-club", "club"];
   const intervals: readonly OrganizationBillingInterval[] = ["month", "year"];
   for (const plan of plans) {
     for (const interval of intervals) {
@@ -244,6 +295,9 @@ export async function createOrganizationPlanCheckout(input: {
   readonly email?: string;
   readonly plan: PaidOrganizationPlanId;
   readonly interval: OrganizationBillingInterval;
+  readonly uploadPackQuantity?: number;
+  readonly livePackQuantity?: number;
+  readonly payAsYouGo?: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
@@ -258,7 +312,29 @@ export async function createOrganizationPlanCheckout(input: {
     dunaOrganizationId: input.organizationId,
     dunaPlan: input.plan,
     product: "duna-hq",
+    dunaUploadPackQuantity: String(input.uploadPackQuantity ?? 0),
+    dunaLivePackQuantity: String(input.livePackQuantity ?? 0),
+    dunaVideoPayg: String(input.payAsYouGo ?? false),
   };
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+    { price: priceId, quantity: 1 },
+  ];
+  for (const [kind, quantity] of [
+    ["upload-pack", input.uploadPackQuantity ?? 0],
+    ["live-pack", input.livePackQuantity ?? 0],
+  ] as const) {
+    if (quantity <= 0) continue;
+    const addOnPriceId = organizationVideoPriceId(kind, input.interval);
+    if (!addOnPriceId) throw new Error(`${kind} price is not configured`);
+    lineItems.push({ price: addOnPriceId, quantity });
+  }
+  if (input.payAsYouGo) {
+    for (const kind of ["upload-payg", "live-payg"] as const) {
+      const paygPriceId = organizationVideoPriceId(kind, "month");
+      if (!paygPriceId) throw new Error(`${kind} price is not configured`);
+      lineItems.push({ price: paygPriceId });
+    }
+  }
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "subscription",
@@ -266,7 +342,7 @@ export async function createOrganizationPlanCheckout(input: {
         ? { customer: input.customerId }
         : { customer_email: input.email }),
       client_reference_id: input.organizationId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: lineItems,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       allow_promotion_codes: true,
@@ -275,7 +351,10 @@ export async function createOrganizationPlanCheckout(input: {
         enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
       },
       tax_id_collection: { enabled: true },
-      subscription_data: { metadata },
+      subscription_data: {
+        metadata,
+        billing_mode: { type: "flexible" },
+      },
       metadata,
     },
     { idempotencyKey: input.idempotencyKey },

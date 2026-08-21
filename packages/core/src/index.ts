@@ -13,6 +13,7 @@ export * from "./ledger";
 export * from "./membership-plans";
 export * from "./membership-subscription-policy";
 export * from "./organization-plans";
+export * from "./court-surfaces";
 export * from "./map-links";
 export * from "./player-url";
 export * from "./video-analysis";

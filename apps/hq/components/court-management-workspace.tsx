@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
-import { formatMoney } from "@duna/core";
+import { COURT_SURFACE_OPTIONS, formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -288,10 +288,11 @@ function CourtSpaceEditor({
           <label>
             <span>Surface</span>
             <select defaultValue={court.surface} name="surface">
-              <option value="sand">Sand</option>
-              <option value="indoor-sand">Indoor sand</option>
-              <option value="grass">Grass</option>
-              <option value="hardcourt">Hardcourt</option>
+              {COURT_SURFACE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>

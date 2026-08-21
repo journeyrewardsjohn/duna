@@ -56,13 +56,14 @@ export interface OrganizationSummary {
   readonly slug: string;
   readonly name: string;
   readonly legalName: string;
-  readonly plan: "coach" | "small-club" | "club" | "multi-venue";
+  readonly plan: "coach" | "small-club" | "club";
+  readonly volleyballTypes?: ("beach" | "indoor")[];
   readonly memberCount: number;
   readonly staffCount: number;
   readonly venueCount: number;
   readonly timezone: string;
   readonly stripeStatus: "connected" | "pending" | "restricted";
-  readonly effectivePlan?: "coach" | "small-club" | "club" | "multi-venue";
+  readonly effectivePlan?: "coach" | "small-club" | "club";
   readonly operatorCommissionBps?: number;
   readonly commissionSource?: "plan-default" | "admin-override";
   readonly stripeFeeMetadataStatus?:

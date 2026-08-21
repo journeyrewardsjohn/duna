@@ -1,7 +1,11 @@
 "use client";
 
 import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
-import { ORGANIZATION_PLAN_IDS, ORGANIZATION_PLANS } from "@duna/core";
+import {
+  ORGANIZATION_PLAN_IDS,
+  ORGANIZATION_PLANS,
+  ORGANIZATION_VIDEO_ADD_ONS,
+} from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowRight,
@@ -514,6 +518,25 @@ export function SettingsCenter({
                     </small>
                   </label>
                   <label className="operator-field--wide">
+                    <span>Volleyball operation</span>
+                    <select
+                      defaultValue={
+                        organization.volleyballTypes.length === 2
+                          ? "both"
+                          : organization.volleyballTypes[0]
+                      }
+                      name="volleyballType"
+                      required
+                    >
+                      <option value="beach">Beach volleyball</option>
+                      <option value="indoor">Indoor volleyball</option>
+                      <option value="both">Beach and indoor</option>
+                    </select>
+                    <small>
+                      Add the other discipline whenever your club expands.
+                    </small>
+                  </label>
+                  <label className="operator-field--wide">
                     <span>Primary time zone</span>
                     <select
                       defaultValue={organization.timezone}
@@ -619,6 +642,42 @@ export function SettingsCenter({
                         !organization.billingPortalAvailable && (
                           <form action={planAction}>
                             <input name="plan" type="hidden" value={planId} />
+                            <label className="organization-plan-settings__addon">
+                              <span>10 upload-hour packs</span>
+                              <input
+                                defaultValue="0"
+                                max="100"
+                                min="0"
+                                name="uploadPackQuantity"
+                                type="number"
+                              />
+                              <small>
+                                +$
+                                {ORGANIZATION_VIDEO_ADD_ONS.upload
+                                  .monthlyPriceMinor / 100}
+                                /mo each
+                              </small>
+                            </label>
+                            <label className="organization-plan-settings__addon">
+                              <span>2 live-hour packs</span>
+                              <input
+                                defaultValue="0"
+                                max="100"
+                                min="0"
+                                name="livePackQuantity"
+                                type="number"
+                              />
+                              <small>
+                                +$
+                                {ORGANIZATION_VIDEO_ADD_ONS.live
+                                  .monthlyPriceMinor / 100}
+                                /mo each
+                              </small>
+                            </label>
+                            <label className="organization-plan-settings__payg">
+                              <input name="payAsYouGo" type="checkbox" />
+                              Bill video overages as used
+                            </label>
                             <button
                               disabled={planPending}
                               name="interval"

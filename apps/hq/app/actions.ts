@@ -2,6 +2,7 @@
 
 import type { VenueLayoutAsset, VenueLayoutGeometry } from "@duna/api";
 import { venueWallTimeToUtc } from "@duna/api";
+import { COURT_SURFACE_IDS, type CourtSurface } from "@duna/core";
 import { normalizeClubColor } from "@duna/ui";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { headers } from "next/headers";
@@ -54,6 +55,14 @@ function field(formData: FormData, name: string): string {
 
 function optionalField(formData: FormData, name: string): string | undefined {
   return field(formData, name) || undefined;
+}
+
+function courtSurfaceField(formData: FormData): CourtSurface {
+  const value = field(formData, "surface");
+  if (!COURT_SURFACE_IDS.includes(value as CourtSurface)) {
+    throw new Error("Choose a valid court surface.");
+  }
+  return value as CourtSurface;
 }
 
 function numberField(formData: FormData, name: string): number {
@@ -720,10 +729,20 @@ export async function updateOrganizationProfileAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
+    const volleyballType = field(formData, "volleyballType");
+    if (!["beach", "indoor", "both"].includes(volleyballType)) {
+      throw new Error("Choose beach volleyball, indoor volleyball, or both.");
+    }
     const caller = await getServerCaller();
     await caller.operator.updateOrganizationProfile({
       name: field(formData, "name"),
       timezone: field(formData, "timezone"),
+      volleyballTypes:
+        volleyballType === "both"
+          ? ["beach", "indoor"]
+          : volleyballType === "indoor"
+            ? ["indoor"]
+            : ["beach"],
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
@@ -2091,7 +2110,7 @@ export async function createCourtFromVenueLayoutAction(
       assetId: field(formData, "assetId"),
       name: field(formData, "name"),
       identifierCode: optionalField(formData, "identifierCode"),
-      surface: field(formData, "surface"),
+      surface: courtSurfaceField(formData),
       capacity: numberField(formData, "capacity"),
       bookingPolicy,
       templateKey: field(formData, "templateKey"),
@@ -2306,7 +2325,7 @@ export async function createCourtAction(
     const created = await caller.operator.createCourt({
       venueId: field(formData, "venueId"),
       name: field(formData, "name"),
-      surface: field(formData, "surface"),
+      surface: courtSurfaceField(formData),
       imageUrl: optionalField(formData, "imageUrl"),
       lit: field(formData, "lit") === "true",
       capacity: numberField(formData, "capacity"),
@@ -2436,7 +2455,7 @@ export async function updateCourtBookingConfigurationAction(
       courtId: field(formData, "courtId"),
       ...(formData.has("name") ? { name: field(formData, "name") } : {}),
       ...(formData.has("surface")
-        ? { surface: field(formData, "surface") }
+        ? { surface: courtSurfaceField(formData) }
         : {}),
       imageUrl: optionalField(formData, "imageUrl"),
       ...(formData.has("litPresent")
@@ -2864,8 +2883,10 @@ export async function startOrganizationPlanCheckoutAction(
   void _previous;
   const plan = field(formData, "plan");
   const interval = field(formData, "interval");
+  const uploadPackQuantity = Number(field(formData, "uploadPackQuantity") || 0);
+  const livePackQuantity = Number(field(formData, "livePackQuantity") || 0);
   if (
-    !["small-club", "club", "multi-venue"].includes(plan) ||
+    !["small-club", "club"].includes(plan) ||
     !["month", "year"].includes(interval)
   ) {
     return result("error", "Choose a valid organization plan and interval.");
@@ -2874,8 +2895,11 @@ export async function startOrganizationPlanCheckoutAction(
     const caller = await getServerCaller();
     const origin = await hqOrigin();
     const checkout = await caller.operator.startPlanCheckout({
-      plan: plan as "small-club" | "club" | "multi-venue",
+      plan: plan as "small-club" | "club",
       interval: interval as "month" | "year",
+      uploadPackQuantity,
+      livePackQuantity,
+      payAsYouGo: formData.get("payAsYouGo") === "on",
       successUrl: `${origin}/settings?section=business&billing=success`,
       cancelUrl: `${origin}/settings?section=business&billing=cancelled`,
       idempotencyKey: crypto.randomUUID(),
