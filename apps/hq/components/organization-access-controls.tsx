@@ -52,8 +52,8 @@ export function OrganizationAccessControls({
           <h2>Add an existing user or create a secure invitation.</h2>
           <p>
             Existing Duna users are added immediately. Linked WorkOS users are
-            synchronized with the same role; new people receive a private claim
-            link.
+            given a synchronized organization membership while Duna keeps the
+            selected staff role; new people receive a private claim link.
           </p>
         </div>
         <UserPlus aria-hidden size={20} />
@@ -73,7 +73,7 @@ export function OrganizationAccessControls({
           <label>
             <span>Role</span>
             <select name="role" defaultValue="manager">
-              <option value="director">Director · owner access</option>
+              <option value="director">Director</option>
               <option value="manager">Manager</option>
               <option value="coach">Coach</option>
               <option value="front-desk">Front desk</option>
@@ -108,8 +108,9 @@ export function OrganizationAccessControls({
         <div className="organization-access-controls__note">
           <ShieldCheck aria-hidden size={17} />
           <p>
-            Director creates an active organization owner. It is intentionally
-            available only here, not in club team management.
+            Director adds organization leadership without creating another
+            Owner. Ownership stays with the original Director until they
+            transfer it to an active Director in HQ.
           </p>
         </div>
         {state.privateClaimLink && (

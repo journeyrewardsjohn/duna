@@ -1506,6 +1506,13 @@ export const organizationMemberships = pgTable(
       table.personId,
       table.role,
     ),
+    // Duna has exactly one active Owner per organization. Directors retain
+    // their day-to-day role in organizationStaffProfiles and a manager
+    // membership with director scopes; ownership moves only through the
+    // explicit transfer workflow.
+    uniqueIndex("organization_active_owner_unique")
+      .on(table.organizationId)
+      .where(sql`${table.role} = 'owner' AND ${table.active} = true`),
     index("org_membership_person_idx").on(table.personId),
   ],
 );
@@ -1645,10 +1652,6 @@ export const organizationStaffInvitations = pgTable(
     check(
       "organization_staff_invitation_status_valid",
       sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
-    ),
-    check(
-      "organization_staff_invitation_destination_present",
-      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL`,
     ),
   ],
 );

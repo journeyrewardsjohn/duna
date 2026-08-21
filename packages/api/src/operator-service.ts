@@ -483,10 +483,23 @@ function staffInvitationUrl(inviteToken: string): string {
   return canonicalPublicWebUrl(`/join/team/${encodeURIComponent(inviteToken)}`);
 }
 
-type OrganizationStaffRole =
+export type OrganizationStaffRole =
   "coach" | "director" | "manager" | "front-desk" | "accountant";
 
-function scopesForOrganizationStaffRole(role: OrganizationStaffRole): string[] {
+/**
+ * Director is a staff profile role, not a second organization owner. A
+ * Director receives the director scope set through a manager membership while
+ * the one Owner remains the only membership with the owner role.
+ */
+export function membershipRoleForOrganizationStaffRole(
+  role: OrganizationStaffRole,
+): Exclude<OrganizationStaffRole, "director"> {
+  return role === "director" ? "manager" : role;
+}
+
+export function scopesForOrganizationStaffRole(
+  role: OrganizationStaffRole,
+): string[] {
   switch (role) {
     case "director":
       return [
@@ -1116,6 +1129,10 @@ export function loadDemoOperatorWorkspace(
     invitations: [],
     staff: [],
     staffInvitations: [],
+    teamAccess: {
+      canInviteDirector: false,
+      canTransferOwnership: false,
+    },
     messageRecipients: [],
     messageDrafts: [],
     marketingFlows: [],
@@ -1212,6 +1229,7 @@ export function loadDemoOperatorWorkspace(
 
 export async function loadOperatorWorkspace(
   organizationId: string,
+  viewerPersonId?: string,
 ): Promise<OperatorWorkspace> {
   requireDatabase();
   const database = getDatabase();
@@ -1567,6 +1585,21 @@ export async function loadOperatorWorkspace(
       .orderBy(desc(communicationUsagePeriods.periodStart))
       .limit(1),
   ]);
+
+  const activeOwnerPersonIds = new Set(
+    (
+      await database
+        .select({ personId: organizationMemberships.personId })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.organizationId, organizationId),
+            eq(organizationMemberships.role, "owner"),
+            eq(organizationMemberships.active, true),
+          ),
+        )
+    ).map((row) => row.personId),
+  );
 
   const recipientMap = new Map(
     [
@@ -2173,6 +2206,7 @@ export async function loadOperatorWorkspace(
             ? row.profileVisibility
             : "private",
         role: role as OperatorWorkspace["staff"][number]["role"],
+        isOwner: activeOwnerPersonIds.has(row.profile.personId),
         workerClassification:
           row.profile.workerClassification === "w2-employee" ||
           row.profile.workerClassification === "1099-contractor"
@@ -2266,6 +2300,14 @@ export async function loadOperatorWorkspace(
       expiresAt: row.expiresAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
     })),
+    teamAccess: {
+      canInviteDirector: Boolean(
+        viewerPersonId && activeOwnerPersonIds.has(viewerPersonId),
+      ),
+      canTransferOwnership: Boolean(
+        viewerPersonId && activeOwnerPersonIds.has(viewerPersonId),
+      ),
+    },
     messageRecipients: [...recipientMap.values()]
       .sort((left, right) => left.displayName.localeCompare(right.displayName))
       .map((recipient) => ({
@@ -3017,7 +3059,7 @@ export async function createStaffInvitation(input: {
   readonly workerClassification: "1099-contractor" | "w2-employee";
   readonly preferredChannel?: "email" | "sms";
   readonly deliveryMode?: "send" | "link-only";
-  /** Only the Super Admin organization-access workflow may invite Directors. */
+  /** Internal Super Admin organization-access workflow bypasses tenant checks. */
   readonly allowDirector?: boolean;
   readonly confirmed: boolean;
   readonly requestId: string;
@@ -3032,12 +3074,6 @@ export async function createStaffInvitation(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
-  if (input.role === "director" && !input.allowDirector) {
-    throw new OperatorServiceError(
-      "FORBIDDEN",
-      "Director access is ownership-controlled and cannot be created from team management.",
-    );
-  }
   const database = getDatabase();
   const actorProfile = await database.query.organizationStaffProfiles.findFirst(
     {
@@ -3049,9 +3085,10 @@ export async function createStaffInvitation(input: {
       columns: { staffRole: true },
     },
   );
+  const actorIsOwner = input.actor.roles.includes("owner");
   const canInviteTeam =
     input.allowDirector ||
-    input.actor.roles.includes("owner") ||
+    actorIsOwner ||
     input.actor.roles.includes("manager") ||
     actorProfile?.staffRole === "director" ||
     actorProfile?.staffRole === "manager";
@@ -3059,6 +3096,12 @@ export async function createStaffInvitation(input: {
     throw new OperatorServiceError(
       "FORBIDDEN",
       "Only Directors and Managers can invite team members.",
+    );
+  }
+  if (input.role === "director" && !input.allowDirector && !actorIsOwner) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only the organization Owner can invite an additional Director.",
     );
   }
   const organization = await organizationRow(organizationId);
@@ -3336,7 +3379,7 @@ export async function claimStaffInvitation(input: {
       invitation.role === "accountant"
         ? invitation.role
         : "coach";
-    const membershipRole = staffRole === "director" ? "owner" : staffRole;
+    const membershipRole = membershipRoleForOrganizationStaffRole(staffRole);
     await transaction
       .insert(organizationMemberships)
       .values({
@@ -3352,7 +3395,11 @@ export async function claimStaffInvitation(input: {
           organizationMemberships.personId,
           organizationMemberships.role,
         ],
-        set: { active: true, updatedAt: input.now },
+        set: {
+          scopes: scopesForOrganizationStaffRole(staffRole),
+          active: true,
+          updatedAt: input.now,
+        },
       });
     await transaction
       .insert(organizationStaffProfiles)
@@ -3544,6 +3591,16 @@ export async function updateStaffProfile(input: {
       "This team member is not connected to the organization.",
     );
   }
+  const currentOwnerMembership =
+    await database.query.organizationMemberships.findFirst({
+      where: and(
+        eq(organizationMemberships.organizationId, organizationId),
+        eq(organizationMemberships.personId, input.personId),
+        eq(organizationMemberships.role, "owner"),
+        eq(organizationMemberships.active, true),
+      ),
+      columns: { id: true },
+    });
   const actorProfile = await database.query.organizationStaffProfiles.findFirst(
     {
       where: and(
@@ -3554,9 +3611,10 @@ export async function updateStaffProfile(input: {
       columns: { staffRole: true },
     },
   );
+  const actorIsOwner = input.actor.roles.includes("owner");
   const actorIsDirector =
-    input.actor.roles.includes("owner") ||
-    actorProfile?.staffRole === "director";
+    actorIsOwner || actorProfile?.staffRole === "director";
+  const actorManagingSelf = input.actor.personId === input.personId;
   const actorCanManageTeam =
     actorIsDirector ||
     input.actor.roles.includes("manager") ||
@@ -3567,26 +3625,44 @@ export async function updateStaffProfile(input: {
       "Only Directors and Managers can update team access.",
     );
   }
-  if (current.staffRole === "director" && !actorIsDirector) {
+  if (currentOwnerMembership && !actorIsOwner) {
     throw new OperatorServiceError(
       "FORBIDDEN",
-      "Only a Director can update another Director's access.",
+      "Only the organization Owner can update the Owner's team profile.",
     );
   }
-  if (input.role === "director" && current.staffRole !== "director") {
+  if (currentOwnerMembership && (input.role !== "director" || !input.active)) {
     throw new OperatorServiceError(
       "FORBIDDEN",
-      "Director access is ownership-controlled and cannot be created from team management.",
+      "Transfer ownership to another active Director before changing or deactivating the Owner.",
     );
   }
-  if (input.role === "director" && !actorIsDirector) {
+  if (current.staffRole === "director" && !actorIsOwner && !actorManagingSelf) {
     throw new OperatorServiceError(
       "FORBIDDEN",
-      "Only a Director can update Director access.",
+      "Only the organization Owner can update another Director's access.",
+    );
+  }
+  if (
+    (current.staffRole === "director" &&
+      (input.role !== "director" || input.active !== current.active)) ||
+    (current.staffRole !== "director" && input.role === "director")
+  ) {
+    if (!actorIsOwner) {
+      throw new OperatorServiceError(
+        "FORBIDDEN",
+        "Only the organization Owner can change Director access.",
+      );
+    }
+  }
+  if (input.role === "director" && !input.active && !actorIsOwner) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only the organization Owner can deactivate a Director.",
     );
   }
   const scopes = scopesForOrganizationStaffRole(input.role);
-  const membershipRole = input.role === "director" ? "owner" : input.role;
+  const membershipRole = membershipRoleForOrganizationStaffRole(input.role);
   const values = {
     staffRole: input.role,
     workerClassification: input.workerClassification,
@@ -3631,38 +3707,43 @@ export async function updateStaffProfile(input: {
       .update(people)
       .set({ displayName, updatedAt: input.now })
       .where(eq(people.id, input.personId));
-    await transaction
-      .update(organizationMemberships)
-      .set({ active: false, updatedAt: input.now })
-      .where(
-        and(
-          eq(organizationMemberships.organizationId, organizationId),
-          eq(organizationMemberships.personId, input.personId),
-          inArray(organizationMemberships.role, [
-            "coach",
-            "manager",
-            "front-desk",
-            "accountant",
-          ]),
-        ),
-      );
-    await transaction
-      .insert(organizationMemberships)
-      .values({
-        organizationId,
-        personId: input.personId,
-        role: membershipRole,
-        scopes,
-        active: input.active,
-      })
-      .onConflictDoUpdate({
-        target: [
-          organizationMemberships.organizationId,
-          organizationMemberships.personId,
-          organizationMemberships.role,
-        ],
-        set: { scopes, active: input.active, updatedAt: input.now },
-      });
+    // The active Owner membership is intentionally left untouched here. It is
+    // changed only by transferOrganizationOwnership, which moves it in one
+    // transaction and preserves an active Director for the former Owner.
+    if (!currentOwnerMembership) {
+      await transaction
+        .update(organizationMemberships)
+        .set({ active: false, updatedAt: input.now })
+        .where(
+          and(
+            eq(organizationMemberships.organizationId, organizationId),
+            eq(organizationMemberships.personId, input.personId),
+            inArray(organizationMemberships.role, [
+              "coach",
+              "manager",
+              "front-desk",
+              "accountant",
+            ]),
+          ),
+        );
+      await transaction
+        .insert(organizationMemberships)
+        .values({
+          organizationId,
+          personId: input.personId,
+          role: membershipRole,
+          scopes,
+          active: input.active,
+        })
+        .onConflictDoUpdate({
+          target: [
+            organizationMemberships.organizationId,
+            organizationMemberships.personId,
+            organizationMemberships.role,
+          ],
+          set: { scopes, active: input.active, updatedAt: input.now },
+        });
+    }
     await transaction
       .update(organizationStaffProfiles)
       .set(values)
@@ -3679,6 +3760,7 @@ export async function updateStaffProfile(input: {
         ...values,
         displayName,
         role: input.role,
+        membershipRole: currentOwnerMembership ? "owner" : membershipRole,
         scopes,
       }),
       reason:
@@ -3692,6 +3774,203 @@ export async function updateStaffProfile(input: {
     id: current.id,
     entity: "staff-profile",
     status: input.active ? "active" : "inactive",
+  };
+}
+
+export async function transferOrganizationOwnership(input: {
+  readonly actor: ApiActor;
+  readonly personId: string;
+  readonly confirmed: boolean;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Confirm the Director who will become the organization Owner.",
+    );
+  }
+  const organizationId = requireOrganization(input.actor);
+  if (input.personId === input.actor.personId) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Choose another active Director before transferring ownership.",
+    );
+  }
+
+  const database = getDatabase();
+  const [actorOwnerMembership, nextOwnerProfile] = await Promise.all([
+    database.query.organizationMemberships.findFirst({
+      where: and(
+        eq(organizationMemberships.organizationId, organizationId),
+        eq(organizationMemberships.personId, input.actor.personId),
+        eq(organizationMemberships.role, "owner"),
+        eq(organizationMemberships.active, true),
+      ),
+      columns: { id: true },
+    }),
+    database.query.organizationStaffProfiles.findFirst({
+      where: and(
+        eq(organizationStaffProfiles.organizationId, organizationId),
+        eq(organizationStaffProfiles.personId, input.personId),
+        eq(organizationStaffProfiles.staffRole, "director"),
+        eq(organizationStaffProfiles.active, true),
+      ),
+      columns: { id: true },
+    }),
+  ]);
+  if (!actorOwnerMembership || !input.actor.roles.includes("owner")) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only the active organization Owner can transfer ownership.",
+    );
+  }
+  if (!nextOwnerProfile) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Choose another active Director before transferring ownership.",
+    );
+  }
+
+  const directorScopes = scopesForOrganizationStaffRole("director");
+  const transactionDatabase = getTransactionalDatabase();
+  await transactionDatabase.transaction(async (transaction) => {
+    // Deactivate the current Owner first so the partial unique index never
+    // permits two active Owners, even during a concurrent transfer request.
+    await transaction
+      .update(organizationMemberships)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.actor.personId),
+          eq(organizationMemberships.role, "owner"),
+          eq(organizationMemberships.active, true),
+        ),
+      );
+
+    await transaction
+      .update(organizationMemberships)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.actor.personId),
+          inArray(organizationMemberships.role, [
+            "coach",
+            "manager",
+            "front-desk",
+            "accountant",
+            "scorekeeper",
+          ]),
+        ),
+      );
+    await transaction
+      .insert(organizationMemberships)
+      .values({
+        organizationId,
+        personId: input.actor.personId,
+        role: "manager",
+        scopes: directorScopes,
+        active: true,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationMemberships.organizationId,
+          organizationMemberships.personId,
+          organizationMemberships.role,
+        ],
+        set: {
+          scopes: directorScopes,
+          active: true,
+          updatedAt: input.now,
+        },
+      });
+
+    await transaction
+      .update(organizationMemberships)
+      .set({ active: false, updatedAt: input.now })
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.personId, input.personId),
+          inArray(organizationMemberships.role, [
+            "coach",
+            "manager",
+            "front-desk",
+            "accountant",
+            "scorekeeper",
+          ]),
+        ),
+      );
+    await transaction
+      .insert(organizationMemberships)
+      .values({
+        organizationId,
+        personId: input.personId,
+        role: "owner",
+        scopes: [],
+        active: true,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationMemberships.organizationId,
+          organizationMemberships.personId,
+          organizationMemberships.role,
+        ],
+        set: { scopes: [], active: true, updatedAt: input.now },
+      });
+
+    // The former Owner remains a Director; the target was already validated
+    // as an active Director above.
+    await transaction
+      .insert(organizationStaffProfiles)
+      .values({
+        organizationId,
+        personId: input.actor.personId,
+        staffRole: "director",
+        active: true,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationStaffProfiles.organizationId,
+          organizationStaffProfiles.personId,
+        ],
+        set: { staffRole: "director", active: true, updatedAt: input.now },
+      });
+    await transaction
+      .update(organizationStaffProfiles)
+      .set({ staffRole: "director", active: true, updatedAt: input.now })
+      .where(eq(organizationStaffProfiles.id, nextOwnerProfile.id));
+
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "organization.ownership.transferred",
+      entityType: "organization-membership",
+      entityId: input.personId,
+      afterHash: stableHash({
+        formerOwnerPersonId: input.actor.personId,
+        ownerPersonId: input.personId,
+      }),
+      reason:
+        "Organization Owner transferred ownership to an active Director. The former Owner remains an active Director.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+
+  return {
+    id: nextOwnerProfile.id,
+    entity: "staff-profile",
+    status: "ownership-transferred",
   };
 }
 

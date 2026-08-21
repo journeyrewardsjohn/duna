@@ -126,12 +126,13 @@ before execution, and every Admin procedure checks the persisted platform role.
 Role groups:
 
 - Player and guardian roles receive player/profile/booking/wallet/social scopes.
-- Director ownership is represented by the organization-owner role; manager,
-  coach, front-desk, scorekeeper, and accountant roles receive only their
-  operator scopes. Directors alone receive financial-configuration access;
-  payment collection is a separate, narrower capability for coaches and
-  front-desk staff. Organization ownership is broad only within its own
-  organization, never the platform.
+- Each organization has one active Owner, represented by the organization
+  `owner` role. Directors are staff-profile roles with an active manager
+  membership plus Director scopes; they do not create additional Owners.
+  Ownership transfers explicitly from the current Owner to an active Director.
+  Directors receive financial-configuration access; payment collection is a
+  separate, narrower capability for coaches and front-desk staff. Organization
+  ownership is broad only within its own organization, never the platform.
 - Admin and Super Admin are platform roles, separate from organization roles.
 - Demo actors exist only for explicit unconnected development/test behavior.
 
