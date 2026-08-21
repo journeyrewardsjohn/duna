@@ -256,6 +256,12 @@ import {
   updatePickup,
 } from "./pickup-service";
 import {
+  createPromoCode,
+  deactivatePromoCode,
+  duplicatePromoCode,
+  loadPromoCodeWorkspace,
+} from "./promo-codes";
+import {
   createPlayerEventNote,
   loadPlayerEventNotes,
 } from "./player-event-notes-service";
@@ -4379,6 +4385,7 @@ const playerRouter = router({
         paymentMethod: z.enum(["card", "credit", "cash"]),
         paymentOption: z.enum(["upfront", "installments"]).optional(),
         paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
+        promoCode: z.string().trim().min(3).max(48).optional(),
         quantity: z.number().int().min(1).max(50),
         catalogSessionOccurrenceId: z.string().uuid().optional(),
         recordingConsentAccepted: z.boolean().optional(),
@@ -7340,6 +7347,138 @@ const operatorRouter = router({
             ctx.actor!.personId,
           ),
     ),
+  promoCodeWorkspace: organizationProcedure("payments:read").query(({ ctx }) =>
+    loadPromoCodeWorkspace({ actor: ctx.actor!, now: ctx.now }),
+  ),
+  createPromoCode: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        code: z.string().trim().min(3).max(48),
+        discountType: z.enum(["percent", "amount"]),
+        discountValue: z.number().int().positive().max(100_000_000),
+        currency: z.string().trim().length(3),
+        minimumPurchaseMinor: z.number().int().positive().optional(),
+        maximumDiscountMinor: z.number().int().positive().optional(),
+        redemptionCap: z.number().int().positive().optional(),
+        perPersonLimit: z.number().int().positive().optional(),
+        startsAt: z.iso.datetime().optional(),
+        endsAt: z.iso.datetime().optional(),
+        appliesToAllPlans: z.boolean(),
+        appliesToAllProducts: z.boolean(),
+        appliesToAllServices: z.boolean(),
+        catalogItemIds: z.array(z.string().uuid()).max(500),
+        memberPersonIds: z.array(z.string().uuid()).max(5_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string(),
+        stripeSyncStatus: z.enum([
+          "pending",
+          "synced",
+          "failed",
+          "not-applicable",
+        ]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createPromoCode",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createPromoCode({
+              actor: ctx.actor!,
+              promotion: {
+                ...input,
+                startsAt: input.startsAt ? new Date(input.startsAt) : undefined,
+                endsAt: input.endsAt ? new Date(input.endsAt) : undefined,
+              },
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  deactivatePromoCode: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        promoCodeId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ id: z.string().uuid(), active: z.literal(false) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.deactivatePromoCode",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await deactivatePromoCode({
+              actor: ctx.actor!,
+              promoCodeId: input.promoCodeId,
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  duplicatePromoCode: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        promoCodeId: z.string().uuid(),
+        code: z.string().trim().min(3).max(48),
+        name: z.string().trim().min(1).max(120).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string(),
+        stripeSyncStatus: z.enum([
+          "pending",
+          "synced",
+          "failed",
+          "not-applicable",
+        ]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.duplicatePromoCode",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await duplicatePromoCode({
+              actor: ctx.actor!,
+              promoCodeId: input.promoCodeId,
+              code: input.code,
+              name: input.name,
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   moneyWorkspace: organizationProcedure("payments:read")
     .output(organizationMoneyWorkspaceSchema)
     .query(({ ctx }) =>
@@ -9114,6 +9253,26 @@ const operatorRouter = router({
         allowCredits: z.boolean(),
         membershipRequired: z.boolean(),
         priceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        memberPriceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        nonMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
+        annualPriceMinor: z.number().int().min(0).max(100_000_000).optional(),
+        annualMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
+        annualNonMemberPriceMinor: z
+          .number()
+          .int()
+          .min(0)
+          .max(100_000_000)
+          .optional(),
         creditCost: z.number().int().positive().max(100_000).optional(),
         recurringInterval: z.enum(["week", "month", "year"]).optional(),
         recurringIntervalCount: z.number().int().min(1).max(52).optional(),

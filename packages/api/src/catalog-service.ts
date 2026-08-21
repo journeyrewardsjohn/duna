@@ -4152,6 +4152,21 @@ export async function replaceCatalogItem(
     throw new Error("Add a positive credit cost when credits are enabled.");
   }
 
+  const hasAnnualCheckoutOption =
+    input.annualPriceMinor !== undefined ||
+    input.annualMemberPriceMinor !== undefined ||
+    input.annualNonMemberPriceMinor !== undefined;
+  if (
+    hasAnnualCheckoutOption &&
+    (input.type !== "plan" ||
+      input.subtype !== "membership" ||
+      input.recurringInterval !== "month")
+  ) {
+    throw new Error(
+      "An annual prepay option requires a monthly membership base price.",
+    );
+  }
+
   const coordinates = variantMatrix(input.options);
   const existingByCoordinate = new Map(
     existingVariants.map((variant) => [
@@ -4198,9 +4213,31 @@ export async function replaceCatalogItem(
         recurringInterval: input.recurringInterval,
         recurringIntervalCount: input.recurringIntervalCount,
       }));
+    const annualMoney = hasAnnualCheckoutOption
+      ? (
+          [
+            input.allowCard ? "card" : undefined,
+            input.allowCash ? "cash" : undefined,
+          ] as const
+        )
+          .filter((kind): kind is "card" | "cash" => Boolean(kind))
+          .map((paymentKind) => ({
+            id: crypto.randomUUID(),
+            organizationId,
+            catalogItemId: item.id,
+            catalogVariantId: variant.id,
+            audience: "everyone" as const,
+            paymentKind,
+            amountMinor: input.annualPriceMinor ?? 0,
+            currency: organization.currency,
+            recurringInterval: "year" as const,
+            recurringIntervalCount: 1,
+          }))
+      : [];
     return input.allowCredits && input.creditCost
       ? [
           ...money,
+          ...annualMoney,
           {
             id: crypto.randomUUID(),
             organizationId,
@@ -4211,7 +4248,7 @@ export async function replaceCatalogItem(
             creditAmount: input.creditCost,
           },
         ]
-      : money;
+      : [...money, ...annualMoney];
   });
   const optionRows = input.options.map((option, sortOrder) => ({
     id: crypto.randomUUID(),
@@ -4953,6 +4990,18 @@ async function ensureCatalogStripeResources(input: {
     taxable: input.item.taxable,
     explicitTaxCode: input.item.stripeTaxCode ?? undefined,
   });
+  const membershipConfiguration =
+    input.item.configuration.membership &&
+    typeof input.item.configuration.membership === "object" &&
+    !Array.isArray(input.item.configuration.membership)
+      ? (input.item.configuration.membership as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const annualDiscountPercent =
+    typeof membershipConfiguration?.annualDiscountPercent === "number"
+      ? membershipConfiguration.annualDiscountPercent
+      : 0;
   if (input.item.stripeTaxCode !== stripeTaxCode) {
     await database
       .update(catalogItems)
@@ -4979,6 +5028,9 @@ async function ensureCatalogStripeResources(input: {
             dunaOrganizationId: input.organizationId,
             dunaCatalogItemId: input.item.id,
             dunaCatalogVariantId: variant.id,
+            dunaAnnualPrepayEnabled:
+              annualDiscountPercent > 0 ? "true" : "false",
+            dunaAnnualPrepayDiscountPercent: String(annualDiscountPercent),
           },
         },
         {
@@ -4993,6 +5045,13 @@ async function ensureCatalogStripeResources(input: {
     } else {
       await stripe.products.update(stripeProductId, {
         tax_code: stripeTaxCode,
+        metadata: {
+          dunaOrganizationId: input.organizationId,
+          dunaCatalogItemId: input.item.id,
+          dunaCatalogVariantId: variant.id,
+          dunaAnnualPrepayEnabled: annualDiscountPercent > 0 ? "true" : "false",
+          dunaAnnualPrepayDiscountPercent: String(annualDiscountPercent),
+        },
       });
     }
     for (const price of variantPrices) {
@@ -5032,6 +5091,13 @@ async function ensureCatalogStripeResources(input: {
             dunaCatalogVariantId: variant.id,
             dunaCatalogPriceId: price.id,
             dunaAudience: price.audience,
+            dunaBillingChoice:
+              recurring?.interval === "year"
+                ? "annual-prepay"
+                : recurring?.interval === "month"
+                  ? "monthly"
+                  : "one-time",
+            dunaAnnualPrepayDiscountPercent: String(annualDiscountPercent),
           },
         },
         {

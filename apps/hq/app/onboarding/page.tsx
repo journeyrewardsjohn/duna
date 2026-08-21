@@ -36,6 +36,7 @@ async function createWorkspace(formData: FormData) {
     .slice(0, 100);
   if (name.length < 2) redirect("/onboarding?error=name");
   const plan = String(formData.get("plan") ?? "coach") as HqPlan;
+  const interval = formData.get("interval") === "year" ? "year" : "month";
   if (!planIds.has(plan)) redirect("/onboarding?error=plan");
   const volleyballType = String(formData.get("volleyballType") ?? "");
   if (!["beach", "indoor", "both"].includes(volleyballType)) {
@@ -79,7 +80,7 @@ async function createWorkspace(formData: FormData) {
     returnTo:
       plan === "coach"
         ? "/"
-        : `/onboarding/complete?plan=${plan}&checkoutId=${crypto.randomUUID()}`,
+        : `/onboarding/complete?plan=${plan}&interval=${interval}&checkoutId=${crypto.randomUUID()}`,
   });
 }
 
@@ -108,6 +109,7 @@ export default async function OrganizationOnboardingPage({
     mode?: string;
     plan?: string;
     source?: string;
+    interval?: string;
   }>;
 }) {
   const query = await searchParams;
@@ -197,6 +199,11 @@ export default async function OrganizationOnboardingPage({
               </div>
             )}
             <form action={createWorkspace} className="workspace-create-form">
+              <input
+                name="interval"
+                type="hidden"
+                value={query.interval === "year" ? "year" : "month"}
+              />
               <div className="workspace-create-form__heading">
                 <span>
                   <Layers3 aria-hidden size={20} />

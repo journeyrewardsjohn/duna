@@ -848,6 +848,8 @@ export async function createCatalogCheckoutSession(input: {
   readonly cancelUrl: string;
   readonly expiresAt: Date;
   readonly idempotencyKey: string;
+  readonly discountCouponId?: string;
+  readonly promoCode?: string;
   readonly installmentPlan?: {
     readonly count: number;
     readonly installmentAmountMinor: number;
@@ -901,6 +903,7 @@ export async function createCatalogCheckoutSession(input: {
       input.organizationCommissionRateBps,
     ),
     dunaApplicationFeeMinor: String(input.applicationFeeMinor),
+    ...(input.promoCode ? { dunaPromoCode: input.promoCode } : {}),
     ...(input.installmentPlan
       ? {
           dunaPaymentOption: "installments",
@@ -973,6 +976,9 @@ export async function createCatalogCheckoutSession(input: {
       client_reference_id: input.personId,
       customer_email: input.customerEmail,
       line_items: lineItems,
+      discounts: input.discountCouponId
+        ? [{ coupon: input.discountCouponId }]
+        : undefined,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
