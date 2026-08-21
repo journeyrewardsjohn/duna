@@ -6,7 +6,7 @@ import {
 } from "./scraper-controls";
 import { SandDataUpstreamError } from "./types";
 
-type ScrapeEngine = "firecrawl" | "native";
+export type ScrapeEngine = "firecrawl" | "native";
 
 const nextRequestAt = new Map<ManagedScraperSource, number>();
 const requestTimes = new Map<ManagedScraperSource, number[]>();
@@ -24,6 +24,7 @@ export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
   if (source === "avp-league") return "firecrawl";
   if (
     source === "avp-tournaments" ||
+    source === "bvbinfo" ||
     source === "fivb-12ndr" ||
     source === "volleyball-life" ||
     source === "volleyball-world" ||
@@ -34,13 +35,12 @@ export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
   return firecrawlKey() ? "firecrawl" : "native";
 }
 
-function resolveScrapeEngine(
+export function resolvedScrapeEngine(
   source: ManagedScraperSource,
   control: ScraperControl,
 ): ScrapeEngine {
   if (
     source === "avp-tournaments" ||
-    source === "fivb-12ndr" ||
     source === "volleyball-life" ||
     source === "volleyball-world"
   ) {
@@ -136,7 +136,10 @@ function firecrawlFormats(
     "html",
     "rawHtml",
     ...(control.firecrawlChangeTracking
-      ? [{ type: "changeTracking" as const, modes: ["git-diff" as const] }]
+      ? [
+          "markdown" as const,
+          { type: "changeTracking" as const, modes: ["git-diff" as const] },
+        ]
       : []),
   ];
 }
@@ -171,18 +174,10 @@ async function scrapeJsonThroughFirecrawl<T>(
   timeoutMs: number | undefined,
 ): Promise<T> {
   const document = await withRetry(source, control, () =>
-    firecrawlClient(source).scrape(url, {
-      formats: firecrawlFormats(control),
-      onlyMainContent: false,
-      timeout: timeoutMs ?? 60_000,
-      blockAds: true,
-      ...(control.firecrawlCacheTtlSeconds !== undefined
-        ? {
-            maxAge: control.firecrawlCacheTtlSeconds * 1_000,
-            storeInCache: true,
-          }
-        : {}),
-    }),
+    firecrawlClient(source).scrape(
+      url,
+      firecrawlScrapeOptions(control, { timeoutMs }),
+    ),
   );
   return parseFirecrawlJsonDocument<T>(document.rawHtml ?? document.html ?? "");
 }
@@ -194,34 +189,59 @@ const nativeHeaders = {
     "Mozilla/5.0 (compatible; DunaSandData/1.0; +https://duna.sport)",
 };
 
+export interface HtmlScrapeOptions {
+  readonly waitForMs?: number;
+  readonly waitForSelector?: string;
+  readonly timeoutMs?: number;
+  readonly proxy?: ScrapeOptions["proxy"];
+}
+
+export function firecrawlScrapeOptions(
+  control: ScraperControl,
+  options: HtmlScrapeOptions = {},
+): ScrapeOptions {
+  return {
+    formats: firecrawlFormats(control),
+    // Parsers consume navigation, table headings, and repeated result rows,
+    // so main-content heuristics must not discard surrounding structure.
+    onlyMainContent: false,
+    timeout: options.timeoutMs ?? 60_000,
+    proxy: options.proxy ?? "auto",
+    blockAds: true,
+    removeBase64Images: true,
+    location: { country: "US", languages: ["en-US"] },
+    ...(options.waitForSelector
+      ? {
+          actions: [
+            { type: "wait" as const, selector: options.waitForSelector },
+          ],
+        }
+      : options.waitForMs !== undefined
+        ? { waitFor: options.waitForMs }
+        : {}),
+    ...(control.firecrawlCacheTtlSeconds !== undefined
+      ? {
+          maxAge: control.firecrawlCacheTtlSeconds * 1_000,
+          storeInCache: true,
+        }
+      : {}),
+  };
+}
+
 export async function scrapeHtml(
   source: ManagedScraperSource,
   url: string,
-  options: {
-    readonly waitForMs?: number;
-    readonly timeoutMs?: number;
-    readonly proxy?: ScrapeOptions["proxy"];
-  } = {},
+  options: HtmlScrapeOptions = {},
 ): Promise<{ readonly html: string; readonly engine: ScrapeEngine }> {
   const control = await assertScraperEnabled(source);
-  const engine = resolveScrapeEngine(source, control);
+  const engine = resolvedScrapeEngine(source, control);
   try {
     if (engine === "firecrawl") {
       const document = await withRetry(source, control, () =>
-        firecrawlClient(source).scrape(url, {
-          formats: firecrawlFormats(control),
-          onlyMainContent: false,
-          waitFor: options.waitForMs,
-          timeout: options.timeoutMs ?? 60_000,
-          proxy: options.proxy,
-          blockAds: true,
-          ...(control.firecrawlCacheTtlSeconds !== undefined
-            ? {
-                maxAge: control.firecrawlCacheTtlSeconds * 1_000,
-                storeInCache: true,
-              }
-            : {}),
-        }),
+        firecrawlClient(source).scrape(
+          url,
+          firecrawlScrapeOptions(control, options),
+        ),
       );
       const html =
         source === "avp-league"
