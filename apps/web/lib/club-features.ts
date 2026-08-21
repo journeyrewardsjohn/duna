@@ -1281,86 +1281,86 @@ export const clubFeatures: readonly ClubFeaturePageData[] = [
   }),
   feature({
     key: "duna-pro-watch",
-    navLabel: "Duna Pro Watch",
-    navDescription: "Courtside tags, drill timers, scoring, and coach cues",
+    navLabel: "Duna for Apple Watch",
+    navDescription:
+      "Score, check the court, and save review cues from your wrist",
     category: "Grow with control",
-    eyebrow: "Duna Pro on Apple Watch",
-    title: "Coach the point in front of you.",
+    eyebrow: "Duna for Apple Watch",
+    title: "Your match. On your wrist.",
     summary:
-      "A courtside Watch direction for tagging coaching moments, running drill intervals, tracking side scores, and carrying the next review cue back to Duna Pro and Duna Vision.",
+      "Score with simple gestures, confirm the court is in frame, save the moment, and carry a source-linked review cue back to the paired iPhone and Duna Vision.",
     image: "/media/brand/duna-pro-hero-v3.webp",
     imageAlt: "A coach using Duna Pro beside a volleyball court",
     accent: "signal",
     visual: "watch",
-    problemTitle:
-      "The best coaching note often arrives before your phone is unlocked.",
+    problemTitle: "The point keeps moving while your phone stays in your bag.",
     problem:
-      "During a drill or live rally, a coach needs one fast action. Opening a phone, finding the session, and typing a note breaks attention and usually loses the exact moment.",
+      "Keeping score, checking capture, and remembering the rally to review should not pull a coach or player away from the court. A phone-first workflow loses attention and often loses the exact moment too.",
     problemSignals: [
+      "Scorekeeping competes with watching the match",
+      "Capture quality is discovered too late",
       "Review moments rely on memory",
-      "Drill timing interrupts observation",
-      "Practice scores never reach the session record",
     ],
-    solutionTitle: "Use the wrist as a small, source-linked control surface.",
+    solutionTitle: "Make the wrist the match’s fastest control surface.",
     solution:
-      "The Duna Pro Watch direction extends Duna’s existing Watch scoring and Duna Vision event foundation toward coach-specific tags, interval timers, side scoring, and haptic cues designed for one-handed courtside use.",
+      "Duna for Apple Watch brings the configured match, gesture scoring, one-tap undo, Live Check-In, and Duna Vision review cues into a focused interface designed for use between rallies.",
     outcomes: [
-      { value: "1 tap", label: "coaching cue" },
-      { value: "Haptic", label: "drill interval feedback" },
-      { value: "Source", label: "linked to session video" },
+      { value: "↑ / ↓", label: "gesture scoring" },
+      { value: "94/100", label: "live court check" },
+      { value: "Source", label: "linked review cue" },
     ],
     capabilities: [
       {
-        title: "Coaching tags",
+        title: "Gesture scorekeeping",
         description:
-          "Flag a rally, skill, decision, or player moment without leaving the court.",
+          "Swipe up for Side A or down for Side B with the score always readable at a glance.",
       },
       {
-        title: "Drill timers",
+        title: "Match rules that travel",
         description:
-          "Run work, rest, rotation, and round intervals with clear haptic transitions.",
+          "The configured set and match context arrive with the paired session.",
       },
       {
-        title: "Side scoring",
+        title: "Fast undo",
         description:
-          "Track simple competitive drill scores with large targets and fast undo.",
+          "Correct the last point from the same screen without breaking the match rhythm.",
       },
       {
-        title: "Duna Vision cues",
+        title: "Live Check-In",
         description:
-          "Attach a Watch event to the recording-relative timeline for later coach review.",
+          "Confirm the court is visible and calibrated before the important rally happens.",
       },
       {
-        title: "Session handoff",
+        title: "Duna Vision moments",
         description:
-          "Carry the timer, score, tag, and note prompt back into Duna Pro after the drill.",
+          "Save a moment with its score and recording-relative time attached for review.",
       },
       {
-        title: "Offline-first intent",
+        title: "Paired iPhone handoff",
         description:
-          "Queue courtside actions locally and reconcile them after the paired phone acknowledges receipt.",
+          "Open a flagged point on the paired phone with the review context already in place.",
       },
     ],
     journey: [
       {
-        title: "Choose the drill",
+        title: "Start the match",
         description:
-          "Start the session context from Duna Pro so the Watch opens on the right control.",
+          "Pair the session once and let the match rules, sides, set, and Duna Vision state arrive on the Watch.",
       },
       {
-        title: "Stay on the court",
+        title: "Keep your eyes up",
         description:
-          "Tag, time, score, and undo with large gestures and haptic confirmation.",
+          "Score with up and down gestures, undo quickly, and check that the court remains in frame.",
       },
       {
-        title: "Review after the whistle",
+        title: "Return to the exact point",
         description:
-          "The session record opens with source-linked cues waiting for a coach’s note or clip.",
+          "Flag the moment, preserve the score and time, then open the source-linked cue on the paired iPhone.",
       },
     ],
     related: ["coach-video", "training", "team-management", "people"],
     statusNote:
-      "Duna Pro Watch is a product direction built on the current Duna Player Apple Watch scoring and Duna Vision timeline foundation. Coach-specific controls remain subject to native build and paired-device validation before release.",
+      "This page reflects the current Duna Apple Watch scorekeeping, Live Check-In, and Duna Vision review workflow. See the dedicated Watch page for the complete product story.",
   }),
 ] as const;
 

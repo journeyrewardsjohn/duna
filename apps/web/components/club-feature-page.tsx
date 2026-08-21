@@ -1,5 +1,6 @@
 "use client";
 
+import { DunaMark } from "@duna/ui";
 import {
   ArrowRight,
   BellRing,
@@ -20,6 +21,7 @@ import {
   MessageCircleMore,
   PackageOpen,
   Radio,
+  Search,
   ShieldCheck,
   ShoppingBag,
   Smartphone,
@@ -45,6 +47,7 @@ import {
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
+import { DunaWatchDevice } from "./duna-watch-device";
 import styles from "./club-feature-page.module.css";
 
 const iconByKey: Readonly<Record<string, LucideIcon>> = {
@@ -143,45 +146,65 @@ function ProductBuilderVisual({
   const isPlan = kind === "plans";
   const isInventory = kind === "inventory";
   const sceneIndex = featureSceneIndex(scene);
-  const productTitles = isService
-    ? ["First-ball assessment", "Tuesday private lesson", "Player follow-up"]
+  const productType = isService ? "Service" : isPlan ? "Plan" : "Physical good";
+  const productKicker = isService
+    ? "Book time"
     : isPlan
-      ? ["Season training pass", "Member access rules", "8 credits available"]
-      : ["Complete club offer", "Customer-facing story", "Fulfillment ready"];
-  const productChoices = isService
+      ? "Grow loyalty"
+      : "Sell or track";
+  const stepNames = isService
+    ? ["Shape", "Story", "Booking", "Price", "Review"]
+    : isPlan
+      ? ["Plan type", "Value", "Structure", "Price", "Review"]
+      : ["Purpose", "Variants", "Story + media", "Stock + price", "Review"];
+  const selectedStep = [0, 2, 4][sceneIndex] ?? 0;
+  const stageTitles = isService
     ? [
-        ["Outcome", "Coach", "Schedule"],
-        ["Availability", "Court", "Intake"],
-        ["Check-in", "Notes", "Next step"],
+        "What kind of service is this?",
+        "How can players book it?",
+        "Ready to review?",
       ]
     : isPlan
       ? [
-          ["Access", "Credits", "Billing"],
+          "What kind of plan is this?",
+          "How does access work?",
+          "Ready to review?",
+        ]
+      : [
+          "What will this product do?",
+          "Tell the product story",
+          "Ready to review?",
+        ];
+  const choiceSets = isService
+    ? [
+        ["Private lesson", "Assessment", "Program"],
+        ["Coach + court", "Availability", "Intake"],
+        ["Offer", "Booking", "Price"],
+      ]
+    : isPlan
+      ? [
+          ["Membership", "Credit pack", "Bundle"],
           ["Benefits", "Priority", "Eligibility"],
-          ["Balance", "Renewal", "History"],
+          ["Value", "Structure", "Price"],
         ]
       : [
-          ["Story", "Pricing", "Delivery"],
-          ["Outcomes", "Media", "Proof"],
-          ["Order", "Inventory", "Access"],
+          ["Sell online", "Track equipment", "Both"],
+          ["Media", "Proof", "Variants"],
+          ["Story", "Stock", "Price"],
         ];
-  const productDetails = isService
+  const previewTitles = isService
     ? [
-        "See how a player moves, then leave with the next three priorities.",
-        "Jordan is available, Court 2 is attached, and intake is complete.",
-        "Check-in, private notes, and the next recommendation share the booking.",
+        "First-ball assessment",
+        "Tuesday private lesson",
+        "First-ball assessment",
       ]
     : isPlan
       ? [
-          "Eight sessions, member booking access, and one assessment.",
-          "Member pricing and priority windows now follow the player.",
-          "Every redemption, grant, renewal, and adjustment stays visible.",
+          "Season training pass",
+          "8-session credit pack",
+          "Season training pass",
         ]
-      : [
-          "Build the value, rules, price, and customer experience together.",
-          "Outcomes, media, proof, and clear terms appear before checkout.",
-          "The purchase now knows what should be booked, granted, or moved.",
-        ];
+      : ["Tournament match ball", "Club training kit", "Tournament match ball"];
   const inventoryScenes = [
     {
       title: "Match balls · 24",
@@ -223,7 +246,7 @@ function ProductBuilderVisual({
     >
       <header>
         <span>
-          <Sparkles aria-hidden size={15} /> Duna HQ
+          <Sparkles aria-hidden size={15} /> Products · Offer studio
         </span>
         <small>
           {isService
@@ -254,53 +277,80 @@ function ProductBuilderVisual({
           ))}
         </div>
       ) : (
-        <>
-          <div className={styles.builderProgress} aria-label="Builder progress">
-            <i /> <i /> <i /> <i />
-          </div>
-          <div className={styles.builderColumns}>
-            <section>
-              <small>What are you crafting?</small>
-              <h3>{productTitles[sceneIndex]}</h3>
-              <div className={styles.builderChoiceRow}>
-                {productChoices[sceneIndex]!.map((label, index) => (
-                  <span data-active={index === 0} key={label}>
-                    {label}
-                  </span>
-                ))}
-              </div>
-              <p>{productDetails[sceneIndex]}</p>
-            </section>
-            <aside>
-              <small>
-                {sceneIndex === 0
-                  ? "Customer preview"
-                  : sceneIndex === 1
-                    ? "Connected state"
-                    : "Ready for the day"}
-              </small>
+        <div className={styles.builderWorkspace}>
+          <aside className={styles.builderGuide}>
+            <small>Your setup map</small>
+            <strong>Step {selectedStep + 1} of 5</strong>
+            <div aria-label="Offer setup steps">
+              {stepNames.map((label, index) => (
+                <span
+                  data-active={index === selectedStep}
+                  data-complete={index < selectedStep}
+                  key={label}
+                >
+                  <i>
+                    {index < selectedStep ? <Check aria-hidden /> : index + 1}
+                  </i>
+                  {label}
+                </span>
+              ))}
+            </div>
+            <p>
+              <Sparkles aria-hidden />{" "}
+              <span>
+                <b>Why this matters</b>Build the customer promise and the
+                operating rules together.
+              </span>
+            </p>
+          </aside>
+          <section className={styles.builderStage}>
+            <small>
+              Step {selectedStep + 1} · {stepNames[selectedStep]}
+            </small>
+            <h3>{stageTitles[sceneIndex]}</h3>
+            <p>
+              {productKicker} with a guided path that keeps the offer private
+              until it is ready.
+            </p>
+            <div className={styles.builderChoiceRow}>
+              {choiceSets[sceneIndex]!.map((label, index) => (
+                <span data-active={index === 0} key={label}>
+                  <b>{label}</b>
+                  <small>{index === 0 ? "Recommended" : "Choose"}</small>
+                </span>
+              ))}
+            </div>
+          </section>
+          <aside className={styles.builderPreview}>
+            <header>
+              <small>Live offer summary</small>
+              <b>Private draft</b>
+            </header>
+            <span className={styles.builderPreviewHero}>{productKicker}</span>
+            <small>{productType}</small>
+            <h4>{previewTitles[sceneIndex]}</h4>
+            <p>
+              Clear value, connected rules, and everything the customer needs
+              before checkout.
+            </p>
+            <div>
+              <small>Customer price</small>
+              <strong>{isService ? "$95" : isPlan ? "$420" : "$68"}</strong>
+            </div>
+            <div>
+              <small>Setup readiness</small>
               <strong>
                 {sceneIndex === 2
-                  ? isService
-                    ? "Checked in"
-                    : isPlan
-                      ? "8 credits"
-                      : "Fulfillment live"
-                  : isService
-                    ? "$95"
-                    : isPlan
-                      ? "$420"
-                      : "Ready to publish"}
+                  ? "Ready to review"
+                  : `${selectedStep + 1} of 5`}
               </strong>
-              <p>
-                {isPlan
-                  ? "6 monthly payments or save with upfront"
-                  : "Clear terms before checkout"}
-              </p>
-              <button type="button">Review offer</button>
-            </aside>
-          </div>
-        </>
+            </div>
+            <footer>
+              <LockKeyhole aria-hidden /> Safe to keep refining. Nothing is
+              published from this builder.
+            </footer>
+          </aside>
+        </div>
       )}
     </div>
   );
@@ -836,44 +886,34 @@ function VisionWatchVisual({
   if (kind === "watch") {
     const watchScenes = [
       {
-        label: "DRILL 03",
-        value: "02:18",
-        center: "Side score",
-        action: "Tag rally",
-        cue: "Cue saved to session",
+        screen: "score" as const,
+        cue: "Swipe up for A. Down for B. Undo in one tap.",
       },
       {
-        label: "COURT 2",
-        value: "6  ·  4",
-        center: "Set 1",
-        action: "Point +",
-        cue: "Score synced to Duna Pro",
+        screen: "camera" as const,
+        cue: "Live Check-In · 94/100 · Court is in frame",
       },
       {
-        label: "RALLY 14",
-        value: "00:42",
-        center: "Review cue",
-        action: "Favorite",
-        cue: "Moment linked to Duna Vision",
+        screen: "review" as const,
+        cue: "17–14 · 00:18:42 · Flagged for review",
       },
     ] as const;
     const watchScene = watchScenes[sceneIndex];
     return (
       <div className={styles.watchVisual} data-scene={sceneIndex}>
-        <div className={styles.watchCase}>
-          <div className={styles.watchFace}>
-            <small>{watchScene.label}</small>
-            <strong>{watchScene.value}</strong>
-            <span>
-              <b>6</b>
-              <i>{watchScene.center}</i>
-              <b>4</b>
-            </span>
-            <button type="button">
-              <Radio aria-hidden /> {watchScene.action}
-            </button>
-          </div>
+        <div className={styles.watchContext} aria-hidden>
+          <span>DUNA VISION</span>
+          <i />
+          <i />
+          <i />
+          <b>18:42</b>
         </div>
+        <DunaWatchDevice
+          className={styles.featureWatchDevice}
+          label={`Duna Apple Watch ${watchScene.screen} screen`}
+          motion={sceneIndex === 0}
+          screen={watchScene.screen}
+        />
         <span className={styles.watchCue}>
           <Check aria-hidden /> {watchScene.cue}
         </span>
@@ -932,6 +972,25 @@ function VisionWatchVisual({
         </span>
       </footer>
     </div>
+  );
+}
+
+function ProductSurfaceHeader({ label }: { readonly label: string }) {
+  return (
+    <header className={styles.productSurfaceHeader}>
+      <span className={styles.productSurfaceBrand}>
+        <DunaMark />
+        <b>Duna HQ</b>
+      </span>
+      <span className={styles.productSurfaceOrg}>South Bay Volleyball</span>
+      <span className={styles.productSurfaceSearch}>
+        <Search aria-hidden /> Search people, events, payments…
+      </span>
+      <span className={styles.productSurfaceAi}>
+        <Sparkles aria-hidden /> Duna AI
+      </span>
+      <small>{label}</small>
+    </header>
   );
 }
 
@@ -1001,14 +1060,18 @@ function FeatureProductStory({
                 />
               ) : null}
               <div className={styles.productStoryWash} />
-              <div className={styles.productStoryChrome}>
-                <header>
-                  <span>
-                    <i /> <i /> <i />
-                  </span>
-                  <strong>Duna HQ</strong>
-                  <small>{feature.navLabel}</small>
-                </header>
+              <div
+                className={styles.productStoryChrome}
+                data-surface={feature.visual === "watch" ? "watch" : "hq"}
+              >
+                {feature.visual === "watch" ? (
+                  <header className={styles.watchSurfaceHeader}>
+                    <strong>Duna for Apple Watch</strong>
+                    <small>Score · Check in · Review</small>
+                  </header>
+                ) : (
+                  <ProductSurfaceHeader label={feature.navLabel} />
+                )}
                 <FeatureVisual kind={feature.visual} scene={index} />
               </div>
               <div className={styles.productStorySignal}>
