@@ -17,9 +17,16 @@ import {
 } from "@/app/app/settings/actions";
 import { HeightInput } from "@/components/height-input";
 
+type PlayerSourceConnection = PlayerSettings["sourceConnections"][number];
+type SourceAction = "confirming" | "queued" | "rejecting" | "retrying";
+
 function splitName(value: string) {
   const parts = value.trim().split(/\s+/);
   return { given: parts[0] ?? "", family: parts.slice(1).join(" ") };
+}
+
+function sourceName(source: PlayerSourceConnection["source"]) {
+  return source === "volleyball-life" ? "VolleyballLife" : "BVBInfo";
 }
 
 function sourceStatusLabel(
@@ -43,24 +50,203 @@ function sourceStatusLabel(
   }
 }
 
-function sourceStatusDescription(
-  source: "volleyball-life" | "bvbinfo",
-  status: PlayerSettings["sourceConnections"][number]["status"],
-) {
-  const name = source === "volleyball-life" ? "VolleyballLife" : "BVBInfo";
-  switch (status) {
-    case "review-required":
-      return `We found a possible ${name} profile. Confirm it to link this profile and import its public history.`;
-    case "queued":
-    case "syncing":
-      return `Your ${name} link is saved. Duna is importing and linking the available history in the background.`;
-    case "linked":
-      return `This ${name} profile is linked and will refresh automatically when new public results are available.`;
-    case "failed":
-      return `Your ${name} link is saved. A temporary source issue is keeping public history from importing; no profile details were lost. Retry the import when you are ready.`;
-    default:
-      return `Paste your public ${name} profile. Duna saves it automatically and imports available history in the background.`;
+function sourceImportStage(connection: PlayerSourceConnection) {
+  const { current, matchesFound, profilesFound, total } = connection.progress;
+  const source = sourceName(connection.source);
+  const eventProgress =
+    total > 0
+      ? `${Math.min(current, total)} of ${total} public events`
+      : undefined;
+
+  if (connection.status === "queued") {
+    return "Queued — Duna is starting the public-history import.";
   }
+  if (connection.status === "review-required") {
+    return "Profile found — confirm that it is yours before anything is linked.";
+  }
+  if (connection.status === "linked") {
+    const results = [
+      matchesFound > 0
+        ? `${matchesFound} imported ${matchesFound === 1 ? "match" : "matches"}`
+        : undefined,
+      profilesFound > 1 ? `${profilesFound} connected players` : undefined,
+    ].filter((value): value is string => Boolean(value));
+    return results.length > 0
+      ? `Linked — ${results.join(" · ")}.`
+      : "Linked — Duna will refresh new public results automatically.";
+  }
+  if (connection.status === "failed") {
+    return "The saved link needs a fresh import attempt.";
+  }
+  if (connection.status === "disconnected") {
+    return "This public profile is no longer linked.";
+  }
+
+  switch (connection.progress.phase) {
+    case "fetching-profile":
+      return `Step 1 of 3 — checking the ${source} profile.`;
+    case "fetching-finishes":
+      return "Step 1 of 3 — finding published event results.";
+    case "checking-rating":
+      return "Step 1 of 3 — reading the public profile details.";
+    case "profile-found":
+      return total > 0
+        ? `Step 2 of 3 — ${total} public ${total === 1 ? "event" : "events"} found. Collecting history.`
+        : "Step 2 of 3 — profile found. Checking public history.";
+    case "fetching-career-pages":
+    case "fetching-match-history":
+      return eventProgress
+        ? `Step 2 of 3 — collecting ${eventProgress}.`
+        : "Step 2 of 3 — collecting public match history.";
+    case "reading-match-history":
+      return eventProgress
+        ? `Step 2 of 3 — reading ${eventProgress}${matchesFound > 0 ? ` · ${matchesFound} matches found` : ""}.`
+        : "Step 2 of 3 — reading public match history.";
+    case "matching-history":
+      return `Step 3 of 3 — linking verified history${matchesFound > 0 ? ` · ${matchesFound} matches found` : ""}.`;
+    case "confirm-profile":
+      return "Profile found — waiting for your confirmation.";
+    default:
+      return "Duna is importing and linking the available public history.";
+  }
+}
+
+function SourceImportStatus({
+  action,
+  connection,
+  disabled,
+  onReview,
+  onRetry,
+}: {
+  readonly action?: SourceAction;
+  readonly connection: PlayerSourceConnection;
+  readonly disabled: boolean;
+  readonly onReview: (
+    connectionId: string,
+    decision: "confirmed" | "rejected",
+  ) => void;
+  readonly onRetry: (connectionId: string) => void;
+}) {
+  const snapshot = connection.profileSnapshot;
+  const displayName =
+    typeof snapshot.displayName === "string" ? snapshot.displayName : undefined;
+  const avatarUrl =
+    typeof snapshot.avatarUrl === "string" ? snapshot.avatarUrl : undefined;
+  const profileFacts = [
+    typeof snapshot.hometown === "string" ? snapshot.hometown : undefined,
+    typeof snapshot.height === "string" ? snapshot.height : undefined,
+    typeof snapshot.eventFinishes === "number"
+      ? `${snapshot.eventFinishes} event finishes`
+      : undefined,
+    typeof snapshot.externalRating === "number"
+      ? `TruVolley ${snapshot.externalRating.toFixed(3)}`
+      : undefined,
+  ].filter((fact): fact is string => Boolean(fact));
+  const isImporting = ["queued", "syncing"].includes(connection.status);
+  const actionPending = Boolean(action);
+  const actionLabel =
+    action === "confirming"
+      ? "Confirming…"
+      : action === "queued"
+        ? "Import queued"
+        : action === "rejecting"
+          ? "Removing…"
+          : action === "retrying"
+            ? "Retrying…"
+            : undefined;
+
+  return (
+    <article
+      aria-busy={actionPending || isImporting}
+      className="source-import-status"
+    >
+      {avatarUrl ? (
+        <Image alt="" height={44} src={avatarUrl} unoptimized width={44} />
+      ) : (
+        <span className="avatar">
+          {(displayName ?? connection.source).slice(0, 2).toUpperCase()}
+        </span>
+      )}
+      <div>
+        <strong>{displayName ?? sourceName(connection.source)}</strong>
+        <small aria-live={isImporting || actionPending ? "polite" : undefined}>
+          {actionLabel ?? sourceImportStage(connection)}
+        </small>
+        {profileFacts.length > 0 && (
+          <small className="source-import-status__facts">
+            {profileFacts.join(" · ")}
+          </small>
+        )}
+        {isImporting && connection.progress.total > 0 && (
+          <span className="source-import-status__progress">
+            <progress
+              aria-label={`${sourceName(connection.source)} import progress`}
+              max={connection.progress.total}
+              value={connection.progress.current}
+            />
+            <small>
+              {connection.progress.current > 0
+                ? `${Math.min(connection.progress.current, connection.progress.total)} of ${connection.progress.total} complete`
+                : "Starting now"}
+            </small>
+          </span>
+        )}
+        {connection.status === "failed" && connection.lastError && (
+          <small className="source-import-status__error" role="alert">
+            We could not import this public history yet. Your source link is
+            saved, and no player details were lost.
+          </small>
+        )}
+        {connection.status === "review-required" &&
+          connection.verificationStatus === "pending" && (
+            <span className="source-import-status__actions">
+              <button
+                disabled={disabled || actionPending}
+                onClick={() => onReview(connection.id, "confirmed")}
+                type="button"
+              >
+                {action === "confirming" || action === "queued"
+                  ? actionLabel
+                  : "This is me"}
+              </button>
+              <button
+                disabled={disabled || actionPending}
+                onClick={() => onReview(connection.id, "rejected")}
+                type="button"
+              >
+                {action === "rejecting" ? "Removing…" : "Not my profile"}
+              </button>
+            </span>
+          )}
+        {connection.status === "failed" && (
+          <span className="source-import-status__actions">
+            <button
+              disabled={disabled || actionPending}
+              onClick={() => onRetry(connection.id)}
+              type="button"
+            >
+              {action === "retrying" || action === "queued"
+                ? actionLabel
+                : "Retry import"}
+            </button>
+          </span>
+        )}
+      </div>
+      <Badge
+        tone={
+          connection.status === "linked"
+            ? "positive"
+            : connection.status === "failed"
+              ? "warning"
+              : "neutral"
+        }
+      >
+        {action === "queued"
+          ? "Starting"
+          : sourceStatusLabel(connection.status)}
+      </Badge>
+    </article>
+  );
 }
 
 export function PlayingProfileSettings({
@@ -79,7 +265,9 @@ export function PlayingProfileSettings({
   const [saveState, setSaveState] = useState<
     "ready" | "saving" | "linking" | "saved"
   >("ready");
-  const [importingSourceId, setImportingSourceId] = useState<string>();
+  const [sourceActions, setSourceActions] = useState<
+    Readonly<Record<string, SourceAction | undefined>>
+  >({});
   const [form, setForm] = useState({
     legalGivenName: profile.legalGivenName ?? fallbackName.given,
     legalMiddleName: profile.legalMiddleName ?? "",
@@ -126,18 +314,69 @@ export function PlayingProfileSettings({
   });
   const saveInFlight = useRef(false);
   const saveQueued = useRef(false);
+  const sourceActionInFlight = useRef(new Set<string>());
+  const sourceActionTimeouts = useRef(new Map<string, number>());
 
   useEffect(() => {
-    if (
-      !settings.sourceConnections.some((connection) =>
-        ["queued", "syncing"].includes(connection.status),
-      )
-    ) {
+    const hasActiveImport = settings.sourceConnections.some((connection) =>
+      ["queued", "syncing"].includes(connection.status),
+    );
+    if (!hasActiveImport && Object.keys(sourceActions).length === 0) {
       return;
     }
     const interval = window.setInterval(() => router.refresh(), 3_000);
     return () => window.clearInterval(interval);
-  }, [router, settings.sourceConnections]);
+  }, [router, settings.sourceConnections, sourceActions]);
+
+  useEffect(() => {
+    setSourceActions((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const connection of settings.sourceConnections) {
+        if (
+          next[connection.id] &&
+          !["review-required", "failed"].includes(connection.status)
+        ) {
+          delete next[connection.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [settings.sourceConnections]);
+
+  useEffect(
+    () => () => {
+      for (const timeout of sourceActionTimeouts.current.values()) {
+        window.clearTimeout(timeout);
+      }
+      sourceActionTimeouts.current.clear();
+    },
+    [],
+  );
+
+  function clearSourceAction(connectionId: string) {
+    const timeout = sourceActionTimeouts.current.get(connectionId);
+    if (timeout !== undefined) {
+      window.clearTimeout(timeout);
+      sourceActionTimeouts.current.delete(connectionId);
+    }
+    setSourceActions((current) => {
+      if (!current[connectionId]) return current;
+      const next = { ...current };
+      delete next[connectionId];
+      return next;
+    });
+  }
+
+  function keepSourceActionVisible(connectionId: string) {
+    const timeout = sourceActionTimeouts.current.get(connectionId);
+    if (timeout !== undefined) window.clearTimeout(timeout);
+    sourceActionTimeouts.current.set(
+      connectionId,
+      window.setTimeout(() => clearSourceAction(connectionId), 6_000),
+    );
+  }
 
   async function persistPlayerDetails({
     automatic = false,
@@ -265,10 +504,17 @@ export function PlayingProfileSettings({
     connectionId: string,
     decision: "confirmed" | "rejected",
   ) {
+    if (sourceActionInFlight.current.has(connectionId)) return;
+    sourceActionInFlight.current.add(connectionId);
     setError(undefined);
+    setSourceActions((current) => ({
+      ...current,
+      [connectionId]: decision === "confirmed" ? "confirming" : "rejecting",
+    }));
     if (decision === "confirmed") {
-      setImportingSourceId(connectionId);
-      setNotice("Importing and linking the confirmed public profile…");
+      setNotice(
+        "Confirming this profile and starting the public-history import…",
+      );
     }
     startTransition(async () => {
       try {
@@ -278,23 +524,34 @@ export function PlayingProfileSettings({
         });
         if (!response.ok) {
           setError(response.error);
+          clearSourceAction(connectionId);
           return;
         }
+        setSourceActions((current) => ({
+          ...current,
+          [connectionId]: "queued",
+        }));
+        keepSourceActionVisible(connectionId);
         setNotice(
           decision === "confirmed"
-            ? "Importing and linking the confirmed public profile. This continues in the background."
+            ? "Profile confirmed. Duna is importing and linking the public history now."
             : "Profile rejected. It was disconnected and will not affect this player.",
         );
         router.refresh();
+      } catch {
+        clearSourceAction(connectionId);
+        setError("The profile choice could not be saved. Please try again.");
       } finally {
-        setImportingSourceId(undefined);
+        sourceActionInFlight.current.delete(connectionId);
       }
     });
   }
 
   function retrySource(connectionId: string) {
+    if (sourceActionInFlight.current.has(connectionId)) return;
+    sourceActionInFlight.current.add(connectionId);
     setError(undefined);
-    setImportingSourceId(connectionId);
+    setSourceActions((current) => ({ ...current, [connectionId]: "retrying" }));
     setNotice(
       "Retrying the public-history import and linking it in the background…",
     );
@@ -303,22 +560,35 @@ export function PlayingProfileSettings({
         const response = await retryPlayerSourceAction({ connectionId });
         if (!response.ok) {
           setError(response.error);
+          clearSourceAction(connectionId);
           return;
         }
+        setSourceActions((current) => ({
+          ...current,
+          [connectionId]: "queued",
+        }));
+        keepSourceActionVisible(connectionId);
         setNotice(
           "The import error was cleared. Duna is importing and linking this public history now.",
         );
         router.refresh();
+      } catch {
+        clearSourceAction(connectionId);
+        setError("The source import could not be retried. Please try again.");
       } finally {
-        setImportingSourceId(undefined);
+        sourceActionInFlight.current.delete(connectionId);
       }
     });
   }
 
-  const connectionStatus = (source: "volleyball-life" | "bvbinfo") =>
+  const sourceConnection = (source: PlayerSourceConnection["source"]) =>
     settings.sourceConnections.find(
       (connection) => connection.source === source,
-    )?.status;
+    );
+  const volleyballLifeConnection = sourceConnection("volleyball-life");
+  const bvbInfoConnection = sourceConnection("bvbinfo");
+  const showBvbInfo =
+    form.playingExperience === "professional" || Boolean(bvbInfoConnection);
 
   return (
     <section id="playing-profile">
@@ -516,181 +786,69 @@ export function PlayingProfileSettings({
           />
         </label>
         <div className="source-link-grid">
-          <label className="source-link-card">
-            <span>
-              <Link2 /> VolleyballLife profile
-              {connectionStatus("volleyball-life") && (
-                <Badge tone="neutral">
-                  {sourceStatusLabel(connectionStatus("volleyball-life")!)}
-                </Badge>
-              )}
-            </span>
-            <small>
-              {sourceStatusDescription(
-                "volleyball-life",
-                connectionStatus("volleyball-life") ?? "disconnected",
-              )}
-            </small>
-            <input
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  volleyballLifeUrl: event.target.value,
-                }))
-              }
-              placeholder="volleyballlife.com/player/5520"
-              value={form.volleyballLifeUrl}
-            />
-          </label>
-          {form.playingExperience === "professional" && (
+          <div className="source-history-source">
             <label className="source-link-card">
               <span>
-                <Link2 /> BVBInfo profile
-                {connectionStatus("bvbinfo") && (
-                  <Badge tone="neutral">
-                    {sourceStatusLabel(connectionStatus("bvbinfo")!)}
-                  </Badge>
-                )}
+                <Link2 /> VolleyballLife profile
               </span>
               <small>
-                {sourceStatusDescription(
-                  "bvbinfo",
-                  connectionStatus("bvbinfo") ?? "disconnected",
-                )}
+                Paste or update the public profile link. Duna saves it
+                automatically and shows the live import status here.
               </small>
               <input
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    bvbInfoUrl: event.target.value,
+                    volleyballLifeUrl: event.target.value,
                   }))
                 }
-                placeholder="bvbinfo.com/player.asp?ID=…"
-                value={form.bvbInfoUrl}
+                placeholder="volleyballlife.com/player/5520"
+                value={form.volleyballLifeUrl}
               />
             </label>
+            {volleyballLifeConnection && (
+              <SourceImportStatus
+                action={sourceActions[volleyballLifeConnection.id]}
+                connection={volleyballLifeConnection}
+                disabled={isPending || isSaving}
+                onRetry={retrySource}
+                onReview={reviewSource}
+              />
+            )}
+          </div>
+          {showBvbInfo && (
+            <div className="source-history-source">
+              <label className="source-link-card">
+                <span>
+                  <Link2 /> BVBInfo profile
+                </span>
+                <small>
+                  Paste or update the public profile link. Duna saves it
+                  automatically and shows the live import status here.
+                </small>
+                <input
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      bvbInfoUrl: event.target.value,
+                    }))
+                  }
+                  placeholder="bvbinfo.com/player.asp?ID=…"
+                  value={form.bvbInfoUrl}
+                />
+              </label>
+              {bvbInfoConnection && (
+                <SourceImportStatus
+                  action={sourceActions[bvbInfoConnection.id]}
+                  connection={bvbInfoConnection}
+                  disabled={isPending || isSaving}
+                  onRetry={retrySource}
+                  onReview={reviewSource}
+                />
+              )}
+            </div>
           )}
         </div>
-        {settings.sourceConnections.map((connection) => {
-          const snapshot = connection.profileSnapshot;
-          const displayName =
-            typeof snapshot.displayName === "string"
-              ? snapshot.displayName
-              : undefined;
-          const avatarUrl =
-            typeof snapshot.avatarUrl === "string"
-              ? snapshot.avatarUrl
-              : undefined;
-          const profileFacts = [
-            typeof snapshot.hometown === "string"
-              ? snapshot.hometown
-              : undefined,
-            typeof snapshot.height === "string" ? snapshot.height : undefined,
-            typeof snapshot.eventFinishes === "number"
-              ? `${snapshot.eventFinishes} event finishes`
-              : undefined,
-            typeof snapshot.externalRating === "number"
-              ? `TruVolley ${snapshot.externalRating.toFixed(3)}`
-              : undefined,
-          ].filter((fact): fact is string => Boolean(fact));
-          return (
-            <article className="source-import-status" key={connection.id}>
-              {avatarUrl ? (
-                <Image
-                  alt=""
-                  height={44}
-                  src={avatarUrl}
-                  unoptimized
-                  width={44}
-                />
-              ) : (
-                <span className="avatar">
-                  {(displayName ?? connection.source).slice(0, 2).toUpperCase()}
-                </span>
-              )}
-              <div>
-                <strong>
-                  {displayName ??
-                    (connection.source === "volleyball-life"
-                      ? "VolleyballLife"
-                      : "BVBInfo")}
-                </strong>
-                <small>
-                  {connection.status === "syncing" ||
-                  connection.status === "queued"
-                    ? `Importing · ${connection.progress.phase.replaceAll("-", " ")}`
-                    : `${connection.progress.matchesFound} matches · ${connection.progress.profilesFound} connected players`}
-                </small>
-                {profileFacts.length > 0 && (
-                  <small>{profileFacts.join(" · ")}</small>
-                )}
-                {connection.progress.total > 0 && (
-                  <progress
-                    max={connection.progress.total}
-                    value={connection.progress.current}
-                  />
-                )}
-                {connection.status === "failed" && connection.lastError && (
-                  <small className="source-import-status__error" role="alert">
-                    We could not import this public history yet. Your source
-                    link is saved, and no player details were lost.
-                  </small>
-                )}
-                <small className="source-import-status__context">
-                  {sourceStatusDescription(
-                    connection.source,
-                    connection.status,
-                  )}
-                </small>
-                {connection.status === "review-required" &&
-                  connection.verificationStatus === "pending" && (
-                    <span className="source-import-status__actions">
-                      <button
-                        disabled={isPending || isSaving}
-                        onClick={() => reviewSource(connection.id, "confirmed")}
-                        type="button"
-                      >
-                        {importingSourceId === connection.id
-                          ? "Importing & linking…"
-                          : "This is me"}
-                      </button>
-                      <button
-                        disabled={isPending || isSaving}
-                        onClick={() => reviewSource(connection.id, "rejected")}
-                        type="button"
-                      >
-                        Not my profile
-                      </button>
-                    </span>
-                  )}
-                {connection.status === "failed" && (
-                  <span className="source-import-status__actions">
-                    <button
-                      disabled={isPending || isSaving}
-                      onClick={() => retrySource(connection.id)}
-                      type="button"
-                    >
-                      {importingSourceId === connection.id
-                        ? "Retrying import…"
-                        : "Retry import"}
-                    </button>
-                  </span>
-                )}
-              </div>
-              <Badge
-                tone={
-                  connection.status === "linked"
-                    ? "positive"
-                    : connection.status === "failed"
-                      ? "warning"
-                      : "neutral"
-                }
-              >
-                {sourceStatusLabel(connection.status)}
-              </Badge>
-            </article>
-          );
-        })}
         <button className="primary-action" disabled={isSaving} type="submit">
           <Save />
           {isSaving ? "Saving profile…" : "Save now"}
