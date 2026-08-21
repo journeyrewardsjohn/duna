@@ -4,6 +4,7 @@ import { AdminPanel } from "@/components/admin-panels";
 import { adminModules, type AdminModule } from "@/components/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import type { ProfessionalTourTool } from "@/components/pro-tour-admin-controls";
+import type { SandDataTool } from "@/components/sand-admin-controls";
 import { getServerCaller } from "@/lib/api";
 
 const professionalTourTools = new Set<ProfessionalTourTool>([
@@ -17,6 +18,8 @@ const professionalTourTools = new Set<ProfessionalTourTool>([
   "mappings",
   "sources",
 ]);
+
+const sandDataTools = new Set<SandDataTool>(["overview", "sources", "reviews"]);
 
 export async function generateMetadata({
   params,
@@ -85,6 +88,9 @@ export default async function AdminModulePage({
       : undefined;
   const proTourTool = professionalTourTools.has(tool as ProfessionalTourTool)
     ? (tool as ProfessionalTourTool)
+    : undefined;
+  const sandDataTool = sandDataTools.has(tool as SandDataTool)
+    ? (tool as SandDataTool)
     : undefined;
   const item = adminModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
@@ -205,6 +211,7 @@ export default async function AdminModulePage({
         playerSearchQuery={q}
         proEventId={event}
         proTourTool={proTourTool}
+        sandDataTool={sandDataTool}
         playerIntelligence={result.playerIntelligence}
         playerIntelligenceDetail={result.playerIntelligenceDetail}
         playerIntelligenceGender={gender}
