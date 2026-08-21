@@ -10,6 +10,7 @@ import {
   CalendarDatePicker,
   type CalendarMarker,
 } from "./calendar-date-picker";
+import { isPlayerPlayableEvent } from "@/lib/player-pickups";
 
 function instantIsoDay(instant: string, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -61,8 +62,8 @@ export function PlayerScheduleCalendar({
 }) {
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const activeEvents = useMemo(
-    () => events.filter((event) => event.lifecycleStatus !== "cancelled"),
+  const playableEvents = useMemo(
+    () => events.filter((event) => isPlayerPlayableEvent(event)),
     [events],
   );
   const markers = useMemo<readonly CalendarMarker[]>(
@@ -73,7 +74,7 @@ export function PlayerScheduleCalendar({
         label: booking.title,
         tone: "booking" as const,
       })),
-      ...activeEvents
+      ...playableEvents
         .filter(
           (event) =>
             !bookings.some(
@@ -89,13 +90,13 @@ export function PlayerScheduleCalendar({
           tone: "event" as const,
         })),
     ],
-    [activeEvents, bookings],
+    [bookings, playableEvents],
   );
   const selectedBookings = bookings.filter(
     (booking) =>
       instantIsoDay(booking.startsAt, "America/Los_Angeles") === selectedDate,
   );
-  const selectedEvents = activeEvents.filter(
+  const selectedEvents = playableEvents.filter(
     (event) =>
       instantIsoDay(event.startsAt, event.timezone) === selectedDate &&
       !selectedBookings.some(
