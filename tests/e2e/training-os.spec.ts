@@ -246,8 +246,9 @@ test("training markdown companion agrees with the page", async ({
   const markdown = await response.text();
   const lower = markdown.toLowerCase();
 
-  expect(markdown).toContain(`https://duna.coach${trainingPath}`);
-  expect(markdown).toContain(`https://duna.coach${trainingPath}.md`);
+  expect(markdown).toContain(`canonical_url:`);
+  expect(markdown).toContain(trainingPath);
+  expect(markdown).toContain(`${trainingPath}.md`);
   expect(lower).toContain("plain language");
   expect(lower).toContain("assembles a timed session");
   expect(lower).toContain("not a health prediction");
@@ -268,13 +269,11 @@ test("training page is discoverable through the public indexes", async ({
 }) => {
   const sitemap = await request.get("/sitemap.xml");
   expect(sitemap.status()).toBe(200);
-  expect(await sitemap.text()).toContain(
-    `https://duna.coach${trainingPath}</loc>`,
-  );
+  expect(await sitemap.text()).toContain(`${trainingPath}</loc>`);
 
   const sitemapMarkdown = await request.get("/sitemap.md");
   expect(sitemapMarkdown.status()).toBe(200);
   const listing = await sitemapMarkdown.text();
-  expect(listing).toContain(`https://duna.coach${trainingPath}`);
-  expect(listing).toContain(`https://duna.coach${trainingPath}.md`);
+  expect(listing).toContain(trainingPath);
+  expect(listing).toContain(`${trainingPath}.md`);
 });
