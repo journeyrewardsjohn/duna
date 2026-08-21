@@ -15039,7 +15039,7 @@ a.play-day__booking {
   align-items: start;
   display: grid;
   gap: 2rem;
-  grid-template-columns: 220px minmax(0, 760px);
+  grid-template-columns: 220px minmax(0, 1fr);
 }
 
 .settings-layout > nav {
@@ -15068,6 +15068,8 @@ a.play-day__booking {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  max-width: 900px;
+  width: 100%;
 }
 
 .settings-content > section {
@@ -15355,6 +15357,10 @@ a.play-day__booking {
   width: 100%;
 }
 
+.settings-form textarea {
+  resize: vertical;
+}
+
 .deletion-confirm button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -15419,7 +15425,7 @@ a.play-day__booking {
   border: 1px solid rgb(var(--overlay-rgb) / 8%);
   border-radius: 18px;
   margin-bottom: 0.7rem;
-  padding: 1rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
 }
 
 .settings-form--compact {
@@ -15446,6 +15452,10 @@ a.play-day__booking {
 .settings-safety-note > span {
   display: flex;
   flex-direction: column;
+}
+
+.settings-form__title > .duna-badge {
+  margin-left: auto;
 }
 
 .settings-form__title small,
@@ -15477,6 +15487,9 @@ a.play-day__booking {
   min-height: 44px;
   outline: 0;
   padding: 0.75rem 0.8rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
   width: 100%;
 }
 
@@ -15729,6 +15742,23 @@ a.play-day__booking {
 .settings-switch-row small {
   color: var(--color-bone-muted);
   font-weight: 500;
+}
+
+.playing-story-field {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.playing-story-field > small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.playing-story-field textarea {
+  min-height: 11rem;
+  padding: 0.95rem 1rem;
 }
 
 .settings-identity-card,
@@ -26270,13 +26300,13 @@ html {
 
 .source-import-status {
   align-items: center;
-  background: #f8fafb;
-  border: 1px solid #dfe6ea;
+  background: rgb(var(--overlay-rgb) / 3%);
+  border: 1px solid rgb(var(--overlay-rgb) / 10%);
   border-radius: 18px;
   display: grid;
-  gap: 0.8rem;
+  gap: 0.9rem;
   grid-template-columns: auto 1fr auto;
-  padding: 0.85rem;
+  padding: 1rem;
 }
 
 .source-import-status > img,
@@ -26294,11 +26324,14 @@ html {
 }
 
 .source-import-status small {
-  color: #71808b;
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 .source-import-status progress {
-  accent-color: #285f99;
+  accent-color: var(--color-aqua);
   height: 5px;
   width: 100%;
 }
@@ -26310,29 +26343,34 @@ html {
 }
 
 .source-import-status__actions button {
-  background: #285f99;
+  background: var(--color-ink);
   border: 0;
   border-radius: 999px;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 750;
-  padding: 0.45rem 0.7rem;
+  color: var(--color-canvas);
+  font-size: 0.875rem;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 0.5rem 0.8rem;
 }
 
 .source-import-status__actions button + button {
-  background: #fff;
-  border: 1px solid #d8e0e5;
-  color: #52636f;
+  background: var(--color-depth);
+  border: 1px solid rgb(var(--overlay-rgb) / 12%);
+  color: var(--color-bone);
 }
 
 .source-import-status__error {
-  background: #fff4e8;
-  border: 1px solid #efcc9b;
+  background: color-mix(in srgb, var(--color-flare) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-flare) 34%, transparent);
   border-radius: 10px;
-  color: #865318 !important;
+  color: var(--color-flare) !important;
   line-height: 1.45;
   margin-top: 0.25rem;
   padding: 0.6rem 0.7rem;
+}
+
+.source-import-status__context {
+  margin-top: 0.15rem;
 }
 
 .source-import-status > .duna-badge {
@@ -26591,18 +26629,41 @@ html {
 
 .source-link-grid {
   display: grid;
-  gap: 0.8rem;
+  gap: 1rem;
   grid-template-columns: repeat(2, 1fr);
+  margin: 1rem 0 0.25rem;
 }
 
-.source-link-grid label > span {
+.source-link-grid .source-link-card {
+  background: rgb(var(--overlay-rgb) / 3%);
+  border: 1px solid rgb(var(--overlay-rgb) / 9%);
+  border-radius: 14px;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.source-link-grid .source-link-card:only-child {
+  grid-column: 1 / -1;
+}
+
+.source-link-grid .source-link-card > span {
   align-items: center;
+  color: var(--color-bone);
   display: flex;
+  font-size: 1rem;
+  font-weight: 700;
   gap: 0.4rem;
 }
 
+.source-link-grid .source-link-card > small {
+  color: var(--color-bone-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .source-link-grid svg {
-  color: #285f99;
+  color: var(--color-aqua);
   height: 16px;
   width: 16px;
 }

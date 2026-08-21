@@ -129,6 +129,64 @@ function firecrawlClient(source: ManagedScraperSource): Firecrawl {
   return firecrawl;
 }
 
+function firecrawlFormats(
+  control: ScraperControl,
+): NonNullable<ScrapeOptions["formats"]> {
+  return [
+    "html",
+    "rawHtml",
+    ...(control.firecrawlChangeTracking
+      ? [{ type: "changeTracking" as const, modes: ["git-diff" as const] }]
+      : []),
+  ];
+}
+
+export function parseFirecrawlJsonDocument<T>(document: string): T {
+  const candidates = [
+    document,
+    document.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i)?.[1] ?? "",
+    document.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? "",
+  ];
+  for (const candidate of candidates) {
+    const value = candidate
+      .replace(/<[^>]+>/g, "")
+      .replaceAll("&quot;", '"')
+      .replaceAll("&#39;", "'")
+      .replaceAll("&amp;", "&")
+      .trim();
+    if (!value) continue;
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      // Firecrawl can return either a raw JSON document or an HTML-wrapped one.
+    }
+  }
+  throw new Error("Firecrawl returned no JSON document.");
+}
+
+async function scrapeJsonThroughFirecrawl<T>(
+  source: ManagedScraperSource,
+  url: string,
+  control: ScraperControl,
+  timeoutMs: number | undefined,
+): Promise<T> {
+  const document = await withRetry(source, control, () =>
+    firecrawlClient(source).scrape(url, {
+      formats: firecrawlFormats(control),
+      onlyMainContent: false,
+      timeout: timeoutMs ?? 60_000,
+      blockAds: true,
+      ...(control.firecrawlCacheTtlSeconds !== undefined
+        ? {
+            maxAge: control.firecrawlCacheTtlSeconds * 1_000,
+            storeInCache: true,
+          }
+        : {}),
+    }),
+  );
+  return parseFirecrawlJsonDocument<T>(document.rawHtml ?? document.html ?? "");
+}
+
 const nativeHeaders = {
   Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
@@ -149,16 +207,9 @@ export async function scrapeHtml(
   const engine = resolveScrapeEngine(source, control);
   try {
     if (engine === "firecrawl") {
-      const formats: NonNullable<ScrapeOptions["formats"]> = [
-        "html",
-        "rawHtml",
-        ...(control.firecrawlChangeTracking
-          ? [{ type: "changeTracking" as const, modes: ["git-diff" as const] }]
-          : []),
-      ];
       const document = await withRetry(source, control, () =>
         firecrawlClient(source).scrape(url, {
-          formats,
+          formats: firecrawlFormats(control),
           onlyMainContent: false,
           waitFor: options.waitForMs,
           timeout: options.timeoutMs ?? 60_000,
@@ -226,8 +277,9 @@ export async function scrapeJson<T>(
     readonly timeoutMs?: number;
   } = {},
 ): Promise<T> {
+  let control: ScraperControl | undefined;
   try {
-    const control = await assertScraperEnabled(source);
+    control = await assertScraperEnabled(source);
     return await withRetry(source, control, async () => {
       const controller = new AbortController();
       const timer = setTimeout(
@@ -256,6 +308,29 @@ export async function scrapeJson<T>(
       }
     });
   } catch (error) {
+    const fallbackControl = control;
+    const supportsFirecrawlFallback =
+      source === "volleyball-life" &&
+      options.body === undefined &&
+      options.method !== "POST" &&
+      fallbackControl !== undefined &&
+      Boolean(firecrawlKey());
+    if (supportsFirecrawlFallback) {
+      try {
+        return await scrapeJsonThroughFirecrawl<T>(
+          source,
+          url,
+          fallbackControl!,
+          options.timeoutMs,
+        );
+      } catch (fallbackError) {
+        throw new SandDataUpstreamError(
+          source,
+          "unavailable",
+          `${error instanceof Error ? error.message : `${source} is unavailable.`} Firecrawl fallback: ${fallbackError instanceof Error ? fallbackError.message : "unavailable"}`,
+        );
+      }
+    }
     throw new SandDataUpstreamError(
       source,
       "unavailable",
