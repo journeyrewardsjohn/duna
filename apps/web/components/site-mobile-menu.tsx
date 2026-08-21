@@ -22,6 +22,7 @@ import {
   useState,
 } from "react";
 import type { SiteNavigationQuickAction } from "@/lib/site-navigation";
+import { clubFeatureByKey, clubFeatureGroups } from "@/lib/club-features";
 
 const mainNavigation = [
   {
@@ -383,6 +384,41 @@ function SiteMobileMenuView({
                       Create an event <ArrowRight aria-hidden size={18} />
                     </Link>
                   </nav>
+
+                  <section
+                    aria-label="Duna HQ features"
+                    className="site-mobile-sheet__features"
+                  >
+                    <div className="site-mobile-sheet__section-heading">
+                      <span>Run your club</span>
+                      <Link href="/run-your-club/features" onClick={close}>
+                        All features
+                      </Link>
+                    </div>
+                    {clubFeatureGroups.map((group) => (
+                      <div key={group.label}>
+                        <header>
+                          <strong>{group.label}</strong>
+                          <small>{group.description}</small>
+                        </header>
+                        <nav aria-label={group.label}>
+                          {group.keys.map((key) => {
+                            const item = clubFeatureByKey.get(key);
+                            return item ? (
+                              <Link
+                                href={item.href}
+                                key={item.key}
+                                onClick={close}
+                              >
+                                {item.navLabel}
+                                <ArrowRight aria-hidden size={16} />
+                              </Link>
+                            ) : null;
+                          })}
+                        </nav>
+                      </div>
+                    ))}
+                  </section>
 
                   {user ? (
                     <footer className="site-mobile-sheet__account">

@@ -4,6 +4,7 @@ import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
+import { ClubFeaturesMenu } from "./club-features-menu";
 import { SiteMobileMenu } from "./site-mobile-menu";
 import { WebAuthButton } from "./web-auth-button";
 
@@ -29,7 +30,7 @@ export function SiteHeader({ authConfigured }: SiteHeaderProps = {}) {
           <Link href="/discover">Play</Link>
           <Link href="/pro">Watch</Link>
           <Link href="/rankings">Sand Rating</Link>
-          <Link href="/run-your-club">For clubs + coaches</Link>
+          <ClubFeaturesMenu />
         </nav>
         <div className="site-header__actions">
           <ThemeToggle />
