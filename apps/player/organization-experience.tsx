@@ -1,4 +1,4 @@
-import { nativeMapUrl } from "@duna/core";
+import { annualPrepaySavingsPercent, nativeMapUrl } from "@duna/core";
 import {
   environmentalColors,
   resolveDunaTokens,
@@ -383,6 +383,9 @@ export function OrganizationExperienceModal({
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CatalogItem>();
   const [selectedVariantId, setSelectedVariantId] = useState<string>();
+  const [selectedPriceId, setSelectedPriceId] = useState<string>();
+  const [promoCode, setPromoCode] = useState("");
+  const [membershipTermsAccepted, setMembershipTermsAccepted] = useState(false);
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState<string>();
   const [recordingConsentAccepted, setRecordingConsentAccepted] =
     useState(false);
@@ -439,6 +442,9 @@ export function OrganizationExperienceModal({
   useEffect(() => {
     const item = selectedItem;
     setSelectedVariantId(item?.variants[0]?.id);
+    setSelectedPriceId(undefined);
+    setPromoCode("");
+    setMembershipTermsAccepted(false);
     setPaymentKind(
       item?.allowCard ? "card" : item?.allowCredits ? "credit" : "cash",
     );
@@ -541,11 +547,19 @@ export function OrganizationExperienceModal({
         : await client.player.catalogOfferEligibility.query({
             catalogItemId: item.id,
           });
-    const price = preferredPrice(
-      variant,
-      requestedKind,
-      itemEligibility?.isMember ?? false,
-    );
+    const purchasingSelectedItem = item.id === selectedItem?.id;
+    const price =
+      purchasingSelectedItem && requestedKind === "card" && selectedPriceId
+        ? variant.prices.find(
+            (candidate) =>
+              candidate.id === selectedPriceId &&
+              candidate.paymentKind === "card",
+          )
+        : preferredPrice(
+            variant,
+            requestedKind,
+            itemEligibility?.isMember ?? false,
+          );
     if (!price) throw new Error("That payment option is not available.");
     const schedule =
       item.configuration.sessionSchedule &&
@@ -558,7 +572,6 @@ export function OrganizationExperienceModal({
     const fixedSession =
       item.type === "service" &&
       (schedule?.mode === "one-off" || schedule?.mode === "recurring");
-    const purchasingSelectedItem = item.id === selectedItem?.id;
     if (fixedSession && (!purchasingSelectedItem || !selectedOccurrenceId)) {
       throw new Error("Choose an upcoming coach-supported session.");
     }
@@ -569,6 +582,10 @@ export function OrganizationExperienceModal({
       catalogPriceId: price.id,
       paymentMethod: requestedKind,
       paymentSurface: Platform.OS === "web" ? "hosted" : "native",
+      promoCode:
+        purchasingSelectedItem && requestedKind === "card"
+          ? promoCode.trim() || undefined
+          : undefined,
       quantity: 1,
       catalogSessionOccurrenceId:
         fixedSession && purchasingSelectedItem
@@ -579,6 +596,10 @@ export function OrganizationExperienceModal({
       successUrl: `${dunaWebUrl}${path}?checkout=success`,
       cancelUrl: `${dunaWebUrl}${path}?checkout=cancelled`,
       idempotencyKey: Crypto.randomUUID(),
+      membershipPolicyAccepted:
+        item.type === "plan" && item.subtype === "membership"
+          ? membershipTermsAccepted
+          : undefined,
     });
     if (result.paymentSheet) {
       const outcome = await presentNativePayment({
@@ -587,13 +608,9 @@ export function OrganizationExperienceModal({
       if (outcome === "cancelled") return false;
       await pollOrder(result.orderId);
     } else if (result.checkoutUrl) {
-      if (Platform.OS !== "web") {
-        throw new Error(
-          "Duna could not prepare the in-app payment. You were not charged; please try again.",
-        );
-      }
       await WebBrowser.openBrowserAsync(result.checkoutUrl);
-      return false;
+      if (Platform.OS === "web") return false;
+      await pollOrder(result.orderId);
     }
     if (result.mode === "cash-reservation") {
       Alert.alert(
@@ -781,6 +798,37 @@ export function OrganizationExperienceModal({
     paymentKind,
     eligibility?.isMember ?? false,
   );
+  const selectedCardPrices =
+    selectedVariant?.prices.filter(
+      (candidate) =>
+        candidate.paymentKind === "card" &&
+        (candidate.audience === "everyone" ||
+          candidate.audience ===
+            (eligibility?.isMember ? "member" : "non-member")),
+    ) ?? [];
+  const activeSelectedPrice =
+    paymentKind === "card"
+      ? (selectedCardPrices.find(
+          (candidate) => candidate.id === selectedPriceId,
+        ) ?? selectedPrice)
+      : selectedPrice;
+  const monthlySelectedPrice = selectedCardPrices.find(
+    (candidate) => candidate.recurringInterval === "month",
+  );
+  const annualSelectedPrice = selectedCardPrices.find(
+    (candidate) => candidate.recurringInterval === "year",
+  );
+  const annualSavings =
+    monthlySelectedPrice?.amountMinor !== undefined &&
+    annualSelectedPrice?.amountMinor !== undefined
+      ? annualPrepaySavingsPercent(
+          monthlySelectedPrice.amountMinor,
+          annualSelectedPrice.amountMinor,
+        )
+      : 0;
+  const isMembershipOffer = Boolean(
+    selectedItem?.type === "plan" && selectedItem.subtype === "membership",
+  );
   const paymentKinds = selectedItem
     ? ([
         selectedItem.allowCard ? "card" : undefined,
@@ -952,7 +1000,7 @@ export function OrganizationExperienceModal({
                 <View style={styles.flex}>
                   <Text style={styles.purchaseLabel}>Your option</Text>
                   <DunaNumericText style={styles.purchasePrice} tier="block">
-                    {priceLabel(selectedPrice)}
+                    {priceLabel(activeSelectedPrice)}
                   </DunaNumericText>
                 </View>
                 {eligibility?.included ? (
@@ -999,6 +1047,61 @@ export function OrganizationExperienceModal({
                     ))}
                   </View>
                 </ScrollView>
+              ) : null}
+
+              {paymentKind === "card" && selectedCardPrices.length > 1 ? (
+                <View style={styles.billingChoice}>
+                  <Text style={styles.purchaseLabel}>Choose billing</Text>
+                  <View style={styles.billingChoiceRow}>
+                    {selectedCardPrices.map((candidate) => {
+                      const active = candidate.id === activeSelectedPrice?.id;
+                      const annual = candidate.recurringInterval === "year";
+                      return (
+                        <Pressable
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: active }}
+                          key={candidate.id}
+                          onPress={() => setSelectedPriceId(candidate.id)}
+                          style={[
+                            styles.billingChoiceCard,
+                            active && { borderColor: primary },
+                          ]}
+                        >
+                          <View style={styles.billingChoiceHeading}>
+                            <Text style={styles.billingChoiceTitle}>
+                              {annual ? "Annual prepay" : "Monthly"}
+                            </Text>
+                            {annual && annualSavings > 0 ? (
+                              <View
+                                style={[
+                                  styles.savingsBadge,
+                                  { backgroundColor: sand },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.savingsBadgeText,
+                                    { color: primary },
+                                  ]}
+                                >
+                                  SAVE {annualSavings}%
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={styles.billingChoicePrice}>
+                            {priceLabel(candidate)}
+                          </Text>
+                          {annual ? (
+                            <Text style={styles.billingChoiceNote}>
+                              Full-year credits and included bookings issued now
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
               ) : null}
 
               {fixedSession ? (
@@ -1158,12 +1261,61 @@ export function OrganizationExperienceModal({
                 </Pressable>
               ) : null}
 
+              {paymentKind === "card" ? (
+                <View style={styles.promoField}>
+                  <Text style={styles.purchaseLabel}>Promo code</Text>
+                  <TextInput
+                    autoCapitalize="characters"
+                    maxLength={48}
+                    onChangeText={(value) => setPromoCode(value.toUpperCase())}
+                    placeholder="Enter code"
+                    placeholderTextColor={themeTokens.text3}
+                    style={styles.promoInput}
+                    value={promoCode}
+                  />
+                </View>
+              ) : null}
+
+              {isMembershipOffer || requiresMembership ? (
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: membershipTermsAccepted }}
+                  onPress={() => setMembershipTermsAccepted((value) => !value)}
+                  style={[styles.membershipAdd, { backgroundColor: sand }]}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      membershipTermsAccepted && {
+                        backgroundColor: primary,
+                        borderColor: primary,
+                      },
+                    ]}
+                  >
+                    {membershipTermsAccepted ? (
+                      <CheckIcon color={onPrimary} />
+                    ) : null}
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.membershipAddTitle}>
+                      I agree to the membership terms
+                    </Text>
+                    <Text style={styles.membershipAddBody}>
+                      This membership renews on the billing schedule shown. You
+                      can manage renewal and cancellation from Duna.
+                    </Text>
+                  </View>
+                </Pressable>
+              ) : null}
+
               <Pressable
                 accessibilityRole="button"
                 disabled={
                   checkoutBusy ||
                   checkingMembership ||
                   !selectedPrice ||
+                  ((isMembershipOffer || requiresMembership) &&
+                    !membershipTermsAccepted) ||
                   (fixedSession && !selectedOccurrenceId) ||
                   (requiresRecordingConsent && !recordingConsentAccepted) ||
                   (requiresMembership && !addMembership)
@@ -1175,6 +1327,8 @@ export function OrganizationExperienceModal({
                   (checkoutBusy ||
                     checkingMembership ||
                     !selectedPrice ||
+                    ((isMembershipOffer || requiresMembership) &&
+                      !membershipTermsAccepted) ||
                     (fixedSession && !selectedOccurrenceId) ||
                     (requiresRecordingConsent && !recordingConsentAccepted) ||
                     (requiresMembership && !addMembership)) &&
@@ -2231,6 +2385,59 @@ function createStyles(token: ResolvedDunaTokens) {
       color: token.text1,
       fontSize: 16,
       fontWeight: "800",
+    },
+    billingChoice: { gap: 9, marginTop: 18 },
+    billingChoiceRow: { flexDirection: "row", gap: 9 },
+    billingChoiceCard: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 17,
+      borderWidth: 1.5,
+      flex: 1,
+      minHeight: 112,
+      padding: 14,
+    },
+    billingChoiceHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    billingChoiceTitle: {
+      color: token.text1,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    billingChoicePrice: {
+      color: token.text1,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 9,
+    },
+    billingChoiceNote: {
+      color: token.text2,
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: 6,
+    },
+    savingsBadge: {
+      borderRadius: 999,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+    savingsBadgeText: { fontSize: 12, fontWeight: "900" },
+    promoField: { gap: 8, marginTop: 18 },
+    promoInput: {
+      backgroundColor: token.surface1,
+      borderColor: token.hairline,
+      borderRadius: 15,
+      borderWidth: 1,
+      color: token.text1,
+      fontSize: 15,
+      fontWeight: "700",
+      letterSpacing: 1,
+      minHeight: 52,
+      paddingHorizontal: 15,
     },
     optionChip: {
       borderColor: token.hairline,

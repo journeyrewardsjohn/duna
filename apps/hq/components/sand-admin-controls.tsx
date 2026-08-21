@@ -58,6 +58,21 @@ const consumerOrigin =
   process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
   "https://duna.coach";
 
+function liveTransportFailure(
+  detail: Readonly<Record<string, unknown>> | undefined,
+): string | undefined {
+  const failures = detail?.failures;
+  if (!Array.isArray(failures)) return undefined;
+  const first = failures[0];
+  if (!first || typeof first !== "object") return undefined;
+  const message = Reflect.get(first, "message");
+  const externalEventId = Reflect.get(first, "externalEventId");
+  if (typeof message !== "string" || !message.trim()) return undefined;
+  return typeof externalEventId === "string" && externalEventId
+    ? `${externalEventId}: ${message}`
+    : message;
+}
+
 function playerComboboxOptions(
   players: readonly PersonSummary[],
 ): readonly PlayerComboboxOption[] {
@@ -179,6 +194,7 @@ function ScraperControlCard({
   const fivbCadence = control.source === "fivb-12ndr";
   const liveTransport = control.source === "volleyball-world";
   const nativeOnly = control.source === "volleyball-life" || liveTransport;
+  const transportFailure = liveTransportFailure(control.liveHealth?.detail);
   return (
     <article className="hq-card scraper-control-card">
       <header className="hq-card-heading">
@@ -202,17 +218,25 @@ function ScraperControlCard({
         </Badge>
       </header>
       {liveTransport && (
-        <p className="scraper-transport-health">
-          Live transport: {control.liveHealth?.status ?? "idle"}
-          {control.liveHealth?.checkedAt
-            ? ` · checked ${new Intl.DateTimeFormat("en-US", {
-                timeStyle: "medium",
-              }).format(new Date(control.liveHealth.checkedAt))}`
-            : " · not checked yet"}
-          {control.liveHealth?.latencyMs !== undefined
-            ? ` · ${control.liveHealth.latencyMs} ms`
-            : ""}
-        </p>
+        <>
+          <p className="scraper-transport-health">
+            Live transport: {control.liveHealth?.status ?? "idle"}
+            {control.liveHealth?.checkedAt
+              ? ` · checked ${new Intl.DateTimeFormat("en-US", {
+                  timeStyle: "medium",
+                }).format(new Date(control.liveHealth.checkedAt))}`
+              : " · not checked yet"}
+            {control.liveHealth?.latencyMs !== undefined
+              ? ` · ${control.liveHealth.latencyMs} ms`
+              : ""}
+          </p>
+          {transportFailure && (
+            <p className="scraper-transport-error">
+              <TriangleAlert aria-hidden size={14} />
+              {transportFailure}
+            </p>
+          )}
+        </>
       )}
       <form action={save} className="scraper-control-form">
         <input name="source" type="hidden" value={control.source} />
@@ -826,6 +850,9 @@ export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
                   timeStyle: "short",
                 }).format(new Date(run.startedAt))}
               </small>
+              {run.errorMessage && (
+                <small className="sand-run-error">{run.errorMessage}</small>
+              )}
             </div>
             <Badge
               tone={

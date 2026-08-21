@@ -22,17 +22,18 @@ async function continueToStripe(formData: FormData) {
 
   const plan = String(formData.get("plan") ?? "") as PaidOrganizationPlanId;
   const idempotencyKey = String(formData.get("checkoutId") ?? "");
+  const interval = formData.get("interval") === "year" ? "year" : "month";
   if (!paidPlans.has(plan)) redirect("/");
   const caller = await getServerCaller();
   const checkout = await caller.operator.startPlanCheckout({
     plan,
-    interval: "month",
+    interval,
     uploadPackQuantity: Number(formData.get("uploadPackQuantity") ?? 0),
     livePackQuantity: Number(formData.get("livePackQuantity") ?? 0),
     payAsYouGo: formData.get("payAsYouGo") === "on",
     successUrl: hqUrl("/onboarding/complete?billing=success"),
     cancelUrl: hqUrl(
-      `/onboarding/complete?billing=cancelled&plan=${plan}&checkoutId=${idempotencyKey}`,
+      `/onboarding/complete?billing=cancelled&plan=${plan}&interval=${interval}&checkoutId=${idempotencyKey}`,
     ),
     idempotencyKey,
   });
@@ -47,6 +48,7 @@ export default async function CompleteOnboardingPage({
     billing?: string;
     checkoutId?: string;
     plan?: string;
+    interval?: string;
   }>;
 }) {
   const query = await searchParams;
@@ -56,6 +58,7 @@ export default async function CompleteOnboardingPage({
   const definition = ORGANIZATION_PLANS[plan];
   const checkoutId =
     query.billing === "cancelled" ? randomUUID() : query.checkoutId;
+  const interval = query.interval === "year" ? "year" : "month";
 
   return (
     <main className="auth-page">
@@ -75,8 +78,13 @@ export default async function CompleteOnboardingPage({
         <article>
           <span>{definition.name}</span>
           <strong>
-            ${(definition.monthlyPriceMinor / 100).toLocaleString("en-US")}
-            <small> / month</small>
+            $
+            {(
+              (interval === "year"
+                ? definition.annualPriceMinor
+                : definition.monthlyPriceMinor) / 100
+            ).toLocaleString("en-US")}
+            <small> / {interval === "year" ? "year" : "month"}</small>
           </strong>
           <ul>
             {definition.features.slice(0, 4).map((feature) => (
@@ -95,6 +103,7 @@ export default async function CompleteOnboardingPage({
         <form action={continueToStripe}>
           <input name="plan" type="hidden" value={plan} />
           <input name="checkoutId" type="hidden" value={checkoutId} />
+          <input name="interval" type="hidden" value={interval} />
           <fieldset className="onboarding-video-options">
             <legend>Optional video capacity</legend>
             <label>

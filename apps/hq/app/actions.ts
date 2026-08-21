@@ -457,6 +457,7 @@ export async function replaceCatalogItemAction(
       allowCredits: field(formData, "allowCredits") === "true",
       membershipRequired: field(formData, "membershipRequired") === "true",
       priceMinor: optionalMoneyMinor(formData, "price"),
+      annualPriceMinor: optionalMoneyMinor(formData, "annualPrice"),
       creditCost: optionalField(formData, "creditCost")
         ? numberField(formData, "creditCost")
         : undefined,

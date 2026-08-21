@@ -474,6 +474,75 @@ export interface FivbRefreshPolicy {
   readonly completedEventGraceHours: number;
 }
 
+function isoDayInTimeZone(now: Date, timeZone?: string): string {
+  if (!timeZone) return now.toISOString().slice(0, 10);
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone,
+    }).formatToParts(now);
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value;
+    const year = value("year");
+    const month = value("month");
+    const day = value("day");
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Stored editorial timezones are operator-validated, but old rows may not
+    // be. UTC remains a deterministic fallback for those legacy records.
+  }
+  return now.toISOString().slice(0, 10);
+}
+
+export function professionalEventLifecycle(input: {
+  readonly status: "upcoming" | "live" | "completed" | string;
+  readonly live: boolean;
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly timeZone?: string;
+  readonly now?: Date;
+}): {
+  readonly status: "upcoming" | "live" | "completed";
+  readonly live: boolean;
+} {
+  const today = isoDayInTimeZone(input.now ?? new Date(), input.timeZone);
+  const startsOn = input.startsOn ?? input.endsOn;
+  const endsOn = input.endsOn ?? input.startsOn;
+
+  // Calendar dates are the final safety boundary. Provider status flags can
+  // lag indefinitely when a scraper fails, but an ended event must never keep
+  // occupying the live rail.
+  if (endsOn && today > endsOn) return { status: "completed", live: false };
+  if (input.status === "completed" && !input.live) {
+    return { status: "completed", live: false };
+  }
+  if (startsOn && endsOn && today >= startsOn && today <= endsOn) {
+    return { status: "live", live: true };
+  }
+  if (startsOn && today < startsOn) return { status: "upcoming", live: false };
+  if (input.live || input.status === "live")
+    return { status: "live", live: true };
+  return input.status === "completed"
+    ? { status: "completed", live: false }
+    : { status: "upcoming", live: false };
+}
+
+function eventDatePriority(input: {
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly today: string;
+}): number {
+  const startsOn = input.startsOn ?? input.endsOn;
+  const endsOn = input.endsOn ?? input.startsOn;
+  if (startsOn && endsOn && startsOn <= input.today && endsOn >= input.today) {
+    return 0;
+  }
+  if (startsOn && startsOn > input.today) return 1;
+  return 2;
+}
+
 export interface PublicFivbLiveRefreshCandidate {
   readonly status: VolleyballWorldStoredMatch["status"];
   readonly eventStatus?: string | null;
@@ -526,11 +595,7 @@ export function selectFivbRefreshCandidates(
     .toISOString()
     .slice(0, 10);
   const isDue = (candidate: FivbRefreshCandidate) => {
-    if (
-      candidate.status === "completed" &&
-      candidate.endsOn &&
-      candidate.endsOn < completedCutoff
-    ) {
+    if (candidate.endsOn && candidate.endsOn < completedCutoff) {
       return false;
     }
     if (!hasTournamentDetail(unknownRecord(candidate.rawPayload))) return true;
@@ -544,7 +609,11 @@ export function selectFivbRefreshCandidates(
   return rows
     .filter(isDue)
     .sort((left, right) => {
-      if (left.live !== right.live) return left.live ? -1 : 1;
+      const today = isoDayInTimeZone(policy.now);
+      const dateOrder =
+        eventDatePriority({ ...left, today }) -
+        eventDatePriority({ ...right, today });
+      if (dateOrder !== 0) return dateOrder;
       const leftDetail = hasTournamentDetail(unknownRecord(left.rawPayload));
       const rightDetail = hasTournamentDetail(unknownRecord(right.rawPayload));
       if (leftDetail !== rightDetail) return leftDetail ? 1 : -1;
@@ -552,10 +621,10 @@ export function selectFivbRefreshCandidates(
         detailSyncedAt(right),
       );
       if (detailOrder !== 0) return detailOrder;
-      const dateOrder = (left.startsOn ?? "9999-12-31").localeCompare(
+      const startOrder = (left.startsOn ?? "9999-12-31").localeCompare(
         right.startsOn ?? "9999-12-31",
       );
-      if (dateOrder !== 0) return dateOrder;
+      if (startOrder !== 0) return startOrder;
       return left.externalEventId.localeCompare(right.externalEventId);
     })
     .slice(0, Math.max(0, Math.floor(limit)));
@@ -2594,16 +2663,27 @@ export async function refreshVolleyballWorldEvent(input: {
     }
   }
   const allOfficialMatchesCompleted = linked > 0 && completed === linked;
+  const effectiveEvent = effectiveProfessionalEvent(event);
+  const dateLifecycle = professionalEventLifecycle({
+    status: event.status,
+    live: false,
+    startsOn: effectiveEvent.startsOn,
+    endsOn: effectiveEvent.endsOn,
+    timeZone: effectiveEvent.editorial.timezone,
+    now,
+  });
+  const eventLive =
+    live > 0 || (!allOfficialMatchesCompleted && dateLifecycle.live);
   await database
     .update(professionalEvents)
     .set({
-      live: live > 0,
+      live: eventLive,
       status:
         live > 0
           ? "live"
           : allOfficialMatchesCompleted
             ? "completed"
-            : event.status,
+            : dateLifecycle.status,
       rawPayload: {
         ...rawPayload,
         volleyballWorld: {
@@ -2693,6 +2773,68 @@ export async function refreshActiveFivbEvents(input: {
   };
 }
 
+export interface VolleyballWorldRefreshCandidate {
+  readonly externalEventId: string;
+  readonly name: string;
+  readonly category?: string | null;
+  readonly live: boolean;
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly rawPayload: unknown;
+}
+
+export function selectVolleyballWorldRefreshCandidates(
+  rows: readonly VolleyballWorldRefreshCandidate[],
+  limit: number,
+  policy: {
+    readonly now: Date;
+    readonly liveRefreshMs: number;
+    readonly upcomingRefreshMs: number;
+  },
+): readonly VolleyballWorldRefreshCandidate[] {
+  const today = isoDayInTimeZone(policy.now);
+  const transportSyncedAt = (rawPayload: unknown) => {
+    const value = unknownRecord(
+      unknownRecord(rawPayload).volleyballWorld,
+    ).syncedAt;
+    return typeof value === "string" ? Date.parse(value) : Number.NaN;
+  };
+  return (
+    [...rows]
+      .filter((row) =>
+        isVolleyballWorldEliteEvent({
+          name: row.name,
+          category: row.category,
+        }),
+      )
+      // A provider flag can remain live forever after a failed refresh. Dates
+      // prevent those rows from starving the small current-event work queue.
+      .filter((row) => !row.endsOn || row.endsOn >= today)
+      .filter((row) => {
+        const synced = transportSyncedAt(row.rawPayload);
+        if (Number.isNaN(synced)) return true;
+        const activeByDate = eventDatePriority({ ...row, today }) === 0;
+        const cadence =
+          activeByDate || row.live
+            ? policy.liveRefreshMs
+            : policy.upcomingRefreshMs;
+        return policy.now.getTime() - synced >= cadence;
+      })
+      .sort((left, right) => {
+        const dateOrder =
+          eventDatePriority({ ...left, today }) -
+          eventDatePriority({ ...right, today });
+        if (dateOrder !== 0) return dateOrder;
+        const startOrder = (left.startsOn ?? "9999-12-31").localeCompare(
+          right.startsOn ?? "9999-12-31",
+        );
+        if (startOrder !== 0) return startOrder;
+        return left.externalEventId.localeCompare(right.externalEventId);
+      })
+      .slice(0, Math.min(8, Math.max(1, Math.floor(limit))))
+  );
+}
+
 export async function refreshActiveVolleyballWorldEvents(input: {
   readonly limit?: number;
   readonly now?: Date;
@@ -2708,6 +2850,7 @@ export async function refreshActiveVolleyballWorldEvents(input: {
       category: professionalEvents.category,
       live: professionalEvents.live,
       startsOn: professionalEvents.startsOn,
+      endsOn: professionalEvents.endsOn,
       rawPayload: professionalEvents.rawPayload,
     })
     .from(professionalEvents)
@@ -2720,33 +2863,11 @@ export async function refreshActiveVolleyballWorldEvents(input: {
     .limit(250);
   const liveRefreshMs = (control.liveRefreshSeconds ?? 60) * 1_000;
   const upcomingRefreshMs = Math.max(15 * 60 * 1_000, liveRefreshMs * 15);
-  const transportSyncedAt = (rawPayload: unknown) => {
-    const value = unknownRecord(
-      unknownRecord(rawPayload).volleyballWorld,
-    ).syncedAt;
-    return typeof value === "string" ? Date.parse(value) : Number.NaN;
-  };
-  const candidates = [...rows]
-    .filter((row) =>
-      isVolleyballWorldEliteEvent({
-        name: row.name,
-        category: row.category,
-      }),
-    )
-    .filter((row) => {
-      const synced = transportSyncedAt(row.rawPayload);
-      if (Number.isNaN(synced)) return true;
-      const cadence = row.live ? liveRefreshMs : upcomingRefreshMs;
-      return now.getTime() - synced >= cadence;
-    })
-    .sort(
-      (left, right) =>
-        Number(right.live) - Number(left.live) ||
-        (left.startsOn ?? "9999-12-31").localeCompare(
-          right.startsOn ?? "9999-12-31",
-        ),
-    )
-    .slice(0, Math.min(8, Math.max(1, input.limit ?? 4)));
+  const candidates = selectVolleyballWorldRefreshCandidates(
+    rows,
+    input.limit ?? 4,
+    { now, liveRefreshMs, upcomingRefreshMs },
+  );
   const startedAt = Date.now();
   const results = [];
   for (const candidate of candidates) {
@@ -2788,6 +2909,16 @@ export async function refreshActiveVolleyballWorldEvents(input: {
       failed,
       cadenceSeconds: control.liveRefreshSeconds ?? 60,
       restFallbackSeconds: control.liveRestFallbackSeconds ?? 30,
+      failures: results.flatMap((result) =>
+        result.status === "failed"
+          ? [
+              {
+                externalEventId: result.externalEventId,
+                message: result.message,
+              },
+            ]
+          : [],
+      ),
     },
     now,
   });
@@ -6147,21 +6278,31 @@ export async function loadPublicProCoverage(now = new Date()) {
       .limit(1),
   ]);
   const eventRows = storedEventRows
-    .map((row) => ({
-      ...row.event,
-      sourceSlug: row.sourceSlug,
-      effective: effectiveProfessionalEvent(row.event),
-    }))
+    .map((row) => {
+      const effective = effectiveProfessionalEvent(row.event);
+      return {
+        ...row.event,
+        sourceSlug: row.sourceSlug,
+        effective,
+        lifecycle: professionalEventLifecycle({
+          status: row.event.status,
+          live: row.event.live,
+          startsOn: effective.startsOn,
+          endsOn: effective.endsOn,
+          timeZone: effective.editorial.timezone,
+          now,
+        }),
+      };
+    })
     .sort((a, b) => {
-      if (a.live !== b.live) return a.live ? -1 : 1;
-      if (a.status !== b.status) {
-        const order = { upcoming: 0, live: 0, completed: 1 } as const;
-        return (
-          order[a.status as keyof typeof order] -
-          order[b.status as keyof typeof order]
-        );
+      if (a.lifecycle.live !== b.lifecycle.live) {
+        return a.lifecycle.live ? -1 : 1;
       }
-      if (a.status === "completed") {
+      if (a.lifecycle.status !== b.lifecycle.status) {
+        const order = { upcoming: 0, live: 0, completed: 1 } as const;
+        return order[a.lifecycle.status] - order[b.lifecycle.status];
+      }
+      if (a.lifecycle.status === "completed") {
         return (b.effective.startsOn ?? "").localeCompare(
           a.effective.startsOn ?? "",
         );
@@ -6283,7 +6424,7 @@ export async function loadPublicProCoverage(now = new Date()) {
             ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
             status: professionalMatchStatus({
               winnerSide: match.winnerSide,
-              eventLive: event.live,
+              eventLive: event.lifecycle.live,
               hasScore: match.sets.length > 0,
               scheduledAt,
               now,
@@ -6317,8 +6458,8 @@ export async function loadPublicProCoverage(now = new Date()) {
         genderCategory: event.genderCategory,
         startsOn: event.effective.startsOn,
         endsOn: event.effective.endsOn,
-        status: event.status,
-        live: event.live,
+        status: event.lifecycle.status,
+        live: event.lifecycle.live,
         teamCount: event.teamCount,
         matchCount: Math.max(event.matchCount, eventMatches.length),
         completedMatchCount,
@@ -6377,7 +6518,7 @@ export async function loadPublicProCoverage(now = new Date()) {
               source: professionalSource(event.sourceSlug),
               status: professionalMatchStatus({
                 winnerSide: match.winnerSide,
-                eventLive: event.live,
+                eventLive: event.lifecycle.live,
                 hasScore: match.sets.length > 0,
                 scheduledAt,
                 now,
@@ -8861,6 +9002,14 @@ export async function loadPublicProEvent(
     effective.editorial,
     siblingEffective?.editorial,
   );
+  const lifecycle = professionalEventLifecycle({
+    status: event.status,
+    live: event.live,
+    startsOn: effective.startsOn,
+    endsOn: effective.endsOn,
+    timeZone: publicEditorial.timezone,
+    now,
+  });
 
   const selectedMatchRows = await database
     .select()
@@ -9152,7 +9301,7 @@ export async function loadPublicProEvent(
       });
       const status = professionalMatchStatus({
         winnerSide,
-        eventLive: event.live,
+        eventLive: lifecycle.live,
         hasScore: (liveScore?.sets.length ?? match.sets.length) > 0,
         scheduledAt,
         providerStatus: liveScore?.status,
@@ -9160,7 +9309,7 @@ export async function loadPublicProEvent(
       });
       const predictionClosed = professionalMatchPredictionClosed({
         status,
-        eventStatus: event.status,
+        eventStatus: lifecycle.status,
         scheduledAt,
         now,
       });
@@ -9591,8 +9740,8 @@ export async function loadPublicProEvent(
     genderCategory: event.genderCategory,
     startsOn: effective.startsOn,
     endsOn: effective.endsOn,
-    status: event.status,
-    live: event.live,
+    status: lifecycle.status,
+    live: lifecycle.live,
     teamCount:
       avpLeague && avpLeague.overall.length > 0
         ? avpLeague.overall.length

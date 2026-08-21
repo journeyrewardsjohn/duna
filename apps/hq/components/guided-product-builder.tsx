@@ -1,7 +1,11 @@
 "use client";
 
 import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
-import { productMediaForKind } from "@duna/core";
+import {
+  annualPrepayPriceMinor,
+  annualPrepaySavingsPercent,
+  productMediaForKind,
+} from "@duna/core";
 import {
   Badge,
   SmartDateRangePicker,
@@ -601,7 +605,7 @@ export function GuidedProductBuilder({
   const initialConfiguration = initialItem?.configuration ?? {};
   const programConfiguration = initialConfiguration.program as
     Record<string, unknown> | undefined;
-  const initialCardPrice = initialItem?.variants
+  const initialMonthlyCardPrice = initialItem?.variants
     .flatMap((variant) => variant.prices)
     .find(
       (candidate) =>
@@ -610,6 +614,16 @@ export function GuidedProductBuilder({
         candidate.amountMinor !== undefined &&
         candidate.recurringInterval !== "year",
     );
+  const initialAnnualCardPrice = initialItem?.variants
+    .flatMap((variant) => variant.prices)
+    .find(
+      (candidate) =>
+        candidate.active &&
+        candidate.paymentKind === "card" &&
+        candidate.amountMinor !== undefined &&
+        candidate.recurringInterval === "year",
+    );
+  const initialCardPrice = initialMonthlyCardPrice ?? initialAnnualCardPrice;
   const initialOptions = useMemo(() => {
     const values = new Map<string, Set<string>>();
     for (const variant of initialItem?.variants ?? []) {
@@ -925,7 +939,30 @@ export function GuidedProductBuilder({
     virtualDelivery?.summarize !== false,
   );
 
-  const [billingMode, setBillingMode] = useState<"month" | "year">("month");
+  const [billingMode, setBillingMode] = useState<"month" | "year">(
+    initialMonthlyCardPrice
+      ? "month"
+      : initialAnnualCardPrice
+        ? "year"
+        : "month",
+  );
+  const [annualPrepayEnabled, setAnnualPrepayEnabled] = useState(
+    Boolean(initialMonthlyCardPrice && initialAnnualCardPrice),
+  );
+  const [annualDiscountPercent, setAnnualDiscountPercent] = useState(() => {
+    if (
+      initialMonthlyCardPrice?.amountMinor !== undefined &&
+      initialAnnualCardPrice?.amountMinor !== undefined
+    ) {
+      return annualPrepaySavingsPercent(
+        initialMonthlyCardPrice.amountMinor,
+        initialAnnualCardPrice.amountMinor,
+      );
+    }
+    return typeof membershipConfiguration?.annualDiscountPercent === "number"
+      ? membershipConfiguration.annualDiscountPercent
+      : 10;
+  });
   const [creditsGranted, setCreditsGranted] = useState(10);
   const [membershipCredits, setMembershipCredits] = useState(0);
   const [membershipBookingLimit, setMembershipBookingLimit] = useState(0);
@@ -1127,6 +1164,12 @@ export function GuidedProductBuilder({
       ? undefined
       : Math.round(receiptTotalMinor / Math.max(1, receiptQuantity));
   const salePriceMinor = moneyMinor(price);
+  const calculatedAnnualPriceMinor =
+    billingMode === "month" &&
+    annualPrepayEnabled &&
+    salePriceMinor !== undefined
+      ? annualPrepayPriceMinor(salePriceMinor, annualDiscountPercent)
+      : undefined;
   const unitProfitMinor =
     salePriceMinor !== undefined && receiptUnitCostMinor !== undefined
       ? salePriceMinor - receiptUnitCostMinor
@@ -1425,7 +1468,9 @@ export function GuidedProductBuilder({
               label: "Billing",
               value: isMembership
                 ? billingMode === "month"
-                  ? "Monthly"
+                  ? annualPrepayEnabled
+                    ? `Monthly + annual prepay · save ${annualDiscountPercent}%`
+                    : "Monthly"
                   : "Annual"
                 : "One time",
             },
@@ -1560,8 +1605,34 @@ export function GuidedProductBuilder({
           ...(isMembership
             ? {
                 membership: {
-                  billingMode: billingMode === "month" ? "monthly" : "annual",
-                  annualDiscountPercent: 0,
+                  billingMode:
+                    billingMode === "month" && annualPrepayEnabled
+                      ? "monthly-and-annual"
+                      : billingMode === "month"
+                        ? "monthly"
+                        : "annual",
+                  annualDiscountPercent:
+                    billingMode === "month" && annualPrepayEnabled
+                      ? annualDiscountPercent
+                      : 0,
+                  annualPrepay: {
+                    enabled: billingMode === "month" && annualPrepayEnabled,
+                    monthsPaidUpfront: 12,
+                    discountPercent:
+                      billingMode === "month" && annualPrepayEnabled
+                        ? annualDiscountPercent
+                        : 0,
+                    creditsIssuedUpfront:
+                      billingMode === "month" && annualPrepayEnabled
+                        ? membershipCredits * 12
+                        : undefined,
+                    bookingAllowanceUpfront:
+                      billingMode === "month" &&
+                      annualPrepayEnabled &&
+                      membershipBookingLimit > 0
+                        ? membershipBookingLimit * 12
+                        : undefined,
+                  },
                   includedCreditsPerCycle: membershipCredits,
                   bookingLimitPerCycle:
                     membershipBookingLimit > 0
@@ -1777,6 +1848,15 @@ export function GuidedProductBuilder({
           value={type === "good" && !sellEnabled ? "" : price}
         />
         <input
+          name="annualPrice"
+          type="hidden"
+          value={
+            calculatedAnnualPriceMinor === undefined
+              ? ""
+              : String(calculatedAnnualPriceMinor / 100)
+          }
+        />
+        <input
           name="creditCost"
           type="hidden"
           value={allowCredits ? String(creditCost) : ""}
@@ -1940,6 +2020,67 @@ export function GuidedProductBuilder({
                       onClick={() => setSellEnabled((current) => !current)}
                     />
                   </ChoiceGrid>
+                  {billingMode === "month" ? (
+                    <section className="operator-field--wide guided-annual-prepay">
+                      <label className="guided-toggle-row">
+                        <input
+                          checked={annualPrepayEnabled}
+                          onChange={(event) =>
+                            setAnnualPrepayEnabled(event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <strong>Offer annual prepay</strong>
+                          Let members pay 12 months upfront and receive the full
+                          year of credits and booking allowances immediately.
+                        </span>
+                      </label>
+                      {annualPrepayEnabled ? (
+                        <div className="operator-form-grid operator-form-grid--two">
+                          <label>
+                            <span>Annual prepay discount</span>
+                            <span className="operator-number-suffix">
+                              <input
+                                max="75"
+                                min="1"
+                                onChange={(event) =>
+                                  setAnnualDiscountPercent(
+                                    Math.min(
+                                      75,
+                                      Math.max(1, Number(event.target.value)),
+                                    ),
+                                  )
+                                }
+                                step="1"
+                                type="number"
+                                value={annualDiscountPercent}
+                              />
+                              <b>%</b>
+                            </span>
+                          </label>
+                          <div className="guided-annual-prepay__summary">
+                            <span>Member sees</span>
+                            <strong>
+                              {moneyLabel(
+                                calculatedAnnualPriceMinor,
+                                workspace.organization.currency,
+                              )}{" "}
+                              / year
+                            </strong>
+                            <small>
+                              Save {annualDiscountPercent}% ·{" "}
+                              {membershipCredits * 12} credits
+                              {membershipBookingLimit > 0
+                                ? ` · ${membershipBookingLimit * 12} included bookings`
+                                : ""}{" "}
+                              issued for the prepaid year
+                            </small>
+                          </div>
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
                   {!trackInventory && !sellEnabled && (
                     <p className="guided-product-warning" role="alert">
                       Choose inventory tracking, selling, or both.
@@ -4555,7 +4696,9 @@ export function GuidedProductBuilder({
                     </strong>
                     <span>
                       {isMembership
-                        ? `${billingMode === "month" ? "Monthly" : "Annual"} renewal`
+                        ? billingMode === "month" && annualPrepayEnabled
+                          ? `Monthly or annual · save ${annualDiscountPercent}% prepaid`
+                          : `${billingMode === "month" ? "Monthly" : "Annual"} renewal`
                         : "One-time purchase"}
                     </span>
                   </article>

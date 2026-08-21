@@ -29,6 +29,7 @@ import {
 } from "@duna/db";
 import {
   isOrganizationPlanId,
+  membershipEntitlementMultiplier,
   ORGANIZATION_VIDEO_ADD_ONS,
   type MembershipSubscriptionPolicy,
 } from "@duna/core";
@@ -76,6 +77,10 @@ import {
   synchronizeMoneyRefund,
 } from "./money-service";
 import { sendTransactionalEmail } from "./resend";
+import {
+  redeemPromoCodeForOrder,
+  releasePromoCodeForOrder,
+} from "./promo-codes";
 
 export { connectAccountMoneyReady } from "./stripe-connect";
 
@@ -1091,7 +1096,12 @@ async function applyMembershipCycleBenefits(input: {
       isDemo: false,
     },
     personId: membership.personId,
-    credits: entitlement.quantity,
+    credits:
+      entitlement.quantity *
+      membershipEntitlementMultiplier(
+        catalogPrice.recurringInterval,
+        catalogPrice.recurringIntervalCount ?? 1,
+      ),
     expiresAt: membership.currentPeriodEndsAt ?? undefined,
     valueMinor: 0,
     currency: tier.currency,
@@ -1366,6 +1376,7 @@ async function processStripeWorkflow(
       ]);
     }
     await fulfillPaidCatalogOrder(order.id, occurredAt);
+    await redeemPromoCodeForOrder(order.id, occurredAt);
     await reconcileTeamEntryPayment(order.id, occurredAt);
     await reconcilePaidOrderDivisionSelections({
       orderId: order.id,
@@ -1490,6 +1501,7 @@ async function processStripeWorkflow(
         });
       }
       await fulfillPaidCatalogOrder(order.id, occurredAt);
+      await redeemPromoCodeForOrder(order.id, occurredAt);
       await reconcileTeamEntryPayment(order.id, occurredAt);
       await reconcilePaidOrderDivisionSelections({
         orderId: order.id,
@@ -1576,6 +1588,7 @@ async function processStripeWorkflow(
           failedAt,
         );
       }
+      await releasePromoCodeForOrder(orderId, failedAt);
       await database.batch([
         database
           .update(orders)

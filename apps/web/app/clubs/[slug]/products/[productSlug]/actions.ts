@@ -28,6 +28,7 @@ export async function startCatalogCheckoutAction(input: {
   readonly returnProductSlug?: string;
   readonly checkoutRole?: "product" | "membership";
   readonly membershipPolicyAccepted?: boolean;
+  readonly promoCode?: string;
 }) {
   try {
     const incoming = await headers();
@@ -54,6 +55,7 @@ export async function startCatalogCheckoutAction(input: {
         : `${origin}${productPath}?checkout=cancelled`,
       idempotencyKey: input.idempotencyKey,
       membershipPolicyAccepted: input.membershipPolicyAccepted,
+      promoCode: input.promoCode,
     });
     return { ok: true as const, result };
   } catch (error) {

@@ -32,7 +32,7 @@ import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProfileAvatar, ProfileAvatarStack } from "./profile-avatar-stack";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
@@ -46,11 +46,14 @@ export interface OrganizationMarketingPlan {
   readonly tagline: string;
   readonly monthlyPrice: string;
   readonly annualPrice: string;
+  readonly monthlyPriceMinor: number;
+  readonly annualPriceMinor: number;
   readonly organizationFeePercent: number;
   readonly monthlyUploadHours: number;
   readonly monthlyLiveHours: number;
   readonly features: readonly string[];
-  readonly signupHref: string;
+  readonly monthlySignupHref: string;
+  readonly annualSignupHref: string;
 }
 
 interface RunYourBusinessPageProps {
@@ -940,6 +943,26 @@ function Pricing({
   readonly plans: readonly OrganizationMarketingPlan[];
   readonly videoPricing: RunYourBusinessPageProps["videoPricing"];
 }) {
+  const [billingInterval, setBillingInterval] = useState<"month" | "year">(
+    "month",
+  );
+  const paidPlans = plans.filter((plan) => plan.monthlyPriceMinor > 0);
+  const annualSavingsPercent = paidPlans.length
+    ? Math.round(
+        paidPlans.reduce(
+          (total, plan) =>
+            total +
+            (1 - plan.annualPriceMinor / (plan.monthlyPriceMinor * 12)) * 100,
+          0,
+        ) / paidPlans.length,
+      )
+    : 0;
+  const money = (minor: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: minor % 100 === 0 ? 0 : 2,
+    }).format(minor / 100);
   return (
     <section className={styles.pricing} id="plans">
       <div className={styles.sectionIntro} data-reveal>
@@ -952,66 +975,107 @@ function Pricing({
           worth more than the monthly subscription.
         </p>
       </div>
+      <div className={styles.billingToggle} data-reveal>
+        <button
+          aria-pressed={billingInterval === "month"}
+          onClick={() => setBillingInterval("month")}
+          type="button"
+        >
+          Monthly
+        </button>
+        <button
+          aria-pressed={billingInterval === "year"}
+          onClick={() => setBillingInterval("year")}
+          type="button"
+        >
+          Annual prepay <b>Save {annualSavingsPercent}%</b>
+        </button>
+      </div>
+      <p className={styles.billingToggleNote} data-reveal>
+        Annual prepay includes the same complete Duna HQ platform and is billed
+        once for the year.
+      </p>
       <div className={styles.planGrid}>
-        {plans.map((plan) => (
-          <article
-            data-featured={plan.id === "coach" ? "true" : undefined}
-            data-reveal
-            key={plan.id}
-          >
-            <header>
-              <span>
-                {plan.name}
-                {plan.id === "coach" && <b>Best place to start</b>}
+        {plans.map((plan) => {
+          const annual =
+            billingInterval === "year" && plan.monthlyPriceMinor > 0;
+          const displayPrice = annual
+            ? money(Math.round(plan.annualPriceMinor / 12))
+            : plan.monthlyPrice;
+          const savings =
+            plan.monthlyPriceMinor > 0
+              ? Math.round(
+                  (1 - plan.annualPriceMinor / (plan.monthlyPriceMinor * 12)) *
+                    100,
+                )
+              : 0;
+          return (
+            <article
+              data-featured={plan.id === "coach" ? "true" : undefined}
+              data-reveal
+              key={plan.id}
+            >
+              <header>
+                <span>
+                  {plan.name}
+                  {plan.id === "coach" && <b>Best place to start</b>}
+                </span>
+                <h3>{plan.productName}</h3>
+                <p>{plan.tagline}</p>
+              </header>
+              <div className={styles.priceLine}>
+                <Numeric tier="hero">{displayPrice}</Numeric>
+                <span>/ month</span>
+              </div>
+              <small className={styles.billingDetail}>
+                {annual
+                  ? `${plan.annualPrice} billed once yearly · save ${savings}%`
+                  : plan.id === "coach"
+                    ? "No software subscription"
+                    : `${plan.annualPrice} with annual prepay`}
+              </small>
+              <span className={styles.feeLine}>
+                Stripe processing averages 2.9%* +{" "}
+                <Numeric tier="chip">{plan.organizationFeePercent}%</Numeric>{" "}
+                Duna organization fee
               </span>
-              <h3>{plan.productName}</h3>
-              <p>{plan.tagline}</p>
-            </header>
-            <div className={styles.priceLine}>
-              <Numeric tier="hero">{plan.monthlyPrice}</Numeric>
-              <span>/ month</span>
-            </div>
-            <span className={styles.feeLine}>
-              Stripe processing averages 2.9%* +{" "}
-              <Numeric tier="chip">{plan.organizationFeePercent}%</Numeric> Duna
-              organization fee
-            </span>
-            <ul>
-              {plan.features.slice(0, 4).map((feature) => (
-                <li key={feature}>
-                  <Check /> {feature}
-                </li>
-              ))}
-            </ul>
-            <a className={styles.planCta} href={plan.signupHref}>
-              {plan.id === "coach"
-                ? "Get Started for Free"
-                : `Choose ${plan.name}`}
-              <ArrowRight aria-hidden />
-            </a>
-            <footer>
-              <span>
-                <Video />{" "}
-                <Numeric tier="chip">{plan.monthlyUploadHours}</Numeric>{" "}
-                uploaded-video hours
-              </span>
-              <span>
-                <Smartphone />{" "}
-                <Numeric tier="chip">{plan.monthlyLiveHours}</Numeric> live
-                hours monthly
-              </span>
-              {plan.id !== "coach" && (
-                <small>{plan.annualPrice} annually</small>
-              )}
-              {plan.id === "coach" && (
-                <small>
-                  +10 upload and +2 live hours for every $40 in organization
-                  fees collected that month
-                </small>
-              )}
-            </footer>
-          </article>
-        ))}
+              <ul>
+                {plan.features.slice(0, 4).map((feature) => (
+                  <li key={feature}>
+                    <Check /> {feature}
+                  </li>
+                ))}
+              </ul>
+              <a
+                className={styles.planCta}
+                href={annual ? plan.annualSignupHref : plan.monthlySignupHref}
+              >
+                {plan.id === "coach"
+                  ? "Get Started for Free"
+                  : `Choose ${plan.name}`}
+                <ArrowRight aria-hidden />
+              </a>
+              <footer>
+                <span>
+                  <Video />{" "}
+                  <Numeric tier="chip">{plan.monthlyUploadHours}</Numeric>{" "}
+                  uploaded-video hours
+                </span>
+                <span>
+                  <Smartphone />{" "}
+                  <Numeric tier="chip">{plan.monthlyLiveHours}</Numeric> live
+                  hours monthly
+                </span>
+                {plan.id === "coach" && (
+                  <small>
+                    +10 upload and +2 live hours for every $40 in organization
+                    fees collected that month
+                  </small>
+                )}
+              </footer>
+            </article>
+          );
+        })}
       </div>
       <div className={styles.videoPricing} data-reveal>
         <div>
@@ -1022,8 +1086,8 @@ function Pricing({
           <p>
             Video is the only metered Duna HQ feature. Add recurring capacity to
             a paid plan when you know you need it, or pay only for overage. Free
-            organizations keep earning capacity as they transact. Rates are set
-            at 5× Duna&apos;s current video infrastructure cost.
+            organizations keep earning capacity as they transact. Every price is
+            shown before purchase, with no hidden video commitment.
           </p>
         </div>
         <dl>

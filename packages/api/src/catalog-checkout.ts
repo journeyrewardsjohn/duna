@@ -34,6 +34,7 @@ import {
 import {
   allocateOrganizationCredits,
   assertBalancedJournal,
+  membershipEntitlementMultiplier,
   membershipSubscriptionDisclosure,
   membershipSubscriptionPolicy,
   validateMembershipSubscriptionPolicy,
@@ -62,6 +63,13 @@ import {
   getOrCreatePlayerStripeCustomer,
   getStripePublishableKey,
 } from "./payments";
+import {
+  createPromoCheckoutCoupon,
+  quotePromoCode,
+  redeemPromoCodeForOrder,
+  releasePromoCodeForOrder,
+  reservePromoRedemption,
+} from "./promo-codes";
 import { queueVirtualSessionDelivery } from "./virtual-session-service";
 import {
   generateBookableSessionOccurrences,
@@ -427,7 +435,11 @@ async function membershipIncludedOffer(input: {
         sql`${catalogFulfillments.createdAt} >= ${cycleStart}`,
       ),
     );
-  const remainingBookings = accessLimit.quantity - (countResult[0]?.count ?? 0);
+  const cycleBookingAllowance =
+    accessLimit.quantity *
+    membershipEntitlementMultiplier(activeMembership.tier.interval, 1);
+  const remainingBookings =
+    cycleBookingAllowance - (countResult[0]?.count ?? 0);
   if (remainingBookings <= 0) return undefined;
   return {
     planCatalogItemId: activeMembership.planCatalogItemId,
@@ -590,6 +602,7 @@ export async function startCatalogCheckout(input: {
   readonly paymentMethod: "card" | "credit" | "cash";
   readonly paymentOption?: "upfront" | "installments";
   readonly paymentSurface?: "hosted" | "native";
+  readonly promoCode?: string;
   readonly quantity: number;
   readonly catalogSessionOccurrenceId?: string;
   readonly recordingConsentAccepted?: boolean;
@@ -923,6 +936,18 @@ export async function startCatalogCheckout(input: {
       "This product does not accept pay-in-person reservations.",
     );
   }
+  if (input.promoCode && input.paymentMethod !== "card") {
+    throw new CatalogCheckoutError(
+      "PRICE_UNAVAILABLE",
+      "Promo codes apply to card purchases.",
+    );
+  }
+  if (input.promoCode && installmentsRequested) {
+    throw new CatalogCheckoutError(
+      "PRICE_UNAVAILABLE",
+      "Choose the upfront payment option to use a promo code.",
+    );
+  }
   const configuredVenueId =
     typeof row.item.configuration.venueId === "string"
       ? row.item.configuration.venueId
@@ -952,6 +977,26 @@ export async function startCatalogCheckout(input: {
     itemKind !== "merchandise"
       ? await hasActiveDunaPlusMembership(input.actor.personId, input.now)
       : false;
+  let promoQuote;
+  if (input.promoCode && amountMinor > 0 && !membershipInclusion) {
+    try {
+      promoQuote = await quotePromoCode({
+        organizationId: row.organization.id,
+        code: input.promoCode,
+        personId: input.actor.personId,
+        catalogItemId: row.item.id,
+        subtotalMinor: amountMinor,
+        currency: orderCurrency,
+        now: input.now,
+      });
+    } catch (error) {
+      throw new CatalogCheckoutError(
+        "PRICE_UNAVAILABLE",
+        error instanceof Error ? error.message : "That promo code is invalid.",
+      );
+    }
+  }
+  const chargeableSubtotalMinor = promoQuote?.netSubtotalMinor ?? amountMinor;
   const priced =
     input.paymentMethod === "card"
       ? priceConsumerOrder({
@@ -962,8 +1007,8 @@ export async function startCatalogCheckout(input: {
               id: row.variant.id,
               kind: itemKind,
               description: row.item.title,
-              quantity: input.quantity,
-              unitAmountMinor: checkoutUnitAmountMinor,
+              quantity: 1,
+              unitAmountMinor: chargeableSubtotalMinor,
             },
           ],
         })
@@ -1210,6 +1255,29 @@ export async function startCatalogCheckout(input: {
       ),
   ]);
 
+  if (promoQuote) {
+    try {
+      await reservePromoRedemption({
+        quote: promoQuote,
+        organizationId: row.organization.id,
+        personId: input.actor.personId,
+        orderId,
+        currency: orderCurrency,
+        now: input.now,
+      });
+    } catch (error) {
+      await releasePromoCodeForOrder(orderId, input.now);
+      await database
+        .update(orders)
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(eq(orders.id, orderId));
+      throw new CatalogCheckoutError(
+        "PRICE_UNAVAILABLE",
+        error instanceof Error ? error.message : "That promo code is invalid.",
+      );
+    }
+  }
+
   if (tracksInventory) {
     try {
       await holdSaleInventory({
@@ -1222,6 +1290,7 @@ export async function startCatalogCheckout(input: {
         expiresAt: reservationExpiresAt,
       });
     } catch (error) {
+      await releasePromoCodeForOrder(orderId, input.now);
       await database
         .update(orders)
         .set({ status: "cancelled", updatedAt: input.now })
@@ -1417,11 +1486,34 @@ export async function startCatalogCheckout(input: {
       currency: orderCurrency,
     };
   }
+  if (priced.totalMinor === 0) {
+    await database
+      .update(orders)
+      .set({ status: "paid", updatedAt: input.now })
+      .where(eq(orders.id, orderId));
+    await redeemPromoCodeForOrder(orderId, input.now);
+    await fulfillPaidCatalogOrder(orderId, input.now);
+    return {
+      mode: "free",
+      orderId,
+      orderStatus: "paid",
+      paymentMethod: "card",
+      quantity: input.quantity,
+      amountMinor: 0,
+      creditsApplied: 0,
+      currency: orderCurrency,
+    };
+  }
   if (
     !row.organization.stripeAccountId ||
     !row.organization.stripeChargesEnabled
   ) {
     await releaseCatalogOrderInventory(row.organization.id, orderId, input.now);
+    await releasePromoCodeForOrder(orderId, input.now);
+    await database
+      .update(orders)
+      .set({ status: "cancelled", updatedAt: input.now })
+      .where(eq(orders.id, orderId));
     throw new CatalogCheckoutError(
       "CHECKOUT_UNAVAILABLE",
       "This organization is not ready to accept online payments.",
@@ -1433,6 +1525,7 @@ export async function startCatalogCheckout(input: {
   try {
     const nativePaymentEligible =
       input.paymentSurface === "native" &&
+      !promoQuote &&
       !installmentsRequested &&
       !isMembershipPlan &&
       row.item.type !== "good" &&
@@ -1509,6 +1602,18 @@ export async function startCatalogCheckout(input: {
         currency: orderCurrency,
       };
     }
+    if (promoQuote && !row.variant.stripeProductId) {
+      throw new Error("The Stripe product for this offer is not ready.");
+    }
+    const promoCouponId = promoQuote
+      ? await createPromoCheckoutCoupon({
+          promoCodeId: promoQuote.promoCodeId,
+          orderId,
+          discountMinor: promoQuote.discountMinor,
+          currency: orderCurrency,
+          stripeProductId: row.variant.stripeProductId!,
+        })
+      : undefined;
     const checkout = await createCatalogCheckoutSession({
       orderId,
       personId: input.actor.personId,
@@ -1547,6 +1652,8 @@ export async function startCatalogCheckout(input: {
       cancelUrl: input.cancelUrl,
       expiresAt: checkoutExpiresAt,
       idempotencyKey: input.idempotencyKey,
+      discountCouponId: promoCouponId,
+      promoCode: promoQuote?.code,
       ...(installmentsRequested
         ? {
             installmentPlan: {
@@ -1583,6 +1690,7 @@ export async function startCatalogCheckout(input: {
     };
   } catch (error) {
     await releaseCatalogOrderInventory(row.organization.id, orderId, input.now);
+    await releasePromoCodeForOrder(orderId, input.now);
     await database
       .update(orders)
       .set({ status: "cancelled", updatedAt: input.now })

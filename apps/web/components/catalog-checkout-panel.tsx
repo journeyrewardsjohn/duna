@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Check,
   CreditCard,
+  BadgePercent,
   Minus,
   Plus,
   WalletCards,
@@ -22,6 +23,12 @@ import {
   startCatalogCheckoutAction,
 } from "@/app/clubs/[slug]/products/[productSlug]/actions";
 import { catalogAuthenticationHref } from "@/lib/catalog-auth";
+import {
+  catalogCheckoutResumeReturnPath,
+  consumeCatalogCheckoutResumeIntent,
+  saveCatalogCheckoutResumeIntent,
+  type CatalogCheckoutResumeIntent,
+} from "@/lib/catalog-checkout-resume";
 import { WaiverSignaturePanel } from "./waiver-signature-panel";
 
 function money(amountMinor: number, currency: string): string {
@@ -42,6 +49,7 @@ export function CatalogCheckoutPanel({
   initialCheckoutSessionId,
   initialMembershipCheckoutSessionId,
   initialNotice,
+  resumeCheckout = false,
   membershipOffers,
   itemWaiverRequirements,
   membershipWaiverRequirements = [],
@@ -62,6 +70,7 @@ export function CatalogCheckoutPanel({
   readonly initialCheckoutSessionId?: string;
   readonly initialMembershipCheckoutSessionId?: string;
   readonly initialNotice?: string;
+  readonly resumeCheckout?: boolean;
   readonly membershipOffers: readonly PublicCatalogItem[];
   readonly itemWaiverRequirements: readonly WaiverRequirement[];
   readonly membershipWaiverRequirements?: readonly WaiverRequirement[];
@@ -74,6 +83,7 @@ export function CatalogCheckoutPanel({
     "upfront" | "installments"
   >("upfront");
   const [selectedPriceId, setSelectedPriceId] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [occurrenceId, setOccurrenceId] = useState(
     item.upcomingOccurrences[0]?.key ?? "",
@@ -86,6 +96,10 @@ export function CatalogCheckoutPanel({
   const [membershipPolicyAccepted, setMembershipPolicyAccepted] =
     useState(false);
   const [complete, setComplete] = useState(false);
+  const [resumingCheckout, setResumingCheckout] = useState(false);
+  const [pendingResumeIntent, setPendingResumeIntent] = useState<
+    CatalogCheckoutResumeIntent | undefined
+  >();
   const [membershipComplete, setMembershipComplete] = useState(false);
   const [completionMode, setCompletionMode] = useState<
     "purchase" | "cash-reservation" | null
@@ -93,6 +107,8 @@ export function CatalogCheckoutPanel({
   const [isPending, startTransition] = useTransition();
   const idempotencyKey = useRef(crypto.randomUUID());
   const membershipIdempotencyKey = useRef(crypto.randomUUID());
+  const resumeInitialized = useRef(false);
+  const resumeAttempted = useRef(false);
   const membershipOffer = membershipOffers[0];
   const membershipVariant = membershipOffer?.variants[0];
   const membershipPrice =
@@ -138,6 +154,26 @@ export function CatalogCheckoutPanel({
       : paymentMethod === "credit"
         ? creditPrice
         : cashPrice;
+  const monthlyCardPrice = cardPrices.find(
+    (candidate) => candidate.recurringInterval === "month",
+  );
+  const annualCardPrice = cardPrices.find(
+    (candidate) => candidate.recurringInterval === "year",
+  );
+  const annualSavingsPercent =
+    monthlyCardPrice?.amountMinor !== undefined &&
+    annualCardPrice?.amountMinor !== undefined &&
+    monthlyCardPrice.amountMinor > 0
+      ? Math.max(
+          0,
+          Math.round(
+            (1 -
+              annualCardPrice.amountMinor /
+                (monthlyCardPrice.amountMinor * 12)) *
+              100,
+          ),
+        )
+      : 0;
   const paymentPlan =
     item.configuration.paymentPlan &&
     typeof item.configuration.paymentPlan === "object" &&
@@ -253,7 +289,10 @@ export function CatalogCheckoutPanel({
     organization.paymentsReady,
   );
   const authenticationHref = catalogAuthenticationHref({
-    returnTo: `/clubs/${organization.slug}/products/${item.slug}#purchase`,
+    returnTo: catalogCheckoutResumeReturnPath({
+      organizationSlug: organization.slug,
+      productSlug: item.slug,
+    }),
     productTitle: item.title,
     organizationName: organization.name,
   });
@@ -288,6 +327,45 @@ export function CatalogCheckoutPanel({
   useEffect(() => {
     setMembershipPolicyAccepted(false);
   }, [membershipDisclosure]);
+
+  useEffect(() => {
+    if (!resumeCheckout || resumeInitialized.current) return;
+    resumeInitialized.current = true;
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("resume_checkout");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+
+    const intent = consumeCatalogCheckoutResumeIntent(window.sessionStorage, {
+      organizationSlug: organization.slug,
+      productSlug: item.slug,
+    });
+    if (!intent) {
+      setNotice(
+        "You're signed in. Review your selection and continue to payment.",
+      );
+      return;
+    }
+
+    setVariantId(intent.variantId);
+    setSelectedPriceId(intent.selectedPriceId);
+    setPaymentMethod(intent.paymentMethod);
+    setPaymentOption(intent.paymentOption);
+    setQuantity(intent.quantity);
+    setOccurrenceId(intent.occurrenceId);
+    setRecordingConsentAccepted(intent.recordingConsentAccepted);
+    setMembershipPolicyAccepted(intent.membershipPolicyAccepted);
+    setAddMembership(intent.addMembership);
+    idempotencyKey.current = intent.idempotencyKey;
+    membershipIdempotencyKey.current = intent.membershipIdempotencyKey;
+    setNotice("Signed in. Returning you to secure checkout…");
+    setResumingCheckout(true);
+    setPendingResumeIntent(intent);
+  }, [item.slug, organization.slug, resumeCheckout]);
 
   useEffect(() => {
     if (!initialMembershipCheckoutSessionId) return;
@@ -325,9 +403,31 @@ export function CatalogCheckoutPanel({
     };
   }, [initialMembershipCheckoutSessionId, item.id]);
 
-  const startMembershipCheckout = () => {
+  const rememberCheckoutAndSignIn = (
+    checkoutRole: CatalogCheckoutResumeIntent["checkoutRole"],
+  ) => {
+    saveCatalogCheckoutResumeIntent(window.sessionStorage, {
+      organizationSlug: organization.slug,
+      productSlug: item.slug,
+      checkoutRole,
+      variantId: variant?.id ?? variantId,
+      selectedPriceId,
+      paymentMethod,
+      paymentOption,
+      quantity,
+      occurrenceId,
+      recordingConsentAccepted,
+      membershipPolicyAccepted,
+      addMembership,
+      idempotencyKey: idempotencyKey.current,
+      membershipIdempotencyKey: membershipIdempotencyKey.current,
+    });
+    window.location.assign(authenticationHref);
+  };
+
+  const startMembershipCheckout = (resuming = false) => {
     if (!membershipOffer || !membershipVariant || !membershipPrice) return;
-    setNotice(undefined);
+    if (!resuming) setNotice(undefined);
     startTransition(async () => {
       const response = await startCatalogCheckoutAction({
         organizationSlug: organization.slug,
@@ -341,12 +441,21 @@ export function CatalogCheckoutPanel({
         quantity: 1,
         idempotencyKey: membershipIdempotencyKey.current,
         membershipPolicyAccepted,
+        promoCode: promoCode.trim() || undefined,
       });
       if (!response.ok) {
         if (response.authRequired) {
-          window.location.assign(authenticationHref);
+          if (resuming) {
+            setResumingCheckout(false);
+            setNotice(
+              "We couldn't finish signing you in. Sign in again to continue your purchase.",
+            );
+            return;
+          }
+          rememberCheckoutAndSignIn("membership");
           return;
         }
+        setResumingCheckout(false);
         setNotice(response.error);
         membershipIdempotencyKey.current = crypto.randomUUID();
         return;
@@ -358,15 +467,16 @@ export function CatalogCheckoutPanel({
       setNotice(
         "Membership added. Complete its participation waiver after your purchase is confirmed.",
       );
+      setResumingCheckout(false);
       setMemberActive(true);
       setMembershipComplete(true);
       membershipIdempotencyKey.current = crypto.randomUUID();
     });
   };
 
-  const startCheckout = () => {
+  const startCheckout = (resuming = false) => {
     if (!variant || !canPurchase) return;
-    setNotice(undefined);
+    if (!resuming) setNotice(undefined);
     startTransition(async () => {
       const response = await startCatalogCheckoutAction({
         organizationSlug: organization.slug,
@@ -383,12 +493,21 @@ export function CatalogCheckoutPanel({
         membershipPolicyAccepted: directMembershipPurchase
           ? membershipPolicyAccepted
           : undefined,
+        promoCode: promoCode.trim() || undefined,
       });
       if (!response.ok) {
         if (response.authRequired) {
-          window.location.assign(authenticationHref);
+          if (resuming) {
+            setResumingCheckout(false);
+            setNotice(
+              "We couldn't finish signing you in. Sign in again to continue your purchase.",
+            );
+            return;
+          }
+          rememberCheckoutAndSignIn("product");
           return;
         }
+        setResumingCheckout(false);
         setNotice(response.error);
         idempotencyKey.current = crypto.randomUUID();
         return;
@@ -398,6 +517,7 @@ export function CatalogCheckoutPanel({
         return;
       }
       setComplete(true);
+      setResumingCheckout(false);
       setCompletionMode(
         response.result.mode === "cash-reservation"
           ? "cash-reservation"
@@ -413,6 +533,49 @@ export function CatalogCheckoutPanel({
       idempotencyKey.current = crypto.randomUUID();
     });
   };
+
+  useEffect(() => {
+    if (!pendingResumeIntent || resumeAttempted.current) return;
+
+    if (membershipDisclosure && !membershipPolicyAccepted) {
+      setPendingResumeIntent(undefined);
+      setResumingCheckout(false);
+      setNotice("Confirm the membership terms to continue to payment.");
+      return;
+    }
+    if (requiresRecordingConsent && !recordingConsentAccepted) {
+      setPendingResumeIntent(undefined);
+      setResumingCheckout(false);
+      setNotice("Confirm the recording notice to continue to payment.");
+      return;
+    }
+
+    const resumesMembership =
+      pendingResumeIntent.checkoutRole === "membership" && membershipStep;
+    if (resumesMembership ? !canStartMembership : !canPurchase) {
+      setPendingResumeIntent(undefined);
+      setResumingCheckout(false);
+      setNotice("Review your selection and continue to payment.");
+      return;
+    }
+
+    resumeAttempted.current = true;
+    setPendingResumeIntent(undefined);
+    if (resumesMembership) {
+      startMembershipCheckout(true);
+    } else {
+      startCheckout(true);
+    }
+  }, [
+    canPurchase,
+    canStartMembership,
+    membershipDisclosure,
+    membershipPolicyAccepted,
+    membershipStep,
+    pendingResumeIntent,
+    recordingConsentAccepted,
+    requiresRecordingConsent,
+  ]);
 
   return (
     <aside className="catalog-checkout-panel" id="purchase">
@@ -537,7 +700,7 @@ export function CatalogCheckoutPanel({
         paymentMethod === "card" &&
         cardPrices.length > 1 && (
           <div className="catalog-billing-options">
-            <span>Choose billing</span>
+            <span>Choose how to join</span>
             <div>
               {cardPrices.map((candidate) => {
                 const active = candidate.id === cardPrice?.id;
@@ -555,15 +718,26 @@ export function CatalogCheckoutPanel({
                     type="button"
                   >
                     <span>
-                      <strong>{interval}</strong>
+                      <strong>
+                        {interval}
+                        {candidate.recurringInterval === "year" &&
+                        annualSavingsPercent > 0 ? (
+                          <b>Save {annualSavingsPercent}%</b>
+                        ) : null}
+                      </strong>
                       <small>
                         {money(
                           candidate.amountMinor ?? 0,
                           candidate.currency ?? organization.currency,
                         )}
-                        {candidate.recurringInterval
-                          ? ` / ${candidate.recurringInterval}`
-                          : ""}
+                        {candidate.recurringInterval === "year"
+                          ? ` / year · ${money(
+                              Math.round((candidate.amountMinor ?? 0) / 12),
+                              candidate.currency ?? organization.currency,
+                            )}/mo equivalent`
+                          : candidate.recurringInterval
+                            ? ` / ${candidate.recurringInterval}`
+                            : ""}
                       </small>
                     </span>
                     <i aria-hidden />
@@ -571,6 +745,12 @@ export function CatalogCheckoutPanel({
                 );
               })}
             </div>
+            {cardPrice?.recurringInterval === "year" ? (
+              <small className="catalog-annual-prepay-note">
+                The full 12-month membership is paid now. Every monthly credit
+                and included-booking allowance for the year is issued upfront.
+              </small>
+            ) : null}
           </div>
         )}
       {!membershipIncluded && (
@@ -756,6 +936,21 @@ export function CatalogCheckoutPanel({
           </div>
         </div>
       )}
+      {!membershipIncluded && paymentMethod === "card" ? (
+        <label className="catalog-promo-code">
+          <span>
+            <BadgePercent aria-hidden size={17} /> Promo code
+          </span>
+          <input
+            autoCapitalize="characters"
+            maxLength={48}
+            onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+            placeholder="Enter code"
+            value={promoCode}
+          />
+          <small>Eligibility and limits are checked before payment.</small>
+        </label>
+      ) : null}
       <div className="catalog-checkout-total">
         <span>
           {membershipIncluded
@@ -775,8 +970,13 @@ export function CatalogCheckoutPanel({
         </strong>
       </div>
       {notice && (
-        <p className={complete ? "catalog-checkout-success" : ""} role="status">
-          {complete && <Check size={16} />}
+        <p
+          className={
+            complete || resumingCheckout ? "catalog-checkout-success" : ""
+          }
+          role="status"
+        >
+          {(complete || resumingCheckout) && <Check size={16} />}
           {notice}
         </p>
       )}
@@ -803,7 +1003,10 @@ export function CatalogCheckoutPanel({
           isPending ||
           complete
         }
-        onClick={membershipStep ? startMembershipCheckout : startCheckout}
+        onClick={() => {
+          if (membershipStep) startMembershipCheckout();
+          else startCheckout();
+        }}
         type="button"
       >
         {isPending

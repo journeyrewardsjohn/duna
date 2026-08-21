@@ -3974,16 +3974,16 @@ body {
   border-radius: 14px;
 }
 
-.pro-tour-filters a {
+.pro-tour-filters :is(a, button) {
   border-radius: 10px;
 }
 
-.pro-tour-filters a:hover {
+.pro-tour-filters :is(a, button):hover {
   background: var(--surface-2);
   color: var(--text-1);
 }
 
-.pro-tour-filters a[aria-current="page"] {
+.pro-tour-filters :is(a, button)[aria-current="page"] {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-fg);
 }
@@ -4946,22 +4946,22 @@ body {
   width: 44px;
 }
 
-.pro-tour-filters a {
+.pro-tour-filters :is(a, button) {
   align-items: center;
   display: inline-flex;
   gap: 0.45rem;
 }
 
-.pro-tour-filters a .tour-brand-mark {
+.pro-tour-filters :is(a, button) .tour-brand-mark {
   height: 19px;
   width: 39px;
 }
 
-.pro-tour-filters a .tour-brand-mark--avp {
+.pro-tour-filters :is(a, button) .tour-brand-mark--avp {
   width: 34px;
 }
 
-.pro-tour-filters a[aria-current="page"] .tour-brand-mark--fivb {
+.pro-tour-filters :is(a, button)[aria-current="page"] .tour-brand-mark--fivb {
   border-color: rgb(255 255 255 / 20%);
 }
 
@@ -19249,9 +19249,14 @@ a.play-day__booking {
   z-index: 8;
 }
 
-.pro-tour-filters a {
+.pro-tour-filters :is(a, button) {
+  appearance: none;
+  background: transparent;
+  border: 0;
   border-radius: 999px;
   color: var(--color-bone-muted);
+  cursor: pointer;
+  font-family: inherit;
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.68rem 1rem;
@@ -19259,12 +19264,12 @@ a.play-day__booking {
   white-space: nowrap;
 }
 
-.pro-tour-filters a:hover {
+.pro-tour-filters :is(a, button):hover {
   background: #eef4f9;
   color: #173a67;
 }
 
-.pro-tour-filters a[aria-current="page"] {
+.pro-tour-filters :is(a, button)[aria-current="page"] {
   background: #173a67;
   color: var(--color-white);
 }
@@ -19274,7 +19279,7 @@ a.play-day__booking {
   border-color: #23343f;
 }
 
-:root[data-theme="dark"] .pro-tour-filters a:hover {
+:root[data-theme="dark"] .pro-tour-filters :is(a, button):hover {
   background: #142833;
   color: #d8f7f3;
 }
@@ -36963,6 +36968,22 @@ button.selected > .choice-radio {
   gap: 0.14rem;
 }
 
+.catalog-billing-options button strong {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.catalog-billing-options button strong b {
+  background: var(--color-lime);
+  border-radius: 999px;
+  color: var(--color-ink);
+  font-size: 0.75rem;
+  padding: 0.18rem 0.42rem;
+  text-transform: uppercase;
+}
+
 .catalog-billing-options button small {
   color: #677386;
   font-size: 0.75rem;
@@ -36982,6 +37003,39 @@ button.selected > .choice-radio {
 
 .catalog-billing-options button.active i {
   border: 4px solid #2b67a4;
+}
+
+.catalog-annual-prepay-note {
+  background: color-mix(in srgb, var(--color-lime) 16%, var(--color-surface));
+  border-left: 3px solid var(--color-lime);
+  border-radius: 0 10px 10px 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  padding: 0.65rem 0.75rem;
+}
+
+.catalog-promo-code > span {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.catalog-promo-code input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  min-height: 48px;
+  padding: 0.75rem 0.85rem;
+  text-transform: uppercase;
+}
+
+.catalog-promo-code small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 .club-marketing-page {

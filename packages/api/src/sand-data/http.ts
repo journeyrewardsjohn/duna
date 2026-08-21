@@ -24,6 +24,7 @@ export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
   if (source === "avp-league") return "firecrawl";
   if (
     source === "avp-tournaments" ||
+    source === "fivb-12ndr" ||
     source === "volleyball-life" ||
     source === "volleyball-world" ||
     process.env.SAND_SCRAPER_ENGINE === "native"
@@ -39,6 +40,7 @@ function resolveScrapeEngine(
 ): ScrapeEngine {
   if (
     source === "avp-tournaments" ||
+    source === "fivb-12ndr" ||
     source === "volleyball-life" ||
     source === "volleyball-world"
   ) {
