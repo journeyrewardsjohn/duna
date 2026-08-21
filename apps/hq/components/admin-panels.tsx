@@ -50,6 +50,7 @@ import {
   PlayerMappingPanel,
   RatingsLabPanel,
   SandDataPanel,
+  type SandDataTool,
 } from "./sand-admin-controls";
 import {
   ProfessionalTourAdminPanel,
@@ -785,6 +786,7 @@ export function AdminPanel({
   playerSearchQuery,
   proEventId,
   proTourTool,
+  sandDataTool,
   playerIntelligence,
   playerIntelligenceDetail,
   playerIntelligenceGender,
@@ -806,6 +808,7 @@ export function AdminPanel({
   readonly playerSearchQuery?: string;
   readonly proEventId?: string;
   readonly proTourTool?: ProfessionalTourTool;
+  readonly sandDataTool?: SandDataTool;
   readonly playerIntelligence?: PlayerIntelligenceAdmin;
   readonly playerIntelligenceDetail?: PlayerIntelligenceDetail;
   readonly playerIntelligenceGender?: "men" | "women";
@@ -909,7 +912,7 @@ export function AdminPanel({
           <AuditList overview={{ ...overview, audit: filteredAudit }} />
         </div>
       ) : module === "sand-data" && sandData ? (
-        <SandDataPanel data={sandData} />
+        <SandDataPanel data={sandData} tool={sandDataTool} />
       ) : module === "pro-tour" && sandData ? (
         <ProfessionalTourAdminPanel
           data={sandData}

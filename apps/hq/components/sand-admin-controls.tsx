@@ -24,11 +24,8 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
-  Trash2,
   Trophy,
-  Tv,
   UsersRound,
-  Waves,
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import {
@@ -40,13 +37,11 @@ import {
   previewSandProfilesAction,
   refreshFivbIndexAction,
   refreshWorldRankingsAction,
-  removeProfessionalWatchOptionAction,
   reviewProfileClaimAction,
   reviewMatchHistoryDisputeAction,
   reviewSandMatchAction,
   saveAvpRosterAssignmentAction,
   saveRatingConfigurationAction,
-  saveProfessionalWatchOptionAction,
   smokeTestScraperAction,
   updateScraperControlAction,
   type SandActionState,
@@ -178,8 +173,10 @@ function RefreshRankingsForm() {
 
 function ScraperControlCard({
   control,
+  source,
 }: {
   readonly control: SandDataOverview["controls"][number];
+  readonly source?: SandDataOverview["sources"][number];
 }) {
   const [saveState, save, saving] = useActionState(
     updateScraperControlAction,
@@ -196,13 +193,36 @@ function ScraperControlCard({
   const nativeOnly = control.source === "volleyball-life" || liveTransport;
   const transportFailure = liveTransportFailure(control.liveHealth?.detail);
   const adaptiveTransport = control.adaptiveTransport;
+  const latestActivity =
+    control.latestRun?.completedAt ?? control.latestRun?.startedAt;
   return (
     <article className="hq-card scraper-control-card">
       <header className="hq-card-heading">
         <div>
-          <span className="hq-eyebrow">SuperAdmin source policy</span>
+          <span className="hq-eyebrow">
+            Connected source · {control.source}
+          </span>
           <h3>{control.name}</h3>
-          <p>
+        </div>
+        <Badge tone={control.enabled ? "positive" : "warning"}>
+          {control.enabled ? "accepting requests" : "paused"}
+        </Badge>
+      </header>
+      <dl className="scraper-control-card__status">
+        <div>
+          <dt>Last completed import</dt>
+          <dd>
+            {source?.latestImportedAt
+              ? new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(source.latestImportedAt))
+              : "None yet"}
+          </dd>
+        </div>
+        <div>
+          <dt>Most recent check</dt>
+          <dd>
             {control.latestRun
               ? `${control.latestRun.status} · ${new Intl.DateTimeFormat(
                   "en-US",
@@ -210,14 +230,15 @@ function ScraperControlCard({
                     dateStyle: "medium",
                     timeStyle: "short",
                   },
-                ).format(new Date(control.latestRun.startedAt))}`
-              : "No importer run recorded yet"}
-          </p>
+                ).format(new Date(latestActivity!))}`
+              : "No run recorded"}
+          </dd>
         </div>
-        <Badge tone={control.enabled ? "positive" : "warning"}>
-          {control.enabled ? "enabled" : "paused"}
-        </Badge>
-      </header>
+        <div>
+          <dt>Evidence terms</dt>
+          <dd>{source?.licenseStatus ?? "Not recorded"}</dd>
+        </div>
+      </dl>
       {liveTransport && (
         <>
           <p className="scraper-transport-health">
@@ -256,164 +277,182 @@ function ScraperControlCard({
             : ""}
         </p>
       )}
-      <form action={save} className="scraper-control-form">
-        <input name="source" type="hidden" value={control.source} />
-        <label className="scraper-toggle">
-          <input
-            defaultChecked={control.enabled}
-            name="enabled"
-            type="checkbox"
-          />
-          <span>Allow scheduled and manual requests</span>
-        </label>
-        <label>
-          <span>Request engine</span>
-          {nativeOnly ? (
+      <details className="scraper-control-card__settings">
+        <summary>
+          <span>Source settings</span>
+          <small>Rate limits, refresh cadence, and retrieval method</small>
+        </summary>
+        <form action={save} className="scraper-control-form">
+          <input name="source" type="hidden" value={control.source} />
+          <label className="scraper-toggle">
+            <input
+              defaultChecked={control.enabled}
+              name="enabled"
+              type="checkbox"
+            />
+            <span>
+              <strong>Permit new import requests</strong>
+              <small>Pausing keeps existing Duna evidence intact.</small>
+            </span>
+          </label>
+          <label>
+            <span>Fetch method</span>
+            {nativeOnly ? (
+              <>
+                <input name="engine" type="hidden" value="native" />
+                <span className="scraper-control-static-value">
+                  Official source API
+                </span>
+              </>
+            ) : (
+              <select defaultValue={control.engine} name="engine">
+                <option value="auto">Automatic</option>
+                <option value="native">Direct HTTP</option>
+                <option value="firecrawl">Firecrawl</option>
+              </select>
+            )}
+          </label>
+          <label>
+            <span>Delay between requests (ms)</span>
+            <input
+              defaultValue={control.minRequestIntervalMs}
+              min={250}
+              name="minRequestIntervalMs"
+              type="number"
+            />
+          </label>
+          <label>
+            <span>Hourly request cap</span>
+            <input
+              defaultValue={control.maxRequestsPerHour}
+              min={1}
+              name="maxRequestsPerHour"
+              type="number"
+            />
+          </label>
+          {playerCadence && (
             <>
-              <input name="engine" type="hidden" value="native" />
-              <span className="scraper-control-static-value">
-                Native official API
-              </span>
+              <label>
+                <span>Refresh active linked players (hours)</span>
+                <input
+                  defaultValue={control.linkedPlayerActiveRefreshHours ?? ""}
+                  min={1}
+                  name="linkedPlayerActiveRefreshHours"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span>Refresh inactive linked players (hours)</span>
+                <input
+                  defaultValue={control.linkedPlayerIdleRefreshHours ?? ""}
+                  min={1}
+                  name="linkedPlayerIdleRefreshHours"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span>Active-player window (days)</span>
+                <input
+                  defaultValue={control.activePlayerWindowDays ?? ""}
+                  min={1}
+                  name="activePlayerWindowDays"
+                  type="number"
+                />
+              </label>
             </>
-          ) : (
-            <select defaultValue={control.engine} name="engine">
-              <option value="auto">Auto</option>
-              <option value="native">Native HTTP</option>
-              <option value="firecrawl">Firecrawl</option>
-            </select>
           )}
-        </label>
-        <label>
-          <span>Minimum gap (ms)</span>
-          <input
-            defaultValue={control.minRequestIntervalMs}
-            min={250}
-            name="minRequestIntervalMs"
-            type="number"
-          />
-        </label>
-        <label>
-          <span>Maximum requests/hour</span>
-          <input
-            defaultValue={control.maxRequestsPerHour}
-            min={1}
-            name="maxRequestsPerHour"
-            type="number"
-          />
-        </label>
-        {playerCadence && (
-          <>
-            <label>
-              <span>Active linked player cadence (hours)</span>
-              <input
-                defaultValue={control.linkedPlayerActiveRefreshHours ?? ""}
-                min={1}
-                name="linkedPlayerActiveRefreshHours"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>Inactive linked player cadence (hours)</span>
-              <input
-                defaultValue={control.linkedPlayerIdleRefreshHours ?? ""}
-                min={1}
-                name="linkedPlayerIdleRefreshHours"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>Active player window (days)</span>
-              <input
-                defaultValue={control.activePlayerWindowDays ?? ""}
-                min={1}
-                name="activePlayerWindowDays"
-                type="number"
-              />
-            </label>
-          </>
-        )}
-        {fivbCadence && (
-          <>
-            <label>
-              <span>12ndr event-detail cadence (minutes)</span>
-              <input
-                defaultValue={control.activeEventRefreshMinutes ?? ""}
-                min={5}
-                name="activeEventRefreshMinutes"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>Completed-event grace (hours)</span>
-              <input
-                defaultValue={control.completedEventGraceHours ?? ""}
-                min={0}
-                name="completedEventGraceHours"
-                type="number"
-              />
-            </label>
-          </>
-        )}
-        {liveTransport && (
-          <>
-            <label className="scraper-toggle">
-              <input
-                defaultChecked={control.liveTransportEnabled}
-                name="liveTransportEnabled"
-                type="checkbox"
-              />
-              <span>Enable Duna live refresh health checks</span>
-            </label>
-            <label>
-              <span>Official live refresh cadence (seconds)</span>
-              <input
-                defaultValue={control.liveRefreshSeconds ?? 60}
-                min={60}
-                name="liveRefreshSeconds"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>REST fallback cadence (seconds)</span>
-              <input
-                defaultValue={control.liveRestFallbackSeconds ?? 30}
-                min={15}
-                name="liveRestFallbackSeconds"
-                type="number"
-              />
-            </label>
-          </>
-        )}
-        {!liveTransport && (
-          <input name="liveTransportEnabled" type="hidden" value="false" />
-        )}
-        <label>
-          <span>Firecrawl cache max age (seconds)</span>
-          <input
-            defaultValue={control.firecrawlCacheTtlSeconds ?? ""}
-            min={0}
-            name="firecrawlCacheTtlSeconds"
-            type="number"
-          />
-        </label>
-        <label className="scraper-toggle">
-          <input
-            defaultChecked={control.firecrawlChangeTracking}
-            name="firecrawlChangeTracking"
-            type="checkbox"
-          />
-          <span>Request Firecrawl change tracking</span>
-        </label>
-        <button className="hq-button hq-button--primary" disabled={saving}>
-          {saving ? (
-            <LoaderCircle className="spin" size={16} />
-          ) : (
-            <ShieldCheck size={16} />
+          {fivbCadence && (
+            <>
+              <label>
+                <span>Event-detail refresh cadence (minutes)</span>
+                <input
+                  defaultValue={control.activeEventRefreshMinutes ?? ""}
+                  min={5}
+                  name="activeEventRefreshMinutes"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span>Completed-event grace period (hours)</span>
+                <input
+                  defaultValue={control.completedEventGraceHours ?? ""}
+                  min={0}
+                  name="completedEventGraceHours"
+                  type="number"
+                />
+              </label>
+            </>
           )}
-          Save guardrails
-        </button>
-        <ActionFeedback state={saveState} />
-      </form>
+          {liveTransport && (
+            <>
+              <label className="scraper-toggle">
+                <input
+                  defaultChecked={control.liveTransportEnabled}
+                  name="liveTransportEnabled"
+                  type="checkbox"
+                />
+                <span>
+                  <strong>Enable Duna live refresh health checks</strong>
+                  <small>
+                    Monitors the official live transport without changing source
+                    evidence.
+                  </small>
+                </span>
+              </label>
+              <label>
+                <span>Official live refresh cadence (seconds)</span>
+                <input
+                  defaultValue={control.liveRefreshSeconds ?? 60}
+                  min={60}
+                  name="liveRefreshSeconds"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span>REST fallback cadence (seconds)</span>
+                <input
+                  defaultValue={control.liveRestFallbackSeconds ?? 30}
+                  min={15}
+                  name="liveRestFallbackSeconds"
+                  type="number"
+                />
+              </label>
+            </>
+          )}
+          {!liveTransport && (
+            <input name="liveTransportEnabled" type="hidden" value="false" />
+          )}
+          <label>
+            <span>Firecrawl cache lifetime (seconds)</span>
+            <input
+              defaultValue={control.firecrawlCacheTtlSeconds ?? ""}
+              min={0}
+              name="firecrawlCacheTtlSeconds"
+              type="number"
+            />
+          </label>
+          <label className="scraper-toggle">
+            <input
+              defaultChecked={control.firecrawlChangeTracking}
+              name="firecrawlChangeTracking"
+              type="checkbox"
+            />
+            <span>
+              <strong>Use Firecrawl change tracking</strong>
+              <small>Requests only changed pages where supported.</small>
+            </span>
+          </label>
+          <button className="hq-button hq-button--primary" disabled={saving}>
+            {saving ? (
+              <LoaderCircle className="spin" size={16} />
+            ) : (
+              <ShieldCheck size={16} />
+            )}
+            Save source settings
+          </button>
+          <ActionFeedback state={saveState} />
+        </form>
+      </details>
       <form action={smoke} className="sand-mini-action">
         <input name="source" type="hidden" value={control.source} />
         <button disabled={smoking || !control.enabled}>
@@ -422,7 +461,7 @@ function ScraperControlCard({
           ) : (
             <Activity size={15} />
           )}
-          Run smoke test
+          Check connection
         </button>
         <ActionFeedback state={smokeState} />
       </form>
@@ -432,13 +471,19 @@ function ScraperControlCard({
 
 function ScraperControls({
   controls,
+  sources,
 }: {
   readonly controls: SandDataOverview["controls"];
+  readonly sources: SandDataOverview["sources"];
 }) {
   return (
     <section className="scraper-control-grid">
       {controls.map((control) => (
-        <ScraperControlCard control={control} key={control.source} />
+        <ScraperControlCard
+          control={control}
+          key={control.source}
+          source={sources.find((source) => source.slug === control.source)}
+        />
       ))}
     </section>
   );
@@ -524,180 +569,6 @@ function MatchReview({
   );
 }
 
-function BroadcastOption({
-  eventId,
-  importedMatchId,
-  option,
-}: {
-  readonly eventId: string;
-  readonly importedMatchId?: string;
-  readonly option: SandDataOverview["events"][number]["watchOptions"][number];
-}) {
-  const [state, action, pending] = useActionState(
-    removeProfessionalWatchOptionAction,
-    initialState,
-  );
-  return (
-    <article className="sand-watch-option">
-      <Tv aria-hidden size={16} />
-      <span>
-        <strong>{option.label}</strong>
-        <small>{option.channelName ?? option.kind}</small>
-      </span>
-      <form action={action}>
-        <input name="professionalEventId" type="hidden" value={eventId} />
-        {importedMatchId && (
-          <input name="importedMatchId" type="hidden" value={importedMatchId} />
-        )}
-        <input name="optionId" type="hidden" value={option.id} />
-        <input
-          aria-label="Removal reason"
-          name="reason"
-          placeholder="Removal reason"
-          required
-        />
-        <button aria-label={`Remove ${option.label}`} disabled={pending}>
-          <Trash2 aria-hidden size={14} />
-        </button>
-      </form>
-      <ActionFeedback state={state} />
-    </article>
-  );
-}
-
-function BroadcastConfiguration({
-  events,
-}: {
-  readonly events: SandDataOverview["events"];
-}) {
-  const [state, action, pending] = useActionState(
-    saveProfessionalWatchOptionAction,
-    initialState,
-  );
-  const currentEvents = events
-    .filter((event) => event.status !== "completed")
-    .sort((a, b) =>
-      (a.startsOn ?? "9999-12-31").localeCompare(b.startsOn ?? "9999-12-31"),
-    )
-    .slice(0, 20);
-  return (
-    <section className="hq-card sand-watch-config">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">Super-admin broadcast guide</span>
-          <h2>Where to watch</h2>
-        </div>
-        <Tv size={20} />
-      </header>
-      <p>
-        Set an event default, or choose one match to replace the event guide
-        with its own link or TV channel.
-      </p>
-      <form action={action} className="sand-watch-form">
-        <label>
-          <span>Event</span>
-          <select name="professionalEventId" required>
-            <option value="">Choose an upcoming event</option>
-            {currentEvents.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Match override</span>
-          <select name="importedMatchId">
-            <option value="">Use as event default</option>
-            {currentEvents.flatMap((event) =>
-              event.matches.map((match) => (
-                <option key={match.id} value={`${event.id}:${match.id}`}>
-                  {event.name} · {match.roundLabel ?? match.label}
-                </option>
-              )),
-            )}
-          </select>
-        </label>
-        <label>
-          <span>Destination</span>
-          <select defaultValue="vbtv" name="kind">
-            <option value="vbtv">VBTV</option>
-            <option value="youtube">YouTube</option>
-            <option value="live-tv">Live TV</option>
-          </select>
-        </label>
-        <label>
-          <span>Display label</span>
-          <input name="label" placeholder="e.g. Center Court on VBTV" />
-        </label>
-        <label>
-          <span>Link</span>
-          <input name="url" placeholder="https://…" type="url" />
-        </label>
-        <label>
-          <span>TV channel</span>
-          <input name="channelName" placeholder="e.g. ESPN2" />
-        </label>
-        <label className="sand-watch-form__reason">
-          <span>Review note</span>
-          <input
-            name="reason"
-            placeholder="Source and reason for this broadcast update"
-            required
-          />
-        </label>
-        <button className="hq-button hq-button--primary" disabled={pending}>
-          Add watch option
-        </button>
-        <ActionFeedback state={state} />
-      </form>
-      <div className="sand-watch-events">
-        {currentEvents
-          .filter(
-            (event) =>
-              event.watchOptions.length > 0 ||
-              event.matches.some((match) => match.watchOptions.length > 0),
-          )
-          .map((event) => (
-            <section key={event.id}>
-              <header>
-                <strong>{event.name}</strong>
-                <small>
-                  {event.watchOptions.length} default ·{" "}
-                  {
-                    event.matches.filter(
-                      (match) => match.watchOptions.length > 0,
-                    ).length
-                  }{" "}
-                  match overrides
-                </small>
-              </header>
-              {event.watchOptions.map((option) => (
-                <BroadcastOption
-                  eventId={event.id}
-                  key={option.id}
-                  option={option}
-                />
-              ))}
-              {event.matches.flatMap((match) =>
-                match.watchOptions.map((option) => (
-                  <div className="sand-watch-match" key={option.id}>
-                    <small>{match.roundLabel ?? match.label}</small>
-                    <BroadcastOption
-                      eventId={event.id}
-                      importedMatchId={match.id}
-                      option={option}
-                    />
-                  </div>
-                )),
-              )}
-            </section>
-          ))}
-      </div>
-    </section>
-  );
-}
-
 function HistoryDisputeReview({
   dispute,
 }: {
@@ -746,191 +617,227 @@ function HistoryDisputeReview({
   );
 }
 
-export function SandDataPanel({ data }: { readonly data: SandDataOverview }) {
+export type SandDataTool = "overview" | "sources" | "reviews";
+
+export function SandDataPanel({
+  data,
+  tool = "overview",
+}: {
+  readonly data: SandDataOverview;
+  readonly tool?: SandDataTool;
+}) {
   const ready = data.matches.filter((match) => match.importState === "ready");
-  const mapping = data.matches.filter(
-    (match) => match.importState === "needs-mapping",
-  );
   return (
     <div className="sand-admin-layout">
-      <section className="hq-card sand-command-card">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Evidence intake</span>
-            <h2>Run a source import</h2>
-          </div>
-          <Database size={20} />
-        </header>
-        <p>
-          Imports are staged first. Identity, score, and duplicate gates must
-          clear before a result can enter Sand Rating.
-        </p>
-        <SourceImportForm />
-        <div className="sand-refresh-row">
-          <RefreshFivbForm />
-          <RefreshRankingsForm />
-        </div>
-      </section>
+      <nav aria-label="Sand data operations" className="sand-admin-jump-nav">
+        <a
+          aria-current={tool === "overview" ? "page" : undefined}
+          className={tool === "overview" ? "active" : undefined}
+          href="/admin/sand-data?tool=overview"
+        >
+          <Activity aria-hidden size={16} /> Overview
+        </a>
+        <a
+          aria-current={tool === "sources" ? "page" : undefined}
+          className={tool === "sources" ? "active" : undefined}
+          href="/admin/sand-data?tool=sources"
+        >
+          <Database aria-hidden size={16} /> Sources + settings
+        </a>
+        <a
+          aria-current={tool === "reviews" ? "page" : undefined}
+          className={tool === "reviews" ? "active" : undefined}
+          href="/admin/sand-data?tool=reviews"
+        >
+          <ShieldCheck aria-hidden size={16} /> Evidence reviews
+        </a>
+      </nav>
 
-      <section>
-        <header className="hq-section-heading">
-          <div>
-            <span className="hq-eyebrow">SuperAdmin</span>
-            <h2>Source policies and live transport health</h2>
-          </div>
-        </header>
-        <ScraperControls controls={data.controls} />
-      </section>
-
-      <BroadcastConfiguration events={data.events} />
-
-      <section className="sand-summary-grid">
-        <article>
-          <small>Ready to review</small>
-          <Numeric>{ready.length}</Numeric>
-          <span>complete + mapped</span>
-        </article>
-        <article>
-          <small>Needs mapping</small>
-          <Numeric>{mapping.length}</Numeric>
-          <span>identity gate open</span>
-        </article>
-        <article>
-          <small>Mapping queue</small>
-          <Numeric>{data.mappings.length}</Numeric>
-          <span>player decisions</span>
-        </article>
-        <article>
-          <small>Pro events</small>
-          <Numeric>{data.events.length}</Numeric>
-          <span>{data.events.filter((event) => event.live).length} live</span>
-        </article>
-        <article>
-          <small>History reviews</small>
-          <Numeric>{data.historyDisputes.length}</Numeric>
-          <span>held out of ratings</span>
-        </article>
-      </section>
-
-      <section className="hq-card sand-source-grid">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Connected sources</span>
-            <h2>Freshness + provenance</h2>
-          </div>
-          <Badge>{data.sources.length}</Badge>
-        </header>
-        <div>
-          {data.sources.map((source) => (
-            <article key={source.id}>
-              <span>
-                <Waves size={18} />
-              </span>
-              <div>
-                <strong>{source.name}</strong>
-                <small>
-                  {source.latestImportedAt
-                    ? `Last import ${new Intl.DateTimeFormat("en-US", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(new Date(source.latestImportedAt))}`
-                    : "No completed import"}
-                </small>
-              </div>
-              <Badge>{source.licenseStatus}</Badge>
+      {tool === "overview" && (
+        <>
+          <section className="sand-admin-metrics" aria-label="Sand data status">
+            <article>
+              <small>Ready for a decision</small>
+              <Numeric>{ready.length}</Numeric>
+              <span>complete, mapped matches only</span>
             </article>
-          ))}
-        </div>
-      </section>
+            <article>
+              <small>Player mappings to resolve</small>
+              <Numeric>{data.mappings.length}</Numeric>
+              <span>resolve in Player mapping</span>
+            </article>
+            <article>
+              <small>Accuracy flags</small>
+              <Numeric>{data.historyDisputes.length}</Numeric>
+              <span>kept out of ratings until resolved</span>
+            </article>
+            <article>
+              <small>Source coverage</small>
+              <Numeric>
+                {data.controls.filter((control) => control.enabled).length}
+              </Numeric>
+              <span>of {data.controls.length} sources accepting requests</span>
+            </article>
+          </section>
+          <section className="hq-card sand-workflow-card">
+            <header className="hq-card-heading">
+              <div>
+                <span className="hq-eyebrow">What SuperAdmin does here</span>
+                <h2>Protect the integrity of the rating record</h2>
+              </div>
+              <ShieldCheck aria-hidden size={20} />
+            </header>
+            <p>
+              This is an exception desk, not a manual review of every imported
+              match. The system collects source evidence, checks identity,
+              score, and duplicates automatically, then asks for a decision only
+              when a record can affect a player’s Sand Rating.
+            </p>
+            <ol>
+              <li>
+                <span>1</span>
+                <div>
+                  <strong>Maintain trusted sources</strong>
+                  <small>
+                    Set retrieval limits and investigate a failed source check.
+                  </small>
+                </div>
+                <a href="/admin/sand-data?tool=sources">Open sources</a>
+              </li>
+              <li>
+                <span>2</span>
+                <div>
+                  <strong>Resolve identity exceptions</strong>
+                  <small>
+                    Map an ambiguous source player to the correct Duna profile.
+                  </small>
+                </div>
+                <a href="/admin/player-mapping">Open mapping</a>
+              </li>
+              <li>
+                <span>3</span>
+                <div>
+                  <strong>Accept or exclude credible match evidence</strong>
+                  <small>
+                    Accepted evidence is allowed to update Sand Rating.
+                  </small>
+                </div>
+                <a href="/admin/sand-data?tool=reviews">Open reviews</a>
+              </li>
+            </ol>
+          </section>
+        </>
+      )}
 
-      <section className="hq-card sand-runs">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Scraper health</span>
-            <h2>Recent runs</h2>
-          </div>
-          <Badge>{data.runs.length}</Badge>
-        </header>
-        {data.runs.map((run) => (
-          <article key={run.id}>
-            <span
-              className={`sand-run-dot sand-run-dot--${run.status}`}
-              title={run.status}
-            />
-            <div>
-              <strong>
-                {run.source} · {run.mode}
-              </strong>
-              <small>
-                {run.engine} ·{" "}
-                {new Intl.DateTimeFormat("en-US", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                }).format(new Date(run.startedAt))}
-              </small>
-              {run.errorMessage && (
-                <small className="sand-run-error">{run.errorMessage}</small>
-              )}
+      {tool === "sources" && (
+        <>
+          <section className="hq-card sand-command-card">
+            <header className="hq-card-heading">
+              <div>
+                <span className="hq-eyebrow">Targeted source intake</span>
+                <h2>Run an import</h2>
+              </div>
+              <Database aria-hidden size={20} />
+            </header>
+            <p>
+              Use this for a specific player, event, or season. Imports stay
+              staged until their evidence passes the automatic quality gates.
+            </p>
+            <SourceImportForm />
+            <div className="sand-refresh-row">
+              <RefreshFivbForm />
+              <RefreshRankingsForm />
             </div>
-            <Badge
-              tone={
-                run.status === "succeeded"
-                  ? "positive"
-                  : run.status === "running"
-                    ? "neutral"
-                    : "warning"
-              }
-            >
-              {run.status}
-            </Badge>
-          </article>
-        ))}
-        {data.runs.length === 0 && (
-          <p className="hq-empty">No imports have run yet.</p>
-        )}
-      </section>
+          </section>
+          <section className="sand-source-section">
+            <header className="sand-section-heading">
+              <div>
+                <span className="hq-eyebrow">Connected sources</span>
+                <h2>Health, provenance, and settings</h2>
+                <p>
+                  Each source owns its own freshness and recent activity. Open
+                  settings only when you need to adjust how it is retrieved.
+                </p>
+              </div>
+              <Badge>{data.controls.length}</Badge>
+            </header>
+            <ScraperControls controls={data.controls} sources={data.sources} />
+          </section>
+        </>
+      )}
 
-      <section className="hq-card sand-match-queue">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Human approval gate</span>
-            <h2>Imported match queue</h2>
-          </div>
-          <Badge>{data.matches.length}</Badge>
-        </header>
-        <div>
-          {data.matches.map((match) => (
-            <MatchReview key={match.id} match={match} />
-          ))}
-        </div>
-        {data.matches.length === 0 && (
-          <p className="hq-empty">The staged match queue is clear.</p>
-        )}
-      </section>
-
-      <section className="hq-card sand-match-queue">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Player evidence appeals</span>
-            <h2>Match accuracy reviews</h2>
-          </div>
-          <Badge tone={data.historyDisputes.length ? "warning" : "positive"}>
-            {data.historyDisputes.length}
-          </Badge>
-        </header>
-        <p>
-          A flagged match remains public with an accuracy notice, but its
-          evidence is held out of Sand Rating until this review is resolved.
-        </p>
-        <div>
-          {data.historyDisputes.map((dispute) => (
-            <HistoryDisputeReview dispute={dispute} key={dispute.id} />
-          ))}
-        </div>
-        {data.historyDisputes.length === 0 && (
-          <p className="hq-empty">No player accuracy reviews are waiting.</p>
-        )}
-      </section>
+      {tool === "reviews" && (
+        <>
+          <section className="hq-card sand-review-intro">
+            <header className="hq-card-heading">
+              <div>
+                <span className="hq-eyebrow">Evidence decision desk</span>
+                <h2>Review only material exceptions</h2>
+              </div>
+              <ShieldCheck aria-hidden size={20} />
+            </header>
+            <p>
+              Only complete, mapped matches appear here. Approving one admits
+              its evidence to Sand Rating; excluding or rejecting it keeps the
+              evidence without changing a player’s rating. Send incomplete
+              identities to Player mapping instead.
+            </p>
+          </section>
+          <section className="hq-card sand-match-queue">
+            <header className="hq-card-heading">
+              <div>
+                <span className="hq-eyebrow">Rating-impacting evidence</span>
+                <h2>Imported match decisions</h2>
+              </div>
+              <Badge tone={ready.length ? "warning" : "positive"}>
+                {ready.length}
+              </Badge>
+            </header>
+            <p>
+              Only complete, mapped records can be approved. Use a review note
+              so the decision remains auditable.
+            </p>
+            <div>
+              {ready.map((match) => (
+                <MatchReview key={match.id} match={match} />
+              ))}
+            </div>
+            {ready.length === 0 && (
+              <p className="hq-empty">
+                There are no imported matches needing review.
+              </p>
+            )}
+          </section>
+          <section className="hq-card sand-match-queue">
+            <header className="hq-card-heading">
+              <div>
+                <span className="hq-eyebrow">
+                  Player-reported evidence issue
+                </span>
+                <h2>Match accuracy reviews</h2>
+              </div>
+              <Badge
+                tone={data.historyDisputes.length ? "warning" : "positive"}
+              >
+                {data.historyDisputes.length}
+              </Badge>
+            </header>
+            <p>
+              These are appeals about evidence already visible to players. A
+              flagged match is held out of Sand Rating while you confirm the
+              evidence or restore it with a recorded resolution.
+            </p>
+            <div>
+              {data.historyDisputes.map((dispute) => (
+                <HistoryDisputeReview dispute={dispute} key={dispute.id} />
+              ))}
+            </div>
+            {data.historyDisputes.length === 0 && (
+              <p className="hq-empty">No accuracy appeals are waiting.</p>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }
