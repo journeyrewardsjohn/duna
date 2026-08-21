@@ -1782,7 +1782,20 @@ export async function loadConnectedAccountMoney(input: {
   readonly bankLast4?: string;
   readonly stripeAvailableMinor?: number;
   readonly stripePendingMinor?: number;
+  readonly stripeInstantAvailableMinor?: number;
   readonly stripeReservedMinor?: number;
+  readonly stripePayoutInterval?: "manual" | "daily" | "weekly" | "monthly";
+  readonly earnings30d: {
+    readonly grossMinor: number;
+    readonly netMinor: number;
+    readonly feesMinor: number;
+    readonly payoutsMinor: number;
+    readonly points: readonly {
+      readonly date: string;
+      readonly grossMinor: number;
+      readonly netMinor: number;
+    }[];
+  };
   readonly bankAccounts: readonly {
     readonly id: string;
     readonly type: "bank-account" | "debit-card";
@@ -1804,6 +1817,15 @@ export async function loadConnectedAccountMoney(input: {
     readonly availableAt: string;
     readonly occurredAt: string;
   }[];
+  readonly disputes: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly status: string;
+    readonly amountMinor: number;
+    readonly currency: "USD" | "CAD" | "AUD" | "BRL" | "EUR";
+    readonly dueAt?: string;
+    readonly createdAt: string;
+  }[];
   readonly requirementsDue: readonly string[];
   readonly settingsUrl?: string;
   readonly liveData: boolean;
@@ -1814,6 +1836,9 @@ export async function loadConnectedAccountMoney(input: {
     balance,
     externalAccounts,
     balanceTransactions,
+    earningsBalanceTransactions,
+    balanceSettings,
+    stripeDisputes,
     v2Account,
     loginLink,
   ] = await Promise.all([
@@ -1826,6 +1851,19 @@ export async function loadConnectedAccountMoney(input: {
       { limit: 50 },
       { stripeAccount: input.accountId },
     ),
+    stripe.balanceTransactions
+      .list(
+        {
+          created: {
+            gte: Math.floor(Date.now() / 1_000) - 30 * 24 * 60 * 60,
+          },
+          limit: 100,
+        },
+        { stripeAccount: input.accountId },
+      )
+      .autoPagingToArray({ limit: 500 }),
+    stripe.balanceSettings.retrieve({}, { stripeAccount: input.accountId }),
+    stripe.disputes.list({ limit: 100 }, { stripeAccount: input.accountId }),
     stripe.v2.core.accounts.retrieve(input.accountId, {
       include: [
         "configuration.merchant",
@@ -1836,6 +1874,17 @@ export async function loadConnectedAccountMoney(input: {
     stripe.accounts.createLoginLink(input.accountId).catch(() => undefined),
   ]);
   const requestedCurrency = input.currency.toLowerCase();
+  const supportedCurrencies = ["USD", "CAD", "AUD", "BRL", "EUR"] as const;
+  const normalizeCurrency = (
+    value: string,
+  ): (typeof supportedCurrencies)[number] => {
+    const normalized = value.toUpperCase();
+    return supportedCurrencies.includes(
+      normalized as (typeof supportedCurrencies)[number],
+    )
+      ? (normalized as (typeof supportedCurrencies)[number])
+      : "USD";
+  };
   const amountFor = (
     amounts: readonly { readonly amount: number; readonly currency: string }[],
   ) =>
@@ -1879,6 +1928,44 @@ export async function loadConnectedAccountMoney(input: {
         (value): value is string => typeof value === "string",
       )
     : [];
+  const relevantEarningsCategories = new Set([
+    "charge",
+    "refund",
+    "dispute",
+    "dispute_reversal",
+  ]);
+  const earningsTransactions = earningsBalanceTransactions.filter(
+    (transaction) => transaction.currency === requestedCurrency,
+  );
+  const chartStart = new Date();
+  chartStart.setUTCHours(0, 0, 0, 0);
+  chartStart.setUTCDate(chartStart.getUTCDate() - 29);
+  const earningsPoints = Array.from({ length: 30 }, (_, index) => {
+    const point = new Date(chartStart);
+    point.setUTCDate(point.getUTCDate() + index);
+    const date = point.toISOString().slice(0, 10);
+    const transactions = earningsTransactions.filter(
+      (transaction) =>
+        new Date(transaction.created * 1_000).toISOString().slice(0, 10) ===
+        date,
+    );
+    return {
+      date,
+      grossMinor: transactions
+        .filter((transaction) => transaction.reporting_category === "charge")
+        .reduce((sum, transaction) => sum + Math.max(0, transaction.amount), 0),
+      netMinor: Math.max(
+        0,
+        transactions
+          .filter((transaction) =>
+            relevantEarningsCategories.has(transaction.reporting_category),
+          )
+          .reduce((sum, transaction) => sum + transaction.net, 0),
+      ),
+    };
+  });
+  const payoutInterval =
+    balanceSettings.payments.payouts?.schedule?.interval ?? undefined;
   return {
     accountId: input.accountId,
     connected: true,
@@ -1897,7 +1984,36 @@ export async function loadConnectedAccountMoney(input: {
     bankLast4: bank?.last4,
     stripeAvailableMinor: Math.max(0, amountFor(balance.available)),
     stripePendingMinor: Math.max(0, amountFor(balance.pending)),
+    stripeInstantAvailableMinor: Math.max(
+      0,
+      amountFor(balance.instant_available ?? []),
+    ),
     stripeReservedMinor: Math.max(0, amountFor(balance.connect_reserved ?? [])),
+    stripePayoutInterval:
+      payoutInterval &&
+      ["manual", "daily", "weekly", "monthly"].includes(payoutInterval)
+        ? (payoutInterval as "manual" | "daily" | "weekly" | "monthly")
+        : undefined,
+    earnings30d: {
+      grossMinor: earningsTransactions
+        .filter((transaction) => transaction.reporting_category === "charge")
+        .reduce((sum, transaction) => sum + Math.max(0, transaction.amount), 0),
+      netMinor: Math.max(
+        0,
+        earningsTransactions
+          .filter((transaction) =>
+            relevantEarningsCategories.has(transaction.reporting_category),
+          )
+          .reduce((sum, transaction) => sum + transaction.net, 0),
+      ),
+      feesMinor: earningsTransactions
+        .filter((transaction) => transaction.reporting_category === "charge")
+        .reduce((sum, transaction) => sum + Math.max(0, transaction.fee), 0),
+      payoutsMinor: earningsTransactions
+        .filter((transaction) => transaction.reporting_category === "payout")
+        .reduce((sum, transaction) => sum + Math.abs(transaction.net), 0),
+      points: earningsPoints,
+    },
     bankAccounts: payoutAccounts,
     activity: balanceTransactions.data.map((transaction) => ({
       id: transaction.id,
@@ -1915,6 +2031,17 @@ export async function loadConnectedAccountMoney(input: {
           : ("pending" as const),
       availableAt: new Date(transaction.available_on * 1_000).toISOString(),
       occurredAt: new Date(transaction.created * 1_000).toISOString(),
+    })),
+    disputes: stripeDisputes.data.map((dispute) => ({
+      id: dispute.id,
+      kind: dispute.reason.replaceAll("_", " "),
+      status: dispute.status,
+      amountMinor: Math.max(0, dispute.amount),
+      currency: normalizeCurrency(dispute.currency),
+      dueAt: dispute.evidence_details.due_by
+        ? new Date(dispute.evidence_details.due_by * 1_000).toISOString()
+        : undefined,
+      createdAt: new Date(dispute.created * 1_000).toISOString(),
     })),
     requirementsDue: currentlyDue,
     settingsUrl: loginLink?.url,
