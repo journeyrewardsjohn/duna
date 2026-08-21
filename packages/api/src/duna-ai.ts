@@ -266,7 +266,9 @@ export function resolveDunaAiGatewayCredentialSource(
 ): "api-key" | "oidc" | undefined {
   const oidc =
     requestOidcToken?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim();
-  const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  const apiKey =
+    process.env.VERCEL_AI_GATEWAY_API_KEY?.trim() ||
+    process.env.AI_GATEWAY_API_KEY?.trim();
   // A scoped Gateway key is the durable production credential. Keep the
   // request-scoped Vercel OIDC token as the zero-config fallback so a missing
   // runtime header never disables local development or new deployments.
@@ -275,12 +277,13 @@ export function resolveDunaAiGatewayCredentialSource(
   return undefined;
 }
 
-function resolveDunaAiGatewayCredential(
+export function resolveDunaAiGatewayCredential(
   requestOidcToken?: string,
 ): string | undefined {
   return resolveDunaAiGatewayCredentialSource(requestOidcToken) === "oidc"
     ? requestOidcToken?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim()
-    : process.env.AI_GATEWAY_API_KEY?.trim();
+    : process.env.VERCEL_AI_GATEWAY_API_KEY?.trim() ||
+        process.env.AI_GATEWAY_API_KEY?.trim();
 }
 
 function dunaAiRuntime(requestOidcToken?: string): DunaAiRuntime | undefined {

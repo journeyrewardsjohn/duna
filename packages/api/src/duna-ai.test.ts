@@ -9,6 +9,7 @@ import {
   isRetryableDunaAiGatewayStatus,
   rankDiscoveryItems,
   resolveDunaAiCopilotModel,
+  resolveDunaAiGatewayCredential,
   resolveDunaAiGatewayCredentialSource,
   transcribeDunaAiAudio,
 } from "./duna-ai";
@@ -17,6 +18,7 @@ import { proposeAgentAction } from "./risk";
 afterEach(() => {
   delete process.env.DUNA_COPILOT_MODEL;
   delete process.env.DUNA_TRANSCRIPTION_MODEL;
+  delete process.env.VERCEL_AI_GATEWAY_API_KEY;
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.VERCEL_OIDC_TOKEN;
   delete process.env.VERCEL;
@@ -168,7 +170,7 @@ describe("Duna AI model", () => {
 
   it("prefers a stable Gateway key in Vercel deployments", () => {
     process.env.VERCEL = "1";
-    process.env.AI_GATEWAY_API_KEY = "gateway-key";
+    process.env.VERCEL_AI_GATEWAY_API_KEY = "gateway-key";
     process.env.VERCEL_OIDC_TOKEN = "current-oidc-token";
     expect(resolveDunaAiGatewayCredentialSource()).toBe("api-key");
   });
@@ -184,6 +186,12 @@ describe("Duna AI model", () => {
     process.env.AI_GATEWAY_API_KEY = "local-api-key";
     process.env.VERCEL_OIDC_TOKEN = "pulled-oidc-token";
     expect(resolveDunaAiGatewayCredentialSource()).toBe("api-key");
+  });
+
+  it("prefers the Vercel-named Gateway key over the legacy name", () => {
+    process.env.VERCEL_AI_GATEWAY_API_KEY = "vercel-gateway-key";
+    process.env.AI_GATEWAY_API_KEY = "legacy-gateway-key";
+    expect(resolveDunaAiGatewayCredential()).toBe("vercel-gateway-key");
   });
 
   it("retries a transient Gateway response once", async () => {
