@@ -324,7 +324,7 @@ export const eventDraftEditorSchema = z.object({
   divisions: z
     .array(
       z.object({
-        id: z.string().uuid(),
+        id: z.string(),
         name: z.string(),
         description: z.string().optional(),
         minimumTeams: z.number().int().positive(),
@@ -829,7 +829,7 @@ export const playerDashboardSchema = z.object({
   feed: z
     .array(
       z.object({
-        id: z.string(),
+        id: z.string().uuid(),
         eyebrow: z.string(),
         title: z.string(),
         body: z.string(),
@@ -5043,7 +5043,26 @@ export const organizationMoneyWorkspaceSchema = z.object({
     bankLast4: z.string().optional(),
     stripeAvailableMinor: z.number().int().nonnegative().optional(),
     stripePendingMinor: z.number().int().nonnegative().optional(),
+    stripeInstantAvailableMinor: z.number().int().nonnegative().optional(),
     stripeReservedMinor: z.number().int().nonnegative().optional(),
+    stripePayoutInterval: z
+      .enum(["manual", "daily", "weekly", "monthly"])
+      .optional(),
+    earnings30d: z.object({
+      grossMinor: z.number().int().nonnegative(),
+      netMinor: z.number().int().nonnegative(),
+      feesMinor: z.number().int().nonnegative(),
+      payoutsMinor: z.number().int().nonnegative(),
+      points: z
+        .array(
+          z.object({
+            date: z.string(),
+            grossMinor: z.number().int().nonnegative(),
+            netMinor: z.number().int().nonnegative(),
+          }),
+        )
+        .readonly(),
+    }),
     bankAccounts: z
       .array(
         z.object({
@@ -5070,6 +5089,19 @@ export const organizationMoneyWorkspaceSchema = z.object({
           status: z.enum(["available", "pending"]),
           availableAt: z.iso.datetime(),
           occurredAt: z.iso.datetime(),
+        }),
+      )
+      .readonly(),
+    disputes: z
+      .array(
+        z.object({
+          id: z.string(),
+          kind: z.string(),
+          status: z.string(),
+          amountMinor: z.number().int().nonnegative(),
+          currency: currencySchema,
+          dueAt: z.iso.datetime().optional(),
+          createdAt: z.iso.datetime(),
         }),
       )
       .readonly(),
@@ -5156,7 +5188,7 @@ export const organizationMoneyWorkspaceSchema = z.object({
   disputes: z
     .array(
       z.object({
-        id: z.string().uuid(),
+        id: z.string(),
         orderId: z.string().uuid().optional(),
         stripeDisputeId: z.string().optional(),
         kind: z.string(),

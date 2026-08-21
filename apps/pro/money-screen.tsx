@@ -68,7 +68,20 @@ function previewMoney(): OrganizationMoneyWorkspace {
       bankLast4: "1842",
       stripeAvailableMinor: 26_605,
       stripePendingMinor: 29_065,
+      stripeInstantAvailableMinor: 17_910,
       stripeReservedMinor: 0,
+      stripePayoutInterval: "manual",
+      earnings30d: {
+        grossMinor: 60_425,
+        netMinor: 55_670,
+        feesMinor: 4_755,
+        payoutsMinor: 24_800,
+        points: Array.from({ length: 14 }, (_, index) => ({
+          date: day(index - 13).slice(0, 10),
+          grossMinor: index % 3 === 0 ? 8_000 + index * 100 : 2_500,
+          netMinor: index % 3 === 0 ? 7_300 + index * 90 : 2_200,
+        })),
+      },
       bankAccounts: [
         {
           id: "ba_preview",
@@ -81,6 +94,7 @@ function previewMoney(): OrganizationMoneyWorkspace {
         },
       ],
       activity: [],
+      disputes: [],
       requirementsDue: [],
       liveData: false,
     },

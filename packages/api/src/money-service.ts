@@ -130,7 +130,22 @@ export function loadDemoOrganizationMoneyWorkspace(
       bankLast4: "1842",
       stripeAvailableMinor: 26_605,
       stripePendingMinor: 29_065,
+      stripeInstantAvailableMinor: 17_910,
       stripeReservedMinor: 0,
+      stripePayoutInterval: "manual",
+      earnings30d: {
+        grossMinor: 60_425,
+        netMinor: 55_670,
+        feesMinor: 4_755,
+        payoutsMinor: 24_800,
+        points: Array.from({ length: 30 }, (_, index) => ({
+          date: day(index - 29).slice(0, 10),
+          grossMinor:
+            index % 5 === 0 ? 9_675 + index * 110 : index % 3 === 0 ? 4_500 : 0,
+          netMinor:
+            index % 5 === 0 ? 8_695 + index * 100 : index % 3 === 0 ? 4_200 : 0,
+        })),
+      },
       bankAccounts: [
         {
           id: "ba_demo",
@@ -168,6 +183,7 @@ export function loadDemoOrganizationMoneyWorkspace(
           occurredAt: day(-1),
         },
       ],
+      disputes: [],
       requirementsDue: [],
       liveData: false,
     },
@@ -590,8 +606,16 @@ function emptyConnect(
     chargesEnabled: organization.stripeChargesEnabled,
     payoutsEnabled: false,
     bankStatus: organization.stripeAccountId ? "unavailable" : "missing",
+    earnings30d: {
+      grossMinor: 0,
+      netMinor: 0,
+      feesMinor: 0,
+      payoutsMinor: 0,
+      points: [],
+    },
     bankAccounts: [],
     activity: [],
+    disputes: [],
     requirementsDue: [],
     liveData: false,
   };
@@ -792,17 +816,41 @@ export async function loadOrganizationMoneyWorkspace(
       expectedArrivalAt: row.expectedArrivalAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
     })),
-    disputes: disputeRows.map((row) => ({
-      id: row.id,
-      orderId: row.orderId ?? undefined,
-      stripeDisputeId: row.stripeDisputeId ?? undefined,
-      kind: row.kind,
-      status: row.status,
-      amountMinor: Math.max(0, row.amountMinor ?? 0),
-      currency: currency(row.currency ?? organization.currency),
-      dueAt: row.dueAt?.toISOString(),
-      createdAt: row.createdAt.toISOString(),
-    })),
+    disputes: [
+      ...connect.disputes
+        .filter(
+          (stripeDispute) =>
+            !disputeRows.some(
+              (storedDispute) =>
+                storedDispute.stripeDisputeId === stripeDispute.id,
+            ),
+        )
+        .map((stripeDispute) => ({
+          id: stripeDispute.id,
+          stripeDisputeId: stripeDispute.id,
+          kind: stripeDispute.kind,
+          status: stripeDispute.status,
+          amountMinor: stripeDispute.amountMinor,
+          currency: stripeDispute.currency,
+          dueAt: stripeDispute.dueAt,
+          createdAt: stripeDispute.createdAt,
+        })),
+      ...disputeRows.map((row) => ({
+        id: row.id,
+        orderId: row.orderId ?? undefined,
+        stripeDisputeId: row.stripeDisputeId ?? undefined,
+        kind: row.kind,
+        status: row.status,
+        amountMinor: Math.max(0, row.amountMinor ?? 0),
+        currency: currency(row.currency ?? organization.currency),
+        dueAt: row.dueAt?.toISOString(),
+        createdAt: row.createdAt.toISOString(),
+      })),
+    ].toSorted(
+      (left, right) =>
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
+    ),
   };
 }
 

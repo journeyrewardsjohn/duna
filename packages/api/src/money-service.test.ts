@@ -41,10 +41,16 @@ describe("organization fund availability", () => {
   });
 
   it("keeps the demo workspace on the public Money contract", () => {
+    const workspace = loadDemoOrganizationMoneyWorkspace(now);
+
     expect(() =>
-      organizationMoneyWorkspaceSchema.parse(
-        loadDemoOrganizationMoneyWorkspace(now),
-      ),
+      organizationMoneyWorkspaceSchema.parse(workspace),
     ).not.toThrow();
+    expect(workspace.connect.earnings30d.netMinor).toBeGreaterThan(0);
+    expect(workspace.connect.stripePendingMinor).toBeGreaterThan(0);
+    expect(workspace.connect.stripePayoutInterval).toBe("manual");
+    expect(
+      workspace.refundPolicies.filter((policy) => policy.isDefault),
+    ).toHaveLength(1);
   });
 });
