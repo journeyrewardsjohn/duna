@@ -75,9 +75,7 @@ test("the drill, the session, and the season are the same week", async ({
   await expect(page.getByText("First-Ball Sideout Lab").first()).toBeVisible();
   await expect(page.getByText("Sideout Under Pressure").first()).toBeVisible();
   await expect(page.getByText("Fall Competition Build")).toBeVisible();
-  await expect(
-    page.getByText("Atlantic Coast Open", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText(/Atlantic Coast Open/)).toBeVisible();
 
   // Two courts run different work at the same offset.
   await expect(page.getByText("Court 1").first()).toBeVisible();
@@ -85,6 +83,30 @@ test("the drill, the session, and the season are the same week", async ({
   await expect(
     page.getByText("High Hands, Deep Corners").first(),
   ).toBeVisible();
+});
+
+test("the program artifact is a season strip, not a spec sheet", async ({
+  page,
+}) => {
+  await page.goto(trainingPath);
+
+  const body = await page.locator("main").innerText();
+
+  // Eight weeks on the strip, with the current week called out and the
+  // tournament placed on its week.
+  expect(body).toContain("8 weeks");
+  expect(body).toContain("This week");
+  expect(body).toMatch(/Week\s*6\s*·\s*Atlantic Coast Open/);
+
+  // Phase names come from the product's own phase model.
+  for (const phase of ["Foundation", "Build", "Integrate", "Sharpen"]) {
+    expect(body).toContain(phase);
+  }
+
+  // The metadata cards it replaced are gone.
+  expect(body).not.toContain("on the program");
+  expect(body).not.toContain("Current phase");
+  expect(body).not.toMatch(/\b7\/16\b/);
 });
 
 test("cut sections stay cut", async ({ page }) => {
