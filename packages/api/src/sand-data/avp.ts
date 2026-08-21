@@ -504,7 +504,7 @@ export async function importAvpLeague(
   requestedSeason?: number,
 ): Promise<SourceImportResult> {
   const { html, engine } = await scrapeHtml("avp-league", avpLeagueUrl, {
-    waitForMs: 5_000,
+    waitForSelector: "#league-app table",
     timeoutMs: 90_000,
     proxy: "auto",
   });

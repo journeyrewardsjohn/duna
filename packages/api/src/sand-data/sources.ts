@@ -118,6 +118,19 @@ export function parseBvbInfoCareerSummary(html: string): BvbInfoCareerSummary {
   };
 }
 
+export function bvbInfoApplicationError(html: string): string | undefined {
+  if (!/<h2>\s*Error!\s*<\/h2>/i.test(html)) return undefined;
+  const summary = stripHtml(
+    html.match(
+      /<span[^>]*class=['"]clsErrorMsg['"][^>]*>([\s\S]*?)<\/span>/i,
+    )?.[1] ?? "BVBInfo returned an application error.",
+  );
+  const description = stripHtml(
+    html.match(/Error Description:\s*([^<\r\n]+)/i)?.[1] ?? "",
+  );
+  return [summary, description].filter(Boolean).join(" ");
+}
+
 export function discoverBvbInfoHistoryPages(html: string): readonly number[] {
   const pages = new Set<number>();
   for (const option of html.matchAll(
@@ -155,6 +168,14 @@ export async function importBvbInfoPlayer(
     timeoutMs: 90_000,
   });
   const pages = new Map<number, string>([[1, first.html]]);
+  const applicationError = bvbInfoApplicationError(first.html);
+  if (applicationError) {
+    throw new SandDataUpstreamError(
+      "bvbinfo",
+      "invalid-response",
+      applicationError,
+    );
+  }
   if (!options.incremental) {
     for (const page of discoverBvbInfoHistoryPages(first.html)) {
       pages.set(page, "");

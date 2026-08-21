@@ -67,6 +67,7 @@ import {
 import { assertProfileSubjectAuthority } from "../profile-onboarding";
 import { avpExternalPlayerId, importAvpLeague } from "./avp";
 import { importAvpTournaments } from "./avp-tournaments";
+import { resolvedScrapeEngine } from "./http";
 import {
   assertLiveTransportEnabled,
   assertScraperEnabled,
@@ -1694,18 +1695,7 @@ async function executeImport(input: {
   const database = getDatabase();
   const control = await assertScraperEnabled(input.source);
   const source = await ensureSource(input.source);
-  const engine =
-    input.source === "avp-tournaments" ||
-    input.source === "volleyball-life" ||
-    input.source === "volleyball-world"
-      ? "native"
-      : control.engine === "auto"
-        ? input.source === "avp-league" ||
-          process.env.FIRECRAWL_API_KEY ||
-          process.env.FIRECRAWL_API
-          ? "firecrawl"
-          : "native"
-        : control.engine;
+  const engine = resolvedScrapeEngine(input.source, control);
   const [run] = await database
     .insert(sandIngestionRuns)
     .values({
@@ -2219,16 +2209,6 @@ async function volleyballWorldEventSource(input: {
   readonly schedule: VolleyballWorldSchedule;
 }> {
   const existing = parseVolleyballWorldBinding(input.event.rawPayload);
-  if (existing) {
-    return {
-      binding: existing,
-      schedule: await fetchVolleyballWorldSchedule({
-        startsOn: existing.startsOn,
-        endsOn: existing.endsOn,
-        tournamentNumbers: existing.tournamentNumbers,
-      }),
-    };
-  }
   const startsOn = input.event.startsOn;
   const endsOn = input.event.endsOn ?? startsOn;
   if (!startsOn || !endsOn) {
@@ -2254,6 +2234,19 @@ async function volleyballWorldEventSource(input: {
       now: input.now,
     });
   } catch (discoveryError) {
+    // Competition slugs can change after an event is first published. Always
+    // prefer fresh discovery, but retain the last known tournament IDs when
+    // the official competition index is temporarily unavailable.
+    if (existing) {
+      return {
+        binding: existing,
+        schedule: await fetchVolleyballWorldSchedule({
+          startsOn: existing.startsOn,
+          endsOn: existing.endsOn,
+          tournamentNumbers: existing.tournamentNumbers,
+        }),
+      };
+    }
     const eventPayload = unknownRecord(input.event.rawPayload);
     const candidateSourceUrl = [
       objectString(eventPayload, "volleyballWorldCompetitionUrl"),

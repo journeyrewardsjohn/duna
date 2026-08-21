@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bvbInfoApplicationError,
   discoverBvbInfoHistoryPages,
   parseBvbInfoCareerSummary,
   parseFivbEventIndexHtml,
@@ -11,6 +12,18 @@ import {
 } from "./sources";
 
 describe("BVBInfo career history parsing", () => {
+  it("reports upstream ASP application errors instead of parsing placeholder data", () => {
+    expect(
+      bvbInfoApplicationError(`
+        <h2>Error!</h2>
+        <span class='clsErrorMsg'>An error occurred while building the player data page.</span>
+        Error Description:Error calling BvbinfoCOM2007.bsPlayer.GetBonusMoney method Overflow<br>
+      `),
+    ).toBe(
+      "An error occurred while building the player data page. Error calling BvbinfoCOM2007.bsPlayer.GetBonusMoney method Overflow",
+    );
+  });
+
   it("discovers every year-range history page from the player selector", () => {
     expect(
       discoverBvbInfoHistoryPages(`

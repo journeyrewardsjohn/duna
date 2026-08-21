@@ -62,7 +62,9 @@ const defaults: Readonly<Record<ManagedScraperSource, ScraperControl>> = {
   bvbinfo: {
     source: "bvbinfo",
     enabled: true,
-    engine: "auto",
+    // The legacy page is server-rendered. Firecrawl cannot repair errors from
+    // its own ASP application, so auto mode should prefer the native response.
+    engine: "native",
     minRequestIntervalMs: 4_000,
     maxRequestsPerHour: 120,
     linkedPlayerActiveRefreshHours: 24,
@@ -75,7 +77,8 @@ const defaults: Readonly<Record<ManagedScraperSource, ScraperControl>> = {
   "fivb-12ndr": {
     source: "fivb-12ndr",
     enabled: true,
-    engine: "auto",
+    // 12ndr is complete server-rendered HTML and is more reliable natively.
+    engine: "native",
     minRequestIntervalMs: 5_000,
     maxRequestsPerHour: 90,
     // This is the slower event-detail page import. Official live scores are
