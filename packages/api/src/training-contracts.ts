@@ -25,7 +25,7 @@ export const trainingContentStatusSchema = z.enum([
   "published",
   "archived",
 ]);
-export const trainingActivityKindSchema = z.enum([
+export const TRAINING_ACTIVITY_KINDS = [
   "drill",
   "warmup",
   "cool-down",
@@ -38,7 +38,16 @@ export const trainingActivityKindSchema = z.enum([
   "assessment",
   "break",
   "transition",
-]);
+] as const;
+export const trainingActivityKindSchema = z.enum(TRAINING_ACTIVITY_KINDS);
+export const TRAINING_PRACTICE_BLOCK_KINDS = [
+  ...TRAINING_ACTIVITY_KINDS,
+  "free-play",
+  "custom",
+] as const;
+export const trainingPracticeBlockKindSchema = z.enum(
+  TRAINING_PRACTICE_BLOCK_KINDS,
+);
 export const trainingDisciplineSchema = z.enum([
   "beach-2s",
   "beach-4s",
@@ -343,7 +352,7 @@ export const trainingPracticeBlockSchema = z.object({
   sequence: z.number().int().nonnegative(),
   lane: z.string(),
   title: z.string(),
-  kind: trainingActivityKindSchema,
+  kind: trainingPracticeBlockKindSchema,
   drillId: z.string().uuid().optional(),
   startsAtMinute: z.number().int().nonnegative(),
   durationMinutes: z.number().int().positive(),
@@ -351,6 +360,7 @@ export const trainingPracticeBlockSchema = z.object({
   intensity: z.number().int().min(1).max(10),
   plannedLoad: z.number().int().min(0).max(100),
   focusArea: trainingFocusAreaSchema.optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
   instructions: z.string().optional(),
   touchesTypical: z.number().int().nonnegative(),
   jumpsTypical: z.number().int().nonnegative(),
@@ -634,7 +644,7 @@ export const playerTrainingBlockSchema = z.object({
   sequence: z.number().int().nonnegative(),
   lane: z.string(),
   title: z.string(),
-  kind: trainingActivityKindSchema,
+  kind: trainingPracticeBlockKindSchema,
   startsAtMinute: z.number().int().nonnegative(),
   durationMinutes: z.number().int().positive(),
   intensity: z.number().int().min(1).max(10),

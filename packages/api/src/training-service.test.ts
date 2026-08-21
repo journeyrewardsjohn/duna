@@ -5,6 +5,7 @@ import {
   createTrainingProgramEventInputSchema,
   draftTrainingDrillInputSchema,
   importTrainingTournamentInputSchema,
+  trainingPracticeBlockSchema,
   trainingDrillSchema,
   trainingDrillMarketplaceSchema,
   type TrainingProgramDraft,
@@ -82,6 +83,37 @@ describe("training program calendar items", () => {
 });
 
 describe("training schedule generation", () => {
+  it("accepts lightweight custom and free-play practice blocks", () => {
+    const common = {
+      id: "38e346e8-322f-4a2e-a73b-33ee9742dff0",
+      sequence: 1,
+      lane: "all",
+      title: "Coach-authored block",
+      startsAtMinute: 10,
+      durationMinutes: 12,
+      transitionMinutes: 2,
+      intensity: 6,
+      plannedLoad: 55,
+      instructions: "Keep the explanation lightweight.",
+      touchesTypical: 32,
+      jumpsTypical: 4,
+      locked: false,
+    };
+    expect(
+      trainingPracticeBlockSchema.parse({ ...common, kind: "custom" }),
+    ).toMatchObject({ kind: "custom", tags: [] });
+    expect(
+      trainingPracticeBlockSchema.parse({
+        ...common,
+        kind: "free-play",
+        tags: ["Game-Like", "Decision Making"],
+      }),
+    ).toMatchObject({
+      kind: "free-play",
+      tags: ["Game-Like", "Decision Making"],
+    });
+  });
+
   it("loads a program calendar independently of the dashboard upcoming-event limit", async () => {
     const now = new Date("2026-08-20T14:00:00.000Z");
     const workspace = loadDemoTrainingWorkspace(demoOrganization.id, now);

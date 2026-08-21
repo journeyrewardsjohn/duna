@@ -3,47 +3,45 @@
 import type {
   TrainingDrill,
   TrainingFocusArea,
-  TrainingPracticeBlock,
   TrainingPracticePlan,
 } from "@duna/api/training-contracts";
 import {
   ArrowDown,
   ArrowUp,
+  BookOpenText,
   Check,
   CircleAlert,
+  CirclePlay,
   FileDown,
+  Flame,
   Gauge,
   GripVertical,
   Layers3,
+  MessageSquareText,
   Plus,
   Save,
   Search,
+  Snowflake,
   Sparkles,
+  SquarePen,
   Target,
   Trash2,
   UsersRound,
+  X,
 } from "lucide-react";
 import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import { saveTrainingPracticePlanAction } from "@/app/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
+import {
+  createQuickPracticeBlock,
+  normalizePracticeBlockTags,
+  practiceBlockKindLabel,
+  QUICK_PRACTICE_BLOCK_PRESETS,
+  type PracticeBuilderBlock,
+  type QuickPracticeBlockId,
+} from "./training-practice-block-presets";
 
-type BuilderBlock = {
-  readonly localId: string;
-  readonly groupId: string;
-  readonly title: string;
-  readonly kind: TrainingPracticeBlock["kind"];
-  readonly drillId?: string;
-  readonly lane: string;
-  readonly durationMinutes: number;
-  readonly transitionMinutes: number;
-  readonly intensity: number;
-  readonly plannedLoad: number;
-  readonly focusArea?: TrainingFocusArea;
-  readonly instructions?: string;
-  readonly touchesTypical: number;
-  readonly jumpsTypical: number;
-  readonly locked: boolean;
-};
+type BuilderBlock = PracticeBuilderBlock;
 
 function variableStyle(name: string, value: string): CSSProperties {
   return { [name]: value } as CSSProperties;
@@ -61,6 +59,7 @@ function warmup(): BuilderBlock {
     intensity: 3,
     plannedLoad: 24,
     focusArea: "Footwork",
+    tags: ["Warmup", "Footwork"],
     instructions:
       "Dynamic movement into partner ball control. Finish with approach rhythm.",
     touchesTypical: 22,
@@ -80,6 +79,7 @@ function cooldown(): BuilderBlock {
     transitionMinutes: 0,
     intensity: 1,
     plannedLoad: 10,
+    tags: ["Recovery", "Mobility"],
     instructions:
       "Breathing reset, lower-leg mobility, and one athlete-led reflection.",
     touchesTypical: 0,
@@ -104,6 +104,7 @@ function fromDrill(
     intensity: drill.intensity,
     plannedLoad: Math.min(100, Math.round(drill.intensity * 9.2)),
     focusArea: drill.focusArea,
+    tags: drill.tags.map((tag) => tag.label),
     touchesTypical: drill.estimate.touchesTypical,
     jumpsTypical: drill.estimate.jumpsTypical,
     locked: false,
@@ -130,11 +131,39 @@ function fromPracticePlan(plan: TrainingPracticePlan): readonly BuilderBlock[] {
       intensity: block.intensity,
       plannedLoad: block.plannedLoad,
       ...(block.focusArea ? { focusArea: block.focusArea } : {}),
+      tags: block.tags,
       ...(block.instructions ? { instructions: block.instructions } : {}),
       touchesTypical: block.touchesTypical,
       jumpsTypical: block.jumpsTypical,
       locked: block.locked,
     }));
+}
+
+function insertBeforeClosingCooldown(
+  current: readonly BuilderBlock[],
+  block: BuilderBlock,
+) {
+  const closingBlock = current.at(-1);
+  if (closingBlock?.kind === "cool-down" && closingBlock.locked) {
+    return [...current.slice(0, -1), block, closingBlock];
+  }
+  return [...current, block];
+}
+
+function QuickBlockIcon({ id }: { readonly id: QuickPracticeBlockId }) {
+  const Icon =
+    id === "drill-block"
+      ? BookOpenText
+      : id === "team-meeting"
+        ? MessageSquareText
+        : id === "warmup"
+          ? Flame
+          : id === "cool-down"
+            ? Snowflake
+            : id === "free-play"
+              ? CirclePlay
+              : SquarePen;
+  return <Icon aria-hidden size={18} />;
 }
 
 function groupBlocks(blocks: readonly BuilderBlock[]) {
@@ -210,6 +239,10 @@ export function TrainingPracticeBuilder({
   const [visibility, setVisibility] = useState<"organization" | "public">(
     initialPlan?.visibility ?? "organization",
   );
+  const [libraryView, setLibraryView] = useState<"drills" | "quick-blocks">(
+    "drills",
+  );
+  const [quickPickerOpen, setQuickPickerOpen] = useState(false);
   const [blocks, setBlocks] = useState<readonly BuilderBlock[]>(() =>
     initialPlan
       ? fromPracticePlan(initialPlan)
@@ -305,6 +338,32 @@ export function TrainingPracticeBuilder({
       ),
     );
 
+  const setBlockFocus = (localId: string, value: string) =>
+    setBlocks((current) =>
+      current.map((block) => {
+        if (block.localId !== localId) return block;
+        if (value) {
+          return { ...block, focusArea: value as TrainingFocusArea };
+        }
+        const withoutFocus = { ...block };
+        delete withoutFocus.focusArea;
+        return withoutFocus;
+      }),
+    );
+
+  const addQuickBlock = (presetId: QuickPracticeBlockId) => {
+    const block = createQuickPracticeBlock(presetId, focusArea);
+    setBlocks((current) => insertBeforeClosingCooldown(current, block));
+    setQuickPickerOpen(false);
+  };
+
+  const addSelectedDrill = () => {
+    if (!selected) return;
+    setBlocks((current) =>
+      insertBeforeClosingCooldown(current, fromDrill(selected)),
+    );
+  };
+
   const moveGroup = (groupId: string, direction: -1 | 1) => {
     setBlocks((current) => {
       const currentGroups = groupBlocks(current);
@@ -389,6 +448,7 @@ export function TrainingPracticeBuilder({
           intensity: block.intensity,
           plannedLoad: block.plannedLoad,
           focusArea: block.focusArea,
+          tags: block.tags,
           instructions: block.instructions,
           touchesTypical: block.touchesTypical,
           jumpsTypical: block.jumpsTypical,
@@ -401,57 +461,101 @@ export function TrainingPracticeBuilder({
 
   return (
     <div className="training-practice-builder">
-      <aside className="training-practice-library">
+      <aside
+        className={`training-practice-library${libraryView === "quick-blocks" ? " quick" : ""}`}
+      >
         <header>
-          <span className="hq-eyebrow">Drill library</span>
-          <strong>{drills.length} available</strong>
+          <span className="hq-eyebrow">
+            {libraryView === "drills" ? "Drill library" : "Quick blocks"}
+          </span>
+          <strong>
+            {libraryView === "drills"
+              ? `${drills.length} available`
+              : "No setup required"}
+          </strong>
         </header>
-        <label>
-          <Search aria-hidden size={16} />
-          <input
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search drills"
-            type="search"
-            value={query}
-          />
-        </label>
-        <div>
-          {filteredDrills.map((drill) => (
-            <button
-              className={selected?.id === drill.id ? "active" : undefined}
-              key={drill.id}
-              onClick={() => setSelectedId(drill.id)}
-              type="button"
-            >
-              <TrainingCourtAnimation compact drill={drill} />
-              <span>
-                <small>{drill.focusArea}</small>
-                <strong>{drill.title}</strong>
-                <em>
-                  {drill.durationMinutes}m · ~{drill.estimate.touchesTypical}{" "}
-                  touches
-                </em>
-              </span>
-            </button>
-          ))}
-        </div>
-        {selected && (
-          <footer>
-            <p>{selected.summary}</p>
-            <button
-              className="hq-button hq-button--primary"
-              onClick={() =>
-                setBlocks((current) => [
-                  ...current.slice(0, -1),
-                  fromDrill(selected),
-                  current.at(-1)!,
-                ])
-              }
-              type="button"
-            >
-              <Plus aria-hidden size={16} /> Add to timeline
-            </button>
-          </footer>
+        <nav aria-label="Practice block sources">
+          <button
+            className={libraryView === "drills" ? "active" : undefined}
+            onClick={() => setLibraryView("drills")}
+            type="button"
+          >
+            Library drills
+          </button>
+          <button
+            className={libraryView === "quick-blocks" ? "active" : undefined}
+            onClick={() => setLibraryView("quick-blocks")}
+            type="button"
+          >
+            Quick blocks
+          </button>
+        </nav>
+        {libraryView === "drills" ? (
+          <>
+            <label>
+              <Search aria-hidden size={16} />
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search drills"
+                type="search"
+                value={query}
+              />
+            </label>
+            <div className="training-practice-drill-list">
+              {filteredDrills.map((drill) => (
+                <button
+                  className={selected?.id === drill.id ? "active" : undefined}
+                  key={drill.id}
+                  onClick={() => setSelectedId(drill.id)}
+                  type="button"
+                >
+                  <TrainingCourtAnimation compact drill={drill} />
+                  <span>
+                    <small>{drill.focusArea}</small>
+                    <strong>{drill.title}</strong>
+                    <em>
+                      {drill.durationMinutes}m · ~
+                      {drill.estimate.touchesTypical} touches
+                    </em>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {selected && (
+              <footer>
+                <p>{selected.summary}</p>
+                <button
+                  className="hq-button hq-button--primary"
+                  onClick={addSelectedDrill}
+                  type="button"
+                >
+                  <Plus aria-hidden size={16} /> Add to timeline
+                </button>
+              </footer>
+            )}
+          </>
+        ) : (
+          <div className="training-quick-block-list">
+            {QUICK_PRACTICE_BLOCK_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => addQuickBlock(preset.id)}
+                type="button"
+              >
+                <i>
+                  <QuickBlockIcon id={preset.id} />
+                </i>
+                <span>
+                  <strong>{preset.label}</strong>
+                  <small>{preset.summary}</small>
+                  <em>
+                    {preset.durationMinutes}m · intensity {preset.intensity}
+                  </em>
+                </span>
+                <Plus aria-hidden size={15} />
+              </button>
+            ))}
+          </div>
         )}
       </aside>
 
@@ -519,109 +623,202 @@ export function TrainingPracticeBuilder({
                   <small>min</small>
                 </aside>
                 <div>
-                  {group.blocks.map((block) => (
-                    <article key={block.localId}>
-                      <header>
-                        <span>
-                          {group.blocks.length > 1
-                            ? block.lane
-                            : block.kind.replaceAll("-", " ")}
-                        </span>
-                        <div>
-                          <button
-                            aria-label="Move earlier"
-                            disabled={groupIndex === 0}
-                            onClick={() => moveGroup(group.id, -1)}
-                            type="button"
-                          >
-                            <ArrowUp aria-hidden size={14} />
-                          </button>
-                          <button
-                            aria-label="Move later"
-                            disabled={groupIndex === groups.length - 1}
-                            onClick={() => moveGroup(group.id, 1)}
-                            type="button"
-                          >
-                            <ArrowDown aria-hidden size={14} />
-                          </button>
-                          <button
-                            aria-label={`Remove ${block.title}`}
-                            disabled={block.locked}
-                            onClick={() =>
-                              setBlocks((current) =>
-                                current.filter(
-                                  (candidate) =>
-                                    candidate.localId !== block.localId,
-                                ),
-                              )
-                            }
-                            type="button"
-                          >
-                            <Trash2 aria-hidden size={14} />
-                          </button>
+                  {group.blocks.map((block) => {
+                    const editableQuickBlock = !block.drillId && !block.locked;
+                    return (
+                      <article
+                        className={
+                          editableQuickBlock ? "quick-block" : undefined
+                        }
+                        key={block.localId}
+                      >
+                        <header>
+                          <span>
+                            {group.blocks.length > 1
+                              ? block.lane
+                              : practiceBlockKindLabel(block)}
+                          </span>
+                          <div>
+                            <button
+                              aria-label="Move earlier"
+                              disabled={groupIndex === 0}
+                              onClick={() => moveGroup(group.id, -1)}
+                              type="button"
+                            >
+                              <ArrowUp aria-hidden size={14} />
+                            </button>
+                            <button
+                              aria-label="Move later"
+                              disabled={groupIndex === groups.length - 1}
+                              onClick={() => moveGroup(group.id, 1)}
+                              type="button"
+                            >
+                              <ArrowDown aria-hidden size={14} />
+                            </button>
+                            <button
+                              aria-label={`Remove ${block.title}`}
+                              disabled={block.locked}
+                              onClick={() =>
+                                setBlocks((current) =>
+                                  current.filter(
+                                    (candidate) =>
+                                      candidate.localId !== block.localId,
+                                  ),
+                                )
+                              }
+                              type="button"
+                            >
+                              <Trash2 aria-hidden size={14} />
+                            </button>
+                          </div>
+                        </header>
+                        {editableQuickBlock ? (
+                          <div className="training-practice-block-copy">
+                            <input
+                              aria-label="Block name"
+                              onChange={(event) =>
+                                patchBlock(block.localId, {
+                                  title: event.target.value,
+                                })
+                              }
+                              placeholder="Name this block"
+                              value={block.title}
+                            />
+                            <textarea
+                              aria-label="Block sub-text"
+                              onChange={(event) =>
+                                patchBlock(block.localId, {
+                                  instructions: event.target.value,
+                                })
+                              }
+                              placeholder="What happens in this block?"
+                              rows={2}
+                              value={block.instructions ?? ""}
+                            />
+                          </div>
+                        ) : (
+                          <strong>{block.title}</strong>
+                        )}
+                        <div className="training-practice-block-fields">
+                          <label>
+                            <span>Minutes</span>
+                            <input
+                              min="1"
+                              onChange={(event) =>
+                                patchBlock(block.localId, {
+                                  durationMinutes: Number(event.target.value),
+                                })
+                              }
+                              type="number"
+                              value={block.durationMinutes}
+                            />
+                          </label>
+                          <label>
+                            <span>Transition</span>
+                            <input
+                              min="0"
+                              onChange={(event) =>
+                                patchBlock(block.localId, {
+                                  transitionMinutes: Number(event.target.value),
+                                })
+                              }
+                              type="number"
+                              value={block.transitionMinutes}
+                            />
+                          </label>
+                          <label>
+                            <span>Intensity</span>
+                            <input
+                              max="10"
+                              min="1"
+                              onChange={(event) => {
+                                const intensity = Number(event.target.value);
+                                patchBlock(block.localId, {
+                                  intensity,
+                                  plannedLoad: Math.round(intensity * 9.2),
+                                });
+                              }}
+                              type="number"
+                              value={block.intensity}
+                            />
+                          </label>
                         </div>
-                      </header>
-                      <strong>{block.title}</strong>
-                      <div className="training-practice-block-fields">
-                        <label>
-                          <span>Minutes</span>
-                          <input
-                            min="1"
-                            onChange={(event) =>
-                              patchBlock(block.localId, {
-                                durationMinutes: Number(event.target.value),
-                              })
-                            }
-                            type="number"
-                            value={block.durationMinutes}
+                        {editableQuickBlock && (
+                          <div className="training-practice-block-details">
+                            <label>
+                              <span>Focus area</span>
+                              <select
+                                aria-label="Block focus area"
+                                onChange={(event) =>
+                                  setBlockFocus(
+                                    block.localId,
+                                    event.target.value,
+                                  )
+                                }
+                                value={block.focusArea ?? ""}
+                              >
+                                <option value="">No primary focus</option>
+                                {focusAreas.map((area) => (
+                                  <option key={area} value={area}>
+                                    {area}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              <span>Tags</span>
+                              <input
+                                aria-label="Block tags"
+                                defaultValue={block.tags.join(", ")}
+                                onBlur={(event) => {
+                                  const tags = normalizePracticeBlockTags(
+                                    event.target.value,
+                                  );
+                                  event.target.value = tags.join(", ");
+                                  patchBlock(block.localId, { tags });
+                                }}
+                                placeholder="e.g. Team culture, recovery"
+                                type="text"
+                              />
+                            </label>
+                            <label>
+                              <span>Est. touches / player</span>
+                              <input
+                                aria-label="Estimated touches per player"
+                                max="10000"
+                                min="0"
+                                onChange={(event) =>
+                                  patchBlock(block.localId, {
+                                    touchesTypical: Number(event.target.value),
+                                  })
+                                }
+                                type="number"
+                                value={block.touchesTypical}
+                              />
+                            </label>
+                          </div>
+                        )}
+                        <footer>
+                          <span>
+                            {block.focusArea ??
+                              block.tags[0] ??
+                              practiceBlockKindLabel(block)}
+                          </span>
+                          <small>
+                            {block.touchesTypical
+                              ? `~${block.touchesTypical} touches`
+                              : "No ball contacts"}
+                          </small>
+                          <i
+                            style={variableStyle(
+                              "--training-value",
+                              `${block.plannedLoad}%`,
+                            )}
                           />
-                        </label>
-                        <label>
-                          <span>Transition</span>
-                          <input
-                            min="0"
-                            onChange={(event) =>
-                              patchBlock(block.localId, {
-                                transitionMinutes: Number(event.target.value),
-                              })
-                            }
-                            type="number"
-                            value={block.transitionMinutes}
-                          />
-                        </label>
-                        <label>
-                          <span>Intensity</span>
-                          <input
-                            max="10"
-                            min="1"
-                            onChange={(event) => {
-                              const intensity = Number(event.target.value);
-                              patchBlock(block.localId, {
-                                intensity,
-                                plannedLoad: Math.round(intensity * 9.2),
-                              });
-                            }}
-                            type="number"
-                            value={block.intensity}
-                          />
-                        </label>
-                      </div>
-                      <footer>
-                        <span>{block.focusArea ?? block.kind}</span>
-                        <small>
-                          {block.touchesTypical
-                            ? `~${block.touchesTypical} touches`
-                            : "No ball contacts"}
-                        </small>
-                        <i
-                          style={variableStyle(
-                            "--training-value",
-                            `${block.plannedLoad}%`,
-                          )}
-                        />
-                      </footer>
-                    </article>
-                  ))}
+                        </footer>
+                      </article>
+                    );
+                  })}
                 </div>
                 {groupIndex > 0 &&
                   group.blocks.every((block) => block.kind === "drill") &&
@@ -642,19 +839,52 @@ export function TrainingPracticeBuilder({
             );
           })}
         </div>
+        {quickPickerOpen && (
+          <section className="training-quick-block-picker">
+            <header>
+              <div>
+                <span className="hq-eyebrow">Quick add</span>
+                <strong>What belongs next?</strong>
+                <small>
+                  Start from a smart preset. Every field stays editable.
+                </small>
+              </div>
+              <button
+                aria-label="Close quick block picker"
+                onClick={() => setQuickPickerOpen(false)}
+                type="button"
+              >
+                <X aria-hidden size={16} />
+              </button>
+            </header>
+            <div>
+              {QUICK_PRACTICE_BLOCK_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => addQuickBlock(preset.id)}
+                  type="button"
+                >
+                  <i>
+                    <QuickBlockIcon id={preset.id} />
+                  </i>
+                  <span>
+                    <strong>{preset.label}</strong>
+                    <small>{preset.summary}</small>
+                  </span>
+                  <Plus aria-hidden size={15} />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         <button
+          aria-expanded={quickPickerOpen}
           className="training-practice-add"
-          onClick={() =>
-            selected &&
-            setBlocks((current) => [
-              ...current.slice(0, -1),
-              fromDrill(selected),
-              current.at(-1)!,
-            ])
-          }
+          onClick={() => setQuickPickerOpen((current) => !current)}
           type="button"
         >
-          <Plus aria-hidden size={16} /> Add another block
+          <Plus aria-hidden size={16} />
+          {quickPickerOpen ? "Close block menu" : "Add another block"}
         </button>
       </section>
 

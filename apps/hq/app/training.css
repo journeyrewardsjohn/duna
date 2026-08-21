@@ -3835,7 +3835,11 @@
 .training-practice-canvas > header input,
 .training-practice-canvas > header textarea,
 .training-practice-canvas > header select,
-.training-practice-block-fields input {
+.training-practice-block-fields input,
+.training-practice-block-copy input,
+.training-practice-block-copy textarea,
+.training-practice-block-details input,
+.training-practice-block-details select {
   background: var(--surface-2);
   border: 1px solid var(--hairline);
   border-radius: 11px;
@@ -3860,7 +3864,11 @@
 .training-program-schedule-editor__form input:focus,
 .training-program-schedule-editor__form select:focus,
 .training-practice-canvas > header input:focus,
-.training-practice-canvas > header textarea:focus {
+.training-practice-canvas > header textarea:focus,
+.training-practice-block-copy input:focus,
+.training-practice-block-copy textarea:focus,
+.training-practice-block-details input:focus,
+.training-practice-block-details select:focus {
   border-color: var(--hq-core);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--hq-core) 16%, transparent);
 }
@@ -5322,7 +5330,11 @@
 
 .training-practice-library {
   display: grid;
-  grid-template-rows: auto auto minmax(120px, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(120px, 1fr) auto;
+}
+
+.training-practice-library.quick {
+  grid-template-rows: auto auto minmax(120px, 1fr);
 }
 
 .training-practice-library > header {
@@ -5336,6 +5348,32 @@
 .training-practice-library > header strong {
   color: var(--text-3);
   font-size: 0.75rem;
+}
+
+.training-practice-library > nav {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.4rem;
+}
+
+.training-practice-library > nav button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 760;
+  min-height: 34px;
+  padding: 0.35rem;
+}
+
+.training-practice-library > nav button.active {
+  background: var(--surface-1);
+  box-shadow: var(--shadow-small);
+  color: var(--hq-ink);
 }
 
 .training-practice-library > label {
@@ -5359,11 +5397,11 @@
   width: 100%;
 }
 
-.training-practice-library > div {
+.training-practice-drill-list {
   overflow: auto;
 }
 
-.training-practice-library > div > button {
+.training-practice-drill-list > button {
   align-items: center;
   background: transparent;
   border: 0;
@@ -5376,11 +5414,11 @@
   width: 100%;
 }
 
-.training-practice-library > div > button + button {
+.training-practice-drill-list > button + button {
   border-top: 1px solid var(--hairline);
 }
 
-.training-practice-library > div > button.active {
+.training-practice-drill-list > button.active {
   background: color-mix(in srgb, var(--hq-tint) 42%, var(--surface-1));
   box-shadow: inset 3px 0 var(--hq-ink);
 }
@@ -5389,20 +5427,20 @@
   height: 58px;
 }
 
-.training-practice-library > div > button > span {
+.training-practice-drill-list > button > span {
   display: grid;
   gap: 0.2rem;
   min-width: 0;
 }
 
-.training-practice-library > div > button small {
+.training-practice-drill-list > button small {
   color: var(--hq-ink);
   font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.training-practice-library > div > button strong {
+.training-practice-drill-list > button strong {
   color: var(--text-1);
   font-size: 0.75rem;
   overflow: hidden;
@@ -5410,10 +5448,66 @@
   white-space: nowrap;
 }
 
-.training-practice-library > div > button em {
+.training-practice-drill-list > button em {
   color: var(--text-3);
   font-size: 0.75rem;
   font-style: normal;
+}
+
+.training-quick-block-list {
+  display: grid;
+  gap: 0.45rem;
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.training-quick-block-list > button {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  color: var(--text-3);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  padding: 0.65rem;
+  text-align: left;
+}
+
+.training-quick-block-list > button:hover {
+  background: color-mix(in srgb, var(--hq-tint) 38%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--hq-core) 34%, var(--hairline));
+}
+
+.training-quick-block-list > button > i,
+.training-quick-block-picker button > i {
+  align-items: center;
+  background: color-mix(in srgb, var(--hq-tint) 52%, var(--surface-1));
+  border-radius: 9px;
+  color: var(--hq-ink);
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.training-quick-block-list > button > span {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.training-quick-block-list strong {
+  color: var(--text-1);
+  font-size: 0.75rem;
+}
+
+.training-quick-block-list small,
+.training-quick-block-list em {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-style: normal;
+  line-height: 1.35;
 }
 
 .training-practice-library > footer {
@@ -5589,10 +5683,55 @@
   white-space: nowrap;
 }
 
+.training-practice-block-copy {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.training-practice-block-copy input {
+  background: transparent;
+  border: 0;
+  font-size: 0.9rem;
+  font-weight: 720;
+  min-height: 34px;
+  padding: 0.2rem 0;
+}
+
+.training-practice-block-copy textarea {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  min-height: 58px;
+  padding: 0.55rem 0.65rem;
+}
+
 .training-practice-block-fields {
   display: grid;
   gap: 0.4rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.training-practice-block-details {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: 1fr 1.2fr 0.8fr;
+}
+
+.training-practice-block-details label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.training-practice-block-details label > span {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.training-practice-block-details input,
+.training-practice-block-details select {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  min-height: 38px;
+  padding: 0.4rem;
 }
 
 .training-practice-block-fields label {
@@ -5669,6 +5808,90 @@
   margin: 0 0.8rem 0.8rem;
   min-height: 46px;
   width: calc(100% - 1.6rem);
+}
+
+.training-quick-block-picker {
+  background: color-mix(in srgb, var(--hq-tint) 18%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--hq-core) 26%, var(--hairline));
+  border-radius: 16px;
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0.8rem 0.65rem;
+  padding: 0.8rem;
+}
+
+.training-quick-block-picker > header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.training-quick-block-picker > header > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.training-quick-block-picker > header strong {
+  color: var(--text-1);
+  font-size: 1rem;
+}
+
+.training-quick-block-picker > header small {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.training-quick-block-picker > header > button {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--text-3);
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.training-quick-block-picker > div {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.training-quick-block-picker > div > button {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  color: var(--text-3);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 66px;
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.training-quick-block-picker > div > button:hover {
+  border-color: var(--hq-core);
+  transform: translateY(-1px);
+}
+
+.training-quick-block-picker > div > button > span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.training-quick-block-picker > div > button strong {
+  color: var(--text-1);
+  font-size: 0.75rem;
+}
+
+.training-quick-block-picker > div > button small {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 
 .training-practice-summary {
@@ -6227,6 +6450,11 @@
   }
 
   .training-practice-groups > section.parallel > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .training-practice-block-details,
+  .training-quick-block-picker > div {
     grid-template-columns: minmax(0, 1fr);
   }
 
