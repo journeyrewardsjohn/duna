@@ -4,7 +4,9 @@ import {
   confirmDunaAiAction,
   dunaAiRequestSchema,
   findScheduleConflicts,
+  fetchDunaAiGatewayWithRetry,
   hasDunaAiGatewayCredential,
+  isRetryableDunaAiGatewayStatus,
   rankDiscoveryItems,
   resolveDunaAiCopilotModel,
   resolveDunaAiGatewayCredentialSource,
@@ -164,16 +166,15 @@ describe("Duna AI model", () => {
     expect(hasDunaAiGatewayCredential()).toBe(true);
   });
 
-  it("prefers automatic OIDC in Vercel deployments over a stale API key", () => {
+  it("prefers a stable Gateway key in Vercel deployments", () => {
     process.env.VERCEL = "1";
-    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
+    process.env.AI_GATEWAY_API_KEY = "gateway-key";
     process.env.VERCEL_OIDC_TOKEN = "current-oidc-token";
-    expect(resolveDunaAiGatewayCredentialSource()).toBe("oidc");
+    expect(resolveDunaAiGatewayCredentialSource()).toBe("api-key");
   });
 
   it("accepts the request-scoped OIDC token used by Vercel functions", () => {
     process.env.VERCEL = "1";
-    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
     expect(resolveDunaAiGatewayCredentialSource("request-oidc-token")).toBe(
       "oidc",
     );
@@ -183,6 +184,45 @@ describe("Duna AI model", () => {
     process.env.AI_GATEWAY_API_KEY = "local-api-key";
     process.env.VERCEL_OIDC_TOKEN = "pulled-oidc-token";
     expect(resolveDunaAiGatewayCredentialSource()).toBe("api-key");
+  });
+
+  it("retries a transient Gateway response once", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: { message: "Gateway overloaded" } },
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ output: [] }));
+    const wait = vi.fn(async () => undefined);
+    await expect(
+      fetchDunaAiGatewayWithRetry({
+        credential: "gateway-key",
+        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        fetchImpl,
+        wait,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(250);
+  });
+
+  it("does not retry an invalid Gateway credential", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ error: { message: "Unauthorized" } }, { status: 401 }),
+    );
+    await expect(
+      fetchDunaAiGatewayWithRetry({
+        credential: "invalid-key",
+        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({ status: 401 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(isRetryableDunaAiGatewayStatus(401)).toBe(false);
+    expect(isRetryableDunaAiGatewayStatus(503)).toBe(true);
   });
 
   it("accepts bounded image and file context on an ask turn", () => {
@@ -237,7 +277,6 @@ describe("Duna AI model", () => {
 
   it("uses the request-scoped OIDC token for Vercel voice transcription", async () => {
     process.env.VERCEL = "1";
-    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
     const fetchImpl = vi.fn(
       async (_url: RequestInfo | URL, init?: RequestInit) => {
         expect(init?.headers).toEqual({
