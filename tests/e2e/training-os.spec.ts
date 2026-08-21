@@ -107,6 +107,9 @@ test("the program artifact is a season strip, not a spec sheet", async ({
   expect(body).not.toContain("on the program");
   expect(body).not.toContain("Current phase");
   expect(body).not.toMatch(/\b7\/16\b/);
+
+  // The bar dip carries the taper. Labelling it too is the algorithm talking.
+  expect(body).not.toContain("Taper");
 });
 
 test("cut sections stay cut", async ({ page }) => {

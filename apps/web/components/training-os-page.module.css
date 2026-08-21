@@ -689,10 +689,6 @@
   line-height: 1.2;
 }
 
-.taperNote {
-  color: var(--mock-muted);
-}
-
 /* The milestone is a tick on the strip plus a readable label, so the title is
    never squeezed into one eighth of the width. */
 .milestoneTicks i {

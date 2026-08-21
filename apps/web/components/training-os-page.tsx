@@ -130,7 +130,6 @@ interface ProgramWeek {
   readonly week: number;
   readonly load: number;
   readonly state: "done" | "current" | "ahead";
-  readonly taper?: boolean;
 }
 
 const programStrip: readonly ProgramWeek[] = [
@@ -139,7 +138,7 @@ const programStrip: readonly ProgramWeek[] = [
   { week: 3, load: 72, state: "done" },
   { week: 4, load: 72, state: "current" },
   { week: 5, load: 72, state: "ahead" },
-  { week: 6, load: 52, state: "ahead", taper: true },
+  { week: 6, load: 52, state: "ahead" },
   { week: 7, load: 68, state: "ahead" },
   { week: 8, load: 46, state: "ahead" },
 ];
@@ -425,7 +424,6 @@ function ProgramWindow() {
             <span data-state={week.state} key={week.week}>
               <Numeric tier="chip">{week.week}</Numeric>
               {week.state === "current" && <em>This week</em>}
-              {week.taper && <em className={styles.taperNote}>Taper</em>}
             </span>
           ))}
         </div>
