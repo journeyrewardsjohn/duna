@@ -51,15 +51,18 @@ export const organizationSummarySchema = z.object({
   slug: z.string(),
   name: z.string(),
   legalName: z.string(),
-  plan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+  plan: z.enum(["coach", "small-club", "club"]),
+  volleyballTypes: z
+    .array(z.enum(["beach", "indoor"]))
+    .min(1)
+    .max(2)
+    .optional(),
   memberCount: z.number().int().nonnegative(),
   staffCount: z.number().int().nonnegative(),
   venueCount: z.number().int().nonnegative(),
   timezone: z.string(),
   stripeStatus: z.enum(["connected", "pending", "restricted"]),
-  effectivePlan: z
-    .enum(["coach", "small-club", "club", "multi-venue"])
-    .optional(),
+  effectivePlan: z.enum(["coach", "small-club", "club"]).optional(),
   operatorCommissionBps: z.number().int().min(0).max(2_500).optional(),
   commissionSource: z.enum(["plan-default", "admin-override"]).optional(),
   stripeFeeMetadataStatus: z
@@ -69,8 +72,8 @@ export const organizationSummarySchema = z.object({
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
 export const organizationCommissionPolicySchema = z.object({
   organizationId: z.string().uuid(),
-  configuredPlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
-  effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+  configuredPlan: z.enum(["coach", "small-club", "club"]),
+  effectivePlan: z.enum(["coach", "small-club", "club"]),
   subscriptionStatus: z.string(),
   defaultRateBps: z.number().int().min(0).max(2_500),
   overrideRateBps: z.number().int().min(0).max(2_500).optional(),
@@ -2357,6 +2360,7 @@ export const videoUsageSchema = z.object({
     usedSeconds: z.number().int().nonnegative(),
     limitSeconds: z.number().int().nonnegative(),
     remainingSeconds: z.number().int().nonnegative(),
+    overageSeconds: z.number().int().nonnegative(),
     enforced: z.boolean(),
   }),
   uploads: z.object({
@@ -2381,9 +2385,7 @@ export const videoStudioSchema = z.object({
     type: z.enum(["person", "organization"]),
     label: z.string(),
     organizationId: z.string().uuid().optional(),
-    organizationPlan: z
-      .enum(["coach", "small-club", "club", "multi-venue"])
-      .optional(),
+    organizationPlan: z.enum(["coach", "small-club", "club"]).optional(),
   }),
   canBroadcast: z.boolean(),
   usage: videoUsageSchema,
@@ -5241,13 +5243,20 @@ export const operatorWorkspaceSchema = z.object({
     slug: z.string(),
     name: z.string(),
     legalName: z.string().optional(),
-    plan: z.enum(["coach", "small-club", "club", "multi-venue"]),
-    effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    plan: z.enum(["coach", "small-club", "club"]),
+    effectivePlan: z.enum(["coach", "small-club", "club"]),
+    volleyballTypes: z
+      .array(z.enum(["beach", "indoor"]))
+      .min(1)
+      .max(2),
     planSubscriptionStatus: z.string(),
     planBillingInterval: z.enum(["month", "year"]).optional(),
     planCurrentPeriodEndsAt: z.iso.datetime().optional(),
     planCancelAtPeriodEnd: z.boolean(),
     billingPortalAvailable: z.boolean(),
+    videoUploadAddonSeconds: z.number().int().nonnegative(),
+    videoLiveAddonSeconds: z.number().int().nonnegative(),
+    videoPaygEnabled: z.boolean(),
     commission: organizationCommissionPolicySchema,
     currency: currencySchema,
     timezone: z.string(),
@@ -5620,8 +5629,8 @@ export const adminOrganizationDetailSchema = z.object({
   events: z.array(eventSummarySchema).readonly(),
   audit: z.array(auditEventSchema).readonly(),
   billing: z.object({
-    configuredPlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
-    effectivePlan: z.enum(["coach", "small-club", "club", "multi-venue"]),
+    configuredPlan: z.enum(["coach", "small-club", "club"]),
+    effectivePlan: z.enum(["coach", "small-club", "club"]),
     subscriptionStatus: z.string(),
     interval: z.enum(["month", "year"]).optional(),
     currentPeriodEndsAt: z.iso.datetime().optional(),

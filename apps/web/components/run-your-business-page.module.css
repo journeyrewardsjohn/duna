@@ -1789,7 +1789,7 @@
 .planGrid {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: clamp(3rem, 6vw, 6rem);
 }
 
@@ -1803,7 +1803,7 @@
   padding: clamp(1.25rem, 2.5vw, 2rem);
 }
 
-.planGrid > article:nth-child(2) {
+.planGrid > article[data-featured="true"] {
   background: var(--business-hq-soft);
   border-color: color-mix(in srgb, var(--hq-core) 42%, var(--hairline));
   transform: translateY(-0.75rem);
@@ -1815,11 +1815,23 @@
 }
 
 .planGrid header > span {
+  align-items: center;
   color: var(--hq-ink);
+  display: flex;
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.planGrid header > span b {
+  background: var(--hq-core);
+  border-radius: 999px;
+  color: var(--hq-deep);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+  padding: 0.35rem 0.55rem;
 }
 
 .planGrid h3 {
@@ -1866,6 +1878,32 @@
   font-size: 0.78rem;
 }
 
+.planCta {
+  align-items: center;
+  background: var(--btn-primary-bg);
+  border-radius: 999px;
+  color: var(--btn-primary-fg);
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  min-height: 46px;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+  transition: transform 180ms ease;
+}
+
+.planCta:hover {
+  transform: translateY(-2px);
+}
+
+.planCta svg {
+  height: 16px;
+  width: 16px;
+}
+
 .planGrid footer {
   border-top: 1px solid var(--hairline);
   display: grid;
@@ -1891,6 +1929,71 @@
 .planGrid footer small {
   color: var(--text-3);
   font-size: 0.75rem;
+}
+
+.videoPricing {
+  align-items: start;
+  background:
+    radial-gradient(
+      circle at 86% 12%,
+      color-mix(in srgb, var(--hq-tint) 72%, transparent),
+      transparent 36%
+    ),
+    var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 20px;
+  display: grid;
+  gap: clamp(2rem, 5vw, 5rem);
+  grid-template-columns: minmax(0, 0.9fr) minmax(30rem, 1.1fr);
+  margin-top: 1.25rem;
+  padding: clamp(1.5rem, 4vw, 3rem);
+}
+
+.videoPricing h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  margin: 0.65rem 0 0;
+}
+
+.videoPricing p {
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.videoPricing dl {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.videoPricing dl > div {
+  background: color-mix(in srgb, var(--surface-1) 84%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.25rem;
+}
+
+.videoPricing dt {
+  color: var(--text-2);
+  font-size: 0.78rem;
+}
+
+.videoPricing dd {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-weight: 700;
+  margin: 0;
+}
+
+.videoPricing small {
+  color: var(--text-3);
+  font-size: 0.72rem;
 }
 
 .pricingNote {
@@ -2020,7 +2123,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .planGrid > article:nth-child(2) {
+  .planGrid > article[data-featured="true"] {
     transform: none;
   }
 }
@@ -2333,12 +2436,20 @@
     row-gap: 2.5rem;
   }
 
+  .videoPricing {
+    grid-template-columns: 1fr;
+  }
+
   .planGrid {
     grid-template-columns: 1fr;
   }
 
   .planGrid > article {
     min-height: 0;
+  }
+
+  .videoPricing dl {
+    grid-template-columns: 1fr;
   }
 }
 

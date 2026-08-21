@@ -42,7 +42,7 @@ export function PublicCreateStarter({ hqUrl }: { readonly hqUrl: string }) {
     <div className="public-create">
       <section className="public-create__intro">
         <Badge>
-          <Sparkles aria-hidden size={12} /> Free Coach & Organizer plan
+          <Sparkles aria-hidden size={12} /> Every Duna HQ feature · $0/month
         </Badge>
         <h1>Put your event on Duna.</h1>
         <p>

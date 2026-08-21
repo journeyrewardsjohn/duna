@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { organizationSlug, resolveWorkOSPerson } from "./context";
 
 export type HqPlan = OrganizationPlanId;
+export type OrganizationVolleyballType = "beach" | "indoor";
 
 export const HQ_PLAN_OPTIONS: readonly {
   readonly id: HqPlan;
@@ -28,7 +29,7 @@ export const HQ_PLAN_OPTIONS: readonly {
   const definition = ORGANIZATION_PLANS[id];
   return {
     id,
-    name: id === "coach" ? "Coach & Organizer" : definition.name,
+    name: definition.productName,
     priceLabel:
       definition.monthlyPriceMinor === 0
         ? "$0"
@@ -37,17 +38,15 @@ export const HQ_PLAN_OPTIONS: readonly {
     description: definition.tagline,
     recommendedFor:
       id === "coach"
-        ? "Independent coaches and new organizers"
+        ? "Any coach, club, academy, or organization"
         : id === "small-club"
-          ? "Growing clubs and academies"
-          : id === "club"
-            ? "Facilities and established operators"
-            : "Regional and multi-location operators",
+          ? "Organizations lowering transaction costs"
+          : "High-volume and multi-location operators",
     features: definition.features,
   };
 });
 
-export const HQ_TERMS_VERSION = "2026-08-02";
+export const HQ_TERMS_VERSION = "2026-08-20";
 
 function planOption(plan: HqPlan) {
   const option = HQ_PLAN_OPTIONS.find((candidate) => candidate.id === plan);
@@ -60,6 +59,7 @@ export async function provisionWorkOSOrganization(input: {
   readonly workosOrganizationId: string;
   readonly organizationName: string;
   readonly plan: HqPlan;
+  readonly volleyballTypes: readonly OrganizationVolleyballType[];
   readonly termsAccepted: boolean;
   readonly termsUrl: string;
   readonly privacyUrl: string;
@@ -72,6 +72,15 @@ export async function provisionWorkOSOrganization(input: {
   }
   if (!input.termsAccepted) {
     throw new Error("Duna HQ terms must be accepted to create a workspace.");
+  }
+  const volleyballTypes = [...new Set(input.volleyballTypes)].filter(
+    (type): type is OrganizationVolleyballType =>
+      type === "beach" || type === "indoor",
+  );
+  if (volleyballTypes.length === 0) {
+    throw new Error(
+      "Choose whether this organization runs beach, indoor, or both.",
+    );
   }
 
   const database = getDatabase();
@@ -87,6 +96,9 @@ export async function provisionWorkOSOrganization(input: {
       ),
       name: input.organizationName,
       plan: selectedPlan.id,
+      volleyballTypes,
+      stripeSubscriptionStatus:
+        selectedPlan.id === "coach" ? "free" : "incomplete",
       marketLaunchEnabled: false,
       createdAt: input.now,
       updatedAt: input.now,
@@ -96,6 +108,9 @@ export async function provisionWorkOSOrganization(input: {
       set: {
         name: input.organizationName,
         plan: selectedPlan.id,
+        volleyballTypes,
+        stripeSubscriptionStatus:
+          selectedPlan.id === "coach" ? "free" : "incomplete",
         updatedAt: input.now,
       },
     });
@@ -138,6 +153,7 @@ export async function provisionWorkOSOrganization(input: {
           priceLabel: selectedPlan.priceLabel,
           priceMinor: selectedPlan.priceMinor,
           recommendedFor: selectedPlan.recommendedFor,
+          volleyballTypes,
         },
       },
       ipAddress: input.ipAddress,

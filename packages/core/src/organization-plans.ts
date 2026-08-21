@@ -1,11 +1,6 @@
 const HOUR_SECONDS = 60 * 60;
 
-export const ORGANIZATION_PLAN_IDS = [
-  "coach",
-  "small-club",
-  "club",
-  "multi-venue",
-] as const;
+export const ORGANIZATION_PLAN_IDS = ["coach", "small-club", "club"] as const;
 
 export type OrganizationPlanId = (typeof ORGANIZATION_PLAN_IDS)[number];
 export type PaidOrganizationPlanId = Exclude<OrganizationPlanId, "coach">;
@@ -24,8 +19,53 @@ export interface OrganizationPlanDefinition {
   readonly features: readonly string[];
 }
 
-export const ORGANIZATION_FEE_POLICY_VERSION = "organization-commission-v1";
+export interface OrganizationVideoRate {
+  readonly label: string;
+  readonly unitHours: number;
+  readonly estimatedProviderCostMinor: number;
+  readonly customerPriceMinor: number;
+}
+
+export const ORGANIZATION_FEE_POLICY_VERSION = "organization-commission-v2";
 export const FREE_ORGANIZATION_COMMISSION_BPS = 500;
+export const CLUB_ORGANIZATION_COMMISSION_BPS = 250;
+export const VIDEO_COST_MARKUP_MULTIPLIER = 5;
+
+// Uploaded video is stored in R2. The cost model assumes a 1080p source at
+// roughly 8 Mbps (3.6 GB per hour) for one GB-month at the published R2 rate.
+// Live video uses Mux Plus 1080p input plus one month of storage. Customer
+// rates are exactly 5x those modeled provider costs, rounded to the cent.
+export const ORGANIZATION_VIDEO_RATES = {
+  upload: {
+    label: "uploaded video",
+    unitHours: 1,
+    estimatedProviderCostMinor: 5.4,
+    customerPriceMinor: 27,
+  },
+  live: {
+    label: "live video",
+    unitHours: 1,
+    estimatedProviderCostMinor: 205.6,
+    customerPriceMinor: 1_028,
+  },
+} as const satisfies Readonly<Record<"upload" | "live", OrganizationVideoRate>>;
+
+export const ORGANIZATION_VIDEO_ADD_ONS = {
+  upload: {
+    hours: 10,
+    monthlyPriceMinor: ORGANIZATION_VIDEO_RATES.upload.customerPriceMinor * 10,
+  },
+  live: {
+    hours: 2,
+    monthlyPriceMinor: ORGANIZATION_VIDEO_RATES.live.customerPriceMinor * 2,
+  },
+} as const;
+
+export const FREE_PLAN_FEE_BONUS = {
+  feeStepMinor: 4_000,
+  uploadSecondsPerStep: 10 * HOUR_SECONDS,
+  liveSecondsPerStep: 2 * HOUR_SECONDS,
+} as const;
 
 export const ORGANIZATION_PLANS: Readonly<
   Record<OrganizationPlanId, OrganizationPlanDefinition>
@@ -33,17 +73,18 @@ export const ORGANIZATION_PLANS: Readonly<
   coach: {
     id: "coach",
     name: "Free",
-    productName: "Coach & Organizer",
-    tagline: "Start a coaching business and pay only when you sell.",
+    productName: "Duna HQ Free",
+    tagline: "Run your entire organization with no monthly software fee.",
     monthlyPriceMinor: 0,
     annualPriceMinor: 0,
     defaultCommissionBps: FREE_ORGANIZATION_COMMISSION_BPS,
-    monthlyUploadSeconds: 4 * HOUR_SECONDS,
+    monthlyUploadSeconds: 10 * HOUR_SECONDS,
     monthlyLiveSeconds: 2 * HOUR_SECONDS,
     features: [
-      "Public coach or organizer profile and booking",
-      "Events, services, clients, and basic reporting",
-      "4 uploaded-video hours and 2 live hours each month",
+      "Every Duna HQ feature, with unlimited staff and player records",
+      "Indoor, beach, or combined club operations",
+      "10 uploaded-video hours and 2 live hours each month",
+      "Earn 10 upload + 2 live hours for every $40 in organization fees",
       "5% organization transaction fee, plus payment processing",
     ],
   },
@@ -51,54 +92,36 @@ export const ORGANIZATION_PLANS: Readonly<
     id: "small-club",
     name: "Club",
     productName: "Duna HQ Club",
-    tagline: "Memberships, programming, and staff tools for a growing club.",
+    tagline: "Lower transaction costs for organizations building momentum.",
     monthlyPriceMinor: 19_900,
     annualPriceMinor: 199_000,
-    defaultCommissionBps: 0,
+    defaultCommissionBps: CLUB_ORGANIZATION_COMMISSION_BPS,
     monthlyUploadSeconds: 100 * HOUR_SECONDS,
     monthlyLiveSeconds: 10 * HOUR_SECONDS,
     features: [
-      "Everything in Free",
-      "Memberships, packages, credits, and marketing",
-      "Unlimited staff and player records",
+      "Every Duna HQ feature",
+      "Unlimited staff, players, venues, products, and events",
       "100 uploaded-video hours and 10 live hours each month",
-      "No organization transaction fee",
+      "2.5% organization transaction fee, plus payment processing",
+      "Add video packs or use pay as you go",
     ],
   },
   club: {
     id: "club",
-    name: "Facility",
-    productName: "Duna HQ Facility",
-    tagline: "Full court inventory and operations for a busy facility.",
+    name: "Scale",
+    productName: "Duna HQ Scale",
+    tagline: "Keep every dollar you earn as your operation scales.",
     monthlyPriceMinor: 49_900,
     annualPriceMinor: 499_000,
     defaultCommissionBps: 0,
     monthlyUploadSeconds: 500 * HOUR_SECONDS,
     monthlyLiveSeconds: 40 * HOUR_SECONDS,
     features: [
-      "Everything in Club",
-      "Court rentals, facility controls, and advanced reporting",
-      "Unlimited staff and player records",
+      "Every Duna HQ feature",
+      "Unlimited staff, players, venues, products, and events",
       "500 uploaded-video hours and 40 live hours each month",
-      "No organization transaction fee",
-    ],
-  },
-  "multi-venue": {
-    id: "multi-venue",
-    name: "Network",
-    productName: "Duna HQ Network",
-    tagline: "One operating model across multiple venues or brands.",
-    monthlyPriceMinor: 99_900,
-    annualPriceMinor: 999_000,
-    defaultCommissionBps: 0,
-    monthlyUploadSeconds: 1_000 * HOUR_SECONDS,
-    monthlyLiveSeconds: 100 * HOUR_SECONDS,
-    features: [
-      "Everything in Facility",
-      "Cross-location controls, reporting, and pooled video usage",
-      "Unlimited staff and player records",
-      "1,000 uploaded-video hours and 100 live hours each month",
-      "No organization transaction fee",
+      "0% organization transaction fee",
+      "Add video packs or use pay as you go",
     ],
   },
 };
@@ -106,7 +129,6 @@ export const ORGANIZATION_PLANS: Readonly<
 export const PAID_ORGANIZATION_PLAN_IDS = [
   "small-club",
   "club",
-  "multi-venue",
 ] as const satisfies readonly PaidOrganizationPlanId[];
 
 export function isOrganizationPlanId(
@@ -116,6 +138,9 @@ export function isOrganizationPlanId(
 }
 
 export function organizationPlan(value: string): OrganizationPlanDefinition {
+  // The retired Network plan folds into Scale so historical demo rows retain
+  // the intended highest-tier economics before the migration runs.
+  if (value === "multi-venue") return ORGANIZATION_PLANS.club;
   return ORGANIZATION_PLANS[isOrganizationPlanId(value) ? value : "coach"];
 }
 
@@ -127,4 +152,55 @@ export function organizationPlanPriceMinor(
   return interval === "month"
     ? definition.monthlyPriceMinor
     : definition.annualPriceMinor;
+}
+
+export function freePlanVideoBonusSteps(feesCollectedMinor: number): number {
+  if (!Number.isFinite(feesCollectedMinor) || feesCollectedMinor <= 0) return 0;
+  return Math.floor(feesCollectedMinor / FREE_PLAN_FEE_BONUS.feeStepMinor);
+}
+
+export function freePlanVideoBonus(feesCollectedMinor: number): {
+  readonly steps: number;
+  readonly uploadSeconds: number;
+  readonly liveSeconds: number;
+} {
+  const steps = freePlanVideoBonusSteps(feesCollectedMinor);
+  return {
+    steps,
+    uploadSeconds: steps * FREE_PLAN_FEE_BONUS.uploadSecondsPerStep,
+    liveSeconds: steps * FREE_PLAN_FEE_BONUS.liveSecondsPerStep,
+  };
+}
+
+export function netCollectedOrganizationFeeMinor(input: {
+  readonly grossMinor: number;
+  readonly organizationFeeMinor: number;
+  readonly refundedMinor: number;
+  readonly disputedMinor: number;
+}): number {
+  if (input.grossMinor <= 0 || input.organizationFeeMinor <= 0) return 0;
+  const reversedMinor = Math.min(
+    input.grossMinor,
+    Math.max(0, input.refundedMinor) + Math.max(0, input.disputedMinor),
+  );
+  return Math.max(
+    0,
+    Math.floor(
+      (input.organizationFeeMinor * (input.grossMinor - reversedMinor)) /
+        input.grossMinor,
+    ),
+  );
+}
+
+export function incrementalVideoOverageSeconds(input: {
+  readonly usedSeconds: number;
+  readonly includedSeconds: number;
+  readonly completedSeconds: number;
+}): number {
+  const after = Math.max(0, input.usedSeconds - input.includedSeconds);
+  const before = Math.max(
+    0,
+    input.usedSeconds - input.completedSeconds - input.includedSeconds,
+  );
+  return Math.max(0, after - before);
 }

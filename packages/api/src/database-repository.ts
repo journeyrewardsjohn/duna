@@ -173,8 +173,8 @@ function plan(value: string): OrganizationSummary["plan"] {
     "coach",
     "small-club",
     "club",
-    "multi-venue",
   ];
+  if (value === "multi-venue") return "club";
   return supported.includes(value as OrganizationSummary["plan"])
     ? (value as OrganizationSummary["plan"])
     : "coach";
@@ -1790,6 +1790,10 @@ async function loadOrganizations(
       name: row.name,
       legalName: row.legalName ?? row.name,
       plan: plan(row.plan),
+      volleyballTypes: row.volleyballTypes.filter(
+        (type): type is "beach" | "indoor" =>
+          type === "beach" || type === "indoor",
+      ),
       memberCount: memberIds.size,
       staffCount: staffIds.size,
       venueCount: venueRows.filter((venue) => venue.organizationId === row.id)

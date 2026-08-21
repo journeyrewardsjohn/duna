@@ -250,6 +250,7 @@ describe("Duna Video contracts", () => {
         usedSeconds: 3_600,
         limitSeconds: 28_800,
         remainingSeconds: 25_200,
+        overageSeconds: 0,
         enforced: true,
       },
       uploads: {

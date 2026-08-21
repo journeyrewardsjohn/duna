@@ -50,11 +50,18 @@ export interface OrganizationMarketingPlan {
   readonly monthlyUploadHours: number;
   readonly monthlyLiveHours: number;
   readonly features: readonly string[];
+  readonly signupHref: string;
 }
 
 interface RunYourBusinessPageProps {
   readonly hqHref: string;
   readonly plans: readonly OrganizationMarketingPlan[];
+  readonly videoPricing: {
+    readonly uploadHourly: string;
+    readonly liveHourly: string;
+    readonly uploadPack: string;
+    readonly livePack: string;
+  };
 }
 
 const clubStories = [
@@ -927,35 +934,46 @@ function StoryCopy({
 
 function Pricing({
   plans,
+  videoPricing,
 }: {
   readonly plans: readonly OrganizationMarketingPlan[];
+  readonly videoPricing: RunYourBusinessPageProps["videoPricing"];
 }) {
   return (
     <section className={styles.pricing} id="plans">
       <div className={styles.sectionIntro} data-reveal>
         <span className={styles.eyebrow}>Plans</span>
-        <h2>Start free. Add operating depth when you need it.</h2>
+        <h2>Every feature. Start at $0.</h2>
         <p>
-          Solo coaches can begin without a monthly subscription. Paid plans add
-          the club, facility, and network controls that growing organizations
-          need, with no Duna organization transaction fee.
+          Indoor clubs, beach clubs, academies, facilities, and independent
+          coaches all start with the complete Duna HQ operating system. Choose a
+          paid plan only when lowering your organization transaction fee is
+          worth more than the monthly subscription.
         </p>
       </div>
       <div className={styles.planGrid}>
         {plans.map((plan) => (
-          <article data-reveal key={plan.id}>
+          <article
+            data-featured={plan.id === "coach" ? "true" : undefined}
+            data-reveal
+            key={plan.id}
+          >
             <header>
-              <span>{plan.name}</span>
+              <span>
+                {plan.name}
+                {plan.id === "coach" && <b>Best place to start</b>}
+              </span>
               <h3>{plan.productName}</h3>
               <p>{plan.tagline}</p>
             </header>
             <div className={styles.priceLine}>
               <Numeric tier="hero">{plan.monthlyPrice}</Numeric>
-              {plan.monthlyPrice !== "$0.00" && <span>/ month</span>}
+              <span>/ month</span>
             </div>
             <span className={styles.feeLine}>
-              <Numeric tier="chip">{plan.organizationFeePercent}%</Numeric>{" "}
-              organization transaction fee
+              Stripe processing averages 2.9%* +{" "}
+              <Numeric tier="chip">{plan.organizationFeePercent}%</Numeric> Duna
+              organization fee
             </span>
             <ul>
               {plan.features.slice(0, 4).map((feature) => (
@@ -964,6 +982,12 @@ function Pricing({
                 </li>
               ))}
             </ul>
+            <a className={styles.planCta} href={plan.signupHref}>
+              {plan.id === "coach"
+                ? "Get Started for Free"
+                : `Choose ${plan.name}`}
+              <ArrowRight aria-hidden />
+            </a>
             <footer>
               <span>
                 <Video />{" "}
@@ -975,16 +999,50 @@ function Pricing({
                 <Numeric tier="chip">{plan.monthlyLiveHours}</Numeric> live
                 hours monthly
               </span>
-              {plan.monthlyPrice !== "$0.00" && (
+              {plan.id !== "coach" && (
                 <small>{plan.annualPrice} annually</small>
+              )}
+              {plan.id === "coach" && (
+                <small>
+                  +10 upload and +2 live hours for every $40 in organization
+                  fees collected that month
+                </small>
               )}
             </footer>
           </article>
         ))}
       </div>
+      <div className={styles.videoPricing} data-reveal>
+        <div>
+          <span className={styles.eyebrow}>
+            Video that flexes with the month
+          </span>
+          <h3>Add hours or turn on pay as you go.</h3>
+          <p>
+            Video is the only metered Duna HQ feature. Add recurring capacity to
+            a paid plan when you know you need it, or pay only for overage. Free
+            organizations keep earning capacity as they transact. Rates are set
+            at 5× Duna&apos;s current video infrastructure cost.
+          </p>
+        </div>
+        <dl>
+          <div>
+            <dt>10 uploaded hours</dt>
+            <dd>{videoPricing.uploadPack} / month</dd>
+            <small>{videoPricing.uploadHourly} per extra hour PAYG</small>
+          </div>
+          <div>
+            <dt>2 live hours</dt>
+            <dd>{videoPricing.livePack} / month</dd>
+            <small>{videoPricing.liveHourly} per extra hour PAYG</small>
+          </div>
+        </dl>
+      </div>
       <p className={styles.pricingNote}>
-        Payment processing is separate. Current eligibility and checkout terms
-        appear in Duna HQ before purchase.
+        *2.9% is an average Stripe card-processing rate and may vary by payment
+        method, card, country, or Stripe account terms. Processing is separate
+        from Duna&apos;s organization fee. Taxes may apply. Exact checkout terms
+        appear before purchase.
       </p>
     </section>
   );
@@ -993,6 +1051,7 @@ function Pricing({
 export function RunYourBusinessPage({
   hqHref,
   plans,
+  videoPricing,
 }: RunYourBusinessPageProps) {
   const pageRef = useBusinessPageMotion();
 
@@ -1015,7 +1074,7 @@ export function RunYourBusinessPage({
           <Link href="#plans">Plans</Link>
         </div>
         <a className={styles.productCta} href={hqHref}>
-          Open Duna HQ
+          Get Started for Free
         </a>
       </nav>
 
@@ -1033,17 +1092,19 @@ export function RunYourBusinessPage({
           <div className={styles.heroTexture} aria-hidden />
           <div className={styles.heroInner}>
             <div className={styles.heroCopy}>
-              <span className={styles.eyebrow}>Duna HQ · clubs + coaches</span>
-              <h1>Run the business. Keep the game human.</h1>
+              <span className={styles.eyebrow}>
+                Duna HQ · indoor + beach volleyball
+              </span>
+              <h1>Run the whole club. Start for $0.</h1>
               <p>
-                One operating system for the independent coach with a packed
-                calendar and the club coordinating courts, staff, parents,
-                memberships, payments, Duna Vision review, offline field
-                capture, and growth.
+                Every Duna HQ feature for the coach with a packed calendar and
+                the organization coordinating indoor courts, beach venues,
+                teams, staff, parents, memberships, payments, video, and
+                growth—without a monthly software fee.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryButton} href={hqHref}>
-                  Open Duna HQ <ArrowRight />
+                  Get Started for Free <ArrowRight />
                 </a>
                 <Link
                   className={styles.secondaryButton}
@@ -1053,8 +1114,8 @@ export function RunYourBusinessPage({
                 </Link>
               </div>
               <small>
-                Start solo. Add courts, locations, and a team when the business
-                asks for them.
+                5% organization transaction fee on Free, plus Stripe processing.
+                Upgrade only when the math works for you.
               </small>
             </div>
             <div className={styles.heroStage}>
@@ -1216,20 +1277,20 @@ export function RunYourBusinessPage({
         </div>
       </section>
 
-      <Pricing plans={plans} />
+      <Pricing plans={plans} videoPricing={videoPricing} />
 
       <section className={styles.closing}>
         <div className={styles.closingTexture} aria-hidden />
         <div data-reveal>
-          <span className={styles.eyebrow}>Start at your size</span>
-          <h2>One lesson, one event, or the whole club.</h2>
+          <span className={styles.eyebrow}>No monthly fee to begin</span>
+          <h2>Your whole operation can start today.</h2>
           <p>
-            Begin with the job you need done today. Duna keeps the foundation
-            ready for what comes next.
+            Create the organization, choose indoor, beach, or both, and bring
+            your first venue, team, product, or event into one connected home.
           </p>
           <div>
             <a className={styles.primaryButton} href={hqHref}>
-              Run your business on Duna <ArrowRight />
+              Get Started for Free <ArrowRight />
             </a>
             <Link className={styles.secondaryButton} href="/create">
               Create an event first

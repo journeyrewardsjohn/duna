@@ -6,6 +6,7 @@ import type {
   VenueLayoutGeometry,
   VenueLayoutWorkspace,
 } from "@duna/api";
+import { COURT_SURFACE_OPTIONS } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -964,10 +965,11 @@ function CourtCreator({
             <label>
               <span>Surface</span>
               <select defaultValue="sand" name="surface">
-                <option value="sand">Sand</option>
-                <option value="indoor-sand">Indoor sand</option>
-                <option value="hard-court">Hard court</option>
-                <option value="grass">Grass</option>
+                {COURT_SURFACE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label>

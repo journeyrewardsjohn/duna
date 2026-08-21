@@ -1097,6 +1097,10 @@ export const organizations = pgTable(
     name: text("name").notNull(),
     legalName: text("legal_name"),
     plan: varchar("plan", { length: 24 }).notNull().default("coach"),
+    volleyballTypes: text("volleyball_types")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['beach']::text[]`),
     timezone: varchar("timezone", { length: 64 })
       .notNull()
       .default("America/New_York"),
@@ -1151,6 +1155,13 @@ export const organizations = pgTable(
     planCancelAtPeriodEnd: boolean("plan_cancel_at_period_end")
       .notNull()
       .default(false),
+    videoUploadAddonSeconds: integer("video_upload_addon_seconds")
+      .notNull()
+      .default(0),
+    videoLiveAddonSeconds: integer("video_live_addon_seconds")
+      .notNull()
+      .default(0),
+    videoPaygEnabled: boolean("video_payg_enabled").notNull().default(false),
     marketLaunchEnabled: boolean("market_launch_enabled")
       .notNull()
       .default(false),
@@ -1167,7 +1178,11 @@ export const organizations = pgTable(
     ),
     check(
       "organization_plan_valid",
-      sql`${table.plan} IN ('coach', 'small-club', 'club', 'multi-venue')`,
+      sql`${table.plan} IN ('coach', 'small-club', 'club')`,
+    ),
+    check(
+      "organization_volleyball_types_valid",
+      sql`cardinality(${table.volleyballTypes}) BETWEEN 1 AND 2 AND ${table.volleyballTypes} <@ ARRAY['beach', 'indoor']::text[]`,
     ),
     check(
       "organization_commission_override_valid",
@@ -1180,6 +1195,10 @@ export const organizations = pgTable(
     check(
       "organization_plan_billing_interval_valid",
       sql`${table.planBillingInterval} IS NULL OR ${table.planBillingInterval} IN ('month', 'year')`,
+    ),
+    check(
+      "organization_video_addons_nonnegative",
+      sql`${table.videoUploadAddonSeconds} >= 0 AND ${table.videoLiveAddonSeconds} >= 0`,
     ),
   ],
 );

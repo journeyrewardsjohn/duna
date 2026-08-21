@@ -4,16 +4,25 @@
 
 | Customer-facing plan | Internal plan id | Monthly | Annual | Organization fee | Uploaded video / month | Live video / month |
 | -------------------- | ---------------- | ------: | -----: | ---------------: | ---------------------: | -----------------: |
-| Coach & Organizer    | `coach`          |      $0 |     $0 |               5% |                4 hours |            2 hours |
-| Club                 | `small-club`     |    $199 | $1,990 |               0% |              100 hours |           10 hours |
-| Facility             | `club`           |    $499 | $4,990 |               0% |              500 hours |           40 hours |
-| Network              | `multi-venue`    |    $999 | $9,990 |               0% |            1,000 hours |          100 hours |
+| Duna HQ Free         | `coach`          |      $0 |     $0 |               5% |               10 hours |            2 hours |
+| Duna HQ Club         | `small-club`     |    $199 | $1,990 |             2.5% |              100 hours |           10 hours |
+| Duna HQ Scale        | `club`           |    $499 | $4,990 |               0% |              500 hours |           40 hours |
 
-Annual pricing is ten months of the monthly rate. Paid tiers include unlimited
-staff and player records. Video hours are pooled by organization, and uploaded
-video and live broadcasting remain separate monthly meters. Existing recordings
-are retained; storage tiering and cold storage are internal COGS controls rather
-than customer-facing deletion limits.
+Every tier includes every Duna HQ feature and unlimited staff, players, venues,
+products, and events. Annual pricing is ten months of the monthly rate. Video
+hours are pooled by organization, and uploaded video and live broadcasting
+remain separate monthly meters. Existing recordings are retained; storage
+tiering and cold storage are internal COGS controls rather than customer-facing
+deletion limits.
+
+Free organizations earn another 10 uploaded-video hours and 2 live hours for
+each $40 in net organization transaction fees collected during that UTC month.
+Refunded and disputed amounts reduce the fee credit proportionally.
+
+Paid-plan recurring add-ons are $2.70 per 10 upload hours and $20.56 per 2 live
+hours. PAYG is $0.27 per upload hour and $10.28 per live hour, metered by
+completed second above the included allowance. These customer rates are five
+times the current modeled provider cost.
 
 ## Two independent transaction fees
 
@@ -22,9 +31,10 @@ Every connected card transaction is evaluated against two different rules:
 1. The consumer service fee is 7.5% of eligible non-goods purchases. Duna
    Premium and Premium+ waive this fee for the player. Merchandise, wallet loads,
    cash, and organization-credit redemptions are excluded.
-2. The organization fee is 5% of the full card-transaction subtotal on the Free
-   Coach & Organizer plan, including merchandise. It is charged to the operator
-   in addition to card processing. Paid Duna HQ plans default to 0%.
+2. The organization fee is 5% of the full card-transaction subtotal on Duna HQ
+   Free, including merchandise. It is charged to the operator
+   in addition to card processing. Duna HQ Club defaults to 2.5%; Duna HQ Scale
+   defaults to 0%.
 
 There is no longer a 12–15% Duna-originated coach marketplace fee. Coach-, club-,
 and Duna-originated bookings use the same consumer rule and the organization’s

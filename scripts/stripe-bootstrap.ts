@@ -4,6 +4,8 @@ import Stripe from "stripe";
 import {
   MEMBERSHIP_PLANS,
   ORGANIZATION_PLANS,
+  ORGANIZATION_VIDEO_ADD_ONS,
+  ORGANIZATION_VIDEO_RATES,
   membershipTierCode,
   type MembershipBillingInterval,
   type PaidMembershipPlanId,
@@ -36,9 +38,11 @@ type PriceDefinition = {
   readonly productKey: string;
   readonly productName: string;
   readonly productDescription: string;
-  readonly amountMinor: number;
+  readonly amountMinor?: number;
+  readonly amountDecimal?: string;
   readonly taxCode: string;
   readonly recurring?: "month" | "year";
+  readonly meterEventName?: string;
   readonly membership?: {
     readonly plan: PaidMembershipPlanId;
     readonly interval: MembershipBillingInterval;
@@ -134,25 +138,56 @@ const definitions: readonly PriceDefinition[] = [
     recurring: "year",
     organization: { plan: "club", interval: "year" },
   },
+  ...(["month", "year"] as const).flatMap((interval) => [
+    {
+      key: `duna_hq_upload_pack_${interval}ly`,
+      productKey: "duna_hq_upload_pack",
+      productName: "Duna HQ Upload Video Pack",
+      productDescription:
+        "Adds 10 uploaded-video hours to each monthly allowance.",
+      amountMinor:
+        ORGANIZATION_VIDEO_ADD_ONS.upload.monthlyPriceMinor *
+        (interval === "month" ? 1 : 10),
+      taxCode: "txcd_10103001",
+      recurring: interval,
+    },
+    {
+      key: `duna_hq_live_pack_${interval}ly`,
+      productKey: "duna_hq_live_pack",
+      productName: "Duna HQ Live Video Pack",
+      productDescription: "Adds 2 live-video hours to each monthly allowance.",
+      amountMinor:
+        ORGANIZATION_VIDEO_ADD_ONS.live.monthlyPriceMinor *
+        (interval === "month" ? 1 : 10),
+      taxCode: "txcd_10103001",
+      recurring: interval,
+    },
+  ]),
   {
-    key: "duna_hq_network_monthly",
-    productKey: "duna_hq_network",
-    productName: ORGANIZATION_PLANS["multi-venue"].productName,
-    productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
-    amountMinor: ORGANIZATION_PLANS["multi-venue"].monthlyPriceMinor,
+    key: "duna_hq_upload_payg",
+    productKey: "duna_hq_upload_payg",
+    productName: "Duna HQ Uploaded Video PAYG",
+    productDescription:
+      "Uploaded-video seconds beyond the included monthly allowance.",
+    amountDecimal: (
+      ORGANIZATION_VIDEO_RATES.upload.customerPriceMinor / 3_600
+    ).toFixed(12),
     taxCode: "txcd_10103001",
     recurring: "month",
-    organization: { plan: "multi-venue", interval: "month" },
+    meterEventName: "duna_hq_upload_overage_seconds",
   },
   {
-    key: "duna_hq_network_annual",
-    productKey: "duna_hq_network",
-    productName: ORGANIZATION_PLANS["multi-venue"].productName,
-    productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
-    amountMinor: ORGANIZATION_PLANS["multi-venue"].annualPriceMinor,
+    key: "duna_hq_live_payg",
+    productKey: "duna_hq_live_payg",
+    productName: "Duna HQ Live Video PAYG",
+    productDescription:
+      "Live-video seconds beyond the included monthly allowance.",
+    amountDecimal: (
+      ORGANIZATION_VIDEO_RATES.live.customerPriceMinor / 3_600
+    ).toFixed(12),
     taxCode: "txcd_10103001",
-    recurring: "year",
-    organization: { plan: "multi-venue", interval: "year" },
+    recurring: "month",
+    meterEventName: "duna_hq_live_overage_seconds",
   },
 ];
 
@@ -196,6 +231,7 @@ async function findOrCreateProduct(definition: PriceDefinition) {
 async function findOrCreatePrice(
   definition: PriceDefinition,
   productId: string,
+  meterId?: string,
 ) {
   const prices = await stripe.prices.list({
     active: true,
@@ -209,9 +245,20 @@ async function findOrCreatePrice(
     {
       product: productId,
       currency: "usd",
-      unit_amount: definition.amountMinor,
+      ...(definition.amountMinor === undefined
+        ? {
+            unit_amount_decimal: Stripe.Decimal.from(
+              definition.amountDecimal ?? "0",
+            ),
+          }
+        : { unit_amount: definition.amountMinor }),
       recurring: definition.recurring
-        ? { interval: definition.recurring }
+        ? {
+            interval: definition.recurring,
+            ...(meterId
+              ? { usage_type: "metered" as const, meter: meterId }
+              : {}),
+          }
         : undefined,
       tax_behavior: "exclusive",
       metadata: {
@@ -223,8 +270,41 @@ async function findOrCreatePrice(
   );
 }
 
+async function findOrCreateMeter(eventName: string) {
+  const meters = await stripe.billing.meters.list({ limit: 100 });
+  const existing = meters.data.find((meter) => meter.event_name === eventName);
+  if (existing) return existing;
+  return stripe.billing.meters.create({
+    display_name: eventName.replaceAll("_", " "),
+    event_name: eventName,
+    default_aggregation: { formula: "sum" },
+    customer_mapping: {
+      type: "by_id",
+      event_payload_key: "stripe_customer_id",
+    },
+    value_settings: { event_payload_key: "value" },
+  });
+}
+
+async function archiveRetiredNetworkPlan() {
+  const products = await stripe.products.list({ active: true, limit: 100 });
+  for (const product of products.data.filter(
+    (candidate) => candidate.metadata.duna_product === "duna_hq_network",
+  )) {
+    const prices = await stripe.prices.list({
+      active: true,
+      product: product.id,
+      limit: 100,
+    });
+    for (const price of prices.data) {
+      await stripe.prices.update(price.id, { active: false });
+    }
+    await stripe.products.update(product.id, { active: false });
+  }
+}
+
 async function main() {
-  const account = await stripe.accounts.retrieve();
+  const account = await stripe.accounts.retrieve(null);
   if (!account.id) {
     throw new Error("Stripe sandbox account could not be resolved.");
   }
@@ -232,9 +312,13 @@ async function main() {
   const resources: Record<string, string> = {};
   for (const definition of definitions) {
     const product = await findOrCreateProduct(definition);
-    const price = await findOrCreatePrice(definition, product.id);
+    const meter = definition.meterEventName
+      ? await findOrCreateMeter(definition.meterEventName)
+      : undefined;
+    const price = await findOrCreatePrice(definition, product.id, meter?.id);
     resources[definition.key] = price.id;
   }
+  await archiveRetiredNetworkPlan();
 
   if (process.env.DATABASE_URL) {
     const database = getDatabase();
@@ -244,6 +328,9 @@ async function main() {
     for (const definition of membershipDefinitions) {
       const membership = definition.membership;
       if (!membership) continue;
+      if (definition.amountMinor === undefined) {
+        throw new Error(`${definition.key} is missing its fixed amount.`);
+      }
       const { plan, interval } = membership;
       const planDefinition = MEMBERSHIP_PLANS[plan];
       const code = membershipTierCode(plan, interval);
@@ -304,8 +391,16 @@ async function main() {
           STRIPE_HQ_FACILITY_MONTHLY_PRICE_ID:
             resources.duna_hq_facility_monthly,
           STRIPE_HQ_FACILITY_ANNUAL_PRICE_ID: resources.duna_hq_facility_annual,
-          STRIPE_HQ_NETWORK_MONTHLY_PRICE_ID: resources.duna_hq_network_monthly,
-          STRIPE_HQ_NETWORK_ANNUAL_PRICE_ID: resources.duna_hq_network_annual,
+          STRIPE_HQ_UPLOAD_PACK_MONTHLY_PRICE_ID:
+            resources.duna_hq_upload_pack_monthly,
+          STRIPE_HQ_UPLOAD_PACK_ANNUAL_PRICE_ID:
+            resources.duna_hq_upload_pack_yearly,
+          STRIPE_HQ_LIVE_PACK_MONTHLY_PRICE_ID:
+            resources.duna_hq_live_pack_monthly,
+          STRIPE_HQ_LIVE_PACK_ANNUAL_PRICE_ID:
+            resources.duna_hq_live_pack_yearly,
+          STRIPE_HQ_UPLOAD_PAYG_PRICE_ID: resources.duna_hq_upload_payg,
+          STRIPE_HQ_LIVE_PAYG_PRICE_ID: resources.duna_hq_live_payg,
         },
         testClock: testClock.id,
       },

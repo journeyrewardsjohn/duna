@@ -1,5 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { withEventLifecycle, type EventSummary } from "@duna/core";
+import {
+  COURT_SURFACE_IDS,
+  withEventLifecycle,
+  type EventSummary,
+} from "@duna/core";
 import { priceConsumerOrder } from "@duna/pricing";
 import { scheduleTournament, solveAvailableSlots } from "@duna/scheduling";
 import {
@@ -8860,8 +8864,11 @@ const operatorRouter = router({
     )
     .input(
       z.object({
-        plan: z.enum(["small-club", "club", "multi-venue"]),
+        plan: z.enum(["small-club", "club"]),
         interval: z.enum(["month", "year"]),
+        uploadPackQuantity: z.number().int().min(0).max(100).default(0),
+        livePackQuantity: z.number().int().min(0).max(100).default(0),
+        payAsYouGo: z.boolean().default(false),
         successUrl: z.url(),
         cancelUrl: z.url(),
         idempotencyKey: z.string().uuid(),
@@ -9348,6 +9355,11 @@ const operatorRouter = router({
       z.object({
         name: z.string().trim().min(2).max(120),
         timezone: z.string().trim().min(3).max(64),
+        volleyballTypes: z
+          .array(z.enum(["beach", "indoor"]))
+          .min(1)
+          .max(2)
+          .refine((types) => new Set(types).size === types.length),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -9364,6 +9376,7 @@ const operatorRouter = router({
               actor: ctx.actor!,
               name: input.name,
               timezone: input.timezone,
+              volleyballTypes: input.volleyballTypes,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -10583,7 +10596,7 @@ const operatorRouter = router({
         assetId: z.string().uuid(),
         name: z.string().trim().min(1).max(100),
         identifierCode: z.string().trim().min(1).max(48).optional(),
-        surface: z.string().trim().min(2).max(32),
+        surface: z.enum(COURT_SURFACE_IDS),
         capacity: z.number().int().min(1).max(1_000),
         bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
         templateKey: z.string().trim().min(1).max(48),
@@ -10815,7 +10828,7 @@ const operatorRouter = router({
       z.object({
         venueId: z.string().uuid(),
         name: z.string().trim().min(1).max(100),
-        surface: z.string().trim().min(2).max(32),
+        surface: z.enum(COURT_SURFACE_IDS),
         imageUrl: z.url().optional(),
         lit: z.boolean(),
         capacity: z.number().int().min(1).max(1_000).optional(),
@@ -10938,7 +10951,7 @@ const operatorRouter = router({
       z.object({
         courtId: z.string().uuid(),
         name: z.string().trim().min(1).max(100).optional(),
-        surface: z.string().trim().min(2).max(32).optional(),
+        surface: z.enum(COURT_SURFACE_IDS).optional(),
         imageUrl: z.url().optional(),
         lit: z.boolean().optional(),
         bookingPolicy: z
