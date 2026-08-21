@@ -1,9 +1,23 @@
-import { afterEach, describe, expect, it } from "vitest";
-import type { ScraperControl } from "./scraper-controls";
+import { afterEach, describe, expect, it, vi } from "vitest";
+const { firecrawlScrapeMock } = vi.hoisted(() => ({
+  firecrawlScrapeMock: vi.fn(),
+}));
+vi.mock("@mendable/firecrawl-js", () => ({
+  Firecrawl: class {
+    scrape = firecrawlScrapeMock;
+  },
+}));
+import {
+  firecrawlPreferenceWindowMs,
+  nextNativeFallbackState,
+  resetAdaptiveTransportLearningForTests,
+  type ScraperControl,
+} from "./scraper-controls";
 import {
   firecrawlScrapeOptions,
   parseFirecrawlJsonDocument,
   resolvedScrapeEngine,
+  scrapeHtml,
   scrapeEngine,
 } from "./http";
 
@@ -26,11 +40,90 @@ describe("sand data scrape engine routing", () => {
   const originalFirecrawlKey = process.env.FIRECRAWL_API_KEY;
 
   afterEach(() => {
+    vi.unstubAllGlobals();
+    firecrawlScrapeMock.mockReset();
+    resetAdaptiveTransportLearningForTests();
     if (originalFirecrawlKey === undefined) {
       delete process.env.FIRECRAWL_API_KEY;
     } else {
       process.env.FIRECRAWL_API_KEY = originalFirecrawlKey;
     }
+  });
+
+  it("falls back to Firecrawl when a native page returns 404", async () => {
+    process.env.FIRECRAWL_API_KEY = "configured-in-production";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404 }),
+    );
+    firecrawlScrapeMock.mockResolvedValue({
+      rawHtml: "<html><body>rendered fallback</body></html>",
+      metadata: { statusCode: 200 },
+    });
+
+    await expect(
+      scrapeHtml("avp-tournaments", "https://example.com/missing"),
+    ).resolves.toEqual({
+      html: "<html><body>rendered fallback</body></html>",
+      engine: "firecrawl",
+    });
+  });
+
+  it("promotes Firecrawl after three paired fallback successes", () => {
+    const now = new Date("2026-08-21T12:00:00.000Z");
+    const first = nextNativeFallbackState({
+      nativeError: "HTTP 404",
+      now,
+    });
+    const second = nextNativeFallbackState({
+      current: first,
+      nativeError: "HTTP 403",
+      now,
+    });
+    const third = nextNativeFallbackState({
+      current: second,
+      nativeError: "fetch failed",
+      now,
+    });
+
+    expect(first.firecrawlPreferredUntil).toBeUndefined();
+    expect(second.firecrawlPreferredUntil).toBeUndefined();
+    expect(third.nativeFailureStreak).toBe(3);
+    expect(third.firecrawlPreferredUntil).toBe(
+      new Date(now.getTime() + firecrawlPreferenceWindowMs).toISOString(),
+    );
+  });
+
+  it("uses the learned Firecrawl default only until its recovery probe", () => {
+    process.env.FIRECRAWL_API_KEY = "configured-in-production";
+    const control: ScraperControl = {
+      source: "fivb-12ndr",
+      enabled: true,
+      engine: "native",
+      minRequestIntervalMs: 5_000,
+      maxRequestsPerHour: 90,
+      liveTransportEnabled: false,
+      firecrawlChangeTracking: true,
+      adaptiveTransport: {
+        nativeFailureStreak: 3,
+        firecrawlPreferredUntil: "2026-08-21T18:00:00.000Z",
+      },
+    };
+
+    expect(
+      resolvedScrapeEngine(
+        "fivb-12ndr",
+        control,
+        new Date("2026-08-21T17:59:59.000Z"),
+      ),
+    ).toBe("firecrawl");
+    expect(
+      resolvedScrapeEngine(
+        "fivb-12ndr",
+        control,
+        new Date("2026-08-21T18:00:01.000Z"),
+      ),
+    ).toBe("native");
   });
 
   it("keeps the server-rendered 12ndr feed on native HTTP", () => {

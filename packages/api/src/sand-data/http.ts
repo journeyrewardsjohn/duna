@@ -1,6 +1,9 @@
 import { Firecrawl, type ScrapeOptions } from "@mendable/firecrawl-js";
 import {
   assertScraperEnabled,
+  prefersFirecrawlAfterNativeFailures,
+  recordNativeFallbackSuccess,
+  recordNativeTransportSuccess,
   type ManagedScraperSource,
   type ScraperControl,
 } from "./scraper-controls";
@@ -38,7 +41,11 @@ export function scrapeEngine(source: ManagedScraperSource): ScrapeEngine {
 export function resolvedScrapeEngine(
   source: ManagedScraperSource,
   control: ScraperControl,
+  now = new Date(),
 ): ScrapeEngine {
+  if (firecrawlKey() && prefersFirecrawlAfterNativeFailures(control, now)) {
+    return "firecrawl";
+  }
   if (
     source === "avp-tournaments" ||
     source === "volleyball-life" ||
@@ -144,6 +151,23 @@ function firecrawlFormats(
   ];
 }
 
+function firecrawlResponseError(
+  document: { readonly metadata?: unknown },
+  url: string,
+): Error | undefined {
+  const metadata =
+    document.metadata && typeof document.metadata === "object"
+      ? (document.metadata as { readonly statusCode?: unknown })
+      : undefined;
+  const statusCode =
+    typeof metadata?.statusCode === "number"
+      ? metadata.statusCode
+      : Number(metadata?.statusCode);
+  return Number.isFinite(statusCode) && statusCode >= 400
+    ? new Error(`HTTP ${statusCode} for ${url}`)
+    : undefined;
+}
+
 export function parseFirecrawlJsonDocument<T>(document: string): T {
   const candidates = [
     document,
@@ -179,6 +203,8 @@ async function scrapeJsonThroughFirecrawl<T>(
       firecrawlScrapeOptions(control, { timeoutMs }),
     ),
   );
+  const responseError = firecrawlResponseError(document, url);
+  if (responseError) throw responseError;
   return parseFirecrawlJsonDocument<T>(document.rawHtml ?? document.html ?? "");
 }
 
@@ -228,6 +254,38 @@ export function firecrawlScrapeOptions(
   };
 }
 
+async function scrapeHtmlThroughFirecrawl(
+  source: ManagedScraperSource,
+  url: string,
+  control: ScraperControl,
+  options: HtmlScrapeOptions,
+): Promise<string> {
+  const document = await withRetry(source, control, () =>
+    firecrawlClient(source).scrape(
+      url,
+      firecrawlScrapeOptions(control, options),
+    ),
+  );
+  const responseError = firecrawlResponseError(document, url);
+  if (responseError) throw responseError;
+  const html =
+    source === "avp-league"
+      ? (document.html ?? document.rawHtml ?? "")
+      : (document.rawHtml ?? document.html ?? "");
+  if (!html) {
+    throw new SandDataUpstreamError(
+      source,
+      "invalid-response",
+      `${source} returned an empty rendered page.`,
+    );
+  }
+  return html;
+}
+
+function errorMessage(source: ManagedScraperSource, error: unknown): string {
+  return error instanceof Error ? error.message : `${source} is unavailable.`;
+}
+
 export async function scrapeHtml(
   source: ManagedScraperSource,
   url: string,
@@ -235,28 +293,23 @@ export async function scrapeHtml(
 ): Promise<{ readonly html: string; readonly engine: ScrapeEngine }> {
   const control = await assertScraperEnabled(source);
   const engine = resolvedScrapeEngine(source, control);
-  try {
-    if (engine === "firecrawl") {
-      const document = await withRetry(source, control, () =>
-        firecrawlClient(source).scrape(
-          url,
-          firecrawlScrapeOptions(control, options),
-        ),
+  if (engine === "firecrawl") {
+    try {
+      return {
+        html: await scrapeHtmlThroughFirecrawl(source, url, control, options),
+        engine,
+      };
+    } catch (error) {
+      if (error instanceof SandDataUpstreamError) throw error;
+      throw new SandDataUpstreamError(
+        source,
+        "unavailable",
+        errorMessage(source, error),
       );
-      const html =
-        source === "avp-league"
-          ? (document.html ?? document.rawHtml ?? "")
-          : (document.rawHtml ?? document.html ?? "");
-      if (!html) {
-        throw new SandDataUpstreamError(
-          source,
-          "invalid-response",
-          `${source} returned an empty rendered page.`,
-        );
-      }
-      return { html, engine };
     }
+  }
 
+  try {
     const html = await withRetry(source, control, async () => {
       const controller = new AbortController();
       const timer = setTimeout(
@@ -276,13 +329,34 @@ export async function scrapeHtml(
         clearTimeout(timer);
       }
     });
+    await recordNativeTransportSuccess({ control }).catch(() => undefined);
     return { html, engine };
-  } catch (error) {
-    if (error instanceof SandDataUpstreamError) throw error;
+  } catch (nativeError) {
+    if (firecrawlKey()) {
+      try {
+        const html = await scrapeHtmlThroughFirecrawl(
+          source,
+          url,
+          control,
+          options,
+        );
+        await recordNativeFallbackSuccess({
+          control,
+          nativeError: errorMessage(source, nativeError),
+        }).catch(() => undefined);
+        return { html, engine: "firecrawl" };
+      } catch (fallbackError) {
+        throw new SandDataUpstreamError(
+          source,
+          "unavailable",
+          `${errorMessage(source, nativeError)} Firecrawl fallback: ${errorMessage(source, fallbackError)}`,
+        );
+      }
+    }
     throw new SandDataUpstreamError(
       source,
       "unavailable",
-      error instanceof Error ? error.message : `${source} is unavailable.`,
+      errorMessage(source, nativeError),
     );
   }
 }
@@ -297,10 +371,31 @@ export async function scrapeJson<T>(
     readonly timeoutMs?: number;
   } = {},
 ): Promise<T> {
-  let control: ScraperControl | undefined;
+  const control = await assertScraperEnabled(source);
+  const supportsFirecrawl =
+    options.body === undefined && options.method !== "POST";
+  if (
+    supportsFirecrawl &&
+    resolvedScrapeEngine(source, control) === "firecrawl"
+  ) {
+    try {
+      return await scrapeJsonThroughFirecrawl<T>(
+        source,
+        url,
+        control,
+        options.timeoutMs,
+      );
+    } catch (error) {
+      throw new SandDataUpstreamError(
+        source,
+        "unavailable",
+        errorMessage(source, error),
+      );
+    }
+  }
+
   try {
-    control = await assertScraperEnabled(source);
-    return await withRetry(source, control, async () => {
+    const value = await withRetry(source, control, async () => {
       const controller = new AbortController();
       const timer = setTimeout(
         () => controller.abort(),
@@ -327,34 +422,36 @@ export async function scrapeJson<T>(
         clearTimeout(timer);
       }
     });
+    await recordNativeTransportSuccess({ control }).catch(() => undefined);
+    return value;
   } catch (error) {
-    const fallbackControl = control;
     const supportsFirecrawlFallback =
-      source === "volleyball-life" &&
-      options.body === undefined &&
-      options.method !== "POST" &&
-      fallbackControl !== undefined &&
-      Boolean(firecrawlKey());
+      supportsFirecrawl && Boolean(firecrawlKey());
     if (supportsFirecrawlFallback) {
       try {
-        return await scrapeJsonThroughFirecrawl<T>(
+        const value = await scrapeJsonThroughFirecrawl<T>(
           source,
           url,
-          fallbackControl!,
+          control,
           options.timeoutMs,
         );
+        await recordNativeFallbackSuccess({
+          control,
+          nativeError: errorMessage(source, error),
+        }).catch(() => undefined);
+        return value;
       } catch (fallbackError) {
         throw new SandDataUpstreamError(
           source,
           "unavailable",
-          `${error instanceof Error ? error.message : `${source} is unavailable.`} Firecrawl fallback: ${fallbackError instanceof Error ? fallbackError.message : "unavailable"}`,
+          `${errorMessage(source, error)} Firecrawl fallback: ${errorMessage(source, fallbackError)}`,
         );
       }
     }
     throw new SandDataUpstreamError(
       source,
       "unavailable",
-      error instanceof Error ? error.message : `${source} is unavailable.`,
+      errorMessage(source, error),
     );
   }
 }

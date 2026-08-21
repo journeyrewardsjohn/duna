@@ -1712,6 +1712,11 @@ async function executeImport(input: {
 
   try {
     const result = await input.loader();
+    const checkpointEngine = unknownRecord(result.checkpoint).engine;
+    const actualEngine =
+      checkpointEngine === "native" || checkpointEngine === "firecrawl"
+        ? checkpointEngine
+        : engine;
     const playerCounts = await persistExternalPlayers({
       source: input.source,
       sourceId: source.id,
@@ -1760,6 +1765,7 @@ async function executeImport(input: {
         .update(sandIngestionRuns)
         .set({
           status: runStatus,
+          engine: actualEngine,
           requestedUrl: result.requestedUrl,
           counters,
           checkpoint: result.checkpoint ?? {},

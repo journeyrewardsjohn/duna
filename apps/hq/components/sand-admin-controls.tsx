@@ -195,6 +195,7 @@ function ScraperControlCard({
   const liveTransport = control.source === "volleyball-world";
   const nativeOnly = control.source === "volleyball-life" || liveTransport;
   const transportFailure = liveTransportFailure(control.liveHealth?.detail);
+  const adaptiveTransport = control.adaptiveTransport;
   return (
     <article className="hq-card scraper-control-card">
       <header className="hq-card-heading">
@@ -237,6 +238,23 @@ function ScraperControlCard({
             </p>
           )}
         </>
+      )}
+      {adaptiveTransport && adaptiveTransport.nativeFailureStreak > 0 && (
+        <p className="scraper-transport-error">
+          <TriangleAlert aria-hidden size={14} />
+          {adaptiveTransport.firecrawlPreferredUntil
+            ? `Adaptive Firecrawl preference after ${adaptiveTransport.nativeFailureStreak} recovered native failures · native recovery probe after ${new Intl.DateTimeFormat(
+                "en-US",
+                {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                },
+              ).format(new Date(adaptiveTransport.firecrawlPreferredUntil))}`
+            : `Firecrawl recovered ${adaptiveTransport.nativeFailureStreak} recent native failure${adaptiveTransport.nativeFailureStreak === 1 ? "" : "s"} · preference changes after 3`}
+          {adaptiveTransport.nativeLastError
+            ? ` · latest native error: ${adaptiveTransport.nativeLastError}`
+            : ""}
+        </p>
       )}
       <form action={save} className="scraper-control-form">
         <input name="source" type="hidden" value={control.source} />
