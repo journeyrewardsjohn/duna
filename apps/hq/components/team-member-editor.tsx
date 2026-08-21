@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import {
+  transferOrganizationOwnershipAction,
   updateStaffProfileAction,
   type OperatorActionState,
 } from "@/app/actions";
@@ -195,6 +196,10 @@ export function TeamMemberEditor({
     updateStaffProfileAction,
     initialState,
   );
+  const [ownershipState, ownershipAction, ownershipPending] = useActionState(
+    transferOrganizationOwnershipAction,
+    initialState,
+  );
   const [compensationModel, setCompensationModel] = useState(
     person.compensationModel,
   );
@@ -219,6 +224,11 @@ export function TeamMemberEditor({
   const activeSchedule =
     schedules.find((schedule) => schedule.id === activeScheduleId) ??
     schedules[0];
+  const canTransferOwnership =
+    workspace.teamAccess.canTransferOwnership &&
+    person.active &&
+    person.role === "director" &&
+    !person.isOwner;
 
   function updateSchedule(
     scheduleId: string,
@@ -388,6 +398,61 @@ export function TeamMemberEditor({
 
   return (
     <form action={action} className="team-member-editor">
+      {canTransferOwnership && (
+        <section className="hq-card operator-control-card team-member-editor__ownership">
+          <header className="hq-card-heading">
+            <div>
+              <span className="hq-eyebrow">Organization ownership</span>
+              <h2>Make {person.displayName} the Owner</h2>
+              <p>
+                This person is already an active Director. Ownership moves to
+                them immediately, while the current Owner remains an active
+                Director.
+              </p>
+            </div>
+            <ShieldCheck aria-hidden size={22} />
+          </header>
+          <div className="operator-form">
+            <label className="operator-confirmation">
+              <input
+                name="ownershipConfirmed"
+                required
+                type="checkbox"
+                value="true"
+              />
+              <span>
+                <strong>I approve this ownership transfer.</strong>
+                <small>
+                  The current Owner will keep Director access and cannot be
+                  restored automatically.
+                </small>
+              </span>
+            </label>
+            {ownershipState.status !== "idle" && (
+              <p
+                className={`operator-action-notice operator-action-notice--${ownershipState.status}`}
+                role={ownershipState.status === "error" ? "alert" : "status"}
+              >
+                {ownershipState.status === "success" ? (
+                  <Check aria-hidden size={16} />
+                ) : (
+                  <CircleAlert aria-hidden size={16} />
+                )}
+                {ownershipState.message}
+              </p>
+            )}
+            <button
+              className="hq-button hq-button--secondary"
+              disabled={ownershipPending}
+              formAction={ownershipAction}
+              formNoValidate
+              type="submit"
+            >
+              {ownershipPending ? "Transferring…" : "Transfer ownership"}
+            </button>
+          </div>
+        </section>
+      )}
       <input name="personId" type="hidden" value={person.personId} />
       <input
         name="availability"
@@ -444,6 +509,7 @@ export function TeamMemberEditor({
           <Badge tone={person.active ? "positive" : "neutral"}>
             {person.active ? "active" : "inactive"}
           </Badge>
+          {person.isOwner && <Badge tone="warning">Owner</Badge>}
         </div>
       </section>
 
@@ -506,13 +572,30 @@ export function TeamMemberEditor({
               />
             </Field>
             <Field htmlFor="team-role" label="Role">
-              <Select defaultValue={person.role} id="team-role" name="role">
-                <option value="coach">Coach</option>
-                <option value="director">Director</option>
-                <option value="manager">Manager</option>
-                <option value="front-desk">Front desk</option>
-                <option value="accountant">Accountant</option>
-              </Select>
+              {person.isOwner ? (
+                <>
+                  <input name="role" type="hidden" value="director" />
+                  <Select
+                    defaultValue="director"
+                    disabled
+                    id="team-role"
+                    name="ownerRole"
+                  >
+                    <option value="director">Director · Owner</option>
+                  </Select>
+                </>
+              ) : (
+                <Select defaultValue={person.role} id="team-role" name="role">
+                  <option value="coach">Coach</option>
+                  {(workspace.teamAccess.canInviteDirector ||
+                    person.role === "director") && (
+                    <option value="director">Director</option>
+                  )}
+                  <option value="manager">Manager</option>
+                  <option value="front-desk">Front desk</option>
+                  <option value="accountant">Accountant</option>
+                </Select>
+              )}
             </Field>
             <Field
               htmlFor="team-worker-classification"
@@ -533,15 +616,35 @@ export function TeamMemberEditor({
               htmlFor="team-status"
               label="Status"
             >
-              <Select
-                defaultValue={person.active ? "true" : "false"}
-                id="team-status"
-                name="active"
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </Select>
+              {person.isOwner ? (
+                <>
+                  <input name="active" type="hidden" value="true" />
+                  <Select
+                    defaultValue="true"
+                    disabled
+                    id="team-status"
+                    name="ownerStatus"
+                  >
+                    <option value="true">Active · ownership protected</option>
+                  </Select>
+                </>
+              ) : (
+                <Select
+                  defaultValue={person.active ? "true" : "false"}
+                  id="team-status"
+                  name="active"
+                >
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </Select>
+              )}
             </Field>
+            {person.isOwner && (
+              <p className="operator-form-hint operator-field--wide">
+                This is the organization Owner. Transfer ownership to another
+                active Director before changing this role or deactivating them.
+              </p>
+            )}
           </div>
         </section>
 
@@ -1096,7 +1199,11 @@ export function TeamMemberEditor({
                               ...schedule,
                               blocks: [
                                 ...schedule.blocks,
-                                { weekday, startsAt: "13:00", endsAt: "17:00" },
+                                {
+                                  weekday,
+                                  startsAt: "13:00",
+                                  endsAt: "17:00",
+                                },
                               ],
                             }))
                           }

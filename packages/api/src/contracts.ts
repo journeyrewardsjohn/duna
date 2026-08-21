@@ -4538,6 +4538,7 @@ export const operatorStaffProfileSchema = z.object({
   bio: z.string().optional(),
   profileVisibility: z.enum(["public", "members", "private"]),
   role: z.enum(["coach", "director", "manager", "front-desk", "accountant"]),
+  isOwner: z.boolean(),
   workerClassification: z.enum(["not-set", "1099-contractor", "w2-employee"]),
   compensationModel: z.enum([
     "not-set",
@@ -5280,6 +5281,10 @@ export const operatorWorkspaceSchema = z.object({
   invitations: z.array(operatorInvitationSchema).readonly(),
   staff: z.array(operatorStaffProfileSchema).readonly(),
   staffInvitations: z.array(operatorStaffInvitationSchema).readonly(),
+  teamAccess: z.object({
+    canInviteDirector: z.boolean(),
+    canTransferOwnership: z.boolean(),
+  }),
   catalog: z.array(operatorCatalogItemSchema).readonly(),
   productPerformance: z
     .array(

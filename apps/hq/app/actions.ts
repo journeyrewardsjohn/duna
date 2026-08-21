@@ -1662,6 +1662,7 @@ export async function createStaffInvitationAction(
     const role = field(formData, "role");
     if (
       role !== "coach" &&
+      role !== "director" &&
       role !== "manager" &&
       role !== "front-desk" &&
       role !== "accountant"
@@ -1867,6 +1868,29 @@ export async function updateStaffProfileAction(
     });
     revalidateOperator();
     return result("success", "Team profile updated.", undefined, updated.id);
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function transferOrganizationOwnershipAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    const transferred = await caller.operator.transferOrganizationOwnership({
+      personId: field(formData, "personId"),
+      confirmed: confirmed(formData, "ownershipConfirmed"),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Ownership transferred. The former Owner remains an active Director.",
+      undefined,
+      transferred.id,
+    );
   } catch (error) {
     return errorState(error);
   }

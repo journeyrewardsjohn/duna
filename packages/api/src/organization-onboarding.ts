@@ -3,6 +3,7 @@ import {
   getDatabase,
   legalAcceptances,
   organizationMemberships,
+  organizationStaffProfiles,
   organizations,
 } from "@duna/db";
 import {
@@ -122,6 +123,27 @@ export async function provisionWorkOSOrganization(input: {
         updatedAt: input.now,
       })
       .onConflictDoNothing(),
+    database
+      .insert(organizationStaffProfiles)
+      .values({
+        organizationId: organization.id,
+        personId: person.id,
+        staffRole: "director",
+        active: true,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationStaffProfiles.organizationId,
+          organizationStaffProfiles.personId,
+        ],
+        set: {
+          staffRole: "director",
+          active: true,
+          updatedAt: input.now,
+        },
+      }),
     database.insert(legalAcceptances).values({
       id: acceptanceId,
       personId: person.id,

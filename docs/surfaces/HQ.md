@@ -107,20 +107,27 @@ inviter immediately, and appears in Pending team access for the seven-day
 claim window. Email and SMS are optional delivery channels for that same
 claim link; a delivery failure never prevents the inviter from copying it.
 
-Director access is ownership-controlled, not an inviteable staff role. This
-keeps a staff-management link from creating a new organization owner. Existing
-Directors and Managers may invite Coaches, Managers, Front Desk, and
-Accountants. The service rechecks this rule, the organization boundary, and
-the role target server-side; hiding a role in HQ is never the authorization
-boundary.
+Each organization has one active **Owner**: the Director who created the Duna
+HQ organization. An Owner may invite additional Directors from Team. Those
+Directors receive the Director staff role and its organization scopes, but do
+not receive an `owner` membership. The Owner cannot be deactivated or moved to
+another role. To change that person, the active Owner explicitly transfers
+ownership to another active Director; the former Owner stays an active
+Director. A database constraint enforces at most one active Owner.
 
-| Role       | HQ access                                                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Director   | Organization ownership, financial configuration, ordinary operational settings, and team administration. More than one Director may exist through the ownership workflow. |
-| Manager    | Operational settings and team invitations, but no Director creation or financial configuration.                                                                           |
-| Coach      | Read-only organization schedule, events, and catalog context; may take a payment at point of service.                                                                     |
-| Front Desk | Registrations, schedules, event creation, leagues, tournaments, check-ins, and point-of-service payment collection.                                                       |
-| Accountant | Read-only access to money reports and financial records.                                                                                                                  |
+Directors and Managers may invite Coaches, Managers, Front Desk, and
+Accountants. Only the Owner may invite or promote a Director. The service
+rechecks this rule, the organization boundary, and the role target
+server-side; hiding a role in HQ is never the authorization boundary.
+
+| Role       | HQ access                                                                                                                                            |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner      | The original Director with the protected `owner` membership. May invite/promote Directors and transfer ownership.                                    |
+| Director   | Elevated operational and financial access, ordinary settings, and team administration. Multiple Directors may exist; they are not additional Owners. |
+| Manager    | Operational settings and team invitations, but no Director creation or financial configuration.                                                      |
+| Coach      | Read-only organization schedule, events, and catalog context; may take a payment at point of service.                                                |
+| Front Desk | Registrations, schedules, event creation, leagues, tournaments, check-ins, and point-of-service payment collection.                                  |
+| Accountant | Read-only access to money reports and financial records.                                                                                             |
 
 Point-of-service collection uses the separate `payments:collect` capability.
 It deliberately does not grant `payments:write`, which protects Stripe,
@@ -130,15 +137,19 @@ commerce, refunds, pricing, and other financial configuration routes.
 
 The organization detail screen in Super Admin can grant an existing Duna user
 access by email, or create a private-link/email invitation for someone who has
-not joined Duna yet. It is the only UI that can assign **Director**, which
-creates an active `owner` membership plus the `director` staff profile and
-allows multiple organization owners.
+not joined Duna yet. It can assign **Director**, but that creates a Director
+staff profile and its scoped manager membership—not another `owner`
+membership. The original Owner remains protected until they transfer ownership
+inside their HQ organization.
 
-For a person and organization already linked to WorkOS, the grant updates the
-matching WorkOS organization membership in the same operation (`director`
-maps to the WorkOS `owner` role). If either side has not been linked yet, Duna
-records the role and returns `not-linked` rather than falsely claiming a WorkOS
-sync. Production must set primary `DATABASE_URL`, `NEON_READ_ONLY_REPLICA`,
+For a person and organization already linked to WorkOS, the grant creates or
+keeps the matching WorkOS organization membership in the same operation. Duna
+keeps the selected staff role, scopes, and Owner record as the authorization
+source of truth; WorkOS roles never create an additional Duna Owner. Unless an
+explicit provider role has been configured, WorkOS applies that environment's
+default membership role. If either side has not been linked yet, Duna records
+the role and returns `not-linked` rather than falsely claiming a WorkOS sync.
+Production must set primary `DATABASE_URL`, `NEON_READ_ONLY_REPLICA`,
 `WORKOS_API_KEY`, and `WORKOS_CLIENT_ID` for connected operation. The linked
 grant and its permission checks stay on the primary; only latency-tolerant HQ
 reporting and dashboard reads may use the replica.

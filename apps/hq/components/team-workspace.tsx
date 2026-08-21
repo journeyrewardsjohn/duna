@@ -304,8 +304,10 @@ export function TeamWorkspace({
                     {person.active ? "active" : "inactive"}
                   </Badge>
                   <small>
-                    {roleName(person.role)} ·{" "}
-                    {person.workerClassification.replaceAll("-", " ")}
+                    {person.isOwner
+                      ? "Owner · Director"
+                      : roleName(person.role)}{" "}
+                    · {person.workerClassification.replaceAll("-", " ")}
                   </small>
                 </span>
                 <span>
@@ -341,8 +343,10 @@ export function TeamWorkspace({
                   <span>
                     <strong>{person.displayName}</strong>
                     <small>
-                      {roleName(person.role)} ·{" "}
-                      {person.active ? "Active" : "Inactive"}
+                      {person.isOwner
+                        ? "Owner · Director"
+                        : roleName(person.role)}{" "}
+                      · {person.active ? "Active" : "Inactive"}
                     </small>
                   </span>
                   <ArrowRight aria-hidden size={17} />

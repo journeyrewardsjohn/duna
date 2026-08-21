@@ -505,6 +505,7 @@ import {
   saveMessageDraft,
   startStripeOnboarding,
   replaceCourtSchedule,
+  transferOrganizationOwnership,
   updateCourtBookingConfiguration,
   updateStaffProfile,
   updateEventDraft,
@@ -7325,7 +7326,10 @@ const operatorRouter = router({
     .query(({ ctx }) =>
       ctx.actor!.isDemo && !process.env.DATABASE_URL
         ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
-        : loadOperatorWorkspace(ctx.actor!.organizationId!),
+        : loadOperatorWorkspace(
+            ctx.actor!.organizationId!,
+            ctx.actor!.personId,
+          ),
     ),
   moneyWorkspace: organizationProcedure("payments:read")
     .output(organizationMoneyWorkspaceSchema)
@@ -10186,7 +10190,13 @@ const operatorRouter = router({
             .string()
             .regex(/^\+[1-9]\d{7,14}$/)
             .optional(),
-          role: z.enum(["coach", "manager", "front-desk", "accountant"]),
+          role: z.enum([
+            "coach",
+            "director",
+            "manager",
+            "front-desk",
+            "accountant",
+          ]),
           workerClassification: z.enum(["1099-contractor", "w2-employee"]),
           preferredChannel: z.enum(["email", "sms"]).optional(),
           deliveryMode: z.enum(["send", "link-only"]).default("send"),
@@ -10317,6 +10327,45 @@ const operatorRouter = router({
             return await updateStaffProfile({
               actor: ctx.actor!,
               ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  transferOrganizationOwnership: organizationProcedure("members:write")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-ownership-transfer",
+        capacity: 4,
+        refillPerMinute: 1,
+        scope: "organization",
+      }),
+    )
+    .input(
+      z.object({
+        personId: z.string().uuid(),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.transferOrganizationOwnership",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await transferOrganizationOwnership({
+              actor: ctx.actor!,
+              personId: input.personId,
+              confirmed: input.confirmed,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,

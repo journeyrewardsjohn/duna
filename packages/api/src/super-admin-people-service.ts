@@ -847,7 +847,6 @@ export async function setPersonSuperAdmin(input: {
       ipAddress: input.ipAddress,
       now: input.now,
       allowSystemOrganization: true,
-      useDefaultWorkosRole: true,
     });
     workosSync = access.workosSync;
     if (!person.workosUserId && dunaOrganization.workosOrganizationId) {
