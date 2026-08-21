@@ -4,7 +4,12 @@ import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
+import {
+  playNavigation,
+  watchNavigation,
+} from "@/lib/site-experience-navigation";
 import { ClubFeaturesMenu } from "./club-features-menu";
+import { SiteExperienceMenu } from "./site-experience-menu";
 import { SiteMobileMenu } from "./site-mobile-menu";
 import { WebAuthButton } from "./web-auth-button";
 
@@ -27,9 +32,8 @@ export function SiteHeader({ authConfigured }: SiteHeaderProps = {}) {
           <DunaMark />
         </Link>
         <nav aria-label="Main navigation" className="site-header__nav">
-          <Link href="/discover">Play</Link>
-          <Link href="/pro">Watch</Link>
-          <Link href="/rankings">Sand Rating</Link>
+          <SiteExperienceMenu navigation={playNavigation} />
+          <SiteExperienceMenu navigation={watchNavigation} />
           <ClubFeaturesMenu />
         </nav>
         <div className="site-header__actions">

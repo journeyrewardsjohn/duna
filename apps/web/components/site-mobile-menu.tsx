@@ -23,19 +23,9 @@ import {
 } from "react";
 import type { SiteNavigationQuickAction } from "@/lib/site-navigation";
 import { clubFeatureByKey, clubFeatureGroups } from "@/lib/club-features";
+import { siteExperienceNavigations } from "@/lib/site-experience-navigation";
 
 const mainNavigation = [
-  {
-    href: "/discover",
-    label: "Play",
-    detail: "Games, sessions, and courts",
-  },
-  { href: "/pro", label: "Watch", detail: "The pro tour and live matches" },
-  {
-    href: "/rankings",
-    label: "Sand Rating",
-    detail: "Rankings and the rating system",
-  },
   {
     href: "/run-your-club",
     label: "Clubs + coaches",
@@ -365,7 +355,7 @@ function SiteMobileMenuView({
                     className="site-mobile-sheet__nav"
                   >
                     <span className="site-mobile-sheet__section-heading">
-                      Explore Duna
+                      For organizations
                     </span>
                     {mainNavigation.map((item) => (
                       <Link href={item.href} key={item.href} onClick={close}>
@@ -384,6 +374,53 @@ function SiteMobileMenuView({
                       Create an event <ArrowRight aria-hidden size={18} />
                     </Link>
                   </nav>
+
+                  <section
+                    aria-label="Play and Watch"
+                    className="site-mobile-sheet__experiences"
+                  >
+                    {siteExperienceNavigations.map((navigation) => (
+                      <div key={navigation.id}>
+                        <header>
+                          <span>
+                            <strong>{navigation.label}</strong>
+                            <small>{navigation.description}</small>
+                          </span>
+                          <Link href={navigation.href} onClick={close}>
+                            View all <ArrowRight aria-hidden size={15} />
+                          </Link>
+                        </header>
+                        <nav aria-label={`${navigation.label} navigation`}>
+                          {navigation.groups.flatMap((group) =>
+                            group.items.map((item) => (
+                              <Link
+                                href={item.href}
+                                key={item.href}
+                                onClick={close}
+                              >
+                                <span>
+                                  <strong>{item.label}</strong>
+                                  <small>{item.description}</small>
+                                </span>
+                                <ArrowRight aria-hidden size={16} />
+                              </Link>
+                            )),
+                          )}
+                          <Link
+                            className="site-mobile-sheet__experience-featured"
+                            href={navigation.featured.href}
+                            onClick={close}
+                          >
+                            <span>
+                              <strong>{navigation.featured.title}</strong>
+                              <small>{navigation.featured.description}</small>
+                            </span>
+                            <ArrowRight aria-hidden size={16} />
+                          </Link>
+                        </nav>
+                      </div>
+                    ))}
+                  </section>
 
                   <section
                     aria-label="Duna HQ features"

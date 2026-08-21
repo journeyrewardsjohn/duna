@@ -66,6 +66,14 @@ const iconByKey: Readonly<Record<string, LucideIcon>> = {
   "duna-pro-watch": Watch,
 };
 
+type FeatureSceneIndex = 0 | 1 | 2;
+
+function featureSceneIndex(scene: number): FeatureSceneIndex {
+  if (scene % 3 === 1) return 1;
+  if (scene % 3 === 2) return 2;
+  return 0;
+}
+
 function useFeaturePageMotion() {
   const pageRef = useRef<HTMLElement>(null);
 
@@ -126,14 +134,93 @@ function useFeaturePageMotion() {
 
 function ProductBuilderVisual({
   kind,
+  scene = 0,
 }: {
   readonly kind: ClubFeatureVisualKind;
+  readonly scene?: number;
 }) {
   const isService = kind === "services";
   const isPlan = kind === "plans";
   const isInventory = kind === "inventory";
+  const sceneIndex = featureSceneIndex(scene);
+  const productTitles = isService
+    ? ["First-ball assessment", "Tuesday private lesson", "Player follow-up"]
+    : isPlan
+      ? ["Season training pass", "Member access rules", "8 credits available"]
+      : ["Complete club offer", "Customer-facing story", "Fulfillment ready"];
+  const productChoices = isService
+    ? [
+        ["Outcome", "Coach", "Schedule"],
+        ["Availability", "Court", "Intake"],
+        ["Check-in", "Notes", "Next step"],
+      ]
+    : isPlan
+      ? [
+          ["Access", "Credits", "Billing"],
+          ["Benefits", "Priority", "Eligibility"],
+          ["Balance", "Renewal", "History"],
+        ]
+      : [
+          ["Story", "Pricing", "Delivery"],
+          ["Outcomes", "Media", "Proof"],
+          ["Order", "Inventory", "Access"],
+        ];
+  const productDetails = isService
+    ? [
+        "See how a player moves, then leave with the next three priorities.",
+        "Jordan is available, Court 2 is attached, and intake is complete.",
+        "Check-in, private notes, and the next recommendation share the booking.",
+      ]
+    : isPlan
+      ? [
+          "Eight sessions, member booking access, and one assessment.",
+          "Member pricing and priority windows now follow the player.",
+          "Every redemption, grant, renewal, and adjustment stays visible.",
+        ]
+      : [
+          "Build the value, rules, price, and customer experience together.",
+          "Outcomes, media, proof, and clear terms appear before checkout.",
+          "The purchase now knows what should be booked, granted, or moved.",
+        ];
+  const inventoryScenes = [
+    {
+      title: "Match balls · 24",
+      detail: "Received · South Bay",
+      state: "Counted",
+      rows: [
+        ["Unit cost", "$31.50", "24 received"],
+        ["Tax context", "Sporting goods", "Ready"],
+        ["Available", "24", "2 reserved"],
+      ],
+    },
+    {
+      title: "Coach kit · 12",
+      detail: "Court 3 · Jordan Cruz",
+      state: "Checked out",
+      rows: [
+        ["Coach checkout", "−12", "Jordan Cruz"],
+        ["Due back", "Friday", "After practice"],
+        ["Available", "12", "2 reserved"],
+      ],
+    },
+    {
+      title: "Inventory close",
+      detail: "Movement and cost history",
+      state: "Export ready",
+      rows: [
+        ["On hand", "$4,862", "Recorded cost"],
+        ["Sold", "$1,240", "Tax attached"],
+        ["In custody", "18 assets", "Named owners"],
+      ],
+    },
+  ] as const;
+  const inventoryScene = inventoryScenes[sceneIndex];
   return (
-    <div className={styles.builderVisual} data-kind={kind}>
+    <div
+      className={styles.builderVisual}
+      data-kind={kind}
+      data-scene={sceneIndex}
+    >
       <header>
         <span>
           <Sparkles aria-hidden size={15} /> Duna HQ
@@ -153,26 +240,18 @@ function ProductBuilderVisual({
           <div>
             <Box aria-hidden />
             <span>
-              <strong>Match balls · 12</strong>
-              <small>Coach kit · Court 3</small>
+              <strong>{inventoryScene.title}</strong>
+              <small>{inventoryScene.detail}</small>
             </span>
-            <b>Checked out</b>
+            <b>{inventoryScene.state}</b>
           </div>
-          <div>
-            <span>Received</span>
-            <strong>+24</strong>
-            <small>$31.50 each</small>
-          </div>
-          <div>
-            <span>Coach checkout</span>
-            <strong>−12</strong>
-            <small>Jordan Cruz</small>
-          </div>
-          <div>
-            <span>Available</span>
-            <strong>12</strong>
-            <small>2 reserved</small>
-          </div>
+          {inventoryScene.rows.map(([label, value, detail]) => (
+            <div key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <small>{detail}</small>
+            </div>
+          ))}
         </div>
       ) : (
         <>
@@ -182,37 +261,36 @@ function ProductBuilderVisual({
           <div className={styles.builderColumns}>
             <section>
               <small>What are you crafting?</small>
-              <h3>
-                {isService
-                  ? "First-ball assessment"
-                  : isPlan
-                    ? "Season training pass"
-                    : "Complete club offer"}
-              </h3>
+              <h3>{productTitles[sceneIndex]}</h3>
               <div className={styles.builderChoiceRow}>
-                {(isService
-                  ? ["Outcome", "Coach", "Schedule"]
-                  : isPlan
-                    ? ["Access", "Credits", "Billing"]
-                    : ["Story", "Pricing", "Delivery"]
-                ).map((label, index) => (
+                {productChoices[sceneIndex]!.map((label, index) => (
                   <span data-active={index === 0} key={label}>
                     {label}
                   </span>
                 ))}
               </div>
-              <p>
-                {isService
-                  ? "See how a player moves, then leave with the next three priorities."
-                  : isPlan
-                    ? "Eight sessions, member booking access, and one assessment."
-                    : "Build the value, rules, price, and customer experience together."}
-              </p>
+              <p>{productDetails[sceneIndex]}</p>
             </section>
             <aside>
-              <small>Customer preview</small>
+              <small>
+                {sceneIndex === 0
+                  ? "Customer preview"
+                  : sceneIndex === 1
+                    ? "Connected state"
+                    : "Ready for the day"}
+              </small>
               <strong>
-                {isService ? "$95" : isPlan ? "$420" : "Ready to publish"}
+                {sceneIndex === 2
+                  ? isService
+                    ? "Checked in"
+                    : isPlan
+                      ? "8 credits"
+                      : "Fulfillment live"
+                  : isService
+                    ? "$95"
+                    : isPlan
+                      ? "$420"
+                      : "Ready to publish"}
               </strong>
               <p>
                 {isPlan
@@ -228,24 +306,63 @@ function ProductBuilderVisual({
   );
 }
 
-function PeopleTeamVisual({ kind }: { readonly kind: "team" | "people" }) {
+function PeopleTeamVisual({
+  kind,
+  scene = 0,
+}: {
+  readonly kind: "team" | "people";
+  readonly scene?: number;
+}) {
   const people = kind === "people";
-  const rows: readonly (readonly [string, string, string])[] = people
-    ? [
-        ["Maya Rivera", "Goal · stronger first contact", "Shared"],
-        ["Mara Lewis", "Guardian connected", "Ready"],
-        ["Theo Park", "Check-in · private", "Private"],
-      ]
-    : [
-        ["Jordan Cruz", "Private lessons · 14h", "Available"],
-        ["Maya Rivera", "Youth program · 8h", "Assigned"],
-        ["Drew Park", "Open play · 6h", "Review"],
-      ];
+  const sceneIndex = featureSceneIndex(scene);
+  const peopleRows = [
+    [
+      ["Maya Rivera", "Goal · stronger first contact", "Shared"],
+      ["Mara Lewis", "Guardian connected", "Ready"],
+      ["Theo Park", "Check-in · private", "Private"],
+    ],
+    [
+      ["Maya Rivera", "Training pass · 5 credits", "Active"],
+      ["Mara Lewis", "Waiver · guardian signed", "Current"],
+      ["Theo Park", "Tuesday lesson · checked in", "Here"],
+    ],
+    [
+      ["Maya Rivera", "Health summary · shared", "Revocable"],
+      ["Mara Lewis", "Video review · granted", "Private"],
+      ["Theo Park", "Next goal · coach review", "Open"],
+    ],
+  ] as const;
+  const teamRows = [
+    [
+      ["Jordan Cruz", "Private lessons · 14h", "Available"],
+      ["Maya Rivera", "Youth program · 8h", "Assigned"],
+      ["Drew Park", "Open play · 6h", "Review"],
+    ],
+    [
+      ["Jordan Cruz", "Court 2 · 4:00 PM", "Checked in"],
+      ["Maya Rivera", "Court 1 · 4:30 PM", "Taking payment"],
+      ["Drew Park", "Court 4 · 6:00 PM", "Notes due"],
+    ],
+    [
+      ["Jordan Cruz", "14h · private lessons", "Approved"],
+      ["Maya Rivera", "8h · youth program", "Profit share"],
+      ["Drew Park", "6h · open play", "Review"],
+    ],
+  ] as const;
+  const rows = (people ? peopleRows : teamRows)[sceneIndex];
   return (
-    <div className={styles.peopleVisual}>
+    <div className={styles.peopleVisual} data-scene={sceneIndex}>
       <header>
         <span>{people ? "People" : "Team"}</span>
-        <small>{people ? "Relationship context" : "This week"}</small>
+        <small>
+          {people
+            ? ["Relationship context", "Current activity", "Sharing controls"][
+                sceneIndex
+              ]
+            : ["This week", "Today in Duna Pro", "Hours and compensation"][
+                sceneIndex
+              ]}
+        </small>
       </header>
       {rows.map(([name, detail, state], index) => (
         <article key={name}>
@@ -267,13 +384,29 @@ function PeopleTeamVisual({ kind }: { readonly kind: "team" | "people" }) {
         <span>
           <strong>
             {people
-              ? "Sharing stays player-controlled"
-              : "Duna Pro keeps the day in reach"}
+              ? [
+                  "One relationship, every useful signal",
+                  "Activity stays attached to the person",
+                  "Sharing stays player-controlled",
+                ][sceneIndex]
+              : [
+                  "Availability meets scheduled work",
+                  "Duna Pro keeps the day in reach",
+                  "Every hour keeps its source",
+                ][sceneIndex]}
           </strong>
           <small>
             {people
-              ? "Health summaries can be revoked at any time."
-              : "Check-in, payments, notes, and exceptions."}
+              ? [
+                  "Players, parents, goals, and participation in context.",
+                  "Plans, attendance, notes, and purchases move together.",
+                  "Health summaries can be revoked at any time.",
+                ][sceneIndex]
+              : [
+                  "Profiles, roles, availability, and assignments.",
+                  "Check-in, payments, notes, and exceptions.",
+                  "Administrative models remain reviewable before payroll.",
+                ][sceneIndex]}
           </small>
         </span>
       </footer>
@@ -283,51 +416,95 @@ function PeopleTeamVisual({ kind }: { readonly kind: "team" | "people" }) {
 
 function OperationsVisual({
   kind,
+  scene = 0,
 }: {
   readonly kind: "events" | "leagues" | "venues" | "training";
+  readonly scene?: number;
 }) {
+  const sceneIndex = featureSceneIndex(scene);
   if (kind === "venues") {
+    const venueScenes = [
+      {
+        utilization: "68% utilized",
+        courts: [
+          "Lesson · 4 PM",
+          "Rental · 5 PM",
+          "League · 6 PM",
+          "Open · 6 PM",
+        ],
+        footer: "Rentals, services, and events share the same court truth.",
+      },
+      {
+        utilization: "4 settings live",
+        courts: [
+          "Lights · 9 PM",
+          "Member priority",
+          "Blocked · repair",
+          "Public rental",
+        ],
+        footer: "Court rules stay visible wherever someone books the place.",
+      },
+      {
+        utilization: "$1,840 this week",
+        courts: [
+          "82% utilized",
+          "74% utilized",
+          "61% utilized",
+          "48% utilized",
+        ],
+        footer: "Utilization connects time, product, revenue, and demand.",
+      },
+    ] as const;
+    const venueScene = venueScenes[sceneIndex];
     return (
-      <div className={styles.venueVisual}>
+      <div className={styles.venueVisual} data-scene={sceneIndex}>
         <header>
           <span>South Bay Beach Club</span>
-          <strong>68% utilized</strong>
+          <strong>{venueScene.utilization}</strong>
         </header>
         <div className={styles.courtMap}>
           {["Court 1", "Court 2", "Court 3", "Court 4"].map((court, index) => (
             <article data-use={index} key={court}>
               <span>{court}</span>
-              <small>
-                {
-                  [
-                    "Lesson · 4 PM",
-                    "Rental · 5 PM",
-                    "League · 6 PM",
-                    "Open · 6 PM",
-                  ][index]
-                }
-              </small>
+              <small>{venueScene.courts[index]}</small>
             </article>
           ))}
         </div>
         <footer>
           <MapPinned aria-hidden />
-          <span>Rentals, services, and events share the same court truth.</span>
+          <span>{venueScene.footer}</span>
         </footer>
       </div>
     );
   }
   if (kind === "training") {
+    const trainingTitles = [
+      "Sideout under pressure",
+      "First-ball Sideout Lab",
+      "Atlantic Coast Open taper",
+    ];
     return (
-      <div className={styles.trainingVisual}>
+      <div className={styles.trainingVisual} data-scene={sceneIndex}>
         <header>
-          <span>Fall Competition Build</span>
-          <small>Week 4 of 8</small>
+          <span>
+            {
+              ["Fall Competition Build", "Tuesday practice", "Load view"][
+                sceneIndex
+              ]
+            }
+          </span>
+          <small>
+            {
+              ["Week 4 of 8", "90 min · 2 courts", "Tournament in 12 days"][
+                sceneIndex
+              ]
+            }
+          </small>
         </header>
         <div className={styles.weekStrip}>
           {[58, 68, 74, 61, 80, 72, 54, 40].map((load, index) => (
             <i
-              data-current={index === 3}
+              data-current={index === [3, 4, 6][sceneIndex]}
               key={index}
               style={{ "--load": `${load}%` } as CSSProperties}
             >
@@ -338,63 +515,117 @@ function OperationsVisual({
         <article>
           <Dumbbell aria-hidden />
           <span>
-            <strong>Sideout under pressure</strong>
-            <small>90 min · 2 courts · load estimate visible</small>
+            <strong>{trainingTitles[sceneIndex]}</strong>
+            <small>
+              {
+                [
+                  "90 min · 2 courts · load estimate visible",
+                  "6 drills · animation and coaching cues attached",
+                  "Volume steps down while intensity stays specific",
+                ][sceneIndex]
+              }
+            </small>
           </span>
-          <b>Tue</b>
+          <b>{["Tue", "Run", "Ready"][sceneIndex]}</b>
         </article>
       </div>
     );
   }
   if (kind === "leagues") {
+    const leagueScenes = [
+      {
+        title: "Tuesday Night League",
+        detail: "Week 6",
+        teams: ["Sand Shift", "Net Results", "High Line", "Sideout Club"],
+        records: ["5–1", "4–2", "4–2", "3–3"],
+      },
+      {
+        title: "Tonight's schedule",
+        detail: "4 courts · 6:00 PM",
+        teams: ["Court 1", "Court 2", "Court 3", "Court 4"],
+        records: ["Ready", "Ready", "Moved", "Warmup"],
+      },
+      {
+        title: "Season standings",
+        detail: "Playoffs in 2 weeks",
+        teams: ["Sand Shift", "Net Results", "High Line", "Sideout Club"],
+        records: ["Clinched", "+18 pts", "+12 pts", "In chase"],
+      },
+    ] as const;
+    const leagueScene = leagueScenes[sceneIndex];
     return (
-      <div className={styles.leagueVisual}>
+      <div className={styles.leagueVisual} data-scene={sceneIndex}>
         <header>
-          <span>Tuesday Night League</span>
-          <small>Week 6</small>
+          <span>{leagueScene.title}</span>
+          <small>{leagueScene.detail}</small>
         </header>
-        {["Sand Shift", "Net Results", "High Line", "Sideout Club"].map(
-          (team, index) => (
-            <article key={team}>
-              <b>{index + 1}</b>
-              <span>
-                <strong>{team}</strong>
-                <small>{["5–1", "4–2", "4–2", "3–3"][index]}</small>
-              </span>
-              <i
-                style={
-                  {
-                    "--standing": `${[92, 78, 70, 56][index]}%`,
-                  } as CSSProperties
-                }
-              />
-            </article>
-          ),
-        )}
+        {leagueScene.teams.map((team, index) => (
+          <article key={team}>
+            <b>{index + 1}</b>
+            <span>
+              <strong>{team}</strong>
+              <small>{leagueScene.records[index]}</small>
+            </span>
+            <i
+              style={
+                {
+                  "--standing": `${[92, 78, 70, 56][index]}%`,
+                } as CSSProperties
+              }
+            />
+          </article>
+        ))}
       </div>
     );
   }
+  const eventScenes = [
+    {
+      title: "Junior Showcase",
+      count: "42 / 48",
+      cards: [
+        ["Registration", "6 spots", "Waivers follow purchase"],
+        ["Courts", "4 ready", "Staffing attached"],
+      ],
+      active: 2,
+    },
+    {
+      title: "Event day",
+      count: "38 here",
+      cards: [
+        ["Check-in", "38 players", "4 arrivals pending"],
+        ["Draw", "12 matches", "Courts assigned"],
+      ],
+      active: 3,
+    },
+    {
+      title: "Results published",
+      count: "12 final",
+      cards: [
+        ["Champion", "Rivera / Park", "Podium and rating linked"],
+        ["Follow-up", "42 players", "Media and next event ready"],
+      ],
+      active: 4,
+    },
+  ] as const;
+  const eventScene = eventScenes[sceneIndex];
   return (
-    <div className={styles.eventVisual}>
+    <div className={styles.eventVisual} data-scene={sceneIndex}>
       <header>
-        <span>Junior Showcase</span>
-        <b>42 / 48</b>
+        <span>{eventScene.title}</span>
+        <b>{eventScene.count}</b>
       </header>
       <div>
-        <article>
-          <small>Registration</small>
-          <strong>6 spots</strong>
-          <span>Waivers follow purchase</span>
-        </article>
-        <article>
-          <small>Courts</small>
-          <strong>4 ready</strong>
-          <span>Staffing attached</span>
-        </article>
+        {eventScene.cards.map(([label, value, detail]) => (
+          <article key={label}>
+            <small>{label}</small>
+            <strong>{value}</strong>
+            <span>{detail}</span>
+          </article>
+        ))}
       </div>
       <footer>
         {["Publish", "Register", "Check in", "Score"].map((label, index) => (
-          <span data-active={index < 2} key={label}>
+          <span data-active={index < eventScene.active} key={label}>
             <Check aria-hidden /> {label}
           </span>
         ))}
@@ -405,15 +636,39 @@ function OperationsVisual({
 
 function GrowthVisual({
   kind,
+  scene = 0,
 }: {
   readonly kind: "money" | "marketing" | "messaging" | "safety";
+  readonly scene?: number;
 }) {
+  const sceneIndex = featureSceneIndex(scene);
   if (kind === "money") {
+    const moneyScenes = [
+      {
+        label: "Today",
+        value: "$4,280",
+        title: "Order → payment → fulfillment",
+        detail: "Every state keeps its source.",
+      },
+      {
+        label: "Private lesson · #1842",
+        value: "$95.00",
+        title: "Payment traced to the session",
+        detail: "Fee, refund, coach, and venue context remain attached.",
+      },
+      {
+        label: "Ready to reconcile",
+        value: "$18,420",
+        title: "The report explains the total",
+        detail: "Products, tax, credits, fees, payouts, and cost are visible.",
+      },
+    ] as const;
+    const moneyScene = moneyScenes[sceneIndex];
     return (
-      <div className={styles.moneyVisual}>
+      <div className={styles.moneyVisual} data-scene={sceneIndex}>
         <header>
-          <span>Today</span>
-          <strong>$4,280</strong>
+          <span>{moneyScene.label}</span>
+          <strong>{moneyScene.value}</strong>
         </header>
         <div className={styles.moneyBars}>
           {[42, 64, 48, 78, 58, 91, 72].map((height, index) => (
@@ -423,32 +678,49 @@ function GrowthVisual({
         <article>
           <CheckCircle2 aria-hidden />
           <span>
-            <strong>Order → payment → fulfillment</strong>
-            <small>Every state keeps its source.</small>
+            <strong>{moneyScene.title}</strong>
+            <small>{moneyScene.detail}</small>
           </span>
         </article>
       </div>
     );
   }
   if (kind === "marketing") {
+    const marketingScenes = [
+      [
+        ["Audience", "Members with credits expiring"],
+        ["Reason", "Balance reaches zero in 14 days"],
+        ["Review", "Operator confirms the audience"],
+      ],
+      [
+        ["Message", "Book your next court"],
+        ["Channels", "Email · SMS · Duna Player"],
+        ["Approval", "Operator reviews and sends"],
+      ],
+      [
+        ["Journey", "Return to training"],
+        ["Response", "12 bookings connected"],
+        ["Next step", "Audience updates from activity"],
+      ],
+    ] as const;
     return (
-      <div className={styles.flowVisual}>
+      <div className={styles.flowVisual} data-scene={sceneIndex}>
         <header>
           <Sparkles aria-hidden />
-          <span>Duna AI · draft for review</span>
+          <span>
+            {
+              [
+                "Build the audience",
+                "Duna AI · draft for review",
+                "See the response",
+              ][sceneIndex]
+            }
+          </span>
         </header>
-        {["Audience", "Message", "Approval"].map((label, index) => (
+        {marketingScenes[sceneIndex].map(([label, value], index) => (
           <article key={label}>
             <small>{label}</small>
-            <strong>
-              {
-                [
-                  "Members with credits expiring",
-                  "Book your next court",
-                  "Operator reviews and sends",
-                ][index]
-              }
-            </strong>
+            <strong>{value}</strong>
             <i data-done={index < 2}>
               {index < 2 ? <Check aria-hidden /> : index + 1}
             </i>
@@ -458,18 +730,35 @@ function GrowthVisual({
     );
   }
   if (kind === "messaging") {
+    const messageScenes = [
+      {
+        title: "Tuesday Night League",
+        count: "18 participants",
+        left: "Court 3 is closed. Tonight's first round moves to Court 1.",
+        right: "Got it. Does our 6:40 start stay the same?",
+      },
+      {
+        title: "Maya Rivera · private lesson",
+        count: "Guardian covered",
+        left: "I added the three first-contact clips from today's session.",
+        right: "Thanks. Mara can see them too.",
+      },
+      {
+        title: "Delivery review",
+        count: "18 of 18 reached",
+        left: "League update delivered with the schedule context attached.",
+        right: "Email, push, and in-app state agree.",
+      },
+    ] as const;
+    const messageScene = messageScenes[sceneIndex];
     return (
-      <div className={styles.messageVisual}>
+      <div className={styles.messageVisual} data-scene={sceneIndex}>
         <header>
-          <span>Tuesday Night League</span>
-          <small>18 participants</small>
+          <span>{messageScene.title}</span>
+          <small>{messageScene.count}</small>
         </header>
-        <article data-side="left">
-          Court 3 is closed. Tonight’s first round moves to Court 1.
-        </article>
-        <article data-side="right">
-          Got it. Does our 6:40 start stay the same?
-        </article>
+        <article data-side="left">{messageScene.left}</article>
+        <article data-side="right">{messageScene.right}</article>
         <footer>
           {[
             [Mail, "Email"],
@@ -487,31 +776,43 @@ function GrowthVisual({
       </div>
     );
   }
+  const safetyScenes = [
+    [
+      ["Guardian relationship", "Verified adult"],
+      ["Youth messaging", "Coverage confirmed"],
+      ["Pickup authority", "Named people only"],
+      ["Emergency context", "Scoped to the event"],
+    ],
+    [
+      ["Summer waiver · v3", "Exact text preserved"],
+      ["Guardian signature", "Receipt attached"],
+      ["Teen acknowledgement", "Complete"],
+      ["Renewal rule", "Re-consent required"],
+    ],
+    [
+      ["Profile visibility", "Player controlled"],
+      ["Health sharing", "Revocable summary"],
+      ["Video access", "Named viewers"],
+      ["Guest access", "Expires after event"],
+    ],
+  ] as const;
   return (
-    <div className={styles.safetyVisual}>
+    <div className={styles.safetyVisual} data-scene={sceneIndex}>
       <header>
         <ShieldCheck aria-hidden />
-        <span>Authority and consent</span>
+        <span>
+          {
+            ["Guardian authority", "Waiver evidence", "Privacy in use"][
+              sceneIndex
+            ]
+          }
+        </span>
       </header>
-      {[
-        "Guardian relationship",
-        "Summer waiver · v3",
-        "Profile visibility",
-        "Health sharing",
-      ].map((label, index) => (
+      {safetyScenes[sceneIndex].map(([label, detail], index) => (
         <article key={label}>
           <span>
             <strong>{label}</strong>
-            <small>
-              {
-                [
-                  "Verified adult",
-                  "Signed by guardian",
-                  "Player controlled",
-                  "Revocable summary",
-                ][index]
-              }
-            </small>
+            <small>{detail}</small>
           </span>
           {index === 3 ? (
             <LockKeyhole aria-hidden />
@@ -524,44 +825,85 @@ function GrowthVisual({
   );
 }
 
-function VisionWatchVisual({ kind }: { readonly kind: "vision" | "watch" }) {
+function VisionWatchVisual({
+  kind,
+  scene = 0,
+}: {
+  readonly kind: "vision" | "watch";
+  readonly scene?: number;
+}) {
+  const sceneIndex = featureSceneIndex(scene);
   if (kind === "watch") {
+    const watchScenes = [
+      {
+        label: "DRILL 03",
+        value: "02:18",
+        center: "Side score",
+        action: "Tag rally",
+        cue: "Cue saved to session",
+      },
+      {
+        label: "COURT 2",
+        value: "6  ·  4",
+        center: "Set 1",
+        action: "Point +",
+        cue: "Score synced to Duna Pro",
+      },
+      {
+        label: "RALLY 14",
+        value: "00:42",
+        center: "Review cue",
+        action: "Favorite",
+        cue: "Moment linked to Duna Vision",
+      },
+    ] as const;
+    const watchScene = watchScenes[sceneIndex];
     return (
-      <div className={styles.watchVisual}>
+      <div className={styles.watchVisual} data-scene={sceneIndex}>
         <div className={styles.watchCase}>
           <div className={styles.watchFace}>
-            <small>DRILL 03</small>
-            <strong>02:18</strong>
+            <small>{watchScene.label}</small>
+            <strong>{watchScene.value}</strong>
             <span>
               <b>6</b>
-              <i>Side score</i>
+              <i>{watchScene.center}</i>
               <b>4</b>
             </span>
             <button type="button">
-              <Radio aria-hidden /> Tag rally
+              <Radio aria-hidden /> {watchScene.action}
             </button>
           </div>
         </div>
         <span className={styles.watchCue}>
-          <Check aria-hidden /> Cue saved to session
+          <Check aria-hidden /> {watchScene.cue}
         </span>
       </div>
     );
   }
   return (
-    <div className={styles.visionVisual}>
+    <div className={styles.visionVisual} data-scene={sceneIndex}>
       <header>
         <span>
           <Radio aria-hidden /> Duna Vision
         </span>
-        <small>Practice · private</small>
+        <small>
+          {["Practice · private", "Timeline review", "Share grant"][sceneIndex]}
+        </small>
       </header>
       <div className={styles.visionCourt}>
         <i />
         <i />
         <i />
         <i />
-        <span>Visible court · calibrated</span>
+        <span>
+          {
+            [
+              "Visible court · calibrated",
+              "Rally boundaries · reviewed",
+              "Private clip · player granted",
+            ][sceneIndex]
+          }
+        </span>
       </div>
       <div className={styles.visionTimeline}>
         <b />
@@ -570,37 +912,144 @@ function VisionWatchVisual({ kind }: { readonly kind: "vision" | "watch" }) {
         <i style={{ left: "76%" }} />
       </div>
       <footer>
-        <strong>Flagged rally · 14:32</strong>
-        <span>Open source-linked review</span>
+        <strong>
+          {
+            [
+              "Court calibration ready",
+              "Flagged rally · 14:32",
+              "Maya Rivera · private review",
+            ][sceneIndex]
+          }
+        </strong>
+        <span>
+          {
+            [
+              "Start source-linked capture",
+              "Open source-linked review",
+              "Access expires with the grant",
+            ][sceneIndex]
+          }
+        </span>
       </footer>
     </div>
   );
 }
 
-function FeatureVisual({ kind }: { readonly kind: ClubFeatureVisualKind }) {
+function FeatureVisual({
+  kind,
+  scene = 0,
+}: {
+  readonly kind: ClubFeatureVisualKind;
+  readonly scene?: number;
+}) {
   switch (kind) {
     case "products":
     case "services":
     case "plans":
     case "inventory":
-      return <ProductBuilderVisual kind={kind} />;
+      return <ProductBuilderVisual kind={kind} scene={scene} />;
     case "team":
     case "people":
-      return <PeopleTeamVisual kind={kind} />;
+      return <PeopleTeamVisual kind={kind} scene={scene} />;
     case "events":
     case "leagues":
     case "venues":
     case "training":
-      return <OperationsVisual kind={kind} />;
+      return <OperationsVisual kind={kind} scene={scene} />;
     case "money":
     case "marketing":
     case "messaging":
     case "safety":
-      return <GrowthVisual kind={kind} />;
+      return <GrowthVisual kind={kind} scene={scene} />;
     case "vision":
     case "watch":
-      return <VisionWatchVisual kind={kind} />;
+      return <VisionWatchVisual kind={kind} scene={scene} />;
   }
+}
+
+function FeatureProductStory({
+  feature,
+  Icon,
+}: {
+  readonly feature: ClubFeaturePageData;
+  readonly Icon: LucideIcon;
+}) {
+  return (
+    <div className={styles.productStories} id="product-tour">
+      {feature.journey.map((step, index) => {
+        const supportingCapabilities = feature.capabilities.slice(
+          index * 2,
+          index * 2 + 2,
+        );
+        return (
+          <article
+            className={styles.productStory}
+            data-feature-reveal
+            data-scene={index}
+            key={step.title}
+          >
+            <div
+              aria-label={`${feature.navLabel}: ${step.title} product view`}
+              className={styles.productStoryStage}
+            >
+              {index === 1 ? (
+                <Image
+                  alt=""
+                  fill
+                  sizes="(max-width: 900px) 100vw, 58vw"
+                  src={feature.image}
+                />
+              ) : null}
+              <div className={styles.productStoryWash} />
+              <div className={styles.productStoryChrome}>
+                <header>
+                  <span>
+                    <i /> <i /> <i />
+                  </span>
+                  <strong>Duna HQ</strong>
+                  <small>{feature.navLabel}</small>
+                </header>
+                <FeatureVisual kind={feature.visual} scene={index} />
+              </div>
+              <div className={styles.productStorySignal}>
+                <CheckCircle2 aria-hidden size={17} />
+                <span>
+                  <small>
+                    {index === 0
+                      ? "Built with context"
+                      : index === 1
+                        ? "Connected to the day"
+                        : "History carried forward"}
+                  </small>
+                  <strong>{supportingCapabilities[0]?.title}</strong>
+                </span>
+              </div>
+              <i className={styles.productStoryTrace} />
+            </div>
+            <div className={styles.productStoryCopy}>
+              <span>
+                <Icon aria-hidden size={18} />
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+              <ul>
+                {supportingCapabilities.map((capability) => (
+                  <li key={capability.title}>
+                    <Check aria-hidden size={16} />
+                    <span>
+                      <strong>{capability.title}</strong>
+                      <small>{capability.description}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
 }
 
 function FeatureProductNav() {
@@ -613,6 +1062,7 @@ function FeatureProductNav() {
       <div>
         <Link href="#problem">The problem</Link>
         <Link href="#solution">The solution</Link>
+        <Link href="#product-tour">Product tour</Link>
         <Link href="#capabilities">Capabilities</Link>
       </div>
       <a className={styles.productCta} href={DUNA_HQ_URL}>
@@ -646,6 +1096,7 @@ export function ClubFeaturePage({
           <Image
             alt={feature.imageAlt}
             fill
+            loading="eager"
             priority
             sizes="(max-width: 900px) 100vw, 58vw"
             src={feature.image}
@@ -714,24 +1165,7 @@ export function ClubFeaturePage({
           <h2>{feature.solutionTitle}</h2>
           <p>{feature.solution}</p>
         </div>
-        <div className={styles.journey}>
-          {feature.journey.map((step, index) => (
-            <article data-feature-reveal key={step.title}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <span>
-                <small>
-                  {index === 0
-                    ? "Start"
-                    : index === 1
-                      ? "Connect"
-                      : "Carry forward"}
-                </small>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
-              </span>
-            </article>
-          ))}
-        </div>
+        <FeatureProductStory Icon={Icon} feature={feature} />
       </section>
 
       <section className={styles.capabilities} id="capabilities">
@@ -850,6 +1284,7 @@ export function ClubFeaturesHub() {
           <Image
             alt="Volleyball courts prepared before a club day begins"
             fill
+            loading="eager"
             priority
             sizes="100vw"
             src="/media/brand/duna-club-hero-v1.webp"
