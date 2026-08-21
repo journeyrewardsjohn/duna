@@ -271,12 +271,8 @@ function requireOrganization(actor: ApiActor): string {
 }
 
 function plan(value: string): OperatorWorkspace["organization"]["plan"] {
-  if (
-    value === "coach" ||
-    value === "small-club" ||
-    value === "club" ||
-    value === "multi-venue"
-  ) {
+  if (value === "multi-venue") return "club";
+  if (value === "coach" || value === "small-club" || value === "club") {
     return value;
   }
   return "coach";
@@ -792,10 +788,14 @@ export function loadDemoOperatorWorkspace(
       slug: "beach-elite-vb-academy",
       plan: plan(demoOrganization.plan),
       effectivePlan: "club",
+      volleyballTypes: ["beach"],
       planSubscriptionStatus: "active",
       planBillingInterval: "month",
       planCancelAtPeriodEnd: false,
       billingPortalAvailable: false,
+      videoUploadAddonSeconds: 0,
+      videoLiveAddonSeconds: 0,
+      videoPaygEnabled: false,
       commission: {
         organizationId: demoOrganization.id,
         configuredPlan: "club",
@@ -1939,6 +1939,10 @@ export async function loadOperatorWorkspace(
       plan: plan(organization.plan),
       effectivePlan:
         resolveOrganizationCommissionPolicy(organization).effectivePlan,
+      volleyballTypes: organization.volleyballTypes.filter(
+        (type): type is "beach" | "indoor" =>
+          type === "beach" || type === "indoor",
+      ),
       planSubscriptionStatus:
         resolveOrganizationCommissionPolicy(organization).subscriptionStatus,
       planBillingInterval:
@@ -1950,6 +1954,9 @@ export async function loadOperatorWorkspace(
         organization.planCurrentPeriodEndsAt?.toISOString(),
       planCancelAtPeriodEnd: organization.planCancelAtPeriodEnd,
       billingPortalAvailable: Boolean(organization.stripeBillingCustomerId),
+      videoUploadAddonSeconds: organization.videoUploadAddonSeconds,
+      videoLiveAddonSeconds: organization.videoLiveAddonSeconds,
+      videoPaygEnabled: organization.videoPaygEnabled,
       commission: resolveOrganizationCommissionPolicy(organization),
       currency: currency(organization.currency),
       timezone: organization.timezone,

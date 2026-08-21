@@ -1,6 +1,6 @@
 import type { OrganizationSummary } from "@duna/core";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
-import { DunaMark } from "@duna/ui";
+import { DunaActionTrigger, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import {
   type ProductNavigationSlug,
 } from "./navigation";
 import { AuthControls } from "./auth-controls";
+import { DunaActionCenter } from "./duna-action-center";
 import { OrganizationSwitcher } from "./organization-switcher";
 
 export async function OperatorShell({
@@ -112,19 +113,19 @@ export async function OperatorShell({
             plan={organization.plan}
             workspaces={workspaces.organizations}
           />
-          <label className="hq-search">
+          <DunaActionTrigger
+            className="hq-search hq-search--trigger"
+            panel="search"
+          >
             <Search aria-hidden size={17} />
-            <input
-              aria-label="Search Duna HQ"
-              placeholder="Search people, events, payments…"
-            />
+            <span>Search people, events, payments…</span>
             <kbd>⌘ K</kbd>
-          </label>
+          </DunaActionTrigger>
           <div>
             <ThemeToggle />
-            <Link className="hq-ai-button" href="/ai">
+            <DunaActionTrigger className="hq-ai-button" panel="chat">
               <Sparkles aria-hidden size={16} /> Duna AI
-            </Link>
+            </DunaActionTrigger>
             <button aria-label="Notifications" className="icon-button">
               <Bell aria-hidden size={18} />
               <i />
@@ -138,6 +139,7 @@ export async function OperatorShell({
         </header>
         <div className="hq-content">{children}</div>
       </div>
+      <DunaActionCenter />
     </div>
   );
 }

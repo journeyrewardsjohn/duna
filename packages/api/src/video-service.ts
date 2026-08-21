@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   MEMBERSHIP_PLANS,
   ORGANIZATION_PLANS,
+  freePlanVideoBonus,
+  incrementalVideoOverageSeconds,
+  netCollectedOrganizationFeeMinor,
   type MembershipPlanId,
   type PersonRole,
   type PersonSummary,
@@ -14,6 +17,7 @@ import {
   matches,
   organizationMemberships,
   organizations,
+  paymentFundSchedules,
   people,
   ratings,
   registrations,
@@ -40,6 +44,7 @@ import {
   ilike,
   inArray,
   isNull,
+  lt,
   or,
   sql,
   type SQL,
@@ -57,6 +62,7 @@ import type {
 import { courtCalibrationSchema } from "./contracts";
 import { getDunaPlusEntitlement } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
+import { recordOrganizationVideoMeterEvent } from "./payments";
 import { loadPublicMatchScoringState } from "./match-service";
 import { loadHealthVideoOverlay } from "./health-service";
 import {
@@ -447,9 +453,27 @@ async function loadQuotaPolicy(
 ): Promise<VideoQuotaLimits> {
   const database = getDatabase();
   if (organizationId) {
-    const organization = await database.query.organizations.findFirst({
-      where: eq(organizations.id, organizationId),
-    });
+    const { startsAt, endsAt } = monthBounds(now);
+    const [organization, feeRows] = await Promise.all([
+      database.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
+      }),
+      database
+        .select({
+          grossMinor: paymentFundSchedules.grossMinor,
+          organizationFeeMinor: paymentFundSchedules.organizationFeeMinor,
+          refundedMinor: paymentFundSchedules.refundedMinor,
+          disputedMinor: paymentFundSchedules.disputedMinor,
+        })
+        .from(paymentFundSchedules)
+        .where(
+          and(
+            eq(paymentFundSchedules.organizationId, organizationId),
+            gte(paymentFundSchedules.createdAt, startsAt),
+            lt(paymentFundSchedules.createdAt, endsAt),
+          ),
+        ),
+    ]);
     if (!organization) {
       throw new VideoServiceError(
         "VIDEO_NOT_FOUND",
@@ -459,11 +483,25 @@ async function loadQuotaPolicy(
     const effectivePlan =
       resolveOrganizationCommissionPolicy(organization).effectivePlan;
     const plan = ORGANIZATION_PLANS[effectivePlan];
+    const feesCollectedMinor = feeRows.reduce(
+      (sum, row) => sum + netCollectedOrganizationFeeMinor(row),
+      0,
+    );
+    const earnedBonus =
+      effectivePlan === "coach"
+        ? freePlanVideoBonus(feesCollectedMinor)
+        : { uploadSeconds: 0, liveSeconds: 0 };
     return {
-      monthlyLiveSeconds: plan.monthlyLiveSeconds,
-      monthlyUploadSeconds: plan.monthlyUploadSeconds,
-      enforceLiveLimit: true,
-      enforceUploadLimit: true,
+      monthlyLiveSeconds:
+        plan.monthlyLiveSeconds +
+        organization.videoLiveAddonSeconds +
+        earnedBonus.liveSeconds,
+      monthlyUploadSeconds:
+        plan.monthlyUploadSeconds +
+        organization.videoUploadAddonSeconds +
+        earnedBonus.uploadSeconds,
+      enforceLiveLimit: !organization.videoPaygEnabled,
+      enforceUploadLimit: !organization.videoPaygEnabled,
     };
   }
   const [personPolicy, globalPolicy, entitlement] = await Promise.all([
@@ -561,6 +599,7 @@ export async function loadVideoUsage(
       usedSeconds: liveSeconds,
       limitSeconds: policy.monthlyLiveSeconds,
       remainingSeconds: liveRemaining,
+      overageSeconds: Math.max(0, liveSeconds - policy.monthlyLiveSeconds),
       enforced: policy.enforceLiveLimit,
     },
     uploads: {
@@ -571,6 +610,44 @@ export async function loadVideoUsage(
       enforced: policy.enforceUploadLimit,
     },
   };
+}
+
+async function reportOrganizationVideoOverage(input: {
+  readonly organizationId?: string | null;
+  readonly personId: string;
+  readonly kind: "upload" | "live";
+  readonly completedSeconds: number;
+  readonly videoId: string;
+  readonly now: Date;
+}): Promise<void> {
+  if (!input.organizationId || input.completedSeconds <= 0) return;
+  const organization = await getDatabase().query.organizations.findFirst({
+    where: eq(organizations.id, input.organizationId),
+  });
+  if (
+    !organization?.videoPaygEnabled ||
+    !organization.stripeBillingCustomerId
+  ) {
+    return;
+  }
+  const usage = await loadVideoUsage(
+    input.personId,
+    input.now,
+    input.organizationId,
+  );
+  const meter = input.kind === "upload" ? usage.uploads : usage.live;
+  const overageSeconds = incrementalVideoOverageSeconds({
+    usedSeconds: meter.usedSeconds,
+    includedSeconds: meter.limitSeconds,
+    completedSeconds: input.completedSeconds,
+  });
+  await recordOrganizationVideoMeterEvent({
+    customerId: organization.stripeBillingCustomerId,
+    kind: input.kind,
+    overageSeconds,
+    videoId: input.videoId,
+    occurredAt: input.now,
+  });
 }
 
 export async function loadVideoStudio(
@@ -1219,6 +1296,14 @@ export async function finishLiveVideo(input: {
       ipAddress: input.ipAddress,
       now: input.now,
     }),
+    reportOrganizationVideoOverage({
+      organizationId: video.organizationId,
+      personId: input.actor.personId,
+      kind: "live",
+      completedSeconds: durationSeconds ?? 0,
+      videoId: video.id,
+      now: input.now,
+    }),
   ]);
   return loadVideoSummary(video.id);
 }
@@ -1691,6 +1776,14 @@ export async function completeVideoUpload(input: {
       reason: `Completed direct R2 upload (${video.bytes} bytes).`,
       requestId: input.requestId,
       ipAddress: input.ipAddress,
+      now: input.now,
+    }),
+    reportOrganizationVideoOverage({
+      organizationId: video.organizationId,
+      personId: input.actor.personId,
+      kind: "upload",
+      completedSeconds: video.durationSeconds ?? 0,
+      videoId: video.id,
       now: input.now,
     }),
   ]);

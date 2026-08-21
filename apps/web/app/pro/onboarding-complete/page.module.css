@@ -1,0 +1,92 @@
+.page {
+  align-items: center;
+  background:
+    radial-gradient(circle at 12% 10%, rgb(191 215 218 / 55%), transparent 32%),
+    linear-gradient(145deg, #f5f2e9, #ffffff);
+  display: flex;
+  justify-content: center;
+  min-height: 100svh;
+  padding: 1rem;
+}
+
+.card {
+  background: rgb(255 255 255 / 88%);
+  border: 1px solid rgb(24 42 49 / 12%);
+  border-radius: 28px;
+  box-shadow: 0 28px 70px rgb(23 43 50 / 12%);
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  max-width: 560px;
+  padding: clamp(1.5rem, 6vw, 3.5rem);
+  text-align: center;
+}
+
+.card header {
+  align-items: center;
+  color: #253841;
+  display: flex;
+  font-weight: 900;
+  gap: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.icon {
+  align-items: center;
+  background: #e8efd9;
+  border-radius: 50%;
+  color: #45636c;
+  display: flex;
+  height: 58px;
+  justify-content: center;
+  margin-top: 0.5rem;
+  width: 58px;
+}
+
+.eyebrow {
+  color: #55717a !important;
+  font-size: 0.75rem !important;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.card h1 {
+  color: #17282f;
+  font-size: clamp(2rem, 8vw, 3.6rem);
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+  margin: 0;
+}
+
+.card p {
+  color: #617078;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.primary,
+.secondary {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-weight: 850;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.75rem 1.25rem;
+  text-decoration: none;
+  width: 100%;
+}
+
+.primary {
+  background: #355e69;
+  color: white;
+  margin-top: 0.5rem;
+}
+
+.secondary {
+  border: 1px solid rgb(24 42 49 / 18%);
+  color: #355e69;
+}

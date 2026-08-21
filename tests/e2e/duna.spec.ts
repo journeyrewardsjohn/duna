@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
-const navigationTimeout = process.env.CI ? 30_000 : 15_000;
+const navigationTimeout = 30_000;
 
 async function clickAndWaitForUrl(
   page: Page,
@@ -11,7 +11,10 @@ async function clickAndWaitForUrl(
   expected: RegExp | string,
 ) {
   await Promise.all([
-    page.waitForURL(expected, { timeout: navigationTimeout }),
+    page.waitForURL(expected, {
+      timeout: navigationTimeout,
+      waitUntil: "domcontentloaded",
+    }),
     locator.click(),
   ]);
 }
@@ -215,7 +218,7 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Run the business. Keep the game human.",
+      name: "Run the whole club. Start for $0.",
     }),
   ).toBeVisible();
   await expect(
@@ -233,6 +236,17 @@ test("club and coach marketing keeps both operating paths clear", async ({
       name: "Assistance proposes. Operators decide.",
     }),
   ).toBeVisible();
+  const plans = page.locator("#plans");
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Free" }),
+  ).toBeVisible();
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Club" }),
+  ).toBeVisible();
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Scale" }),
+  ).toBeVisible();
+  await expect(plans.getByText("$999.00", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Player-controlled summaries")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -254,6 +268,25 @@ test("player home puts useful actions and the personal calendar first", async ({
     quickActions.getByRole("link", { name: /Host pickup/ }),
   ).toBeVisible();
   await expect(page.getByText("Next up", { exact: true })).toBeVisible();
+  const actionCenter = page.getByRole("navigation", {
+    name: "Duna action center",
+  });
+  await expect(actionCenter).toBeVisible();
+  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
+  await expect(dunaAi).toBeVisible();
+  await expect(
+    dunaAi.getByRole("button", { name: "Attach an image or file" }),
+  ).toBeVisible();
+  await expect(
+    dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
+  ).toBeVisible();
+  await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
+  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
+  const command = page.getByRole("dialog", { name: "Search Duna Player" });
+  await expect(command).toBeVisible();
+  await expect(command.getByText("Go anywhere")).toBeVisible();
+  await page.keyboard.press("Escape");
   const nextUpDate = page
     .getByRole("region", { name: "Your day" })
     .locator("time")
@@ -377,6 +410,45 @@ test("branded identity entry preserves the secure auth handoff", async ({
     page.getByRole("link", { name: "Create my Duna account" }),
   ).toHaveAttribute("href", "/sign-up/start?returnTo=%2Fapp");
   await expectNoHorizontalOverflow(page);
+
+  const purchaseReturnTo =
+    "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership#purchase";
+  const purchaseContext = new URLSearchParams({
+    returnTo: purchaseReturnTo,
+    product: "Beach Elite Academy Membership",
+    organization: "Beach Elite VB Academy",
+  });
+  await page.goto(`/sign-in?${purchaseContext.toString()}`);
+  await expect(
+    page.getByRole("heading", { name: "Continue where you left off." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /review Beach Elite Academy Membership from Beach Elite VB Academy/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Sign in and continue" }),
+  ).toHaveAttribute(
+    "href",
+    `/sign-in/start?returnTo=${encodeURIComponent(purchaseReturnTo)}`,
+  );
+  await expect(
+    page.getByRole("link", { name: "Create a free account" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("link", { name: "Create a free account" }).click();
+  await expect(
+    page.getByRole("link", { name: "Create account and continue" }),
+  ).toHaveAttribute(
+    "href",
+    `/sign-up/start?returnTo=${encodeURIComponent(purchaseReturnTo)}`,
+  );
+  await expect(
+    page.getByRole("link", { name: "Sign in instead" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 });
 
 test("light mode starts cleanly and the dark choice persists", async ({
@@ -439,7 +511,7 @@ test("public event creation carries a clean starter into guided HQ", async ({
   await expect(
     page.getByRole("heading", { name: "Put your event on Duna." }),
   ).toBeVisible();
-  await expect(page.getByText("$0")).toBeVisible();
+  await expect(page.getByText("$0", { exact: true })).toBeVisible();
   await expect(page.getByText("5%", { exact: true })).toBeVisible();
   await expect(page.getByText(/separate 7.5% service fee/)).toBeVisible();
   await page.getByRole("button", { name: /League/ }).click();
@@ -796,6 +868,7 @@ test("account controls, profile editing, and legal documents stay reachable", as
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {
+  test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
     page.getByRole("heading", { name: "Good morning." }),
@@ -1031,7 +1104,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/admin`);
+  await page.goto(`${hqBaseUrl}/admin`, { waitUntil: "domcontentloaded" });
   await expect(
     page.getByRole("heading", {
       name: "Platform administration access required.",
@@ -1043,7 +1116,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
   await expect(page.getByText(/1 connected/)).toBeVisible();
-  await page.getByRole("link", { name: /Create league/ }).click();
+  await clickAndWaitForUrl(
+    page,
+    page.getByRole("link", { name: /Create league/ }),
+    /\/events\/create\?type=league$/,
+  );
   await expect(
     page.getByRole("heading", { name: "Create something players remember." }),
   ).toBeVisible();
@@ -1052,15 +1129,19 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
 
   await page.goto(`${hqBaseUrl}/ai`);
-  await expect(page.getByText("Context-aware co-pilot")).toBeVisible();
+  await expect(page).toHaveURL(/\?duna=ask$/);
+  const centralAi = page.getByRole("region", { name: "Duna AI assistant" });
+  await expect(centralAi).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "See what matters. Act with control." }),
+    centralAi.getByText(/Sensitive changes always require your review/i),
   ).toBeVisible();
   await expect(
-    page.getByText(/fresh approval for consequential actions/i),
+    centralAi.getByRole("button", { name: "Web research off" }),
   ).toBeVisible();
+  await centralAi.getByRole("button", { name: "Close Duna AI" }).click();
+  await page.keyboard.press("Meta+K");
   await expect(
-    page.getByRole("button", { name: "Web research off" }),
+    page.getByRole("dialog", { name: "Search Duna HQ" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

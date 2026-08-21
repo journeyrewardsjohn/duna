@@ -81,12 +81,15 @@ The launch plan allowances are:
 - Premium+: 30 uploaded-video hours and 8 live-broadcast hours.
 
 Organization-scoped capture uses a separate pooled meter tied to the effective
-Duna HQ plan: Coach & Organizer includes 4 upload / 2 live hours, Club 100 / 10,
-Facility 500 / 40, and Network 1,000 / 100. Videos created in an organization
-context carry the organization id and do not consume the individual player’s
-meter.
+Duna HQ plan: Free includes 10 upload / 2 live hours, Club 100 / 10, and Scale
+500 / 40. Free organizations earn another 10 upload / 2 live hours for every
+$40 in net organization fees collected that month. Recurring add-on packs
+increase the included meter; PAYG reports only completed seconds above that
+allowance to Stripe Billing. Videos created in an organization context carry
+the organization id and do not consume the individual player’s meter.
 
-Both meters reset at the beginning of each UTC calendar month and are enforced.
+Both meters reset at the beginning of each UTC calendar month and are enforced
+unless the organization explicitly enables PAYG.
 Super Admin can set platform safety ceilings or a person-specific override. The
 default ceilings are 30 upload hours and 8 live hours so they do not reduce any
 launch plan.

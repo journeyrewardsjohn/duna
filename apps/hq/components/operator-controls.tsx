@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
-import { formatMoney } from "@duna/core";
+import { COURT_SURFACE_OPTIONS, formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
@@ -885,6 +885,13 @@ function VenueComposer({
               required
             />
           </label>
+          <label>
+            <span>Venue setting</span>
+            <select defaultValue="outdoor" name="environment" required>
+              <option value="indoor">Indoor</option>
+              <option value="outdoor">Outdoor</option>
+            </select>
+          </label>
           <label className="operator-field--wide">
             <span>Player-facing description</span>
             <textarea
@@ -1143,10 +1150,11 @@ export function CourtComposer({
                   value={surface}
                   onChange={(event) => setSurface(event.target.value)}
                 >
-                  <option value="sand">Sand</option>
-                  <option value="grass">Grass</option>
-                  <option value="indoor-sand">Indoor sand</option>
-                  <option value="hardcourt">Hardcourt</option>
+                  {COURT_SURFACE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>

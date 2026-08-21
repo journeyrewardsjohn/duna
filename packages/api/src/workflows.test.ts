@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   connectAccountMoneyReady,
+  organizationVideoCapacityForSubscription,
   retryDelayMilliseconds,
   stripeSubscriptionItemPriceId,
 } from "./workflows";
@@ -100,5 +101,32 @@ describe("Stripe subscription item mapping", () => {
     expect(
       stripeSubscriptionItemPriceId({ price: { id: "price_service_fee" } }),
     ).toBe("price_service_fee");
+  });
+
+  it("activates paid video capacity only after the subscription is active", () => {
+    expect(
+      organizationVideoCapacityForSubscription({
+        status: "incomplete",
+        uploadPackQuantity: 2,
+        livePackQuantity: 3,
+        payAsYouGo: true,
+      }),
+    ).toEqual({
+      uploadAddonSeconds: 0,
+      liveAddonSeconds: 0,
+      payAsYouGo: false,
+    });
+    expect(
+      organizationVideoCapacityForSubscription({
+        status: "active",
+        uploadPackQuantity: 2,
+        livePackQuantity: 3,
+        payAsYouGo: true,
+      }),
+    ).toEqual({
+      uploadAddonSeconds: 20 * 60 * 60,
+      liveAddonSeconds: 6 * 60 * 60,
+      payAsYouGo: true,
+    });
   });
 });

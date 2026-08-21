@@ -1,14 +1,29 @@
 import { BrandedAuthEntry } from "@/components/branded-auth-entry";
+import { catalogPurchaseAuthContext } from "@/lib/catalog-auth";
 
-function safeReturnTo(value?: string): string {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/app";
+function safeReturnTo(value?: string | readonly string[]): string {
+  return typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//")
+    ? value
+    : "/app";
 }
 
 export default async function SignInPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ readonly returnTo?: string }>;
+  readonly searchParams: Promise<{
+    readonly returnTo?: string | readonly string[];
+    readonly product?: string | readonly string[];
+    readonly organization?: string | readonly string[];
+  }>;
 }) {
-  const { returnTo } = await searchParams;
-  return <BrandedAuthEntry mode="sign-in" returnTo={safeReturnTo(returnTo)} />;
+  const { returnTo, product, organization } = await searchParams;
+  return (
+    <BrandedAuthEntry
+      mode="sign-in"
+      purchaseContext={catalogPurchaseAuthContext({ product, organization })}
+      returnTo={safeReturnTo(returnTo)}
+    />
+  );
 }

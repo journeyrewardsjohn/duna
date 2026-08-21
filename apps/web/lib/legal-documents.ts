@@ -376,7 +376,9 @@ export const legalDocuments: readonly LegalDocument[] = [
         title: "2. Plans, trials, fees, and changes",
         paragraphs: [
           "The selected plan, included features, usage limits, monthly or annual fee, transaction fees, and any promotional period are shown at signup or in an order form. Paid plans renew until cancelled. Taxes are additional unless stated otherwise. Duna may change future pricing with advance notice; changes apply at the next renewal or as permitted in the order form.",
-          "Custom multi-venue, data, implementation, support, or payment terms require a signed order form. If an order form conflicts with these HQ Terms, the order form controls for that purchase.",
+          "Duna HQ Free has no monthly software fee and includes all product features, subject to video allowances. It carries a 5% organization transaction fee in addition to payment processing. Club carries a 2.5% organization transaction fee, and Scale carries no organization transaction fee. Current prices and video allowances appear at signup and in billing settings.",
+          "Free-plan video bonuses are based on net organization transaction fees collected in the applicable month. Recurring video add-ons and pay-as-you-go overages are billed at the displayed rates. Refunds and disputes may reduce earned allowances or create billing adjustments.",
+          "Custom data, implementation, support, or payment terms require a signed order form. If an order form conflicts with these HQ Terms, the order form controls for that purchase.",
         ],
       },
       {

@@ -1,4 +1,10 @@
-import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
+import {
+  formatMoney,
+  ORGANIZATION_PLANS,
+  ORGANIZATION_VIDEO_ADD_ONS,
+  ORGANIZATION_VIDEO_RATES,
+} from "@duna/core";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import type { Metadata } from "next";
 import { RunYourBusinessPage } from "@/components/run-your-business-page";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
@@ -6,19 +12,24 @@ import { DUNA_HQ_URL } from "@/lib/site-urls";
 export const metadata: Metadata = {
   title: "Duna for clubs and coaches",
   description:
-    "Run a coaching business or a growing beach volleyball club with scheduling, courts, staff, parents, memberships, payments, marketing, video, and reporting in Duna HQ.",
+    "Run an indoor, beach, or combined volleyball organization with every Duna HQ feature for $0 per month, then pay only when you transact or use more video.",
   alternates: {
     canonical: "/run-your-club",
     types: { "text/markdown": "/run-your-club.md" },
   },
   openGraph: {
-    title: "Run your coaching business or club on Duna",
+    title: "Run your entire volleyball organization for $0 per month",
     description:
-      "One operating system for independent coaches, growing clubs, facilities, and multi-venue networks.",
+      "Every Duna HQ feature for indoor and beach clubs, with transparent transaction fees and flexible video usage.",
     images: ["/media/brand/duna-club-hero-v1.webp"],
     type: "website",
   },
 };
+
+function signupHref(planId: string): string {
+  const returnTo = `/onboarding?plan=${planId}&source=run-your-club`;
+  return `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent(returnTo)}`;
+}
 
 const plans = Object.values(ORGANIZATION_PLANS).map((plan) => ({
   id: plan.id,
@@ -31,7 +42,27 @@ const plans = Object.values(ORGANIZATION_PLANS).map((plan) => ({
   monthlyUploadHours: plan.monthlyUploadSeconds / 60 / 60,
   monthlyLiveHours: plan.monthlyLiveSeconds / 60 / 60,
   features: plan.features,
+  signupHref: signupHref(plan.id),
 }));
+
+const videoPricing = {
+  uploadHourly: formatMoney(
+    ORGANIZATION_VIDEO_RATES.upload.customerPriceMinor,
+    "USD",
+  ),
+  liveHourly: formatMoney(
+    ORGANIZATION_VIDEO_RATES.live.customerPriceMinor,
+    "USD",
+  ),
+  uploadPack: formatMoney(
+    ORGANIZATION_VIDEO_ADD_ONS.upload.monthlyPriceMinor,
+    "USD",
+  ),
+  livePack: formatMoney(
+    ORGANIZATION_VIDEO_ADD_ONS.live.monthlyPriceMinor,
+    "USD",
+  ),
+};
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -42,7 +73,7 @@ const structuredData = {
       url: "https://duna.coach/run-your-club",
       name: "Duna for clubs and coaches",
       description:
-        "Duna HQ is an operating system for independent coaches, clubs, facilities, and multi-venue beach volleyball organizations.",
+        "Duna HQ is the operating system for indoor, beach, and combined volleyball organizations.",
       inLanguage: "en-US",
       isPartOf: { "@id": "https://duna.coach/#website" },
       mainEntity: { "@id": "https://duna.coach/run-your-club#software" },
@@ -68,7 +99,7 @@ const structuredData = {
         name: plan.productName,
         price: (plan.monthlyPriceMinor / 100).toFixed(2),
         priceCurrency: "USD",
-        url: DUNA_HQ_URL,
+        url: signupHref(plan.id),
       })),
     },
   ],
@@ -83,7 +114,12 @@ export default function RunYourClubPage() {
         }}
         type="application/ld+json"
       />
-      <RunYourBusinessPage hqHref={DUNA_HQ_URL} plans={plans} />
+      <RunYourBusinessPage
+        authConfigured={isWorkOSAuthKitConfigured()}
+        hqHref={signupHref("coach")}
+        plans={plans}
+        videoPricing={videoPricing}
+      />
     </>
   );
 }

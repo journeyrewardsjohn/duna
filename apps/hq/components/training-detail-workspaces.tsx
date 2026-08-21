@@ -359,6 +359,7 @@ export function TrainingProgramDetail({
             contentId={program.id}
             kind="program"
             status={program.status}
+            timezone={program.timezone}
             versions={versions}
           />
         </aside>

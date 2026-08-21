@@ -4,6 +4,12 @@ import {
   type WorkOSMobileOrganization,
 } from "@duna/mobile-auth";
 import {
+  ORGANIZATION_PLAN_IDS,
+  ORGANIZATION_PLANS,
+  type OrganizationPlanId,
+} from "@duna/core";
+import * as WebBrowser from "expo-web-browser";
+import {
   createContext,
   useCallback,
   useContext,
@@ -12,7 +18,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import Svg, { Line, Path } from "react-native-svg";
 import {
   createSessionNoteRoom,
@@ -141,6 +154,241 @@ function CenteredState({
   );
 }
 
+function WelcomeState({
+  error,
+  signIn,
+  signUp,
+}: {
+  readonly error?: string;
+  readonly signIn: () => Promise<void>;
+  readonly signUp: () => Promise<void>;
+}) {
+  return (
+    <ScrollView
+      contentContainerStyle={runtimeStyles.welcome}
+      style={runtimeStyles.auth}
+    >
+      <View style={runtimeStyles.wordmarkRow}>
+        <RuntimeMark />
+        <Text style={runtimeStyles.wordmark}>DUNA</Text>
+        <Text style={runtimeStyles.pro}>PRO</Text>
+      </View>
+      <Text style={runtimeStyles.kicker}>YOUR CLUB. ONE OPERATING SYSTEM.</Text>
+      <Text style={runtimeStyles.welcomeTitle}>
+        Run indoor and beach volleyball from anywhere.
+      </Text>
+      <Text style={runtimeStyles.welcomeBody}>
+        Schedule, sell, message, staff, stream, and understand the whole club.
+        Every Duna feature starts at $0 per month.
+      </Text>
+      <View style={runtimeStyles.featureGrid}>
+        {[
+          "Unlimited players and staff",
+          "Programs, memberships, and payments",
+          "Courts, schedules, video, and insights",
+          "10 upload + 2 live hours included",
+        ].map((feature) => (
+          <View key={feature} style={runtimeStyles.featureCard}>
+            <Text style={runtimeStyles.featureCheck}>✓</Text>
+            <Text style={runtimeStyles.featureText}>{feature}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={runtimeStyles.freePlanCallout}>
+        <Text style={runtimeStyles.freePlanPrice}>$0</Text>
+        <View style={runtimeStyles.freePlanCopy}>
+          <Text style={runtimeStyles.freePlanTitle}>
+            Start with every feature
+          </Text>
+          <Text style={runtimeStyles.freePlanBody}>
+            Stripe processing plus a 5% organization transaction fee.
+          </Text>
+        </View>
+      </View>
+      {error && <Text style={runtimeStyles.errorText}>{error}</Text>}
+      <Pressable
+        onPress={() => void signUp()}
+        style={runtimeStyles.primaryButton}
+      >
+        <Text style={runtimeStyles.primaryButtonText}>
+          Get Started for Free
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => void signIn()}
+        style={runtimeStyles.secondaryButton}
+      >
+        <Text style={runtimeStyles.secondaryButtonText}>
+          I already use Duna
+        </Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+function OrganizationOnboarding({
+  createOrganization,
+  error,
+  signOut,
+}: {
+  readonly createOrganization: ReturnType<
+    typeof useWorkOSMobileAuth
+  >["createOrganization"];
+  readonly error?: string;
+  readonly signOut: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [plan, setPlan] = useState<OrganizationPlanId>("coach");
+  const [clubType, setClubType] = useState<"beach" | "indoor" | "both">(
+    "beach",
+  );
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string>();
+  const submit = async () => {
+    if (name.trim().length < 2 || !termsAccepted) {
+      setLocalError("Add your club name and accept the terms to continue.");
+      return;
+    }
+    setBusy(true);
+    setLocalError(undefined);
+    try {
+      const created = await createOrganization({
+        name: name.trim(),
+        plan,
+        termsAccepted,
+        volleyballTypes: clubType === "both" ? ["beach", "indoor"] : [clubType],
+      });
+      if (created.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(created.checkoutUrl);
+      }
+    } catch (reason) {
+      setLocalError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna could not create your club.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <ScrollView
+      contentContainerStyle={runtimeStyles.onboarding}
+      keyboardShouldPersistTaps="handled"
+      style={runtimeStyles.auth}
+    >
+      <View style={runtimeStyles.wordmarkRow}>
+        <RuntimeMark />
+        <Text style={runtimeStyles.wordmark}>DUNA</Text>
+        <Text style={runtimeStyles.pro}>PRO</Text>
+      </View>
+      <Text style={runtimeStyles.kicker}>CREATE YOUR WORKSPACE</Text>
+      <Text style={runtimeStyles.welcomeTitle}>What are you building?</Text>
+      <Text style={runtimeStyles.welcomeBody}>
+        Select the club you run today. You can change this in Settings later.
+      </Text>
+      <Text style={runtimeStyles.fieldLabel}>Club or organization name</Text>
+      <TextInput
+        autoCapitalize="words"
+        onChangeText={setName}
+        placeholder="Beach Elite Volleyball"
+        placeholderTextColor="#7b8790"
+        style={runtimeStyles.textInput}
+        value={name}
+      />
+      <Text style={runtimeStyles.fieldLabel}>Volleyball program</Text>
+      <View style={runtimeStyles.choiceRow}>
+        {(["beach", "indoor", "both"] as const).map((value) => (
+          <Pressable
+            key={value}
+            onPress={() => setClubType(value)}
+            style={[
+              runtimeStyles.choice,
+              clubType === value && runtimeStyles.choiceSelected,
+            ]}
+          >
+            <Text
+              style={[
+                runtimeStyles.choiceText,
+                clubType === value && runtimeStyles.choiceTextSelected,
+              ]}
+            >
+              {value[0]!.toUpperCase() + value.slice(1)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={runtimeStyles.fieldLabel}>Plan</Text>
+      <View style={runtimeStyles.planList}>
+        {ORGANIZATION_PLAN_IDS.map((planId) => {
+          const definition = ORGANIZATION_PLANS[planId];
+          return (
+            <Pressable
+              key={planId}
+              onPress={() => setPlan(planId)}
+              style={[
+                runtimeStyles.nativePlan,
+                plan === planId && runtimeStyles.nativePlanSelected,
+              ]}
+            >
+              <View style={runtimeStyles.nativePlanHeading}>
+                <Text style={runtimeStyles.nativePlanName}>
+                  {definition.name}
+                </Text>
+                <Text style={runtimeStyles.nativePlanPrice}>
+                  {definition.monthlyPriceMinor === 0
+                    ? "$0"
+                    : `$${definition.monthlyPriceMinor / 100}`}
+                  /mo
+                </Text>
+              </View>
+              <Text style={runtimeStyles.nativePlanBody}>
+                {definition.defaultCommissionBps / 100}% organization fee ·{" "}
+                {definition.monthlyUploadSeconds / 3_600} upload /{" "}
+                {definition.monthlyLiveSeconds / 3_600} live hours
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Pressable
+        onPress={() => setTermsAccepted((value) => !value)}
+        style={runtimeStyles.termsRow}
+      >
+        <Text style={runtimeStyles.checkbox}>{termsAccepted ? "✓" : ""}</Text>
+        <Text style={runtimeStyles.termsText}>
+          I agree to the Duna HQ Terms and Privacy Policy.
+        </Text>
+      </Pressable>
+      {(localError || error) && (
+        <Text style={runtimeStyles.errorText}>{localError ?? error}</Text>
+      )}
+      <Pressable
+        disabled={busy}
+        onPress={() => void submit()}
+        style={runtimeStyles.primaryButton}
+      >
+        {busy ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <Text style={runtimeStyles.primaryButtonText}>
+            {plan === "coach" ? "Create My Free Club" : "Create & Continue"}
+          </Text>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={() => void signOut()}
+        style={runtimeStyles.secondaryButton}
+      >
+        <Text style={runtimeStyles.secondaryButtonText}>
+          Use another account
+        </Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
 function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const {
     error: authError,
@@ -149,8 +397,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     isSignedIn,
     organizationId,
     organizations,
+    createOrganization,
     selectOrganization,
     signIn,
+    signUp,
     signOut,
   } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
@@ -232,25 +482,14 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     );
   }
   if (!isSignedIn) {
-    return (
-      <CenteredState
-        action="Sign in"
-        body={
-          authError ??
-          "Use your secure Duna identity to open the organization workspace."
-        }
-        onAction={() => void signIn()}
-        title="Run your day from anywhere"
-      />
-    );
+    return <WelcomeState error={authError} signIn={signIn} signUp={signUp} />;
   }
   if (!organizationId) {
     return (
-      <CenteredState
-        action="Sign out"
-        body="Your Duna identity is valid, but it has not been invited to a club or coaching organization."
-        onAction={() => void safeSignOut()}
-        title="Club access required"
+      <OrganizationOnboarding
+        createOrganization={createOrganization}
+        error={authError}
+        signOut={safeSignOut}
       />
     );
   }
@@ -373,6 +612,108 @@ const runtimeStyles = StyleSheet.create({
     paddingVertical: 14,
   },
   buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  checkbox: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#b4bcc2",
+    borderRadius: 6,
+    borderWidth: 1,
+    color: "#3d6672",
+    fontSize: 14,
+    fontWeight: "900",
+    height: 24,
+    lineHeight: 22,
+    textAlign: "center",
+    width: 24,
+  },
+  choice: {
+    alignItems: "center",
+    borderColor: "#d9dddf",
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  choiceRow: { flexDirection: "row", gap: 8 },
+  choiceSelected: { backgroundColor: "#3d6672", borderColor: "#3d6672" },
+  choiceText: { color: "#596873", fontSize: 13, fontWeight: "800" },
+  choiceTextSelected: { color: "#ffffff" },
+  errorText: {
+    color: "#a54332",
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+  },
+  featureCard: {
+    alignItems: "flex-start",
+    backgroundColor: "#ffffff",
+    borderColor: "#e1e1dc",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    padding: 13,
+    width: "48.5%",
+  },
+  featureCheck: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
+  featureGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  featureText: { color: "#243039", flex: 1, fontSize: 12, lineHeight: 17 },
+  fieldLabel: { color: "#26343c", fontSize: 13, fontWeight: "800" },
+  freePlanBody: { color: "#657083", fontSize: 12, lineHeight: 17 },
+  freePlanCallout: {
+    alignItems: "center",
+    backgroundColor: "#edf2e2",
+    borderColor: "#cbd8a7",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 16,
+    padding: 16,
+  },
+  freePlanCopy: { flex: 1, gap: 3 },
+  freePlanPrice: {
+    color: "#26343c",
+    fontSize: 36,
+    fontWeight: "900",
+    letterSpacing: -1.5,
+  },
+  freePlanTitle: { color: "#26343c", fontSize: 14, fontWeight: "900" },
+  kicker: {
+    color: "#3d6672",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.7,
+    marginTop: 14,
+  },
+  nativePlan: {
+    backgroundColor: "#ffffff",
+    borderColor: "#dedfdc",
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 5,
+    padding: 14,
+  },
+  nativePlanBody: { color: "#657083", fontSize: 12, lineHeight: 17 },
+  nativePlanHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  nativePlanName: { color: "#1d2a31", fontSize: 15, fontWeight: "900" },
+  nativePlanPrice: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
+  nativePlanSelected: { borderColor: "#3d6672", borderWidth: 2 },
+  onboarding: { gap: 14, padding: 24, paddingBottom: 48 },
+  planList: { gap: 9 },
+  primaryButton: {
+    alignItems: "center",
+    backgroundColor: "#3d6672",
+    borderRadius: 15,
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 20,
+  },
+  primaryButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
   pro: {
     backgroundColor: "rgba(247,200,107,.12)",
     borderRadius: 6,
@@ -384,6 +725,16 @@ const runtimeStyles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
   },
+  secondaryButton: {
+    alignItems: "center",
+    borderColor: "#b9c2c6",
+    borderRadius: 15,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 50,
+    paddingHorizontal: 20,
+  },
+  secondaryButtonText: { color: "#3d6672", fontSize: 14, fontWeight: "800" },
   state: {
     alignItems: "center",
     backgroundColor: "#f6f5f1",
@@ -392,6 +743,18 @@ const runtimeStyles = StyleSheet.create({
     justifyContent: "center",
     padding: 28,
   },
+  termsRow: { alignItems: "flex-start", flexDirection: "row", gap: 10 },
+  termsText: { color: "#657083", flex: 1, fontSize: 12, lineHeight: 18 },
+  textInput: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d4d9db",
+    borderRadius: 13,
+    borderWidth: 1,
+    color: "#18252c",
+    fontSize: 15,
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
   title: {
     color: "#101a20",
     fontSize: 26,
@@ -399,6 +762,15 @@ const runtimeStyles = StyleSheet.create({
     letterSpacing: -0.7,
     marginTop: 10,
     textAlign: "center",
+  },
+  welcome: { gap: 16, padding: 24, paddingBottom: 48, paddingTop: 54 },
+  welcomeBody: { color: "#657083", fontSize: 15, lineHeight: 23 },
+  welcomeTitle: {
+    color: "#101a20",
+    fontSize: 34,
+    fontWeight: "900",
+    letterSpacing: -1.2,
+    lineHeight: 39,
   },
   wordmark: {
     color: "#101a20",

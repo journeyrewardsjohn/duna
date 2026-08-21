@@ -29,6 +29,7 @@ import {
 } from "@duna/db";
 import {
   isOrganizationPlanId,
+  ORGANIZATION_VIDEO_ADD_ONS,
   type MembershipSubscriptionPolicy,
 } from "@duna/core";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
@@ -49,10 +50,14 @@ import {
   processSandAutoApproveMatch,
 } from "./sand-data/service";
 import { connectAccountMoneyReady } from "./stripe-connect";
-import { synchronizeOrganizationFeeMetadata } from "./organization-billing";
+import {
+  organizationSubscriptionIsActive,
+  synchronizeOrganizationFeeMetadata,
+} from "./organization-billing";
 import {
   capCatalogInstallmentSubscription,
   organizationPlanForPriceId,
+  organizationVideoPriceKindForPriceId,
   ensureMembershipSubscriptionSchedule,
   getStripeClient,
   retrieveChargeSettlementAvailableAt,
@@ -141,6 +146,44 @@ export function stripeSubscriptionItemPriceId(
       : undefined;
 }
 
+function stripeSubscriptionItemQuantity(
+  item: Readonly<Record<string, unknown>>,
+): number {
+  return typeof item.quantity === "number" &&
+    Number.isSafeInteger(item.quantity)
+    ? Math.max(0, item.quantity)
+    : 0;
+}
+
+export function organizationVideoCapacityForSubscription(input: {
+  readonly status: string;
+  readonly uploadPackQuantity: number;
+  readonly livePackQuantity: number;
+  readonly payAsYouGo: boolean;
+}): {
+  readonly uploadAddonSeconds: number;
+  readonly liveAddonSeconds: number;
+  readonly payAsYouGo: boolean;
+} {
+  if (!organizationSubscriptionIsActive(input.status)) {
+    return {
+      uploadAddonSeconds: 0,
+      liveAddonSeconds: 0,
+      payAsYouGo: false,
+    };
+  }
+  return {
+    uploadAddonSeconds:
+      input.uploadPackQuantity *
+      ORGANIZATION_VIDEO_ADD_ONS.upload.hours *
+      60 *
+      60,
+    liveAddonSeconds:
+      input.livePackQuantity * ORGANIZATION_VIDEO_ADD_ONS.live.hours * 60 * 60,
+    payAsYouGo: input.payAsYouGo,
+  };
+}
+
 async function synchronizeOrganizationSubscription(input: {
   readonly object: Readonly<Record<string, unknown>>;
   readonly occurredAt: Date;
@@ -209,6 +252,21 @@ async function synchronizeOrganizationSubscription(input: {
       organizationPlanForPriceId(stripeSubscriptionItemPriceId(item) ?? "")
         ?.plan === selectedPlan,
   );
+  const videoItems = subscriptionItems.map((item) => ({
+    kind: organizationVideoPriceKindForPriceId(
+      stripeSubscriptionItemPriceId(item) ?? "",
+    ),
+    quantity: stripeSubscriptionItemQuantity(item),
+  }));
+  const uploadPackQuantity = videoItems
+    .filter((item) => item.kind === "upload-pack")
+    .reduce((sum, item) => sum + item.quantity, 0);
+  const livePackQuantity = videoItems
+    .filter((item) => item.kind === "live-pack")
+    .reduce((sum, item) => sum + item.quantity, 0);
+  const payAsYouGo =
+    videoItems.some((item) => item.kind === "upload-payg") &&
+    videoItems.some((item) => item.kind === "live-payg");
   const customer = input.object.customer;
   const customerId =
     typeof customer === "string"
@@ -217,6 +275,12 @@ async function synchronizeOrganizationSubscription(input: {
         ? String(customer.id)
         : organization.stripeBillingCustomerId;
   const status = optionalString(input.object, "status") ?? "unknown";
+  const videoCapacity = organizationVideoCapacityForSubscription({
+    status,
+    uploadPackQuantity,
+    livePackQuantity,
+    payAsYouGo,
+  });
   const currentPeriodStartsAt =
     unixDate(input.object.current_period_start) ??
     unixDate(selectedItem?.current_period_start);
@@ -236,6 +300,9 @@ async function synchronizeOrganizationSubscription(input: {
         planCurrentPeriodStartsAt: currentPeriodStartsAt,
         planCurrentPeriodEndsAt: currentPeriodEndsAt,
         planCancelAtPeriodEnd: input.object.cancel_at_period_end === true,
+        videoUploadAddonSeconds: videoCapacity.uploadAddonSeconds,
+        videoLiveAddonSeconds: videoCapacity.liveAddonSeconds,
+        videoPaygEnabled: videoCapacity.payAsYouGo,
         stripeFeeMetadataStatus: organization.stripeAccountId
           ? "pending"
           : "not-connected",

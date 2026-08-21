@@ -260,6 +260,9 @@ export async function startOrganizationPlanCheckout(input: {
   readonly actor: ApiActor;
   readonly plan: PaidOrganizationPlanId;
   readonly interval: OrganizationBillingInterval;
+  readonly uploadPackQuantity?: number;
+  readonly livePackQuantity?: number;
+  readonly payAsYouGo?: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
@@ -292,6 +295,9 @@ export async function startOrganizationPlanCheckout(input: {
     email: person?.email ?? undefined,
     plan: input.plan,
     interval: input.interval,
+    uploadPackQuantity: input.uploadPackQuantity,
+    livePackQuantity: input.livePackQuantity,
+    payAsYouGo: input.payAsYouGo,
     successUrl: input.successUrl,
     cancelUrl: input.cancelUrl,
     idempotencyKey: input.idempotencyKey,
@@ -313,7 +319,7 @@ export async function startOrganizationPlanCheckout(input: {
       action: "organization.plan_checkout_started",
       entityType: "organization",
       entityId: organization.id,
-      reason: `Started ${ORGANIZATION_PLANS[input.plan].name} ${input.interval} checkout.`,
+      reason: `Started ${ORGANIZATION_PLANS[input.plan].name} ${input.interval} checkout with ${input.uploadPackQuantity ?? 0} upload packs, ${input.livePackQuantity ?? 0} live packs, and pay as you go ${input.payAsYouGo ? "enabled" : "disabled"}.`,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

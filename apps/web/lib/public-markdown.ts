@@ -99,7 +99,7 @@ export const staticPublicPages = [
     path: "/run-your-club",
     title: "Duna for clubs and coaches",
     description:
-      "Run an independent coaching business or a growing beach volleyball club with scheduling, courts, staff, parents, memberships, payments, marketing, video, and reporting in Duna HQ.",
+      "Run an indoor, beach, or combined volleyball organization with every Duna HQ feature for $0 per month.",
     sections: [
       "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
       "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
@@ -107,7 +107,9 @@ export const staticPublicPages = [
       "Duna Vision is controlled per recording: players can help improve Duna Vision with de-identified setup and geometry signals while full video remains private and reviewed before any training use.",
       "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
       "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
-      "Current plans include a free Coach and Organizer plan plus paid Club, Facility, and Network plans. Live prices and eligibility are confirmed in Duna HQ.",
+      "Duna HQ Free includes every feature, 10 uploaded-video hours, and 2 live hours for $0 per month with a 5% organization transaction fee plus payment processing.",
+      "Duna HQ Club is $199 per month with a 2.5% organization transaction fee and 100 upload / 10 live hours. Duna HQ Scale is $499 per month with no organization transaction fee and 500 upload / 40 live hours.",
+      "Free organizations earn another 10 uploaded-video hours and 2 live hours for each $40 in organization transaction fees collected that month. Paid plans can add recurring video capacity or pay as they go.",
     ],
   },
   {

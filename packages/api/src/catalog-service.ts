@@ -5558,6 +5558,7 @@ export async function updateOrganizationProfileSettings(input: {
   readonly actor: ApiActor;
   readonly name: string;
   readonly timezone: string;
+  readonly volleyballTypes: readonly ("beach" | "indoor")[];
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -5573,6 +5574,7 @@ export async function updateOrganizationProfileSettings(input: {
   const values = {
     name: input.name.trim(),
     timezone: organizationTimeZone(input.timezone.trim()),
+    volleyballTypes: [...new Set(input.volleyballTypes)],
   };
   await database.batch([
     database
@@ -5589,9 +5591,11 @@ export async function updateOrganizationProfileSettings(input: {
       beforeHash: stableHash({
         name: organization.name,
         timezone: organization.timezone,
+        volleyballTypes: organization.volleyballTypes,
       }),
       afterHash: stableHash(values),
-      reason: "Operator updated the organization display name or time zone.",
+      reason:
+        "Operator updated the organization profile, volleyball operation, or time zone.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

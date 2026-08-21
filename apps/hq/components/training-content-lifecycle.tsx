@@ -22,11 +22,12 @@ import {
 
 type ContentKind = "program" | "practice-plan";
 
-function formatVersionDate(value: string): string {
+function formatVersionDate(value: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: timezone,
   }).format(new Date(value));
 }
 
@@ -34,11 +35,13 @@ export function TrainingContentLifecycle({
   contentId,
   kind,
   status,
+  timezone = "UTC",
   versions,
 }: {
   readonly contentId: string;
   readonly kind: ContentKind;
   readonly status: string;
+  readonly timezone?: string;
   readonly versions: readonly TrainingVersionHistoryEntry[];
 }) {
   const router = useRouter();
@@ -149,7 +152,7 @@ export function TrainingContentLifecycle({
                 <strong>Version {version.version}</strong>
                 {version.current && <span>Current</span>}
                 <small>
-                  {formatVersionDate(version.createdAt)}
+                  {formatVersionDate(version.createdAt, timezone)}
                   {version.changeNote ? ` · ${version.changeNote}` : ""}
                 </small>
               </div>

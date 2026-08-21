@@ -7,6 +7,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import type { CatalogPurchaseAuthContext } from "@/lib/catalog-auth";
 
 type AuthContext = {
   readonly eyebrow: string;
@@ -14,7 +15,22 @@ type AuthContext = {
   readonly description: string;
 };
 
-function contextFor(returnTo: string): AuthContext | undefined {
+function contextFor(
+  returnTo: string,
+  purchaseContext?: CatalogPurchaseAuthContext,
+): AuthContext | undefined {
+  if (
+    purchaseContext &&
+    returnTo.startsWith("/clubs/") &&
+    returnTo.includes("/products/")
+  ) {
+    return {
+      eyebrow: "COMPLETE YOUR PURCHASE",
+      title: "Continue where you left off.",
+      description: `Sign in or create a free Duna account, and we'll bring you back to review ${purchaseContext.productTitle} from ${purchaseContext.organizationName} before secure payment. Nothing has been charged yet.`,
+    };
+  }
+
   if (returnTo.startsWith("/app/checkout/")) {
     return {
       eyebrow: "YOUR SPOT IS WAITING",
@@ -63,20 +79,34 @@ function contextFor(returnTo: string): AuthContext | undefined {
 
 export function BrandedAuthEntry({
   mode,
+  purchaseContext,
   returnTo,
 }: {
   readonly mode: "sign-in" | "sign-up";
+  readonly purchaseContext?: CatalogPurchaseAuthContext;
   readonly returnTo: string;
 }) {
   const signingUp = mode === "sign-up";
-  const context = contextFor(returnTo);
+  const checkoutContext =
+    purchaseContext &&
+    returnTo.startsWith("/clubs/") &&
+    returnTo.includes("/products/")
+      ? purchaseContext
+      : undefined;
+  const context = contextFor(returnTo, checkoutContext);
   const primaryHref = `/${mode}/start?returnTo=${encodeURIComponent(returnTo)}`;
-  const alternateHref = `${
-    signingUp ? "/sign-in" : "/sign-up"
-  }?returnTo=${encodeURIComponent(returnTo)}`;
+  const alternateSearch = new URLSearchParams({ returnTo });
+  if (checkoutContext) {
+    alternateSearch.set("product", checkoutContext.productTitle);
+    alternateSearch.set("organization", checkoutContext.organizationName);
+  }
+  const alternateHref = `${signingUp ? "/sign-in" : "/sign-up"}?${alternateSearch.toString()}`;
 
   return (
-    <main className="auth-entry" data-zone="editorial">
+    <main
+      className={`auth-entry${checkoutContext ? " auth-entry--purchase" : ""}`}
+      data-zone="editorial"
+    >
       <div className="auth-entry__media" aria-hidden>
         <video
           autoPlay
@@ -144,11 +174,15 @@ export function BrandedAuthEntry({
           </p>
 
           <a className="auth-entry__primary" href={primaryHref}>
-            {signingUp
-              ? "Create my Duna account"
-              : context
-                ? "Continue to your next step"
-                : "Continue to Duna"}
+            {checkoutContext
+              ? signingUp
+                ? "Create account and continue"
+                : "Sign in and continue"
+              : signingUp
+                ? "Create my Duna account"
+                : context
+                  ? "Continue to your next step"
+                  : "Continue to Duna"}
             <ArrowRight aria-hidden size={18} />
           </a>
 
@@ -157,10 +191,18 @@ export function BrandedAuthEntry({
             <span>Secure authentication · Duna never sees your password</span>
           </div>
 
-          <p className="auth-entry__alternate">
+          <p
+            className={`auth-entry__alternate${checkoutContext ? " auth-entry__alternate--purchase" : ""}`}
+          >
             {signingUp ? "Already have an account?" : "New to Duna?"}{" "}
             <Link href={alternateHref}>
-              {signingUp ? "Sign in" : "Create one"}
+              {checkoutContext
+                ? signingUp
+                  ? "Sign in instead"
+                  : "Create a free account"
+                : signingUp
+                  ? "Sign in"
+                  : "Create one"}
             </Link>
           </p>
         </section>
