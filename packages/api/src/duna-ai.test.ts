@@ -7,6 +7,7 @@ import {
   hasDunaAiGatewayCredential,
   rankDiscoveryItems,
   resolveDunaAiCopilotModel,
+  resolveDunaAiGatewayCredentialSource,
   transcribeDunaAiAudio,
 } from "./duna-ai";
 import { proposeAgentAction } from "./risk";
@@ -16,6 +17,8 @@ afterEach(() => {
   delete process.env.DUNA_TRANSCRIPTION_MODEL;
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.VERCEL_OIDC_TOKEN;
+  delete process.env.VERCEL;
+  delete process.env.VERCEL_ENV;
   delete process.env.OPENAI_API_KEY;
 });
 
@@ -159,6 +162,19 @@ describe("Duna AI model", () => {
     expect(hasDunaAiGatewayCredential()).toBe(false);
     process.env.VERCEL_OIDC_TOKEN = "vercel-oidc";
     expect(hasDunaAiGatewayCredential()).toBe(true);
+  });
+
+  it("prefers automatic OIDC in Vercel deployments over a stale API key", () => {
+    process.env.VERCEL = "1";
+    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
+    process.env.VERCEL_OIDC_TOKEN = "current-oidc-token";
+    expect(resolveDunaAiGatewayCredentialSource()).toBe("oidc");
+  });
+
+  it("prefers a stable API key outside Vercel deployments", () => {
+    process.env.AI_GATEWAY_API_KEY = "local-api-key";
+    process.env.VERCEL_OIDC_TOKEN = "pulled-oidc-token";
+    expect(resolveDunaAiGatewayCredentialSource()).toBe("api-key");
   });
 
   it("accepts bounded image and file context on an ask turn", () => {

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Fragment,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -292,6 +294,53 @@ function resultIcon(kind: DunaSearchResult["kind"]) {
   if (kind === "venue") return "V";
   if (kind === "product") return "O";
   return "→";
+}
+
+function linkedMessageText(value: string): readonly ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern =
+    /\[([^\]]{1,160})\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]{1,200})\*\*|(https?:\/\/[^\s<]+)/g;
+  let cursor = 0;
+  for (const match of value.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) nodes.push(value.slice(cursor, index));
+    const href = match[2] ?? match[4];
+    const label = match[1] ?? href;
+    if (href) {
+      nodes.push(
+        <a
+          href={href}
+          key={`${href}-${index}`}
+          rel="noreferrer noopener"
+          target="_blank"
+        >
+          {label}
+        </a>,
+      );
+    } else if (match[3]) {
+      nodes.push(<strong key={`strong-${index}`}>{match[3]}</strong>);
+    }
+    cursor = index + match[0].length;
+  }
+  if (cursor < value.length) nodes.push(value.slice(cursor));
+  return nodes;
+}
+
+function MessageBody({ body }: { readonly body: string }) {
+  return (
+    <div className="duna-action-center__message-body">
+      {body.split(/\n{2,}/).map((paragraph, paragraphIndex) => (
+        <p key={`${paragraph.slice(0, 32)}-${paragraphIndex}`}>
+          {paragraph.split("\n").map((line, lineIndex) => (
+            <Fragment key={`${line.slice(0, 24)}-${lineIndex}`}>
+              {lineIndex > 0 && <br />}
+              {linkedMessageText(line)}
+            </Fragment>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 export function DunaActionCenter({
@@ -1098,7 +1147,7 @@ export function DunaActionCenter({
                 className={`duna-action-center__message duna-action-center__message--${message.role}`}
                 key={`${message.role}-${index}`}
               >
-                <p>{message.body}</p>
+                <MessageBody body={message.body} />
                 {message.attachmentNames?.length ? (
                   <div className="duna-action-center__sent-files">
                     {message.attachmentNames.map((name) => (
@@ -1260,6 +1309,7 @@ export function DunaActionCenter({
         <button
           aria-label="Search Duna"
           aria-pressed={panel === "search"}
+          className="duna-action-center__search-button"
           onClick={() =>
             setPanel((current) => (current === "search" ? null : "search"))
           }
