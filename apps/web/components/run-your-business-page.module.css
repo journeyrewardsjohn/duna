@@ -1828,7 +1828,7 @@
   background: var(--hq-core);
   border-radius: 999px;
   color: var(--hq-deep);
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
   margin-left: auto;
   padding: 0.35rem 0.55rem;
@@ -1993,7 +1993,7 @@
 
 .videoPricing small {
   color: var(--text-3);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .pricingNote {

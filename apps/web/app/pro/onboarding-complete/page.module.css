@@ -46,7 +46,7 @@
 
 .eyebrow {
   color: #55717a !important;
-  font-size: 0.72rem !important;
+  font-size: 0.75rem !important;
   font-weight: 900;
   letter-spacing: 0.16em;
 }
@@ -54,7 +54,7 @@
 .card h1 {
   color: #17282f;
   font-size: clamp(2rem, 8vw, 3.6rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
 }

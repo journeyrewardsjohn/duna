@@ -681,7 +681,7 @@ const runtimeStyles = StyleSheet.create({
   freePlanTitle: { color: "#26343c", fontSize: 14, fontWeight: "900" },
   kicker: {
     color: "#3d6672",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.7,
     marginTop: 14,

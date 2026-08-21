@@ -25066,7 +25066,7 @@ body {
 .organization-plan-settings__addon > span,
 .organization-plan-settings__payg {
   color: var(--color-bone-muted);
-  font-size: max(0.72rem, 11px);
+  font-size: max(0.75rem, 12px);
 }
 
 .organization-plan-settings__addon input {
