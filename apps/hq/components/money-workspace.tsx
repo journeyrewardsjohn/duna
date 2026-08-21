@@ -496,7 +496,7 @@ export function MoneyWorkspace({
       </section>
 
       <div className="money-ledger-layout">
-        <section className="hq-card money-activity-card">
+        <section className="hq-card hq-card--inset money-activity-card">
           <header className="hq-card-heading">
             <div>
               <span className="hq-eyebrow">Transaction ledger</span>
@@ -634,7 +634,7 @@ export function MoneyWorkspace({
         </section>
 
         <aside className="money-side-stack">
-          <section className="hq-card money-payout-plan">
+          <section className="hq-card hq-card--inset money-payout-plan">
             <header>
               <div>
                 <span className="hq-eyebrow">Payout plan</span>
@@ -686,7 +686,7 @@ export function MoneyWorkspace({
               <Landmark size={15} /> Request a payout
             </button>
           </section>
-          <section className="hq-card money-connect-health">
+          <section className="hq-card hq-card--inset money-connect-health">
             <header>
               <div>
                 <span className="hq-eyebrow">Stripe Connect</span>
@@ -742,7 +742,7 @@ export function MoneyWorkspace({
       </div>
 
       <div className="money-secondary-grid">
-        <section className="hq-card money-list-card">
+        <section className="hq-card hq-card--inset money-list-card">
           <header className="hq-card-heading">
             <div>
               <span className="hq-eyebrow">Stripe activity</span>
@@ -782,7 +782,7 @@ export function MoneyWorkspace({
             </div>
           )}
         </section>
-        <section className="hq-card money-list-card">
+        <section className="hq-card hq-card--inset money-list-card">
           <header className="hq-card-heading">
             <div>
               <span className="hq-eyebrow">Disputes</span>
@@ -822,7 +822,7 @@ export function MoneyWorkspace({
         </section>
       </div>
 
-      <section className="hq-card money-settings-card">
+      <section className="hq-card hq-card--inset money-settings-card">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Payout + card settings</span>
@@ -924,7 +924,7 @@ export function MoneyWorkspace({
         </form>
       </section>
 
-      <section className="hq-card refund-policy-card">
+      <section className="hq-card hq-card--inset refund-policy-card">
         <header className="hq-card-heading">
           <div>
             <span className="hq-eyebrow">Refund policies</span>

@@ -6,6 +6,14 @@
 .money-workspace {
   display: grid;
   gap: 1rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.money-workspace > *,
+.money-ledger-layout > *,
+.money-secondary-grid > * {
+  min-width: 0;
 }
 
 .money-balance-card {
@@ -216,6 +224,10 @@
     minmax(220px, 1.35fr) 0.55fr minmax(180px, 0.9fr)
     0.55fr minmax(170px, 0.9fr) 0.65fr;
   padding: 0.85rem 0;
+}
+
+.money-activity-table {
+  max-width: 100%;
 }
 .money-activity-table > header {
   border-bottom: 1px solid rgb(var(--overlay-rgb) / 10%);
@@ -1895,6 +1907,16 @@ button {
   background: var(--color-depth);
   border: 1px solid rgb(var(--overlay-rgb) / 7%);
   border-radius: 19px;
+}
+
+/*
+ * Card shells intentionally stay padding-free so tables and media can meet the
+ * edge. Content cards opt into one shared inset instead of recreating padding
+ * in each workspace.
+ */
+.hq-card--inset {
+  --hq-card-inset: clamp(1rem, 1.4vw, 1.5rem);
+  padding: var(--hq-card-inset);
 }
 
 .hq-card-heading {
