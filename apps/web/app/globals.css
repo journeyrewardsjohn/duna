@@ -15069,6 +15069,7 @@ a.play-day__booking {
   flex-direction: column;
   gap: 2rem;
   max-width: 900px;
+  min-width: 0;
   width: 100%;
 }
 
@@ -18561,7 +18562,7 @@ a.play-day__booking {
   }
 
   .settings-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-layout > nav {
@@ -26815,6 +26816,15 @@ html {
 }
 
 @media (max-width: 560px) {
+  .settings-form__title {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-form__title > .duna-badge {
+    margin-left: 0;
+  }
+
   .onboarding-shell {
     padding-inline: 0.8rem;
   }
