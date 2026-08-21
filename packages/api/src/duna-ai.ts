@@ -267,11 +267,9 @@ export function resolveDunaAiGatewayCredentialSource(
   const oidc =
     requestOidcToken?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim();
   const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    if (oidc) return "oidc";
-    if (apiKey) return "api-key";
-    return undefined;
-  }
+  // A scoped Gateway key is the durable production credential. Keep the
+  // request-scoped Vercel OIDC token as the zero-config fallback so a missing
+  // runtime header never disables local development or new deployments.
   if (apiKey) return "api-key";
   if (oidc) return "oidc";
   return undefined;
@@ -1089,22 +1087,66 @@ function providerErrorMessage(error: unknown): string {
   return error.message.replace(/\s+/g, " ").slice(0, 500);
 }
 
+const dunaAiGatewayResponsesUrl = "https://ai-gateway.vercel.sh/v1/responses";
+const retryableGatewayStatuses = new Set([
+  408, 409, 425, 429, 500, 502, 503, 504,
+]);
+
+export function isRetryableDunaAiGatewayStatus(status: number): boolean {
+  return retryableGatewayStatuses.has(status);
+}
+
+export async function fetchDunaAiGatewayWithRetry(input: {
+  credential: string;
+  body: string;
+  fetchImpl?: typeof fetch;
+  wait?: (milliseconds: number) => Promise<void>;
+}): Promise<Response> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const wait =
+    input.wait ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const request = () =>
+    fetchImpl(dunaAiGatewayResponsesUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.credential}`,
+        "Content-Type": "application/json",
+      },
+      body: input.body,
+    });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await request();
+      if (!isRetryableDunaAiGatewayStatus(response.status) || attempt === 1)
+        return response;
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+    // AI Gateway already handles provider routing. This short application-level
+    // retry only covers a transient Gateway/network response after that routing
+    // has been exhausted.
+    await wait(250);
+  }
+  throw new Error("Duna AI Gateway did not return a response.");
+}
+
 async function researchDunaQuestion(input: {
   message: string;
   now: Date;
   runtime: DunaAiRuntime;
 }): Promise<string> {
-  const response = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${input.runtime.credential}`,
-      "Content-Type": "application/json",
-    },
+  const response = await fetchDunaAiGatewayWithRetry({
+    credential: input.runtime.credential,
     body: JSON.stringify({
       model: resolveDunaAiCopilotModel(),
       store: false,
       reasoning: { effort: "high" },
       max_output_tokens: 4_000,
+      max_tool_calls: 1,
+      tool_choice: "required",
       tools: [{ type: "web_search", search_context_size: "high" }],
       input: [
         {
@@ -1132,6 +1174,7 @@ async function researchDunaQuestion(input: {
   });
   const payload = (await response.json()) as {
     error?: { message?: string };
+    status?: string;
     output?: readonly {
       type?: string;
       content?: readonly { type?: string; text?: string }[];
@@ -1142,6 +1185,10 @@ async function researchDunaQuestion(input: {
       payload.error?.message ??
         `Web research returned HTTP ${response.status}.`,
     );
+  if (payload.error?.message)
+    throw new Error(`Web research failed: ${payload.error.message}`);
+  if (payload.status && payload.status !== "completed")
+    throw new Error(`Web research finished with status ${payload.status}.`);
   const text = (payload.output ?? [])
     .flatMap(({ content }) => content ?? [])
     .filter(({ type, text: value }) => type === "output_text" && Boolean(value))
@@ -1613,7 +1660,10 @@ export async function runDunaAiAgent(input: {
     researchMode: input.researchMode,
     snapshot,
   });
-  if (!runtime)
+  if (!runtime) {
+    console.error(
+      `[duna-ai] provider unavailable requestId=${input.requestId} surface=${input.surface} research=${input.researchMode ?? "off"} reason=missing-gateway-credential`,
+    );
     return {
       reply: unavailableReply,
       cards: cards.slice(0, 10),
@@ -1623,6 +1673,7 @@ export async function runDunaAiAgent(input: {
       providerAvailable: false,
       researchUsed: false,
     };
+  }
 
   const getPlatformContext = tool({
     name: "get_current_duna_context",
@@ -1679,15 +1730,26 @@ export async function runDunaAiAgent(input: {
         runtime,
       });
       toolsUsed.add("web_search");
+      console.info(
+        `[duna-ai] web research complete requestId=${input.requestId} surface=${input.surface} credential=${runtime.credentialSource} model=${resolveDunaAiCopilotModel()}`,
+      );
     } catch (error) {
-      console.error("[duna-ai] web research failed", {
-        credentialSource: runtime.credentialSource,
-        error: providerErrorMessage(error),
-        model: resolveDunaAiCopilotModel(),
-        surface: input.surface,
-      });
+      console.error(
+        `[duna-ai] web research failed requestId=${input.requestId} surface=${input.surface} credential=${runtime.credentialSource} model=${resolveDunaAiCopilotModel()} error=${providerErrorMessage(error)}`,
+      );
     }
   }
+  if (webResearch)
+    return {
+      reply: webResearch,
+      cards: cards.slice(0, 10),
+      suggestions: suggestionsFor(snapshot, input.surface),
+      toolsUsed: [...toolsUsed],
+      model: resolveDunaAiCopilotModel(),
+      reasoningEffort: "high",
+      providerAvailable: true,
+      researchUsed: true,
+    };
   const agent = new Agent({
     name: "Duna AI",
     model: resolveDunaAiCopilotModel(),
