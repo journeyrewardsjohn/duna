@@ -25,6 +25,7 @@ export default async function CreatePracticePlanPage({
     <OperatorShell
       active="training"
       immersive
+      immersiveScrollable
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}
     >
