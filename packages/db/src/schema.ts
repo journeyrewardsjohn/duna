@@ -8697,19 +8697,165 @@ export const promoCodes = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Promotion"),
     code: varchar("code", { length: 48 }).notNull(),
     discountType: varchar("discount_type", { length: 16 }).notNull(),
     discountValue: integer("discount_value").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    minimumPurchaseMinor: integer("minimum_purchase_minor"),
+    maximumDiscountMinor: integer("maximum_discount_minor"),
     redemptionCap: integer("redemption_cap"),
+    perPersonLimit: integer("per_person_limit"),
     redeemedCount: integer("redeemed_count").notNull().default(0),
+    appliesToAllPlans: boolean("applies_to_all_plans").notNull().default(false),
+    appliesToAllProducts: boolean("applies_to_all_products")
+      .notNull()
+      .default(false),
+    appliesToAllServices: boolean("applies_to_all_services")
+      .notNull()
+      .default(false),
     startsAt: timestamp("starts_at", { withTimezone: true, mode: "date" }),
     endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }),
+    stripeCouponId: varchar("stripe_coupon_id", { length: 128 }),
+    stripePromotionCodeId: varchar("stripe_promotion_code_id", { length: 128 }),
+    stripeSyncStatus: varchar("stripe_sync_status", { length: 24 })
+      .notNull()
+      .default("pending"),
+    stripeSyncError: text("stripe_sync_error"),
+    stripeSyncedAt: timestamp("stripe_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    duplicatedFromId: uuid("duplicated_from_id"),
+    deactivatedAt: timestamp("deactivated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     active: boolean("active").notNull().default(true),
     createdAt,
     updatedAt,
   },
   (table) => [
     uniqueIndex("promo_org_code_unique").on(table.organizationId, table.code),
+    check(
+      "promo_discount_type_valid",
+      sql`${table.discountType} IN ('percent', 'amount')`,
+    ),
+    check(
+      "promo_discount_value_valid",
+      sql`${table.discountValue} > 0 AND (${table.discountType} <> 'percent' OR ${table.discountValue} <= 10000)`,
+    ),
+    check(
+      "promo_currency_uppercase",
+      sql`${table.currency} = upper(${table.currency})`,
+    ),
+    check(
+      "promo_limits_positive",
+      sql`(${table.minimumPurchaseMinor} IS NULL OR ${table.minimumPurchaseMinor} >= 0) AND (${table.maximumDiscountMinor} IS NULL OR ${table.maximumDiscountMinor} > 0) AND (${table.redemptionCap} IS NULL OR ${table.redemptionCap} > 0) AND (${table.perPersonLimit} IS NULL OR ${table.perPersonLimit} > 0)`,
+    ),
+    check(
+      "promo_window_valid",
+      sql`${table.startsAt} IS NULL OR ${table.endsAt} IS NULL OR ${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "promo_stripe_sync_status_valid",
+      sql`${table.stripeSyncStatus} IN ('pending', 'synced', 'failed', 'not-applicable')`,
+    ),
+  ],
+);
+
+export const promoCodeCatalogItems = pgTable(
+  "promo_code_catalog_items",
+  {
+    promoCodeId: uuid("promo_code_id")
+      .notNull()
+      .references(() => promoCodes.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.promoCodeId, table.catalogItemId] }),
+    index("promo_item_catalog_idx").on(table.catalogItemId),
+  ],
+);
+
+export const promoCodeMembers = pgTable(
+  "promo_code_members",
+  {
+    promoCodeId: uuid("promo_code_id")
+      .notNull()
+      .references(() => promoCodes.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.promoCodeId, table.personId] }),
+    index("promo_member_person_idx").on(table.personId),
+  ],
+);
+
+export const promoCodeRedemptions = pgTable(
+  "promo_code_redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    promoCodeId: uuid("promo_code_id")
+      .notNull()
+      .references(() => promoCodes.id, { onDelete: "restrict" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    originalSubtotalMinor: integer("original_subtotal_minor").notNull(),
+    eligibleSubtotalMinor: integer("eligible_subtotal_minor").notNull(),
+    discountMinor: integer("discount_minor").notNull(),
+    netSubtotalMinor: integer("net_subtotal_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    stripeCouponId: varchar("stripe_coupon_id", { length: 128 }),
+    stripePromotionCodeId: varchar("stripe_promotion_code_id", { length: 128 }),
+    redeemedAt: timestamp("redeemed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    releasedAt: timestamp("released_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("promo_redemption_order_unique").on(table.orderId),
+    index("promo_redemption_code_status_idx").on(
+      table.promoCodeId,
+      table.status,
+    ),
+    index("promo_redemption_person_idx").on(
+      table.promoCodeId,
+      table.personId,
+      table.status,
+    ),
+    check(
+      "promo_redemption_status_valid",
+      sql`${table.status} IN ('pending', 'redeemed', 'released', 'refunded')`,
+    ),
+    check(
+      "promo_redemption_amounts_valid",
+      sql`${table.originalSubtotalMinor} >= 0 AND ${table.eligibleSubtotalMinor} >= 0 AND ${table.discountMinor} > 0 AND ${table.netSubtotalMinor} >= 0 AND ${table.netSubtotalMinor} = ${table.originalSubtotalMinor} - ${table.discountMinor}`,
+    ),
+    check(
+      "promo_redemption_currency_uppercase",
+      sql`${table.currency} = upper(${table.currency})`,
+    ),
   ],
 );
 

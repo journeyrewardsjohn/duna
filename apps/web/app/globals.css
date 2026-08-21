@@ -36892,6 +36892,22 @@ button.selected > .choice-radio {
   gap: 0.14rem;
 }
 
+.catalog-billing-options button strong {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.catalog-billing-options button strong b {
+  background: var(--color-lime);
+  border-radius: 999px;
+  color: var(--color-ink);
+  font-size: 0.75rem;
+  padding: 0.18rem 0.42rem;
+  text-transform: uppercase;
+}
+
 .catalog-billing-options button small {
   color: #677386;
   font-size: 0.75rem;
@@ -36911,6 +36927,39 @@ button.selected > .choice-radio {
 
 .catalog-billing-options button.active i {
   border: 4px solid #2b67a4;
+}
+
+.catalog-annual-prepay-note {
+  background: color-mix(in srgb, var(--color-lime) 16%, var(--color-surface));
+  border-left: 3px solid var(--color-lime);
+  border-radius: 0 10px 10px 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  padding: 0.65rem 0.75rem;
+}
+
+.catalog-promo-code > span {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.catalog-promo-code input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  min-height: 48px;
+  padding: 0.75rem 0.85rem;
+  text-transform: uppercase;
+}
+
+.catalog-promo-code small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
 .club-marketing-page {

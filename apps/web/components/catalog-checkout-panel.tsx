@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Check,
   CreditCard,
+  BadgePercent,
   Minus,
   Plus,
   WalletCards,
@@ -74,6 +75,7 @@ export function CatalogCheckoutPanel({
     "upfront" | "installments"
   >("upfront");
   const [selectedPriceId, setSelectedPriceId] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [occurrenceId, setOccurrenceId] = useState(
     item.upcomingOccurrences[0]?.key ?? "",
@@ -138,6 +140,26 @@ export function CatalogCheckoutPanel({
       : paymentMethod === "credit"
         ? creditPrice
         : cashPrice;
+  const monthlyCardPrice = cardPrices.find(
+    (candidate) => candidate.recurringInterval === "month",
+  );
+  const annualCardPrice = cardPrices.find(
+    (candidate) => candidate.recurringInterval === "year",
+  );
+  const annualSavingsPercent =
+    monthlyCardPrice?.amountMinor !== undefined &&
+    annualCardPrice?.amountMinor !== undefined &&
+    monthlyCardPrice.amountMinor > 0
+      ? Math.max(
+          0,
+          Math.round(
+            (1 -
+              annualCardPrice.amountMinor /
+                (monthlyCardPrice.amountMinor * 12)) *
+              100,
+          ),
+        )
+      : 0;
   const paymentPlan =
     item.configuration.paymentPlan &&
     typeof item.configuration.paymentPlan === "object" &&
@@ -341,6 +363,7 @@ export function CatalogCheckoutPanel({
         quantity: 1,
         idempotencyKey: membershipIdempotencyKey.current,
         membershipPolicyAccepted,
+        promoCode: promoCode.trim() || undefined,
       });
       if (!response.ok) {
         if (response.authRequired) {
@@ -383,6 +406,7 @@ export function CatalogCheckoutPanel({
         membershipPolicyAccepted: directMembershipPurchase
           ? membershipPolicyAccepted
           : undefined,
+        promoCode: promoCode.trim() || undefined,
       });
       if (!response.ok) {
         if (response.authRequired) {
@@ -537,7 +561,7 @@ export function CatalogCheckoutPanel({
         paymentMethod === "card" &&
         cardPrices.length > 1 && (
           <div className="catalog-billing-options">
-            <span>Choose billing</span>
+            <span>Choose how to join</span>
             <div>
               {cardPrices.map((candidate) => {
                 const active = candidate.id === cardPrice?.id;
@@ -555,15 +579,26 @@ export function CatalogCheckoutPanel({
                     type="button"
                   >
                     <span>
-                      <strong>{interval}</strong>
+                      <strong>
+                        {interval}
+                        {candidate.recurringInterval === "year" &&
+                        annualSavingsPercent > 0 ? (
+                          <b>Save {annualSavingsPercent}%</b>
+                        ) : null}
+                      </strong>
                       <small>
                         {money(
                           candidate.amountMinor ?? 0,
                           candidate.currency ?? organization.currency,
                         )}
-                        {candidate.recurringInterval
-                          ? ` / ${candidate.recurringInterval}`
-                          : ""}
+                        {candidate.recurringInterval === "year"
+                          ? ` / year · ${money(
+                              Math.round((candidate.amountMinor ?? 0) / 12),
+                              candidate.currency ?? organization.currency,
+                            )}/mo equivalent`
+                          : candidate.recurringInterval
+                            ? ` / ${candidate.recurringInterval}`
+                            : ""}
                       </small>
                     </span>
                     <i aria-hidden />
@@ -571,6 +606,12 @@ export function CatalogCheckoutPanel({
                 );
               })}
             </div>
+            {cardPrice?.recurringInterval === "year" ? (
+              <small className="catalog-annual-prepay-note">
+                The full 12-month membership is paid now. Every monthly credit
+                and included-booking allowance for the year is issued upfront.
+              </small>
+            ) : null}
           </div>
         )}
       {!membershipIncluded && (
@@ -756,6 +797,21 @@ export function CatalogCheckoutPanel({
           </div>
         </div>
       )}
+      {!membershipIncluded && paymentMethod === "card" ? (
+        <label className="catalog-promo-code">
+          <span>
+            <BadgePercent aria-hidden size={17} /> Promo code
+          </span>
+          <input
+            autoCapitalize="characters"
+            maxLength={48}
+            onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+            placeholder="Enter code"
+            value={promoCode}
+          />
+          <small>Eligibility and limits are checked before payment.</small>
+        </label>
+      ) : null}
       <div className="catalog-checkout-total">
         <span>
           {membershipIncluded

@@ -107,6 +107,12 @@ const moduleCopy: Record<
     description:
       "Campaigns and simple Segment, Trigger, Action flows with consent and guardian-safe routing.",
   },
+  "promo-codes": {
+    eyebrow: "Offers + conversion",
+    title: "Promo codes",
+    description:
+      "Targeted discounts with explicit eligibility, limits, Stripe synchronization, and live redemption performance.",
+  },
   reports: {
     eyebrow: "Operating truth",
     title: "Reports",

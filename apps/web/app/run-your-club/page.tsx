@@ -26,8 +26,8 @@ export const metadata: Metadata = {
   },
 };
 
-function signupHref(planId: string): string {
-  const returnTo = `/onboarding?plan=${planId}&source=run-your-club`;
+function signupHref(planId: string, interval: "month" | "year"): string {
+  const returnTo = `/onboarding?plan=${planId}&interval=${interval}&source=run-your-club`;
   return `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
@@ -38,11 +38,14 @@ const plans = Object.values(ORGANIZATION_PLANS).map((plan) => ({
   tagline: plan.tagline,
   monthlyPrice: formatMoney(plan.monthlyPriceMinor, "USD"),
   annualPrice: formatMoney(plan.annualPriceMinor, "USD"),
+  monthlyPriceMinor: plan.monthlyPriceMinor,
+  annualPriceMinor: plan.annualPriceMinor,
   organizationFeePercent: plan.defaultCommissionBps / 100,
   monthlyUploadHours: plan.monthlyUploadSeconds / 60 / 60,
   monthlyLiveHours: plan.monthlyLiveSeconds / 60 / 60,
   features: plan.features,
-  signupHref: signupHref(plan.id),
+  monthlySignupHref: signupHref(plan.id, "month"),
+  annualSignupHref: signupHref(plan.id, "year"),
 }));
 
 const videoPricing = {
@@ -99,7 +102,7 @@ const structuredData = {
         name: plan.productName,
         price: (plan.monthlyPriceMinor / 100).toFixed(2),
         priceCurrency: "USD",
-        url: signupHref(plan.id),
+        url: signupHref(plan.id, "month"),
       })),
     },
   ],
@@ -116,7 +119,7 @@ export default function RunYourClubPage() {
       />
       <RunYourBusinessPage
         authConfigured={isWorkOSAuthKitConfigured()}
-        hqHref={signupHref("coach")}
+        hqHref={signupHref("coach", "month")}
         plans={plans}
         videoPricing={videoPricing}
       />

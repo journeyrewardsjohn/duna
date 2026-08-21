@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   Sparkles,
   Trophy,
+  TicketPercent,
   UserRoundSearch,
   UsersRound,
   Waves,
@@ -64,6 +65,12 @@ export const operatorModules = [
     group: "Run",
   },
   { slug: "payments", label: "Money", icon: CreditCard, group: "Grow" },
+  {
+    slug: "promo-codes",
+    label: "Promo codes",
+    icon: TicketPercent,
+    group: "Grow",
+  },
   { slug: "marketing", label: "Marketing", icon: Mail, group: "Grow" },
   { slug: "reports", label: "Reports", icon: CircleGauge, group: "Grow" },
   {

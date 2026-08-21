@@ -12,6 +12,7 @@ export * from "./reporting";
 export * from "./ledger";
 export * from "./membership-plans";
 export * from "./membership-subscription-policy";
+export * from "./membership-prepay";
 export * from "./organization-plans";
 export * from "./court-surfaces";
 export * from "./map-links";
