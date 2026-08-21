@@ -8,6 +8,7 @@ import {
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
   preferredProfessionalEventCardMedia,
+  professionalEventLifecycle,
   professionalEventCurrentRound,
   professionalEventSlug,
   professionalMatchCanonicalPath,
@@ -15,6 +16,7 @@ import {
   professionalMatchPredictionClosed,
   professionalMatchStatus,
   selectFivbRefreshCandidates,
+  selectVolleyballWorldRefreshCandidates,
   shouldRefreshPublicFivbLiveMatch,
   shouldBackfillEliteVolleyballWorldEvent,
   shouldAutoLinkProfessionalSource,
@@ -145,13 +147,15 @@ describe("FIVB event detail refresh", () => {
     });
   });
 
-  it("rotates through unhydrated upcoming events before stale hydrated events", () => {
+  it("prioritizes the active calendar window over a stale live flag", () => {
     const selected = selectFivbRefreshCandidates(
       [
         {
-          externalEventId: "LIVE",
+          externalEventId: "STALE-LIVE",
           live: true,
           startsOn: "2026-08-04",
+          endsOn: "2026-08-09",
+          status: "live",
           rawPayload: {
             detailLevel: "tournament",
             detailSyncedAt: "2026-08-04T13:00:00.000Z",
@@ -161,6 +165,7 @@ describe("FIVB event detail refresh", () => {
           externalEventId: "MONTREAL",
           live: false,
           startsOn: "2026-08-19",
+          endsOn: "2026-08-23",
           rawPayload: { detailLevel: "index" },
         },
         {
@@ -174,11 +179,73 @@ describe("FIVB event detail refresh", () => {
         },
       ],
       2,
+      {
+        now: new Date("2026-08-20T12:00:00.000Z"),
+        activeEventRefreshMinutes: 120,
+        completedEventGraceHours: 48,
+      },
     );
     expect(selected.map((event) => event.externalEventId)).toEqual([
-      "LIVE",
       "MONTREAL",
+      "STALE",
     ]);
+  });
+
+  it("selects active Montreal transport before expired live rows", () => {
+    const selected = selectVolleyballWorldRefreshCandidates(
+      [
+        {
+          externalEventId: "HAMBURG",
+          name: "BPT Elite16 Hamburg",
+          category: "Elite16",
+          live: true,
+          startsOn: "2026-08-05",
+          endsOn: "2026-08-09",
+          rawPayload: {},
+        },
+        {
+          externalEventId: "WMON2026",
+          name: "BPT Elite Montreal",
+          category: "Elite16",
+          live: false,
+          startsOn: "2026-08-19",
+          endsOn: "2026-08-23",
+          rawPayload: {},
+        },
+      ],
+      1,
+      {
+        now: new Date("2026-08-20T12:00:00.000Z"),
+        liveRefreshMs: 60_000,
+        upcomingRefreshMs: 15 * 60_000,
+      },
+    );
+    expect(selected.map((event) => event.externalEventId)).toEqual([
+      "WMON2026",
+    ]);
+  });
+
+  it("uses event dates as a public lifecycle safety boundary", () => {
+    const now = new Date("2026-08-20T12:00:00.000Z");
+    expect(
+      professionalEventLifecycle({
+        status: "live",
+        live: true,
+        startsOn: "2026-08-13",
+        endsOn: "2026-08-16",
+        now,
+      }),
+    ).toEqual({ status: "completed", live: false });
+    expect(
+      professionalEventLifecycle({
+        status: "upcoming",
+        live: false,
+        startsOn: "2026-08-19",
+        endsOn: "2026-08-23",
+        timeZone: "America/Toronto",
+        now,
+      }),
+    ).toEqual({ status: "live", live: true });
   });
 
   it("stops refreshing completed 12ndr event pages after the grace window", () => {
