@@ -15,13 +15,13 @@ import {
   Plus,
   WalletCards,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   catalogOfferEligibilityAction,
   catalogCheckoutStatusAction,
   startCatalogCheckoutAction,
 } from "@/app/clubs/[slug]/products/[productSlug]/actions";
+import { catalogAuthenticationHref } from "@/lib/catalog-auth";
 import { WaiverSignaturePanel } from "./waiver-signature-panel";
 
 function money(amountMinor: number, currency: string): string {
@@ -252,6 +252,11 @@ export function CatalogCheckoutPanel({
     membershipPrice &&
     organization.paymentsReady,
   );
+  const authenticationHref = catalogAuthenticationHref({
+    returnTo: `/clubs/${organization.slug}/products/${item.slug}#purchase`,
+    productTitle: item.title,
+    organizationName: organization.name,
+  });
 
   useEffect(() => {
     if (!initialCheckoutSessionId) return;
@@ -338,6 +343,10 @@ export function CatalogCheckoutPanel({
         membershipPolicyAccepted,
       });
       if (!response.ok) {
+        if (response.authRequired) {
+          window.location.assign(authenticationHref);
+          return;
+        }
         setNotice(response.error);
         membershipIdempotencyKey.current = crypto.randomUUID();
         return;
@@ -376,6 +385,10 @@ export function CatalogCheckoutPanel({
           : undefined,
       });
       if (!response.ok) {
+        if (response.authRequired) {
+          window.location.assign(authenticationHref);
+          return;
+        }
         setNotice(response.error);
         idempotencyKey.current = crypto.randomUUID();
         return;
@@ -402,7 +415,7 @@ export function CatalogCheckoutPanel({
   };
 
   return (
-    <aside className="catalog-checkout-panel">
+    <aside className="catalog-checkout-panel" id="purchase">
       <header>
         <span>Choose your option</span>
         {(complete || membershipIncluded) && (
@@ -836,14 +849,6 @@ export function CatalogCheckoutPanel({
             ? `${organization.name} credits stay with this club.`
             : `Reserve now; ${organization.name} collects payment in person.`}
       </p>
-      <Link
-        className="catalog-sign-in-link"
-        href={`/sign-in?returnTo=${encodeURIComponent(
-          `/clubs/${organization.slug}/products/${item.slug}`,
-        )}`}
-      >
-        Sign in to keep this purchase with your Duna account
-      </Link>
     </aside>
   );
 }

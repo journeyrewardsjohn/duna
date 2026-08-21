@@ -391,6 +391,45 @@ test("branded identity entry preserves the secure auth handoff", async ({
     page.getByRole("link", { name: "Create my Duna account" }),
   ).toHaveAttribute("href", "/sign-up/start?returnTo=%2Fapp");
   await expectNoHorizontalOverflow(page);
+
+  const purchaseReturnTo =
+    "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership#purchase";
+  const purchaseContext = new URLSearchParams({
+    returnTo: purchaseReturnTo,
+    product: "Beach Elite Academy Membership",
+    organization: "Beach Elite VB Academy",
+  });
+  await page.goto(`/sign-in?${purchaseContext.toString()}`);
+  await expect(
+    page.getByRole("heading", { name: "Continue where you left off." }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /review Beach Elite Academy Membership from Beach Elite VB Academy/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Sign in and continue" }),
+  ).toHaveAttribute(
+    "href",
+    `/sign-in/start?returnTo=${encodeURIComponent(purchaseReturnTo)}`,
+  );
+  await expect(
+    page.getByRole("link", { name: "Create a free account" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("link", { name: "Create a free account" }).click();
+  await expect(
+    page.getByRole("link", { name: "Create account and continue" }),
+  ).toHaveAttribute(
+    "href",
+    `/sign-up/start?returnTo=${encodeURIComponent(purchaseReturnTo)}`,
+  );
+  await expect(
+    page.getByRole("link", { name: "Sign in instead" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 });
 
 test("light mode starts cleanly and the dark choice persists", async ({
