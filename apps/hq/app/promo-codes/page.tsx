@@ -16,7 +16,7 @@ export default async function PromoCodesPage() {
       messageDraftCount={0}
       organization={dashboard.organization}
     >
-      <main className="hq-page module-page">
+      <main className="hq-page module-page promo-page">
         <header className="hq-page-heading">
           <div>
             <span className="hq-eyebrow">Grow · Promo codes</span>
