@@ -622,12 +622,16 @@
   color: var(--hq-ink);
   font-size: 0.75rem;
   font-weight: 600;
+  grid-column: var(--from) / var(--to);
   letter-spacing: 0.04em;
   margin-right: 0.35rem;
-  overflow: hidden;
   padding-top: 0.3rem;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The week range only earns its space once the bands stop spanning columns. */
+.phaseBands i {
+  display: none;
 }
 
 .weekBars {
@@ -897,9 +901,28 @@
     block-size: 5.5rem;
   }
 
+  /* A single week is far too narrow to hold a phase name, so the bands become
+     a wrapped legend rather than truncating to "Sh...". */
+  .phaseBands {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+  }
+
   .phaseBands span {
+    align-items: baseline;
+    display: inline-flex;
+    gap: 0.3rem;
+    grid-column: auto;
+    margin-right: 0;
+  }
+
+  .phaseBands i {
+    color: var(--mock-muted);
+    display: inline;
     font-size: 0.75rem;
-    margin-right: 0.2rem;
+    font-style: normal;
+    font-weight: 500;
   }
 }
 

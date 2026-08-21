@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { marketingPeople, marketingPlayerGroup } from "@/lib/marketing-people";
 import { ProfileAvatar, ProfileAvatarStack } from "./profile-avatar-stack";
@@ -391,11 +391,19 @@ function ProgramWindow() {
           {programPhases.map((phase) => (
             <span
               key={phase.name}
-              style={{
-                gridColumn: `${phase.from} / ${phase.to + 1}`,
-              }}
+              style={
+                {
+                  "--from": phase.from,
+                  "--to": phase.to + 1,
+                } as CSSProperties
+              }
             >
               {phase.name}
+              <i>
+                {phase.from === phase.to
+                  ? `wk ${phase.from}`
+                  : `wks ${phase.from}–${phase.to}`}
+              </i>
             </span>
           ))}
         </div>
