@@ -43,6 +43,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GetPaidScreen } from "./get-paid";
 import { MoneyScreen } from "./money-screen";
+import { DunaAiScreen } from "./duna-ai-screen";
 import {
   connectProCalendar,
   loadProPersonalEvents,
@@ -80,28 +81,28 @@ const dunaProWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 const dunaProWordmarkWhite = require("./assets/duna-horizontal-white.png");
 
 const lightColors = {
-  canvas: "#f6f5f1",
-  ink: "#1b1b19",
+  canvas: "#eef4f8",
+  ink: "#173b65",
   depth: "#ffffff",
-  navy: "#b5ccd3",
-  navyLift: "#edece6",
-  bone: "#1b1b19",
-  muted: "#766f61",
-  aqua: "#22343b",
-  aquaDeep: "#3a3a36",
-  sand: "#c9a96a",
-  flare: "#e8683a",
-  positive: "#2f6b3a",
-  warning: "#8a6a2f",
-  danger: "#9a4a2e",
+  navy: "#d8e8f2",
+  navyLift: "#f4f8fb",
+  bone: "#173b65",
+  muted: "#687b8e",
+  aqua: "#214b7a",
+  aquaDeep: "#173b65",
+  sand: "#d6a874",
+  flare: "#f0a06d",
+  positive: "#3c7a5b",
+  warning: "#d9955f",
+  danger: "#a64b43",
   onAccent: "#ffffff",
-  overlayRgb: "27,27,25",
-  accentRgb: "34,52,59",
-  warningRgb: "138,106,47",
-  positiveRgb: "47,107,58",
-  dangerRgb: "154,74,46",
-  flareRgb: "232,104,58",
-  inkRgb: "27,27,25",
+  overlayRgb: "23,59,101",
+  accentRgb: "33,75,122",
+  warningRgb: "217,149,95",
+  positiveRgb: "60,122,91",
+  dangerRgb: "166,75,67",
+  flareRgb: "240,160,109",
+  inkRgb: "23,59,101",
   depthRgb: "255,255,255",
 } as const;
 
@@ -168,6 +169,8 @@ const ThemeContext = createContext<{
   readonly toggle: () => void;
 }>({ theme: "light", preference: "light", toggle: () => undefined });
 
+const OpenDunaAiContext = createContext<() => void>(() => undefined);
+
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
   return (
@@ -187,13 +190,13 @@ function ThemeButton() {
 }
 
 type Tab = "today" | "calendar" | "people" | "more";
-type NavDestination = Tab | "paid";
+type NavDestination = Tab | "ai" | "create";
 
 const tabs: readonly { key: NavDestination; label: string; icon: string }[] = [
   { key: "today", label: "Today", icon: "⌂" },
-  { key: "calendar", label: "Courts", icon: "▦" },
-  { key: "paid", label: "Money", icon: ")))" },
-  { key: "people", label: "People", icon: "◎" },
+  { key: "calendar", label: "Calendar", icon: "▦" },
+  { key: "ai", label: "Duna AI", icon: "" },
+  { key: "create", label: "Create", icon: "+" },
   { key: "more", label: "More", icon: "•••" },
 ];
 
@@ -438,6 +441,7 @@ function Pill({
 }
 
 function Header({ context }: { readonly context: string }) {
+  const openDunaAi = useContext(OpenDunaAiContext);
   const {
     activeAuthOrganizationId,
     authOrganizations,
@@ -487,7 +491,11 @@ function Header({ context }: { readonly context: string }) {
           </View>
           <View style={styles.headerButtons}>
             <ThemeButton />
-            <Pressable accessibilityLabel="Ask Duna" style={styles.aiButton}>
+            <Pressable
+              accessibilityLabel="Ask Duna"
+              onPress={openDunaAi}
+              style={styles.aiButton}
+            >
               <Text style={styles.aiButtonText}>✦</Text>
             </Pressable>
             <Pressable
@@ -4644,22 +4652,38 @@ function TabBar({
             selectionHaptic();
             onChange(tab.key);
           }}
-          style={[styles.tabItem, tab.key === "paid" && styles.scoreTab]}
+          style={[
+            styles.tabItem,
+            tab.key === "ai" && styles.aiTab,
+            tab.key === "create" && styles.createTab,
+          ]}
         >
-          <Text
-            style={[
-              styles.tabIcon,
-              active === tab.key && styles.tabActive,
-              tab.key === "paid" && styles.scoreTabIcon,
-            ]}
-          >
-            {tab.icon}
-          </Text>
+          {tab.key === "ai" ? (
+            <View style={styles.aiTabMarkCrop}>
+              <Image
+                accessibilityIgnoresInvertColors
+                resizeMode="contain"
+                source={dunaProWordmarkBlue}
+                style={styles.aiTabMarkImage}
+              />
+            </View>
+          ) : (
+            <Text
+              style={[
+                styles.tabIcon,
+                active === tab.key && styles.tabActive,
+                tab.key === "create" && styles.createTabIcon,
+              ]}
+            >
+              {tab.icon}
+            </Text>
+          )}
           <Text
             style={[
               styles.tabLabel,
               active === tab.key && styles.tabActive,
-              tab.key === "paid" && styles.scoreTabLabel,
+              tab.key === "ai" && styles.aiTabLabel,
+              tab.key === "create" && styles.createTabLabel,
             ]}
           >
             {tab.label}
@@ -4683,6 +4707,7 @@ function ProApp() {
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<
+    | "ai"
     | "create"
     | "get-paid"
     | "money"
@@ -4731,8 +4756,8 @@ function ProApp() {
   };
 
   const changeTab = (nextTab: NavDestination) => {
-    if (nextTab === "paid") {
-      setSurface("money");
+    if (nextTab === "ai" || nextTab === "create") {
+      setSurface(nextTab);
       return;
     }
     if (nextTab === "calendar") setCalendarEntryId(undefined);
@@ -4836,99 +4861,70 @@ function ProApp() {
   activeStyles = surfaceTheme === "dark" ? darkStyles : lightStyles;
 
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        preference: themePreference,
-        toggle: () => {
-          const next: ThemePreference =
-            themePreference === "system"
-              ? "light"
-              : themePreference === "light"
-                ? "dark"
-                : "system";
-          setThemePreference(next);
-          void AsyncStorage.setItem("duna-theme", next);
-        },
-      }}
-    >
-      {sessionNotesId ? (
-        <SessionNotesScreen
-          initialPersonId={sessionNotePersonId}
-          onClose={() => {
-            setSessionNotesId(undefined);
-            setSessionNotePersonId(undefined);
-          }}
-          onSaved={refresh}
-          sessionId={sessionNotesId}
-        />
-      ) : surface === "create" ? (
-        <OperatorCreateScreen
-          onClose={() => setSurface(undefined)}
-          onCreated={refresh}
-          onGetPaid={() => setSurface("get-paid")}
-        />
-      ) : surface === "get-paid" ? (
-        <GetPaidScreen
-          onClose={() => setSurface(undefined)}
-          onCreate={() => setSurface("create")}
-        />
-      ) : surface === "money" ? (
-        <MoneyScreen
-          onClose={() => setSurface(undefined)}
-          onCollect={() => setSurface("get-paid")}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            border: rgba(colors.overlayRgb, 0.12),
-            text: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            navy: colors.navy,
-          }}
-        />
-      ) : surface === "messages" ? (
-        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
-          <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          <ProMessagingScreen
-            initialAudienceKey={messagesAudienceKey}
-            initialConversationId={messagesConversationId}
-            initialPersonId={messagesPersonId}
+    <OpenDunaAiContext.Provider value={() => setSurface("ai")}>
+      <ThemeContext.Provider
+        value={{
+          theme,
+          preference: themePreference,
+          toggle: () => {
+            const next: ThemePreference =
+              themePreference === "system"
+                ? "light"
+                : themePreference === "light"
+                  ? "dark"
+                  : "system";
+            setThemePreference(next);
+            void AsyncStorage.setItem("duna-theme", next);
+          },
+        }}
+      >
+        {sessionNotesId ? (
+          <SessionNotesScreen
+            initialPersonId={sessionNotePersonId}
             onClose={() => {
-              setMessagesConversationId(undefined);
-              setMessagesPersonId(undefined);
-              setMessagesAudienceKey(undefined);
-              setSurface(undefined);
+              setSessionNotesId(undefined);
+              setSessionNotePersonId(undefined);
             }}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              border: rgba(colors.overlayRgb, 0.12),
-              text: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              positive: colors.positive,
-              warning: colors.warning,
-              danger: colors.danger,
-            }}
+            onSaved={refresh}
+            sessionId={sessionNotesId}
           />
-        </SafeAreaView>
-      ) : surface === "scan" ? (
-        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
-          <StatusBar style="light" />
-          <TicketScannerScreen
+        ) : surface === "ai" ? (
+          <DunaAiScreen
             onClose={() => setSurface(undefined)}
             palette={{
               canvas: colors.canvas,
               surface: colors.depth,
               surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              warning: colors.warning,
+              positive: colors.positive,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+            pathname={`/${tab}`}
+          />
+        ) : surface === "create" ? (
+          <OperatorCreateScreen
+            onClose={() => setSurface(undefined)}
+            onCreated={refresh}
+            onGetPaid={() => setSurface("get-paid")}
+          />
+        ) : surface === "get-paid" ? (
+          <GetPaidScreen
+            onClose={() => setSurface(undefined)}
+            onCreate={() => setSurface("create")}
+          />
+        ) : surface === "money" ? (
+          <MoneyScreen
+            onClose={() => setSurface(undefined)}
+            onCollect={() => setSurface("get-paid")}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
               border: rgba(colors.overlayRgb, 0.12),
               text: colors.bone,
               muted: colors.muted,
@@ -4937,143 +4933,192 @@ function ProApp() {
               positive: colors.positive,
               warning: colors.warning,
               danger: colors.danger,
-              overlay: rgba(colors.inkRgb, 0.35),
+              navy: colors.navy,
             }}
           />
-        </SafeAreaView>
-      ) : surface === "score" ? (
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style="light" />
-          <View style={styles.app}>
-            <ScorerScreen
-              initialMatchId={scoreMatchId}
-              onExit={() => {
-                setScoreMatchId(undefined);
+        ) : surface === "messages" ? (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+            <ProMessagingScreen
+              initialAudienceKey={messagesAudienceKey}
+              initialConversationId={messagesConversationId}
+              initialPersonId={messagesPersonId}
+              onClose={() => {
+                setMessagesConversationId(undefined);
+                setMessagesPersonId(undefined);
+                setMessagesAudienceKey(undefined);
                 setSurface(undefined);
               }}
+              palette={{
+                canvas: colors.canvas,
+                surface: colors.depth,
+                surfaceAlt: colors.navyLift,
+                border: rgba(colors.overlayRgb, 0.12),
+                text: colors.bone,
+                muted: colors.muted,
+                accent: colors.aqua,
+                onAccent: colors.onAccent,
+                positive: colors.positive,
+                warning: colors.warning,
+                danger: colors.danger,
+              }}
             />
-          </View>
-        </SafeAreaView>
-      ) : surface === "tournament" ? (
-        <TournamentControl
-          onClose={() => setSurface(undefined)}
-          onScore={openScore}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            ink: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            border: rgba(colors.overlayRgb, 0.12),
-          }}
-        />
-      ) : surface === "video" ? (
-        <CoachVideoScreen
-          onClose={() => setSurface(undefined)}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            ink: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            border: rgba(colors.overlayRgb, 0.12),
-          }}
-        />
-      ) : (
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          <View style={styles.app}>
-            <PreviewBanner />
-            <Animated.View
-              style={[
-                styles.animatedScreen,
-                {
-                  opacity: screenTransition,
-                  transform: [
-                    {
-                      translateY: screenTransition.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [8, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {tab === "today" && (
-                <TodayScreen
-                  onCalendar={openCalendar}
-                  onCreate={() => setSurface("create")}
-                  onGetPaid={() => setSurface("get-paid")}
-                  onMessageGroup={openGroupMessaging}
-                  onPeople={() => setTab("people")}
-                  onRecordNotes={(sessionId) => {
-                    setSessionNotePersonId(undefined);
-                    setSessionNotesId(sessionId);
-                  }}
-                  onScore={openScore}
-                />
-              )}
-              {tab === "calendar" && (
-                <CalendarScreen
-                  focusEntryId={calendarEntryId}
-                  onCreate={() => setSurface("create")}
-                  onMessageGroup={openGroupMessaging}
-                  onRecordNotes={(sessionId) => {
-                    setSessionNotePersonId(undefined);
-                    setSessionNotesId(sessionId);
-                  }}
-                  onScan={() => setSurface("scan")}
-                  onScore={openScore}
-                />
-              )}
-              {tab === "people" && (
-                <PeopleScreen
-                  onMessage={(personId) => {
-                    setMessagesPersonId(personId);
-                    setMessagesAudienceKey(undefined);
-                    setMessagesConversationId(undefined);
-                    setSurface("messages");
-                  }}
-                  onRecordNotes={(sessionId, personId) => {
-                    setSessionNotePersonId(personId);
-                    setSessionNotesId(sessionId);
-                  }}
-                />
-              )}
-              {tab === "more" && (
-                <MoreScreen
-                  onCalendar={() => openCalendar()}
-                  onCreate={() => setSurface("create")}
-                  onGetPaid={() => setSurface("get-paid")}
-                  onMoney={() => setSurface("money")}
-                  onMessages={() => {
-                    setMessagesConversationId(undefined);
-                    setMessagesPersonId(undefined);
-                    setMessagesAudienceKey(undefined);
-                    setSurface("messages");
-                  }}
-                  onPeople={() => setTab("people")}
-                  onTournament={() => setSurface("tournament")}
-                  onVideo={() => setSurface("video")}
-                />
-              )}
-            </Animated.View>
-            <TabBar active={tab} onChange={changeTab} />
-          </View>
-        </SafeAreaView>
-      )}
-    </ThemeContext.Provider>
+          </SafeAreaView>
+        ) : surface === "scan" ? (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+            <StatusBar style="light" />
+            <TicketScannerScreen
+              onClose={() => setSurface(undefined)}
+              palette={{
+                canvas: colors.canvas,
+                surface: colors.depth,
+                surfaceAlt: colors.navyLift,
+                border: rgba(colors.overlayRgb, 0.12),
+                text: colors.bone,
+                muted: colors.muted,
+                accent: colors.aqua,
+                onAccent: colors.onAccent,
+                positive: colors.positive,
+                warning: colors.warning,
+                danger: colors.danger,
+                overlay: rgba(colors.inkRgb, 0.35),
+              }}
+            />
+          </SafeAreaView>
+        ) : surface === "score" ? (
+          <SafeAreaView edges={["top"]} style={styles.safe}>
+            <StatusBar style="light" />
+            <View style={styles.app}>
+              <ScorerScreen
+                initialMatchId={scoreMatchId}
+                onExit={() => {
+                  setScoreMatchId(undefined);
+                  setSurface(undefined);
+                }}
+              />
+            </View>
+          </SafeAreaView>
+        ) : surface === "tournament" ? (
+          <TournamentControl
+            onClose={() => setSurface(undefined)}
+            onScore={openScore}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+          />
+        ) : surface === "video" ? (
+          <CoachVideoScreen
+            onClose={() => setSurface(undefined)}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+          />
+        ) : (
+          <SafeAreaView edges={["top"]} style={styles.safe}>
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+            <View style={styles.app}>
+              <PreviewBanner />
+              <Animated.View
+                style={[
+                  styles.animatedScreen,
+                  {
+                    opacity: screenTransition,
+                    transform: [
+                      {
+                        translateY: screenTransition.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [8, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {tab === "today" && (
+                  <TodayScreen
+                    onCalendar={openCalendar}
+                    onCreate={() => setSurface("create")}
+                    onGetPaid={() => setSurface("get-paid")}
+                    onMessageGroup={openGroupMessaging}
+                    onPeople={() => setTab("people")}
+                    onRecordNotes={(sessionId) => {
+                      setSessionNotePersonId(undefined);
+                      setSessionNotesId(sessionId);
+                    }}
+                    onScore={openScore}
+                  />
+                )}
+                {tab === "calendar" && (
+                  <CalendarScreen
+                    focusEntryId={calendarEntryId}
+                    onCreate={() => setSurface("create")}
+                    onMessageGroup={openGroupMessaging}
+                    onRecordNotes={(sessionId) => {
+                      setSessionNotePersonId(undefined);
+                      setSessionNotesId(sessionId);
+                    }}
+                    onScan={() => setSurface("scan")}
+                    onScore={openScore}
+                  />
+                )}
+                {tab === "people" && (
+                  <PeopleScreen
+                    onMessage={(personId) => {
+                      setMessagesPersonId(personId);
+                      setMessagesAudienceKey(undefined);
+                      setMessagesConversationId(undefined);
+                      setSurface("messages");
+                    }}
+                    onRecordNotes={(sessionId, personId) => {
+                      setSessionNotePersonId(personId);
+                      setSessionNotesId(sessionId);
+                    }}
+                  />
+                )}
+                {tab === "more" && (
+                  <MoreScreen
+                    onCalendar={() => openCalendar()}
+                    onCreate={() => setSurface("create")}
+                    onGetPaid={() => setSurface("get-paid")}
+                    onMoney={() => setSurface("money")}
+                    onMessages={() => {
+                      setMessagesConversationId(undefined);
+                      setMessagesPersonId(undefined);
+                      setMessagesAudienceKey(undefined);
+                      setSurface("messages");
+                    }}
+                    onPeople={() => setTab("people")}
+                    onTournament={() => setSurface("tournament")}
+                    onVideo={() => setSurface("video")}
+                  />
+                )}
+              </Animated.View>
+              <TabBar active={tab} onChange={changeTab} />
+            </View>
+          </SafeAreaView>
+        )}
+      </ThemeContext.Provider>
+    </OpenDunaAiContext.Provider>
   );
 }
 
@@ -7992,17 +8037,23 @@ function createStyles(palette: Palette) {
       padding: 15,
     },
     tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.98),
-      borderTopColor: rgba(colors.overlayRgb, 0.08),
-      borderTopWidth: 1,
-      bottom: 0,
+      backgroundColor: rgba(colors.depthRgb, 0.99),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 30,
+      borderWidth: 1,
+      bottom: Platform.OS === "ios" ? 14 : 10,
       flexDirection: "row",
-      left: 0,
-      paddingBottom: Platform.OS === "ios" ? 22 : 9,
+      left: 12,
+      minHeight: 64,
+      paddingBottom: 7,
       paddingHorizontal: 8,
-      paddingTop: 8,
+      paddingTop: 7,
       position: "absolute",
-      right: 0,
+      right: 12,
+      shadowColor: "#173b65",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
     },
     tabItem: {
       alignItems: "center",
@@ -8022,16 +8073,32 @@ function createStyles(palette: Palette) {
       top: -9,
       width: 20,
     },
-    scoreTab: {
-      backgroundColor: colors.warning,
-      borderRadius: 25,
-      height: 50,
-      marginTop: -18,
-      maxWidth: 50,
-      paddingTop: 5,
+    aiTab: { marginTop: -18 },
+    aiTabMarkCrop: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.depth,
+      borderRadius: 28,
+      borderWidth: 4,
+      height: 56,
+      overflow: "hidden",
+      position: "relative",
+      width: 56,
     },
-    scoreTabIcon: { color: colors.onAccent, fontSize: 22, lineHeight: 23 },
-    scoreTabLabel: { color: colors.onAccent, fontWeight: "800" },
+    aiTabMarkImage: {
+      height: 56,
+      left: -3,
+      position: "absolute",
+      top: -2,
+      width: 128,
+    },
+    aiTabLabel: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
+    createTab: { justifyContent: "center" },
+    createTabIcon: {
+      color: colors.aqua,
+      fontSize: 30,
+      lineHeight: 30,
+    },
+    createTabLabel: { color: colors.aqua, fontWeight: "800" },
   });
 }
 

@@ -23,6 +23,7 @@ import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
 } from "./operator-service";
+import { venueWallTimeToUtc } from "./court-checkout";
 import { cancelPlayerBooking } from "./player-bookings";
 import { getRepository } from "./repository";
 import {
@@ -33,8 +34,13 @@ import {
   type RegisteredToolName,
 } from "./risk";
 import { consumeRateLimit } from "./rate-limit";
-import { cancelCalendarSession } from "./catalog-service";
+import {
+  cancelCalendarSession,
+  confirmCalendarChange,
+  proposeCalendarChange,
+} from "./catalog-service";
 import { loadWeatherForecast } from "./weather";
+import { generatedDunaFeatureKnowledge } from "./generated/duna-feature-knowledge";
 
 // Duna's first-party context can include membership and payment information.
 // OpenAI tracing stays off; Duna stores its own bounded audit record for every
@@ -44,7 +50,7 @@ setTracingDisabled(true);
 type BookingSummary = z.infer<typeof bookingSummarySchema>;
 type Metric = z.infer<typeof metricSchema>;
 
-export const dunaAiSurfaceSchema = z.enum(["player", "hq"]);
+export const dunaAiSurfaceSchema = z.enum(["player", "hq", "pro"]);
 export type DunaAiSurface = z.infer<typeof dunaAiSurfaceSchema>;
 
 export const dunaAiClientContextSchema = z.object({
@@ -250,6 +256,40 @@ interface ContextSnapshot {
   readonly underperforming: readonly EventSummary[];
   readonly discovery: readonly DiscoveryMapItem[];
   readonly alerts: readonly { title: string; detail: string }[];
+  readonly organization?: {
+    readonly id: string;
+    readonly name: string;
+    readonly timezone: string;
+    readonly brandDisplayName?: string;
+    readonly brandVoice?: string;
+    readonly tagline?: string;
+    readonly palette: Readonly<Record<string, string | number | undefined>>;
+    readonly knowledgeRevision: string;
+    readonly approvedKnowledge: readonly string[];
+  };
+  readonly calendarEntries: readonly DunaAiCalendarEntry[];
+}
+
+interface DunaAiCalendarEntry {
+  readonly id: string;
+  readonly sourceType:
+    "session" | "booking" | "pickup" | "busy-block" | "operator-block";
+  readonly title: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly timezone: string;
+  readonly status: string;
+  readonly kind?: string;
+  readonly venueId?: string;
+  readonly venueName?: string;
+  readonly courtId?: string;
+  readonly courtName?: string;
+  readonly coachPersonId?: string;
+  readonly coachName?: string;
+  readonly participantCount: number;
+  readonly capacity: number;
+  readonly draggable: boolean;
+  readonly activeAttendeeCount: number;
 }
 
 interface WeatherSignal {
@@ -329,7 +369,7 @@ function pageIntent(surface: DunaAiSurface, pathname: string): string {
   const value = pathname.toLowerCase();
   if (/discover|map|venue/.test(value)) return "discovering places to play";
   if (/event/.test(value))
-    return surface === "hq" ? "operating an event" : "evaluating an event";
+    return surface === "player" ? "evaluating an event" : "operating an event";
   if (/calendar|schedule/.test(value)) return "planning a schedule";
   if (/team|coach/.test(value)) return "managing coaches and team availability";
   if (/payment|finance|report/.test(value))
@@ -337,9 +377,9 @@ function pageIntent(surface: DunaAiSurface, pathname: string): string {
   if (/match|rating/.test(value))
     return "reviewing play and rating performance";
   if (/message/.test(value)) return "communicating with members or players";
-  return surface === "hq"
-    ? "reviewing the operation"
-    : "reviewing the player home";
+  return surface === "player"
+    ? "reviewing the player home"
+    : "reviewing the operation";
 }
 
 function overlaps(
@@ -511,6 +551,62 @@ function normalizedKnowledgeText(value: string): string {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function withoutSearchScore<T extends { score: number }>(
+  item: T,
+): Omit<T, "score"> {
+  const result = { ...item };
+  delete (result as { score?: number }).score;
+  return result;
+}
+
+function searchDunaFeatureKnowledge(query: string) {
+  const terms = normalizedKnowledgeText(query)
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length > 1);
+  const score = (value: string) => {
+    const normalized = normalizedKnowledgeText(value);
+    return terms.reduce(
+      (total, term) => total + (normalized.includes(term) ? 1 : 0),
+      0,
+    );
+  };
+  const modules = generatedDunaFeatureKnowledge.modules
+    .map((module) => ({
+      ...module,
+      score: score(
+        `${module.id} ${module.name} ${module.surfaces.join(" ")} ${module.status}`,
+      ),
+    }))
+    .filter((module) => terms.length === 0 || module.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 8)
+    .map(withoutSearchScore);
+  const apiCapabilities = generatedDunaFeatureKnowledge.apiCapabilities
+    .map((capability) => ({ capability, score: score(capability) }))
+    .filter((item) => terms.length === 0 || item.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 20)
+    .map(({ capability }) => capability);
+  const surfaceGuides = generatedDunaFeatureKnowledge.surfaceGuides
+    .map((guide) => ({
+      ...guide,
+      score: score(
+        `${guide.surface} ${guide.summary} ${guide.capabilities.join(" ")}`,
+      ),
+    }))
+    .filter((guide) => terms.length === 0 || guide.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map(withoutSearchScore);
+  return {
+    query,
+    sourceFingerprint: generatedDunaFeatureKnowledge.sourceFingerprint,
+    modules,
+    apiCapabilities,
+    surfaceGuides,
+  };
 }
 
 function rankKnowledgeResults(
@@ -747,7 +843,13 @@ async function buildContextSnapshot(input: {
   now: Date;
 }): Promise<ContextSnapshot> {
   const localContext: DunaAiClientContext = input.context ?? {
-    pathname: input.page ?? (input.surface === "hq" ? "/" : "/app"),
+    pathname:
+      input.page ??
+      (input.surface === "player"
+        ? "/app"
+        : input.surface === "pro"
+          ? "/today"
+          : "/"),
   };
   const base = {
     actor: {
@@ -801,6 +903,7 @@ async function buildContextSnapshot(input: {
       underperforming: [],
       discovery,
       alerts: [],
+      calendarEntries: [],
     };
   }
 
@@ -821,11 +924,21 @@ async function buildContextSnapshot(input: {
             "Duna HQ needs an active organization before operational context can be loaded.",
         },
       ],
+      calendarEntries: [],
     };
   }
-  const dashboard = await getRepository().operator.dashboard(
-    input.actor.organizationId,
-  );
+  const canReadOperatingContext = hasScope(input.actor, "sessions:read");
+  const [dashboard, workspace] = await Promise.all([
+    getRepository().operator.dashboard(input.actor.organizationId),
+    canReadOperatingContext
+      ? input.actor.isDemo && !process.env.DATABASE_URL
+        ? Promise.resolve(loadDemoOperatorWorkspace(input.actor.organizationId))
+        : loadOperatorWorkspace(
+            input.actor.organizationId,
+            input.actor.personId,
+          )
+      : Promise.resolve(undefined),
+  ]);
   const events = dashboard.events
     .filter((item) => Date.parse(item.endsAt) >= input.now.getTime())
     .slice(0, 30);
@@ -855,6 +968,51 @@ async function buildContextSnapshot(input: {
     underperforming,
     discovery: [],
     alerts: dashboard.alerts.map(({ title, detail }) => ({ title, detail })),
+    organization: workspace
+      ? {
+          id: workspace.organization.id,
+          name: workspace.organization.name,
+          timezone: workspace.organization.timezone,
+          brandDisplayName: workspace.theme.brandDisplayName,
+          brandVoice: workspace.theme.brandVoice,
+          tagline: workspace.theme.tagline,
+          palette: workspace.theme.palette,
+          knowledgeRevision: workspace.brandKnowledge.contextRevision,
+          approvedKnowledge: workspace.brandKnowledge.contextPreview,
+        }
+      : undefined,
+    calendarEntries: (workspace?.calendar.entries ?? [])
+      .filter((entry) => Date.parse(entry.endsAt) >= input.now.getTime())
+      .slice(0, 120)
+      .map((entry) => ({
+        id: entry.id,
+        sourceType: entry.sourceType,
+        title: entry.title,
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        timezone: entry.timezone,
+        status: entry.status,
+        kind: entry.kind,
+        venueId: entry.venueId,
+        venueName: entry.venueName,
+        courtId: entry.courtId,
+        courtName: entry.courtName,
+        coachPersonId: entry.coachPersonId,
+        coachName: entry.coachName,
+        participantCount: entry.participantCount,
+        capacity: entry.capacity,
+        draggable: entry.draggable,
+        activeAttendeeCount: entry.attendees.filter((attendee) =>
+          [
+            "accepted",
+            "paid",
+            "pending",
+            "confirmed",
+            "waitlisted",
+            "checked-in",
+          ].includes(attendee.status),
+        ).length,
+      })),
   };
 }
 
@@ -977,7 +1135,7 @@ function defaultLinkCards(
   message: string,
 ): DunaAiCard[] {
   const value = message.toLowerCase();
-  if (surface === "hq") {
+  if (surface !== "player") {
     if (/availability|coach|team/.test(value))
       return [
         {
@@ -1063,7 +1221,7 @@ function fallbackReply(input: {
   ) {
     return "I didn’t find an exact current Duna match for that search. I won’t pad the answer with unrelated places; open Discover to broaden the filters.";
   }
-  if (input.surface === "hq")
+  if (input.surface !== "player")
     return "I checked your page, current operating context, upcoming schedule, performance signals, weather, and conflicts. The most relevant next steps are below.";
   return "I checked your current page, upcoming Duna schedule, conflicts, and available weather context. The most relevant next steps are below.";
 }
@@ -1080,7 +1238,7 @@ function providerUnavailableReply(input: {
     return "I received the attachment, but Duna’s reasoning service could not analyze it. Nothing in Duna changed. Please try again in a moment.";
   if (input.researchMode === "on")
     return "I couldn’t reach web research, so I can’t give you a trustworthy current answer yet. Nothing in Duna changed. Please try again in a moment.";
-  return input.surface === "hq"
+  return input.surface !== "player"
     ? "I couldn’t reach Duna’s reasoning service, so I won’t pretend the organization summary below answers your question. Nothing changed; please try again in a moment."
     : "I couldn’t reach Duna’s reasoning service, so I won’t substitute your schedule for a real answer. Nothing changed; please try again in a moment.";
 }
@@ -1202,6 +1360,186 @@ async function researchDunaQuestion(input: {
   return text;
 }
 
+function localDateParts(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  return {
+    year: values.year ?? 0,
+    month: values.month ?? 0,
+    day: values.day ?? 0,
+    hour: values.hour ?? 0,
+    minute: values.minute ?? 0,
+  };
+}
+
+function dateKeyFromParts(parts: { year: number; month: number; day: number }) {
+  return `${parts.year.toString().padStart(4, "0")}-${parts.month
+    .toString()
+    .padStart(2, "0")}-${parts.day.toString().padStart(2, "0")}`;
+}
+
+function requestedLocalDateKey(
+  message: string,
+  now: Date,
+  timezone: string,
+): string | undefined {
+  const value = message.toLowerCase();
+  const today = localDateParts(now, timezone);
+  let offset: number | undefined;
+  if (/\btomorrow\b/.test(value)) offset = 1;
+  else if (/\btoday\b/.test(value)) offset = 0;
+  else {
+    const weekdays = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+    const requestedWeekday = weekdays.findIndex((day) => value.includes(day));
+    if (requestedWeekday >= 0) {
+      const todayIndex = new Date(
+        Date.UTC(today.year, today.month - 1, today.day),
+      ).getUTCDay();
+      offset = (requestedWeekday - todayIndex + 7) % 7;
+      if (offset === 0 && /\bnext\b/.test(value)) offset = 7;
+    }
+  }
+  if (offset === undefined) return undefined;
+  const requested = new Date(
+    Date.UTC(today.year, today.month - 1, today.day + offset),
+  );
+  return `${requested.getUTCFullYear().toString().padStart(4, "0")}-${(
+    requested.getUTCMonth() + 1
+  )
+    .toString()
+    .padStart(2, "0")}-${requested.getUTCDate().toString().padStart(2, "0")}`;
+}
+
+function mentionedClockMinutes(message: string): number[] {
+  return [
+    ...message.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/gi),
+  ]
+    .map((match) => {
+      const rawHour = Number(match[1]);
+      const minute = Number(match[2] ?? 0);
+      if (rawHour < 1 || rawHour > 12 || minute > 59) return undefined;
+      const isPm = match[3]?.toLowerCase().startsWith("p");
+      return (rawHour % 12) * 60 + minute + (isPm ? 12 * 60 : 0);
+    })
+    .filter((value): value is number => value !== undefined);
+}
+
+export type DunaAiRescheduleResolution =
+  | {
+      readonly status: "ready";
+      readonly entry: DunaAiCalendarEntry;
+      readonly startsAt: Date;
+      readonly endsAt: Date;
+    }
+  | {
+      readonly status: "clarify";
+      readonly reason: string;
+      readonly candidates: readonly DunaAiCalendarEntry[];
+    };
+
+export function resolveDunaAiRescheduleRequest(input: {
+  readonly message: string;
+  readonly actorPersonId: string;
+  readonly timezone: string;
+  readonly now: Date;
+  readonly entries: readonly DunaAiCalendarEntry[];
+}): DunaAiRescheduleResolution {
+  const value = input.message.toLowerCase();
+  const times = mentionedClockMinutes(input.message);
+  if (times.length === 0) {
+    return {
+      status: "clarify",
+      reason: "What new start time should I use?",
+      candidates: [],
+    };
+  }
+  const sourceMinutes = times.length >= 2 ? times[0] : undefined;
+  const targetMinutes = times.at(-1)!;
+  const requestedDate = requestedLocalDateKey(
+    input.message,
+    input.now,
+    input.timezone,
+  );
+  let candidates = input.entries.filter((entry) => {
+    if (
+      entry.sourceType !== "session" ||
+      !entry.draggable ||
+      Date.parse(entry.startsAt) <= input.now.getTime()
+    )
+      return false;
+    const local = localDateParts(new Date(entry.startsAt), entry.timezone);
+    if (requestedDate && dateKeyFromParts(local) !== requestedDate)
+      return false;
+    if (
+      sourceMinutes !== undefined &&
+      local.hour * 60 + local.minute !== sourceMinutes
+    )
+      return false;
+    if (/\bgroup\b/.test(value) && entry.capacity <= 2) return false;
+    if (
+      /\b(lesson|clinic|training|practice|session|class)\b/.test(value) &&
+      !/lesson|clinic|training|practice|session|class/i.test(
+        `${entry.title} ${entry.kind ?? ""}`,
+      )
+    )
+      return false;
+    return true;
+  });
+  if (/\bmy\b/.test(value)) {
+    candidates = candidates.filter(
+      (entry) => entry.coachPersonId === input.actorPersonId,
+    );
+  }
+  candidates = candidates.sort(
+    (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt),
+  );
+  if (candidates.length !== 1) {
+    return {
+      status: "clarify",
+      reason:
+        candidates.length === 0
+          ? "I could not identify one matching future session. Tell me its exact title, date, and current start time."
+          : "I found more than one matching session. Tell me the exact session title or court.",
+      candidates: candidates.slice(0, 5),
+    };
+  }
+  const entry = candidates[0]!;
+  const local = localDateParts(new Date(entry.startsAt), entry.timezone);
+  const targetLocal = `${dateKeyFromParts(local)}T${Math.floor(
+    targetMinutes / 60,
+  )
+    .toString()
+    .padStart(2, "0")}:${(targetMinutes % 60).toString().padStart(2, "0")}`;
+  const startsAt = venueWallTimeToUtc(targetLocal, entry.timezone);
+  const durationMs = Date.parse(entry.endsAt) - Date.parse(entry.startsAt);
+  return {
+    status: "ready",
+    entry,
+    startsAt,
+    endsAt: new Date(startsAt.getTime() + durationMs),
+  };
+}
+
 export function classifyDunaAiAction(message: string):
   | {
       readonly toolName: RegisteredToolName;
@@ -1210,6 +1548,16 @@ export function classifyDunaAiAction(message: string):
     }
   | undefined {
   const value = message.toLowerCase();
+  if (
+    /(move|reschedule|shift).*(lesson|clinic|training|practice|session|class)|(lesson|clinic|training|practice|session|class).*\b(to|at)\b.*\b(a\.?m\.?|p\.?m\.?)\b/.test(
+      value,
+    )
+  )
+    return {
+      toolName: "bookings.reschedule",
+      scope: "sessions:write",
+      title: "Reschedule session",
+    };
   if (/refund/.test(value))
     return {
       toolName: "payments.refund",
@@ -1386,12 +1734,14 @@ function suggestionsFor(
     )
   )
     suggestions.push("Which upcoming events have weather risk?");
-  if (surface === "hq" && snapshot.underperforming.length > 0)
+  if (surface !== "player" && snapshot.underperforming.length > 0)
     suggestions.push("Show me what is under-performing and what to do next");
-  if (surface === "hq")
+  if (surface !== "player")
     suggestions.push(
       "How is the business performing today?",
-      "Help me plan next week around coaches and courts",
+      surface === "pro"
+        ? "Move my next session and notify the players"
+        : "Help me plan next week around coaches and courts",
     );
   else
     suggestions.push(
@@ -1424,7 +1774,7 @@ export async function getDunaAiSuggestions(input: {
     cards,
     suggestions: suggestionsFor(snapshot, input.surface),
     toolsUsed: [
-      input.surface === "hq"
+      input.surface !== "player"
         ? "operator.dashboard.read"
         : "player.dashboard.read",
     ],
@@ -1598,7 +1948,7 @@ export async function runDunaAiAgent(input: {
   const toolsUsed = new Set<string>();
   const snapshot = await buildContextSnapshot(input);
   toolsUsed.add(
-    input.surface === "hq"
+    input.surface !== "player"
       ? "operator.dashboard.read"
       : "player.dashboard.read",
   );
@@ -1607,6 +1957,15 @@ export async function runDunaAiAgent(input: {
     ...contextCards(snapshot, input.message),
     ...defaultLinkCards(input.surface, input.message),
   ];
+  const deterministicResponse = (reply: string): DunaAiResponse => ({
+    reply,
+    cards: cards.slice(0, 10),
+    suggestions: suggestionsFor(snapshot, input.surface),
+    toolsUsed: [...toolsUsed],
+    reasoningEffort: "high",
+    providerAvailable: Boolean(dunaAiRuntime(input.requestOidcToken)),
+    researchUsed: false,
+  });
   const intent = classifyDunaAiAction(input.message);
   if (intent) {
     if (!hasScope(input.actor, intent.scope)) {
@@ -1616,6 +1975,99 @@ export async function runDunaAiAgent(input: {
         detail: `Your current Duna role cannot ${intent.title.toLowerCase()}. I can still prepare the details for someone who can.`,
         tone: "warning",
       });
+    } else if (intent.toolName === "bookings.reschedule") {
+      const resolution = resolveDunaAiRescheduleRequest({
+        message: input.message,
+        actorPersonId: input.actor.personId,
+        timezone:
+          snapshot.organization?.timezone ??
+          input.context?.timezone ??
+          "America/New_York",
+        now: input.now,
+        entries: snapshot.calendarEntries,
+      });
+      if (resolution.status === "clarify") {
+        const candidateDetail = resolution.candidates.length
+          ? ` I found: ${resolution.candidates
+              .map(
+                (entry) =>
+                  `${entry.title} on ${new Date(entry.startsAt).toLocaleString("en-US", { timeZone: entry.timezone })}${entry.courtName ? ` at ${entry.courtName}` : ""}`,
+              )
+              .join("; ")}.`
+          : "";
+        cards.unshift({
+          kind: "notice",
+          title: "One detail needed",
+          detail: `${resolution.reason}${candidateDetail}`,
+          tone: "warning",
+        });
+        toolsUsed.add("calendar.session.resolve");
+        return deterministicResponse(
+          `${resolution.reason}${candidateDetail} Nothing has changed.`,
+        );
+      }
+      const calendarProposal = await proposeCalendarChange({
+        actor: input.actor,
+        sessionId: resolution.entry.id,
+        startsAt: resolution.startsAt,
+        endsAt: resolution.endsAt,
+        courtId: resolution.entry.courtId,
+        coachPersonId: resolution.entry.coachPersonId,
+        requestId: input.requestId,
+        now: input.now,
+      });
+      toolsUsed.add("calendar.availability.check");
+      if (calendarProposal.status === "conflict") {
+        cards.unshift({
+          kind: "notice",
+          title: "That time is not available",
+          detail: `${resolution.entry.courtName ?? "The assigned court"} or ${resolution.entry.coachName ?? "the assigned coach"} is already reserved then. I did not move the session or notify anyone. Tell me whether to find another court or another time.`,
+          tone: "warning",
+        });
+        return deterministicResponse(
+          `I checked the live schedule, and ${resolution.entry.courtName ?? "the assigned court"} or ${resolution.entry.coachName ?? "the assigned coach"} is not available then. I did not change the session or notify anyone. Would you like another court or another start time?`,
+        );
+      }
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: resolution.entry.timezone,
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const changes = [
+        `Move ${resolution.entry.title} from ${formatter.format(new Date(resolution.entry.startsAt))} to ${formatter.format(resolution.startsAt)}`,
+        `${resolution.entry.courtName ?? "Assigned court"} and ${resolution.entry.coachName ?? "assigned coach"} are available`,
+        `Notify ${resolution.entry.activeAttendeeCount} active ${resolution.entry.activeAttendeeCount === 1 ? "player" : "players"} after the move is approved`,
+      ];
+      const draft = await proposeAgentAction({
+        toolName: intent.toolName,
+        toolInput: {
+          request: input.message,
+          surface: input.surface,
+          page: snapshot.localContext.pathname,
+          targetIds: [resolution.entry.id],
+          calendarProposalId: calendarProposal.id,
+          startsAt: resolution.startsAt.toISOString(),
+          endsAt: resolution.endsAt.toISOString(),
+        },
+        proposedDiff: {
+          operation: intent.title,
+          targetCount: 1,
+          changes,
+          status: "awaiting-review",
+        },
+        actorPersonId: input.actor.personId,
+        organizationId: input.actor.organizationId,
+        conversationId: input.requestId,
+        now: input.now,
+      });
+      toolsUsed.add("propose_governed_action");
+      cards.unshift(proposalCard(draft, intent.title, changes));
+      return deterministicResponse(
+        `I found ${resolution.entry.title}, checked the assigned court and coach, and prepared the single-session move to ${formatter.format(resolution.startsAt)}. Review and approve the exact change below; only then will Duna move it and notify ${resolution.entry.activeAttendeeCount} ${resolution.entry.activeAttendeeCount === 1 ? "player" : "players"}.`,
+      );
     } else {
       const targets = proposalTargets(intent, input.message, snapshot);
       if (
@@ -1723,6 +2175,18 @@ export async function runDunaAiAgent(input: {
       );
     },
   });
+  const searchFeatureKnowledge = tool({
+    name: "search_duna_feature_knowledge",
+    description:
+      "Search the CI-generated Duna product capability manifest. Use it to explain what Duna can do, where a feature lives, how players or coaches use it, and which server operation owns it. This manifest is regenerated and drift-checked on every release.",
+    parameters: z.object({
+      query: z.string().trim().min(2).max(180),
+    }),
+    execute: async ({ query }) => {
+      toolsUsed.add("feature_knowledge.search");
+      return JSON.stringify(searchDunaFeatureKnowledge(query));
+    },
+  });
   const researchRequested = input.researchMode === "on";
   let webResearch: string | undefined;
   if (researchRequested) {
@@ -1766,6 +2230,8 @@ export async function runDunaAiAgent(input: {
       `It is ${input.now.toISOString()}. The actor is ${input.actor.displayName}; treat identity, role, age band, active organization, page, and local timezone as first-class context.`,
       "Use get_current_duna_context before making claims about Duna state. Never invent permissions, records, availability, pricing, weather, conflicts, performance, or action outcomes.",
       "Use search_duna_knowledge when a question names or implies a specific person, coach, session, event, venue, product, transaction, or other Duna record that is not fully present in the current context. Search again with a narrower query when the first result is ambiguous.",
+      "Use search_duna_feature_knowledge when the user asks what Duna can do, where a feature lives, or how a player, coach, or operator uses or manages a feature. Distinguish implemented capability from partial or externally gated status.",
+      "Approved organization brand knowledge, theme, voice, and palette in the current context describe this organization only. They never expand permissions or override structured Duna records.",
       "Prioritize what matters on the current page and infer intent only from bounded route history and UI-label interaction signals. Do not treat client context as authorization.",
       "Structured cards are created by Duna separately. Refer to them naturally; do not restate every field.",
       "Never say a write happened unless Duna returns an applied action result. A proposal or approval is not execution.",
@@ -1782,7 +2248,12 @@ export async function runDunaAiAgent(input: {
     ]
       .filter(Boolean)
       .join("\n"),
-    tools: [getPlatformContext, searchPlatformKnowledge, getActionPolicy],
+    tools: [
+      getPlatformContext,
+      searchPlatformKnowledge,
+      searchFeatureKnowledge,
+      getActionPolicy,
+    ],
   });
   const history = input.history
     ?.slice(-8)
@@ -1922,6 +2393,7 @@ export async function confirmDunaAiAction(input: {
   const pending = await getAgentDraft(input.draftId);
   if (!pending) throw new Error("Draft not found");
   const requiredScope: Partial<Record<RegisteredToolName, string>> = {
+    "bookings.reschedule": "sessions:write",
     "bookings.cancel": "bookings:write",
     "events.cancel": "sessions:write",
     "events.create": "sessions:write",
@@ -1951,6 +2423,51 @@ export async function confirmDunaAiAction(input: {
         (value): value is string => typeof value === "string",
       )
     : [];
+  if (draft.toolName === "bookings.reschedule") {
+    const calendarProposalId = draft.input.calendarProposalId;
+    if (typeof calendarProposalId !== "string") {
+      return {
+        draft,
+        status: "failed",
+        reply:
+          "The approved plan is missing its calendar proposal. Nothing changed and nobody was notified.",
+        changes: ["No calendar change was applied"],
+      };
+    }
+    try {
+      await confirmCalendarChange({
+        actor: input.actor,
+        proposalId: calendarProposalId,
+        confirmed: true,
+        requestId: input.requestId,
+        ipAddress: input.ipAddress,
+        now: input.now,
+      });
+      return {
+        draft,
+        status: "applied",
+        reply:
+          "The session is moved. Duna reserved the approved court and coach time and queued the player schedule notifications.",
+        changes: Object.values(draft.proposedDiff).flatMap((value) =>
+          Array.isArray(value)
+            ? value.filter((item): item is string => typeof item === "string")
+            : [],
+        ),
+      };
+    } catch (error) {
+      return {
+        draft,
+        status: "failed",
+        reply:
+          "The schedule changed while you were reviewing. Duna did not move the session or send notifications.",
+        changes: [
+          error instanceof Error
+            ? error.message
+            : "The calendar proposal could not be applied.",
+        ],
+      };
+    }
+  }
   if (
     draft.toolName !== "bookings.cancel" &&
     draft.toolName !== "events.cancel"

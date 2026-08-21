@@ -8,6 +8,7 @@ import {
   hasDunaAiGatewayCredential,
   isRetryableDunaAiGatewayStatus,
   rankDiscoveryItems,
+  resolveDunaAiRescheduleRequest,
   resolveDunaAiCopilotModel,
   resolveDunaAiGatewayCredential,
   resolveDunaAiGatewayCredentialSource,
@@ -55,6 +56,17 @@ describe("Duna AI action classification", () => {
     expect(
       classifyDunaAiAction("What is the coach availability next Tuesday?"),
     ).toBeUndefined();
+  });
+
+  it("classifies a single-session move as a governed reschedule", () => {
+    expect(
+      classifyDunaAiAction(
+        "Move my 9:30am group lesson to a 10:00am start time tomorrow",
+      ),
+    ).toMatchObject({
+      toolName: "bookings.reschedule",
+      scope: "sessions:write",
+    });
   });
 });
 
@@ -121,6 +133,69 @@ describe("Duna AI context", () => {
         new Date("2026-08-17T12:00:00.000Z"),
       ),
     ).toEqual([]);
+  });
+
+  it("resolves one coach session and preserves its duration", () => {
+    const resolution = resolveDunaAiRescheduleRequest({
+      message: "Move my 9:30am group lesson to a 10:00am start time tomorrow",
+      actorPersonId: "10000000-0000-4000-8000-000000000001",
+      timezone: "America/New_York",
+      now: new Date("2026-08-21T12:00:00.000Z"),
+      entries: [
+        {
+          id: "20000000-0000-4000-8000-000000000001",
+          sourceType: "session",
+          title: "U16 group lesson",
+          startsAt: "2026-08-22T13:30:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          timezone: "America/New_York",
+          status: "registration-open",
+          kind: "clinic",
+          courtId: "30000000-0000-4000-8000-000000000001",
+          courtName: "Court 2",
+          coachPersonId: "10000000-0000-4000-8000-000000000001",
+          coachName: "Coach Taylor",
+          participantCount: 8,
+          capacity: 10,
+          draggable: true,
+          activeAttendeeCount: 8,
+        },
+      ],
+    });
+    expect(resolution.status).toBe("ready");
+    if (resolution.status !== "ready") return;
+    expect(resolution.startsAt.toISOString()).toBe("2026-08-22T14:00:00.000Z");
+    expect(resolution.endsAt.toISOString()).toBe("2026-08-22T15:30:00.000Z");
+  });
+
+  it("asks for clarification when two sessions match", () => {
+    const base = {
+      sourceType: "session" as const,
+      startsAt: "2026-08-22T13:30:00.000Z",
+      endsAt: "2026-08-22T14:30:00.000Z",
+      timezone: "America/New_York",
+      status: "registration-open",
+      kind: "clinic",
+      coachPersonId: "10000000-0000-4000-8000-000000000001",
+      participantCount: 6,
+      capacity: 8,
+      draggable: true,
+      activeAttendeeCount: 6,
+    };
+    const resolution = resolveDunaAiRescheduleRequest({
+      message: "Move my 9:30am lesson to 10:00am tomorrow",
+      actorPersonId: "10000000-0000-4000-8000-000000000001",
+      timezone: "America/New_York",
+      now: new Date("2026-08-21T12:00:00.000Z"),
+      entries: [
+        { ...base, id: "session-1", title: "Group lesson A" },
+        { ...base, id: "session-2", title: "Group lesson B" },
+      ],
+    });
+    expect(resolution).toMatchObject({
+      status: "clarify",
+      candidates: [{ title: "Group lesson A" }, { title: "Group lesson B" }],
+    });
   });
 
   it("re-checks current permission before confirming a write", async () => {
@@ -249,6 +324,16 @@ describe("Duna AI model", () => {
         ],
       }),
     ).toMatchObject({ attachments: [{ name: "court.png" }] });
+  });
+
+  it("accepts Duna Pro as an organization-aware copilot surface", () => {
+    expect(
+      dunaAiRequestSchema.parse({
+        mode: "ask",
+        message: "What is on my schedule?",
+        surface: "pro",
+      }),
+    ).toMatchObject({ surface: "pro" });
   });
 
   it("routes signed-in voice transcription through Vercel AI Gateway", async () => {

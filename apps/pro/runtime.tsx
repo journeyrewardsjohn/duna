@@ -20,21 +20,26 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from "react-native";
-import Svg, { Line, Path } from "react-native-svg";
 import {
+  askDunaAi,
+  confirmProDunaAiAction,
   createSessionNoteRoom,
   createDunaApiClient,
   createProMessagingDeliveryEngine,
+  getDunaAiSuggestions,
   uploadProductImage,
   type DunaApiClient,
   type SessionNoteRoom,
   type UploadedProductImage,
+  type ProDunaAiActionOutcome,
+  type ProDunaAiResponse,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
 import { SatoshiText as Text } from "./satoshi-text";
@@ -87,6 +92,23 @@ export interface ProRuntime {
   readonly createSessionNoteRoom?: (
     sessionId: string,
   ) => Promise<SessionNoteRoom>;
+  readonly askDunaAi?: (input: {
+    readonly message: string;
+    readonly pathname: string;
+    readonly pageTitle?: string;
+    readonly history?: readonly {
+      role: "assistant" | "user";
+      body: string;
+    }[];
+  }) => Promise<ProDunaAiResponse>;
+  readonly getDunaAiSuggestions?: (input: {
+    readonly pathname: string;
+    readonly pageTitle?: string;
+  }) => Promise<ProDunaAiResponse>;
+  readonly confirmDunaAiAction?: (input: {
+    readonly draftId: string;
+    readonly confirmationNonce?: string;
+  }) => Promise<ProDunaAiActionOutcome>;
   readonly signOut?: () => Promise<void>;
 }
 
@@ -97,28 +119,20 @@ const authBaseUrl = (
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const runtimeDunaWordmark = require("./assets/duna-horizontal-blue.png");
+
 function RuntimeMark() {
   return (
-    <Svg height="33" viewBox="0 0 64 48" width="44">
-      <Line
-        opacity={0.38}
-        stroke="#d4b77c"
-        strokeLinecap="round"
-        strokeWidth="1.5"
-        x1="5"
-        x2="59"
-        y1="34"
-        y2="34"
+    <View style={runtimeStyles.wordmarkRow}>
+      <Image
+        accessibilityLabel="Duna"
+        resizeMode="contain"
+        source={runtimeDunaWordmark}
+        style={runtimeStyles.wordmarkImage}
       />
-      <Path
-        d="M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5"
-        fill="none"
-        stroke="#d4b77c"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="4.5"
-      />
-    </Svg>
+      <Text style={runtimeStyles.pro}>PRO</Text>
+    </View>
   );
 }
 
@@ -137,11 +151,7 @@ function CenteredState({
 }) {
   return (
     <View style={runtimeStyles.state}>
-      <View style={runtimeStyles.wordmarkRow}>
-        <RuntimeMark />
-        <Text style={runtimeStyles.wordmark}>DUNA</Text>
-        <Text style={runtimeStyles.pro}>PRO</Text>
-      </View>
+      <RuntimeMark />
       <Text style={runtimeStyles.title}>{title}</Text>
       <Text style={runtimeStyles.body}>{body}</Text>
       {busy && <ActivityIndicator color="#f7c86b" size="small" />}
@@ -168,11 +178,7 @@ function WelcomeState({
       contentContainerStyle={runtimeStyles.welcome}
       style={runtimeStyles.auth}
     >
-      <View style={runtimeStyles.wordmarkRow}>
-        <RuntimeMark />
-        <Text style={runtimeStyles.wordmark}>DUNA</Text>
-        <Text style={runtimeStyles.pro}>PRO</Text>
-      </View>
+      <RuntimeMark />
       <Text style={runtimeStyles.kicker}>YOUR CLUB. ONE OPERATING SYSTEM.</Text>
       <Text style={runtimeStyles.welcomeTitle}>
         Run indoor and beach volleyball from anywhere.
@@ -278,11 +284,7 @@ function OrganizationOnboarding({
       keyboardShouldPersistTaps="handled"
       style={runtimeStyles.auth}
     >
-      <View style={runtimeStyles.wordmarkRow}>
-        <RuntimeMark />
-        <Text style={runtimeStyles.wordmark}>DUNA</Text>
-        <Text style={runtimeStyles.pro}>PRO</Text>
-      </View>
+      <RuntimeMark />
       <Text style={runtimeStyles.kicker}>CREATE YOUR WORKSPACE</Text>
       <Text style={runtimeStyles.welcomeTitle}>What are you building?</Text>
       <Text style={runtimeStyles.welcomeBody}>
@@ -539,6 +541,25 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         switchOrganization,
         createSessionNoteRoom: (sessionId) =>
           createSessionNoteRoom(getToken, sessionId),
+        askDunaAi: (input) =>
+          askDunaAi(getToken, {
+            message: input.message,
+            history: input.history,
+            context: {
+              pathname: input.pathname,
+              pageTitle: input.pageTitle,
+              timezone: workspace.organization.timezone,
+              locale: Intl.DateTimeFormat().resolvedOptions().locale,
+            },
+          }),
+        getDunaAiSuggestions: (input) =>
+          getDunaAiSuggestions(getToken, {
+            pathname: input.pathname,
+            pageTitle: input.pageTitle,
+            timezone: workspace.organization.timezone,
+            locale: Intl.DateTimeFormat().resolvedOptions().locale,
+          }),
+        confirmDunaAiAction: (input) => confirmProDunaAiAction(getToken, input),
         uploadProductImage: (input) => uploadProductImage(getToken, input),
         signOut: safeSignOut,
       }}
@@ -772,11 +793,6 @@ const runtimeStyles = StyleSheet.create({
     letterSpacing: -1.2,
     lineHeight: 39,
   },
-  wordmark: {
-    color: "#101a20",
-    fontSize: 19,
-    fontWeight: "900",
-    letterSpacing: 4,
-  },
   wordmarkRow: { alignItems: "center", flexDirection: "row", gap: 9 },
+  wordmarkImage: { height: 46, width: 146 },
 });

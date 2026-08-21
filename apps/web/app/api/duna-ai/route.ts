@@ -84,9 +84,9 @@ export async function POST(request: Request) {
       return Response.json({ result });
     }
     const input = dunaAiRequestSchema.parse(body);
-    if (input.surface !== "player") {
+    if (input.surface !== "player" && input.surface !== "pro") {
       return Response.json(
-        { error: "This endpoint is for Duna Player." },
+        { error: "This endpoint is for Duna Player and Duna Pro." },
         { status: 400 },
       );
     }
