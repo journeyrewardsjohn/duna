@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { messageWidgetSchema } from "@duna/messaging-client";
 import { getServerCaller } from "@/lib/api";
 
 export interface MessagingActionState {
@@ -46,6 +47,12 @@ function actionError(error: unknown, fallback: string): MessagingActionState {
   };
 }
 
+function widgets(formData: FormData) {
+  const raw = formData.get("widgets");
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  return messageWidgetSchema.array().max(8).parse(JSON.parse(raw));
+}
+
 export async function sendOrganizationMessage(
   _previous: MessagingActionState,
   formData: FormData,
@@ -62,7 +69,7 @@ export async function sendOrganizationMessage(
         kind:
           formData.get("announcementOnly") === "true" ? "announcement" : "text",
         body: required(formData, "body"),
-        widgets: [],
+        widgets: widgets(formData),
         attachmentUploadIds: [],
       },
     });
@@ -126,6 +133,7 @@ export async function createOrganizationConversation(
         announcementOnly: formData.get("announcementOnly") === "on",
         followerBroadcast: false,
         initialMessage: required(formData, "message"),
+        initialWidgets: widgets(formData),
         clientMessageId: required(formData, "clientMessageId"),
       },
     });

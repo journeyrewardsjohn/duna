@@ -708,6 +708,7 @@ export async function createCatalogCheckoutSession(input: {
   readonly organizationId: string;
   readonly catalogItemId: string;
   readonly catalogVariantId: string;
+  readonly title: string;
   readonly stripePriceId: string;
   readonly quantity: number;
   readonly subtotalMinor: number;
@@ -725,6 +726,11 @@ export async function createCatalogCheckoutSession(input: {
   readonly cancelUrl: string;
   readonly expiresAt: Date;
   readonly idempotencyKey: string;
+  readonly installmentPlan?: {
+    readonly count: number;
+    readonly installmentAmountMinor: number;
+    readonly totalMinor: number;
+  };
 }): Promise<{
   readonly id: string;
   readonly url: string | null;
@@ -750,7 +756,7 @@ export async function createCatalogCheckoutSession(input: {
   ) {
     throw new Error("Catalog checkout application fee is invalid");
   }
-  const recurring = Boolean(input.recurringInterval);
+  const recurring = Boolean(input.recurringInterval || input.installmentPlan);
   if (recurring && input.quantity !== 1) {
     throw new Error("Recurring plans must be purchased one at a time");
   }
@@ -772,11 +778,36 @@ export async function createCatalogCheckoutSession(input: {
     dunaOrganizationCommissionRateBps: String(
       input.organizationCommissionRateBps,
     ),
+    ...(input.installmentPlan
+      ? {
+          dunaPaymentOption: "installments",
+          dunaInstallmentCount: String(input.installmentPlan.count),
+          dunaInstallmentTotalMinor: String(input.installmentPlan.totalMinor),
+          dunaInstallmentFirstInvoiceMinor: String(
+            input.installmentPlan.installmentAmountMinor +
+              input.serviceFeeMinor,
+          ),
+        }
+      : {}),
   };
   const applicationFeePercent =
     Math.round((input.applicationFeeMinor / totalAmountMinor) * 10_000) / 100;
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-    { price: input.stripePriceId, quantity: input.quantity },
+    input.installmentPlan
+      ? {
+          quantity: 1,
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: input.installmentPlan.installmentAmountMinor,
+            product_data: {
+              name: input.title,
+              description: `${input.installmentPlan.count} fixed monthly payments through Duna`,
+              metadata: { dunaCatalogItemId: input.catalogItemId },
+            },
+            recurring: { interval: "month", interval_count: 1 },
+          },
+        }
+      : { price: input.stripePriceId, quantity: input.quantity },
   ];
   if (input.serviceFeeMinor > 0) {
     lineItems.push({
@@ -790,12 +821,13 @@ export async function createCatalogCheckoutSession(input: {
             "Platform service fee for this organization transaction.",
           metadata: { dunaOrderId: input.orderId },
         },
-        recurring: input.recurringInterval
-          ? {
-              interval: input.recurringInterval,
-              interval_count: input.recurringIntervalCount ?? 1,
-            }
-          : undefined,
+        recurring:
+          input.recurringInterval && !input.installmentPlan
+            ? {
+                interval: input.recurringInterval,
+                interval_count: input.recurringIntervalCount ?? 1,
+              }
+            : undefined,
       },
     });
   }
@@ -861,6 +893,68 @@ export async function createCatalogCheckoutSession(input: {
     url: session.url,
     expiresAt: new Date(session.expires_at * 1_000).toISOString(),
   };
+}
+
+export async function capCatalogInstallmentSubscription(input: {
+  readonly subscriptionId: string;
+  readonly installmentCount: number;
+  readonly idempotencyKey: string;
+}): Promise<void> {
+  if (
+    !Number.isSafeInteger(input.installmentCount) ||
+    input.installmentCount < 2 ||
+    input.installmentCount > 24
+  ) {
+    throw new Error("Installment count must be between 2 and 24");
+  }
+  const stripe = getStripeClient();
+  const schedule = await stripe.subscriptionSchedules.create(
+    { from_subscription: input.subscriptionId },
+    { idempotencyKey: `${input.idempotencyKey}:create-schedule` },
+  );
+  const phase = schedule.phases[0];
+  if (!phase) throw new Error("Stripe did not return an installment phase");
+  await stripe.subscriptionSchedules.update(
+    schedule.id,
+    {
+      end_behavior: "cancel",
+      phases: [
+        {
+          start_date: phase.start_date,
+          duration: {
+            interval: "month",
+            interval_count: input.installmentCount,
+          },
+          items: phase.items.map((item) => ({
+            price: typeof item.price === "string" ? item.price : item.price.id,
+            quantity: item.quantity ?? 1,
+          })),
+          ...(phase.application_fee_percent !== null
+            ? { application_fee_percent: phase.application_fee_percent }
+            : {}),
+          ...(phase.on_behalf_of
+            ? {
+                on_behalf_of:
+                  typeof phase.on_behalf_of === "string"
+                    ? phase.on_behalf_of
+                    : phase.on_behalf_of.id,
+              }
+            : {}),
+          ...(phase.transfer_data?.destination
+            ? {
+                transfer_data: {
+                  destination:
+                    typeof phase.transfer_data.destination === "string"
+                      ? phase.transfer_data.destination
+                      : phase.transfer_data.destination.id,
+                },
+              }
+            : {}),
+        },
+      ],
+    },
+    { idempotencyKey: `${input.idempotencyKey}:cap-schedule` },
+  );
 }
 
 export async function createBillingPortalSession(input: {

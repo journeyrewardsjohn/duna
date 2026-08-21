@@ -152,6 +152,11 @@ const coachStories = [
 ] as const;
 
 const sharedCapabilities: readonly [LucideIcon, string, string][] = [
+  [
+    ClipboardCheck,
+    "Training OS",
+    "Programs, practice plans, load-aware schedules, drills, and coaching animations",
+  ],
   [CalendarDays, "Calendar", "Sessions, courts, coaches, holds, and capacity"],
   [MapPinned, "Venues", "Court inventory, rentals, media, and booking rules"],
   [UsersRound, "People", "Players, parents, guardians, balances, and history"],
@@ -1072,6 +1077,9 @@ export function RunYourBusinessPage({
             the pressure you feel today, then keeps the same data and identity
             intact as the business changes shape.
           </p>
+          <Link href="/run-your-club/training-os">
+            Explore Program Designer + Training OS <ArrowRight size={17} />
+          </Link>
         </div>
         <div className={styles.pathGrid}>
           <Link data-reveal href="#solo-coach">

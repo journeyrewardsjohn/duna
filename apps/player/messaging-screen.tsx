@@ -260,7 +260,7 @@ function WidgetCard({
   readonly index: number;
   readonly onAction: (
     actionId: string,
-    actionType: "acknowledge" | "quick-action",
+    actionType: "acknowledge" | "quick-action" | "poll-vote",
     label?: string,
   ) => void;
   readonly palette: MessagingPalette;
@@ -370,6 +370,85 @@ function WidgetCard({
           </Text>
         </View>
       </Pressable>
+    );
+  }
+  if (widget.kind === "resource-card") {
+    return (
+      <View style={styles.widget}>
+        <Text style={styles.widgetEyebrow}>
+          {widget.resourceType.replace("-", " ").toUpperCase()}
+        </Text>
+        <Text style={styles.widgetTitle}>{widget.title}</Text>
+        {widget.detail ? (
+          <Text style={styles.widgetBody}>{widget.detail}</Text>
+        ) : null}
+        <Pressable
+          onPress={() => openDunaPath(widget.action.href)}
+          style={styles.widgetPrimary}
+        >
+          <Text style={styles.widgetPrimaryText}>{widget.action.label}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (widget.kind === "poll") {
+    const totalVotes = widget.options.reduce(
+      (total, option) => total + (option.voteCount ?? 0),
+      0,
+    );
+    return (
+      <View style={styles.widget}>
+        <Text style={styles.widgetEyebrow}>
+          POLL · {widget.closed ? "ENDED" : "OPEN"}
+        </Text>
+        <Text style={styles.widgetTitle}>{widget.title}</Text>
+        <Text style={styles.widgetBody}>
+          {widget.allowMultipleAnswers ? "Choose one or more" : "Choose one"}
+        </Text>
+        <View style={styles.pollOptions}>
+          {widget.options.map((option) => {
+            const percent = totalVotes
+              ? Math.round(((option.voteCount ?? 0) / totalVotes) * 100)
+              : 0;
+            return (
+              <Pressable
+                disabled={widget.closed}
+                key={option.id}
+                onPress={() =>
+                  onAction(`poll:${index}:${option.id}`, "poll-vote")
+                }
+                style={[
+                  styles.pollOption,
+                  option.selected && styles.pollOptionSelected,
+                ]}
+              >
+                <Text style={styles.pollChoice}>
+                  {option.selected ? "✓" : "○"}
+                </Text>
+                <View style={styles.pollOptionBody}>
+                  <View style={styles.pollOptionHeading}>
+                    <Text style={styles.pollOptionLabel}>{option.label}</Text>
+                    <Text style={styles.widgetMeta}>
+                      {option.voteCount ?? 0}
+                    </Text>
+                  </View>
+                  <View style={styles.pollTrack}>
+                    <View style={[styles.pollFill, { width: `${percent}%` }]} />
+                  </View>
+                  {option.voterNames?.length ? (
+                    <Text style={styles.widgetMeta}>
+                      {option.voterNames.join(", ")}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.widgetMeta}>
+          {widget.totalVoters ?? 0} voter{widget.totalVoters === 1 ? "" : "s"}
+        </Text>
+      </View>
     );
   }
   return (
@@ -617,7 +696,7 @@ function MessageBubble({
   readonly onAction: (
     messageId: string,
     actionId: string,
-    actionType: "acknowledge" | "quick-action",
+    actionType: "acknowledge" | "quick-action" | "poll-vote",
     label?: string,
   ) => void;
   readonly palette: MessagingPalette;
@@ -1534,7 +1613,7 @@ export function PlayerMessagingScreen({
     async (
       messageId: string,
       actionId: string,
-      actionType: "acknowledge" | "quick-action",
+      actionType: "acknowledge" | "quick-action" | "poll-vote",
       label?: string,
     ) => {
       if (label) setDraft(label);
@@ -2795,6 +2874,34 @@ function createStyles(palette: MessagingPalette) {
       fontWeight: "900",
     },
     quickActions: { gap: 7 },
+    pollOptions: { gap: 7 },
+    pollOption: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 54,
+      padding: 9,
+    },
+    pollOptionSelected: { borderColor: palette.accent, borderWidth: 2 },
+    pollChoice: { color: palette.accent, fontSize: 17, fontWeight: "900" },
+    pollOptionBody: { flex: 1, gap: 4 },
+    pollOptionHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    pollOptionLabel: { color: palette.text, fontSize: 12, fontWeight: "800" },
+    pollTrack: {
+      backgroundColor: palette.border,
+      borderRadius: 999,
+      height: 5,
+      overflow: "hidden",
+    },
+    pollFill: { backgroundColor: palette.accent, height: 5 },
     scoreRow: {
       alignItems: "center",
       flexDirection: "row",

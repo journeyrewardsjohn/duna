@@ -111,6 +111,20 @@ export const staticPublicPages = [
     ],
   },
   {
+    path: "/run-your-club/training-os",
+    title: "Duna Training OS",
+    description:
+      "Design season-long volleyball programs, build practice plans, animate drills, manage athlete load, and sell programs with Duna Training OS.",
+    sections: [
+      "Program Designer turns dates, practice frequency, tournaments, travel, objectives, roster context, and coaching style into an editable, load-aware training calendar.",
+      "Practice Planner combines timed blocks, focus areas, intensity, estimated touches, jumps, technical work, game-like play, lifting, plyometrics, warmup, and recovery.",
+      "The Drill Library supports private organization drills, shared public drills, and paid marketplace drills with normalized tags and one primary focus area.",
+      "Advanced Drill Studio models player movement, ball contacts, self-passes, sets, attack targets, ordered balls, and multiple phases before Sol creates coaching guidance and animation direction.",
+      "Programs can be sold as one offer covering every included session, with upfront payment or a fixed installment schedule. When configured, checkout clearly shows the pay-over-time total and upfront savings.",
+      "Programs and practice plans preserve the latest five non-financial versions for restore. Commercial and completed-session history remains protected.",
+    ],
+  },
+  {
     path: "/safety",
     title: "Duna safety",
     description:

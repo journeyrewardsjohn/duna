@@ -112,6 +112,40 @@ export const messageWidgetSchema = z.discriminatedUnion("kind", [
       .min(1)
       .max(4),
   }),
+  z.object({
+    kind: z.literal("resource-card"),
+    resourceType: z.enum(["practice-plan", "session", "video"]),
+    title: z.string().min(1).max(160),
+    detail: z.string().max(1_000).optional(),
+    startsAt: z.string().datetime().optional(),
+    thumbnailUrl: z.string().url().optional(),
+    action: z.object({
+      label: z.string().min(1).max(48),
+      href: dunaActionPathSchema,
+    }),
+  }),
+  z.object({
+    kind: z.literal("poll"),
+    id: z.string().min(1).max(40),
+    title: z.string().min(1).max(240),
+    options: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(32),
+          label: z.string().min(1).max(160),
+          voteCount: z.number().int().nonnegative().optional(),
+          selected: z.boolean().optional(),
+          voterNames: z.array(z.string().min(1).max(160)).max(100).optional(),
+        }),
+      )
+      .min(2)
+      .max(10),
+    allowMultipleAnswers: z.boolean().default(false),
+    hideVoterNames: z.boolean().default(false),
+    endsAt: z.string().datetime().optional(),
+    totalVoters: z.number().int().nonnegative().optional(),
+    closed: z.boolean().optional(),
+  }),
 ]);
 export type MessageWidget = z.infer<typeof messageWidgetSchema>;
 
@@ -314,20 +348,28 @@ export type MessageAttachmentUploadResult = z.infer<
 export const messageActionInputSchema = z.object({
   messageId: z.string().uuid(),
   actionId: z.string().min(1).max(64),
-  actionType: z.enum(["acknowledge", "quick-action"]),
+  actionType: z.enum(["acknowledge", "quick-action", "poll-vote"]),
 });
 export type MessageActionInput = z.infer<typeof messageActionInputSchema>;
 
-export const createConversationInputSchema = z.object({
-  type: conversationTypeSchema,
-  title: z.string().trim().min(1).max(160),
-  recipientPersonIds: z.array(z.string().uuid()).max(2_000).default([]),
-  context: conversationContextSchema.optional(),
-  announcementOnly: z.boolean().default(false),
-  followerBroadcast: z.boolean().default(false),
-  initialMessage: z.string().trim().min(1).max(10_000).optional(),
-  clientMessageId: z.string().uuid().optional(),
-});
+export const createConversationInputSchema = z
+  .object({
+    type: conversationTypeSchema,
+    title: z.string().trim().min(1).max(160),
+    recipientPersonIds: z.array(z.string().uuid()).max(2_000).default([]),
+    context: conversationContextSchema.optional(),
+    announcementOnly: z.boolean().default(false),
+    followerBroadcast: z.boolean().default(false),
+    initialMessage: z.string().trim().min(1).max(10_000).optional(),
+    initialWidgets: z.array(messageWidgetSchema).max(8).optional(),
+    clientMessageId: z.string().uuid().optional(),
+  })
+  .refine(
+    (value) =>
+      !value.initialWidgets?.length ||
+      Boolean(value.initialMessage && value.clientMessageId),
+    "Interactive cards require an initial message and client message id.",
+  );
 export type CreateConversationInput = z.infer<
   typeof createConversationInputSchema
 >;

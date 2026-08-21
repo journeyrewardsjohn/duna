@@ -426,6 +426,91 @@
   color: var(--text-2);
 }
 
+.pollWidget {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 0.85rem;
+  color: var(--text-1);
+  display: grid;
+  gap: 0.65rem;
+  min-width: min(380px, 100%);
+  padding: 0.8rem;
+}
+
+.pollWidget > header {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.pollWidget > header span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.pollWidget strong,
+.pollWidget small {
+  font-size: 0.75rem;
+}
+
+.pollWidget small {
+  color: var(--text-2);
+}
+
+.pollWidget > div {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.pollWidget form button {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 0.7rem;
+  color: var(--text-1);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  width: 100%;
+}
+
+.pollWidget form button > span:first-child {
+  align-items: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  display: inline-flex;
+  height: 1.25rem;
+  justify-content: center;
+  width: 1.25rem;
+}
+
+.pollWidget form button > span.pollSelected {
+  background: var(--layout-amenity-core);
+  color: var(--layout-amenity-on-core);
+}
+
+.pollWidget form button > span:nth-child(2) {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.pollWidget i {
+  background: var(--hairline);
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+}
+
+.pollWidget i b {
+  background: var(--layout-amenity-core);
+  display: block;
+  height: 100%;
+}
+
 .widget a,
 .widget button,
 .quickActions button {

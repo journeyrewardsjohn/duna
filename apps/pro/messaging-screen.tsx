@@ -23,6 +23,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -84,6 +85,61 @@ function WidgetCard({
   readonly widget: MessageWidget;
 }) {
   const styles = useMemo(() => createStyles(palette), [palette]);
+  if (widget.kind === "resource-card") {
+    return (
+      <View style={styles.widget}>
+        <Text style={styles.widgetEyebrow}>
+          {widget.resourceType.replace("-", " ").toUpperCase()}
+        </Text>
+        <Text style={styles.widgetTitle}>{widget.title}</Text>
+        {widget.detail ? (
+          <Text style={styles.widgetBody}>{widget.detail}</Text>
+        ) : null}
+      </View>
+    );
+  }
+  if (widget.kind === "poll") {
+    const total = widget.options.reduce(
+      (sum, option) => sum + (option.voteCount ?? 0),
+      0,
+    );
+    return (
+      <View style={styles.widget}>
+        <Text style={styles.widgetEyebrow}>
+          POLL · {widget.closed ? "ENDED" : "OPEN"}
+        </Text>
+        <Text style={styles.widgetTitle}>{widget.title}</Text>
+        <View style={styles.pollOptions}>
+          {widget.options.map((option) => {
+            const percentage = total
+              ? Math.round(((option.voteCount ?? 0) / total) * 100)
+              : 0;
+            return (
+              <View key={option.id} style={styles.pollOption}>
+                <View style={styles.pollHeading}>
+                  <Text style={styles.widgetBody}>{option.label}</Text>
+                  <Text style={styles.widgetEyebrow}>
+                    {option.voteCount ?? 0}
+                  </Text>
+                </View>
+                <View style={styles.pollTrack}>
+                  <View
+                    style={[styles.pollFill, { width: `${percentage}%` }]}
+                  />
+                </View>
+                {option.voterNames?.length ? (
+                  <Text style={styles.widgetBody}>
+                    {option.voterNames.join(", ")}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+        <Text style={styles.widgetBody}>{widget.totalVoters ?? 0} voters</Text>
+      </View>
+    );
+  }
   const label =
     widget.kind === "schedule-change"
       ? "SCHEDULE UPDATE"
@@ -280,6 +336,14 @@ export function ProMessagingScreen({
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTitle, setComposeTitle] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [composePollEnabled, setComposePollEnabled] = useState(false);
+  const [composePollTitle, setComposePollTitle] = useState("");
+  const [composePollOptions, setComposePollOptions] = useState<
+    readonly string[]
+  >(["Option 1", "Option 2"]);
+  const [composePollMultiple, setComposePollMultiple] = useState(false);
+  const [composePollPrivate, setComposePollPrivate] = useState(false);
+  const [composePollEndsAt, setComposePollEndsAt] = useState("");
   const [audienceKey, setAudienceKey] = useState("organization");
   const [selectedPeople, setSelectedPeople] = useState<readonly string[]>([]);
   const [creating, setCreating] = useState(false);
@@ -714,6 +778,19 @@ export function ProMessagingScreen({
     const body = composeBody.trim();
     const audience = audiences.find((item) => item.key === audienceKey);
     if (!title || !body || !audience || creating) return;
+    const pollOptions = composePollOptions
+      .map((label, index) => ({
+        id: `option-${index + 1}`,
+        label: label.trim(),
+      }))
+      .filter((option) => option.label);
+    if (
+      composePollEnabled &&
+      (!composePollTitle.trim() || pollOptions.length < 2)
+    ) {
+      setError("Give the poll a name and at least two options.");
+      return;
+    }
     if (audience.key === "specific" && selectedPeople.length === 0) {
       setError("Choose at least one person for this conversation.");
       return;
@@ -738,12 +815,37 @@ export function ProMessagingScreen({
           announcementOnly: false,
           followerBroadcast: false,
           initialMessage: body,
+          initialWidgets: composePollEnabled
+            ? [
+                {
+                  kind: "poll",
+                  id: Crypto.randomUUID().slice(0, 36),
+                  title: composePollTitle.trim(),
+                  options: pollOptions,
+                  allowMultipleAnswers: composePollMultiple,
+                  hideVoterNames: composePollPrivate,
+                  ...(composePollEndsAt.trim()
+                    ? {
+                        endsAt: new Date(
+                          composePollEndsAt.trim(),
+                        ).toISOString(),
+                      }
+                    : {}),
+                },
+              ]
+            : [],
           clientMessageId: Crypto.randomUUID(),
         },
       });
       setComposeOpen(false);
       setComposeTitle("");
       setComposeBody("");
+      setComposePollEnabled(false);
+      setComposePollTitle("");
+      setComposePollOptions(["Option 1", "Option 2"]);
+      setComposePollMultiple(false);
+      setComposePollPrivate(false);
+      setComposePollEndsAt("");
       setSelectedPeople([]);
       await loadInbox();
       setSelectedId(result.id);
@@ -760,6 +862,12 @@ export function ProMessagingScreen({
     audienceKey,
     audiences,
     composeBody,
+    composePollEnabled,
+    composePollEndsAt,
+    composePollMultiple,
+    composePollOptions,
+    composePollPrivate,
+    composePollTitle,
     composeTitle,
     creating,
     loadInbox,
@@ -1101,6 +1209,87 @@ export function ProMessagingScreen({
               style={[styles.fieldInput, styles.fieldTextarea]}
               value={composeBody}
             />
+            <View style={styles.pollComposer}>
+              <View style={styles.rowBetween}>
+                <View style={styles.flex}>
+                  <Text style={styles.fieldLabel}>POLL WIDGET</Text>
+                  <Text style={styles.audienceMeta}>
+                    Collect a decision inside the conversation.
+                  </Text>
+                </View>
+                <Switch
+                  onValueChange={setComposePollEnabled}
+                  trackColor={{ false: palette.border, true: palette.accent }}
+                  value={composePollEnabled}
+                />
+              </View>
+              {composePollEnabled ? (
+                <>
+                  <TextInput
+                    onChangeText={setComposePollTitle}
+                    placeholder="Poll name"
+                    placeholderTextColor={palette.muted}
+                    style={styles.fieldInput}
+                    value={composePollTitle}
+                  />
+                  {composePollOptions.map((option, index) => (
+                    <View key={index} style={styles.pollOptionEditor}>
+                      <Text style={styles.audienceMeta}>{index + 1}</Text>
+                      <TextInput
+                        onChangeText={(value) => {
+                          const next = [...composePollOptions];
+                          next[index] = value;
+                          setComposePollOptions(next);
+                        }}
+                        placeholder={`Option ${index + 1}`}
+                        placeholderTextColor={palette.muted}
+                        style={[styles.fieldInput, styles.flex]}
+                        value={option}
+                      />
+                    </View>
+                  ))}
+                  {composePollOptions.length < 10 ? (
+                    <Pressable
+                      onPress={() =>
+                        setComposePollOptions((current) => [
+                          ...current,
+                          `Option ${current.length + 1}`,
+                        ])
+                      }
+                      style={styles.secondaryButton}
+                    >
+                      <Text style={styles.secondaryButtonText}>
+                        ＋ Add option
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  <View style={styles.pollSetting}>
+                    <Text style={styles.audienceTitle}>
+                      Allow multiple answers
+                    </Text>
+                    <Switch
+                      onValueChange={setComposePollMultiple}
+                      value={composePollMultiple}
+                    />
+                  </View>
+                  <View style={styles.pollSetting}>
+                    <Text style={styles.audienceTitle}>Hide voter names</Text>
+                    <Switch
+                      onValueChange={setComposePollPrivate}
+                      value={composePollPrivate}
+                    />
+                  </View>
+                  <TextInput
+                    autoCapitalize="none"
+                    onChangeText={setComposePollEndsAt}
+                    placeholder="Optional end time · 2026-08-25T18:00:00-04:00"
+                    placeholderTextColor={palette.muted}
+                    style={styles.fieldInput}
+                    value={composePollEndsAt}
+                  />
+                </>
+              ) : null}
+            </View>
             <Pressable
               disabled={
                 !composeTitle.trim() ||
@@ -1451,6 +1640,20 @@ function createStyles(palette: ProMessagingPalette) {
     widgetBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
     widgetAmount: { color: palette.text, fontSize: 24, fontWeight: "900" },
     widgetScore: { color: palette.text, fontSize: 15, fontWeight: "900" },
+    pollOptions: { gap: 7 },
+    pollOption: { gap: 4 },
+    pollHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    pollTrack: {
+      backgroundColor: palette.border,
+      borderRadius: 999,
+      height: 5,
+      overflow: "hidden",
+    },
+    pollFill: { backgroundColor: palette.accent, height: 5 },
     composer: {
       alignItems: "flex-end",
       backgroundColor: palette.surface,
@@ -1630,5 +1833,36 @@ function createStyles(palette: ProMessagingPalette) {
       paddingVertical: 13,
     },
     fieldTextarea: { minHeight: 118, textAlignVertical: "top" },
+    pollComposer: {
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 10,
+      padding: 12,
+    },
+    pollOptionEditor: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    pollSetting: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    secondaryButton: {
+      alignItems: "center",
+      borderColor: palette.border,
+      borderRadius: 13,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 46,
+    },
+    secondaryButtonText: {
+      color: palette.text,
+      fontSize: 13,
+      fontWeight: "900",
+    },
   });
 }

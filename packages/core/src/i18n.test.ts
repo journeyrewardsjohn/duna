@@ -18,4 +18,20 @@ describe("formatVenueTime", () => {
       formatVenueTime("2026-06-14T11:30:00.000Z", "America/Los_Angeles"),
     ).toBe("Jun 14, 4:30 AM");
   });
+
+  it("keeps explicit date-only and time-only formats separate", () => {
+    const value = "2026-06-14T11:30:00.000Z";
+    expect(
+      formatVenueTime(value, "America/Los_Angeles", "en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+    ).toBe("Jun 14");
+    expect(
+      formatVenueTime(value, "America/Los_Angeles", "en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    ).toBe("4:30 AM");
+  });
 });

@@ -57,3 +57,57 @@ describe("message attachment contracts", () => {
     ).toBe(false);
   });
 });
+
+describe("conversation widgets", () => {
+  it("supports a complete poll with coach-controlled privacy and timing", () => {
+    expect(
+      messageWidgetSchema.parse({
+        kind: "poll",
+        id: "poll-practice-time",
+        title: "Choose Saturday's practice time",
+        options: [
+          { id: "morning", label: "9:00 AM" },
+          { id: "afternoon", label: "2:00 PM" },
+        ],
+        allowMultipleAnswers: true,
+        hideVoterNames: true,
+        endsAt: "2026-08-22T18:00:00.000Z",
+      }),
+    ).toMatchObject({
+      kind: "poll",
+      allowMultipleAnswers: true,
+      hideVoterNames: true,
+    });
+  });
+
+  it("limits a poll to ten non-empty options", () => {
+    expect(
+      messageWidgetSchema.safeParse({
+        kind: "poll",
+        id: "too-many",
+        title: "Pick one",
+        options: Array.from({ length: 11 }, (_, index) => ({
+          id: `option-${index}`,
+          label: `Option ${index}`,
+        })),
+        allowMultipleAnswers: false,
+        hideVoterNames: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("supports practice, session, and video cards in the conversation", () => {
+    for (const resourceType of ["practice-plan", "session", "video"] as const) {
+      expect(
+        messageWidgetSchema.safeParse({
+          kind: "resource-card",
+          resourceType,
+          resourceId: `${resourceType}-1`,
+          title: "Saturday prep",
+          detail: "Open the shared resource.",
+          action: { label: "Open", href: "/app/messages" },
+        }).success,
+      ).toBe(true);
+    }
+  });
+});

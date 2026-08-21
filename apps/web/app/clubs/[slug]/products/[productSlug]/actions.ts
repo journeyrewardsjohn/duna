@@ -19,6 +19,7 @@ export async function startCatalogCheckoutAction(input: {
   readonly catalogVariantId: string;
   readonly catalogPriceId?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
+  readonly paymentOption?: "upfront" | "installments";
   readonly quantity: number;
   readonly catalogSessionOccurrenceId?: string;
   readonly recordingConsentAccepted?: boolean;
@@ -39,6 +40,7 @@ export async function startCatalogCheckoutAction(input: {
       catalogVariantId: input.catalogVariantId,
       catalogPriceId: input.catalogPriceId,
       paymentMethod: input.paymentMethod,
+      paymentOption: input.paymentOption ?? "upfront",
       quantity: input.quantity,
       catalogSessionOccurrenceId: input.catalogSessionOccurrenceId,
       recordingConsentAccepted: input.recordingConsentAccepted,

@@ -22,11 +22,26 @@ export function formatVenueTime(
   locale: SupportedLocale = defaultLocale,
   options: Intl.DateTimeFormatOptions = {},
 ): string {
-  const usesStyle =
-    options.dateStyle !== undefined || options.timeStyle !== undefined;
+  const hasExplicitPresentation = [
+    "dateStyle",
+    "timeStyle",
+    "weekday",
+    "era",
+    "year",
+    "month",
+    "day",
+    "dayPeriod",
+    "hour",
+    "minute",
+    "second",
+    "fractionalSecondDigits",
+    "timeZoneName",
+  ].some(
+    (key) => options[key as keyof Intl.DateTimeFormatOptions] !== undefined,
+  );
   return new Intl.DateTimeFormat(locale, {
     timeZone: timezone,
-    ...(usesStyle
+    ...(hasExplicitPresentation
       ? {}
       : {
           month: "short" as const,

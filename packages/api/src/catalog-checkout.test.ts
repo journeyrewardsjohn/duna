@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { catalogOrderItemKind } from "./catalog-checkout";
+import {
+  calculateCatalogInstallmentQuote,
+  catalogOrderItemKind,
+} from "./catalog-checkout";
 import { catalogCheckoutResultSchema } from "./contracts";
 
 describe("catalog transaction pricing", () => {
@@ -13,6 +16,48 @@ describe("catalog transaction pricing", () => {
     [{ type: "plan", subtype: "bundle" }, "package"],
   ] as const)("maps %o to %s pricing", (input, expected) => {
     expect(catalogOrderItemKind(input)).toBe(expected);
+  });
+
+  it("quotes a fixed pay-over-time total without losing cents", () => {
+    expect(
+      calculateCatalogInstallmentQuote({
+        upfrontAmountMinor: 48_000,
+        installmentCount: 4,
+        priceIncreasePercent: 10,
+      }),
+    ).toEqual({
+      installmentAmountMinor: 13_200,
+      totalAmountMinor: 52_800,
+      savingsAmountMinor: 4_800,
+    });
+    expect(
+      calculateCatalogInstallmentQuote({
+        upfrontAmountMinor: 10_001,
+        installmentCount: 3,
+        priceIncreasePercent: 0,
+      }),
+    ).toEqual({
+      installmentAmountMinor: 3_334,
+      totalAmountMinor: 10_002,
+      savingsAmountMinor: 1,
+    });
+  });
+
+  it("rejects installment pricing outside the supported guardrails", () => {
+    expect(() =>
+      calculateCatalogInstallmentQuote({
+        upfrontAmountMinor: 48_000,
+        installmentCount: 25,
+        priceIncreasePercent: 10,
+      }),
+    ).toThrow("between 2 and 24");
+    expect(() =>
+      calculateCatalogInstallmentQuote({
+        upfrontAmountMinor: 48_000,
+        installmentCount: 4,
+        priceIncreasePercent: 101,
+      }),
+    ).toThrow("between 0 and 100");
   });
 });
 

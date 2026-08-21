@@ -6223,20 +6223,52 @@
 }
 
 .training-advanced-court .court-action path {
-  stroke-dasharray: 2 1.2;
+  cursor: pointer;
+  pointer-events: stroke;
   stroke-linecap: round;
-  stroke-width: 0.55;
+  stroke-width: 0.72;
 }
 
 .training-advanced-court .court-action--move path,
 .training-advanced-court .court-action--rotate path,
 .training-advanced-court .court-action--block path {
-  stroke-dasharray: none;
+  stroke-dasharray: 2 1.2;
+  stroke-width: 0.58;
+}
+
+.training-advanced-court .court-action.is-selected path {
+  filter: drop-shadow(0 0 1.2px var(--hq-accent));
+  stroke: var(--hq-accent);
+  stroke-width: 1.05;
 }
 
 .training-advanced-court .court-action text {
   fill: var(--hq-deep);
   font-weight: 800;
+}
+
+.training-advanced-court .action-handle {
+  cursor: grab;
+  fill: var(--hq-surface);
+  pointer-events: all;
+  stroke: var(--hq-deep);
+  stroke-width: 0.55;
+}
+
+.training-advanced-court .action-handle--curve {
+  fill: var(--hq-accent);
+}
+
+.training-advanced-court .action-ball {
+  fill: var(--hq-signal);
+  stroke: var(--hq-deep);
+  stroke-width: 0.4;
+}
+
+.training-advanced-court .action-player {
+  fill: var(--hq-deep);
+  stroke: var(--hq-surface);
+  stroke-width: 0.5;
 }
 
 .training-advanced-court.is-playing .court-action path {
@@ -6422,6 +6454,40 @@
   align-items: center;
   display: grid;
   gap: 0.7rem;
+}
+
+.training-advanced-timeline > article {
+  border-radius: 12px;
+  cursor: pointer;
+  padding: 0.45rem;
+}
+
+.training-advanced-timeline > article.is-selected {
+  background: var(--hq-accent-soft);
+  box-shadow: inset 3px 0 0 var(--hq-accent);
+}
+
+.training-advanced-action-editor header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.training-advanced-action-editor header div {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.training-advanced-action-editor header button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--hq-line);
+  border-radius: 9px;
+  color: var(--hq-ink);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
 }
 
 .training-advanced-timeline > header {

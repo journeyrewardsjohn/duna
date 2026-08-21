@@ -397,6 +397,7 @@ import {
   draftTrainingDrillInputSchema,
   draftTrainingProgramInputSchema,
   recordTrainingOutcomeInputSchema,
+  removeTrainingProgramEventInputSchema,
   playerTrainingWorkspaceSchema,
   submitTrainingAthleteResponseInputSchema,
   trainingDrillSchema,
@@ -429,6 +430,7 @@ import {
   loadTrainingWorkspace,
   loadPlayerTrainingWorkspace,
   recordTrainingOutcome,
+  removeTrainingProgramEvent,
   restoreTrainingPracticePlanArchive,
   restoreTrainingPracticePlanVersion,
   restoreTrainingProgramArchive,
@@ -4356,6 +4358,7 @@ const playerRouter = router({
         catalogVariantId: z.string().uuid(),
         catalogPriceId: z.string().uuid().optional(),
         paymentMethod: z.enum(["card", "credit", "cash"]),
+        paymentOption: z.enum(["upfront", "installments"]).optional(),
         paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
         quantity: z.number().int().min(1).max(50),
         catalogSessionOccurrenceId: z.string().uuid().optional(),
@@ -7502,6 +7505,38 @@ const operatorRouter = router({
         execute: async () => {
           try {
             return await updateTrainingProgramEvent({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  removeTrainingProgramEvent: organizationProcedure("training:write")
+    .use(
+      rateLimitMiddleware({
+        id: "training-program-event-remove",
+        capacity: 24,
+        refillPerMinute: 8,
+        scope: "organization",
+      }),
+    )
+    .input(removeTrainingProgramEventInputSchema)
+    .output(z.object({ id: z.string().uuid(), programId: z.string().uuid() }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.removeTrainingProgramEvent",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await removeTrainingProgramEvent({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

@@ -1,9 +1,11 @@
 import type { MessageWidget } from "@duna/messaging-client";
 import {
   ArrowLeft,
+  BarChart3,
   CalendarClock,
   ChevronRight,
   CircleDollarSign,
+  ClipboardList,
   FileCheck2,
   Megaphone,
   MessageSquareText,
@@ -16,6 +18,7 @@ import Link from "next/link";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 import { MessagingLiveRefresh } from "./live-refresh";
+import { MessageComposer } from "./message-composer";
 import { MessagingActionForm } from "./messaging-action-form";
 import styles from "./messaging.module.css";
 
@@ -31,6 +34,54 @@ function initials(name: string) {
 }
 
 function Widget({ widget }: { readonly widget: MessageWidget }) {
+  if (widget.kind === "poll") {
+    const highest = Math.max(
+      1,
+      ...widget.options.map((option) => option.voteCount ?? 0),
+    );
+    return (
+      <div className={`${styles.widget} ${styles.pollWidget}`}>
+        <BarChart3 aria-hidden size={18} />
+        <span>
+          <strong>{widget.title}</strong>
+          <small>
+            {widget.totalVoters ?? 0} voter{widget.totalVoters === 1 ? "" : "s"}
+            {widget.closed ? " · Ended" : " · Open"}
+          </small>
+          {widget.options.map((option) => (
+            <span className={styles.pollOption} key={option.id}>
+              <span>
+                <b>{option.label}</b>
+                <small>{option.voteCount ?? 0}</small>
+              </span>
+              <i
+                style={{
+                  width: `${((option.voteCount ?? 0) / highest) * 100}%`,
+                }}
+              />
+              {option.voterNames?.length ? (
+                <small>{option.voterNames.join(", ")}</small>
+              ) : null}
+            </span>
+          ))}
+        </span>
+      </div>
+    );
+  }
+  if (widget.kind === "resource-card") {
+    return (
+      <div className={styles.widget}>
+        <ClipboardList aria-hidden size={18} />
+        <span>
+          <strong>{widget.title}</strong>
+          <small>
+            {widget.detail ?? widget.resourceType.replace("-", " ")}
+          </small>
+        </span>
+        <Link href={widget.action.href}>{widget.action.label}</Link>
+      </div>
+    );
+  }
   const Icon =
     widget.kind === "payment-request"
       ? CircleDollarSign
@@ -72,12 +123,14 @@ export default async function OrganizationMessagesPage({
 }) {
   const { compose, thread, view } = await searchParams;
   const caller = await getServerCaller();
-  const [dashboard, workspace, events, inbox] = await Promise.all([
-    caller.operator.dashboard(),
-    caller.operator.workspace(),
-    caller.operator.events(),
-    caller.messaging.inbox({ asPrincipal: "organization" }),
-  ]);
+  const [dashboard, workspace, events, inbox, trainingWorkspace] =
+    await Promise.all([
+      caller.operator.dashboard(),
+      caller.operator.workspace(),
+      caller.operator.events(),
+      caller.messaging.inbox({ asPrincipal: "organization" }),
+      caller.operator.trainingWorkspace(),
+    ]);
   const selected =
     inbox.conversations.find((conversation) => conversation.id === thread) ??
     inbox.conversations[0];
@@ -125,6 +178,43 @@ export default async function OrganizationMessagesPage({
       ),
     ]).values(),
   ].sort((left, right) => left.displayName.localeCompare(right.displayName));
+  const audiences = [
+    {
+      value: `organization::${dashboard.organization.id}::Active organization members`,
+      title: "Entire organization",
+      detail: "Active members and staff",
+      kind: "group" as const,
+    },
+    ...workspace.sessions.map((session) => {
+      const leagueProgramId =
+        session.kind === "league" ? session.programId : undefined;
+      const audienceType = leagueProgramId
+        ? "league"
+        : session.kind === "private-lesson"
+          ? "lesson"
+          : "event";
+      return {
+        value: `${audienceType}::${leagueProgramId ?? session.id}::${session.title}`,
+        title: session.title,
+        detail: `${session.analytics.registrations} registered · ${session.kind.replace("-", " ")}`,
+        kind: "session" as const,
+      };
+    }),
+    ...events.flatMap((event) =>
+      (event.divisions ?? []).map((division) => ({
+        value: `division::${division.id}::${event.title} · ${division.name}`,
+        title: `${event.title} · ${division.name}`,
+        detail: "Division group",
+        kind: "group" as const,
+      })),
+    ),
+    {
+      value: "specific::::Selected people",
+      title: "Choose specific people",
+      detail: `${relatedPeople.length} related people available`,
+      kind: "people" as const,
+    },
+  ];
   return (
     <OperatorShell
       active="messages"
@@ -213,140 +303,25 @@ export default async function OrganizationMessagesPage({
                   <strong>Start with who needs the update.</strong>
                 </span>
               </header>
-              <MessagingActionForm
-                buttonClassName={styles.sendButton}
-                mode="create"
-                pendingLabel="Creating and sending…"
-                submitLabel="Create and send"
-              >
-                <input
-                  name="organizationId"
-                  type="hidden"
-                  value={dashboard.organization.id}
-                />
-                <input
-                  name="clientMessageId"
-                  type="hidden"
-                  value={creationId}
-                />
-                <label>
-                  <span>Audience</span>
-                  <select defaultValue="" name="audience" required>
-                    <option disabled value="">
-                      Choose a related audience
-                    </option>
-                    <option
-                      value={`organization::${dashboard.organization.id}::Active organization members`}
-                    >
-                      Active organization members
-                    </option>
-                    {workspace.sessions.map((session) => {
-                      const leagueProgramId =
-                        session.kind === "league"
-                          ? session.programId
-                          : undefined;
-                      const audienceType = leagueProgramId
-                        ? "league"
-                        : session.kind === "private-lesson"
-                          ? "lesson"
-                          : "event";
-                      const audienceId = leagueProgramId ?? session.id;
-                      return (
-                        <option
-                          key={session.id}
-                          value={`${audienceType}::${audienceId}::${session.title}`}
-                        >
-                          {session.title} · {session.analytics.registrations}{" "}
-                          registered
-                        </option>
-                      );
-                    })}
-                    {events.flatMap((event) =>
-                      (event.divisions ?? []).map((division) => (
-                        <option
-                          key={division.id}
-                          value={`division::${division.id}::${event.title} · ${division.name}`}
-                        >
-                          {event.title} · {division.name}
-                        </option>
-                      )),
-                    )}
-                    {workspace.calendar.entries
-                      .filter((entry) => entry.sourceType === "booking")
-                      .map((entry) => (
-                        <option
-                          key={`rental:${entry.id}`}
-                          value={`rental::${entry.id}::${entry.title}`}
-                        >
-                          {entry.title} · rental
-                        </option>
-                      ))}
-                    <option value="specific::::Selected people">
-                      Specific related people
-                    </option>
-                  </select>
-                </label>
-                <label>
-                  <span>Conversation name</span>
-                  <input
-                    maxLength={160}
-                    name="title"
-                    placeholder="Saturday clinic · Players"
-                    required
-                  />
-                </label>
-                <details className={styles.peoplePicker}>
-                  <summary>
-                    Choose people for a specific-person conversation
-                    <small>
-                      {relatedPeople.length} related people available
-                    </small>
-                  </summary>
-                  <div>
-                    {relatedPeople.map((person) => (
-                      <label key={person.personId}>
-                        <input
-                          name="recipientPersonId"
-                          type="checkbox"
-                          value={person.personId}
-                        />
-                        <span className={styles.personAvatar}>
-                          {initials(person.displayName)}
-                        </span>
-                        <span>
-                          <strong>{person.displayName}</strong>
-                          <small>{person.detail}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </details>
-                <label>
-                  <span>Message</span>
-                  <textarea
-                    maxLength={10_000}
-                    name="message"
-                    placeholder="Share the useful update, what changed, and what people should do next."
-                    required
-                    rows={7}
-                  />
-                </label>
-                <label className={styles.checkLabel}>
-                  <input name="announcementOnly" type="checkbox" />
-                  <span>
-                    <strong>Updates only</strong>
-                    <small>Only organization staff can post.</small>
-                  </span>
-                </label>
-                <div className={styles.guardrail}>
-                  <ShieldCheck aria-hidden size={18} />
-                  <span>
-                    Duna removes blocked recipients, includes verified guardians
-                    for minors, and holds minor conversations for SafeSport
-                    screening.
-                  </span>
-                </div>
-              </MessagingActionForm>
+              <MessageComposer
+                audiences={audiences}
+                clientMessageId={creationId}
+                organizationId={dashboard.organization.id}
+                people={relatedPeople}
+                practicePlans={trainingWorkspace.practicePlans.map((plan) => ({
+                  id: plan.id,
+                  title: plan.title,
+                  detail: `${plan.durationMinutes} min · ${plan.focusArea}`,
+                  href: "/app/training",
+                }))}
+                sessions={workspace.sessions.map((session) => ({
+                  id: session.id,
+                  title: session.title,
+                  detail: `${session.analytics.registrations} registered`,
+                  href: "/app/schedule",
+                  startsAt: session.startsAt,
+                }))}
+              />
             </section>
           ) : detail ? (
             <section className={styles.thread}>

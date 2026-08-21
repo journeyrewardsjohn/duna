@@ -66,6 +66,9 @@ export function CatalogCheckoutPanel({
   const [paymentMethod, setPaymentMethod] = useState<
     "card" | "cash" | "credit"
   >(item.allowCard ? "card" : item.allowCredits ? "credit" : "cash");
+  const [paymentOption, setPaymentOption] = useState<
+    "upfront" | "installments"
+  >("upfront");
   const [selectedPriceId, setSelectedPriceId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [occurrenceId, setOccurrenceId] = useState(
@@ -127,9 +130,39 @@ export function CatalogCheckoutPanel({
       : paymentMethod === "credit"
         ? creditPrice
         : cashPrice;
-  const monetaryTotal = membershipIncluded
-    ? 0
-    : (price?.amountMinor ?? 0) * quantity;
+  const paymentPlan =
+    item.configuration.paymentPlan &&
+    typeof item.configuration.paymentPlan === "object" &&
+    !Array.isArray(item.configuration.paymentPlan)
+      ? (item.configuration.paymentPlan as Readonly<Record<string, unknown>>)
+      : undefined;
+  const installmentCount =
+    typeof paymentPlan?.installmentCount === "number"
+      ? Math.trunc(paymentPlan.installmentCount)
+      : 0;
+  const installmentIncreasePercent =
+    typeof paymentPlan?.priceIncreasePercent === "number"
+      ? Math.min(100, Math.max(0, paymentPlan.priceIncreasePercent))
+      : 0;
+  const installmentsAvailable =
+    paymentPlan?.enabled === true &&
+    installmentCount >= 2 &&
+    paymentMethod === "card" &&
+    !cardPrice?.recurringInterval &&
+    item.type !== "good";
+  const upfrontUnitMinor = price?.amountMinor ?? 0;
+  const installmentAmountMinor = installmentsAvailable
+    ? Math.ceil(
+        Math.round(upfrontUnitMinor * (1 + installmentIncreasePercent / 100)) /
+          installmentCount,
+      )
+    : 0;
+  const payOverTimeUnitMinor = installmentAmountMinor * installmentCount;
+  const selectedUnitMinor =
+    paymentOption === "installments" && installmentsAvailable
+      ? payOverTimeUnitMinor
+      : upfrontUnitMinor;
+  const monetaryTotal = membershipIncluded ? 0 : selectedUnitMinor * quantity;
   const dunaServiceFeeEligible =
     paymentMethod === "card" && item.type !== "good" && monetaryTotal > 0;
   const dunaServiceFeeMinor =
@@ -294,6 +327,7 @@ export function CatalogCheckoutPanel({
         catalogVariantId: variant.id,
         catalogPriceId: price?.id,
         paymentMethod,
+        paymentOption,
         quantity,
         catalogSessionOccurrenceId: occurrenceId || undefined,
         recordingConsentAccepted,
@@ -509,7 +543,10 @@ export function CatalogCheckoutPanel({
           {item.allowCredits && (
             <button
               className={paymentMethod === "credit" ? "active" : ""}
-              onClick={() => setPaymentMethod("credit")}
+              onClick={() => {
+                setPaymentMethod("credit");
+                setPaymentOption("upfront");
+              }}
               type="button"
             >
               <WalletCards size={18} />
@@ -522,7 +559,10 @@ export function CatalogCheckoutPanel({
           {item.allowCash && (
             <button
               className={paymentMethod === "cash" ? "active" : ""}
-              onClick={() => setPaymentMethod("cash")}
+              onClick={() => {
+                setPaymentMethod("cash");
+                setPaymentOption("upfront");
+              }}
               type="button"
             >
               <Banknote size={18} />
@@ -541,6 +581,59 @@ export function CatalogCheckoutPanel({
           )}
         </div>
       )}
+      {!membershipIncluded && installmentsAvailable ? (
+        <div className="catalog-payment-plan-choice">
+          <span>Choose how to pay</span>
+          <div>
+            <button
+              className={paymentOption === "upfront" ? "active" : ""}
+              onClick={() => setPaymentOption("upfront")}
+              type="button"
+            >
+              <span>
+                <strong>Pay upfront</strong>
+                <small>
+                  {money(
+                    upfrontUnitMinor,
+                    price?.currency ?? organization.currency,
+                  )}
+                </small>
+              </span>
+              {installmentIncreasePercent > 0 ? (
+                <b>Save {installmentIncreasePercent}%</b>
+              ) : null}
+            </button>
+            <button
+              className={paymentOption === "installments" ? "active" : ""}
+              onClick={() => setPaymentOption("installments")}
+              type="button"
+            >
+              <span>
+                <strong>{installmentCount} monthly payments</strong>
+                <small>
+                  {money(
+                    installmentAmountMinor,
+                    price?.currency ?? organization.currency,
+                  )}{" "}
+                  each
+                </small>
+              </span>
+              <b>
+                {money(
+                  payOverTimeUnitMinor,
+                  price?.currency ?? organization.currency,
+                )}{" "}
+                total
+              </b>
+            </button>
+          </div>
+          <small>
+            Future payments are automatic. By choosing installments, you
+            authorize the full fixed schedule shown above; the plan ends after
+            payment {installmentCount}.
+          </small>
+        </div>
+      ) : null}
       {membershipStep && (
         <button
           aria-checked={addMembership}
