@@ -54,4 +54,27 @@ describe("promo code creation workspace", () => {
     expect(component).toContain("Deactivate code");
     expect(component).toContain("Deactivated · history retained");
   });
+
+  it("submits the complete draft from the review step", () => {
+    for (const field of [
+      "name",
+      "code",
+      "discountType",
+      "discountValue",
+      "minimumPurchase",
+      "maximumDiscount",
+    ]) {
+      expect(component).toMatch(
+        new RegExp(`name="${field}"[\\s\\S]*?type="hidden"`),
+      );
+    }
+  });
+
+  it("creates promo edits as linked successors and shows their history", () => {
+    expect(component).toContain("Edit as new version");
+    expect(component).toContain("Create the next, traceable version.");
+    expect(component).toContain("Version history");
+    expect(component).toContain("sourcePromoCodeId");
+    expect(stylesheet).toContain(".promo-card__history");
+  });
 });

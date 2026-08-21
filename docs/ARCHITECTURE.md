@@ -190,6 +190,34 @@ payments, inventory/capacity, registration, live state, messaging cursors, and
 read-after-write flows remain on the primary. Audit evidence that explains a
 mutation is committed with that mutation.
 
+## Versioning and lineage
+
+For a commercial, published, regulated, or externally synchronized record,
+**edit means create a successor; it never means overwrite the prior record**.
+The successor carries a stable lineage root, a monotonic revision number, and
+its direct predecessor. The prior record remains addressable for reporting,
+redemption, execution, fulfillment, reconciliation, and audit. Its lifecycle
+can become inactive, archived, or superseded, but it is not deleted as part of
+ordinary operator work.
+
+This is the default for catalog definitions, promo codes, pricing and policy
+definitions, waivers, brackets, training programs, and other published
+configuration. A revision must:
+
+- preserve an immutable snapshot or a new durable record before changing what
+  customers can receive;
+- link the successor to its direct predecessor and a common lineage root;
+- keep orders, redemptions, signatures, fulfillment, and external-provider
+  identifiers attached to the exact revision used;
+- write a reasoned audit event with actor, time, and request trace; and
+- activate the successor only after any predecessor transition is safe.
+
+Live operational state is different: counters, availability, delivery state,
+and reservations are events or projections. Financial truth is append-only and
+is corrected with a reversal or adjustment, never by changing a historic row.
+Destructive removal is reserved for legal retention workflows and must be
+explicitly authorized, scoped, and audited.
+
 ## Deterministic engines
 
 Rating, league/scoring, scheduling, and pricing packages are pure. They do not
