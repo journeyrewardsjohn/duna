@@ -1545,18 +1545,30 @@
 }
 
 .duna-action-center__launcher kbd {
+  background: color-mix(in srgb, var(--dac-surface) 96%, var(--dac-canvas));
+  border: 1px solid var(--dac-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(15 28 43 / 14%);
   color: var(--dac-muted);
   font-size: 0.75rem;
   font-weight: 780;
+  left: 50%;
   opacity: 0;
+  padding: 0.25rem 0.42rem;
+  pointer-events: none;
   position: absolute;
-  right: 5px;
-  top: 7px;
-  transition: opacity 140ms ease;
+  top: -34px;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: nowrap;
 }
 
-.duna-action-center__launcher > button:hover kbd {
-  opacity: 0.72;
+.duna-action-center__launcher > button:hover kbd,
+.duna-action-center__launcher > button:focus-visible kbd {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .duna-action-center__launcher .duna-action-center__duna-button {
@@ -1614,7 +1626,7 @@
   height: min(540px, calc(100dvh - 135px));
   left: 50%;
   overflow: hidden;
-  width: min(410px, calc(100vw - 26px));
+  width: min(520px, calc(100vw - 34px));
   transition:
     height 220ms ease,
     width 220ms ease;
@@ -1622,7 +1634,7 @@
 
 .duna-action-center__chat--expanded {
   height: min(680px, calc(100dvh - 128px));
-  width: min(480px, calc(100vw - 26px));
+  width: min(600px, calc(100vw - 34px));
 }
 
 .duna-action-center__chat-header {
@@ -1715,18 +1727,36 @@
   max-width: 94%;
 }
 
-.duna-action-center__message > p {
-  font-size: 0.845rem;
+.duna-action-center__message-body {
+  font-size: max(0.95rem, 16px);
   line-height: 1.54;
+}
+
+.duna-action-center__message-body > p {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.duna-action-center__message-body > p + p {
+  margin-top: 0.62rem;
+}
+
+.duna-action-center__message-body a {
+  color: var(--dac-accent);
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.duna-action-center__message-body strong {
+  font-weight: 780;
 }
 
 .duna-action-center__message--assistant {
   align-self: flex-start;
 }
 
-.duna-action-center__message--assistant > p {
+.duna-action-center__message--assistant > .duna-action-center__message-body {
   color: var(--dac-ink);
   padding: 0.18rem 0.15rem;
 }
@@ -1736,12 +1766,16 @@
   justify-items: end;
 }
 
-.duna-action-center__message--user > p {
+.duna-action-center__message--user > .duna-action-center__message-body {
   background: #163f6d;
   border-radius: 18px 18px 5px 18px;
   box-shadow: 0 6px 16px rgb(20 61 107 / 16%);
   color: #fff;
   padding: 0.68rem 0.82rem;
+}
+
+.duna-action-center__message--user .duna-action-center__message-body a {
+  color: inherit;
 }
 
 .duna-action-center__sent-files {
@@ -1813,7 +1847,7 @@
   background: transparent;
   border: 0;
   color: var(--dac-ink);
-  font-size: 0.86rem;
+  font-size: max(0.95rem, 16px);
   line-height: 1.45;
   max-height: 116px;
   min-height: 32px;
@@ -2553,6 +2587,10 @@
 
   .duna-action-center__launcher > button {
     height: 50px;
+  }
+
+  .duna-action-center__launcher kbd {
+    display: none;
   }
 
   .duna-action-center__launcher .duna-action-center__duna-button {
