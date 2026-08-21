@@ -12,10 +12,14 @@ import {
   Gauge,
   Pencil,
   Save,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { updateTrainingProgramEventAction } from "@/app/training/actions";
+import {
+  removeTrainingProgramEventAction,
+  updateTrainingProgramEventAction,
+} from "@/app/training/actions";
 
 type EventDraft = {
   readonly localDate: string;
@@ -135,6 +139,25 @@ export function TrainingProgramScheduleEditor({
         ...draft,
         idempotencyKey,
       });
+      setNotice(result);
+      if (result.status === "success") {
+        setEditingEventId(undefined);
+        router.refresh();
+      }
+    });
+  };
+
+  const removeEvent = (event: TrainingEvent) => {
+    if (
+      !window.confirm(
+        `Remove “${event.title}” from this program? The current schedule will be preserved in version history.`,
+      )
+    ) {
+      return;
+    }
+    setNotice(undefined);
+    startSaving(async () => {
+      const result = await removeTrainingProgramEventAction(event.id);
       setNotice(result);
       if (result.status === "success") {
         setEditingEventId(undefined);
@@ -322,6 +345,14 @@ export function TrainingProgramScheduleEditor({
                     >
                       <Save aria-hidden size={16} />
                       {saving ? "Saving…" : "Save calendar change"}
+                    </button>
+                    <button
+                      className="hq-button hq-button--secondary training-program-schedule-editor__remove"
+                      disabled={saving}
+                      onClick={() => removeEvent(event)}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden size={16} /> Remove session
                     </button>
                   </footer>
                 </form>

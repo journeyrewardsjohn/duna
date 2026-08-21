@@ -29985,6 +29985,71 @@ html {
   font-size: 0.75rem;
 }
 
+.catalog-payment-plan-choice {
+  background: #f7f8fa;
+  border: 1px solid #dfe4ea;
+  border-radius: 16px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.catalog-payment-plan-choice > span {
+  color: #101828;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.catalog-payment-plan-choice > div {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-payment-plan-choice button {
+  align-items: start;
+  background: white;
+  border: 1px solid #dfe4ea;
+  border-radius: 13px;
+  color: #101828;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.catalog-payment-plan-choice button.active {
+  border-color: #2b67a4;
+  box-shadow: inset 3px 0 0 #2b67a4;
+}
+
+.catalog-payment-plan-choice button span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.catalog-payment-plan-choice button strong,
+.catalog-payment-plan-choice button small,
+.catalog-payment-plan-choice button b,
+.catalog-payment-plan-choice > small {
+  font-size: 0.75rem;
+}
+
+.catalog-payment-plan-choice button small,
+.catalog-payment-plan-choice > small {
+  color: #677386;
+}
+
+.catalog-payment-plan-choice button b {
+  color: #2b67a4;
+}
+
+@media (max-width: 560px) {
+  .catalog-payment-plan-choice > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 .catalog-quantity,
 .catalog-checkout-total {
   align-items: center;

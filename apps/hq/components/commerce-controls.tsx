@@ -237,6 +237,9 @@ export function ProductComposer({
   >([]);
   const [allowInstallments, setAllowInstallments] = useState(false);
   const [installmentCount, setInstallmentCount] = useState(3);
+  const [installmentsCostMore, setInstallmentsCostMore] = useState(false);
+  const [installmentPriceIncreasePercent, setInstallmentPriceIncreasePercent] =
+    useState(0);
   const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">("venue");
   const [venueId, setVenueId] = useState(workspace.venues[0]?.id ?? "");
   const [coachAssignmentMode, setCoachAssignmentMode] = useState<
@@ -411,6 +414,12 @@ export function ProductComposer({
                   paymentPlan: {
                     enabled: true,
                     installmentCount,
+                    priceIncreasePercent: installmentsCostMore
+                      ? Math.min(
+                          100,
+                          Math.max(0, installmentPriceIncreasePercent),
+                        )
+                      : 0,
                     interval: "month",
                     customerAcknowledgementRequired: true,
                     collectionMethod: "automatic",
@@ -1097,6 +1106,38 @@ export function ProductComposer({
                       ))}
                     </select>
                   </label>
+                  <label className="operator-switch">
+                    <input
+                      checked={installmentsCostMore}
+                      onChange={(event) =>
+                        setInstallmentsCostMore(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Charge more for paying over time</strong>
+                      The upfront price remains the best-value option.
+                    </span>
+                  </label>
+                  {installmentsCostMore ? (
+                    <label>
+                      <span>Price increase (0–100%)</span>
+                      <input
+                        max="100"
+                        min="0"
+                        onChange={(event) =>
+                          setInstallmentPriceIncreasePercent(
+                            Math.min(
+                              100,
+                              Math.max(0, Number(event.target.value)),
+                            ),
+                          )
+                        }
+                        type="number"
+                        value={installmentPriceIncreasePercent}
+                      />
+                    </label>
+                  ) : null}
                   <div>
                     <CircleAlert aria-hidden size={17} />
                     <span>

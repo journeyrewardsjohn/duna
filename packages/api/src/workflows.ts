@@ -42,7 +42,10 @@ import {
 } from "./sand-data/service";
 import { connectAccountMoneyReady } from "./stripe-connect";
 import { synchronizeOrganizationFeeMetadata } from "./organization-billing";
-import { organizationPlanForPriceId } from "./payments";
+import {
+  capCatalogInstallmentSubscription,
+  organizationPlanForPriceId,
+} from "./payments";
 import { processMessageSafetyWorkflow } from "./duna-ai-support";
 import {
   dispatchMessagingPushNotifications,
@@ -830,6 +833,11 @@ async function processStripeWorkflow(
       }
       const metadata = object.metadata as
         Readonly<Record<string, unknown>> | undefined;
+      const installmentCount = Number(metadata?.dunaInstallmentCount ?? 0);
+      const installmentCheckout =
+        metadata?.dunaPaymentOption === "installments" &&
+        Number.isSafeInteger(installmentCount) &&
+        installmentCount >= 2;
       const orderId =
         typeof metadata?.dunaOrderId === "string"
           ? metadata.dunaOrderId
@@ -848,6 +856,17 @@ async function processStripeWorkflow(
         where: eq(orders.id, orderId),
       });
       if (!order) throw new Error("Subscription checkout order was not found");
+      if (installmentCheckout) {
+        const subscriptionId = optionalString(object, "subscription");
+        if (!subscriptionId) {
+          throw new Error("Installment checkout is missing its subscription");
+        }
+        await capCatalogInstallmentSubscription({
+          subscriptionId,
+          installmentCount,
+          idempotencyKey: `stripe:${webhook.providerEventId}:installment`,
+        });
+      }
       const amountTotal =
         typeof object.amount_total === "number"
           ? object.amount_total
@@ -856,22 +875,33 @@ async function processStripeWorkflow(
         typeof object.currency === "string"
           ? object.currency.toUpperCase()
           : order.currency;
+      const firstInvoiceMinor = Number(
+        metadata?.dunaInstallmentFirstInvoiceMinor ?? 0,
+      );
       if (
         checkoutCurrency !== order.currency ||
-        amountTotal < order.totalMinor
+        (installmentCheckout
+          ? !Number.isSafeInteger(firstInvoiceMinor) ||
+            firstInvoiceMinor <= 0 ||
+            amountTotal < firstInvoiceMinor
+          : amountTotal < order.totalMinor)
       ) {
         throw new Error(
           "Subscription checkout amount does not match its order",
         );
       }
-      const taxTotalMinor = amountTotal - order.totalMinor;
+      const taxTotalMinor = installmentCheckout
+        ? amountTotal - firstInvoiceMinor
+        : amountTotal - order.totalMinor;
       await database.batch([
         database
           .update(orders)
           .set({
             status: "paid",
             taxTotalMinor: order.taxTotalMinor + taxTotalMinor,
-            totalMinor: amountTotal,
+            totalMinor: installmentCheckout
+              ? order.totalMinor + taxTotalMinor
+              : amountTotal,
             updatedAt: occurredAt,
           })
           .where(eq(orders.id, order.id)),

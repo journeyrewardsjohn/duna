@@ -181,6 +181,7 @@ export interface CatalogCheckoutResult {
   };
   readonly expiresAt?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
+  readonly paymentOption?: "upfront" | "installments";
   readonly quantity: number;
   readonly amountMinor: number;
   readonly creditsApplied: number;
@@ -227,6 +228,49 @@ export function catalogOrderItemKind(input: {
   if (input.type === "service") return "booking";
   if (input.type === "good") return "merchandise";
   return input.subtype === "membership" ? "membership" : "package";
+}
+
+export function calculateCatalogInstallmentQuote(input: {
+  readonly upfrontAmountMinor: number;
+  readonly installmentCount: number;
+  readonly priceIncreasePercent: number;
+}): {
+  readonly installmentAmountMinor: number;
+  readonly totalAmountMinor: number;
+  readonly savingsAmountMinor: number;
+} {
+  if (
+    !Number.isSafeInteger(input.upfrontAmountMinor) ||
+    input.upfrontAmountMinor < 1
+  ) {
+    throw new Error("Upfront amount must be a positive minor-unit amount");
+  }
+  if (
+    !Number.isSafeInteger(input.installmentCount) ||
+    input.installmentCount < 2 ||
+    input.installmentCount > 24
+  ) {
+    throw new Error("Installment count must be between 2 and 24");
+  }
+  if (
+    !Number.isFinite(input.priceIncreasePercent) ||
+    input.priceIncreasePercent < 0 ||
+    input.priceIncreasePercent > 100
+  ) {
+    throw new Error("Installment price increase must be between 0 and 100");
+  }
+  const upliftedAmountMinor = Math.round(
+    input.upfrontAmountMinor * (1 + input.priceIncreasePercent / 100),
+  );
+  const installmentAmountMinor = Math.ceil(
+    upliftedAmountMinor / input.installmentCount,
+  );
+  const totalAmountMinor = installmentAmountMinor * input.installmentCount;
+  return {
+    installmentAmountMinor,
+    totalAmountMinor,
+    savingsAmountMinor: totalAmountMinor - input.upfrontAmountMinor,
+  };
 }
 
 function fulfillmentKind(
@@ -536,6 +580,7 @@ export async function startCatalogCheckout(input: {
   readonly catalogVariantId: string;
   readonly catalogPriceId?: string;
   readonly paymentMethod: "card" | "credit" | "cash";
+  readonly paymentOption?: "upfront" | "installments";
   readonly paymentSurface?: "hosted" | "native";
   readonly quantity: number;
   readonly catalogSessionOccurrenceId?: string;
@@ -774,10 +819,56 @@ export async function startCatalogCheckout(input: {
       }.`,
     );
   }
+  const paymentPlanConfiguration =
+    row.item.configuration.paymentPlan &&
+    typeof row.item.configuration.paymentPlan === "object" &&
+    !Array.isArray(row.item.configuration.paymentPlan)
+      ? (row.item.configuration.paymentPlan as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const installmentCount =
+    typeof paymentPlanConfiguration?.installmentCount === "number"
+      ? Math.trunc(paymentPlanConfiguration.installmentCount)
+      : 0;
+  const priceIncreasePercent =
+    typeof paymentPlanConfiguration?.priceIncreasePercent === "number"
+      ? Math.min(
+          100,
+          Math.max(0, paymentPlanConfiguration.priceIncreasePercent),
+        )
+      : 0;
+  const installmentsRequested = input.paymentOption === "installments";
+  if (
+    installmentsRequested &&
+    (paymentPlanConfiguration?.enabled !== true ||
+      installmentCount < 2 ||
+      installmentCount > 24 ||
+      input.paymentMethod !== "card" ||
+      input.quantity !== 1 ||
+      price.recurringInterval)
+  ) {
+    throw new CatalogCheckoutError(
+      "PRICE_UNAVAILABLE",
+      "This offer is not eligible for the selected installment plan.",
+    );
+  }
   const orderCurrency = currency(row.organization.currency);
+  const baseUnitAmountMinor = price.amountMinor ?? 0;
+  const installmentQuote = installmentsRequested
+    ? calculateCatalogInstallmentQuote({
+        upfrontAmountMinor: baseUnitAmountMinor,
+        installmentCount,
+        priceIncreasePercent,
+      })
+    : undefined;
+  const installmentAmountMinor = installmentQuote?.installmentAmountMinor ?? 0;
+  const checkoutUnitAmountMinor = installmentsRequested
+    ? (installmentQuote?.totalAmountMinor ?? baseUnitAmountMinor)
+    : baseUnitAmountMinor;
   const amountMinor = membershipInclusion
     ? 0
-    : (price.amountMinor ?? 0) * input.quantity;
+    : checkoutUnitAmountMinor * input.quantity;
   const creditsApplied = membershipInclusion
     ? 0
     : (price.creditAmount ?? 0) * input.quantity;
@@ -842,7 +933,7 @@ export async function startCatalogCheckout(input: {
               kind: itemKind,
               description: row.item.title,
               quantity: input.quantity,
-              unitAmountMinor: price.amountMinor ?? 0,
+              unitAmountMinor: checkoutUnitAmountMinor,
             },
           ],
         })
@@ -944,7 +1035,7 @@ export async function startCatalogCheckout(input: {
       referenceId: row.variant.id,
       description: row.item.title,
       quantity: input.quantity,
-      unitAmountMinor: price.amountMinor ?? 0,
+      unitAmountMinor: checkoutUnitAmountMinor,
       totalAmountMinor: amountMinor,
     }),
     database.insert(catalogFulfillments).values({
@@ -985,6 +1076,17 @@ export async function startCatalogCheckout(input: {
         recordingConsentAccepted: recordingConsentRequired,
         recordingConsentAcceptedAt: recordingConsentRequired
           ? input.now.toISOString()
+          : undefined,
+        paymentOption: installmentsRequested ? "installments" : "upfront",
+        installmentCount: installmentsRequested ? installmentCount : undefined,
+        installmentAmountMinor: installmentsRequested
+          ? installmentAmountMinor
+          : undefined,
+        upfrontPriceMinor: installmentsRequested
+          ? baseUnitAmountMinor
+          : undefined,
+        priceIncreasePercent: installmentsRequested
+          ? priceIncreasePercent
           : undefined,
       },
     }),
@@ -1256,6 +1358,7 @@ export async function startCatalogCheckout(input: {
   try {
     const nativePaymentEligible =
       input.paymentSurface === "native" &&
+      !installmentsRequested &&
       row.item.type !== "good" &&
       !(row.item.taxable && row.organization.stripeTaxEnabled);
     if (nativePaymentEligible) {
@@ -1337,6 +1440,7 @@ export async function startCatalogCheckout(input: {
       organizationId: row.organization.id,
       catalogItemId: row.item.id,
       catalogVariantId: row.variant.id,
+      title: row.item.title,
       stripePriceId: price.stripePriceId!,
       quantity: input.quantity,
       subtotalMinor: priced.subtotalMinor,
@@ -1360,6 +1464,15 @@ export async function startCatalogCheckout(input: {
       cancelUrl: input.cancelUrl,
       expiresAt: checkoutExpiresAt,
       idempotencyKey: input.idempotencyKey,
+      ...(installmentsRequested
+        ? {
+            installmentPlan: {
+              count: installmentCount,
+              installmentAmountMinor,
+              totalMinor: priced.totalMinor,
+            },
+          }
+        : {}),
     });
     if (!checkout.url) {
       throw new Error("The payment processor did not return a checkout URL.");

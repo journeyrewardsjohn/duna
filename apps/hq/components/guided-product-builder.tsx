@@ -745,8 +745,26 @@ export function GuidedProductBuilder({
   const [membershipRequired, setMembershipRequired] = useState(
     initialItem?.membershipRequired ?? false,
   );
-  const [allowInstallments, setAllowInstallments] = useState(false);
-  const [installmentCount, setInstallmentCount] = useState(3);
+  const paymentPlanConfiguration = initialConfiguration.paymentPlan as
+    Record<string, unknown> | undefined;
+  const [allowInstallments, setAllowInstallments] = useState(
+    paymentPlanConfiguration?.enabled === true,
+  );
+  const [installmentCount, setInstallmentCount] = useState(
+    typeof paymentPlanConfiguration?.installmentCount === "number"
+      ? paymentPlanConfiguration.installmentCount
+      : 3,
+  );
+  const [installmentsCostMore, setInstallmentsCostMore] = useState(
+    typeof paymentPlanConfiguration?.priceIncreasePercent === "number" &&
+      paymentPlanConfiguration.priceIncreasePercent > 0,
+  );
+  const [installmentPriceIncreasePercent, setInstallmentPriceIncreasePercent] =
+    useState(
+      typeof paymentPlanConfiguration?.priceIncreasePercent === "number"
+        ? paymentPlanConfiguration.priceIncreasePercent
+        : 0,
+    );
 
   const serviceConfiguration = initialConfiguration.service as
     Record<string, unknown> | undefined;
@@ -1563,6 +1581,9 @@ export function GuidedProductBuilder({
           paymentPlan: {
             enabled: true,
             installmentCount,
+            priceIncreasePercent: installmentsCostMore
+              ? Math.min(100, Math.max(0, installmentPriceIncreasePercent))
+              : 0,
             interval: "month",
             customerAcknowledgementRequired: true,
             collectionMethod: "automatic",
@@ -3863,21 +3884,60 @@ export function GuidedProductBuilder({
                   </label>
                 )}
                 {allowInstallments && (
-                  <label className="guided-inline-field">
-                    <span>Number of installments</span>
-                    <select
-                      onChange={(event) =>
-                        setInstallmentCount(Number(event.target.value))
-                      }
-                      value={installmentCount}
-                    >
-                      {[2, 3, 4, 6].map((count) => (
-                        <option key={count} value={count}>
-                          {count} payments
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="guided-payment-plan-fields">
+                    <label className="guided-inline-field">
+                      <span>Number of installments</span>
+                      <select
+                        onChange={(event) =>
+                          setInstallmentCount(Number(event.target.value))
+                        }
+                        value={installmentCount}
+                      >
+                        {[2, 3, 4, 6].map((count) => (
+                          <option key={count} value={count}>
+                            {count} payments
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="operator-switch">
+                      <input
+                        checked={installmentsCostMore}
+                        onChange={(event) =>
+                          setInstallmentsCostMore(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        <strong>Charge more for paying over time</strong>
+                        Keep the upfront price as the best-value option.
+                      </span>
+                    </label>
+                    {installmentsCostMore ? (
+                      <label className="guided-inline-field">
+                        <span>Pay-over-time price increase</span>
+                        <input
+                          max="100"
+                          min="0"
+                          onChange={(event) =>
+                            setInstallmentPriceIncreasePercent(
+                              Math.min(
+                                100,
+                                Math.max(0, Number(event.target.value)),
+                              ),
+                            )
+                          }
+                          type="number"
+                          value={installmentPriceIncreasePercent}
+                        />
+                        <small>
+                          {price && Number(price) > 0
+                            ? `Upfront ${new Intl.NumberFormat("en-US", { style: "currency", currency: workspace.organization.currency }).format(Number(price))} · installments ${new Intl.NumberFormat("en-US", { style: "currency", currency: workspace.organization.currency }).format(Number(price) * (1 + installmentPriceIncreasePercent / 100))}`
+                            : "Enter the price above to preview both totals."}
+                        </small>
+                      </label>
+                    ) : null}
+                  </div>
                 )}
                 <div className="guided-product-policy-grid">
                   <label className="operator-switch">

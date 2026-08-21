@@ -9,6 +9,7 @@ import {
   draftTrainingProgramInputSchema,
   getHiggsfieldJob,
   recordTrainingOutcomeInputSchema,
+  removeTrainingProgramEventInputSchema,
   restoreTrainingPracticePlanArchiveInputSchema,
   restoreTrainingPracticePlanVersionInputSchema,
   restoreTrainingProgramArchiveInputSchema,
@@ -301,6 +302,30 @@ export async function updateTrainingProgramEventAction(input: {
       status: "success",
       message: "Program calendar updated.",
       value: saved,
+    };
+  } catch (error) {
+    return { status: "error", message: message(error) };
+  }
+}
+
+export async function removeTrainingProgramEventAction(
+  trainingEventId: string,
+): Promise<
+  TrainingStudioResult<{ readonly id: string; readonly programId: string }>
+> {
+  try {
+    const parsed = removeTrainingProgramEventInputSchema.parse({
+      trainingEventId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const caller = await getServerCaller();
+    const removed = await caller.operator.removeTrainingProgramEvent(parsed);
+    revalidatePath("/training");
+    revalidatePath(`/training/programs/${removed.programId}`);
+    return {
+      status: "success",
+      message: "Session removed. The prior program version is still available.",
+      value: removed,
     };
   } catch (error) {
     return { status: "error", message: message(error) };

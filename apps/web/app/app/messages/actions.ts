@@ -63,7 +63,11 @@ export async function blockPlayerMessagingPrincipal(formData: FormData) {
 
 export async function recordPlayerMessageAction(formData: FormData) {
   const actionType = required(formData, "actionType");
-  if (actionType !== "acknowledge" && actionType !== "quick-action") {
+  if (
+    actionType !== "acknowledge" &&
+    actionType !== "quick-action" &&
+    actionType !== "poll-vote"
+  ) {
     throw new Error("Unsupported message action");
   }
   const caller = await getServerCaller();

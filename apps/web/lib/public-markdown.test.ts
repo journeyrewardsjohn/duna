@@ -132,4 +132,12 @@ describe("public Markdown representations", () => {
     expect(markdown).toContain("Players control health-data sharing");
     expect(markdown).toContain("Duna AI suggestions remain reviewable");
   });
+
+  it("publishes the Training OS feature story for coaches and AI agents", () => {
+    const markdown = renderStaticPageMarkdown("/run-your-club/training-os");
+    expect(markdown).toContain("Program Designer turns dates");
+    expect(markdown).toContain("Advanced Drill Studio models player movement");
+    expect(markdown).toContain("fixed installment schedule");
+    expect(markdown).toContain("latest five non-financial versions");
+  });
 });

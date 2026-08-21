@@ -169,8 +169,12 @@ export const drillEditorActionSchema = z.object({
   ]),
   actorId: z.string().min(1).max(80),
   targetObjectId: z.string().min(1).max(80).optional(),
+  fromX: z.number().min(0).max(100).optional(),
+  fromY: z.number().min(0).max(100).optional(),
   toX: z.number().min(0).max(100),
   toY: z.number().min(0).max(100),
+  controlX: z.number().min(0).max(100).optional(),
+  controlY: z.number().min(0).max(100).optional(),
   ballId: z.string().min(1).max(80).optional(),
   withBall: z.boolean().default(false),
   simultaneous: z.boolean().default(false),
@@ -813,6 +817,11 @@ export const updateTrainingProgramEventInputSchema = z.object({
   title: z.string().trim().min(2).max(180),
   plannedLoad: z.number().int().min(0).max(100),
   focusArea: trainingFocusAreaSchema.optional(),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const removeTrainingProgramEventInputSchema = z.object({
+  trainingEventId: z.string().uuid(),
   idempotencyKey: z.string().uuid(),
 });
 

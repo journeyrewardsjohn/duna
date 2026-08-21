@@ -45,6 +45,13 @@ import { TrainingCourtAnimation } from "./training-court-animation";
 type EditorTab = "draw" | "animate" | "notes" | "output";
 type AddTool = DrillEditorObject["kind"] | undefined;
 type ActionTool = DrillEditorAction["kind"] | undefined;
+type DragTarget =
+  | { readonly kind: "object"; readonly id: string }
+  | {
+      readonly kind: "action";
+      readonly id: string;
+      readonly handle: "start" | "curve" | "end";
+    };
 type Notice = {
   readonly status: "success" | "error";
   readonly message: string;
@@ -200,6 +207,87 @@ function editorDescription(editor: DrillEditorState): string {
     .slice(0, 6_000);
 }
 
+const ballActionKinds = new Set<DrillEditorAction["kind"]>([
+  "toss",
+  "pass",
+  "set",
+  "attack",
+  "serve",
+  "dig",
+  "freeball",
+  "hold",
+]);
+
+type ActionGeometry = {
+  readonly action: DrillEditorAction;
+  readonly startX: number;
+  readonly startY: number;
+  readonly controlX: number;
+  readonly controlY: number;
+  readonly endX: number;
+  readonly endY: number;
+  readonly path: string;
+};
+
+function actionGeometries(phase: DrillEditorPhase): readonly ActionGeometry[] {
+  const objectPositions = new Map(
+    phase.objects.map((object) => [object.id, { x: object.x, y: object.y }]),
+  );
+  const ballPositions = new Map(
+    phase.objects
+      .filter((object) => object.kind === "ball")
+      .map((object) => [object.id, { x: object.x, y: object.y }]),
+  );
+  return [...phase.actions]
+    .sort((first, second) => first.order - second.order)
+    .map((action) => {
+      const actor = objectPositions.get(action.actorId) ?? { x: 50, y: 50 };
+      const selectedBallId =
+        action.ballId ??
+        phase.objects.find((object) => object.kind === "ball")?.id;
+      const trackedBall = selectedBallId
+        ? ballPositions.get(selectedBallId)
+        : undefined;
+      const start = {
+        x:
+          action.fromX ??
+          (action.withBall ? trackedBall?.x : undefined) ??
+          actor.x,
+        y:
+          action.fromY ??
+          (action.withBall ? trackedBall?.y : undefined) ??
+          actor.y,
+      };
+      const target = action.targetObjectId
+        ? objectPositions.get(action.targetObjectId)
+        : undefined;
+      const end = { x: target?.x ?? action.toX, y: target?.y ?? action.toY };
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const distance = Math.max(4, Math.hypot(dx, dy));
+      const curve = action.withBall ? Math.min(13, distance * 0.28) : 0;
+      const control = {
+        x: action.controlX ?? (start.x + end.x) / 2 + (-dy / distance) * curve,
+        y: action.controlY ?? (start.y + end.y) / 2 + (dx / distance) * curve,
+      };
+      if (action.kind === "move" || action.kind === "rotate") {
+        objectPositions.set(action.actorId, end);
+      }
+      if (action.withBall && selectedBallId)
+        ballPositions.set(selectedBallId, end);
+      return {
+        action,
+        startX: start.x,
+        startY: start.y,
+        controlX: control.x,
+        controlY: control.y,
+        endX: end.x,
+        endY: end.y,
+        path: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
+      };
+    });
+}
+
 function CourtDiagram({
   actionTool,
   activePhase,
@@ -209,9 +297,11 @@ function CourtDiagram({
   pendingActorId,
   playing,
   selectedObjectId,
+  selectedActionId,
   onCourtPointer,
   onObjectPointerDown,
   onObjectSelect,
+  onActionSelect,
   onPointerMove,
   onPointerUp,
 }: {
@@ -219,19 +309,22 @@ function CourtDiagram({
   readonly activePhase: DrillEditorPhase;
   readonly addTool: AddTool;
   readonly court: DrillEditorState["court"];
-  readonly draggingId?: string;
+  readonly draggingId?: DragTarget;
   readonly pendingActorId?: string;
   readonly playing: boolean;
   readonly selectedObjectId?: string;
+  readonly selectedActionId?: string;
   readonly onCourtPointer: (x: number, y: number) => void;
   readonly onObjectPointerDown: (id: string) => void;
   readonly onObjectSelect: (id: string) => void;
+  readonly onActionSelect: (id: string) => void;
   readonly onPointerMove: (x: number, y: number) => void;
   readonly onPointerUp: () => void;
 }) {
   const courtRef = useRef<HTMLDivElement>(null);
   const halfCourt = court.endsWith("-half");
   const indoorCourt = court.startsWith("indoor-");
+  const geometries = actionGeometries(activePhase);
   const coordinates = (event: {
     readonly clientX: number;
     readonly clientY: number;
@@ -335,36 +428,67 @@ function CourtDiagram({
             ) : null}
           </>
         ) : null}
-        {activePhase.actions.map((action) => {
-          const actor = activePhase.objects.find(
-            (object) => object.id === action.actorId,
-          );
-          if (!actor) return null;
-          const target = action.targetObjectId
-            ? activePhase.objects.find(
-                (object) => object.id === action.targetObjectId,
-              )
-            : undefined;
-          const x2 = target?.x ?? action.toX;
-          const y2 = target?.y ?? action.toY;
+        {geometries.map((geometry) => {
+          const { action } = geometry;
           return (
             <g
-              className={`court-action court-action--${action.kind}`}
+              className={`court-action court-action--${action.kind}${selectedActionId === action.id ? " is-selected" : ""}`}
               key={action.id}
             >
               <path
-                d={`M ${actor.x} ${actor.y} Q ${(actor.x + x2) / 2 + (action.withBall ? 3 : 0)} ${Math.min(actor.y, y2) - (action.withBall ? 6 : 1)} ${x2} ${y2}`}
+                d={geometry.path}
                 markerEnd="url(#advanced-arrow)"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onActionSelect(action.id);
+                }}
                 pathLength="1"
                 style={{ animationDelay: `${(action.order - 1) * 320}ms` }}
               />
               <text
                 fontSize="2.5"
-                x={(actor.x + x2) / 2}
-                y={(actor.y + y2) / 2 - 1}
+                x={geometry.controlX}
+                y={geometry.controlY - 1}
               >
                 {action.order}
               </text>
+              {playing ? (
+                <circle
+                  className={action.withBall ? "action-ball" : "action-player"}
+                  key={`${action.id}-${playing}`}
+                  r={action.withBall ? 1.45 : 1.8}
+                >
+                  <animateMotion
+                    begin={`${Math.max(0, action.order - 1) * 0.6}s`}
+                    dur="0.9s"
+                    fill="freeze"
+                    path={geometry.path}
+                  />
+                </circle>
+              ) : null}
+              {selectedActionId === action.id ? (
+                <>
+                  {(
+                    [
+                      ["start", geometry.startX, geometry.startY],
+                      ["curve", geometry.controlX, geometry.controlY],
+                      ["end", geometry.endX, geometry.endY],
+                    ] as const
+                  ).map(([handle, x, y]) => (
+                    <circle
+                      className={`action-handle action-handle--${handle}`}
+                      cx={x}
+                      cy={y}
+                      key={handle}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        onObjectPointerDown(`${action.id}:${handle}`);
+                      }}
+                      r="1.85"
+                    />
+                  ))}
+                </>
+              ) : null}
             </g>
           );
         })}
@@ -408,10 +532,11 @@ export function TrainingAdvancedDrillEditor() {
   const [editor, setEditor] = useState<DrillEditorState>(initialEditor);
   const [activePhaseId, setActivePhaseId] = useState(initialPhase.id);
   const [selectedObjectId, setSelectedObjectId] = useState<string>();
+  const [selectedActionId, setSelectedActionId] = useState<string>();
   const [addTool, setAddTool] = useState<AddTool>();
   const [actionTool, setActionTool] = useState<ActionTool>();
   const [pendingActorId, setPendingActorId] = useState<string>();
-  const [draggingId, setDraggingId] = useState<string>();
+  const [draggingId, setDraggingId] = useState<DragTarget>();
   const [playing, setPlaying] = useState(false);
   const [focusArea, setFocusArea] = useState<TrainingFocusArea>("Ball Control");
   const [mode, setMode] = useState<
@@ -434,6 +559,9 @@ export function TrainingAdvancedDrillEditor() {
     editor.phases[0]!;
   const selectedObject = activePhase.objects.find(
     (object) => object.id === selectedObjectId,
+  );
+  const selectedAction = activePhase.actions.find(
+    (action) => action.id === selectedActionId,
   );
 
   const replacePhase = (next: DrillEditorPhase) => {
@@ -462,28 +590,24 @@ export function TrainingAdvancedDrillEditor() {
     targetObjectId?: string,
   ) => {
     if (!actionTool) return;
-    const ballAction = [
-      "toss",
-      "pass",
-      "set",
-      "attack",
-      "serve",
-      "dig",
-      "freeball",
-      "hold",
-    ].includes(actionTool);
+    const ballAction = ballActionKinds.has(actionTool);
+    const ballId = activePhase.objects.find(
+      (object) => object.kind === "ball",
+    )?.id;
+    const actionId = newId("action");
     replacePhase({
       ...activePhase,
       actions: [
         ...activePhase.actions,
         {
-          id: newId("action"),
+          id: actionId,
           order: activePhase.actions.length + 1,
           kind: actionTool,
           actorId,
           ...(targetObjectId ? { targetObjectId } : {}),
           toX: x,
           toY: y,
+          ...(ballAction && ballId ? { ballId } : {}),
           withBall: ballAction,
           simultaneous: false,
           intent:
@@ -493,6 +617,8 @@ export function TrainingAdvancedDrillEditor() {
         },
       ],
     });
+    setSelectedActionId(actionId);
+    setSelectedObjectId(undefined);
     setPendingActorId(undefined);
   };
 
@@ -519,13 +645,29 @@ export function TrainingAdvancedDrillEditor() {
         setPendingActorId(id);
         return;
       }
-      if (pendingActorId !== id) {
-        const target = activePhase.objects.find((object) => object.id === id);
-        if (target) addAction(pendingActorId, target.x, target.y, id);
-        return;
-      }
+      const target = activePhase.objects.find((object) => object.id === id);
+      if (target) addAction(pendingActorId, target.x, target.y, id);
+      return;
     }
     setSelectedObjectId(id);
+    setSelectedActionId(undefined);
+  };
+
+  const updateActionHandle = (target: DragTarget, x: number, y: number) => {
+    if (target.kind !== "action") return;
+    replacePhase({
+      ...activePhase,
+      actions: activePhase.actions.map((action) => {
+        if (action.id !== target.id) return action;
+        if (target.handle === "start") return { ...action, fromX: x, fromY: y };
+        if (target.handle === "curve") {
+          return { ...action, controlX: x, controlY: y };
+        }
+        const next = { ...action, toX: x, toY: y };
+        delete next.targetObjectId;
+        return next;
+      }),
+    });
   };
 
   const addPhase = () => {
@@ -829,15 +971,35 @@ export function TrainingAdvancedDrillEditor() {
               draggingId={draggingId}
               pendingActorId={pendingActorId}
               playing={playing}
+              selectedActionId={selectedActionId}
               selectedObjectId={selectedObjectId}
               onCourtPointer={handleCourtPointer}
-              onObjectPointerDown={(id) =>
-                setDraggingId(actionTool ? undefined : id)
-              }
+              onActionSelect={(id) => {
+                setSelectedActionId(id);
+                setSelectedObjectId(undefined);
+                setPendingActorId(undefined);
+              }}
+              onObjectPointerDown={(id) => {
+                const [actionId, handle] = id.split(":") as [
+                  string,
+                  "start" | "curve" | "end" | undefined,
+                ];
+                setDraggingId(
+                  handle
+                    ? { kind: "action", id: actionId, handle }
+                    : actionTool
+                      ? undefined
+                      : { kind: "object", id },
+                );
+              }}
               onObjectSelect={selectObject}
-              onPointerMove={(x, y) =>
-                draggingId && updateObject(draggingId, { x, y })
-              }
+              onPointerMove={(x, y) => {
+                if (draggingId?.kind === "object") {
+                  updateObject(draggingId.id, { x, y });
+                } else if (draggingId) {
+                  updateActionHandle(draggingId, x, y);
+                }
+              }}
               onPointerUp={() => setDraggingId(undefined)}
             />
             {tab === "animate" ? (
@@ -856,7 +1018,16 @@ export function TrainingAdvancedDrillEditor() {
                   </button>
                 </header>
                 {activePhase.actions.map((action) => (
-                  <article key={action.id}>
+                  <article
+                    className={
+                      selectedActionId === action.id ? "is-selected" : undefined
+                    }
+                    key={action.id}
+                    onClick={() => {
+                      setSelectedActionId(action.id);
+                      setSelectedObjectId(undefined);
+                    }}
+                  >
                     <span>{action.order}</span>
                     <div>
                       <strong>{action.kind}</strong>
@@ -1086,6 +1257,111 @@ export function TrainingAdvancedDrillEditor() {
       </section>
 
       <aside className="training-advanced-editor__inspector">
+        {(tab === "draw" || tab === "animate") && selectedAction ? (
+          <section className="training-advanced-action-editor">
+            <header>
+              <div>
+                <span>Selected action</span>
+                <strong>
+                  {selectedAction.order}. {selectedAction.kind}
+                </strong>
+              </div>
+              <button
+                aria-label="Delete selected action"
+                onClick={() => {
+                  replacePhase({
+                    ...activePhase,
+                    actions: activePhase.actions
+                      .filter((action) => action.id !== selectedAction.id)
+                      .map((action, index) => ({
+                        ...action,
+                        order: index + 1,
+                      })),
+                  });
+                  setSelectedActionId(undefined);
+                }}
+                type="button"
+              >
+                <Trash2 aria-hidden size={15} />
+              </button>
+            </header>
+            <p>
+              Drag the white start/end handles or the accent curve handle on
+              court. Movement is dashed; ball flight is solid.
+            </p>
+            <label>
+              <span>Action</span>
+              <select
+                onChange={(event) => {
+                  const kind = event.target.value as DrillEditorAction["kind"];
+                  replacePhase({
+                    ...activePhase,
+                    actions: activePhase.actions.map((action) =>
+                      action.id === selectedAction.id
+                        ? {
+                            ...action,
+                            kind,
+                            withBall: ballActionKinds.has(kind),
+                          }
+                        : action,
+                    ),
+                  });
+                }}
+                value={selectedAction.kind}
+              >
+                {actionTools.map((tool) => (
+                  <option key={tool.kind} value={tool.kind}>
+                    {tool.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedAction.withBall ? (
+              <label>
+                <span>Ball in this sequence</span>
+                <select
+                  onChange={(event) =>
+                    replacePhase({
+                      ...activePhase,
+                      actions: activePhase.actions.map((action) =>
+                        action.id === selectedAction.id
+                          ? { ...action, ballId: event.target.value }
+                          : action,
+                      ),
+                    })
+                  }
+                  value={selectedAction.ballId ?? ""}
+                >
+                  <option value="">First available ball</option>
+                  {activePhase.objects
+                    .filter((object) => object.kind === "ball")
+                    .map((ball) => (
+                      <option key={ball.id} value={ball.id}>
+                        {ball.label} · {ball.role ?? "Ball"}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+            <label>
+              <span>Intent</span>
+              <input
+                onChange={(event) =>
+                  replacePhase({
+                    ...activePhase,
+                    actions: activePhase.actions.map((action) =>
+                      action.id === selectedAction.id
+                        ? { ...action, intent: event.target.value }
+                        : action,
+                    ),
+                  })
+                }
+                placeholder="Pass to target; attack deep seam…"
+                value={selectedAction.intent ?? ""}
+              />
+            </label>
+          </section>
+        ) : null}
         {tab === "draw" ? (
           <>
             <section>

@@ -22,6 +22,7 @@ import {
   type MessageAttachmentUploadResult,
   type MessageAttachmentUploadSession,
   type MessageActionInput,
+  type MessageWidget,
   type PrincipalType,
   type SendMessageInput,
   type SupportQueueItem,
@@ -733,6 +734,77 @@ function principalFromDirectory(
 function widgetsFromRow(row: MessageRow) {
   const parsed = messageWidgetSchema.array().safeParse(row.widgets);
   return parsed.success ? parsed.data : [];
+}
+
+type PollVote = {
+  readonly messageId: string;
+  readonly personId: string;
+  readonly actionId: string;
+  readonly displayName: string;
+};
+
+async function loadPollVotes(
+  messageIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly PollVote[]>> {
+  if (messageIds.length === 0) return new Map();
+  const votes = await getDatabase()
+    .select({
+      messageId: conversationMessageActions.messageId,
+      personId: conversationMessageActions.personId,
+      actionId: conversationMessageActions.actionId,
+      displayName: people.displayName,
+    })
+    .from(conversationMessageActions)
+    .innerJoin(people, eq(conversationMessageActions.personId, people.id))
+    .where(
+      and(
+        inArray(conversationMessageActions.messageId, [...new Set(messageIds)]),
+        eq(conversationMessageActions.actionType, "poll-vote"),
+      ),
+    );
+  const directory = new Map<string, PollVote[]>();
+  for (const vote of votes) {
+    const current = directory.get(vote.messageId);
+    if (current) current.push(vote);
+    else directory.set(vote.messageId, [vote]);
+  }
+  return directory;
+}
+
+function decoratePollWidgets(input: {
+  readonly messageId: string;
+  readonly widgets: readonly MessageWidget[];
+  readonly votes: ReadonlyMap<string, readonly PollVote[]>;
+  readonly viewerPersonId: string;
+  readonly now: Date;
+}): MessageWidget[] {
+  const votes = input.votes.get(input.messageId) ?? [];
+  return input.widgets.map((widget, index) => {
+    if (widget.kind !== "poll") return widget;
+    const prefix = `poll:${index}:`;
+    const pollVotes = votes.filter((vote) => vote.actionId.startsWith(prefix));
+    const voters = new Set(pollVotes.map((vote) => vote.personId));
+    return {
+      ...widget,
+      totalVoters: voters.size,
+      closed: Boolean(widget.endsAt && new Date(widget.endsAt) <= input.now),
+      options: widget.options.map((option) => {
+        const optionVotes = pollVotes.filter(
+          (vote) => vote.actionId === `${prefix}${option.id}`,
+        );
+        return {
+          ...option,
+          voteCount: optionVotes.length,
+          selected: optionVotes.some(
+            (vote) => vote.personId === input.viewerPersonId,
+          ),
+          ...(!widget.hideVoterNames
+            ? { voterNames: optionVotes.map((vote) => vote.displayName) }
+            : {}),
+        };
+      }),
+    };
+  });
 }
 
 type AttachmentRow = typeof conversationMessageAttachments.$inferSelect;
@@ -1473,6 +1545,9 @@ export async function loadConversation(input: {
   const attachmentDirectory = await loadMessageAttachmentDirectory(
     messageRows.map((message) => message.id),
   );
+  const pollVotes = await loadPollVotes(
+    messageRows.map((message) => message.id),
+  );
   const lastPublished = [...messageRows]
     .reverse()
     .find((message) => message.status === "published");
@@ -1550,9 +1625,19 @@ export async function loadConversation(input: {
       lastReadSeq: participant.lastReadSequence,
       lastDeliveredSeq: participant.lastDeliveredSequence,
     })),
-    messages: messageRows.map((message) =>
-      messageFromRow(message, directory, attachmentDirectory),
-    ),
+    messages: messageRows.map((message) => {
+      const resolved = messageFromRow(message, directory, attachmentDirectory);
+      return {
+        ...resolved,
+        widgets: decoratePollWidgets({
+          messageId: message.id,
+          widgets: resolved.widgets,
+          votes: pollVotes,
+          viewerPersonId: input.actor.personId,
+          now: new Date(),
+        }),
+      };
+    }),
     permissions: {
       canPost:
         membership.canPost &&
@@ -2526,7 +2611,7 @@ export async function createMessagingConversation(input: {
         clientMessageId: parsed.clientMessageId,
         kind: parsed.announcementOnly ? "announcement" : "text",
         body: parsed.initialMessage,
-        widgets: [],
+        widgets: parsed.initialWidgets ?? [],
         attachmentUploadIds: [],
       },
       requestId: input.requestId,
@@ -3169,6 +3254,12 @@ export async function recordConversationMessageAction(input: {
   if (!visibleMessage) {
     throw new MessagingError("FORBIDDEN", "Message action is unavailable.");
   }
+  let selectedPoll:
+    | {
+        readonly widget: Extract<MessageWidget, { kind: "poll" }>;
+        readonly index: number;
+      }
+    | undefined;
   const actionAllowed = visibleMessage.widgets.some((widget, index) => {
     if (
       input.action.actionType === "acknowledge" &&
@@ -3178,6 +3269,16 @@ export async function recordConversationMessageAction(input: {
         widget.acknowledgementRequired &&
         input.action.actionId === `schedule-change:${index}:acknowledge`
       );
+    }
+    if (
+      input.action.actionType === "poll-vote" &&
+      widget.kind === "poll" &&
+      widget.options.some(
+        (option) => input.action.actionId === `poll:${index}:${option.id}`,
+      )
+    ) {
+      selectedPoll = { widget, index };
+      return true;
     }
     return (
       input.action.actionType === "quick-action" &&
@@ -3192,18 +3293,64 @@ export async function recordConversationMessageAction(input: {
     );
   }
   const now = input.now ?? new Date();
-  const [recorded] = await database
-    .insert(conversationMessageActions)
-    .values({
-      messageId: message.id,
-      personId: input.actor.personId,
-      actionId: input.action.actionId,
-      actionType: input.action.actionType,
-      payload: {},
-      createdAt: now,
-    })
-    .onConflictDoNothing()
-    .returning({ id: conversationMessageActions.id });
+  if (
+    selectedPoll?.widget.endsAt &&
+    new Date(selectedPoll.widget.endsAt) <= now
+  ) {
+    throw new MessagingError("PRECONDITION_FAILED", "This poll has ended.");
+  }
+  let removedVote = false;
+  const [recorded] = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      if (selectedPoll) {
+        const prefix = `poll:${selectedPoll.index}:`;
+        const existing = await transaction
+          .select({
+            id: conversationMessageActions.id,
+            actionId: conversationMessageActions.actionId,
+          })
+          .from(conversationMessageActions)
+          .where(
+            and(
+              eq(conversationMessageActions.messageId, message.id),
+              eq(conversationMessageActions.personId, input.actor.personId),
+              eq(conversationMessageActions.actionType, "poll-vote"),
+              sql`${conversationMessageActions.actionId} like ${`${prefix}%`}`,
+            ),
+          );
+        const exact = existing.find(
+          (vote) => vote.actionId === input.action.actionId,
+        );
+        if (exact && selectedPoll.widget.allowMultipleAnswers) {
+          await transaction
+            .delete(conversationMessageActions)
+            .where(eq(conversationMessageActions.id, exact.id));
+          removedVote = true;
+          return [];
+        }
+        if (!selectedPoll.widget.allowMultipleAnswers && existing.length) {
+          await transaction.delete(conversationMessageActions).where(
+            inArray(
+              conversationMessageActions.id,
+              existing.map((vote) => vote.id),
+            ),
+          );
+        }
+      }
+      return transaction
+        .insert(conversationMessageActions)
+        .values({
+          messageId: message.id,
+          personId: input.actor.personId,
+          actionId: input.action.actionId,
+          actionType: input.action.actionType,
+          payload: {},
+          createdAt: now,
+        })
+        .onConflictDoNothing()
+        .returning({ id: conversationMessageActions.id });
+    },
+  );
   if (recorded) {
     const conversation = await database.query.messagingConversations.findFirst({
       where: eq(messagingConversations.id, message.conversationId),
@@ -3224,7 +3371,7 @@ export async function recordConversationMessageAction(input: {
   return {
     ok: true,
     id: recorded?.id ?? `${message.id}:${input.action.actionId}`,
-    message: "Response recorded.",
+    message: removedVote ? "Vote removed." : "Response recorded.",
   };
 }
 

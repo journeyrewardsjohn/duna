@@ -4,6 +4,7 @@ import type {
 } from "@duna/messaging-client";
 import {
   ArrowLeft,
+  BarChart3,
   CalendarClock,
   Check,
   ChevronRight,
@@ -150,6 +151,68 @@ function Widget({
             </form>
           ))}
         </span>
+      </div>
+    );
+  }
+  if (widget.kind === "poll") {
+    const totalVotes = widget.options.reduce(
+      (total, option) => total + (option.voteCount ?? 0),
+      0,
+    );
+    return (
+      <div className={styles.pollWidget}>
+        <header>
+          <BarChart3 aria-hidden size={19} />
+          <span>
+            <strong>{widget.title}</strong>
+            <small>
+              {widget.allowMultipleAnswers
+                ? "Choose one or more"
+                : "Choose one"}
+              {widget.closed ? " · Poll ended" : ""}
+            </small>
+          </span>
+        </header>
+        <div>
+          {widget.options.map((option) => {
+            const percentage = totalVotes
+              ? Math.round(((option.voteCount ?? 0) / totalVotes) * 100)
+              : 0;
+            return (
+              <form action={recordPlayerMessageAction} key={option.id}>
+                <input name="messageId" type="hidden" value={messageId} />
+                <input
+                  name="actionId"
+                  type="hidden"
+                  value={`poll:${index}:${option.id}`}
+                />
+                <input name="actionType" type="hidden" value="poll-vote" />
+                <button disabled={widget.closed} type="submit">
+                  <span
+                    className={
+                      option.selected ? styles.pollSelected : undefined
+                    }
+                  >
+                    {option.selected ? <Check aria-hidden size={13} /> : null}
+                  </span>
+                  <span>
+                    <strong>{option.label}</strong>
+                    <i>
+                      <b style={{ width: `${percentage}%` }} />
+                    </i>
+                    {option.voterNames?.length ? (
+                      <small>{option.voterNames.join(", ")}</small>
+                    ) : null}
+                  </span>
+                  <small>{option.voteCount ?? 0}</small>
+                </button>
+              </form>
+            );
+          })}
+        </div>
+        <small>
+          {widget.totalVoters ?? 0} voter{widget.totalVoters === 1 ? "" : "s"}
+        </small>
       </div>
     );
   }

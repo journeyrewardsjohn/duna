@@ -40,6 +40,7 @@ import {
   draftTrainingProgramInputSchema,
   drillSceneSchema,
   recordTrainingOutcomeInputSchema,
+  removeTrainingProgramEventInputSchema,
   playerTrainingEventSchema,
   playerTrainingWorkspaceSchema,
   restoreTrainingPracticePlanArchiveInputSchema,
@@ -4960,6 +4961,167 @@ export async function updateTrainingProgramEvent(input: {
       }),
       reason:
         "Coach adjusted a program event while keeping the commercial offer and completed-session history intact.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: event.id, programId: event.programId };
+}
+
+export async function removeTrainingProgramEvent(input: {
+  readonly actor: ApiActor;
+  readonly trainingEventId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly id: string; readonly programId: string }> {
+  requireTrainingDatabase();
+  const organizationId = requireOrganization(input.actor);
+  if (!hasTrainingWrite(input.actor)) {
+    throw new TrainingServiceError(
+      "FORBIDDEN",
+      "Your role cannot remove a program session.",
+    );
+  }
+  const parsed = removeTrainingProgramEventInputSchema.parse(input);
+  const database = getDatabase();
+  const [event] = await database
+    .select()
+    .from(trainingEvents)
+    .where(eq(trainingEvents.id, parsed.trainingEventId))
+    .limit(1);
+  if (!event || !event.programId) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This program session is no longer available.",
+    );
+  }
+  if (event.organizationId !== organizationId) {
+    throw new TrainingServiceError(
+      "RESOURCE_WRONG_ORGANIZATION",
+      "This program session belongs to another organization.",
+    );
+  }
+  if (event.status === "completed") {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "Completed sessions are historical records and cannot be removed.",
+    );
+  }
+  if (event.sessionId) {
+    throw new TrainingServiceError(
+      "INVALID_SCHEDULE",
+      "This session is tied to attendance or a customer booking. Cancel it from the session record instead so money and participation history stay intact.",
+    );
+  }
+  const [program] = await database
+    .select()
+    .from(trainingPrograms)
+    .where(
+      and(
+        eq(trainingPrograms.id, event.programId),
+        eq(trainingPrograms.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!program) {
+    throw new TrainingServiceError(
+      "RESOURCE_NOT_FOUND",
+      "This training program is no longer available.",
+    );
+  }
+  if (program.status === "archived") {
+    throw new TrainingServiceError(
+      "INVALID_CONFIGURATION",
+      "Restore this archived program before changing its calendar.",
+    );
+  }
+  const [programEvents, programVersions] = await Promise.all([
+    database
+      .select()
+      .from(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.programId, program.id),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      )
+      .orderBy(asc(trainingEvents.startsAt)),
+    database
+      .select({
+        id: trainingProgramVersions.id,
+        version: trainingProgramVersions.version,
+      })
+      .from(trainingProgramVersions)
+      .where(eq(trainingProgramVersions.programId, program.id))
+      .orderBy(desc(trainingProgramVersions.version)),
+  ]);
+  const nextProgramEvents = programEvents.filter(
+    (candidate) => candidate.id !== event.id,
+  );
+  const scheduledSessionCount = Math.max(
+    0,
+    program.scheduledSessionCount - (event.kind === "practice" ? 1 : 0),
+  );
+  const nextSnapshot = programVersionSnapshot(
+    { ...program, scheduledSessionCount },
+    nextProgramEvents,
+  );
+  const nextVersionId = crypto.randomUUID();
+  const nextVersion = (programVersions[0]?.version ?? 0) + 1;
+  const staleVersionIds = programVersions
+    .slice(TRAINING_VERSION_RETENTION - 1)
+    .map((version) => version.id);
+  const transactional = getTransactionalDatabase();
+  await transactional.transaction(async (transaction) => {
+    await transaction
+      .delete(trainingEvents)
+      .where(
+        and(
+          eq(trainingEvents.id, event.id),
+          eq(trainingEvents.organizationId, organizationId),
+        ),
+      );
+    await transaction
+      .update(trainingPrograms)
+      .set({
+        scheduledSessionCount,
+        currentVersionId: nextVersionId,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(trainingPrograms.id, program.id),
+          eq(trainingPrograms.organizationId, organizationId),
+        ),
+      );
+    await transaction.insert(trainingProgramVersions).values({
+      id: nextVersionId,
+      programId: program.id,
+      version: nextVersion,
+      snapshot: nextSnapshot,
+      changeNote: `Removed calendar item: ${event.title}.`,
+      createdByPersonId: input.actor.personId,
+      createdAt: input.now,
+    });
+    if (staleVersionIds.length) {
+      await transaction
+        .delete(trainingProgramVersions)
+        .where(inArray(trainingProgramVersions.id, staleVersionIds));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "training-program.event-removed",
+      entityType: "training-event",
+      entityId: event.id,
+      beforeHash: stableHash(programEventSnapshot(event)),
+      afterHash: stableHash({ removed: true, programId: program.id }),
+      reason:
+        "Coach removed an uncompleted, non-commercial calendar item and preserved the prior program version.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

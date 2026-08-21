@@ -514,6 +514,274 @@
   color: var(--hq-muted);
 }
 
+.audienceStudio {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.audienceStudio > header {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.audienceStudio > header span {
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.audienceStudio > header small,
+.widgetShelf small {
+  color: var(--hq-muted);
+  font-size: 0.75rem;
+}
+
+.audienceCards {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  max-height: 220px;
+  overflow: auto;
+}
+
+.audienceCards > button {
+  align-items: center;
+  background: var(--color-panel);
+  border: 1px solid var(--hq-border);
+  border-radius: 0.9rem;
+  color: var(--text-1);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 4.25rem;
+  padding: 0.7rem;
+  text-align: left;
+}
+
+.audienceCards > button > span {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.audienceCards strong,
+.audienceCards small {
+  font-size: 0.75rem;
+}
+
+.audienceCards small {
+  color: var(--hq-muted);
+}
+
+.audienceCards > button.selectedAudience {
+  background: var(--hq-tint);
+  border-color: var(--hq-core);
+  box-shadow: inset 3px 0 0 var(--hq-core);
+}
+
+.specificPeople {
+  border: 1px solid var(--hq-border);
+  border-radius: 0.9rem;
+  overflow: hidden;
+}
+
+.specificPeople > label {
+  align-items: center;
+  display: grid !important;
+  gap: 0.45rem !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.45rem;
+}
+
+.specificPeople > label input {
+  border: 0;
+}
+
+.specificPeople > div {
+  border-top: 1px solid var(--hq-border);
+  display: grid;
+  max-height: 220px;
+  overflow: auto;
+  padding: 0.4rem;
+}
+
+.specificPeople > div button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.65rem;
+  color: var(--text-1);
+  display: grid !important;
+  gap: 0.5rem !important;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  padding: 0.42rem;
+  text-align: left;
+}
+
+.specificPeople > div button:hover,
+.specificPeople > div button[aria-pressed="true"] {
+  background: var(--hq-wash);
+}
+
+.specificPeople > div button > span:last-child {
+  display: grid;
+}
+
+.personSelectionMark {
+  align-items: center;
+  border: 1px solid var(--hq-border);
+  border-radius: 0.35rem;
+  display: inline-flex;
+  height: 1.15rem;
+  justify-content: center;
+  width: 1.15rem;
+}
+
+.specificPeople > div button[aria-pressed="true"] .personSelectionMark {
+  background: var(--hq-core);
+  border-color: var(--hq-core);
+  color: var(--hq-deep);
+}
+
+.specificPeople strong,
+.specificPeople small {
+  font-size: 0.75rem;
+}
+
+.specificPeople small {
+  color: var(--hq-muted);
+}
+
+.messageBuilder {
+  align-items: start;
+  border: 1px solid var(--hq-border);
+  border-radius: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.messageCanvas {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.8rem;
+}
+
+.widgetShelf {
+  align-self: stretch;
+  background: var(--hq-wash);
+  border-left: 1px solid var(--hq-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.8rem;
+}
+
+.widgetShelf > span {
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.widgetShelf button,
+.pollBuilder > button {
+  align-items: center;
+  background: var(--color-panel);
+  border: 1px solid var(--hq-border);
+  border-radius: 0.7rem;
+  color: var(--text-1);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 750;
+  gap: 0.4rem;
+  min-height: 2.7rem;
+  padding: 0 0.65rem;
+}
+
+.widgetDraft {
+  align-items: start;
+  background: var(--hq-wash);
+  border: 1px solid var(--hq-border);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.7rem;
+}
+
+.widgetDraft > div {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.widgetDraft > div > strong {
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+.widgetDraft > button,
+.pollBuilder label > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--hq-muted);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+}
+
+.pollBuilder {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pollBuilder > label {
+  align-items: center;
+  display: grid !important;
+  gap: 0.45rem !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pollBuilder > label:has(input[type="checkbox"]) {
+  display: flex !important;
+}
+
+.pollWidget {
+  align-items: start;
+}
+
+.pollOption {
+  display: grid !important;
+  gap: 0.2rem !important;
+  margin-top: 0.4rem;
+}
+
+.pollOption > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.pollOption i {
+  background: var(--hq-core);
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  min-width: 3px;
+}
+
+@media (max-width: 760px) {
+  .messageBuilder {
+    grid-template-columns: 1fr;
+  }
+
+  .widgetShelf {
+    border-left: 0;
+    border-top: 1px solid var(--hq-border);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .checkLabel {
   align-items: center;
   border: 1px solid var(--hq-border);
