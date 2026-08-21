@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getServerCaller } from "@/lib/api";
+import { selectPlayerPickups } from "@/lib/player-pickups";
 import { PlayerScheduleCalendar } from "@/components/player-schedule-calendar";
 
 export const metadata = { title: "Play" };
@@ -23,8 +24,9 @@ export default async function PlayPage() {
     caller.player.dashboard(),
     caller.public.venues(),
   ]);
-  const pickups = dashboard.events.filter((event) => event.kind === "pickup");
-  const featuredPickup = pickups[0];
+  const { pickups, featuredPickup, featuredPickupPhase } = selectPlayerPickups(
+    dashboard.events,
+  );
   const featuredVenue = venues[0];
   const today = new Date().toISOString().slice(0, 10);
 
@@ -67,8 +69,12 @@ export default async function PlayPage() {
                 <strong>Open a match</strong>
               </span>
             </span>
-            <Badge tone={featuredPickup ? "live" : "neutral"}>
-              {featuredPickup ? "Live now" : "Quick create"}
+            <Badge tone={featuredPickupPhase === "live" ? "live" : "neutral"}>
+              {featuredPickupPhase === "live"
+                ? "Live now"
+                : featuredPickup
+                  ? "Up next"
+                  : "Quick create"}
             </Badge>
           </div>
           <h2>

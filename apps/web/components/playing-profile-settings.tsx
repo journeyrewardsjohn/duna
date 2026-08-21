@@ -6,7 +6,7 @@ import { ExternalLink, Link2, Save, ShieldCheck, Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState, useTransition } from "react";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import {
   connectPlayerSourceAction,
   createGuardianInvitationAction,
@@ -42,6 +42,26 @@ function sourceStatusLabel(
   }
 }
 
+function sourceStatusDescription(
+  source: "volleyball-life" | "bvbinfo",
+  status: PlayerSettings["sourceConnections"][number]["status"],
+) {
+  const name = source === "volleyball-life" ? "VolleyballLife" : "BVBInfo";
+  switch (status) {
+    case "review-required":
+      return `We found a possible ${name} profile. Confirm it to link this profile and import its public history.`;
+    case "queued":
+    case "syncing":
+      return `Your ${name} link is saved. Duna is importing and linking the available history in the background.`;
+    case "linked":
+      return `This ${name} profile is linked and will refresh automatically when new public results are available.`;
+    case "failed":
+      return `Your ${name} link is saved. A temporary source issue is keeping public history from importing; no profile details were lost.`;
+    default:
+      return `Paste your public ${name} profile. Duna saves it automatically and imports available history in the background.`;
+  }
+}
+
 export function PlayingProfileSettings({
   settings,
 }: {
@@ -54,6 +74,11 @@ export function PlayingProfileSettings({
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [guardianInviteUrl, setGuardianInviteUrl] = useState<string>();
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState<
+    "ready" | "saving" | "linking" | "saved"
+  >("ready");
+  const [importingSourceId, setImportingSourceId] = useState<string>();
   const [form, setForm] = useState({
     legalGivenName: profile.legalGivenName ?? fallbackName.given,
     legalMiddleName: profile.legalMiddleName ?? "",
@@ -76,6 +101,30 @@ export function PlayingProfileSettings({
         (connection) => connection.source === "bvbinfo",
       )?.profileUrl ?? "",
   });
+  const formRef = useRef(form);
+  formRef.current = form;
+  const savedProfileFingerprint = useRef(
+    JSON.stringify({
+      legalGivenName: profile.legalGivenName ?? fallbackName.given,
+      legalMiddleName: profile.legalMiddleName ?? "",
+      legalFamilyName: profile.legalFamilyName ?? fallbackName.family,
+      heightMillimeters: profile.heightMillimeters,
+      playingExperience:
+        profile.playingExperience === "not-set"
+          ? ("amateur" as const)
+          : profile.playingExperience,
+      playedIndoorPrior: profile.playedIndoorPrior ?? false,
+      yearsPlaying: profile.yearsPlaying ?? 0,
+      collegeName: profile.collegeName ?? "",
+      experienceSummary: profile.experienceSummary ?? "",
+    }),
+  );
+  const savedSourceUrls = useRef({
+    "volleyball-life": form.volleyballLifeUrl.trim(),
+    bvbinfo: form.bvbInfoUrl.trim(),
+  });
+  const saveInFlight = useRef(false);
+  const saveQueued = useRef(false);
 
   useEffect(() => {
     if (
@@ -89,49 +138,95 @@ export function PlayingProfileSettings({
     return () => window.clearInterval(interval);
   }, [router, settings.sourceConnections]);
 
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function persistPlayerDetails({
+    automatic = false,
+  }: { readonly automatic?: boolean } = {}) {
+    if (saveInFlight.current) {
+      saveQueued.current = true;
+      return;
+    }
     setError(undefined);
     setNotice(undefined);
-    startTransition(async () => {
-      const response = await updatePlayingProfileAction({
-        legalGivenName: form.legalGivenName,
-        legalMiddleName: form.legalMiddleName,
-        legalFamilyName: form.legalFamilyName,
-        heightMillimeters: form.heightMillimeters,
-        playingExperience: form.playingExperience,
-        playedIndoorPrior: form.playedIndoorPrior,
-        yearsPlaying: form.yearsPlaying,
-        collegeName: form.collegeName,
-        experienceSummary: form.experienceSummary,
-      });
-      if (!response.ok) {
-        setError(response.error);
-        return;
+    const currentForm = formRef.current;
+    const profileInput = {
+      legalGivenName: currentForm.legalGivenName,
+      legalMiddleName: currentForm.legalMiddleName,
+      legalFamilyName: currentForm.legalFamilyName,
+      heightMillimeters: currentForm.heightMillimeters,
+      playingExperience: currentForm.playingExperience,
+      playedIndoorPrior: currentForm.playedIndoorPrior,
+      yearsPlaying: currentForm.yearsPlaying,
+      collegeName: currentForm.collegeName,
+      experienceSummary: currentForm.experienceSummary,
+    };
+    const profileFingerprint = JSON.stringify(profileInput);
+    const sourceCandidates = [
+      {
+        source: "volleyball-life" as const,
+        profileUrl: currentForm.volleyballLifeUrl.trim(),
+      },
+      {
+        source: "bvbinfo" as const,
+        profileUrl:
+          currentForm.playingExperience === "professional"
+            ? currentForm.bvbInfoUrl.trim()
+            : "",
+      },
+    ];
+    const changedConnections = sourceCandidates.filter(
+      (connection) =>
+        connection.profileUrl.length > 0 &&
+        connection.profileUrl !== savedSourceUrls.current[connection.source],
+    );
+    const profileChanged =
+      profileFingerprint !== savedProfileFingerprint.current;
+    if (!profileChanged && changedConnections.length === 0) {
+      if (!automatic) setNotice("Everything is already saved.");
+      return;
+    }
+
+    saveInFlight.current = true;
+    setIsSaving(true);
+    setSaveState(changedConnections.length > 0 ? "linking" : "saving");
+    try {
+      if (profileChanged) {
+        const response = await updatePlayingProfileAction(profileInput);
+        if (!response.ok) {
+          setError(response.error);
+          return;
+        }
+        savedProfileFingerprint.current = profileFingerprint;
       }
-      for (const connection of [
-        {
-          source: "volleyball-life" as const,
-          profileUrl: form.volleyballLifeUrl.trim(),
-        },
-        {
-          source: "bvbinfo" as const,
-          profileUrl:
-            form.playingExperience === "professional"
-              ? form.bvbInfoUrl.trim()
-              : "",
-        },
-      ]) {
-        if (!connection.profileUrl) continue;
+      for (const connection of changedConnections) {
         const sourceResponse = await connectPlayerSourceAction(connection);
         if (!sourceResponse.ok) {
           setError(sourceResponse.error);
           return;
         }
+        savedSourceUrls.current[connection.source] = connection.profileUrl;
       }
-      setNotice("Private identity and playing history saved.");
+      setSaveState("saved");
+      setNotice(
+        changedConnections.length > 0
+          ? "Profile auto-saved. Importing and linking the public match history now."
+          : automatic
+            ? "Profile auto-saved."
+            : "Player details saved.",
+      );
       router.refresh();
-    });
+    } finally {
+      saveInFlight.current = false;
+      setIsSaving(false);
+      if (saveQueued.current) {
+        saveQueued.current = false;
+        void persistPlayerDetails({ automatic: true });
+      }
+    }
+  }
+
+  function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void persistPlayerDetails();
   }
 
   function startIdentity() {
@@ -170,21 +265,29 @@ export function PlayingProfileSettings({
     decision: "confirmed" | "rejected",
   ) {
     setError(undefined);
+    if (decision === "confirmed") {
+      setImportingSourceId(connectionId);
+      setNotice("Importing and linking the confirmed public profile…");
+    }
     startTransition(async () => {
-      const response = await reviewPlayerSourceAction({
-        connectionId,
-        decision,
-      });
-      if (!response.ok) {
-        setError(response.error);
-        return;
+      try {
+        const response = await reviewPlayerSourceAction({
+          connectionId,
+          decision,
+        });
+        if (!response.ok) {
+          setError(response.error);
+          return;
+        }
+        setNotice(
+          decision === "confirmed"
+            ? "Importing and linking the confirmed public profile. This continues in the background."
+            : "Profile rejected. It was disconnected and will not affect this player.",
+        );
+        router.refresh();
+      } finally {
+        setImportingSourceId(undefined);
       }
-      setNotice(
-        decision === "confirmed"
-          ? "Profile confirmed. Duna is now importing and rating the verified match history."
-          : "Profile rejected. It was disconnected and will not affect this player.",
-      );
-      router.refresh();
     });
   }
 
@@ -228,7 +331,11 @@ export function PlayingProfileSettings({
         <span>Open onboarding</span>
       </Link>
 
-      <form className="settings-form" onSubmit={save}>
+      <form
+        className="settings-form"
+        onBlur={() => void persistPlayerDetails({ automatic: true })}
+        onSubmit={save}
+      >
         <div className="settings-form__title">
           <ShieldCheck aria-hidden size={20} />
           <span>
@@ -237,6 +344,15 @@ export function PlayingProfileSettings({
               Legal name and birthday stay private. Height is optional.
             </small>
           </span>
+          <Badge tone={saveState === "saved" ? "positive" : "neutral"}>
+            {isSaving
+              ? saveState === "linking"
+                ? "Importing and linking"
+                : "Saving profile"
+              : saveState === "saved"
+                ? "Profile auto-saved"
+                : "Changes save automatically"}
+          </Badge>
         </div>
         <div className="form-grid form-grid--3">
           <label>
@@ -358,8 +474,11 @@ export function PlayingProfileSettings({
             <span aria-hidden="true" />
           </span>
         </label>
-        <label>
+        <label className="playing-story-field">
           Playing story
+          <small>
+            Share the experience, roles, and goals you want Duna to understand.
+          </small>
           <textarea
             maxLength={1_500}
             onChange={(event) =>
@@ -368,12 +487,12 @@ export function PlayingProfileSettings({
                 experienceSummary: event.target.value,
               }))
             }
-            rows={4}
+            rows={7}
             value={form.experienceSummary}
           />
         </label>
         <div className="source-link-grid">
-          <label>
+          <label className="source-link-card">
             <span>
               <Link2 /> VolleyballLife profile
               {connectionStatus("volleyball-life") && (
@@ -382,6 +501,12 @@ export function PlayingProfileSettings({
                 </Badge>
               )}
             </span>
+            <small>
+              {sourceStatusDescription(
+                "volleyball-life",
+                connectionStatus("volleyball-life") ?? "disconnected",
+              )}
+            </small>
             <input
               onChange={(event) =>
                 setForm((current) => ({
@@ -394,7 +519,7 @@ export function PlayingProfileSettings({
             />
           </label>
           {form.playingExperience === "professional" && (
-            <label>
+            <label className="source-link-card">
               <span>
                 <Link2 /> BVBInfo profile
                 {connectionStatus("bvbinfo") && (
@@ -403,6 +528,12 @@ export function PlayingProfileSettings({
                   </Badge>
                 )}
               </span>
+              <small>
+                {sourceStatusDescription(
+                  "bvbinfo",
+                  connectionStatus("bvbinfo") ?? "disconnected",
+                )}
+              </small>
               <input
                 onChange={(event) =>
                   setForm((current) => ({
@@ -477,22 +608,30 @@ export function PlayingProfileSettings({
                 )}
                 {connection.status === "failed" && connection.lastError && (
                   <small className="source-import-status__error" role="alert">
-                    {connection.lastError} Review the profile link, then save
-                    again to retry.
+                    We could not import this public history yet. Your source
+                    link is saved, and no player details were lost.
                   </small>
                 )}
+                <small className="source-import-status__context">
+                  {sourceStatusDescription(
+                    connection.source,
+                    connection.status,
+                  )}
+                </small>
                 {connection.status === "review-required" &&
                   connection.verificationStatus === "pending" && (
                     <span className="source-import-status__actions">
                       <button
-                        disabled={isPending}
+                        disabled={isPending || isSaving}
                         onClick={() => reviewSource(connection.id, "confirmed")}
                         type="button"
                       >
-                        This is me
+                        {importingSourceId === connection.id
+                          ? "Importing & linking…"
+                          : "This is me"}
                       </button>
                       <button
-                        disabled={isPending}
+                        disabled={isPending || isSaving}
                         onClick={() => reviewSource(connection.id, "rejected")}
                         type="button"
                       >
@@ -515,9 +654,9 @@ export function PlayingProfileSettings({
             </article>
           );
         })}
-        <button className="primary-action" disabled={isPending} type="submit">
+        <button className="primary-action" disabled={isSaving} type="submit">
           <Save />
-          {isPending ? "Saving…" : "Save player details"}
+          {isSaving ? "Saving profile…" : "Save now"}
         </button>
       </form>
 
