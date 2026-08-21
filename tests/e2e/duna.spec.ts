@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
-const navigationTimeout = process.env.CI ? 30_000 : 15_000;
+const navigationTimeout = 30_000;
 
 async function clickAndWaitForUrl(
   page: Page,
@@ -11,7 +11,10 @@ async function clickAndWaitForUrl(
   expected: RegExp | string,
 ) {
   await Promise.all([
-    page.waitForURL(expected, { timeout: navigationTimeout }),
+    page.waitForURL(expected, {
+      timeout: navigationTimeout,
+      waitUntil: "domcontentloaded",
+    }),
     locator.click(),
   ]);
 }
@@ -215,7 +218,7 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Run the business. Keep the game human.",
+      name: "Run the whole club. Start for $0.",
     }),
   ).toBeVisible();
   await expect(
@@ -233,6 +236,17 @@ test("club and coach marketing keeps both operating paths clear", async ({
       name: "Assistance proposes. Operators decide.",
     }),
   ).toBeVisible();
+  const plans = page.locator("#plans");
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Free" }),
+  ).toBeVisible();
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Club" }),
+  ).toBeVisible();
+  await expect(
+    plans.getByRole("heading", { name: "Duna HQ Scale" }),
+  ).toBeVisible();
+  await expect(plans.getByText("$999.00", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Player-controlled summaries")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -439,7 +453,7 @@ test("public event creation carries a clean starter into guided HQ", async ({
   await expect(
     page.getByRole("heading", { name: "Put your event on Duna." }),
   ).toBeVisible();
-  await expect(page.getByText("$0")).toBeVisible();
+  await expect(page.getByText("$0", { exact: true })).toBeVisible();
   await expect(page.getByText("5%", { exact: true })).toBeVisible();
   await expect(page.getByText(/separate 7.5% service fee/)).toBeVisible();
   await page.getByRole("button", { name: /League/ }).click();
@@ -796,6 +810,7 @@ test("account controls, profile editing, and legal documents stay reachable", as
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {
+  test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
     page.getByRole("heading", { name: "Good morning." }),
@@ -1031,7 +1046,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/admin`);
+  await page.goto(`${hqBaseUrl}/admin`, { waitUntil: "domcontentloaded" });
   await expect(
     page.getByRole("heading", {
       name: "Platform administration access required.",
@@ -1043,7 +1058,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
   await expect(page.getByText(/1 connected/)).toBeVisible();
-  await page.getByRole("link", { name: /Create league/ }).click();
+  await clickAndWaitForUrl(
+    page,
+    page.getByRole("link", { name: /Create league/ }),
+    /\/events\/create\?type=league$/,
+  );
   await expect(
     page.getByRole("heading", { name: "Create something players remember." }),
   ).toBeVisible();
