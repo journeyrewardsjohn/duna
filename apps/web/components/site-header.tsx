@@ -7,8 +7,13 @@ import { DUNA_HQ_URL } from "@/lib/site-urls";
 import { SiteMobileMenu } from "./site-mobile-menu";
 import { WebAuthButton } from "./web-auth-button";
 
-export function SiteHeader() {
-  const authConfigured = isWorkOSAuthKitConfigured();
+interface SiteHeaderProps {
+  readonly authConfigured?: boolean;
+}
+
+export function SiteHeader({ authConfigured }: SiteHeaderProps = {}) {
+  const configured =
+    authConfigured === undefined ? isWorkOSAuthKitConfigured() : authConfigured;
   return (
     <header className="site-header">
       <div className="site-header__inner">
@@ -41,8 +46,8 @@ export function SiteHeader() {
               <ArrowUpRight aria-hidden size={14} />
             </i>
           </a>
-          <WebAuthButton configured={authConfigured} />
-          <SiteMobileMenu configured={authConfigured} hqUrl={DUNA_HQ_URL} />
+          <WebAuthButton configured={configured} />
+          <SiteMobileMenu configured={configured} hqUrl={DUNA_HQ_URL} />
         </div>
       </div>
     </header>

@@ -54,6 +54,7 @@ export interface OrganizationMarketingPlan {
 }
 
 interface RunYourBusinessPageProps {
+  readonly authConfigured: boolean;
   readonly hqHref: string;
   readonly plans: readonly OrganizationMarketingPlan[];
   readonly videoPricing: {
@@ -1049,6 +1050,7 @@ function Pricing({
 }
 
 export function RunYourBusinessPage({
+  authConfigured,
   hqHref,
   plans,
   videoPricing,
@@ -1057,7 +1059,7 @@ export function RunYourBusinessPage({
 
   return (
     <main className={styles.page} data-zone="editorial" ref={pageRef}>
-      <SiteHeader />
+      <SiteHeader authConfigured={authConfigured} />
 
       <nav
         aria-label="Duna HQ product navigation"
