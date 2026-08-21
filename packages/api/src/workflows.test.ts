@@ -21,23 +21,34 @@ describe("durable workflow retry policy", () => {
 
 describe("connected-account money readiness", () => {
   it("supports legacy accounts that can accept connected charges", () => {
-    expect(connectAccountMoneyReady({ charges_enabled: true })).toBe(true);
+    expect(
+      connectAccountMoneyReady({
+        charges_enabled: true,
+        payouts_enabled: true,
+      }),
+    ).toBe(true);
   });
 
-  it("supports Accounts v2 recipients that can receive transfers and payouts", () => {
+  it("keeps transfer-only projections gated from settlement-merchant charges", () => {
     expect(
       connectAccountMoneyReady({
         charges_enabled: false,
         payouts_enabled: true,
         capabilities: { transfers: "active" },
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("supports native Accounts v2 recipient capability payloads", () => {
     expect(
       connectAccountMoneyReady({
         configuration: {
+          merchant: {
+            applied: true,
+            capabilities: {
+              card_payments: { status: "active" },
+            },
+          },
           recipient: {
             applied: true,
             capabilities: {

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MEMBERSHIP_SUBSCRIPTION_POLICY,
   MEMBERSHIP_PLANS,
   PAID_MEMBERSHIP_PLAN_IDS,
   PLATFORM_MEMBERSHIP_TIER_CODES,
@@ -6,6 +7,7 @@ import {
   membershipPriceMinor,
   type MembershipBillingInterval,
   type MembershipPlanId,
+  type MembershipSubscriptionPolicy,
   type PaidMembershipPlanId,
 } from "@duna/core";
 import {
@@ -13,8 +15,11 @@ import {
   dunaPlusGrants,
   getDatabase,
   memberships,
+  membershipInvoiceTransactions,
   membershipTiers,
+  orders,
   organizations,
+  paymentFundSchedules,
   people,
 } from "@duna/db";
 import {
@@ -31,9 +36,11 @@ import {
 import type { ApiActor } from "./context";
 import {
   createBillingPortalSession,
+  cancelMembershipSubscription,
   getStripeClient,
   isMembershipPriceConfigured,
   isStripeConfigured,
+  resumeMembershipSubscription,
 } from "./payments";
 
 export type MembershipAction = "cancel" | "pause" | "resume";
@@ -204,6 +211,8 @@ async function connectedMembership(personId: string) {
         stripeSubscriptionId: memberships.stripeSubscriptionId,
         pauseMonthsUsed: memberships.pauseMonthsUsed,
         cancelAtPeriodEnd: memberships.cancelAtPeriodEnd,
+        subscriptionPolicySnapshot: memberships.subscriptionPolicySnapshot,
+        initialTermEndsAt: memberships.initialTermEndsAt,
         tierName: membershipTiers.name,
       })
       .from(memberships)
@@ -339,6 +348,8 @@ async function connectedOrganizationMembership(
         organizationName: organizations.name,
         stripeSubscriptionId: memberships.stripeSubscriptionId,
         tierName: membershipTiers.name,
+        subscriptionPolicySnapshot: memberships.subscriptionPolicySnapshot,
+        initialTermEndsAt: memberships.initialTermEndsAt,
       })
       .from(memberships)
       .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
@@ -389,6 +400,8 @@ export async function changeOrganizationMembership(input: {
   readonly action: OrganizationMembershipAction;
   readonly effectiveAt?: string;
   readonly cancelAtPeriodEnd: boolean;
+  readonly refundAmountMinor?: number;
+  readonly refundId?: string;
 }> {
   requireConnections();
   const database = getDatabase();
@@ -396,26 +409,98 @@ export async function changeOrganizationMembership(input: {
     input.actor.personId,
     input.membershipId,
   );
-  const cancelAtPeriodEnd = input.action === "cancel";
-  const subscription = await getStripeClient().subscriptions.update(
-    membership.stripeSubscriptionId,
-    { cancel_at_period_end: cancelAtPeriodEnd },
-    { idempotencyKey: input.idempotencyKey },
-  );
-  const firstItem = subscription.items.data[0];
-  const effectiveAt =
-    cancelAtPeriodEnd && firstItem
-      ? new Date(firstItem.current_period_end * 1_000)
+  const policy =
+    (membership.subscriptionPolicySnapshot as
+      MembershipSubscriptionPolicy | undefined) ??
+    DEFAULT_MEMBERSHIP_SUBSCRIPTION_POLICY;
+  const cancellation =
+    input.action === "cancel"
+      ? await cancelMembershipSubscription({
+          subscriptionId: membership.stripeSubscriptionId,
+          policy,
+          earliestEffectiveAt: membership.initialTermEndsAt ?? undefined,
+          idempotencyKey: input.idempotencyKey,
+          now: input.now,
+        })
       : undefined;
+  if (input.action === "resume") {
+    await resumeMembershipSubscription({
+      subscriptionId: membership.stripeSubscriptionId,
+      policy,
+      idempotencyKey: input.idempotencyKey,
+    });
+  }
+  const cancelAtPeriodEnd = cancellation?.cancelAtPeriodEnd ?? false;
+  const effectiveAt = cancellation?.effectiveAt;
   await database
     .update(memberships)
-    .set({ cancelAtPeriodEnd, updatedAt: input.now })
+    .set({
+      cancelAtPeriodEnd,
+      cancellationRequestedAt: input.action === "cancel" ? input.now : null,
+      cancellationEffectiveAt: input.action === "cancel" ? effectiveAt : null,
+      updatedAt: input.now,
+    })
     .where(
       and(
         eq(memberships.id, membership.id),
         eq(memberships.personId, input.actor.personId),
       ),
     );
+  if (
+    input.action === "cancel" &&
+    cancellation?.invoiceId &&
+    cancellation.refundAmountMinor > 0
+  ) {
+    const invoiceTransaction =
+      await database.query.membershipInvoiceTransactions.findFirst({
+        where: eq(
+          membershipInvoiceTransactions.stripeInvoiceId,
+          cancellation.invoiceId,
+        ),
+      });
+    const refundStatus =
+      invoiceTransaction &&
+      cancellation.refundAmountMinor >= invoiceTransaction.amountPaidMinor
+        ? "refunded"
+        : "partially-refunded";
+    await database
+      .update(membershipInvoiceTransactions)
+      .set({
+        refundedMinor: cancellation.refundAmountMinor,
+        status: refundStatus,
+        updatedAt: input.now,
+      })
+      .where(
+        eq(
+          membershipInvoiceTransactions.stripeInvoiceId,
+          cancellation.invoiceId,
+        ),
+      );
+    if (invoiceTransaction?.stripePaymentIntentId) {
+      const order = await database.query.orders.findFirst({
+        where: eq(
+          orders.stripePaymentIntentId,
+          invoiceTransaction.stripePaymentIntentId,
+        ),
+      });
+      if (order) {
+        await database.batch([
+          database
+            .update(orders)
+            .set({ status: refundStatus, updatedAt: input.now })
+            .where(eq(orders.id, order.id)),
+          database
+            .update(paymentFundSchedules)
+            .set({
+              refundedMinor: cancellation.refundAmountMinor,
+              status: refundStatus,
+              updatedAt: input.now,
+            })
+            .where(eq(paymentFundSchedules.orderId, order.id)),
+        ]);
+      }
+    }
+  }
   await database.insert(auditLog).values({
     actorPersonId: input.actor.personId,
     actorType: "person",
@@ -423,9 +508,12 @@ export async function changeOrganizationMembership(input: {
     entityType: "membership",
     entityId: membership.id,
     organizationId: membership.organizationId,
-    reason: cancelAtPeriodEnd
-      ? `Member requested ${membership.organizationName} membership cancellation at the end of the paid period.`
-      : `Member resumed the ${membership.organizationName} membership.`,
+    reason:
+      input.action === "resume"
+        ? `Member resumed the ${membership.organizationName} membership.`
+        : cancelAtPeriodEnd
+          ? `Member requested ${membership.organizationName} membership cancellation at the end of the accepted paid term.`
+          : `Member immediately canceled the ${membership.organizationName} membership; ${cancellation?.refundAmountMinor ?? 0} minor units were submitted for refund.`,
     traceId: input.requestId,
     ipAddress: input.ipAddress,
     createdAt: input.now,
@@ -435,6 +523,8 @@ export async function changeOrganizationMembership(input: {
     action: input.action,
     effectiveAt: effectiveAt?.toISOString(),
     cancelAtPeriodEnd,
+    refundAmountMinor: cancellation?.refundAmountMinor,
+    refundId: cancellation?.refundId,
   };
 }
 

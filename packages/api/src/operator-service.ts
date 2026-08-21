@@ -75,6 +75,7 @@ import { enforceGuardianCopies } from "./messaging";
 import {
   createConnectOnboarding,
   retrieveConnectAccountReadiness,
+  retrieveMarketplaceTaxReadiness,
 } from "./payments";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { isResendConfigured, sendTransactionalEmail } from "./resend";
@@ -184,6 +185,7 @@ export interface CreateEventDraftInput {
   }[];
   readonly smartRules: {
     readonly waitlistEnabled: boolean;
+    readonly refundPolicyMode: "refundable" | "non-refundable";
     readonly allowLateCancellation: boolean;
     readonly freeCancellationHours: number;
     readonly bookingOpensDays: number;
@@ -2825,6 +2827,7 @@ export async function loadEventDraft(
       ? parsedSmartRules.data
       : {
           waitlistEnabled: true,
+          refundPolicyMode: "refundable",
           allowLateCancellation: false,
           freeCancellationHours: 24,
           bookingOpensDays: 90,
@@ -5458,11 +5461,19 @@ export async function createEventDraft(
       minimumCapacity: values.minimumCapacity,
       priceMinor: values.priceMinor,
       currency: values.currency,
-      cancellationPolicy: {
-        refundBeforeHours: 48,
-        creditBeforeHours: 12,
-        lateCancellation: "non-refundable",
-      },
+      cancellationPolicy:
+        input.smartRules.refundPolicyMode === "non-refundable"
+          ? {
+              mode: "non-refundable",
+              lateCancellation: "non-refundable",
+            }
+          : {
+              mode: "refundable",
+              refundBeforeHours: input.smartRules.freeCancellationHours,
+              lateCancellation: input.smartRules.allowLateCancellation
+                ? "allowed without refund after the cutoff"
+                : "not allowed after the cutoff",
+            },
     }),
     database.insert(sessions).values({
       id: sessionId,
@@ -5925,6 +5936,19 @@ export async function updateEventDraft(
         minimumCapacity: values.minimumCapacity,
         priceMinor: values.priceMinor,
         currency: values.currency,
+        cancellationPolicy:
+          input.smartRules.refundPolicyMode === "non-refundable"
+            ? {
+                mode: "non-refundable",
+                lateCancellation: "non-refundable",
+              }
+            : {
+                mode: "refundable",
+                refundBeforeHours: input.smartRules.freeCancellationHours,
+                lateCancellation: input.smartRules.allowLateCancellation
+                  ? "allowed without refund after the cutoff"
+                  : "not allowed after the cutoff",
+              },
         updatedAt: input.now,
       })
       .where(eq(eventTypes.id, target.eventTypeId)),
@@ -6598,9 +6622,10 @@ export async function refreshStripeOnboarding(input: {
     );
   }
 
-  const readiness = await retrieveConnectAccountReadiness(
-    organization.stripeAccountId,
-  );
+  const [readiness, marketplaceTax] = await Promise.all([
+    retrieveConnectAccountReadiness(organization.stripeAccountId),
+    retrieveMarketplaceTaxReadiness(),
+  ]);
   if (
     readiness.accountId !== organization.stripeAccountId ||
     (readiness.metadataEntityId &&
@@ -6614,7 +6639,9 @@ export async function refreshStripeOnboarding(input: {
 
   const changed =
     organization.stripeAccountType !== readiness.accountType ||
-    organization.stripeChargesEnabled !== readiness.chargesEnabled;
+    organization.stripeChargesEnabled !== readiness.chargesEnabled ||
+    organization.stripeTaxEnabled !== readiness.chargesEnabled ||
+    organization.taxRegistrationStatus !== marketplaceTax.status;
   if (changed) {
     const database = getDatabase();
     await database.batch([
@@ -6623,6 +6650,10 @@ export async function refreshStripeOnboarding(input: {
         .set({
           stripeAccountType: readiness.accountType,
           stripeChargesEnabled: readiness.chargesEnabled,
+          stripeTaxEnabled: readiness.chargesEnabled,
+          taxRegistrationStatus: readiness.chargesEnabled
+            ? marketplaceTax.status
+            : "not-configured",
           updatedAt: input.now,
         })
         .where(
@@ -6642,11 +6673,13 @@ export async function refreshStripeOnboarding(input: {
           accountId: organization.stripeAccountId,
           accountType: organization.stripeAccountType,
           chargesEnabled: organization.stripeChargesEnabled,
+          marketplaceTaxStatus: organization.taxRegistrationStatus,
         }),
         afterHash: stableHash({
           accountId: readiness.accountId,
           accountType: readiness.accountType,
           chargesEnabled: readiness.chargesEnabled,
+          marketplaceTaxStatus: marketplaceTax.status,
         }),
         reason: readiness.chargesEnabled
           ? "Stripe confirmed that the connected account can receive Duna sandbox payments."
@@ -6661,6 +6694,9 @@ export async function refreshStripeOnboarding(input: {
   return {
     accountId: readiness.accountId,
     chargesEnabled: readiness.chargesEnabled,
+    marketplaceTaxStatus: marketplaceTax.status,
+    marketplaceTaxHeadOfficeConfigured: marketplaceTax.headOfficeConfigured,
+    activeTaxRegistrationCount: marketplaceTax.activeRegistrationCount,
   };
 }
 

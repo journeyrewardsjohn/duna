@@ -3,6 +3,10 @@
   "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm --filter @duna/db migrate; fi && pnpm build",
   "crons": [
     {
+      "path": "/api/cron/money-payouts",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/event-operations",
       "schedule": "* * * * *"
     },

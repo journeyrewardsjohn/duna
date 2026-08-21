@@ -131,6 +131,7 @@ const roleScopes: Readonly<Record<PersonRole, readonly string[]>> = {
     "messages:read",
     "messages:write",
     "messages:propose",
+    "payments:read",
     "reports:read",
   ],
   "front-desk": [

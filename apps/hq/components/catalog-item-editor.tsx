@@ -1,6 +1,7 @@
 "use client";
 
 import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
+import { membershipSubscriptionPolicy } from "@duna/core";
 import { Badge } from "@duna/ui";
 import {
   ArrowLeft,
@@ -85,6 +86,14 @@ export function CatalogItemEditor({
   readonly workspace: OperatorWorkspace;
 }) {
   const configuration = item.configuration ?? {};
+  const configuredMembership =
+    configuration.membership &&
+    typeof configuration.membership === "object" &&
+    !Array.isArray(configuration.membership)
+      ? (configuration.membership as Record<string, unknown>)
+      : {};
+  const configuredSubscriptionPolicy =
+    membershipSubscriptionPolicy(configuration);
   const eligibleCoaches = workspace.staff.filter(
     (person) => person.active && person.role === "coach",
   );
@@ -125,6 +134,30 @@ export function CatalogItemEditor({
     useState<readonly string[]>(() =>
       configurationStrings(configuration, "waiverDocumentIds"),
     );
+  const [initialTermMonths, setInitialTermMonths] = useState(
+    configuredSubscriptionPolicy.initialTermMonths ?? 0,
+  );
+  const [renewalBehavior, setRenewalBehavior] = useState(
+    configuredSubscriptionPolicy.renewalBehavior,
+  );
+  const [cancellationTiming, setCancellationTiming] = useState(
+    configuredSubscriptionPolicy.cancellationTiming,
+  );
+  const [refundBehavior, setRefundBehavior] = useState(
+    configuredSubscriptionPolicy.refundBehavior,
+  );
+  const [refundWindowDays, setRefundWindowDays] = useState(
+    configuredSubscriptionPolicy.refundWindowDays ?? 7,
+  );
+  const [trialDays, setTrialDays] = useState(
+    configuredSubscriptionPolicy.trialDays,
+  );
+  const [trialPaymentMethod, setTrialPaymentMethod] = useState(
+    configuredSubscriptionPolicy.trialPaymentMethod,
+  );
+  const [renewalReminderDays, setRenewalReminderDays] = useState(
+    configuredSubscriptionPolicy.renewalReminderDays,
+  );
   const [state, action, pending] = useActionState(
     updateCatalogItemAction,
     initialState,
@@ -165,7 +198,29 @@ export function CatalogItemEditor({
     highlights: parsedHighlights,
     validityDays: validityDays ? Math.max(0, Number(validityDays)) : undefined,
     redemptionNotes: redemptionNotes.trim() || undefined,
-    ...(isMembership ? { waiverDocumentIds: membershipWaiverDocumentIds } : {}),
+    ...(isMembership
+      ? {
+          waiverDocumentIds: membershipWaiverDocumentIds,
+          membership: {
+            ...configuredMembership,
+            subscriptionPolicy: {
+              initialTermMonths:
+                initialTermMonths > 0 ? initialTermMonths : undefined,
+              renewalBehavior:
+                initialTermMonths > 0 ? renewalBehavior : "automatic",
+              cancellationTiming,
+              refundBehavior,
+              refundWindowDays:
+                refundBehavior === "full-within-window"
+                  ? refundWindowDays
+                  : undefined,
+              trialDays,
+              trialPaymentMethod,
+              renewalReminderDays,
+            },
+          },
+        }
+      : {}),
     ...(supportsCoaches
       ? {
           coachAssignmentMode: coachMode,
@@ -442,6 +497,148 @@ export function CatalogItemEditor({
             </span>
           </label>
         </div>
+
+        {isMembership && (
+          <fieldset className="product-coach-assignment">
+            <legend>Membership billing policy</legend>
+            <p>
+              These rules are shown beside checkout consent, saved with every
+              signup, and used for Stripe trials, renewals, cancellations, and
+              refunds.
+            </p>
+            <div className="operator-form-grid operator-form-grid--two">
+              <label>
+                <span>Initial term · months</span>
+                <input
+                  min="0"
+                  onChange={(event) =>
+                    setInitialTermMonths(
+                      Math.max(0, Number(event.target.value)),
+                    )
+                  }
+                  placeholder="0 · ongoing"
+                  step={primaryPrice?.recurringInterval === "year" ? 12 : 1}
+                  type="number"
+                  value={initialTermMonths || ""}
+                />
+              </label>
+              <label>
+                <span>After the initial term</span>
+                <select
+                  disabled={initialTermMonths === 0}
+                  onChange={(event) =>
+                    setRenewalBehavior(
+                      event.target.value as "automatic" | "ends-after-term",
+                    )
+                  }
+                  value={initialTermMonths > 0 ? renewalBehavior : "automatic"}
+                >
+                  <option value="automatic">Automatically renew</option>
+                  <option value="ends-after-term">End without renewal</option>
+                </select>
+              </label>
+              <label>
+                <span>Cancellation takes effect</span>
+                <select
+                  onChange={(event) => {
+                    const value = event.target.value as
+                      "period-end" | "immediate";
+                    setCancellationTiming(value);
+                    if (value === "period-end") {
+                      setRefundBehavior("none");
+                    }
+                  }}
+                  value={cancellationTiming}
+                >
+                  <option value="period-end">At paid-period end</option>
+                  <option value="immediate">Immediately</option>
+                </select>
+              </label>
+              <label>
+                <span>Refund behavior</span>
+                <select
+                  onChange={(event) =>
+                    setRefundBehavior(
+                      event.target.value as
+                        "none" | "prorated" | "full-within-window",
+                    )
+                  }
+                  value={refundBehavior}
+                >
+                  <option value="none">No refund</option>
+                  <option
+                    disabled={cancellationTiming !== "immediate"}
+                    value="prorated"
+                  >
+                    Prorated unused time
+                  </option>
+                  <option
+                    disabled={cancellationTiming !== "immediate"}
+                    value="full-within-window"
+                  >
+                    Full refund within a window
+                  </option>
+                </select>
+              </label>
+              {refundBehavior === "full-within-window" && (
+                <label>
+                  <span>Full-refund window · days</span>
+                  <input
+                    max="30"
+                    min="1"
+                    onChange={(event) =>
+                      setRefundWindowDays(Number(event.target.value))
+                    }
+                    type="number"
+                    value={refundWindowDays}
+                  />
+                </label>
+              )}
+              <label>
+                <span>Free trial · days</span>
+                <input
+                  max="90"
+                  min="0"
+                  onChange={(event) =>
+                    setTrialDays(Math.max(0, Number(event.target.value)))
+                  }
+                  type="number"
+                  value={trialDays}
+                />
+              </label>
+              {trialDays > 0 && (
+                <label>
+                  <span>Payment method during trial</span>
+                  <select
+                    onChange={(event) =>
+                      setTrialPaymentMethod(
+                        event.target.value as "required" | "optional",
+                      )
+                    }
+                    value={trialPaymentMethod}
+                  >
+                    <option value="required">Required at signup</option>
+                    <option value="optional">
+                      Optional · cancel if missing
+                    </option>
+                  </select>
+                </label>
+              )}
+              <label>
+                <span>Renewal reminder · days before</span>
+                <input
+                  max="45"
+                  min="3"
+                  onChange={(event) =>
+                    setRenewalReminderDays(Number(event.target.value))
+                  }
+                  type="number"
+                  value={renewalReminderDays}
+                />
+              </label>
+            </div>
+          </fieldset>
+        )}
 
         {supportsCoaches && (
           <fieldset className="product-coach-assignment">

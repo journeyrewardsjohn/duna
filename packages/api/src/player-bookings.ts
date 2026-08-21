@@ -1,6 +1,7 @@
 import {
   auditLog,
   courtBookings,
+  eventBlueprints,
   getDatabase,
   getTransactionalDatabase,
   orders,
@@ -12,6 +13,7 @@ import {
 } from "@duna/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import { refundOrganizationOrder } from "./catalog-service";
 import { CommerceError } from "./commerce";
 import type { ApiActor } from "./context";
 
@@ -35,11 +37,15 @@ export async function cancelPlayerBooking(input: {
       session: sessions,
       orderStatus: orders.status,
       orderTotalMinor: orders.totalMinor,
+      orderId: orders.id,
+      organizationId: orders.organizationId,
+      registrationSettings: eventBlueprints.registrationSettings,
       teamEntry: teamEntries,
     })
     .from(registrations)
     .innerJoin(sessions, eq(registrations.sessionId, sessions.id))
     .leftJoin(orders, eq(registrations.orderId, orders.id))
+    .leftJoin(eventBlueprints, eq(eventBlueprints.sessionId, sessions.id))
     .leftJoin(teamEntries, eq(teamEntries.registrationId, registrations.id))
     .where(
       and(
@@ -107,15 +113,67 @@ export async function cancelPlayerBooking(input: {
       (registration.orderTotalMinor ?? 0) > 0 &&
       (registration.orderStatus === "paid" ||
         registration.orderStatus === "partially-refunded");
+    const settings = registration.registrationSettings as {
+      readonly smartRules?: Readonly<Record<string, unknown>>;
+    } | null;
+    const smartRules = settings?.smartRules;
+    const nonRefundable = smartRules?.refundPolicyMode === "non-refundable";
+    const freeCancellationHours =
+      typeof smartRules?.freeCancellationHours === "number" &&
+      Number.isFinite(smartRules.freeCancellationHours)
+        ? Math.max(0, Math.round(smartRules.freeCancellationHours))
+        : 24;
+    const refundCutoffAt = new Date(
+      registration.session.startsAt.getTime() -
+        freeCancellationHours * 60 * 60 * 1_000,
+    );
+    const eligibleForAutomaticRefund =
+      paid && !nonRefundable && input.now <= refundCutoffAt;
+    let automaticRefundStatus: "submitted" | "review-required" | undefined;
+    if (
+      eligibleForAutomaticRefund &&
+      registration.orderId &&
+      registration.organizationId &&
+      registration.orderTotalMinor
+    ) {
+      try {
+        const result = await refundOrganizationOrder({
+          actor: {
+            ...input.actor,
+            organizationId: registration.organizationId,
+          },
+          orderId: registration.orderId,
+          amountMinor: registration.orderTotalMinor,
+          disposition: "original-payment",
+          reason: "Automatic refund under the event cancellation policy.",
+          requestId: `${input.requestId}:automatic-refund`,
+          ipAddress: input.ipAddress,
+          now: input.now,
+        });
+        automaticRefundStatus =
+          result.status === "failed" ? "review-required" : "submitted";
+      } catch {
+        automaticRefundStatus = "review-required";
+      }
+    }
     return {
       id: registration.registration.id,
       status: "cancelled" as const,
-      refundStatus: paid
-        ? ("review-required" as const)
-        : ("not-applicable" as const),
-      message: paid
-        ? "Registration cancelled. Any eligible refund or organization credit will follow the event’s cancellation policy."
-        : "Registration cancelled.",
+      refundStatus:
+        automaticRefundStatus ??
+        (paid && !nonRefundable && input.now <= refundCutoffAt
+          ? ("review-required" as const)
+          : ("not-applicable" as const)),
+      message:
+        automaticRefundStatus === "submitted"
+          ? "Registration cancelled. Your refund was submitted automatically to the original payment method."
+          : automaticRefundStatus === "review-required"
+            ? "Registration cancelled. The automatic refund needs organizer attention."
+            : paid && nonRefundable
+              ? "Registration cancelled. This event is non-refundable."
+              : paid
+                ? `Registration cancelled after the ${freeCancellationHours}-hour refund cutoff.`
+                : "Registration cancelled.",
     };
   }
 

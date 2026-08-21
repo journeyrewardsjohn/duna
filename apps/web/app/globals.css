@@ -3408,6 +3408,56 @@
   background: color-mix(in srgb, var(--text-3) 35%, var(--surface-2));
 }
 
+.catalog-membership-consent {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--catalog-primary) 7%, white);
+  border: 1px solid color-mix(in srgb, var(--catalog-primary) 24%, #d9e1ea);
+  border-radius: 16px;
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+}
+
+.catalog-membership-consent input {
+  flex: 0 0 auto;
+  height: 18px;
+  margin-top: 2px;
+  width: 18px;
+}
+
+.catalog-membership-consent span {
+  display: grid;
+  gap: 5px;
+}
+
+.catalog-membership-consent small {
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.organization-membership-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.organization-membership-actions button {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text-1) 18%, transparent);
+  border-radius: 999px;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.organization-membership-actions small {
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
 .catalog-checkout-panel > p.catalog-payment-expectation {
   color: var(--text-2);
   font-size: 0.75rem;

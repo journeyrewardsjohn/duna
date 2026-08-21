@@ -36,6 +36,9 @@ type OperatorDashboard = Awaited<
 type OperatorWorkspace = Awaited<
   ReturnType<DunaApiClient["operator"]["workspace"]["query"]>
 >;
+type OperatorMoney = Awaited<
+  ReturnType<DunaApiClient["operator"]["moneyWorkspace"]["query"]>
+>;
 type OperatorMembers = Awaited<
   ReturnType<DunaApiClient["operator"]["members"]["query"]>
 >;
@@ -55,6 +58,7 @@ export interface ProRuntime {
   readonly messagingDelivery?: DeliveryEngine;
   readonly dashboard?: OperatorDashboard;
   readonly workspace?: OperatorWorkspace;
+  readonly money?: OperatorMoney;
   readonly members?: OperatorMembers;
   readonly events?: OperatorEvents;
   readonly matches?: OperatorMatches;
@@ -160,6 +164,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   }, [client, signOut]);
   const [dashboard, setDashboard] = useState<OperatorDashboard>();
   const [workspace, setWorkspace] = useState<OperatorWorkspace>();
+  const [money, setMoney] = useState<OperatorMoney>();
   const [members, setMembers] = useState<OperatorMembers>();
   const [events, setEvents] = useState<OperatorEvents>();
   const [matches, setMatches] = useState<OperatorMatches>();
@@ -173,18 +178,21 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       const [
         nextDashboard,
         nextWorkspace,
+        nextMoney,
         nextMembers,
         nextEvents,
         nextMatches,
       ] = await Promise.all([
         client.operator.dashboard.query(),
         client.operator.workspace.query(),
+        client.operator.moneyWorkspace.query(),
         client.operator.members.query(),
         client.operator.events.query(),
         client.operator.scorableMatches.query(),
       ]);
       setDashboard(nextDashboard);
       setWorkspace(nextWorkspace);
+      setMoney(nextMoney);
       setMembers(nextMembers);
       setEvents(nextEvents);
       setMatches(nextMatches);
@@ -255,7 +263,15 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       />
     );
   }
-  if (error || !dashboard || !workspace || !members || !events || !matches) {
+  if (
+    error ||
+    !dashboard ||
+    !workspace ||
+    !money ||
+    !members ||
+    !events ||
+    !matches
+  ) {
     return (
       <CenteredState
         action="Try again"
@@ -276,6 +292,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         messagingDelivery,
         dashboard,
         workspace,
+        money,
         members,
         events,
         matches,

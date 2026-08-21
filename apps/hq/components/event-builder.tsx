@@ -765,6 +765,9 @@ export function EventBuilder({
   const [waitlistEnabled, setWaitlistEnabled] = useState(
     initialDraft?.smartRules.waitlistEnabled ?? true,
   );
+  const [refundPolicyMode, setRefundPolicyMode] = useState<
+    "refundable" | "non-refundable"
+  >(initialDraft?.smartRules.refundPolicyMode ?? "refundable");
   const [allowLateCancellation, setAllowLateCancellation] = useState(
     initialDraft?.smartRules.allowLateCancellation ?? false,
   );
@@ -1013,6 +1016,7 @@ export function EventBuilder({
       })),
       smartRules: {
         waitlistEnabled,
+        refundPolicyMode,
         allowLateCancellation,
         freeCancellationHours,
         bookingOpensDays,
@@ -2330,31 +2334,61 @@ export function EventBuilder({
                   />
                 </article>
                 <article
+                  className={
+                    refundPolicyMode === "refundable" ? "enabled" : undefined
+                  }
+                >
+                  <div className="smart-rule-copy">
+                    <strong>Refund policy</strong>
+                    <small>
+                      Refundable sales stay held until the cutoff.
+                      Non-refundable sales release after payment clears.
+                    </small>
+                  </div>
+                  <label>
+                    <span>Policy</span>
+                    <select
+                      onChange={(event) =>
+                        setRefundPolicyMode(
+                          event.target.value as "refundable" | "non-refundable",
+                        )
+                      }
+                      value={refundPolicyMode}
+                    >
+                      <option value="refundable">
+                        Refundable before cutoff
+                      </option>
+                      <option value="non-refundable">Non-refundable</option>
+                    </select>
+                  </label>
+                  {refundPolicyMode === "refundable" && (
+                    <label>
+                      <span>Refund cutoff</span>
+                      <div>
+                        <input
+                          min={0}
+                          onChange={(event) =>
+                            setFreeCancellationHours(
+                              Math.max(0, Number(event.target.value)),
+                            )
+                          }
+                          type="number"
+                          value={freeCancellationHours}
+                        />
+                        <small>hours before start</small>
+                      </div>
+                    </label>
+                  )}
+                </article>
+                <article
                   className={allowLateCancellation ? "enabled" : undefined}
                 >
                   <Toggle
                     checked={allowLateCancellation}
-                    detail="Let players cancel after the free-cancellation window."
+                    detail="Let players cancel after the refund cutoff without issuing a refund."
                     label="Allow late cancellations"
                     onChange={setAllowLateCancellation}
                   />
-                  <label>
-                    <span>Free cancellation until</span>
-                    <div>
-                      <input
-                        disabled={!allowLateCancellation}
-                        min={0}
-                        onChange={(event) =>
-                          setFreeCancellationHours(
-                            Math.max(0, Number(event.target.value)),
-                          )
-                        }
-                        type="number"
-                        value={freeCancellationHours}
-                      />
-                      <small>hours before start</small>
-                    </div>
-                  </label>
                 </article>
                 <article>
                   <div className="smart-rule-copy">

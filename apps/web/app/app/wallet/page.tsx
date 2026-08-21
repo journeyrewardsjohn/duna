@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { WalletSectionNav } from "@/components/wallet-section-nav";
 import { getServerCaller } from "@/lib/api";
+import { OrganizationMembershipActions } from "./organization-membership-actions";
 
 export const metadata = { title: "Wallet" };
 
@@ -267,7 +268,10 @@ export default async function WalletPage() {
         </div>
       </section>
 
-      <section className="dashboard-section organization-credit-section">
+      <section
+        className="dashboard-section organization-credit-section"
+        id="memberships"
+      >
         <div className="dashboard-section__heading">
           <div>
             <span className="page-eyebrow">Closed-loop benefits</span>
@@ -296,12 +300,36 @@ export default async function WalletPage() {
               <Numeric>{organizationWallet.credits}</Numeric>
               <span>credits available</span>
               {organizationWallet.membershipName && (
-                <p>
-                  <strong>{organizationWallet.membershipName}</strong>
-                  <span>
-                    {organizationWallet.membershipStatus ?? "membership"}
-                  </span>
-                </p>
+                <>
+                  <p>
+                    <strong>{organizationWallet.membershipName}</strong>
+                    <span>
+                      {organizationWallet.membershipCancelAtPeriodEnd
+                        ? "cancellation scheduled"
+                        : (organizationWallet.membershipStatus ?? "membership")}
+                    </span>
+                  </p>
+                  {organizationWallet.membershipPolicy &&
+                    organizationWallet.membershipId &&
+                    organizationWallet.membershipManageable && (
+                      <OrganizationMembershipActions
+                        cancellationTiming={
+                          organizationWallet.membershipPolicy.cancellationTiming
+                        }
+                        ending={
+                          organizationWallet.membershipCancelAtPeriodEnd ===
+                          true
+                        }
+                        membershipId={organizationWallet.membershipId}
+                        refundBehavior={
+                          organizationWallet.membershipPolicy.refundBehavior
+                        }
+                        refundWindowDays={
+                          organizationWallet.membershipPolicy.refundWindowDays
+                        }
+                      />
+                    )}
+                </>
               )}
               {organizationWallet.nextExpirationAt && (
                 <p>

@@ -61,8 +61,11 @@ import {
 } from "@duna/db";
 import {
   assertBalancedJournal,
+  membershipSubscriptionPolicy,
   reverseLedgerPostings,
+  validateMembershipSubscriptionPolicy,
   type LedgerPosting,
+  type MembershipSubscriptionPolicy,
 } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
 import {
@@ -99,6 +102,7 @@ import {
   virtualDeliveryConfigurationSchema,
   type SessionCoachAvailability,
 } from "./session-delivery";
+import { resolveCatalogTaxCode } from "./tax-policy";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
 type CatalogItemSubtype = string;
@@ -2921,6 +2925,10 @@ export async function loadPlayerOrganizationWallets(
     readonly membershipCurrency?: CurrencyCode;
     readonly membershipCurrentPeriodEndsAt?: string;
     readonly membershipCancelAtPeriodEnd?: boolean;
+    readonly membershipTrialEndsAt?: string;
+    readonly membershipInitialTermEndsAt?: string;
+    readonly membershipCancellationEffectiveAt?: string;
+    readonly membershipPolicy?: MembershipSubscriptionPolicy;
     readonly membershipManageable?: boolean;
   }[]
 > {
@@ -2996,6 +3004,10 @@ export async function loadPlayerOrganizationWallets(
       membershipCurrency?: CurrencyCode;
       membershipCurrentPeriodEndsAt?: string;
       membershipCancelAtPeriodEnd?: boolean;
+      membershipTrialEndsAt?: string;
+      membershipInitialTermEndsAt?: string;
+      membershipCancellationEffectiveAt?: string;
+      membershipPolicy?: MembershipSubscriptionPolicy;
       membershipManageable?: boolean;
     }
   >();
@@ -3047,6 +3059,14 @@ export async function loadPlayerOrganizationWallets(
       membershipCurrentPeriodEndsAt:
         row.membership.currentPeriodEndsAt?.toISOString(),
       membershipCancelAtPeriodEnd: row.membership.cancelAtPeriodEnd,
+      membershipTrialEndsAt: row.membership.trialEndsAt?.toISOString(),
+      membershipInitialTermEndsAt:
+        row.membership.initialTermEndsAt?.toISOString(),
+      membershipCancellationEffectiveAt:
+        row.membership.cancellationEffectiveAt?.toISOString(),
+      membershipPolicy:
+        (row.membership.subscriptionPolicySnapshot as
+          MembershipSubscriptionPolicy | undefined) ?? undefined,
       membershipManageable:
         Boolean(row.membership.stripeSubscriptionId) &&
         ["active", "trialing", "past_due", "unpaid", "incomplete"].includes(
@@ -3250,6 +3270,19 @@ export async function createCatalogItem(
   const membershipBookingLimit = Number(
     membershipConfiguration?.bookingLimitPerCycle ?? 0,
   );
+  const subscriptionPolicy = membershipConfiguration
+    ? membershipSubscriptionPolicy(input.configuration)
+    : undefined;
+  if (
+    subscriptionPolicy &&
+    (input.recurringInterval === "month" || input.recurringInterval === "year")
+  ) {
+    validateMembershipSubscriptionPolicy({
+      policy: subscriptionPolicy,
+      billingInterval: input.recurringInterval,
+      billingIntervalCount: input.recurringIntervalCount,
+    });
+  }
   const configuredIncludedItemIds = Array.isArray(
     membershipConfiguration?.includedCatalogItemIds,
   )
@@ -3470,6 +3503,7 @@ export async function createCatalogItem(
       ...normalizedConfiguration,
       membership: {
         ...membershipConfiguration,
+        subscriptionPolicy,
         includedCatalogItemIds: [...new Set(configuredIncludedItemIds)],
         waiverDocumentIds: configuredWaiverDocumentIds,
       },
@@ -3824,7 +3858,12 @@ export async function createCatalogItem(
     description: input.description?.trim() || undefined,
     visibility: input.visibility,
     taxable: input.taxable,
-    stripeTaxCode: input.stripeTaxCode?.trim() || undefined,
+    stripeTaxCode: resolveCatalogTaxCode({
+      type: input.type,
+      subtype: input.subtype,
+      taxable: input.taxable,
+      explicitTaxCode: input.stripeTaxCode,
+    }),
     allowCard: input.allowCard,
     allowCash: input.allowCash,
     allowCredits: input.allowCredits,
@@ -4640,6 +4679,45 @@ export async function updateCatalogItem(input: {
         normalizedConfiguration.customerCoachSelection !== false,
     };
   }
+  if (isMembership) {
+    const subscriptionPolicy = membershipSubscriptionPolicy(
+      normalizedConfiguration,
+    );
+    const recurringPrices = await database
+      .select({
+        interval: catalogPrices.recurringInterval,
+        intervalCount: catalogPrices.recurringIntervalCount,
+      })
+      .from(catalogPrices)
+      .where(
+        and(
+          eq(catalogPrices.catalogItemId, item.id),
+          eq(catalogPrices.paymentKind, "card"),
+          eq(catalogPrices.active, true),
+        ),
+      );
+    for (const price of recurringPrices) {
+      if (price.interval === "month" || price.interval === "year") {
+        validateMembershipSubscriptionPolicy({
+          policy: subscriptionPolicy,
+          billingInterval: price.interval,
+          billingIntervalCount: price.intervalCount ?? undefined,
+        });
+      }
+    }
+    const membership =
+      normalizedConfiguration.membership &&
+      typeof normalizedConfiguration.membership === "object" &&
+      !Array.isArray(normalizedConfiguration.membership)
+        ? (normalizedConfiguration.membership as Readonly<
+            Record<string, unknown>
+          >)
+        : {};
+    normalizedConfiguration = {
+      ...normalizedConfiguration,
+      membership: { ...membership, subscriptionPolicy },
+    };
+  }
 
   const changes = {
     title: input.title.trim(),
@@ -4869,6 +4947,18 @@ async function ensureCatalogStripeResources(input: {
   }
   const database = getDatabase();
   const stripe = getStripeClient();
+  const stripeTaxCode = resolveCatalogTaxCode({
+    type: input.item.type,
+    subtype: input.item.subtype,
+    taxable: input.item.taxable,
+    explicitTaxCode: input.item.stripeTaxCode ?? undefined,
+  });
+  if (input.item.stripeTaxCode !== stripeTaxCode) {
+    await database
+      .update(catalogItems)
+      .set({ stripeTaxCode, updatedAt: input.now })
+      .where(eq(catalogItems.id, input.item.id));
+  }
   for (const variant of input.variants) {
     const variantPrices = cardPrices.filter(
       (price) => price.catalogVariantId === variant.id,
@@ -4884,7 +4974,7 @@ async function ensureCatalogStripeResources(input: {
               : `${input.item.title} · ${variant.title}`,
           description:
             input.item.shortSummary ?? input.item.description ?? undefined,
-          tax_code: input.item.stripeTaxCode ?? undefined,
+          tax_code: stripeTaxCode,
           metadata: {
             dunaOrganizationId: input.organizationId,
             dunaCatalogItemId: input.item.id,
@@ -4900,6 +4990,10 @@ async function ensureCatalogStripeResources(input: {
         .update(catalogVariants)
         .set({ stripeProductId, updatedAt: input.now })
         .where(eq(catalogVariants.id, variant.id));
+    } else {
+      await stripe.products.update(stripeProductId, {
+        tax_code: stripeTaxCode,
+      });
     }
     for (const price of variantPrices) {
       if (price.stripePriceId) continue;
@@ -5415,9 +5509,11 @@ export async function updateOrganizationCommerceSettings(input: {
     googlePlaceId: input.googlePlaceId?.trim() || undefined,
     latitude: input.latitude,
     longitude: input.longitude,
-    stripeTaxEnabled: input.stripeTaxEnabled,
-    taxRegistrationStatus: input.stripeTaxEnabled
-      ? ("pending" as const)
+    stripeTaxEnabled: organization.stripeChargesEnabled,
+    taxRegistrationStatus: organization.stripeChargesEnabled
+      ? organization.taxRegistrationStatus === "active"
+        ? ("active" as const)
+        : ("pending" as const)
       : ("not-configured" as const),
   };
   await database.batch([
@@ -5445,7 +5541,7 @@ export async function updateOrganizationCommerceSettings(input: {
       }),
       afterHash: stableHash(values),
       reason:
-        "Operator confirmed the organization address and automatic-tax preference.",
+        "Operator confirmed the seller address used by Duna marketplace tax.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,

@@ -771,10 +771,11 @@ export function SettingsCenter({
               </span>
               <div>
                 <span className="hq-eyebrow">Money & tax</span>
-                <h2>Get paid directly, with the right location attached.</h2>
+                <h2>Get paid with marketplace tax handled by Duna.</h2>
                 <p>
-                  Duna prepares the workflow; you remain in control of business
-                  verification, tax registrations, and legal attestations.
+                  Your organization verifies its business and bank account. Duna
+                  owns marketplace tax calculation, collection, reporting, and
+                  remittance where Duna is legally liable.
                 </p>
               </div>
             </header>
@@ -873,8 +874,8 @@ export function SettingsCenter({
                     <span className="hq-eyebrow">Legal & tax location</span>
                     <h3>Business address</h3>
                     <p>
-                      Used as the fallback taxable location. In-person sales use
-                      the venue address.
+                      Saved as the seller and ship-from fallback. Events,
+                      lessons, and rentals use the relevant venue address.
                     </p>
                   </div>
                   <Badge tone={addressReady ? "live" : "warning"}>
@@ -906,25 +907,23 @@ export function SettingsCenter({
                     required
                   />
                 </div>
-                <label
-                  className={`operator-switch ${
-                    paymentsReady ? "" : "is-disabled"
-                  }`}
-                >
+                <label className="operator-switch is-disabled">
                   <input
-                    defaultChecked={organization.stripeTaxEnabled}
-                    disabled={!paymentsReady}
-                    name="stripeTaxEnabled"
+                    checked={paymentsReady}
+                    disabled
+                    readOnly
                     type="checkbox"
-                    value="true"
                   />
                   <span>
-                    <strong>Calculate eligible tax automatically</strong>
+                    <strong>Duna marketplace tax is required</strong>
                     {paymentsReady
-                      ? "Turn this on only after confirming the registrations the business needs."
-                      : "Finish payment verification before automatic tax can be enabled."}
+                      ? "Duna uses its platform registrations and withholds collected tax for filing and remittance."
+                      : "This turns on automatically after payment verification is complete."}
                   </span>
                 </label>
+                {paymentsReady && (
+                  <input name="stripeTaxEnabled" type="hidden" value="true" />
+                )}
                 <input name="confirmed" type="hidden" value="true" />
                 <footer className="settings-form__footer">
                   <ActionNotice state={commerceState} />

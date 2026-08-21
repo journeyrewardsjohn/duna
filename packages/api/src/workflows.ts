@@ -1,5 +1,7 @@
 import {
+  appliedFees,
   auditLog,
+  catalogItems,
   catalogEntitlements,
   catalogFulfillments,
   catalogPrices,
@@ -8,9 +10,12 @@ import {
   getDatabase,
   isDatabaseConfigured,
   memberships,
+  membershipPolicyAcceptances,
+  membershipInvoiceTransactions,
   membershipTiers,
   operatorPaymentCollections,
   operatorPaymentEvents,
+  orderItems,
   orders,
   orderTaxContexts,
   organizations,
@@ -22,7 +27,10 @@ import {
   webhookEvents,
   workflowJobs,
 } from "@duna/db";
-import { isOrganizationPlanId } from "@duna/core";
+import {
+  isOrganizationPlanId,
+  type MembershipSubscriptionPolicy,
+} from "@duna/core";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import {
   fulfillPaidCatalogOrder,
@@ -45,12 +53,24 @@ import { synchronizeOrganizationFeeMetadata } from "./organization-billing";
 import {
   capCatalogInstallmentSubscription,
   organizationPlanForPriceId,
+  ensureMembershipSubscriptionSchedule,
+  getStripeClient,
+  retrieveChargeSettlementAvailableAt,
+  withholdDestinationChargeTax,
+  withholdDestinationChargePlatformFee,
 } from "./payments";
 import { processMessageSafetyWorkflow } from "./duna-ai-support";
 import {
   dispatchMessagingPushNotifications,
   processMessagingPushReceipts,
 } from "./messaging-notifications";
+import {
+  recordPaymentFundSchedule,
+  synchronizeMoneyDispute,
+  synchronizeMoneyPayout,
+  synchronizeMoneyRefund,
+} from "./money-service";
+import { sendTransactionalEmail } from "./resend";
 
 export { connectAccountMoneyReady } from "./stripe-connect";
 
@@ -312,9 +332,22 @@ async function synchronizeMembership(input: {
   const pausedUntil = unixDate(pauseCollection?.resumes_at);
   const status = optionalString(input.object, "status") ?? "unknown";
   const cancelAtPeriodEnd = input.object.cancel_at_period_end === true;
+  const catalogOrderId =
+    typeof metadata?.dunaOrderId === "string"
+      ? metadata.dunaOrderId
+      : undefined;
+  const policyAcceptance = catalogOrderId
+    ? await database.query.membershipPolicyAcceptances.findFirst({
+        where: eq(membershipPolicyAcceptances.orderId, catalogOrderId),
+      })
+    : undefined;
+  const policy = policyAcceptance?.policySnapshot as
+    MembershipSubscriptionPolicy | undefined;
+  const trialEndsAt = unixDate(input.object.trial_end);
   const existing = await database.query.memberships.findFirst({
     where: eq(memberships.stripeSubscriptionId, subscriptionId),
   });
+  const membershipId = existing?.id ?? crypto.randomUUID();
   if (existing && existing.personId !== personId) {
     throw new Error("Stripe subscription is bound to a different Duna person");
   }
@@ -328,11 +361,15 @@ async function synchronizeMembership(input: {
         currentPeriodEndsAt,
         pausedUntil,
         cancelAtPeriodEnd,
+        subscriptionPolicySnapshot:
+          policy ?? existing.subscriptionPolicySnapshot,
+        trialEndsAt,
         updatedAt: input.occurredAt,
       })
       .where(eq(memberships.id, existing.id));
   } else {
     await database.insert(memberships).values({
+      id: membershipId,
       personId,
       tierId: tier.id,
       status,
@@ -341,14 +378,79 @@ async function synchronizeMembership(input: {
       currentPeriodEndsAt,
       pausedUntil,
       cancelAtPeriodEnd,
+      subscriptionPolicySnapshot: policy,
+      trialEndsAt,
       createdAt: input.occurredAt,
       updatedAt: input.occurredAt,
     });
   }
-  const catalogOrderId =
-    typeof metadata?.dunaOrderId === "string"
-      ? metadata.dunaOrderId
-      : undefined;
+  if (policy?.initialTermMonths) {
+    const schedule = await ensureMembershipSubscriptionSchedule({
+      subscriptionId,
+      policy,
+      idempotencyKey: `membership-schedule:${subscriptionId}:${policy.version}`,
+    });
+    await database
+      .update(memberships)
+      .set({
+        stripeSubscriptionScheduleId: schedule.scheduleId,
+        initialTermEndsAt: schedule.initialTermEndsAt,
+        updatedAt: input.occurredAt,
+      })
+      .where(eq(memberships.stripeSubscriptionId, subscriptionId));
+  }
+  if (policyAcceptance) {
+    await database
+      .insert(workflowJobs)
+      .values({
+        kind: "membership.policy-acknowledgment",
+        idempotencyKey: `membership-policy-acknowledgment:${policyAcceptance.id}`,
+        payload: { acceptanceId: policyAcceptance.id },
+        availableAt: input.occurredAt,
+        traceId: input.traceId,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      })
+      .onConflictDoNothing();
+  }
+  const reminderTarget = trialEndsAt ?? currentPeriodEndsAt;
+  if (
+    policy &&
+    reminderTarget &&
+    policy.renewalBehavior === "automatic" &&
+    !cancelAtPeriodEnd
+  ) {
+    const reminderDays = trialEndsAt
+      ? policy.trialDays > 31
+        ? Math.min(21, Math.max(3, policy.renewalReminderDays))
+        : policy.renewalReminderDays
+      : tier.interval === "year" || (policy.initialTermMonths ?? 0) >= 12
+        ? Math.min(45, Math.max(15, policy.renewalReminderDays))
+        : policy.renewalReminderDays;
+    const availableAt = new Date(
+      Math.max(
+        input.occurredAt.getTime(),
+        reminderTarget.getTime() - reminderDays * 86_400_000,
+      ),
+    );
+    await database
+      .insert(workflowJobs)
+      .values({
+        kind: "membership.renewal-reminder",
+        idempotencyKey: `membership:${subscriptionId}:renewal:${reminderTarget.toISOString()}`,
+        payload: {
+          membershipId,
+          subscriptionId,
+          targetAt: reminderTarget.toISOString(),
+          policyVersion: policy.version,
+        },
+        availableAt,
+        traceId: input.traceId,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      })
+      .onConflictDoNothing();
+  }
   if (catalogOrderId) {
     const catalogPrice = await database.query.catalogPrices.findFirst({
       where: eq(catalogPrices.stripePriceId, priceId),
@@ -379,10 +481,129 @@ async function synchronizeMembership(input: {
     actorType: "system",
     action: "membership.synchronized",
     entityType: "membership",
-    entityId: existing?.id ?? subscriptionId,
+    entityId: membershipId,
     reason: `Stripe subscription state synchronized as ${status}.`,
     traceId: input.traceId,
     createdAt: input.occurredAt,
+  });
+}
+
+async function sendMembershipRenewalReminder(
+  payload: Readonly<Record<string, unknown>>,
+  now: Date,
+): Promise<void> {
+  const membershipId = stringField(payload, "membershipId");
+  const targetAt = stringField(payload, "targetAt");
+  const database = getDatabase();
+  const row = (
+    await database
+      .select({
+        membership: memberships,
+        tier: membershipTiers,
+        organization: organizations,
+        person: people,
+      })
+      .from(memberships)
+      .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+      .innerJoin(
+        organizations,
+        eq(membershipTiers.organizationId, organizations.id),
+      )
+      .innerJoin(people, eq(memberships.personId, people.id))
+      .where(eq(memberships.id, membershipId))
+      .limit(1)
+  )[0];
+  if (
+    !row ||
+    !row.person.email ||
+    row.membership.cancelAtPeriodEnd ||
+    !["active", "trialing"].includes(row.membership.status)
+  ) {
+    return;
+  }
+  const currentTarget =
+    row.membership.trialEndsAt ?? row.membership.currentPeriodEndsAt;
+  if (!currentTarget || currentTarget.toISOString() !== targetAt) return;
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "long",
+    timeZone: "UTC",
+  }).format(currentTarget);
+  const amount = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: row.tier.currency,
+  }).format(row.tier.priceMinor / 100);
+  const result = await sendTransactionalEmail({
+    to: row.person.email,
+    subject: `${row.organization.name} membership renewal reminder`,
+    text: `${row.tier.name} is scheduled to renew on ${formatted} for ${amount}. You can review the accepted policy or cancel online in Duna before renewal.`,
+    idempotencyKey: `membership-renewal:${membershipId}:${targetAt}`,
+  });
+  if (!result.sent) {
+    throw new Error(
+      result.reason ?? "Membership renewal reminder could not be delivered.",
+    );
+  }
+  await database.insert(auditLog).values({
+    organizationId: row.organization.id,
+    actorType: "system",
+    action: "membership.renewal_reminder_sent",
+    entityType: "membership",
+    entityId: membershipId,
+    reason: `Transactional renewal reminder sent for ${targetAt}.`,
+    traceId:
+      result.messageId ?? `membership-renewal:${membershipId}:${targetAt}`,
+    createdAt: now,
+  });
+}
+
+async function sendMembershipPolicyAcknowledgment(
+  payload: Readonly<Record<string, unknown>>,
+  now: Date,
+): Promise<void> {
+  const acceptanceId = stringField(payload, "acceptanceId");
+  const database = getDatabase();
+  const row = (
+    await database
+      .select({
+        acceptance: membershipPolicyAcceptances,
+        itemTitle: catalogItems.title,
+        organizationName: organizations.name,
+        email: people.email,
+      })
+      .from(membershipPolicyAcceptances)
+      .innerJoin(
+        catalogItems,
+        eq(membershipPolicyAcceptances.catalogItemId, catalogItems.id),
+      )
+      .innerJoin(
+        organizations,
+        eq(membershipPolicyAcceptances.organizationId, organizations.id),
+      )
+      .innerJoin(people, eq(membershipPolicyAcceptances.personId, people.id))
+      .where(eq(membershipPolicyAcceptances.id, acceptanceId))
+      .limit(1)
+  )[0];
+  if (!row?.email) return;
+  const result = await sendTransactionalEmail({
+    to: row.email,
+    subject: `${row.organizationName} membership confirmation`,
+    text: `${row.itemTitle}\n\nTerms you accepted:\n${row.acceptance.disclosureText}\n\nManage or cancel online: https://duna.coach/app/wallet#memberships\n\nPolicy version: ${row.acceptance.policyVersion}\nAccepted: ${row.acceptance.acceptedAt.toISOString()}`,
+    idempotencyKey: `membership-policy-acknowledgment:${acceptanceId}`,
+  });
+  if (!result.sent) {
+    throw new Error(
+      result.reason ?? "Membership confirmation could not be delivered.",
+    );
+  }
+  await database.insert(auditLog).values({
+    organizationId: row.acceptance.organizationId,
+    actorType: "system",
+    action: "membership.policy_acknowledgment_sent",
+    entityType: "membership-policy-acceptance",
+    entityId: row.acceptance.id,
+    reason: "Retainable membership terms and online cancellation link sent.",
+    traceId: result.messageId ?? `membership-policy:${acceptanceId}`,
+    createdAt: now,
   });
 }
 
@@ -447,6 +668,10 @@ async function markMembershipPaymentFailed(input: {
   if (!membership) {
     throw new Error("Failed Stripe invoice membership was not found");
   }
+  const tier = await database.query.membershipTiers.findFirst({
+    where: eq(membershipTiers.id, membership.tierId),
+  });
+  const invoiceId = optionalString(input.object, "id") ?? input.traceId;
   await database.batch([
     database
       .update(memberships)
@@ -461,6 +686,32 @@ async function markMembershipPaymentFailed(input: {
       traceId: input.traceId,
       createdAt: input.occurredAt,
     }),
+    ...(tier?.organizationId
+      ? [
+          database
+            .insert(membershipInvoiceTransactions)
+            .values({
+              membershipId: membership.id,
+              organizationId: tier.organizationId,
+              personId: membership.personId,
+              stripeSubscriptionId: subscriptionId,
+              stripeInvoiceId: invoiceId,
+              amountPaidMinor: 0,
+              taxAmountMinor: 0,
+              currency:
+                typeof input.object.currency === "string"
+                  ? input.object.currency.toUpperCase()
+                  : tier.currency,
+              status: "failed",
+              createdAt: input.occurredAt,
+              updatedAt: input.occurredAt,
+            })
+            .onConflictDoUpdate({
+              target: membershipInvoiceTransactions.stripeInvoiceId,
+              set: { status: "failed", updatedAt: input.occurredAt },
+            }),
+        ]
+      : []),
   ]);
 }
 
@@ -545,6 +796,213 @@ async function applyMembershipCycleBenefits(input: {
     where: eq(catalogPrices.stripePriceId, tier.stripePriceId),
   });
   if (!catalogPrice) return;
+  const invoiceId = optionalString(input.object, "id") ?? input.traceId;
+  const amountPaidMinor =
+    typeof input.object.amount_paid === "number" ? input.object.amount_paid : 0;
+  const currency =
+    typeof input.object.currency === "string"
+      ? input.object.currency.toUpperCase()
+      : tier.currency;
+  const taxRows = Array.isArray(input.object.total_taxes)
+    ? input.object.total_taxes
+    : Array.isArray(input.object.total_tax_amounts)
+      ? input.object.total_tax_amounts
+      : [];
+  const taxAmountMinor = taxRows.reduce(
+    (total, row) =>
+      total +
+      (row &&
+      typeof row === "object" &&
+      "amount" in row &&
+      typeof row.amount === "number"
+        ? row.amount
+        : 0),
+    0,
+  );
+  const paidInvoicePayment = (
+    await getStripeClient().invoicePayments.list({
+      invoice: invoiceId,
+      status: "paid",
+      limit: 10,
+    })
+  ).data.find((payment) => payment.payment.type === "payment_intent");
+  const paymentIntentId =
+    typeof paidInvoicePayment?.payment.payment_intent === "string"
+      ? paidInvoicePayment.payment.payment_intent
+      : paidInvoicePayment?.payment.payment_intent?.id;
+  const taxTransferReversalId =
+    taxAmountMinor > 0 && paymentIntentId
+      ? await withholdDestinationChargeTax({
+          paymentIntentId,
+          taxAmountMinor,
+          orderId: `membership-invoice:${invoiceId}`,
+          idempotencyKey: `membership-invoice:${invoiceId}:tax-withholding`,
+        })
+      : undefined;
+  const subscriptionDetails = parent?.subscription_details;
+  const subscriptionMetadata = subscriptionDetails?.metadata as
+    Readonly<Record<string, unknown>> | undefined;
+  const originalOrderId =
+    typeof subscriptionMetadata?.dunaOrderId === "string"
+      ? subscriptionMetadata.dunaOrderId
+      : undefined;
+  const originalOrder = originalOrderId
+    ? await database.query.orders.findFirst({
+        where: eq(orders.id, originalOrderId),
+      })
+    : undefined;
+  const renewalOrder = paymentIntentId
+    ? await database.query.orders.findFirst({
+        where: eq(orders.stripePaymentIntentId, paymentIntentId),
+      })
+    : undefined;
+  const orderId = originalOrder?.id ?? renewalOrder?.id ?? crypto.randomUUID();
+  const applicationFeeMinor = Number(
+    subscriptionMetadata?.dunaApplicationFeeMinor ?? 0,
+  );
+  if (
+    paymentIntentId &&
+    Number.isSafeInteger(applicationFeeMinor) &&
+    applicationFeeMinor > 0
+  ) {
+    await withholdDestinationChargePlatformFee({
+      paymentIntentId,
+      amountMinor: applicationFeeMinor,
+      invoiceId,
+      idempotencyKey: `membership-invoice:${invoiceId}:platform-fee`,
+    });
+  }
+  if (originalOrder || renewalOrder) {
+    await database
+      .update(orders)
+      .set({
+        status: "paid",
+        taxTotalMinor: taxAmountMinor,
+        totalMinor: amountPaidMinor,
+        stripePaymentIntentId:
+          paymentIntentId ??
+          originalOrder?.stripePaymentIntentId ??
+          renewalOrder?.stripePaymentIntentId,
+        updatedAt: input.occurredAt,
+      })
+      .where(eq(orders.id, orderId));
+  } else {
+    await database.batch([
+      database.insert(orders).values({
+        id: orderId,
+        organizationId: tier.organizationId,
+        buyerPersonId: membership.personId,
+        status: "paid",
+        currency,
+        subtotalMinor: Math.max(0, amountPaidMinor - taxAmountMinor),
+        feeTotalMinor: 0,
+        taxTotalMinor: taxAmountMinor,
+        totalMinor: amountPaidMinor,
+        stripePaymentIntentId: paymentIntentId,
+        idempotencyKey: `stripe-membership-invoice:${invoiceId}`,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      }),
+      database.insert(orderItems).values({
+        orderId,
+        kind: "catalog-plan",
+        referenceId: catalogPrice.catalogVariantId,
+        description: `${tier.name} renewal`,
+        quantity: 1,
+        unitAmountMinor: Math.max(0, amountPaidMinor - taxAmountMinor),
+        totalAmountMinor: Math.max(0, amountPaidMinor - taxAmountMinor),
+      }),
+    ]);
+  }
+  const existingPayment = await database.query.payments.findFirst({
+    where: eq(payments.orderId, orderId),
+  });
+  if (!existingPayment) {
+    await database.insert(payments).values({
+      orderId,
+      method: "stripe-subscription-invoice",
+      amountMinor: amountPaidMinor,
+      currency,
+      status: "succeeded",
+      createdAt: input.occurredAt,
+      updatedAt: input.occurredAt,
+    });
+  }
+  if (applicationFeeMinor > 0) {
+    await database
+      .insert(appliedFees)
+      .values({
+        orderId,
+        ruleId: `stripe-subscription-application-fee:${invoiceId}`,
+        payer: "operator",
+        amountMinor: applicationFeeMinor,
+        currency,
+        ruleInputs: { stripeInvoiceId: invoiceId },
+      })
+      .onConflictDoNothing();
+  }
+  await database
+    .insert(membershipInvoiceTransactions)
+    .values({
+      membershipId: membership.id,
+      organizationId: tier.organizationId,
+      personId: membership.personId,
+      stripeSubscriptionId: subscriptionId,
+      stripeInvoiceId: invoiceId,
+      stripePaymentIntentId: paymentIntentId,
+      stripeTaxTransactionId:
+        typeof input.object.tax === "string" ? input.object.tax : undefined,
+      stripeTaxTransferReversalId: taxTransferReversalId,
+      amountPaidMinor,
+      taxAmountMinor,
+      currency,
+      status: "paid",
+      paidAt: input.occurredAt,
+      createdAt: input.occurredAt,
+      updatedAt: input.occurredAt,
+    })
+    .onConflictDoUpdate({
+      target: membershipInvoiceTransactions.stripeInvoiceId,
+      set: {
+        stripePaymentIntentId: paymentIntentId,
+        stripeTaxTransferReversalId: taxTransferReversalId,
+        amountPaidMinor,
+        taxAmountMinor,
+        currency,
+        status: "paid",
+        paidAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+      },
+    });
+  const acceptedPolicy = membership.subscriptionPolicySnapshot as
+    MembershipSubscriptionPolicy | undefined;
+  await recordPaymentFundSchedule({
+    orderId,
+    policyOverride: acceptedPolicy
+      ? acceptedPolicy.refundBehavior === "none"
+        ? {
+            mode: "non-refundable",
+            name: "Membership · non-refundable",
+            version: 1,
+          }
+        : acceptedPolicy.refundBehavior === "prorated"
+          ? {
+              mode: "refundable",
+              refundBeforeMinutes: 0,
+              releaseAt: membership.currentPeriodEndsAt ?? undefined,
+              name: "Membership · prorated through period end",
+              version: 1,
+            }
+          : {
+              mode: "refundable",
+              refundBeforeMinutes:
+                (acceptedPolicy.refundWindowDays ?? 7) * 24 * 60,
+              name: `Membership · ${acceptedPolicy.refundWindowDays ?? 7}-day refund window`,
+              version: 1,
+            }
+      : undefined,
+    now: input.occurredAt,
+  });
   const entitlement = await database.query.catalogEntitlements.findFirst({
     where: and(
       eq(catalogEntitlements.planCatalogItemId, catalogPrice.catalogItemId),
@@ -555,7 +1013,6 @@ async function applyMembershipCycleBenefits(input: {
   const person = await database.query.people.findFirst({
     where: eq(people.id, membership.personId),
   });
-  const invoiceId = optionalString(input.object, "id") ?? input.traceId;
   await issueOrganizationCredits({
     actor: {
       personId: membership.personId,
@@ -622,6 +1079,12 @@ async function synchronizeConnectAccount(input: {
         stripeAccountId: accountId,
         stripeAccountType: accountType,
         stripeChargesEnabled: chargesEnabled,
+        stripeTaxEnabled: chargesEnabled,
+        taxRegistrationStatus: chargesEnabled
+          ? organization.taxRegistrationStatus === "active"
+            ? "active"
+            : "pending"
+          : "not-configured",
         updatedAt: input.occurredAt,
       })
       .where(eq(organizations.id, organization.id)),
@@ -697,6 +1160,12 @@ async function processStripeWorkflow(
       occurredAt,
       traceId: eventPayload.id ?? webhook.providerEventId,
     });
+  } else if (action === "payout.synchronized") {
+    await synchronizeMoneyPayout({ object, now: occurredAt });
+  } else if (action === "dispute.synchronized") {
+    await synchronizeMoneyDispute({ object, now: occurredAt });
+  } else if (action === "refund.synchronized") {
+    await synchronizeMoneyRefund({ object, now: occurredAt });
   } else if (action === "identity.synchronized") {
     await synchronizeIdentityVerification({
       object,
@@ -751,6 +1220,18 @@ async function processStripeWorkflow(
           : null;
     if (amountReceived !== order.totalMinor) {
       const taxTotalMinor = amountReceived - order.totalMinor;
+      const taxContext = await database.query.orderTaxContexts.findFirst({
+        where: eq(orderTaxContexts.orderId, order.id),
+      });
+      const stripeTransferReversalId =
+        taxContext?.stripeTransferReversalId ??
+        (await withholdDestinationChargeTax({
+          paymentIntentId,
+          latestChargeId: latestCharge ?? undefined,
+          taxAmountMinor: taxTotalMinor,
+          orderId: order.id,
+          idempotencyKey: `marketplace-tax:${order.id}:${paymentIntentId}`,
+        }));
       await database.batch([
         database
           .update(orders)
@@ -766,6 +1247,8 @@ async function processStripeWorkflow(
             taxAmountMinor: taxTotalMinor,
             status: "committed",
             committedAt: occurredAt,
+            stripeTransferReversalId,
+            taxWithheldAt: stripeTransferReversalId ? occurredAt : undefined,
           })
           .where(eq(orderTaxContexts.orderId, order.id)),
       ]);
@@ -821,6 +1304,13 @@ async function processStripeWorkflow(
       orderId: order.id,
       now: occurredAt,
       requestId: `payment-selection:${webhook.providerEventId}`,
+    });
+    await recordPaymentFundSchedule({
+      orderId: order.id,
+      processorAvailableAt: latestCharge
+        ? await retrieveChargeSettlementAvailableAt(latestCharge)
+        : undefined,
+      now: occurredAt,
     });
   } else if (action === "checkout.completed") {
     const mode = optionalString(object, "mode");
@@ -939,6 +1429,7 @@ async function processStripeWorkflow(
         now: occurredAt,
         requestId: `payment-selection:${webhook.providerEventId}`,
       });
+      await recordPaymentFundSchedule({ orderId: order.id, now: occurredAt });
     }
   } else if (
     action === "order.payment_failed" ||
@@ -1199,6 +1690,10 @@ export async function processWorkflowJobById(
       await dispatchMessagingPushNotifications(claimed.payload, now);
     } else if (claimed.kind === "messaging.push-receipts") {
       await processMessagingPushReceipts(claimed.payload, now);
+    } else if (claimed.kind === "membership.renewal-reminder") {
+      await sendMembershipRenewalReminder(claimed.payload, now);
+    } else if (claimed.kind === "membership.policy-acknowledgment") {
+      await sendMembershipPolicyAcknowledgment(claimed.payload, now);
     } else {
       throw new Error(`No workflow handler is registered for ${claimed.kind}`);
     }
