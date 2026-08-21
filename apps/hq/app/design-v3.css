@@ -3829,7 +3829,6 @@ body[data-zone="operator"] .promo-field > small {
   line-height: 1.45;
 }
 
-body[data-zone="operator"] .promo-field > input,
 body[data-zone="operator"] .promo-code-input,
 body[data-zone="operator"] .promo-number-input,
 body[data-zone="operator"] .promo-search {
@@ -3842,7 +3841,20 @@ body[data-zone="operator"] .promo-search {
   min-height: 50px;
 }
 
-body[data-zone="operator"] .promo-field > input,
+body[data-zone="operator"] .promo-field > input {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 1rem;
+  min-height: 50px;
+  min-width: 0;
+  outline: 0;
+  padding: 0.72rem 0.85rem;
+  width: 100%;
+}
+
 body[data-zone="operator"] .promo-code-input input,
 body[data-zone="operator"] .promo-number-input input,
 body[data-zone="operator"] .promo-search input {
@@ -4540,6 +4552,13 @@ body[data-zone="operator"] .promo-list > header h2 {
   margin-top: 0.35rem;
 }
 
+body[data-zone="operator"] .promo-list__description {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0.35rem 0 0;
+}
+
 body[data-zone="operator"] .promo-list > header > span {
   color: var(--text-3);
   font-size: 0.8rem;
@@ -4553,6 +4572,12 @@ body[data-zone="operator"] .promo-list__grid {
 
 body[data-zone="operator"] .promo-card {
   border-radius: 14px;
+}
+
+body[data-zone="operator"] .promo-card__inactive-note {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 body[data-zone="operator"] .guided-annual-prepay {
