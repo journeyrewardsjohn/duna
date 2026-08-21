@@ -27476,6 +27476,29 @@ html {
   text-decoration: none;
 }
 
+.auth-entry__alternate--purchase {
+  border-top: 0;
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+  padding-top: 0;
+}
+
+.auth-entry__alternate--purchase a {
+  align-items: center;
+  border: 1px solid #c9d6e4;
+  border-radius: 15px;
+  display: flex;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0.75rem 1rem;
+}
+
+.auth-entry__alternate--purchase a:hover {
+  background: #f1f6fb;
+  border-color: #8baac8;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .auth-entry__media video {
     display: none;
@@ -27553,6 +27576,15 @@ html {
 
   .auth-entry__card h2 {
     font-size: 2rem;
+  }
+
+  .auth-entry--purchase .auth-entry__shell {
+    align-content: center;
+    padding-top: 5.5rem;
+  }
+
+  .auth-entry--purchase .auth-entry__story {
+    display: none;
   }
 }
 

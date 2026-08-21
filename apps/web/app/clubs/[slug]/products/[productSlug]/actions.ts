@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { getServerCaller } from "@/lib/api";
+import { catalogCheckoutFailure } from "@/lib/catalog-checkout-error";
 
 function applicationOrigin(headersValue: Headers): string {
   const protocol = headersValue.get("x-forwarded-proto") ?? "https";
@@ -10,20 +11,6 @@ function applicationOrigin(headersValue: Headers): string {
     headersValue.get("host") ??
     "localhost:3000";
   return `${protocol}://${host}`;
-}
-
-function publicCheckoutError(error: unknown): string {
-  if (!(error instanceof Error)) return "Checkout could not start.";
-  const message = error.message.toLowerCase();
-  if (
-    message.includes("head office") ||
-    message.includes("automatic tax") ||
-    message.includes("tax settings") ||
-    message.includes("taxable recurring")
-  ) {
-    return "Card checkout is temporarily unavailable while Duna finishes marketplace tax setup. No charge was made.";
-  }
-  return error.message;
 }
 
 export async function startCatalogCheckoutAction(input: {
@@ -72,7 +59,7 @@ export async function startCatalogCheckoutAction(input: {
   } catch (error) {
     return {
       ok: false as const,
-      error: publicCheckoutError(error),
+      ...catalogCheckoutFailure(error),
     };
   }
 }
