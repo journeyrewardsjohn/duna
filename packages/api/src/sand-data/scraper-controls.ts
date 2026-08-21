@@ -1,5 +1,5 @@
 import { getDatabase, isDatabaseConfigured, scraperControls } from "@duna/db";
-import { asc } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { SandDataUpstreamError, type SandDataSource } from "./types";
 
 export type ManagedScraperSource = SandDataSource;
@@ -29,6 +29,13 @@ export interface ScraperControl {
   };
   readonly firecrawlCacheTtlSeconds?: number;
   readonly firecrawlChangeTracking: boolean;
+  readonly adaptiveTransport?: {
+    readonly nativeFailureStreak: number;
+    readonly firecrawlPreferredUntil?: string;
+    readonly nativeLastFailureAt?: string;
+    readonly firecrawlFallbackLastSucceededAt?: string;
+    readonly nativeLastError?: string;
+  };
 }
 
 type ScraperControlInsert = typeof scraperControls.$inferInsert;
@@ -115,6 +122,12 @@ const defaults: Readonly<Record<ManagedScraperSource, ScraperControl>> = {
 };
 
 const sources = Object.keys(defaults) as ManagedScraperSource[];
+export const nativeFallbackPromotionThreshold = 3;
+export const firecrawlPreferenceWindowMs = 6 * 60 * 60 * 1_000;
+const learnedTransport = new Map<
+  ManagedScraperSource,
+  NonNullable<ScraperControl["adaptiveTransport"]>
+>();
 let cached:
   | { readonly expiresAt: number; readonly rows: readonly ScraperControl[] }
   | undefined;
@@ -151,6 +164,14 @@ function toControl(row: typeof scraperControls.$inferSelect): ScraperControl {
         : undefined,
     firecrawlCacheTtlSeconds: row.firecrawlCacheTtlSeconds ?? undefined,
     firecrawlChangeTracking: row.firecrawlChangeTracking,
+    adaptiveTransport: {
+      nativeFailureStreak: row.nativeFailureStreak,
+      firecrawlPreferredUntil: row.firecrawlPreferredUntil?.toISOString(),
+      nativeLastFailureAt: row.nativeLastFailureAt?.toISOString(),
+      firecrawlFallbackLastSucceededAt:
+        row.firecrawlFallbackLastSucceededAt?.toISOString(),
+      nativeLastError: row.nativeLastError ?? undefined,
+    },
   };
 }
 
@@ -177,7 +198,125 @@ function seedRow(control: ScraperControl): ScraperControlInsert {
     liveHealthDetail: control.liveHealth?.detail ?? {},
     firecrawlCacheTtlSeconds: control.firecrawlCacheTtlSeconds,
     firecrawlChangeTracking: control.firecrawlChangeTracking,
+    nativeFailureStreak: control.adaptiveTransport?.nativeFailureStreak ?? 0,
+    firecrawlPreferredUntil: control.adaptiveTransport?.firecrawlPreferredUntil
+      ? new Date(control.adaptiveTransport.firecrawlPreferredUntil)
+      : undefined,
+    nativeLastFailureAt: control.adaptiveTransport?.nativeLastFailureAt
+      ? new Date(control.adaptiveTransport.nativeLastFailureAt)
+      : undefined,
+    firecrawlFallbackLastSucceededAt: control.adaptiveTransport
+      ?.firecrawlFallbackLastSucceededAt
+      ? new Date(control.adaptiveTransport.firecrawlFallbackLastSucceededAt)
+      : undefined,
+    nativeLastError: control.adaptiveTransport?.nativeLastError,
   };
+}
+
+function transportState(
+  control: ScraperControl,
+): NonNullable<ScraperControl["adaptiveTransport"]> {
+  return (
+    learnedTransport.get(control.source) ??
+    control.adaptiveTransport ?? { nativeFailureStreak: 0 }
+  );
+}
+
+export function prefersFirecrawlAfterNativeFailures(
+  control: ScraperControl,
+  now = new Date(),
+): boolean {
+  const until = transportState(control).firecrawlPreferredUntil;
+  return Boolean(until && new Date(until).getTime() > now.getTime());
+}
+
+export function nextNativeFallbackState(input: {
+  readonly current?: ScraperControl["adaptiveTransport"];
+  readonly nativeError: string;
+  readonly now: Date;
+}): NonNullable<ScraperControl["adaptiveTransport"]> {
+  const nativeFailureStreak = (input.current?.nativeFailureStreak ?? 0) + 1;
+  return {
+    ...input.current,
+    nativeFailureStreak,
+    nativeLastFailureAt: input.now.toISOString(),
+    firecrawlFallbackLastSucceededAt: input.now.toISOString(),
+    nativeLastError: input.nativeError.slice(0, 2_000),
+    ...(nativeFailureStreak >= nativeFallbackPromotionThreshold
+      ? {
+          firecrawlPreferredUntil: new Date(
+            input.now.getTime() + firecrawlPreferenceWindowMs,
+          ).toISOString(),
+        }
+      : {}),
+  };
+}
+
+export async function recordNativeFallbackSuccess(input: {
+  readonly control: ScraperControl;
+  readonly nativeError: string;
+  readonly now?: Date;
+}): Promise<void> {
+  const now = input.now ?? new Date();
+  const next = nextNativeFallbackState({
+    current: transportState(input.control),
+    nativeError: input.nativeError,
+    now,
+  });
+  learnedTransport.set(input.control.source, next);
+  if (!isDatabaseConfigured()) return;
+  const preferredUntil = new Date(now.getTime() + firecrawlPreferenceWindowMs);
+  const [row] = await getDatabase()
+    .insert(scraperControls)
+    .values({
+      ...seedRow(defaultScraperControl(input.control.source)),
+      nativeFailureStreak: 1,
+      nativeLastFailureAt: now,
+      firecrawlFallbackLastSucceededAt: now,
+      nativeLastError: input.nativeError.slice(0, 2_000),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: scraperControls.source,
+      set: {
+        nativeFailureStreak: sql`${scraperControls.nativeFailureStreak} + 1`,
+        firecrawlPreferredUntil: sql`CASE WHEN ${scraperControls.nativeFailureStreak} + 1 >= ${nativeFallbackPromotionThreshold} THEN ${preferredUntil} ELSE ${scraperControls.firecrawlPreferredUntil} END`,
+        nativeLastFailureAt: now,
+        firecrawlFallbackLastSucceededAt: now,
+        nativeLastError: input.nativeError.slice(0, 2_000),
+        updatedAt: now,
+      },
+    })
+    .returning();
+  if (row) {
+    learnedTransport.set(
+      input.control.source,
+      toControl(row).adaptiveTransport!,
+    );
+  }
+  invalidateScraperControlCache();
+}
+
+export async function recordNativeTransportSuccess(input: {
+  readonly control: ScraperControl;
+  readonly now?: Date;
+}): Promise<void> {
+  const current = transportState(input.control);
+  if (current.nativeFailureStreak === 0 && !current.firecrawlPreferredUntil) {
+    return;
+  }
+  learnedTransport.delete(input.control.source);
+  if (!isDatabaseConfigured()) return;
+  await getDatabase()
+    .update(scraperControls)
+    .set({
+      nativeFailureStreak: 0,
+      firecrawlPreferredUntil: null,
+      updatedAt: input.now ?? new Date(),
+    })
+    .where(eq(scraperControls.source, input.control.source));
+  invalidateScraperControlCache();
 }
 
 export function defaultScraperControl(
@@ -188,6 +327,10 @@ export function defaultScraperControl(
 
 export function invalidateScraperControlCache(): void {
   cached = undefined;
+}
+
+export function resetAdaptiveTransportLearningForTests(): void {
+  learnedTransport.clear();
 }
 
 export async function loadScraperControls(): Promise<
@@ -297,6 +440,8 @@ export async function saveScraperControl(input: {
     liveRestFallbackSeconds: input.liveRestFallbackSeconds ?? null,
     firecrawlCacheTtlSeconds: input.firecrawlCacheTtlSeconds ?? null,
     firecrawlChangeTracking: input.firecrawlChangeTracking,
+    nativeFailureStreak: 0,
+    firecrawlPreferredUntil: null,
     updatedByPersonId: input.updatedByPersonId,
     updatedAt: input.now,
   };
@@ -310,6 +455,7 @@ export async function saveScraperControl(input: {
     .onConflictDoUpdate({ target: scraperControls.source, set: values })
     .returning();
   invalidateScraperControlCache();
+  learnedTransport.delete(input.source);
   if (!row) throw new Error("Scraper control could not be saved");
   return toControl(row);
 }

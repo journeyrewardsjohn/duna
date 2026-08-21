@@ -5161,6 +5161,20 @@ export const scraperControls = pgTable(
     firecrawlChangeTracking: boolean("firecrawl_change_tracking")
       .notNull()
       .default(false),
+    nativeFailureStreak: integer("native_failure_streak").notNull().default(0),
+    firecrawlPreferredUntil: timestamp("firecrawl_preferred_until", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    nativeLastFailureAt: timestamp("native_last_failure_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    firecrawlFallbackLastSucceededAt: timestamp(
+      "firecrawl_fallback_last_succeeded_at",
+      { withTimezone: true, mode: "date" },
+    ),
+    nativeLastError: text("native_last_error"),
     updatedByPersonId: uuid("updated_by_person_id").references(() => people.id),
     createdAt,
     updatedAt,
@@ -5193,6 +5207,10 @@ export const scraperControls = pgTable(
     check(
       "scraper_control_cache_ttl_valid",
       sql`${table.firecrawlCacheTtlSeconds} IS NULL OR ${table.firecrawlCacheTtlSeconds} BETWEEN 0 AND 604800`,
+    ),
+    check(
+      "scraper_control_native_failure_streak_valid",
+      sql`${table.nativeFailureStreak} >= 0`,
     ),
   ],
 );
