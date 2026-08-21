@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   dedupeProfessionalMatchRowsForDisplay,
+  derivedVolleyballWorldCompetitionUrl,
   inferHistoricalPersonId,
   inheritProfessionalEventEditorial,
   matchProfessionalStatisticsToPlayers,
@@ -29,6 +30,20 @@ import {
 } from "./volleyball-world-live";
 
 describe("FIVB event detail refresh", () => {
+  it("derives a canonical city URL when the stored country slug is stale", () => {
+    expect(
+      derivedVolleyballWorldCompetitionUrl({
+        name: "BPT Elite16 Montreal",
+        category: "Elite16",
+        location: "Canada",
+        countryCode: "CA",
+        startsOn: "2026-08-19",
+      }),
+    ).toBe(
+      "https://en.volleyballworld.com/beachvolleyball/competitions/beach-pro-tour/2026/elite16/montreal-can/",
+    );
+  });
+
   it("does not turn completed or archived public matches into live requests", () => {
     const policy = {
       now: new Date("2026-08-16T12:00:00.000Z"),
