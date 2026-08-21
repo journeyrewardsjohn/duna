@@ -171,6 +171,14 @@ describe("Duna AI model", () => {
     expect(resolveDunaAiGatewayCredentialSource()).toBe("oidc");
   });
 
+  it("accepts the request-scoped OIDC token used by Vercel functions", () => {
+    process.env.VERCEL = "1";
+    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
+    expect(resolveDunaAiGatewayCredentialSource("request-oidc-token")).toBe(
+      "oidc",
+    );
+  });
+
   it("prefers a stable API key outside Vercel deployments", () => {
     process.env.AI_GATEWAY_API_KEY = "local-api-key";
     process.env.VERCEL_OIDC_TOKEN = "pulled-oidc-token";
@@ -225,5 +233,35 @@ describe("Duna AI model", () => {
         fetchImpl,
       }),
     ).resolves.toBe("Show me tomorrow's clinics.");
+  });
+
+  it("uses the request-scoped OIDC token for Vercel voice transcription", async () => {
+    process.env.VERCEL = "1";
+    process.env.AI_GATEWAY_API_KEY = "stale-api-key";
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.headers).toEqual({
+          Authorization: "Bearer runtime-oidc-token",
+        });
+        return Response.json({ text: "Show my next booking." });
+      },
+    );
+    await expect(
+      transcribeDunaAiAudio({
+        actor: {
+          personId: "person-runtime-voice",
+          displayName: "Runtime Voice Player",
+          roles: ["player"],
+          scopes: ["profile:read"],
+          ageBand: "adult",
+          isDemo: true,
+        },
+        audio: new Blob(["voice"], { type: "audio/webm" }),
+        filename: "voice.webm",
+        now: new Date("2026-08-20T16:00:00.000Z"),
+        requestOidcToken: "runtime-oidc-token",
+        fetchImpl,
+      }),
+    ).resolves.toBe("Show my next booking.");
   });
 });

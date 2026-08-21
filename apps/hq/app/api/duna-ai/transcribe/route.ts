@@ -57,6 +57,8 @@ export async function POST(request: Request) {
       audio,
       filename: audio.name || "duna-voice.webm",
       now: context.now,
+      requestOidcToken:
+        request.headers.get("x-vercel-oidc-token")?.trim() || undefined,
     });
     return Response.json({ text });
   } catch (error) {
