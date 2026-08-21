@@ -2201,6 +2201,61 @@ function officialFivbRosterCandidates(input: {
   return [...rowCandidates, ...eventCandidates];
 }
 
+const volleyballWorldCountryAliases: Readonly<Record<string, string>> = {
+  BR: "BRA",
+  BRA: "BRA",
+  BRAZIL: "BRA",
+  CA: "CAN",
+  CAN: "CAN",
+  CANADA: "CAN",
+  CH: "SUI",
+  CHE: "SUI",
+  SUI: "SUI",
+  SWITZERLAND: "SUI",
+  CZ: "CZE",
+  CZE: "CZE",
+  CZECHIA: "CZE",
+  "CZECH REPUBLIC": "CZE",
+  DE: "GER",
+  DEU: "GER",
+  GER: "GER",
+  GERMANY: "GER",
+};
+
+export function derivedVolleyballWorldCompetitionUrl(input: {
+  readonly name: string;
+  readonly category?: string;
+  readonly location?: string;
+  readonly countryCode?: string;
+  readonly startsOn: string;
+}): string | undefined {
+  if (
+    !/elite\s*16|elite16|\belite\b/i.test(
+      `${input.name} ${input.category ?? ""}`,
+    )
+  ) {
+    return undefined;
+  }
+  const locationParts = (input.location ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const countryCandidate = input.countryCode ?? locationParts.at(-1);
+  const countryCode =
+    volleyballWorldCountryAliases[countryCandidate?.toUpperCase() ?? ""];
+  const locationCity = locationParts[0];
+  const namedCity = input.name
+    .match(/(?:elite\s*16|elite16|\belite\b)\s+(.+)$/i)?.[1]
+    ?.replace(/\s+(?:men|women)$/i, "")
+    .trim();
+  const city =
+    locationCity && !volleyballWorldCountryAliases[locationCity.toUpperCase()]
+      ? locationCity
+      : namedCity;
+  if (!city || !countryCode) return undefined;
+  return `https://en.volleyballworld.com/beachvolleyball/competitions/beach-pro-tour/${input.startsOn.slice(0, 4)}/elite16/${slugSegment(city)}-${countryCode.toLowerCase()}/`;
+}
+
 async function volleyballWorldEventSource(input: {
   readonly event: typeof professionalEvents.$inferSelect;
   readonly now: Date;
@@ -2234,9 +2289,47 @@ async function volleyballWorldEventSource(input: {
       now: input.now,
     });
   } catch (discoveryError) {
-    // Competition slugs can change after an event is first published. Always
-    // prefer fresh discovery, but retain the last known tournament IDs when
-    // the official competition index is temporarily unavailable.
+    const eventPayload = unknownRecord(input.event.rawPayload);
+    const candidateSourceUrl = [
+      objectString(eventPayload, "volleyballWorldCompetitionUrl"),
+      input.event.sourceUrl,
+    ].find((candidate) =>
+      /^https:\/\/en\.volleyballworld\.com\/beachvolleyball\/competitions\//i.test(
+        candidate ?? "",
+      ),
+    );
+    const derivedUrl = derivedVolleyballWorldCompetitionUrl({
+      name: input.event.name,
+      category: input.event.category ?? undefined,
+      location: input.event.location ?? undefined,
+      countryCode: input.event.countryCode ?? undefined,
+      startsOn,
+    });
+    let fallbackError: unknown = discoveryError;
+    // The monthly official index can lag behind a newly published event. Try
+    // the canonical city slug before a saved URL, which may itself be stale.
+    for (const competitionUrl of [
+      ...new Set(
+        [derivedUrl, candidateSourceUrl].filter((url): url is string =>
+          Boolean(url),
+        ),
+      ),
+    ]) {
+      try {
+        return await discoverVolleyballWorldEventAtUrl({
+          competitionUrl,
+          competitionName: input.event.name,
+          startsOn,
+          endsOn,
+          genderCategory,
+          now: input.now,
+        });
+      } catch (error) {
+        fallbackError = error;
+      }
+    }
+    // Retain the last known tournament IDs only when every canonical
+    // discovery path is temporarily unavailable.
     if (existing) {
       return {
         binding: existing,
@@ -2247,62 +2340,7 @@ async function volleyballWorldEventSource(input: {
         }),
       };
     }
-    const eventPayload = unknownRecord(input.event.rawPayload);
-    const candidateSourceUrl = [
-      objectString(eventPayload, "volleyballWorldCompetitionUrl"),
-      input.event.sourceUrl,
-    ].find((candidate) =>
-      /^https:\/\/en\.volleyballworld\.com\/beachvolleyball\/competitions\//i.test(
-        candidate ?? "",
-      ),
-    );
-    const countryAliases: Readonly<Record<string, string>> = {
-      BR: "BRA",
-      BRA: "BRA",
-      BRAZIL: "BRA",
-      CA: "CAN",
-      CAN: "CAN",
-      CANADA: "CAN",
-      CH: "SUI",
-      CHE: "SUI",
-      SUI: "SUI",
-      SWITZERLAND: "SUI",
-      CZ: "CZE",
-      CZE: "CZE",
-      CZECHIA: "CZE",
-      "CZECH REPUBLIC": "CZE",
-      DE: "GER",
-      DEU: "GER",
-      GER: "GER",
-      GERMANY: "GER",
-    };
-    const locationParts = (input.event.location ?? "")
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    const countryCandidate =
-      input.event.countryCode ?? locationParts.at(-1)?.toUpperCase();
-    const countryCode = countryAliases[countryCandidate?.toUpperCase() ?? ""];
-    const city = locationParts[0];
-    const derivedUrl =
-      !candidateSourceUrl &&
-      /elite\s*16|\belite\b/i.test(
-        `${input.event.name} ${input.event.category ?? ""}`,
-      ) &&
-      city &&
-      countryCode
-        ? `https://en.volleyballworld.com/beachvolleyball/competitions/beach-pro-tour/${startsOn.slice(0, 4)}/elite16/${slugSegment(city)}-${countryCode.toLowerCase()}/`
-        : undefined;
-    const competitionUrl = candidateSourceUrl ?? derivedUrl;
-    if (!competitionUrl) throw discoveryError;
-    return discoverVolleyballWorldEventAtUrl({
-      competitionUrl,
-      competitionName: input.event.name,
-      startsOn,
-      endsOn,
-      genderCategory,
-      now: input.now,
-    });
+    throw fallbackError;
   }
 }
 

@@ -104,6 +104,7 @@ export const staticPublicPages = [
       "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
       "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
       "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, court maps, and operating reports without inferring unavailable financial data.",
+      "Training planning covers drill creation from a plain-language description, coach-assembled practice plans, and season programs with drafted phases. See /run-your-club/training for detail.",
       "Duna Vision is controlled per recording: players can help improve Duna Vision with de-identified setup and geometry signals while full video remains private and reviewed before any training use.",
       "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
       "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
@@ -124,6 +125,19 @@ export const staticPublicPages = [
       "Advanced Drill Studio models player movement, ball contacts, self-passes, sets, attack targets, ordered balls, and multiple phases before Sol creates coaching guidance and animation direction.",
       "Programs can be sold as one offer covering every included session, with upfront payment or a fixed installment schedule. When configured, checkout clearly shows the pay-over-time total and upfront savings.",
       "Programs and practice plans preserve the latest five non-financial versions for restore. Commercial and completed-session history remains protected.",
+    ],
+  },
+  {
+    path: "/run-your-club/training",
+    title: "Training: drill, practice, and program planning",
+    description:
+      "Describe a drill in plain language and Duna returns a structured plan you can correct. Build the session around it, then set the season it belongs to.",
+    sections: [
+      "Drill: Describe a drill in plain language and Duna drafts the steps, coaching cues, and scoring. The coach reviews and edits before anything is saved.",
+      "Practice: The coach assembles a timed session from their drills. Blocks can run on parallel courts. Practice plans are built by the coach rather than generated from a prompt.",
+      "Program: Set the date window, weekly recurrence, and the tournaments that matter. Duna drafts the training phases and the load leading to them, and the coach can edit any week before the program is saved. Programs schedule sessions; they do not generate practice content for each session.",
+      "Contact and load figures are planning estimates derived from each drill's pacing assumptions. They are coach planning context, not a measurement of any athlete and not a health prediction.",
+      "The page shows the Drill Studio, Practice Builder, and Program Designer screens from Duna HQ using the sample content the product ships: a First-Ball Sideout Lab drill, the 90-minute Sideout Under Pressure session that contains it across two courts, and the Fall Competition Build program that session belongs to, drawn as an eight-week strip whose phases, weekly load, current week, and Atlantic Coast Open tournament come from the program's own scheduling logic.",
     ],
   },
   {

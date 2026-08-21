@@ -1,0 +1,931 @@
+/* Type scale, hero treatment, and HQ mock chrome mirror
+   run-your-business-page.module.css so this page reads as the same product. */
+
+.page {
+  --hero-progress: 0;
+  background: var(--ground);
+  color: var(--text-1);
+  overflow: clip;
+}
+
+.page :where(a, button):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.eyebrow {
+  color: color-mix(in srgb, var(--text-2) 72%, transparent);
+  display: inline-flex;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.primaryButton,
+.secondaryButton {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0.8rem 1.15rem;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.primaryButton {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+}
+
+.secondaryButton {
+  background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+  border: 1px solid var(--btn-ghost-border);
+  color: var(--text-1);
+}
+
+.primaryButton svg {
+  height: 17px;
+  transition: transform 180ms ease;
+  width: 17px;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-2px);
+}
+
+.primaryButton:hover svg {
+  transform: translateX(3px);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.4rem;
+}
+
+/* Hero */
+.hero {
+  background: var(--ground);
+  overflow: clip;
+  padding: clamp(7rem, 11vw, 11rem) max(1.25rem, calc((100vw - 112rem) / 2))
+    clamp(5rem, 8vw, 8rem);
+  position: relative;
+}
+
+.heroMedia {
+  inset: 0;
+  opacity: 0.52;
+  pointer-events: none;
+  position: absolute;
+}
+
+.heroMedia img {
+  filter: saturate(0.64) contrast(0.9) brightness(1.15);
+  object-fit: cover;
+  object-position: 24% center;
+}
+
+/* The hero image dissolves into the section ground rather than ending on an
+   edge. Same two-layer dissolve as the parent hero. */
+.heroMedia::after {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ground) 8%, transparent),
+      color-mix(in srgb, var(--ground) 60%, transparent) 49%,
+      var(--ground) 78%
+    ),
+    linear-gradient(
+      0deg,
+      var(--ground) 0%,
+      color-mix(in srgb, var(--ground) 64%, transparent) 24%,
+      transparent 54%
+    );
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.heroTexture {
+  background:
+    repeating-radial-gradient(
+      ellipse at 15% 95%,
+      color-mix(in srgb, var(--sand-500) 18%, transparent) 0 1px,
+      transparent 1px 16px
+    ),
+    radial-gradient(
+      circle at 84% 55%,
+      color-mix(in srgb, var(--hq-tint) 54%, transparent),
+      transparent 28%
+    );
+  inset: 0;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 4%,
+    black 44%,
+    transparent 100%
+  );
+  opacity: 0.34;
+  pointer-events: none;
+  position: absolute;
+}
+
+.heroInner {
+  align-items: center;
+  display: grid;
+  gap: clamp(2.5rem, 5vw, 5rem);
+  margin: 0 auto;
+  max-width: 112rem;
+  position: relative;
+  z-index: 2;
+}
+
+@media (min-width: 68rem) {
+  .heroInner {
+    grid-template-columns: minmax(28rem, 0.86fr) minmax(34rem, 1.14fr);
+  }
+}
+
+.heroCopy {
+  display: grid;
+  gap: 1.25rem;
+  justify-items: start;
+  max-width: 46rem;
+}
+
+.heroCopy h1 {
+  font-family: var(--font-display);
+  font-size: clamp(3.5rem, 5.8vw, 6.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.03;
+  margin: 0;
+  max-width: 14ch;
+  word-spacing: 0.05em;
+}
+
+.heroCopy > p {
+  color: var(--text-2);
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-weight: 300;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 52ch;
+}
+
+.heroCopy > small {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  max-width: 48ch;
+}
+
+.heroStage {
+  min-width: 0;
+  position: relative;
+}
+
+/* HQ chrome. Local mock tokens keep the window reading as the product in any
+   theme, exactly as the sibling page does. */
+.hqWindow {
+  --mock-ink: var(--ink);
+  --mock-muted: var(--pending);
+  --mock-ground: var(--fog-50);
+  --mock-surface: color-mix(in srgb, var(--fog-50) 88%, var(--marine-200));
+  background: var(--mock-ground);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 34px 110px color-mix(in srgb, var(--ink) 20%, transparent);
+  color: var(--mock-ink);
+  overflow: hidden;
+}
+
+.hqTopbar {
+  align-items: center;
+  background: color-mix(in srgb, var(--fog-50) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: auto 1fr auto;
+  min-height: 60px;
+  padding: 0.75rem 1rem;
+}
+
+.hqWordmark {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-variation-settings:
+    "wdth" 90,
+    "wght" 800;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+}
+
+.hqContext {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+  justify-self: center;
+  text-align: center;
+}
+
+.hqAvatar {
+  align-items: center;
+  background: var(--mock-surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 50%;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.hqBody {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+}
+
+.hqSidebar {
+  align-content: start;
+  background: color-mix(in srgb, var(--fog-100) 54%, var(--fog-50));
+  border-right: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem 0.65rem;
+}
+
+.hqSidebar span {
+  align-items: center;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 500;
+  gap: 0.45rem;
+  min-height: 36px;
+  padding: 0.55rem;
+}
+
+.hqSidebar svg {
+  height: 13px;
+  width: 13px;
+}
+
+.hqNavActive {
+  background: var(--hq-tint);
+  color: var(--hq-ink) !important;
+  font-weight: 600 !important;
+}
+
+.hqScreen {
+  display: grid;
+  gap: 0.85rem;
+  padding: clamp(1rem, 1.8vw, 1.5rem);
+}
+
+.mockHeading > span,
+.heroScreenHead > span {
+  color: var(--hq-ink);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mockHeading > strong {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.006em;
+  margin-top: 0.2rem;
+}
+
+.heroScreenHead h2 {
+  font-size: clamp(1.4rem, 2.2vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1.06;
+  margin: 0.3rem 0 0;
+  word-spacing: 0.02em;
+}
+
+/* Metric row, matching the sibling's HQ metric cards. */
+.hqMetrics {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.hqMetrics article {
+  background: var(--mock-surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.hqMetrics small {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+.hqMetrics span {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+/* Studio */
+.studioField {
+  background: color-mix(in srgb, var(--fog-100) 70%, var(--fog-50));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem 0.9rem;
+}
+
+.studioField label {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+.studioField p {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.studioParams {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.studioParams span {
+  background: var(--mock-surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.studioParams small {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+.studioParams strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.studioResult {
+  background: var(--fog-50);
+  border: 1px solid var(--hq-core);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.9rem;
+}
+
+.studioResult header {
+  align-items: center;
+  color: var(--hq-ink);
+  display: flex;
+  gap: 0.4rem;
+}
+
+.studioResult header svg {
+  height: 14px;
+  width: 14px;
+}
+
+.studioResult header span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.studioResultTitle {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.studioResultMeta {
+  color: var(--mock-muted);
+  font-size: 0.8125rem;
+}
+
+.studioResult ol,
+.studioResult ul {
+  display: grid;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+}
+
+.studioResult ol {
+  counter-reset: step;
+}
+
+.studioResult ol li {
+  counter-increment: step;
+  display: grid;
+  font-size: 0.8125rem;
+  gap: 0.5rem;
+  grid-template-columns: 1rem 1fr;
+  line-height: 1.45;
+}
+
+.studioResult ol li::before {
+  color: var(--mock-muted);
+  content: counter(step);
+  font-variant-numeric: tabular-nums;
+}
+
+.studioResult ul {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  padding-top: 0.45rem;
+}
+
+.studioResult ul li {
+  color: var(--mock-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+/* Block board */
+.blockBoard {
+  display: grid;
+  gap: 1px;
+}
+
+.blockBoard article {
+  align-items: center;
+  background: var(--fog-50);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 2.25rem 1fr auto auto;
+  padding: 0.55rem 0.2rem;
+}
+
+.blockBoard article:first-child {
+  border-top: 0;
+}
+
+.blockParallel {
+  background: color-mix(in srgb, var(--hq-tint) 55%, var(--fog-50)) !important;
+}
+
+.blockBoard article > :first-child {
+  color: var(--mock-muted);
+  font-size: 0.8125rem;
+}
+
+.blockMain {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.blockMain strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.blockMain small {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+.blockFocus {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.blockLane {
+  color: var(--hq-ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* People with roles, the way the parent's HQ chrome carries them. */
+.staffBoard {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.staffBoard article {
+  align-items: center;
+  background: var(--mock-surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 0.5rem 0.6rem;
+}
+
+.staffBoard span {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.staffBoard strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staffBoard small {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+}
+
+.staffBoard em {
+  color: var(--hq-ink);
+  font-size: 0.75rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.blockBoard em {
+  color: var(--mock-muted);
+  font-size: 0.8125rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.hqFooterRow {
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.6rem;
+}
+
+.hqFooterRow em {
+  color: var(--mock-muted);
+  font-size: 0.75rem;
+  font-style: normal;
+}
+
+/* Program. The season strip is the artifact, so the numbers stay quiet in the
+   chrome rather than becoming cards. */
+.programChromeLine {
+  color: var(--mock-muted);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.seasonStrip {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.phaseBands,
+.weekBars,
+.weekLabels,
+.milestoneTicks {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.phaseBands span {
+  border-top: 2px solid var(--hq-core);
+  color: var(--hq-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  grid-column: var(--from) / var(--to);
+  letter-spacing: 0.04em;
+  margin-right: 0.35rem;
+  padding-top: 0.3rem;
+  white-space: nowrap;
+}
+
+/* The week range only earns its space once the bands stop spanning columns. */
+.phaseBands i {
+  display: none;
+}
+
+.weekBars {
+  align-items: end;
+  block-size: 7.5rem;
+}
+
+.weekBar {
+  align-items: end;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 6px;
+  display: flex;
+  block-size: 100%;
+  overflow: hidden;
+}
+
+.weekBar i {
+  background: color-mix(in srgb, var(--hq-core) 52%, var(--fog-100));
+  display: block;
+  inline-size: 100%;
+}
+
+.weekBar[data-state="done"] i {
+  background: color-mix(in srgb, var(--hq-ink) 34%, var(--fog-100));
+}
+
+.weekBar[data-state="current"] {
+  background: var(--hq-tint);
+  outline: 2px solid var(--hq-core);
+  outline-offset: 0;
+}
+
+.weekBar[data-state="current"] i {
+  background: var(--hq-core);
+}
+
+.weekLabels span {
+  align-items: center;
+  color: var(--mock-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.weekLabels span[data-state="current"] {
+  color: var(--hq-ink);
+  font-weight: 600;
+}
+
+.weekLabels em {
+  font-size: 0.75rem;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+/* The milestone is a tick on the strip plus a readable label, so the title is
+   never squeezed into one eighth of the width. */
+.milestoneTicks i {
+  background: var(--hq-ink);
+  border-radius: 2px;
+  block-size: 6px;
+  display: block;
+}
+
+.milestoneLabel {
+  color: var(--hq-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Hero screen extras */
+.heroStudioStrip {
+  align-items: start;
+  background: color-mix(in srgb, var(--fog-100) 70%, var(--fog-50));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 0.7rem 0.8rem;
+}
+
+.heroStudioStrip svg {
+  color: var(--hq-ink);
+  height: 14px;
+  margin-top: 0.15rem;
+  width: 14px;
+}
+
+.heroStudioStrip p {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.heroStudioStrip > span {
+  display: grid;
+  gap: 0.05rem;
+  justify-items: end;
+  text-align: right;
+}
+
+.heroStudioStrip small {
+  color: var(--hq-ink);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.heroStudioStrip strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Plates */
+.plate {
+  padding: clamp(6rem, 10vw, 10rem) max(1.25rem, calc((100vw - 100rem) / 2));
+}
+
+.plateRaised {
+  background: linear-gradient(
+    120deg,
+    var(--ground),
+    color-mix(in srgb, var(--hq-tint) 54%, var(--ground))
+  );
+}
+
+/* Intro sits above the proof, as it does on the parent's #club-owner and
+   #platform sections, so the product window gets the full measure. */
+.plateIntro {
+  display: grid;
+  gap: 1.1rem;
+  justify-items: start;
+  margin: 0 auto clamp(3rem, 6vw, 5.5rem);
+  max-width: 100rem;
+}
+
+.plateIntro h2 {
+  font-size: clamp(2.7rem, 4.6vw, 5.15rem);
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: 1.06;
+  margin: 0;
+  max-width: 16ch;
+  word-spacing: 0.04em;
+}
+
+.plateIntro p {
+  color: var(--text-2);
+  font-size: clamp(1rem, 1.25vw, 1.2rem);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 58ch;
+}
+
+.plateProof {
+  margin: 0 auto;
+  max-width: 100rem;
+}
+
+/* Closing */
+.closing {
+  padding: clamp(6rem, 10vw, 10rem) max(1.25rem, calc((100vw - 100rem) / 2))
+    clamp(7rem, 12vw, 12rem);
+}
+
+.closingInner {
+  display: grid;
+  gap: 1.1rem;
+  justify-items: start;
+  margin: 0 auto;
+  max-width: 100rem;
+}
+
+.closingInner h2 {
+  font-size: clamp(2.7rem, 4.6vw, 5.15rem);
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: 1.06;
+  margin: 0;
+  max-width: 14ch;
+  word-spacing: 0.04em;
+}
+
+.closingInner p {
+  color: var(--text-2);
+  font-size: clamp(1rem, 1.25vw, 1.2rem);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 58ch;
+}
+
+/* Reveal. Content is visible by default and only hides once script has
+   confirmed it can reveal it again. */
+.page[data-motion="ready"] [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 600ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.page[data-motion="ready"] [data-reveal][data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .primaryButton:hover,
+  .secondaryButton:hover,
+  .primaryButton:hover svg {
+    transform: none;
+  }
+}
+
+@media (max-width: 52rem) {
+  .hqBody {
+    grid-template-columns: 1fr;
+  }
+
+  .hqSidebar {
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+    border-right: 0;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    padding: 0.5rem;
+  }
+
+  .studioParams {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .hqMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .blockBoard article {
+    grid-template-columns: 2.25rem 1fr auto;
+    row-gap: 0.2rem;
+  }
+
+  .blockFocus,
+  .blockLane {
+    grid-column: 2;
+  }
+
+  .staffBoard {
+    grid-template-columns: 1fr;
+  }
+
+  .weekBars {
+    block-size: 5.5rem;
+  }
+
+  /* A single week is far too narrow to hold a phase name, so the bands become
+     a wrapped legend rather than truncating to "Sh...". */
+  .phaseBands {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+  }
+
+  .phaseBands span {
+    align-items: baseline;
+    display: inline-flex;
+    gap: 0.3rem;
+    grid-column: auto;
+    margin-right: 0;
+  }
+
+  .phaseBands i {
+    color: var(--mock-muted);
+    display: inline;
+    font-size: 0.75rem;
+    font-style: normal;
+    font-weight: 500;
+  }
+}
+
+@media (max-width: 46rem) {
+  .primaryButton,
+  .secondaryButton {
+    min-height: 56px;
+    width: 100%;
+  }
+}
