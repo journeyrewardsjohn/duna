@@ -164,6 +164,13 @@ export async function importBvbInfoPlayer(
     );
   }
   const requestedUrl = `http://www.bvbinfo.com/player.asp?ID=${numericId}&Page=1`;
+  await onProgress?.({
+    phase: "fetching-profile",
+    current: 0,
+    total: 3,
+    matchesFound: 0,
+    profilesFound: 0,
+  });
   const first = await scrapeHtml("bvbinfo", requestedUrl, {
     timeoutMs: 90_000,
   });
@@ -181,6 +188,13 @@ export async function importBvbInfoPlayer(
       pages.set(page, "");
     }
   }
+  await onProgress?.({
+    phase: "profile-found",
+    current: 1,
+    total: pages.size,
+    matchesFound: 0,
+    profilesFound: 1,
+  });
   const failedPages: number[] = [];
   for (const page of pages.keys()) {
     if (page === 1) continue;
@@ -740,6 +754,13 @@ export async function importVolleyballLifePlayer(
   const headers = volleyballLifeHeaders(numericId);
   const endpointFallbacks: string[] = [];
   let profile: Record<string, unknown> = {};
+  await onProgress?.({
+    phase: "fetching-profile",
+    current: 0,
+    total: 3,
+    matchesFound: 0,
+    profilesFound: 0,
+  });
   try {
     profile = record(
       await scrapeJson<unknown>("volleyball-life", apiProfileUrl, { headers }),
@@ -748,6 +769,13 @@ export async function importVolleyballLifePlayer(
     endpointFallbacks.push("profile-from-feed-finishes");
   }
   let finishesValue: unknown;
+  await onProgress?.({
+    phase: "fetching-finishes",
+    current: 1,
+    total: 3,
+    matchesFound: 0,
+    profilesFound: Object.keys(profile).length > 0 ? 1 : 0,
+  });
   try {
     finishesValue = await scrapeJson<unknown>(
       "volleyball-life",
@@ -781,6 +809,13 @@ export async function importVolleyballLifePlayer(
       .join(", ") || stringValue(finishes.cityState);
 
   let truVolley: Record<string, unknown> = {};
+  await onProgress?.({
+    phase: "checking-rating",
+    current: 2,
+    total: 3,
+    matchesFound: 0,
+    profilesFound: 1,
+  });
   try {
     truVolley = record(
       await scrapeJson<unknown>(

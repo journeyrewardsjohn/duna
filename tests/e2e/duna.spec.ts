@@ -865,6 +865,33 @@ test("account controls, profile editing, and legal documents stay reachable", as
   await expectNoHorizontalOverflow(page);
 });
 
+test("settings use the available desktop width and collapse cleanly", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1100 });
+  await page.goto("/app/settings");
+
+  const [layoutBox, navigationBox, contentBox] = await Promise.all([
+    getBox(page.locator(".settings-layout")),
+    getBox(page.locator(".settings-layout > nav")),
+    getBox(page.locator(".settings-content")),
+  ]);
+  expect(contentBox.width).toBeGreaterThan(1_000);
+  expect(contentBox.width).toBeGreaterThan(
+    layoutBox.width - navigationBox.width - 96,
+  );
+  await expectNoHorizontalOverflow(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings." })).toBeVisible();
+  await expect(page.locator(".source-link-grid")).toHaveCSS(
+    "grid-template-columns",
+    /\d+px/,
+  );
+  await expectNoHorizontalOverflow(page);
+});
+
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
 }) => {
