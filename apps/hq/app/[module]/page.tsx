@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ModulePanel } from "@/components/module-panels";
 import { operatorModules, type OperatorModule } from "@/components/navigation";
 import { OperatorShell } from "@/components/operator-shell";
@@ -25,6 +25,7 @@ export default async function OperatorModulePage({
   const { draft, stripe } = await searchParams;
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
+  if (module === "ai") redirect("/?duna=ask");
   const caller = await getServerCaller();
   if (module === "payments" && stripe === "return") {
     try {

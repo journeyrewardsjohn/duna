@@ -66,7 +66,13 @@ export const operatorModules = [
   { slug: "payments", label: "Money", icon: CreditCard, group: "Grow" },
   { slug: "marketing", label: "Marketing", icon: Mail, group: "Grow" },
   { slug: "reports", label: "Reports", icon: CircleGauge, group: "Grow" },
-  { slug: "ai", label: "Duna AI", icon: Bot, group: "Grow" },
+  {
+    slug: "ai",
+    label: "Duna AI",
+    icon: Bot,
+    group: "Grow",
+    hiddenFromNavigation: true,
+  },
   { slug: "settings", label: "Settings", icon: Settings2, group: "Configure" },
 ] as const satisfies readonly {
   readonly slug: string;
