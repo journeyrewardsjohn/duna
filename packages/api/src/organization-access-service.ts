@@ -10,7 +10,11 @@ import {
 import { WorkOS } from "@workos-inc/node";
 import { and, eq, ilike, inArray } from "drizzle-orm";
 import type { ApiActor } from "./context";
-import { createStaffInvitation } from "./operator-service";
+import {
+  createStaffInvitation,
+  membershipRoleForOrganizationStaffRole,
+  scopesForOrganizationStaffRole,
+} from "./operator-service";
 import { resolveWorkOSCredentials } from "./workos-environment";
 
 export type OrganizationAccessRole =
@@ -26,81 +30,24 @@ export class OrganizationAccessError extends Error {
   }
 }
 
-function roleScopes(role: OrganizationAccessRole): string[] {
-  switch (role) {
-    case "director":
-      return [
-        "members:read",
-        "members:write",
-        "sessions:read",
-        "sessions:write",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "payments:read",
-        "payments:write",
-        "payments:collect",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-        "reports:read",
-      ];
-    case "manager":
-      return [
-        "members:read",
-        "members:write",
-        "sessions:read",
-        "sessions:write",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-        "reports:read",
-      ];
-    case "front-desk":
-      return [
-        "members:read",
-        "sessions:read",
-        "sessions:write",
-        "bookings:write",
-        "payments:collect",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-      ];
-    case "accountant":
-      return ["sessions:read", "payments:read", "reports:read"];
-    case "coach":
-      return [
-        "members:read",
-        "sessions:read",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "payments:collect",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-      ];
-  }
-}
-
-function workOSRoleSlug(role: OrganizationAccessRole): string {
-  return role === "director" ? "owner" : role;
+/**
+ * Duna staff roles are local authorization policy. They must not be inferred
+ * as WorkOS role slugs: a WorkOS environment only accepts roles configured in
+ * that environment. Omit the provider role by default so WorkOS applies its
+ * configured default membership role; callers may opt into an explicit,
+ * provider-configured slug when one is available.
+ */
+export function resolveWorkOSMembershipRoleSlug(
+  workosRoleSlug?: string,
+): string | undefined {
+  return workosRoleSlug?.trim() || undefined;
 }
 
 async function synchronizeWorkOSMembership(input: {
   readonly workosOrganizationId?: string | null;
   readonly workosUserId?: string | null;
-  readonly role: OrganizationAccessRole;
-  /** A provider role can be narrower than Duna's local staff role. */
+  /** An optional, explicitly configured provider role. */
   readonly workosRoleSlug?: string;
-  /** System workspaces use the provider's safe default membership role. */
-  readonly useDefaultWorkosRole?: boolean;
 }): Promise<"synced" | "not-linked"> {
   if (!input.workosOrganizationId || !input.workosUserId) return "not-linked";
   const credentials = resolveWorkOSCredentials();
@@ -125,17 +72,16 @@ async function synchronizeWorkOSMembership(input: {
     const membership = memberships.data.find(
       (candidate) => candidate.userId === input.workosUserId,
     );
-    if (membership && !input.useDefaultWorkosRole) {
+    const roleSlug = resolveWorkOSMembershipRoleSlug(input.workosRoleSlug);
+    if (membership && roleSlug) {
       await workos.userManagement.updateOrganizationMembership(membership.id, {
-        roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role),
+        roleSlug,
       });
     } else if (!membership) {
       await workos.userManagement.createOrganizationMembership({
         organizationId: input.workosOrganizationId,
         userId: input.workosUserId,
-        ...(input.useDefaultWorkosRole
-          ? {}
-          : { roleSlug: input.workosRoleSlug ?? workOSRoleSlug(input.role) }),
+        ...(roleSlug ? { roleSlug } : {}),
       });
     }
     return "synced";
@@ -162,10 +108,8 @@ export async function grantOrganizationAccess(input: {
   readonly now: Date;
   /** Internal platform-only path; never exposed by the public admin mutation. */
   readonly allowSystemOrganization?: boolean;
-  /** Internal provider mapping for system workspaces. */
+  /** Optional mapping to a role slug configured in the WorkOS environment. */
   readonly workosRoleSlug?: string;
-  /** Internal identity-only membership for system workspaces. */
-  readonly useDefaultWorkosRole?: boolean;
 }): Promise<{
   readonly id: string;
   readonly entity: "staff-profile" | "staff-invitation";
@@ -229,14 +173,30 @@ export async function grantOrganizationAccess(input: {
     };
   }
 
+  const activeOwnerMembership =
+    await database.query.organizationMemberships.findFirst({
+      where: and(
+        eq(organizationMemberships.organizationId, organization.id),
+        eq(organizationMemberships.personId, person.id),
+        eq(organizationMemberships.role, "owner"),
+        eq(organizationMemberships.active, true),
+      ),
+      columns: { id: true },
+    });
+  if (activeOwnerMembership && input.role !== "director") {
+    throw new OrganizationAccessError(
+      "CONFIGURATION",
+      "The organization Owner can only change role after transferring ownership to another Director.",
+    );
+  }
+  const membershipRole = activeOwnerMembership
+    ? "owner"
+    : membershipRoleForOrganizationStaffRole(input.role);
   const workosSync = await synchronizeWorkOSMembership({
     workosOrganizationId: organization.workosOrganizationId,
     workosUserId: person.workosUserId,
-    role: input.role,
     workosRoleSlug: input.workosRoleSlug,
-    useDefaultWorkosRole: input.useDefaultWorkosRole,
   });
-  const membershipRole = input.role === "director" ? "owner" : input.role;
   await getTransactionalDatabase().transaction(async (transaction) => {
     await transaction
       .update(organizationMemberships)
@@ -246,7 +206,6 @@ export async function grantOrganizationAccess(input: {
           eq(organizationMemberships.organizationId, organization.id),
           eq(organizationMemberships.personId, person.id),
           inArray(organizationMemberships.role, [
-            "owner",
             "manager",
             "coach",
             "front-desk",
@@ -261,7 +220,7 @@ export async function grantOrganizationAccess(input: {
         organizationId: organization.id,
         personId: person.id,
         role: membershipRole,
-        scopes: roleScopes(input.role),
+        scopes: scopesForOrganizationStaffRole(input.role),
         active: true,
         updatedAt: input.now,
       })
@@ -272,7 +231,7 @@ export async function grantOrganizationAccess(input: {
           organizationMemberships.role,
         ],
         set: {
-          scopes: roleScopes(input.role),
+          scopes: scopesForOrganizationStaffRole(input.role),
           active: true,
           updatedAt: input.now,
         },

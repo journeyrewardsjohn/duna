@@ -480,8 +480,11 @@ async function resolveWorkOSActor(input: {
       | "accountant"
     >
   > = {
-    admin: "owner",
-    owner: "owner",
+    // WorkOS can establish a linked organization context, but it must never
+    // mint a second Duna Owner. Duna ownership starts at HQ provisioning and
+    // moves only through the explicit Owner-transfer workflow.
+    admin: "manager",
+    owner: "manager",
     manager: "manager",
     coach: "coach",
     member: "coach",
@@ -492,7 +495,21 @@ async function resolveWorkOSActor(input: {
   const organizationRole = workosRoleCandidates
     .map((role) => organizationRoleByWorkOSRole[role])
     .find(Boolean);
-  if (workosOrganization && organizationRole) {
+  // A persisted Duna membership is authoritative. Do not let a provider-default
+  // WorkOS role add a second local role (which could broaden an accountant or
+  // front-desk user's permissions on their next sign-in).
+  const activeDunaMembership =
+    workosOrganization && organizationRole
+      ? await database.query.organizationMemberships.findFirst({
+          where: and(
+            eq(organizationMemberships.organizationId, workosOrganization.id),
+            eq(organizationMemberships.personId, person.id),
+            eq(organizationMemberships.active, true),
+          ),
+          columns: { id: true },
+        })
+      : undefined;
+  if (workosOrganization && organizationRole && !activeDunaMembership) {
     await database
       .insert(organizationMemberships)
       .values({

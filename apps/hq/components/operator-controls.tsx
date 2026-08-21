@@ -564,6 +564,9 @@ function TeamMemberComposer({
               <span>Role</span>
               <select name="role" defaultValue="coach">
                 <option value="coach">Coach</option>
+                {workspace.teamAccess.canInviteDirector && (
+                  <option value="director">Director</option>
+                )}
                 <option value="manager">Manager</option>
                 <option value="front-desk">Front desk</option>
                 <option value="accountant">Accountant</option>
@@ -629,6 +632,8 @@ function TeamMemberComposer({
               <p className="operator-form-hint operator-field--wide">
                 No email or mobile number needed. The private link is ready to
                 copy as soon as you create it and expires after 7 days.
+                {workspace.teamAccess.canInviteDirector &&
+                  " Directors share organization leadership; the original Owner remains protected until ownership is transferred."}
               </p>
             )}
           </div>

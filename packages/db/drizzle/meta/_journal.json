@@ -607,8 +607,15 @@
     {
       "idx": 86,
       "version": "7",
-      "when": 1787274804554,
-      "tag": "0086_puzzling_sage",
+      "when": 1787273778303,
+      "tag": "0086_cool_hellion",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1787275871110,
+      "tag": "0087_hesitant_power_pack",
       "breakpoints": true
     }
   ]
