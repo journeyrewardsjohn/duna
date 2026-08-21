@@ -621,6 +621,7 @@ import {
   loadSandDataOverview,
   mergeUnclaimedProfile,
   queuePlayerSourceConnection,
+  retryPlayerSourceConnection,
   refreshAvpLeague,
   refreshAvpTournaments,
   refreshActiveFivbEvents,
@@ -5597,6 +5598,48 @@ const playerRouter = router({
         execute: async () => {
           try {
             return await reviewPlayerSourceConnection({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  retryPlayerSource: protectedProcedure
+    .use(requireScope("profile:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-source-retry",
+        capacity: 4,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        connectionId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        connectionId: z.string().uuid(),
+        status: z.literal("queued"),
+        jobId: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.retryPlayerSource",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await retryPlayerSourceConnection({
               actor: ctx.actor!,
               ...input,
               requestId: ctx.requestId,

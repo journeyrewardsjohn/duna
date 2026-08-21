@@ -354,6 +354,7 @@ export class SandDataServiceError extends Error {
       | "MERGE_CONFLICT"
       | "CLAIM_CONFLICT"
       | "INVALID_PROFILE_URL"
+      | "SOURCE_NOT_RETRYABLE"
       | "INVALID_WATCH_OPTION"
       | "INVALID_PROFESSIONAL_EVENT"
       | "PROFESSIONAL_REQUIRED"
@@ -12207,6 +12208,99 @@ export async function reviewPlayerSourceConnection(input: {
       entityId: connection.id,
       reason:
         "Player or connected guardian confirmed the discovered source profile.",
+      traceId: input.requestId,
+      createdAt: input.now,
+    }),
+  ]);
+  return {
+    connectionId: connection.id,
+    status: "queued" as const,
+    jobId,
+  };
+}
+
+export async function retryPlayerSourceConnection(input: {
+  readonly actor: ApiActor;
+  readonly connectionId: string;
+  readonly idempotencyKey: string;
+  readonly requestId: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const connection = await database.query.playerSourceConnections.findFirst({
+    where: eq(playerSourceConnections.id, input.connectionId),
+  });
+  if (!connection) {
+    throw new SandDataServiceError(
+      "PLAYER_NOT_FOUND",
+      "The source profile connection was not found.",
+    );
+  }
+  await assertProfileSubjectAuthority({
+    actor: input.actor,
+    subjectPersonId: connection.personId,
+  });
+  if (connection.status !== "failed") {
+    throw new SandDataServiceError(
+      "SOURCE_NOT_RETRYABLE",
+      "This source import is already active or linked.",
+    );
+  }
+
+  const jobId = crypto.randomUUID();
+  await database.batch([
+    database
+      .update(playerSourceConnections)
+      .set({
+        status: "queued",
+        progressPhase: "retrying-import",
+        progressCurrent: 0,
+        progressTotal: 3,
+        lastError: null,
+        lastDunaActivityAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(playerSourceConnections.id, connection.id),
+          eq(playerSourceConnections.status, "failed"),
+        ),
+      ),
+    database.insert(workflowJobs).values({
+      id: jobId,
+      kind: "sand.profile-import",
+      idempotencyKey: `sand-profile-retry:${connection.id}:${input.idempotencyKey}`,
+      personId: connection.personId,
+      payload: {
+        connectionId: connection.id,
+        requestedByPersonId: input.actor.personId,
+        subjectPersonId: connection.personId,
+        source: connection.source,
+        externalId: connection.externalPersonId,
+        requestId: input.requestId,
+      },
+      traceId: input.requestId,
+      createdAt: input.now,
+      updatedAt: input.now,
+    }),
+    database.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "sand-data.profile-import.retried",
+      entityType: "player-source-connection",
+      entityId: connection.id,
+      beforeHash: stableHash({
+        status: connection.status,
+        lastError: connection.lastError,
+      }),
+      afterHash: stableHash({
+        source: connection.source,
+        externalId: connection.externalPersonId,
+        status: "queued",
+      }),
+      reason:
+        "Player or connected guardian retried a failed source-owned match-history import.",
       traceId: input.requestId,
       createdAt: input.now,
     }),

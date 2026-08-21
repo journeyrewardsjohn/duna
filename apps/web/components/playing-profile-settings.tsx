@@ -11,6 +11,7 @@ import {
   connectPlayerSourceAction,
   createGuardianInvitationAction,
   reviewPlayerSourceAction,
+  retryPlayerSourceAction,
   startIdentityVerificationAction,
   updatePlayingProfileAction,
 } from "@/app/app/settings/actions";
@@ -56,7 +57,7 @@ function sourceStatusDescription(
     case "linked":
       return `This ${name} profile is linked and will refresh automatically when new public results are available.`;
     case "failed":
-      return `Your ${name} link is saved. A temporary source issue is keeping public history from importing; no profile details were lost.`;
+      return `Your ${name} link is saved. A temporary source issue is keeping public history from importing; no profile details were lost. Retry the import when you are ready.`;
     default:
       return `Paste your public ${name} profile. Duna saves it automatically and imports available history in the background.`;
   }
@@ -283,6 +284,29 @@ export function PlayingProfileSettings({
           decision === "confirmed"
             ? "Importing and linking the confirmed public profile. This continues in the background."
             : "Profile rejected. It was disconnected and will not affect this player.",
+        );
+        router.refresh();
+      } finally {
+        setImportingSourceId(undefined);
+      }
+    });
+  }
+
+  function retrySource(connectionId: string) {
+    setError(undefined);
+    setImportingSourceId(connectionId);
+    setNotice(
+      "Retrying the public-history import and linking it in the background…",
+    );
+    startTransition(async () => {
+      try {
+        const response = await retryPlayerSourceAction({ connectionId });
+        if (!response.ok) {
+          setError(response.error);
+          return;
+        }
+        setNotice(
+          "The import error was cleared. Duna is importing and linking this public history now.",
         );
         router.refresh();
       } finally {
@@ -639,6 +663,19 @@ export function PlayingProfileSettings({
                       </button>
                     </span>
                   )}
+                {connection.status === "failed" && (
+                  <span className="source-import-status__actions">
+                    <button
+                      disabled={isPending || isSaving}
+                      onClick={() => retrySource(connection.id)}
+                      type="button"
+                    >
+                      {importingSourceId === connection.id
+                        ? "Retrying import…"
+                        : "Retry import"}
+                    </button>
+                  </span>
+                )}
               </div>
               <Badge
                 tone={
