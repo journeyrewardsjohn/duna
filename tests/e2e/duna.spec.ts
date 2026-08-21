@@ -412,7 +412,7 @@ test("branded identity entry preserves the secure auth handoff", async ({
   await expectNoHorizontalOverflow(page);
 
   const purchaseReturnTo =
-    "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership#purchase";
+    "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership?resume_checkout=1#purchase";
   const purchaseContext = new URLSearchParams({
     returnTo: purchaseReturnTo,
     product: "Beach Elite Academy Membership",
@@ -424,7 +424,7 @@ test("branded identity entry preserves the secure auth handoff", async ({
   ).toBeVisible();
   await expect(
     page.getByText(
-      /review Beach Elite Academy Membership from Beach Elite VB Academy/,
+      /pick up your purchase of Beach Elite Academy Membership from Beach Elite VB Academy and take you straight to secure payment/,
     ),
   ).toBeVisible();
   await expect(

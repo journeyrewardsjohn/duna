@@ -27,7 +27,7 @@ function contextFor(
     return {
       eyebrow: "COMPLETE YOUR PURCHASE",
       title: "Continue where you left off.",
-      description: `Sign in or create a free Duna account, and we'll bring you back to review ${purchaseContext.productTitle} from ${purchaseContext.organizationName} before secure payment. Nothing has been charged yet.`,
+      description: `Sign in or create a free Duna account, and we'll pick up your purchase of ${purchaseContext.productTitle} from ${purchaseContext.organizationName} and take you straight to secure payment. Nothing has been charged yet.`,
     };
   }
 

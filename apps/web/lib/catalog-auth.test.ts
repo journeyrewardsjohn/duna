@@ -8,7 +8,7 @@ describe("catalog authentication handoff", () => {
   it("keeps the exact product return path and purchase context", () => {
     const href = catalogAuthenticationHref({
       returnTo:
-        "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership#purchase",
+        "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership?resume_checkout=1#purchase",
       productTitle: "Beach Elite Academy Membership",
       organizationName: "Beach Elite VB Academy",
     });
@@ -16,7 +16,7 @@ describe("catalog authentication handoff", () => {
 
     expect(url.pathname).toBe("/sign-in");
     expect(url.searchParams.get("returnTo")).toBe(
-      "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership#purchase",
+      "/clubs/beach-elite-vb-academy-X3N0ZSW4/products/beach-elite-academy-membership?resume_checkout=1#purchase",
     );
     expect(url.searchParams.get("product")).toBe(
       "Beach Elite Academy Membership",
