@@ -1,16 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   classifyDunaAiAction,
   confirmDunaAiAction,
+  dunaAiRequestSchema,
   findScheduleConflicts,
   hasDunaAiGatewayCredential,
   rankDiscoveryItems,
   resolveDunaAiCopilotModel,
+  transcribeDunaAiAudio,
 } from "./duna-ai";
 import { proposeAgentAction } from "./risk";
 
 afterEach(() => {
   delete process.env.DUNA_COPILOT_MODEL;
+  delete process.env.DUNA_TRANSCRIPTION_MODEL;
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.VERCEL_OIDC_TOKEN;
   delete process.env.OPENAI_API_KEY;
@@ -156,5 +159,55 @@ describe("Duna AI model", () => {
     expect(hasDunaAiGatewayCredential()).toBe(false);
     process.env.VERCEL_OIDC_TOKEN = "vercel-oidc";
     expect(hasDunaAiGatewayCredential()).toBe(true);
+  });
+
+  it("accepts bounded image and file context on an ask turn", () => {
+    expect(
+      dunaAiRequestSchema.parse({
+        mode: "ask",
+        message: "What should I notice?",
+        surface: "hq",
+        attachments: [
+          {
+            kind: "image",
+            name: "court.png",
+            mimeType: "image/png",
+            data: "data:image/png;base64,Y291cnQ=",
+          },
+        ],
+      }),
+    ).toMatchObject({ attachments: [{ name: "court.png" }] });
+  });
+
+  it("routes signed-in voice transcription through Vercel AI Gateway", async () => {
+    process.env.AI_GATEWAY_API_KEY = "gateway-key";
+    process.env.DUNA_TRANSCRIPTION_MODEL = "openai/gpt-transcribe";
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        expect(_url).toBe(
+          "https://ai-gateway.vercel.sh/v1/audio/transcriptions",
+        );
+        expect(init?.headers).toEqual({ Authorization: "Bearer gateway-key" });
+        const form = init?.body as FormData;
+        expect(form.get("model")).toBe("openai/gpt-transcribe");
+        return Response.json({ text: "Show me tomorrow's clinics." });
+      },
+    );
+    await expect(
+      transcribeDunaAiAudio({
+        actor: {
+          personId: "person-voice",
+          displayName: "Voice Operator",
+          roles: ["manager"],
+          scopes: ["reports:read"],
+          ageBand: "adult",
+          isDemo: true,
+        },
+        audio: new Blob(["voice"], { type: "audio/webm" }),
+        filename: "voice.webm",
+        now: new Date("2026-08-20T16:00:00.000Z"),
+        fetchImpl,
+      }),
+    ).resolves.toBe("Show me tomorrow's clinics.");
   });
 });

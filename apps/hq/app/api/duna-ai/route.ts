@@ -4,6 +4,7 @@ import {
   createApiContextFromRequest,
   createApiContextFromWorkOSSession,
   dunaAiRequestSchema,
+  getDunaAiDashboardInsights,
   getDunaAiSuggestions,
   isWorkOSAuthKitConfigured,
   runDunaAiAgent,
@@ -99,6 +100,11 @@ export async function POST(request: Request) {
         }),
       );
     }
+    if (input.mode === "insights") {
+      return Response.json(
+        await getDunaAiDashboardInsights({ actor, now: context.now }),
+      );
+    }
     const response = await runDunaAiAgent({
       actor,
       message: input.message,
@@ -106,6 +112,7 @@ export async function POST(request: Request) {
       page: input.page,
       context: input.context,
       history: input.history,
+      attachments: input.attachments,
       researchMode: input.researchMode,
       requestId: context.requestId,
       now: context.now,

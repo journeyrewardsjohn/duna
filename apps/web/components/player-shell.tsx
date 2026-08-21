@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
-import { AskDuna } from "./ask-duna";
+import { DunaActionCenter } from "./duna-action-center";
 import { PlayerAccountMenu } from "./player-account-menu";
 import { PlayerOrganizationSwitcher } from "./player-organization-switcher";
 
@@ -208,7 +208,7 @@ export function PlayerShell({
               );
             })}
           </nav>
-          <AskDuna />
+          <DunaActionCenter />
         </>
       )}
     </div>

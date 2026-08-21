@@ -3,20 +3,17 @@ import { formatMoney, formatVenueTime, type PersonSummary } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
-  CalendarDays,
   CalendarPlus,
   Check,
   ChevronRight,
-  CircleAlert,
   CreditCard,
   ExternalLink,
-  History,
-  Sparkles,
   TrendingUp,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { quickActions } from "./navigation";
+import { OrganizationAiInsights } from "./organization-ai-insights";
 import { VenueMatchOperations } from "./venue-match-operations";
 
 const metricIcons = [TrendingUp, UsersRound, Check, CreditCard] as const;
@@ -359,93 +356,49 @@ export function OperatorOverview({
           </section>
         </div>
 
-        <aside className="hq-ai-analyst">
-          <header>
-            <span>
-              <Sparkles aria-hidden size={18} />
-              Duna AI
-            </span>
-            <Link aria-label="Open Duna AI history" href="/ai">
-              <History aria-hidden size={18} />
-            </Link>
-          </header>
-
-          <div className="hq-ai-analyst__intro">
-            <span>Today’s operating signals</span>
-            <h2>
-              {topAlert
-                ? topAlert.title
-                : nearlyFull[0]
-                  ? `${nearlyFull[0].title} is filling up.`
-                  : "Everything connected looks steady."}
-            </h2>
-            <p>
-              Recommendations use only your connected schedule, event, member,
-              and payment status.
-            </p>
-          </div>
-
-          <div className="hq-ai-analyst__signals">
-            {topAlert && (
-              <article className="hq-ai-signal hq-ai-signal--attention">
-                <span>
-                  <CircleAlert aria-hidden size={18} />
-                </span>
-                <div>
-                  <Badge tone="warning">Needs attention</Badge>
-                  <h3>{topAlert.title}</h3>
-                  <p>{topAlert.detail}</p>
-                  <Link href={topAlert.id === "stripe" ? "/payments" : "/ai"}>
-                    {topAlert.action} <ArrowRight aria-hidden size={14} />
-                  </Link>
-                </div>
-              </article>
-            )}
-
-            {nearlyFull[0] && (
-              <article className="hq-ai-signal hq-ai-signal--growth">
-                <span>
-                  <UsersRound aria-hidden size={18} />
-                </span>
-                <div>
-                  <Badge tone="positive">Demand signal</Badge>
-                  <h3>{nearlyFull[0].title}</h3>
-                  <p>
-                    {nearlyFull[0].spotsRemaining} spots remain. Consider a
-                    waitlist or an additional session before it fills.
-                  </p>
-                  <Link href="/events">
-                    Open event <ArrowRight aria-hidden size={14} />
-                  </Link>
-                </div>
-              </article>
-            )}
-
-            {!topAlert && !nearlyFull[0] && (
-              <article className="hq-ai-signal hq-ai-signal--clear">
-                <span>
-                  <Check aria-hidden size={18} />
-                </span>
-                <div>
-                  <Badge tone="positive">Clear</Badge>
-                  <h3>No urgent operating alerts.</h3>
-                  <p>Duna will surface new connected signals here.</p>
-                </div>
-              </article>
-            )}
-          </div>
-
-          <footer>
-            <span>
-              <CalendarDays aria-hidden size={16} />
-              {dashboard.schedule.length} schedule items ·{" "}
-              {dashboard.events.length} events
-            </span>
-            <Link href="/ai">
-              Ask Duna <ArrowRight aria-hidden size={15} />
-            </Link>
-          </footer>
-        </aside>
+        <OrganizationAiInsights
+          eventCount={dashboard.events.length}
+          initial={{
+            headline: topAlert
+              ? topAlert.title
+              : nearlyFull[0]
+                ? `${nearlyFull[0].title} is filling up.`
+                : "Everything connected looks steady.",
+            summary:
+              "Connected schedule, event, member, and payment context is ready for Duna AI analysis.",
+            signals: topAlert
+              ? [
+                  {
+                    kind: "attention",
+                    label: "Needs attention",
+                    title: topAlert.title,
+                    detail: topAlert.detail,
+                    href: topAlert.id === "stripe" ? "/payments" : "/calendar",
+                  },
+                ]
+              : nearlyFull[0]
+                ? [
+                    {
+                      kind: "demand",
+                      label: "Demand signal",
+                      title: nearlyFull[0].title,
+                      detail: `${nearlyFull[0].spotsRemaining} spots remain. Review capacity, waitlist, or another session while interest is active.`,
+                      href: "/events",
+                    },
+                  ]
+                : [
+                    {
+                      kind: "steady",
+                      label: "All clear",
+                      title: "No urgent operating alert.",
+                      detail:
+                        "Duna will keep checking connected organization context for meaningful changes.",
+                      href: "/reports",
+                    },
+                  ],
+          }}
+          scheduleCount={dashboard.schedule.length}
+        />
       </div>
     </main>
   );

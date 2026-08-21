@@ -268,6 +268,25 @@ test("player home puts useful actions and the personal calendar first", async ({
     quickActions.getByRole("link", { name: /Host pickup/ }),
   ).toBeVisible();
   await expect(page.getByText("Next up", { exact: true })).toBeVisible();
+  const actionCenter = page.getByRole("navigation", {
+    name: "Duna action center",
+  });
+  await expect(actionCenter).toBeVisible();
+  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
+  await expect(dunaAi).toBeVisible();
+  await expect(
+    dunaAi.getByRole("button", { name: "Attach an image or file" }),
+  ).toBeVisible();
+  await expect(
+    dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
+  ).toBeVisible();
+  await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
+  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
+  const command = page.getByRole("dialog", { name: "Search Duna Player" });
+  await expect(command).toBeVisible();
+  await expect(command.getByText("Go anywhere")).toBeVisible();
+  await page.keyboard.press("Escape");
   const nextUpDate = page
     .getByRole("region", { name: "Your day" })
     .locator("time")
@@ -1110,15 +1129,19 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
 
   await page.goto(`${hqBaseUrl}/ai`);
-  await expect(page.getByText("Context-aware co-pilot")).toBeVisible();
+  await expect(page).toHaveURL(/\?duna=ask$/);
+  const centralAi = page.getByRole("region", { name: "Duna AI assistant" });
+  await expect(centralAi).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "See what matters. Act with control." }),
+    centralAi.getByText(/Sensitive changes always require your review/i),
   ).toBeVisible();
   await expect(
-    page.getByText(/fresh approval for consequential actions/i),
+    centralAi.getByRole("button", { name: "Web research off" }),
   ).toBeVisible();
+  await centralAi.getByRole("button", { name: "Close Duna AI" }).click();
+  await page.keyboard.press("Meta+K");
   await expect(
-    page.getByRole("button", { name: "Web research off" }),
+    page.getByRole("dialog", { name: "Search Duna HQ" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
