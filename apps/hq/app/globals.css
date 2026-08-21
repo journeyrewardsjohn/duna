@@ -1375,8 +1375,10 @@ button {
   border-radius: 999px;
   cursor: pointer;
   min-height: 42px;
+  min-width: 0;
   padding: 0.72rem 3.5rem 0.72rem 2.5rem;
   text-align: left;
+  width: 100%;
 }
 
 .hq-search--trigger:hover,
@@ -1388,6 +1390,7 @@ button {
 
 .hq-search--trigger > span {
   color: rgb(var(--muted-rgb) / 62%);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -19387,7 +19390,7 @@ body {
 
 @media (max-width: 1000px) {
   .hq-shell:not(.admin-shell) .hq-topbar {
-    grid-template-columns: minmax(190px, auto) 1fr auto;
+    grid-template-columns: minmax(72px, 190px) minmax(0, 1fr) auto;
   }
 
   .hq-search {
