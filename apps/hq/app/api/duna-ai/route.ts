@@ -62,6 +62,8 @@ async function actorFromRequest(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const requestOidcToken =
+      request.headers.get("x-vercel-oidc-token")?.trim() || undefined;
     const body: unknown = await request.json();
     const { actor, context } = await actorFromRequest(request);
     if (!actor) {
@@ -102,7 +104,11 @@ export async function POST(request: Request) {
     }
     if (input.mode === "insights") {
       return Response.json(
-        await getDunaAiDashboardInsights({ actor, now: context.now }),
+        await getDunaAiDashboardInsights({
+          actor,
+          requestOidcToken,
+          now: context.now,
+        }),
       );
     }
     const response = await runDunaAiAgent({
@@ -114,6 +120,7 @@ export async function POST(request: Request) {
       history: input.history,
       attachments: input.attachments,
       researchMode: input.researchMode,
+      requestOidcToken,
       requestId: context.requestId,
       now: context.now,
     });

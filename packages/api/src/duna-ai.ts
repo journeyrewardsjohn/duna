@@ -261,9 +261,11 @@ interface WeatherSignal {
   readonly temperatureC?: number;
 }
 
-export function resolveDunaAiGatewayCredentialSource():
-  "api-key" | "oidc" | undefined {
-  const oidc = process.env.VERCEL_OIDC_TOKEN?.trim();
+export function resolveDunaAiGatewayCredentialSource(
+  requestOidcToken?: string,
+): "api-key" | "oidc" | undefined {
+  const oidc =
+    requestOidcToken?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim();
   const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
   if (process.env.VERCEL || process.env.VERCEL_ENV) {
     if (oidc) return "oidc";
@@ -275,15 +277,18 @@ export function resolveDunaAiGatewayCredentialSource():
   return undefined;
 }
 
-function resolveDunaAiGatewayCredential(): string | undefined {
-  return resolveDunaAiGatewayCredentialSource() === "oidc"
-    ? process.env.VERCEL_OIDC_TOKEN?.trim()
+function resolveDunaAiGatewayCredential(
+  requestOidcToken?: string,
+): string | undefined {
+  return resolveDunaAiGatewayCredentialSource(requestOidcToken) === "oidc"
+    ? requestOidcToken?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim()
     : process.env.AI_GATEWAY_API_KEY?.trim();
 }
 
-function dunaAiRuntime(): DunaAiRuntime | undefined {
-  const credentialSource = resolveDunaAiGatewayCredentialSource();
-  const credential = resolveDunaAiGatewayCredential();
+function dunaAiRuntime(requestOidcToken?: string): DunaAiRuntime | undefined {
+  const credentialSource =
+    resolveDunaAiGatewayCredentialSource(requestOidcToken);
+  const credential = resolveDunaAiGatewayCredential(requestOidcToken);
   if (!credentialSource || !credential) return undefined;
   return {
     credential,
@@ -1451,6 +1456,7 @@ function deterministicDashboardInsights(
 
 export async function getDunaAiDashboardInsights(input: {
   actor: ApiActor;
+  requestOidcToken?: string;
   now: Date;
 }): Promise<DunaAiDashboardInsights & { readonly hrefs: readonly string[] }> {
   const snapshot = await buildContextSnapshot({
@@ -1461,7 +1467,7 @@ export async function getDunaAiDashboardInsights(input: {
     now: input.now,
   });
   const fallback = deterministicDashboardInsights(snapshot, input.now);
-  const runtime = dunaAiRuntime();
+  const runtime = dunaAiRuntime(input.requestOidcToken);
   if (!runtime)
     return {
       ...fallback,
@@ -1525,6 +1531,7 @@ export async function runDunaAiAgent(input: {
   history?: readonly { role: "assistant" | "user"; body: string }[];
   attachments?: readonly DunaAiAttachment[];
   researchMode?: "off" | "on";
+  requestOidcToken?: string;
   requestId: string;
   now: Date;
 }): Promise<DunaAiResponse> {
@@ -1598,7 +1605,7 @@ export async function runDunaAiAgent(input: {
     }
   }
 
-  const runtime = dunaAiRuntime();
+  const runtime = dunaAiRuntime(input.requestOidcToken);
   const unavailableReply = providerUnavailableReply({
     attachments: input.attachments,
     surface: input.surface,
@@ -1797,6 +1804,7 @@ export async function transcribeDunaAiAudio(input: {
   audio: Blob;
   filename: string;
   now: Date;
+  requestOidcToken?: string;
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   const rateLimit = await consumeRateLimit({
@@ -1809,7 +1817,7 @@ export async function transcribeDunaAiAudio(input: {
     throw new Error(
       `Voice input is taking a short pause. Try again in ${rateLimit.retryAfterSeconds} seconds.`,
     );
-  const credential = resolveDunaAiGatewayCredential();
+  const credential = resolveDunaAiGatewayCredential(input.requestOidcToken);
   if (!credential) throw new Error("Voice transcription is not configured.");
   const form = new FormData();
   form.append("file", input.audio, input.filename);
