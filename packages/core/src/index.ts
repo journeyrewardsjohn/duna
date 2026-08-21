@@ -11,6 +11,7 @@ export * from "./i18n";
 export * from "./reporting";
 export * from "./ledger";
 export * from "./membership-plans";
+export * from "./membership-subscription-policy";
 export * from "./organization-plans";
 export * from "./map-links";
 export * from "./player-url";

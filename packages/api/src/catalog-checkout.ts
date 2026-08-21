@@ -18,6 +18,7 @@ import {
   ledgerJournals,
   membershipTiers,
   memberships,
+  membershipPolicyAcceptances,
   orderItems,
   orders,
   orderTaxContexts,
@@ -33,6 +34,9 @@ import {
 import {
   allocateOrganizationCredits,
   assertBalancedJournal,
+  membershipSubscriptionDisclosure,
+  membershipSubscriptionPolicy,
+  validateMembershipSubscriptionPolicy,
   type LedgerPosting,
 } from "@duna/core";
 import {
@@ -63,6 +67,10 @@ import {
   generateBookableSessionOccurrences,
   parseSessionDeliveryConfiguration,
 } from "./session-delivery";
+import {
+  MARKETPLACE_TAX_POLICY_VERSION,
+  resolveCatalogTaxCode,
+} from "./tax-policy";
 
 async function resolveAvailableOccurrenceCoaches(input: {
   readonly organizationId: string;
@@ -588,6 +596,7 @@ export async function startCatalogCheckout(input: {
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly idempotencyKey: string;
+  readonly membershipPolicyAccepted?: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -853,6 +862,27 @@ export async function startCatalogCheckout(input: {
       "This offer is not eligible for the selected installment plan.",
     );
   }
+  const isMembershipPlan =
+    row.item.type === "plan" && row.item.subtype === "membership";
+  const subscriptionPolicy = isMembershipPlan
+    ? membershipSubscriptionPolicy(row.item.configuration)
+    : undefined;
+  if (isMembershipPlan && !input.membershipPolicyAccepted) {
+    throw new CatalogCheckoutError(
+      "CHECKOUT_UNAVAILABLE",
+      "Review and accept the membership renewal and cancellation terms before continuing.",
+    );
+  }
+  if (
+    subscriptionPolicy &&
+    (price.recurringInterval === "month" || price.recurringInterval === "year")
+  ) {
+    validateMembershipSubscriptionPolicy({
+      policy: subscriptionPolicy,
+      billingInterval: price.recurringInterval,
+      billingIntervalCount: price.recurringIntervalCount ?? undefined,
+    });
+  }
   const orderCurrency = currency(row.organization.currency);
   const baseUnitAmountMinor = price.amountMinor ?? 0;
   const installmentQuote = installmentsRequested
@@ -997,6 +1027,19 @@ export async function startCatalogCheckout(input: {
   const tracksInventory =
     row.item.type === "good" &&
     row.item.configuration.inventoryTracked !== false;
+  const membershipDisclosure =
+    subscriptionPolicy &&
+    (price.recurringInterval === "month" || price.recurringInterval === "year")
+      ? membershipSubscriptionDisclosure({
+          organizationName: row.organization.name,
+          priceLabel: new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: orderCurrency,
+          }).format((price.amountMinor ?? 0) / 100),
+          billingInterval: price.recurringInterval,
+          policy: subscriptionPolicy,
+        })
+      : undefined;
   await database.batch([
     row.item.type === "good" && row.item.subtype === "digital-content"
       ? database
@@ -1113,10 +1156,42 @@ export async function startCatalogCheckout(input: {
         country: taxLocation.countryCode,
       },
       itemTaxCodes: [
-        { orderItemId, stripeTaxCode: row.item.stripeTaxCode ?? undefined },
+        {
+          orderItemId,
+          stripeTaxCode: resolveCatalogTaxCode({
+            type: row.item.type,
+            subtype: row.item.subtype,
+            taxable: row.item.taxable,
+            explicitTaxCode: row.item.stripeTaxCode ?? undefined,
+          }),
+        },
       ],
+      policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
       currency: orderCurrency,
     }),
+    ...(subscriptionPolicy && membershipDisclosure
+      ? [
+          database.insert(membershipPolicyAcceptances).values({
+            acceptanceKey: stableHash({
+              orderId,
+              personId: input.actor.personId,
+              policyVersion: subscriptionPolicy.version,
+              disclosure: membershipDisclosure,
+            }),
+            orderId,
+            organizationId: row.organization.id,
+            catalogItemId: row.item.id,
+            personId: input.actor.personId,
+            policyVersion: subscriptionPolicy.version,
+            policySnapshot: subscriptionPolicy,
+            disclosureText: membershipDisclosure,
+            disclosureTextHash: stableHash(membershipDisclosure),
+            affirmativeConsent: true,
+            ipAddress: input.ipAddress,
+            acceptedAt: input.now,
+          }),
+        ]
+      : []),
     ...[
       ...priced.fees,
       ...(operatorFee ? [operatorFee] : []),
@@ -1359,6 +1434,7 @@ export async function startCatalogCheckout(input: {
     const nativePaymentEligible =
       input.paymentSurface === "native" &&
       !installmentsRequested &&
+      !isMembershipPlan &&
       row.item.type !== "good" &&
       !(row.item.taxable && row.organization.stripeTaxEnabled);
     if (nativePaymentEligible) {
@@ -1457,8 +1533,15 @@ export async function startCatalogCheckout(input: {
           ? price.recurringInterval
           : undefined,
       recurringIntervalCount: price.recurringIntervalCount ?? undefined,
+      subscriptionPolicy,
       automaticTaxEnabled:
         row.item.taxable && row.organization.stripeTaxEnabled,
+      stripeTaxCode: resolveCatalogTaxCode({
+        type: row.item.type,
+        subtype: row.item.subtype,
+        taxable: row.item.taxable,
+        explicitTaxCode: row.item.stripeTaxCode ?? undefined,
+      }),
       collectShippingAddress: row.item.type === "good",
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,

@@ -6,11 +6,13 @@ import type {
   PaidOrganizationPlanId,
 } from "@duna/core";
 import { ORGANIZATION_FEE_POLICY_VERSION } from "@duna/core";
+import type { MembershipSubscriptionPolicy } from "@duna/core";
 import Stripe from "stripe";
 import {
   connectAccountMetadataEntityId,
   connectAccountMoneyReady,
 } from "./stripe-connect";
+import { STRIPE_TAX_CODES, marketplaceAutomaticTax } from "./tax-policy";
 
 let stripeClient: Stripe | undefined;
 
@@ -39,6 +41,36 @@ export function getStripePublishableKey(): string {
     throw new Error("STRIPE_PUBLISHABLE_KEY is not configured");
   }
   return publishableKey;
+}
+
+export async function retrieveMarketplaceTaxReadiness(): Promise<{
+  readonly status: "active" | "pending";
+  readonly headOfficeConfigured: boolean;
+  readonly activeRegistrationCount: number;
+  readonly missingFields: readonly string[];
+}> {
+  const stripe = getStripeClient();
+  const [settings, registrations] = await Promise.all([
+    stripe.tax.settings.retrieve(),
+    stripe.tax.registrations.list({ status: "active", limit: 100 }),
+  ]);
+  const missingFields =
+    settings.status === "pending"
+      ? (settings.status_details.pending?.missing_fields ?? [])
+      : [];
+  const headOfficeConfigured = Boolean(settings.head_office?.address);
+  const activeRegistrationCount = registrations.data.length;
+  return {
+    status:
+      settings.status === "active" &&
+      headOfficeConfigured &&
+      activeRegistrationCount > 0
+        ? "active"
+        : "pending",
+    headOfficeConfigured,
+    activeRegistrationCount,
+    missingFields,
+  };
 }
 
 export async function getOrCreatePlayerStripeCustomer(input: {
@@ -263,6 +295,8 @@ export async function createEventCheckoutSession(input: {
   readonly organizationCommissionMinor: number;
   readonly organizationCommissionRateBps: number;
   readonly connectedAccountId: string;
+  readonly automaticTaxEnabled: boolean;
+  readonly stripeTaxCode: string;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly expiresAt: Date;
@@ -295,19 +329,20 @@ export async function createEventCheckoutSession(input: {
             unit_amount: input.amountMinor,
             product_data: {
               name: input.eventTitle,
+              tax_code: input.stripeTaxCode,
               metadata: { dunaEventId: input.eventId },
             },
+            tax_behavior: "exclusive",
           },
         },
       ],
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      automatic_tax: {
-        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
-      },
+      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
+        on_behalf_of: input.connectedAccountId,
         transfer_data: { destination: input.connectedAccountId },
         metadata: {
           dunaOrderId: input.orderId,
@@ -374,6 +409,7 @@ export async function createEventPaymentIntent(input: {
       description: input.eventTitle,
       automatic_payment_methods: { enabled: true },
       application_fee_amount: input.applicationFeeMinor,
+      on_behalf_of: input.connectedAccountId,
       transfer_data: { destination: input.connectedAccountId },
       metadata: {
         dunaOrderId: input.orderId,
@@ -434,6 +470,7 @@ export async function createCourtBookingPaymentIntent(input: {
       description: input.description,
       automatic_payment_methods: { enabled: true },
       application_fee_amount: input.applicationFeeMinor,
+      on_behalf_of: input.connectedAccountId,
       transfer_data: { destination: input.connectedAccountId },
       metadata: {
         dunaOrderId: input.orderId,
@@ -476,6 +513,7 @@ interface CatalogNativePaymentInput {
   readonly connectedAccountId: string;
   readonly recurringInterval?: "week" | "month" | "year";
   readonly recurringIntervalCount?: number;
+  readonly subscriptionPolicy?: MembershipSubscriptionPolicy;
   readonly idempotencyKey: string;
 }
 
@@ -492,6 +530,7 @@ function catalogPaymentMetadata(input: CatalogNativePaymentInput) {
     dunaOrganizationCommissionRateBps: String(
       input.organizationCommissionRateBps,
     ),
+    dunaApplicationFeeMinor: String(input.applicationFeeMinor),
   };
 }
 
@@ -628,6 +667,7 @@ export async function createCourtCheckoutSession(input: {
   readonly organizationCommissionMinor: number;
   readonly organizationCommissionRateBps: number;
   readonly connectedAccountId: string;
+  readonly automaticTaxEnabled: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
   readonly expiresAt: Date;
@@ -660,19 +700,20 @@ export async function createCourtCheckoutSession(input: {
             unit_amount: input.amountMinor,
             product_data: {
               name: input.description,
+              tax_code: STRIPE_TAX_CODES.singleUseFacilityAccess,
               metadata: { dunaBookingId: input.bookingId },
             },
+            tax_behavior: "exclusive",
           },
         },
       ],
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      automatic_tax: {
-        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
-      },
+      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
+        on_behalf_of: input.connectedAccountId,
         transfer_data: { destination: input.connectedAccountId },
         metadata: {
           dunaOrderId: input.orderId,
@@ -720,7 +761,9 @@ export async function createCatalogCheckoutSession(input: {
   readonly connectedAccountId: string;
   readonly recurringInterval?: "week" | "month" | "year";
   readonly recurringIntervalCount?: number;
+  readonly subscriptionPolicy?: MembershipSubscriptionPolicy;
   readonly automaticTaxEnabled: boolean;
+  readonly stripeTaxCode: string;
   readonly collectShippingAddress: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -778,6 +821,7 @@ export async function createCatalogCheckoutSession(input: {
     dunaOrganizationCommissionRateBps: String(
       input.organizationCommissionRateBps,
     ),
+    dunaApplicationFeeMinor: String(input.applicationFeeMinor),
     ...(input.installmentPlan
       ? {
           dunaPaymentOption: "installments",
@@ -789,9 +833,20 @@ export async function createCatalogCheckoutSession(input: {
           ),
         }
       : {}),
+    ...(input.subscriptionPolicy
+      ? {
+          dunaMembershipPolicyVersion: input.subscriptionPolicy.version,
+          dunaMembershipInitialTermMonths: String(
+            input.subscriptionPolicy.initialTermMonths ?? 0,
+          ),
+          dunaMembershipRenewalBehavior:
+            input.subscriptionPolicy.renewalBehavior,
+        }
+      : {}),
   };
-  const applicationFeePercent =
-    Math.round((input.applicationFeeMinor / totalAmountMinor) * 10_000) / 100;
+  if (input.automaticTaxEnabled) {
+    await ensureStripePriceTaxCode(input.stripePriceId, input.stripeTaxCode);
+  }
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
     input.installmentPlan
       ? {
@@ -819,8 +874,10 @@ export async function createCatalogCheckoutSession(input: {
           name: "Duna service fee",
           description:
             "Platform service fee for this organization transaction.",
+          tax_code: STRIPE_TAX_CODES.generalServices,
           metadata: { dunaOrderId: input.orderId },
         },
+        tax_behavior: "exclusive",
         recurring:
           input.recurringInterval && !input.installmentPlan
             ? {
@@ -859,15 +916,7 @@ export async function createCatalogCheckoutSession(input: {
             ],
           }
         : undefined,
-      automatic_tax: {
-        enabled: input.automaticTaxEnabled,
-        liability: input.automaticTaxEnabled
-          ? {
-              type: "account",
-              account: input.connectedAccountId,
-            }
-          : undefined,
-      },
+      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
       payment_intent_data: recurring
         ? undefined
         : {
@@ -878,12 +927,31 @@ export async function createCatalogCheckoutSession(input: {
           },
       subscription_data: recurring
         ? {
-            application_fee_percent: applicationFeePercent,
             on_behalf_of: input.connectedAccountId,
             transfer_data: { destination: input.connectedAccountId },
+            invoice_settings: input.automaticTaxEnabled
+              ? { issuer: { type: "self" } }
+              : undefined,
             metadata,
+            trial_period_days: input.subscriptionPolicy?.trialDays || undefined,
+            trial_settings: input.subscriptionPolicy?.trialDays
+              ? {
+                  end_behavior: {
+                    missing_payment_method:
+                      input.subscriptionPolicy.trialPaymentMethod === "optional"
+                        ? "cancel"
+                        : "create_invoice",
+                  },
+                }
+              : undefined,
           }
         : undefined,
+      payment_method_collection:
+        recurring &&
+        input.subscriptionPolicy?.trialDays &&
+        input.subscriptionPolicy.trialPaymentMethod === "optional"
+          ? "if_required"
+          : "always",
       metadata,
     },
     { idempotencyKey: input.idempotencyKey },
@@ -957,15 +1025,480 @@ export async function capCatalogInstallmentSubscription(input: {
   );
 }
 
+async function ensureStripePriceTaxCode(
+  stripePriceId: string,
+  stripeTaxCode: string,
+): Promise<void> {
+  const stripe = getStripeClient();
+  const price = await stripe.prices.retrieve(stripePriceId, {
+    expand: ["product"],
+  });
+  const product =
+    typeof price.product === "string"
+      ? await stripe.products.retrieve(price.product)
+      : price.product;
+  if ("deleted" in product && product.deleted) {
+    throw new Error("The Stripe product for this catalog item was deleted.");
+  }
+  const currentTaxCode =
+    typeof product.tax_code === "string"
+      ? product.tax_code
+      : product.tax_code?.id;
+  if (currentTaxCode === stripeTaxCode) return;
+  await stripe.products.update(product.id, { tax_code: stripeTaxCode });
+}
+
+export async function withholdDestinationChargeTax(input: {
+  readonly paymentIntentId: string;
+  readonly latestChargeId?: string;
+  readonly taxAmountMinor: number;
+  readonly orderId: string;
+  readonly idempotencyKey: string;
+}): Promise<string | undefined> {
+  if (!Number.isSafeInteger(input.taxAmountMinor) || input.taxAmountMinor < 0) {
+    throw new Error("Tax withholding amount is invalid");
+  }
+  if (input.taxAmountMinor === 0) return undefined;
+  const stripe = getStripeClient();
+  const paymentIntent = input.latestChargeId
+    ? undefined
+    : await stripe.paymentIntents.retrieve(input.paymentIntentId, {
+        expand: ["latest_charge"],
+      });
+  const latestCharge = input.latestChargeId ?? paymentIntent?.latest_charge;
+  const charge =
+    typeof latestCharge === "string"
+      ? await stripe.charges.retrieve(latestCharge)
+      : latestCharge;
+  if (!charge || ("deleted" in charge && charge.deleted)) {
+    throw new Error("Stripe charge is unavailable for tax withholding");
+  }
+  const transferId =
+    typeof charge.transfer === "string" ? charge.transfer : charge.transfer?.id;
+  if (!transferId) {
+    throw new Error("Destination transfer is unavailable for tax withholding");
+  }
+  const reversal = await stripe.transfers.createReversal(
+    transferId,
+    {
+      amount: input.taxAmountMinor,
+      metadata: {
+        dunaOrderId: input.orderId,
+        purpose: "marketplace-tax-withholding",
+      },
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return reversal.id;
+}
+
+export async function withholdDestinationChargePlatformFee(input: {
+  readonly paymentIntentId: string;
+  readonly amountMinor: number;
+  readonly invoiceId: string;
+  readonly idempotencyKey: string;
+}): Promise<string | undefined> {
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor < 0) {
+    throw new Error("Platform fee withholding amount is invalid");
+  }
+  if (input.amountMinor === 0) return undefined;
+  const stripe = getStripeClient();
+  const paymentIntent = await stripe.paymentIntents.retrieve(
+    input.paymentIntentId,
+    { expand: ["latest_charge"] },
+  );
+  const latestCharge = paymentIntent.latest_charge;
+  const charge =
+    typeof latestCharge === "string"
+      ? await stripe.charges.retrieve(latestCharge)
+      : latestCharge;
+  const chargeTransfer = charge?.transfer;
+  const transferId =
+    typeof chargeTransfer === "string" ? chargeTransfer : chargeTransfer?.id;
+  if (!transferId) {
+    throw new Error("Destination transfer is unavailable for fee withholding");
+  }
+  const reversal = await stripe.transfers.createReversal(
+    transferId,
+    {
+      amount: input.amountMinor,
+      metadata: {
+        dunaInvoiceId: input.invoiceId,
+        purpose: "platform-fee-withholding",
+      },
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  return reversal.id;
+}
+
 export async function createBillingPortalSession(input: {
   readonly customerId: string;
   readonly returnUrl: string;
 }): Promise<{ readonly id: string; readonly url: string }> {
-  const session = await getStripeClient().billingPortal.sessions.create({
+  const stripe = getStripeClient();
+  const configuration = await stripe.billingPortal.configurations.create(
+    {
+      name: "Duna managed membership policies",
+      business_profile: {
+        headline:
+          "Update payment details and view invoices. Membership cancellation is handled in Duna using the terms accepted at signup.",
+        privacy_policy_url: "https://duna.coach/legal/privacy",
+        terms_of_service_url: "https://duna.coach/legal/terms",
+      },
+      features: {
+        customer_update: {
+          enabled: true,
+          allowed_updates: ["address", "email", "name", "phone", "tax_id"],
+        },
+        invoice_history: { enabled: true },
+        payment_method_update: { enabled: true },
+        subscription_cancel: { enabled: false },
+        subscription_update: { enabled: false },
+      },
+      metadata: { dunaPolicy: "managed-memberships-v1" },
+    },
+    { idempotencyKey: "duna-billing-portal-managed-memberships-v1" },
+  );
+  const session = await stripe.billingPortal.sessions.create({
     customer: input.customerId,
+    configuration: configuration.id,
     return_url: input.returnUrl,
   });
   return { id: session.id, url: session.url };
+}
+
+export async function ensureMembershipSubscriptionSchedule(input: {
+  readonly subscriptionId: string;
+  readonly policy: MembershipSubscriptionPolicy;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly scheduleId?: string;
+  readonly initialTermEndsAt?: Date;
+}> {
+  if (!input.policy.initialTermMonths) return {};
+  const stripe = getStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(
+    input.subscriptionId,
+    { expand: ["schedule"] },
+  );
+  const items = subscription.items.data.map((item) => ({
+    price: typeof item.price === "string" ? item.price : item.price.id,
+    quantity: item.quantity ?? 1,
+  }));
+  if (items.length === 0) {
+    throw new Error("Membership subscription schedule has no prices.");
+  }
+  const existingScheduleId =
+    typeof subscription.schedule === "string"
+      ? subscription.schedule
+      : subscription.schedule?.id;
+  const schedule = existingScheduleId
+    ? await stripe.subscriptionSchedules.retrieve(existingScheduleId)
+    : await stripe.subscriptionSchedules.create(
+        { from_subscription: subscription.id },
+        { idempotencyKey: `${input.idempotencyKey}:create` },
+      );
+  const trialEnd = subscription.trial_end ?? undefined;
+  const phaseStart =
+    schedule.current_phase?.start_date ??
+    subscription.items.data[0]?.current_period_start ??
+    subscription.start_date;
+  const paidPhaseStart =
+    trialEnd && trialEnd > phaseStart ? trialEnd : phaseStart;
+  const phases: Stripe.SubscriptionScheduleUpdateParams.Phase[] = [
+    ...(trialEnd && trialEnd > phaseStart
+      ? [
+          {
+            start_date: phaseStart,
+            end_date: trialEnd,
+            items,
+            trial_end: trialEnd,
+            proration_behavior: "none" as const,
+          },
+        ]
+      : []),
+    {
+      start_date: paidPhaseStart,
+      duration: {
+        interval: "month",
+        interval_count: input.policy.initialTermMonths,
+      },
+      items,
+      metadata: {
+        dunaMembershipPolicyVersion: input.policy.version,
+        dunaMembershipInitialTermMonths: String(input.policy.initialTermMonths),
+      },
+      proration_behavior: "none",
+    },
+  ];
+  const updated = await stripe.subscriptionSchedules.update(
+    schedule.id,
+    {
+      end_behavior:
+        input.policy.renewalBehavior === "ends-after-term"
+          ? "cancel"
+          : "release",
+      phases,
+      proration_behavior: "none",
+    },
+    { idempotencyKey: `${input.idempotencyKey}:configure` },
+  );
+  const finalPhase = updated.phases.at(-1);
+  return {
+    scheduleId: updated.id,
+    initialTermEndsAt: finalPhase
+      ? new Date(finalPhase.end_date * 1_000)
+      : undefined,
+  };
+}
+
+export async function cancelMembershipSubscription(input: {
+  readonly subscriptionId: string;
+  readonly policy: MembershipSubscriptionPolicy;
+  readonly idempotencyKey: string;
+  readonly now: Date;
+  readonly earliestEffectiveAt?: Date;
+}): Promise<{
+  readonly cancelAtPeriodEnd: boolean;
+  readonly effectiveAt?: Date;
+  readonly refundId?: string;
+  readonly invoiceId?: string;
+  readonly refundAmountMinor: number;
+}> {
+  const stripe = getStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(
+    input.subscriptionId,
+    { expand: ["latest_invoice", "schedule"] },
+  );
+  const currentPeriodEnd = subscription.items.data[0]?.current_period_end;
+  const commitmentEnd = input.earliestEffectiveAt;
+  if (
+    commitmentEnd &&
+    commitmentEnd.getTime() > input.now.getTime() &&
+    (!currentPeriodEnd || commitmentEnd.getTime() > currentPeriodEnd * 1_000)
+  ) {
+    const scheduleId =
+      typeof subscription.schedule === "string"
+        ? subscription.schedule
+        : subscription.schedule?.id;
+    if (scheduleId) {
+      await stripe.subscriptionSchedules.update(
+        scheduleId,
+        { end_behavior: "cancel" },
+        { idempotencyKey: `${input.idempotencyKey}:term-end` },
+      );
+    } else {
+      await stripe.subscriptions.update(
+        subscription.id,
+        {
+          cancel_at: Math.floor(commitmentEnd.getTime() / 1_000),
+          proration_behavior: "none",
+        },
+        { idempotencyKey: `${input.idempotencyKey}:term-end` },
+      );
+    }
+    return {
+      cancelAtPeriodEnd: true,
+      effectiveAt: commitmentEnd,
+      refundAmountMinor: 0,
+    };
+  }
+  if (input.policy.cancellationTiming === "period-end") {
+    await stripe.subscriptions.update(
+      subscription.id,
+      { cancel_at_period_end: true },
+      { idempotencyKey: `${input.idempotencyKey}:period-end` },
+    );
+    return {
+      cancelAtPeriodEnd: true,
+      effectiveAt: currentPeriodEnd
+        ? new Date(currentPeriodEnd * 1_000)
+        : undefined,
+      refundAmountMinor: 0,
+    };
+  }
+
+  const invoiceId =
+    typeof subscription.latest_invoice === "string"
+      ? subscription.latest_invoice
+      : subscription.latest_invoice?.id;
+  const invoice = invoiceId
+    ? await stripe.invoices.retrieve(invoiceId)
+    : undefined;
+  const paidInvoicePayment = invoiceId
+    ? (
+        await stripe.invoicePayments.list({
+          invoice: invoiceId,
+          status: "paid",
+          limit: 10,
+        })
+      ).data.find(
+        (payment) =>
+          payment.payment.type === "payment_intent" &&
+          payment.amount_paid &&
+          payment.amount_paid > 0,
+      )
+    : undefined;
+  const paymentIntentId =
+    typeof paidInvoicePayment?.payment.payment_intent === "string"
+      ? paidInvoicePayment.payment.payment_intent
+      : paidInvoicePayment?.payment.payment_intent?.id;
+  const amountPaidMinor = paidInvoicePayment?.amount_paid ?? 0;
+  let refundAmountMinor = 0;
+  if (
+    input.policy.refundBehavior === "full-within-window" &&
+    invoice?.status_transitions.paid_at &&
+    input.now.getTime() - invoice.status_transitions.paid_at * 1_000 <=
+      (input.policy.refundWindowDays ?? 7) * 86_400_000
+  ) {
+    refundAmountMinor = amountPaidMinor;
+  } else if (
+    input.policy.refundBehavior === "prorated" &&
+    amountPaidMinor > 0
+  ) {
+    const preview = await stripe.invoices.createPreview({
+      subscription: subscription.id,
+      subscription_details: {
+        cancel_now: true,
+        proration_behavior: "create_prorations",
+      },
+    });
+    refundAmountMinor = Math.min(amountPaidMinor, Math.max(0, -preview.total));
+  }
+
+  await stripe.subscriptions.cancel(
+    subscription.id,
+    {
+      invoice_now: input.policy.refundBehavior === "prorated",
+      prorate: input.policy.refundBehavior === "prorated",
+      cancellation_details: {
+        comment: "Customer canceled online under the accepted Duna policy.",
+      },
+    },
+    { idempotencyKey: `${input.idempotencyKey}:cancel` },
+  );
+  let refundId: string | undefined;
+  if (refundAmountMinor > 0 && paymentIntentId && invoice) {
+    const invoiceTaxMinor = [...(invoice.total_taxes ?? [])].reduce(
+      (sum, tax) => sum + tax.amount,
+      0,
+    );
+    const applicationFeeMinor = Number(
+      subscription.metadata.dunaApplicationFeeMinor ?? 0,
+    );
+    const proportionalTaxMinor = Math.round(
+      (invoiceTaxMinor * refundAmountMinor) / Math.max(1, amountPaidMinor),
+    );
+    const proportionalApplicationFeeMinor = Math.round(
+      (applicationFeeMinor * refundAmountMinor) / Math.max(1, amountPaidMinor),
+    );
+    const refund = await stripe.refunds.create(
+      {
+        payment_intent: paymentIntentId,
+        amount: refundAmountMinor,
+        reason: "requested_by_customer",
+        reverse_transfer: false,
+        refund_application_fee: false,
+        metadata: {
+          dunaMembershipSubscriptionId: subscription.id,
+          dunaInvoiceId: invoice.id,
+          refundPolicy: input.policy.refundBehavior,
+        },
+      },
+      { idempotencyKey: `${input.idempotencyKey}:refund` },
+    );
+    refundId = refund.id;
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      { expand: ["latest_charge"] },
+    );
+    const latestCharge = paymentIntent.latest_charge;
+    const charge =
+      typeof latestCharge === "string"
+        ? await stripe.charges.retrieve(latestCharge)
+        : latestCharge;
+    const chargeTransfer = charge?.transfer;
+    const transferId =
+      typeof chargeTransfer === "string" ? chargeTransfer : chargeTransfer?.id;
+    const organizationRefundShareMinor = Math.max(
+      0,
+      refundAmountMinor -
+        proportionalTaxMinor -
+        proportionalApplicationFeeMinor,
+    );
+    if (transferId && organizationRefundShareMinor > 0) {
+      await stripe.transfers.createReversal(
+        transferId,
+        {
+          amount: organizationRefundShareMinor,
+          metadata: {
+            dunaMembershipSubscriptionId: subscription.id,
+            dunaInvoiceId: invoice.id,
+            dunaRefundId: refund.id,
+          },
+        },
+        { idempotencyKey: `${input.idempotencyKey}:transfer-reversal` },
+      );
+    }
+    if (input.policy.refundBehavior === "prorated") {
+      const customerId =
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : subscription.customer.id;
+      await stripe.customers.createBalanceTransaction(
+        customerId,
+        {
+          amount: refundAmountMinor,
+          currency: invoice.currency,
+          description:
+            "Offset prorated membership credit refunded to original payment method",
+          metadata: { dunaMembershipSubscriptionId: subscription.id },
+        },
+        { idempotencyKey: `${input.idempotencyKey}:offset-credit` },
+      );
+    }
+  }
+  return {
+    cancelAtPeriodEnd: false,
+    effectiveAt: input.now,
+    refundId,
+    invoiceId: invoice?.id,
+    refundAmountMinor,
+  };
+}
+
+export async function resumeMembershipSubscription(input: {
+  readonly subscriptionId: string;
+  readonly policy: MembershipSubscriptionPolicy;
+  readonly idempotencyKey: string;
+}): Promise<void> {
+  const stripe = getStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(
+    input.subscriptionId,
+    { expand: ["schedule"] },
+  );
+  const scheduleId =
+    typeof subscription.schedule === "string"
+      ? subscription.schedule
+      : subscription.schedule?.id;
+  if (scheduleId) {
+    await stripe.subscriptionSchedules.update(
+      scheduleId,
+      {
+        end_behavior:
+          input.policy.renewalBehavior === "ends-after-term"
+            ? "cancel"
+            : "release",
+      },
+      { idempotencyKey: `${input.idempotencyKey}:schedule` },
+    );
+  }
+  await stripe.subscriptions.update(
+    subscription.id,
+    { cancel_at_period_end: false, cancel_at: "" },
+    { idempotencyKey: `${input.idempotencyKey}:subscription` },
+  );
 }
 
 export async function createBookingPaymentIntent(input: {
@@ -990,6 +1523,7 @@ export async function createBookingPaymentIntent(input: {
       application_fee_amount: input.connectedAccountId
         ? input.applicationFeeMinor
         : undefined,
+      on_behalf_of: input.connectedAccountId,
       transfer_data: input.connectedAccountId
         ? { destination: input.connectedAccountId }
         : undefined,
@@ -1033,6 +1567,11 @@ export async function createConnectOnboarding(input: {
           country: input.countryCode.toLowerCase(),
         },
         configuration: {
+          merchant: {
+            capabilities: {
+              card_payments: { requested: true },
+            },
+          },
           recipient: {
             capabilities: {
               stripe_balance: {
@@ -1056,6 +1595,24 @@ export async function createConnectOnboarding(input: {
         },
       })
     ).id;
+  if (input.accountId) {
+    await stripe.v2.core.accounts.update(accountId, {
+      configuration: {
+        merchant: {
+          capabilities: {
+            card_payments: { requested: true },
+          },
+        },
+        recipient: {
+          capabilities: {
+            stripe_balance: {
+              stripe_transfers: { requested: true },
+            },
+          },
+        },
+      },
+    });
+  }
   if (input.accountId && input.feePolicy) {
     await updateConnectAccountFeeMetadata({
       accountId,
@@ -1068,7 +1625,7 @@ export async function createConnectOnboarding(input: {
     use_case: {
       type: "account_onboarding",
       account_onboarding: {
-        configurations: ["recipient"],
+        configurations: ["merchant", "recipient"],
         refresh_url: input.refreshUrl,
         return_url: input.returnUrl,
         collection_options: {
@@ -1117,6 +1674,245 @@ export async function retrieveConnectAccountReadiness(
     chargesEnabled: connectAccountMoneyReady(object),
     metadataEntityId: connectAccountMetadataEntityId(object),
   };
+}
+
+function objectRecord(
+  value: unknown,
+): Readonly<Record<string, unknown>> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
+}
+
+export async function loadConnectedAccountMoney(input: {
+  readonly accountId: string;
+  readonly currency: string;
+}): Promise<{
+  readonly accountId: string;
+  readonly connected: boolean;
+  readonly chargesEnabled: boolean;
+  readonly payoutsEnabled: boolean;
+  readonly bankStatus: "connected" | "missing" | "unverified" | "unavailable";
+  readonly bankName?: string;
+  readonly bankLast4?: string;
+  readonly stripeAvailableMinor?: number;
+  readonly stripePendingMinor?: number;
+  readonly stripeReservedMinor?: number;
+  readonly bankAccounts: readonly {
+    readonly id: string;
+    readonly type: "bank-account" | "debit-card";
+    readonly name: string;
+    readonly last4: string;
+    readonly currency?: "USD" | "CAD" | "AUD" | "BRL" | "EUR";
+    readonly status: "connected" | "unverified" | "unavailable";
+    readonly defaultForCurrency: boolean;
+  }[];
+  readonly activity: readonly {
+    readonly id: string;
+    readonly type: string;
+    readonly reportingCategory: string;
+    readonly description: string;
+    readonly amountMinor: number;
+    readonly feeMinor: number;
+    readonly netMinor: number;
+    readonly status: "available" | "pending";
+    readonly availableAt: string;
+    readonly occurredAt: string;
+  }[];
+  readonly requirementsDue: readonly string[];
+  readonly settingsUrl?: string;
+  readonly liveData: boolean;
+}> {
+  const stripe = getStripeClient();
+  const [
+    account,
+    balance,
+    externalAccounts,
+    balanceTransactions,
+    v2Account,
+    loginLink,
+  ] = await Promise.all([
+    stripe.accounts.retrieve(input.accountId),
+    stripe.balance.retrieve({}, { stripeAccount: input.accountId }),
+    stripe.accounts.listExternalAccounts(input.accountId, {
+      limit: 10,
+    }),
+    stripe.balanceTransactions.list(
+      { limit: 50 },
+      { stripeAccount: input.accountId },
+    ),
+    stripe.v2.core.accounts.retrieve(input.accountId, {
+      include: [
+        "configuration.merchant",
+        "configuration.recipient",
+        "requirements",
+      ],
+    }),
+    stripe.accounts.createLoginLink(input.accountId).catch(() => undefined),
+  ]);
+  const requestedCurrency = input.currency.toLowerCase();
+  const amountFor = (
+    amounts: readonly { readonly amount: number; readonly currency: string }[],
+  ) =>
+    amounts
+      .filter((amount) => amount.currency === requestedCurrency)
+      .reduce((total, amount) => total + amount.amount, 0);
+  const payoutAccounts = externalAccounts.data.map((externalAccount) => {
+    const isBank = externalAccount.object === "bank_account";
+    const bankStatus = isBank ? externalAccount.status : undefined;
+    const supportedCurrency = externalAccount.currency?.toUpperCase() ?? "";
+    const normalizedCurrency = ["USD", "CAD", "AUD", "BRL", "EUR"].includes(
+      supportedCurrency,
+    )
+      ? (supportedCurrency as "USD" | "CAD" | "AUD" | "BRL" | "EUR")
+      : undefined;
+    return {
+      id: externalAccount.id,
+      type: isBank ? ("bank-account" as const) : ("debit-card" as const),
+      name: isBank
+        ? (externalAccount.bank_name ?? "Bank account")
+        : `${externalAccount.brand ?? "Debit"} card`,
+      last4: externalAccount.last4,
+      currency: normalizedCurrency,
+      status: isBank
+        ? bankStatus === "verified" || bankStatus === "new"
+          ? ("connected" as const)
+          : ("unverified" as const)
+        : ("connected" as const),
+      defaultForCurrency: externalAccount.default_for_currency ?? false,
+    };
+  });
+  const bank = externalAccounts.data.find(
+    (externalAccount) => externalAccount.object === "bank_account",
+  );
+  const requirements = objectRecord(
+    v2Account as unknown as Readonly<Record<string, unknown>>,
+  )?.requirements;
+  const requirementsRecord = objectRecord(requirements);
+  const currentlyDue = Array.isArray(requirementsRecord?.currently_due)
+    ? requirementsRecord.currently_due.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  return {
+    accountId: input.accountId,
+    connected: true,
+    chargesEnabled: account.charges_enabled,
+    payoutsEnabled: account.payouts_enabled,
+    bankStatus: bank
+      ? bank.object === "bank_account" &&
+        (bank.status === "verified" || bank.status === "new")
+        ? "connected"
+        : "unverified"
+      : "missing",
+    bankName:
+      bank?.object === "bank_account"
+        ? (bank.bank_name ?? undefined)
+        : undefined,
+    bankLast4: bank?.last4,
+    stripeAvailableMinor: Math.max(0, amountFor(balance.available)),
+    stripePendingMinor: Math.max(0, amountFor(balance.pending)),
+    stripeReservedMinor: Math.max(0, amountFor(balance.connect_reserved ?? [])),
+    bankAccounts: payoutAccounts,
+    activity: balanceTransactions.data.map((transaction) => ({
+      id: transaction.id,
+      type: transaction.type,
+      reportingCategory: transaction.reporting_category,
+      description:
+        transaction.description ??
+        transaction.reporting_category.replaceAll("_", " "),
+      amountMinor: transaction.amount,
+      feeMinor: Math.max(0, transaction.fee),
+      netMinor: transaction.net,
+      status:
+        transaction.status === "available"
+          ? ("available" as const)
+          : ("pending" as const),
+      availableAt: new Date(transaction.available_on * 1_000).toISOString(),
+      occurredAt: new Date(transaction.created * 1_000).toISOString(),
+    })),
+    requirementsDue: currentlyDue,
+    settingsUrl: loginLink?.url,
+    liveData: true,
+  };
+}
+
+export async function configureConnectedAccountMoney(input: {
+  readonly accountId: string;
+  readonly statementDescriptor?: string;
+  readonly payoutStatementDescriptor?: string;
+}): Promise<void> {
+  const stripe = getStripeClient();
+  await Promise.all([
+    stripe.balanceSettings.update(
+      {
+        payments: {
+          payouts: {
+            // Duna's per-order release ledger controls the user-selected
+            // frequency. Stripe must stay manual so refundable funds cannot
+            // reach the bank before their cancellation window closes.
+            schedule: { interval: "manual" },
+            ...(input.payoutStatementDescriptor
+              ? { statement_descriptor: input.payoutStatementDescriptor }
+              : {}),
+          },
+        },
+      },
+      { stripeAccount: input.accountId },
+    ),
+    input.statementDescriptor
+      ? stripe.accounts.update(input.accountId, {
+          settings: {
+            payments: { statement_descriptor: input.statementDescriptor },
+            card_payments: {
+              statement_descriptor_prefix: input.statementDescriptor,
+            },
+          },
+        })
+      : Promise.resolve(),
+  ]);
+}
+
+export async function createConnectedAccountPayout(input: {
+  readonly accountId: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly id: string;
+  readonly status: string;
+  readonly expectedArrivalAt?: Date;
+}> {
+  const payout = await getStripeClient().payouts.create(
+    {
+      amount: input.amountMinor,
+      currency: input.currency.toLowerCase(),
+      metadata: { dunaRelease: "eligible-funds-only" },
+    },
+    { stripeAccount: input.accountId, idempotencyKey: input.idempotencyKey },
+  );
+  return {
+    id: payout.id,
+    status: payout.status,
+    expectedArrivalAt: payout.arrival_date
+      ? new Date(payout.arrival_date * 1_000)
+      : undefined,
+  };
+}
+
+export async function retrieveChargeSettlementAvailableAt(
+  chargeId: string,
+): Promise<Date | undefined> {
+  const charge = await getStripeClient().charges.retrieve(chargeId, {
+    expand: ["balance_transaction"],
+  });
+  const balanceTransaction =
+    typeof charge.balance_transaction === "object"
+      ? charge.balance_transaction
+      : undefined;
+  return balanceTransaction?.available_on
+    ? new Date(balanceTransaction.available_on * 1_000)
+    : undefined;
 }
 
 export async function createTerminalLocation(input: {

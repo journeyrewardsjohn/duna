@@ -29,6 +29,12 @@ describe("API identity context", () => {
     expect(scopes).toContain("minor:write");
   });
 
+  it("lets managers review Money without granting money movement", () => {
+    const scopes = scopesForRoles(["manager"]);
+    expect(scopes).toContain("payments:read");
+    expect(scopes).not.toContain("payments:write");
+  });
+
   it("keeps a missing WorkOS session anonymous even when demo mode is enabled", async () => {
     const context = await createApiContextFromWorkOSSession({ user: null });
     expect(context.actor).toBeUndefined();

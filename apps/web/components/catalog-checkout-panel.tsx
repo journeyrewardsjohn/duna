@@ -1,7 +1,11 @@
 "use client";
 
 import type { PublicCatalogItem, WaiverRequirement } from "@duna/api";
-import { DUNA_SERVICE_FEE_BPS } from "@duna/core";
+import {
+  DUNA_SERVICE_FEE_BPS,
+  membershipSubscriptionDisclosure,
+  membershipSubscriptionPolicy,
+} from "@duna/core";
 import {
   Banknote,
   CalendarClock,
@@ -79,6 +83,8 @@ export function CatalogCheckoutPanel({
   const [notice, setNotice] = useState(initialNotice);
   const [memberActive, setMemberActive] = useState(isMember);
   const [addMembership, setAddMembership] = useState(true);
+  const [membershipPolicyAccepted, setMembershipPolicyAccepted] =
+    useState(false);
   const [complete, setComplete] = useState(false);
   const [membershipComplete, setMembershipComplete] = useState(false);
   const [completionMode, setCompletionMode] = useState<
@@ -98,6 +104,8 @@ export function CatalogCheckoutPanel({
       (candidate) =>
         candidate.paymentKind === "card" && candidate.audience === "everyone",
     );
+  const directMembershipPurchase =
+    item.type === "plan" && item.subtype === "membership";
   const variant =
     item.variants.find((candidate) => candidate.id === variantId) ??
     item.variants[0];
@@ -162,6 +170,35 @@ export function CatalogCheckoutPanel({
     paymentOption === "installments" && installmentsAvailable
       ? payOverTimeUnitMinor
       : upfrontUnitMinor;
+  const requiresMembership =
+    item.membershipRequired || item.visibility === "members";
+  const membershipStep = requiresMembership && !memberActive;
+  const membershipPurchaseItem = directMembershipPurchase
+    ? item
+    : membershipStep
+      ? membershipOffer
+      : undefined;
+  const membershipPurchasePrice = directMembershipPurchase
+    ? price
+    : membershipPrice;
+  const membershipPolicy = membershipPurchaseItem
+    ? membershipSubscriptionPolicy(membershipPurchaseItem.configuration)
+    : undefined;
+  const membershipDisclosure =
+    membershipPolicy &&
+    membershipPurchasePrice?.amountMinor !== undefined &&
+    (membershipPurchasePrice.recurringInterval === "month" ||
+      membershipPurchasePrice.recurringInterval === "year")
+      ? membershipSubscriptionDisclosure({
+          organizationName: organization.name,
+          priceLabel: money(
+            membershipPurchasePrice.amountMinor,
+            membershipPurchasePrice.currency ?? organization.currency,
+          ),
+          billingInterval: membershipPurchasePrice.recurringInterval,
+          policy: membershipPolicy,
+        })
+      : undefined;
   const monetaryTotal = membershipIncluded ? 0 : selectedUnitMinor * quantity;
   const dunaServiceFeeEligible =
     paymentMethod === "card" && item.type !== "good" && monetaryTotal > 0;
@@ -173,8 +210,6 @@ export function CatalogCheckoutPanel({
   const creditTotal = membershipIncluded
     ? 0
     : (price?.creditAmount ?? 0) * quantity;
-  const requiresMembership =
-    item.membershipRequired || item.visibility === "members";
   const tracksInventory =
     item.type === "good" && item.configuration.inventoryTracked !== false;
   const available =
@@ -210,7 +245,6 @@ export function CatalogCheckoutPanel({
     (paymentMethod !== "credit" || walletCredits >= creditTotal) &&
     (!fixedSession || Boolean(occurrenceId)) &&
     (!requiresRecordingConsent || recordingConsentAccepted);
-  const membershipStep = requiresMembership && !memberActive;
   const canStartMembership = Boolean(
     addMembership &&
     membershipOffer &&
@@ -245,6 +279,10 @@ export function CatalogCheckoutPanel({
   }, [initialCheckoutSessionId]);
 
   useEffect(() => setMemberActive(isMember), [isMember]);
+
+  useEffect(() => {
+    setMembershipPolicyAccepted(false);
+  }, [membershipDisclosure]);
 
   useEffect(() => {
     if (!initialMembershipCheckoutSessionId) return;
@@ -297,6 +335,7 @@ export function CatalogCheckoutPanel({
         paymentMethod: "card",
         quantity: 1,
         idempotencyKey: membershipIdempotencyKey.current,
+        membershipPolicyAccepted,
       });
       if (!response.ok) {
         setNotice(response.error);
@@ -332,6 +371,9 @@ export function CatalogCheckoutPanel({
         catalogSessionOccurrenceId: occurrenceId || undefined,
         recordingConsentAccepted,
         idempotencyKey: idempotencyKey.current,
+        membershipPolicyAccepted: directMembershipPurchase
+          ? membershipPolicyAccepted
+          : undefined,
       });
       if (!response.ok) {
         setNotice(response.error);
@@ -725,10 +767,26 @@ export function CatalogCheckoutPanel({
           {notice}
         </p>
       )}
+      {membershipDisclosure && (
+        <label className="catalog-membership-consent">
+          <input
+            checked={membershipPolicyAccepted}
+            onChange={(event) =>
+              setMembershipPolicyAccepted(event.target.checked)
+            }
+            type="checkbox"
+          />
+          <span>
+            <strong>I agree to the membership terms.</strong>
+            <small>{membershipDisclosure}</small>
+          </span>
+        </label>
+      )}
       <button
         className="catalog-checkout-button"
         disabled={
           (membershipStep ? !canStartMembership : !canPurchase) ||
+          (Boolean(membershipDisclosure) && !membershipPolicyAccepted) ||
           isPending ||
           complete
         }

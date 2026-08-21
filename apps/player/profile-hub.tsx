@@ -428,20 +428,18 @@ function SubscriptionManagementModal({
 
   const confirmCancellation = (
     title: string,
+    detail: string,
+    actionLabel: string,
     onConfirm: () => Promise<unknown>,
   ) => {
-    Alert.alert(
-      `Cancel ${title}?`,
-      "Your access remains active through the current paid period. You can resume before then.",
-      [
-        { text: "Keep membership", style: "cancel" },
-        {
-          text: "Cancel at period end",
-          style: "destructive",
-          onPress: () => void onConfirm(),
-        },
-      ],
-    );
+    Alert.alert(`Cancel ${title}?`, detail, [
+      { text: "Keep membership", style: "cancel" },
+      {
+        text: actionLabel,
+        style: "destructive",
+        onPress: () => void onConfirm(),
+      },
+    ]);
   };
 
   const openBilling = async () => {
@@ -568,13 +566,17 @@ function SubscriptionManagementModal({
                     <Pressable
                       disabled={Boolean(busy)}
                       onPress={() =>
-                        confirmCancellation(dunaMembership.tierName, () =>
-                          run("duna-cancel", () =>
-                            client!.player.changeDunaPlusMembership.mutate({
-                              action: "cancel",
-                              idempotencyKey: Crypto.randomUUID(),
-                            }),
-                          ),
+                        confirmCancellation(
+                          dunaMembership.tierName,
+                          "Your access remains active through the current paid period. You can resume before then.",
+                          "Cancel at period end",
+                          () =>
+                            run("duna-cancel", () =>
+                              client!.player.changeDunaPlusMembership.mutate({
+                                action: "cancel",
+                                idempotencyKey: Crypto.randomUUID(),
+                              }),
+                            ),
                         )
                       }
                       style={styles.subscriptionDangerAction}
@@ -647,9 +649,22 @@ function SubscriptionManagementModal({
                             }),
                           );
                         if (action === "cancel") {
+                          const policy = organization.membershipPolicy;
+                          const immediate =
+                            policy?.cancellationTiming === "immediate";
+                          const refundDetail =
+                            policy?.refundBehavior === "prorated"
+                              ? " Stripe calculates and returns the unused portion to your original payment method."
+                              : policy?.refundBehavior === "full-within-window"
+                                ? ` Your latest payment is refunded only when it is within the ${policy.refundWindowDays ?? 7}-day refund window.`
+                                : " Payments already made are not refunded, except where required by law.";
                           confirmCancellation(
                             organization.membershipName ??
                               organization.organizationName,
+                            immediate
+                              ? `Cancellation takes effect immediately.${refundDetail}`
+                              : `Access remains active through ${organization.membershipInitialTermEndsAt ? "the accepted initial term" : "the current paid period"}.${refundDetail}`,
+                            immediate ? "Cancel now" : "Schedule cancellation",
                             change,
                           );
                         } else {
@@ -669,7 +684,12 @@ function SubscriptionManagementModal({
                             : styles.subscriptionDangerText
                         }
                       >
-                        {ending ? "Resume" : "Cancel at period end"}
+                        {ending
+                          ? "Resume"
+                          : organization.membershipPolicy
+                                ?.cancellationTiming === "immediate"
+                            ? "Cancel membership"
+                            : "Cancel at period end"}
                       </Text>
                     </Pressable>
                   </View>

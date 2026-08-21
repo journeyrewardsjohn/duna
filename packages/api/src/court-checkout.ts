@@ -12,6 +12,7 @@ import {
   organizationMemberships,
   organizations,
   orderItems,
+  orderTaxContexts,
   orders,
   people,
   pickupParticipants,
@@ -54,6 +55,7 @@ import {
   isStripeConfigured,
 } from "./payments";
 import { sendTemplateSms } from "./sent";
+import { MARKETPLACE_TAX_POLICY_VERSION, STRIPE_TAX_CODES } from "./tax-policy";
 import {
   daylightStatus,
   loadWeatherForecast,
@@ -983,10 +985,17 @@ async function checkoutResource(courtId: string) {
         venueName: venues.name,
         venueStatus: venues.status,
         timezone: venues.timezone,
+        venueAddressLine1: venues.addressLine1,
+        venueAddressLine2: venues.addressLine2,
+        venueLocality: venues.locality,
+        venueAdministrativeArea: venues.administrativeArea,
+        venuePostalCode: venues.postalCode,
+        venueCountryCode: venues.countryCode,
         organizationId: organizations.id,
         organizationName: organizations.name,
         stripeAccountId: organizations.stripeAccountId,
         stripeChargesEnabled: organizations.stripeChargesEnabled,
+        stripeTaxEnabled: organizations.stripeTaxEnabled,
         bookingPolicy: courts.bookingPolicy,
         minimumDurationMinutes: courts.minimumDurationMinutes,
         maximumDurationMinutes: courts.maximumDurationMinutes,
@@ -1694,6 +1703,7 @@ export async function startCourtCheckout(input: {
         )
       : organizationCommissionFee.amountMinor;
   pricing.payNowMinor = organizerShare;
+  const organizerOrderItemId = crypto.randomUUID();
   await database.batch([
     database.insert(orders).values({
       id: orderId!,
@@ -1709,6 +1719,7 @@ export async function startCourtCheckout(input: {
       expiresAt: checkoutExpiresAt,
     }),
     database.insert(orderItems).values({
+      id: organizerOrderItemId,
       orderId: orderId!,
       kind: "booking",
       referenceId: hold.bookingId,
@@ -1716,6 +1727,28 @@ export async function startCourtCheckout(input: {
       quantity: 1,
       unitAmountMinor: organizerSubtotal,
       totalAmountMinor: organizerSubtotal,
+    }),
+    database.insert(orderTaxContexts).values({
+      orderId: orderId!,
+      organizationId: resource.organizationId,
+      venueId: resource.venueId,
+      source: "venue",
+      addressSnapshot: {
+        line1: resource.venueAddressLine1 ?? undefined,
+        line2: resource.venueAddressLine2 ?? undefined,
+        city: resource.venueLocality ?? undefined,
+        region: resource.venueAdministrativeArea ?? undefined,
+        postalCode: resource.venuePostalCode ?? undefined,
+        country: resource.venueCountryCode,
+      },
+      itemTaxCodes: [
+        {
+          orderItemId: organizerOrderItemId,
+          stripeTaxCode: STRIPE_TAX_CODES.singleUseFacilityAccess,
+        },
+      ],
+      policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
+      currency: priced.currency,
     }),
     ...(input.paymentMode === "split"
       ? [
@@ -1802,7 +1835,7 @@ export async function startCourtCheckout(input: {
         organizerOperatorFee +
         organizerOrganizationCommission,
     );
-    if (input.paymentSurface === "native") {
+    if (input.paymentSurface === "native" && !resource.stripeTaxEnabled) {
       const customerId = await getOrCreatePlayerStripeCustomer({
         personId: buyer.id,
         existingCustomerId: buyer.stripeCustomerId ?? undefined,
@@ -1894,6 +1927,7 @@ export async function startCourtCheckout(input: {
       organizationCommissionMinor: organizerOrganizationCommission,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId!,
+      automaticTaxEnabled: resource.stripeTaxEnabled,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       expiresAt: checkoutExpiresAt,
@@ -2240,6 +2274,7 @@ export async function startParticipantShareCheckout(input: {
     source: commissionPolicy.source,
   });
   const orderId = crypto.randomUUID();
+  const orderItemId = crypto.randomUUID();
   const checkoutExpiresAt = new Date(input.now.getTime() + 30 * 60_000);
   const policyHash = stableHash(policy.markdown);
   await database.batch([
@@ -2257,6 +2292,7 @@ export async function startParticipantShareCheckout(input: {
       expiresAt: checkoutExpiresAt,
     }),
     database.insert(orderItems).values({
+      id: orderItemId,
       orderId,
       kind: "booking",
       referenceId: booking.id,
@@ -2264,6 +2300,28 @@ export async function startParticipantShareCheckout(input: {
       quantity: 1,
       unitAmountMinor: subtotalMinor,
       totalAmountMinor: subtotalMinor,
+    }),
+    database.insert(orderTaxContexts).values({
+      orderId,
+      organizationId: booking.organizationId,
+      venueId: resource.venueId,
+      source: "venue",
+      addressSnapshot: {
+        line1: resource.venueAddressLine1 ?? undefined,
+        line2: resource.venueAddressLine2 ?? undefined,
+        city: resource.venueLocality ?? undefined,
+        region: resource.venueAdministrativeArea ?? undefined,
+        postalCode: resource.venuePostalCode ?? undefined,
+        country: resource.venueCountryCode,
+      },
+      itemTaxCodes: [
+        {
+          orderItemId,
+          stripeTaxCode: STRIPE_TAX_CODES.singleUseFacilityAccess,
+        },
+      ],
+      policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
+      currency: booking.currency,
     }),
     ...(feeTotalMinor > 0
       ? [
@@ -2351,6 +2409,7 @@ export async function startParticipantShareCheckout(input: {
       organizationCommissionMinor: organizationCommissionFee.amountMinor,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId,
+      automaticTaxEnabled: resource.stripeTaxEnabled,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       expiresAt: checkoutExpiresAt,

@@ -26,17 +26,14 @@ export function connectAccountMetadataEntityId(
  * either representation so payment readiness cannot depend on payload style.
  */
 export function connectAccountMoneyReady(object: StripeObject): boolean {
-  if (object.charges_enabled === true) return true;
-
-  const legacyCapabilities = nestedRecord(object, "capabilities");
-  if (
-    legacyCapabilities?.transfers === "active" &&
-    object.payouts_enabled === true
-  ) {
+  if (object.charges_enabled === true && object.payouts_enabled === true) {
     return true;
   }
 
   const configuration = nestedRecord(object, "configuration");
+  const merchant = nestedRecord(configuration, "merchant");
+  const merchantCapabilities = nestedRecord(merchant, "capabilities");
+  const cardPayments = nestedRecord(merchantCapabilities, "card_payments");
   const recipient = nestedRecord(configuration, "recipient");
   const capabilities = nestedRecord(recipient, "capabilities");
   const stripeBalance = nestedRecord(capabilities, "stripe_balance");
@@ -44,6 +41,8 @@ export function connectAccountMoneyReady(object: StripeObject): boolean {
   const payouts = nestedRecord(stripeBalance, "payouts");
 
   return (
+    merchant?.applied === true &&
+    cardPayments?.status === "active" &&
     recipient?.applied === true &&
     transfers?.status === "active" &&
     payouts?.status === "active"

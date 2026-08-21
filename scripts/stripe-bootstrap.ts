@@ -37,6 +37,7 @@ type PriceDefinition = {
   readonly productName: string;
   readonly productDescription: string;
   readonly amountMinor: number;
+  readonly taxCode: string;
   readonly recurring?: "month" | "year";
   readonly membership?: {
     readonly plan: PaidMembershipPlanId;
@@ -56,6 +57,7 @@ const definitions: readonly PriceDefinition[] = [
     productDescription:
       "No Duna service fees, 8 upload hours, and 2 live-broadcast hours each month.",
     amountMinor: 999,
+    taxCode: "txcd_10103000",
     recurring: "month",
     membership: { plan: "premium", interval: "month" },
   },
@@ -66,6 +68,7 @@ const definitions: readonly PriceDefinition[] = [
     productDescription:
       "No Duna service fees, 8 upload hours, and 2 live-broadcast hours each month.",
     amountMinor: 9_900,
+    taxCode: "txcd_10103000",
     recurring: "year",
     membership: { plan: "premium", interval: "year" },
   },
@@ -76,6 +79,7 @@ const definitions: readonly PriceDefinition[] = [
     productDescription:
       "No Duna service fees, 30 upload hours, 8 live-broadcast hours, and advanced video insights.",
     amountMinor: 2_999,
+    taxCode: "txcd_10103000",
     recurring: "month",
     membership: { plan: "premium-plus", interval: "month" },
   },
@@ -86,6 +90,7 @@ const definitions: readonly PriceDefinition[] = [
     productDescription:
       "No Duna service fees, 30 upload hours, 8 live-broadcast hours, and advanced video insights.",
     amountMinor: 29_900,
+    taxCode: "txcd_10103000",
     recurring: "year",
     membership: { plan: "premium-plus", interval: "year" },
   },
@@ -95,6 +100,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS["small-club"].productName,
     productDescription: ORGANIZATION_PLANS["small-club"].tagline,
     amountMinor: ORGANIZATION_PLANS["small-club"].monthlyPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "month",
     organization: { plan: "small-club", interval: "month" },
   },
@@ -104,6 +110,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS["small-club"].productName,
     productDescription: ORGANIZATION_PLANS["small-club"].tagline,
     amountMinor: ORGANIZATION_PLANS["small-club"].annualPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "year",
     organization: { plan: "small-club", interval: "year" },
   },
@@ -113,6 +120,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS.club.productName,
     productDescription: ORGANIZATION_PLANS.club.tagline,
     amountMinor: ORGANIZATION_PLANS.club.monthlyPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "month",
     organization: { plan: "club", interval: "month" },
   },
@@ -122,6 +130,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS.club.productName,
     productDescription: ORGANIZATION_PLANS.club.tagline,
     amountMinor: ORGANIZATION_PLANS.club.annualPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "year",
     organization: { plan: "club", interval: "year" },
   },
@@ -131,6 +140,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS["multi-venue"].productName,
     productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
     amountMinor: ORGANIZATION_PLANS["multi-venue"].monthlyPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "month",
     organization: { plan: "multi-venue", interval: "month" },
   },
@@ -140,6 +150,7 @@ const definitions: readonly PriceDefinition[] = [
     productName: ORGANIZATION_PLANS["multi-venue"].productName,
     productDescription: ORGANIZATION_PLANS["multi-venue"].tagline,
     amountMinor: ORGANIZATION_PLANS["multi-venue"].annualPriceMinor,
+    taxCode: "txcd_10103001",
     recurring: "year",
     organization: { plan: "multi-venue", interval: "year" },
   },
@@ -157,21 +168,22 @@ async function findOrCreateProduct(definition: PriceDefinition) {
       product.name === definition.productName,
   );
   if (existing) {
-    if (existing.metadata.duna_product !== productKey) {
-      return stripe.products.update(existing.id, {
-        metadata: {
-          ...existing.metadata,
-          duna_product: productKey,
-          provisioned_by: "duna-bootstrap",
-        },
-      });
-    }
-    return existing;
+    return stripe.products.update(existing.id, {
+      name: definition.productName,
+      description: definition.productDescription,
+      tax_code: definition.taxCode,
+      metadata: {
+        ...existing.metadata,
+        duna_product: productKey,
+        provisioned_by: "duna-bootstrap",
+      },
+    });
   }
   return stripe.products.create(
     {
       name: definition.productName,
       description: definition.productDescription,
+      tax_code: definition.taxCode,
       metadata: {
         duna_product: productKey,
         provisioned_by: "duna-bootstrap",
