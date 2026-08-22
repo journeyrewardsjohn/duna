@@ -81,7 +81,7 @@ import {
   isR2VideoConfigured,
   presignR2AttachmentDownload,
   presignR2VideoPart,
-  R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+  R2_VIDEO_PART_SIZE_BYTES,
   verifyR2ObjectSize,
 } from "./video-providers";
 
@@ -1169,9 +1169,9 @@ export async function beginMessageAttachmentUpload(input: {
   if (!isDatabaseConfigured() || input.actor.isDemo) {
     return {
       id: crypto.randomUUID(),
-      partSizeBytes: R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+      partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
       totalParts: Math.ceil(
-        input.attachment.byteSize / R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+        input.attachment.byteSize / R2_VIDEO_PART_SIZE_BYTES,
       ),
       expiresAt: new Date(
         now.getTime() + MESSAGE_ATTACHMENT_UPLOAD_SECONDS * 1_000,
@@ -1224,7 +1224,7 @@ export async function beginMessageAttachmentUpload(input: {
   const fileName = safeAttachmentFileName(input.attachment.fileName);
   const storageKey = `messaging/${input.attachment.conversationId}/${input.actor.personId}/${id}/${fileName}`;
   const totalParts = Math.ceil(
-    input.attachment.byteSize / R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+    input.attachment.byteSize / R2_VIDEO_PART_SIZE_BYTES,
   );
   const expiresAt = new Date(
     now.getTime() + MESSAGE_ATTACHMENT_UPLOAD_SECONDS * 1_000,
@@ -1279,7 +1279,7 @@ export async function beginMessageAttachmentUpload(input: {
         mediaType: validated.mediaType,
         fileName,
         byteSize: input.attachment.byteSize,
-        partSizeBytes: R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+        partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
         totalParts,
         status: "initiated",
         expiresAt,
@@ -1296,7 +1296,7 @@ export async function beginMessageAttachmentUpload(input: {
   }
   return {
     id,
-    partSizeBytes: R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES,
+    partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
     totalParts,
     expiresAt: expiresAt.toISOString(),
   };

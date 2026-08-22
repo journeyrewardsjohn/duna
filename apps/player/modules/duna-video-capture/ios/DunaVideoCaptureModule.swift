@@ -1533,6 +1533,78 @@ public final class DunaVideoCaptureModule: Module {
       )
     }
 
+    AsyncFunction("uploadPart") {
+      (
+        fileUri: String,
+        uploadUrl: String,
+        offset: Double,
+        length: Int,
+        promise: Promise
+      ) in
+      guard
+        let destination = URL(string: uploadUrl),
+        destination.scheme == "https",
+        length > 0,
+        length <= 64 * 1024 * 1024
+      else {
+        promise.reject(
+          "ERR_DUNA_VIDEO_UPLOAD",
+          "The upload part is invalid."
+        )
+        return
+      }
+      let source = URL(string: fileUri) ??
+        URL(fileURLWithPath: fileUri)
+      do {
+        let handle = try FileHandle(forReadingFrom: source)
+        try handle.seek(toOffset: UInt64(offset))
+        let data = try handle.read(upToCount: length) ?? Data()
+        try handle.close()
+        guard data.count == length else {
+          promise.reject(
+            "ERR_DUNA_VIDEO_UPLOAD",
+            "The upload part could not be read."
+          )
+          return
+        }
+        var request = URLRequest(url: destination)
+        request.httpMethod = "PUT"
+        request.setValue(
+          "application/octet-stream",
+          forHTTPHeaderField: "Content-Type"
+        )
+        URLSession.shared.uploadTask(with: request, from: data) {
+          _,
+          response,
+          error in
+          if let error {
+            promise.reject(
+              "ERR_DUNA_VIDEO_UPLOAD",
+              error.localizedDescription
+            )
+            return
+          }
+          guard
+            let response = response as? HTTPURLResponse,
+            (200...299).contains(response.statusCode),
+            let etag = response.value(forHTTPHeaderField: "ETag")
+          else {
+            promise.reject(
+              "ERR_DUNA_VIDEO_UPLOAD",
+              "Cloudflare R2 rejected an upload part."
+            )
+            return
+          }
+          promise.resolve(["etag": etag, "sizeBytes": data.count])
+        }.resume()
+      } catch {
+        promise.reject(
+          "ERR_DUNA_VIDEO_UPLOAD",
+          "The local video could not be read."
+        )
+      }
+    }
+
     Function("lockCalibration") {
       DunaVideoCaptureController.shared.lockCalibration()
     }
