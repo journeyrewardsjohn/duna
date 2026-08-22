@@ -19,7 +19,7 @@ import {
 import { useProRuntime } from "./runtime";
 
 type TournamentSnapshot = Awaited<
-  ReturnType<DunaApiClient["public"]["tournamentCompetition"]["query"]>
+  ReturnType<DunaApiClient["operator"]["tournamentCompetition"]["query"]>
 >;
 type DivisionDetail = Awaited<
   ReturnType<DunaApiClient["operator"]["divisionDetail"]["query"]>
@@ -98,8 +98,8 @@ export function TournamentControl({
     setLoading(true);
     setFeedback(undefined);
     try {
-      const next = await client.public.tournamentCompetition.query({
-        slug: event.slug,
+      const next = await client.operator.tournamentCompetition.query({
+        sessionId: event.id,
       });
       setSnapshot(next);
       const nextDivision =
@@ -355,42 +355,16 @@ export function TournamentControl({
                       </Pressable>
                     </View>
                     {snapshot.session.status !== "live" && (
-                      <Pressable
-                        disabled={busy === "launch"}
-                        onPress={() =>
-                          Alert.alert(
-                            "Start this tournament?",
-                            "This publishes the existing draw as live. Match scoring can begin immediately.",
-                            [
-                              { text: "Not yet", style: "cancel" },
-                              {
-                                text: "Start tournament",
-                                style: "default",
-                                onPress: () =>
-                                  void perform("launch", () =>
-                                    client!.operator.launchDivisionTournament.mutate(
-                                      {
-                                        divisionId: selectedDivision.id,
-                                        reason:
-                                          "Tournament started by an operator in Duna Pro.",
-                                        confirmed: true,
-                                        idempotencyKey: Crypto.randomUUID(),
-                                      },
-                                    ),
-                                  ),
-                              },
-                            ],
-                          )
-                        }
-                        style={[
-                          styles.primaryButton,
-                          busy === "launch" && styles.disabled,
-                        ]}
-                      >
-                        <Text style={styles.primaryButtonText}>
-                          {busy === "launch" ? "Starting…" : "Start tournament"}
+                      <View style={styles.publishGate}>
+                        <Text style={styles.publishGateTitle}>
+                          Finalize in Duna HQ
                         </Text>
-                      </Pressable>
+                        <Text style={styles.publishGateBody}>
+                          Close registration, finalize seeds and pools, assign
+                          every match time, then Publish &amp; Set Live. This
+                          desk will refresh onto the official draw.
+                        </Text>
+                      </View>
                     )}
                     {entryOpen && (
                       <View style={styles.entryCard}>
@@ -612,6 +586,7 @@ export function TournamentControl({
                                       accessibilityLabel={`Remove one point from ${participant.team.name}`}
                                       disabled={
                                         participant.points === 0 ||
+                                        snapshot.session.status !== "live" ||
                                         match.status === "complete" ||
                                         busy === `heat:${match.id}`
                                       }
@@ -643,6 +618,7 @@ export function TournamentControl({
                                     <Pressable
                                       accessibilityLabel={`Add one point to ${participant.team.name}`}
                                       disabled={
+                                        snapshot.session.status !== "live" ||
                                         match.status === "complete" ||
                                         busy === `heat:${match.id}`
                                       }
@@ -693,6 +669,7 @@ export function TournamentControl({
                           </View>
                           {match.heat &&
                           match.heat.participants.length > 1 &&
+                          snapshot.session.status === "live" &&
                           match.status !== "complete" ? (
                             <Pressable
                               onPress={() =>
@@ -729,7 +706,9 @@ export function TournamentControl({
                                 Lock results + advance
                               </Text>
                             </Pressable>
-                          ) : match.teamA && match.teamB ? (
+                          ) : match.teamA &&
+                            match.teamB &&
+                            snapshot.session.status === "live" ? (
                             <Pressable
                               onPress={() => onScore(match.id)}
                               style={styles.scoreButton}
@@ -896,6 +875,24 @@ function createStyles(palette: TournamentControlPalette) {
       justifyContent: "center",
       minHeight: 56,
       paddingHorizontal: 18,
+    },
+    publishGate: {
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 5,
+      padding: 16,
+    },
+    publishGateTitle: {
+      color: palette.ink,
+      fontSize: 16,
+      fontWeight: "800",
+    },
+    publishGateBody: {
+      color: palette.muted,
+      fontSize: 14,
+      lineHeight: 20,
     },
     primaryButtonText: {
       color: palette.onAccent,

@@ -4841,6 +4841,7 @@ export const operatorDivisionDetailSchema = z.object({
       })
       .optional(),
     registrationClosesAt: z.iso.datetime().optional(),
+    seedingFinalizedAt: z.iso.datetime().optional(),
   }),
   teams: operatorSessionDetailSchema.shape.teams,
   bracket: z
@@ -4850,6 +4851,10 @@ export const operatorDivisionDetailSchema = z.object({
       format: z.string(),
       structure: z.record(z.string(), z.unknown()),
       liveAt: z.iso.datetime().optional(),
+      drawFinalizedAt: z.iso.datetime().optional(),
+      poolsFinalizedAt: z.iso.datetime().optional(),
+      publishedAt: z.iso.datetime().optional(),
+      poolOverrideCount: z.number().int().nonnegative(),
       createdAt: z.iso.datetime(),
     })
     .optional(),

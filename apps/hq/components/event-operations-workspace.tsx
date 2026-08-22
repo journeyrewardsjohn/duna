@@ -1,6 +1,10 @@
 "use client";
 
-import type { OperatorSessionDetail, OperatorWorkspace } from "@duna/api";
+import type {
+  OperatorDivisionDetail,
+  OperatorSessionDetail,
+  OperatorWorkspace,
+} from "@duna/api";
 import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
@@ -40,8 +44,10 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import {
   addEventPlayerEntryAction,
   cancelCalendarSessionAction,
+  closeEventRegistrationAction,
   createSessionNoteAction,
   publishSessionNoteAction,
+  publishTournamentLiveAction,
   recordSessionAttendanceAction,
   refundEventRegistrationAction,
   setTeamSelectionAction,
@@ -832,9 +838,10 @@ function TeamSelectionControl({
         type="number"
       />
       <input
+        aria-label="Override note"
         name="reason"
-        type="hidden"
-        value={`Organizer moved team to ${nextStatus}.`}
+        placeholder="Required override note"
+        required
       />
       <button disabled={pending} type="submit">
         {pending
@@ -850,11 +857,218 @@ function TeamSelectionControl({
   );
 }
 
+function TournamentLifecyclePanel({
+  detail,
+  divisions,
+}: {
+  readonly detail: OperatorSessionDetail;
+  readonly divisions: readonly OperatorDivisionDetail[];
+}) {
+  const [closeState, closeAction, closePending] = useActionState(
+    closeEventRegistrationAction,
+    initialState,
+  );
+  const [publishState, publishAction, publishPending] = useActionState(
+    publishTournamentLiveAction,
+    initialState,
+  );
+  const session = detail.session;
+  const registrationClosed = Boolean(
+    session.status === "live" ||
+    (session.registrationClosesAt &&
+      new Date(session.registrationClosesAt).getTime() <= Date.now()),
+  );
+  const divisionStates = divisions.map((division) => {
+    const bracketCurrent = Boolean(
+      division.division.seedingFinalizedAt &&
+      division.bracket &&
+      new Date(division.bracket.createdAt).getTime() >=
+        new Date(division.division.seedingFinalizedAt).getTime(),
+    );
+    const scheduledMatches = division.matches.filter(
+      (match) => match.scheduledAt,
+    ).length;
+    return {
+      detail: division,
+      seedsReady: Boolean(division.division.seedingFinalizedAt),
+      drawReady: bracketCurrent && Boolean(division.bracket?.drawFinalizedAt),
+      scheduleReady:
+        division.matches.length > 0 &&
+        scheduledMatches === division.matches.length,
+      scheduledMatches,
+    };
+  });
+  const readyToPublish =
+    registrationClosed &&
+    divisionStates.length > 0 &&
+    divisionStates.every(
+      (state) => state.seedsReady && state.drawReady && state.scheduleReady,
+    );
+  const live =
+    session.status === "live" &&
+    divisionStates.length > 0 &&
+    divisionStates.every((state) => Boolean(state.detail.bracket?.liveAt));
+  return (
+    <section
+      className={`event-tournament-lifecycle${live ? " is-live" : ""}`}
+      aria-label="Tournament launch workflow"
+    >
+      <header>
+        <span>
+          <small>{live ? "Live tournament" : "Director launch sequence"}</small>
+          <h2>
+            {live
+              ? "Pools and schedules are published."
+              : "Close, review, finalize, then publish."}
+          </h2>
+          <p>
+            {live
+              ? "Duna Pro can run the courts while players follow the same official field on web and mobile."
+              : "Each gate preserves a clear source of truth and an audit note before participants are alerted."}
+          </p>
+        </span>
+        <Badge tone={live ? "live" : readyToPublish ? "positive" : "warning"}>
+          {live
+            ? "Live"
+            : readyToPublish
+              ? "Ready to publish"
+              : "Setup in progress"}
+        </Badge>
+      </header>
+
+      <ol className="event-tournament-lifecycle__steps">
+        <li data-complete={registrationClosed}>
+          <b>{registrationClosed ? <Check aria-hidden size={16} /> : "1"}</b>
+          <span>
+            <strong>Close registration</strong>
+            <small>Stops checkout and roster changes immediately.</small>
+          </span>
+          {!registrationClosed && !live ? (
+            <details>
+              <summary>Close now</summary>
+              <form action={closeAction}>
+                <input name="sessionId" type="hidden" value={session.id} />
+                <label>
+                  <span>Director note</span>
+                  <textarea
+                    defaultValue="Director closed registration to begin final seeding."
+                    name="reason"
+                    required
+                    rows={2}
+                  />
+                </label>
+                <label>
+                  <input
+                    name="confirmed"
+                    required
+                    type="checkbox"
+                    value="true"
+                  />
+                  Stop new registrations and roster edits now
+                </label>
+                <button disabled={closePending} type="submit">
+                  {closePending ? "Closing…" : "Close registration"}
+                </button>
+                <ActionNotice state={closeState} />
+              </form>
+            </details>
+          ) : null}
+        </li>
+        {divisionStates.map((state, index) => (
+          <li
+            data-complete={
+              state.seedsReady && state.drawReady && state.scheduleReady
+            }
+            key={state.detail.division.id}
+          >
+            <b>
+              {state.seedsReady && state.drawReady && state.scheduleReady ? (
+                <Check aria-hidden size={16} />
+              ) : (
+                index + 2
+              )}
+            </b>
+            <span>
+              <strong>{state.detail.division.name}</strong>
+              <small>
+                Seeds {state.seedsReady ? "final" : "open"} · draw{" "}
+                {state.drawReady ? "final" : "open"} · schedule{" "}
+                {state.scheduledMatches}/{state.detail.matches.length}
+              </small>
+            </span>
+            <Link
+              href={`/events/${session.id}/divisions/${state.detail.division.id}`}
+            >
+              Open division <ArrowRight aria-hidden size={14} />
+            </Link>
+          </li>
+        ))}
+      </ol>
+
+      {!live ? (
+        <form
+          action={publishAction}
+          className="event-tournament-lifecycle__publish"
+        >
+          <input name="sessionId" type="hidden" value={session.id} />
+          <input
+            name="reason"
+            type="hidden"
+            value="Director reviewed every division and published the official tournament field."
+          />
+          <span>
+            <small>Final gate</small>
+            <strong>Publish &amp; Set Live</strong>
+            <p>
+              Alerts the registered field and reveals the official pools, draw,
+              courts, and match times across Duna.
+            </p>
+          </span>
+          <label>
+            <span>Message to participants</span>
+            <textarea
+              defaultValue="The official pools and match schedule are live. Check your first match and court assignment before play begins."
+              name="participantMessage"
+              required
+              rows={3}
+            />
+          </label>
+          <label>
+            <input name="confirmed" required type="checkbox" value="true" />I
+            reviewed every finalized division and schedule
+          </label>
+          <button disabled={!readyToPublish || publishPending} type="submit">
+            {publishPending ? "Publishing…" : "Publish & Set Live"}
+          </button>
+          {!readyToPublish ? (
+            <small>
+              Complete each unfinished gate above before participants can be
+              alerted.
+            </small>
+          ) : null}
+          <ActionNotice state={publishState} />
+        </form>
+      ) : (
+        <a
+          className="event-tournament-lifecycle__public-link"
+          href={`https://duna.coach/events/${session.slug}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          View the live player event <ArrowRight aria-hidden size={15} />
+        </a>
+      )}
+    </section>
+  );
+}
+
 export function EventOperationsWorkspace({
+  competitionDivisions,
   detail,
   workspace,
   liveKitConfigured,
 }: {
+  readonly competitionDivisions: readonly OperatorDivisionDetail[];
   readonly detail: OperatorSessionDetail;
   readonly workspace: OperatorWorkspace;
   readonly liveKitConfigured: boolean;
@@ -1033,6 +1247,13 @@ export function EventOperationsWorkspace({
           </a>
         </div>
       </header>
+
+      {(session.kind === "tournament" || session.kind === "league") && (
+        <TournamentLifecyclePanel
+          detail={detail}
+          divisions={competitionDivisions}
+        />
+      )}
 
       <section
         className="event-operations-metrics"
