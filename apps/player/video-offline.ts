@@ -124,42 +124,6 @@ export async function retainVideoForOfflineUpload(input: {
   return destination.uri;
 }
 
-/**
- * Android and web intentionally retain a foreground-only, file-backed
- * fallback. It streams the requested range from the retained source rather
- * than materializing a whole multipart part in JavaScript memory, and makes
- * no promise that the transfer survives app suspension.
- */
-export async function uploadOfflineVideoRange(input: {
-  readonly fileUri: string;
-  readonly uploadUrl: string;
-  readonly offset: number;
-  readonly length: number;
-  readonly contentType: string;
-}): Promise<string> {
-  const source = new File(input.fileUri);
-  if (!source.exists) {
-    throw new Error("Duna could not find the retained video for upload.");
-  }
-  const response = await fetch(input.uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": input.contentType },
-    body: source.slice(
-      input.offset,
-      input.offset + input.length,
-      input.contentType,
-    ),
-  });
-  if (!response.ok) {
-    throw new Error("Private storage rejected an upload part.");
-  }
-  const etag = response.headers.get("etag");
-  if (!etag) {
-    throw new Error("Private storage did not confirm an upload part.");
-  }
-  return etag;
-}
-
 export async function loadOfflineVideoDrafts(): Promise<
   readonly OfflineVideoDraft[]
 > {

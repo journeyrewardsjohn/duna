@@ -19,10 +19,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/vision-improvement",
-      "schedule": "*/10 * * * *"
-    },
-    {
       "path": "/api/cron/sand?mode=vw-live",
       "schedule": "* * * * *"
     },

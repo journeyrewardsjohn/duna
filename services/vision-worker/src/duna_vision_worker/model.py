@@ -11,14 +11,7 @@ import onnxruntime as ort
 from pydantic import BaseModel, Field, model_validator
 
 from .quality import sha256_bundle
-from .schemas import (
-    AnalysisOutput,
-    ContactQuality,
-    CourtMap,
-    CourtPoint,
-    RawObservation,
-    TrajectorySummary,
-)
+from .schemas import AnalysisOutput, CourtMap, RawObservation
 
 
 class TensorSpec(BaseModel):
@@ -469,25 +462,12 @@ class OnnxVolleyballAnalyzer:
                             )
                         )
                 else:
-                    contact_point = (
-                        CourtPoint(xMeters=point[0], yMeters=point[1], observed="visible")
-                        if point
-                        and 0 <= point[0] <= court.widthMeters
-                        and 0 <= point[1] <= court.lengthMeters
-                        else None
-                    )
                     observations.append(
                         RawObservation(
                             eventType="ball-contact",
                             timeUs=time_us,
                             confidence=confidence,
                             contactKind=label,
-                            contactPoint=contact_point,
-                            contactQuality=ContactQuality(
-                                temporalConfidence=confidence,
-                                visibleFrames=1 if contact_point else 0,
-                                evidence="visible-2d" if contact_point else "unavailable",
-                            ),
                         )
                     )
                 last_event_us = time_us
@@ -537,20 +517,6 @@ class OnnxVolleyballAnalyzer:
                     timeUs=time_us,
                     confidence=min(0.69, 0.5 + normalized_change),
                     contactKind="free-ball",
-                    contactPoint=CourtPoint(
-                        xMeters=current[0], yMeters=current[1], observed="visible"
-                    ),
-                    contactQuality=ContactQuality(
-                        temporalConfidence=min(0.69, 0.5 + normalized_change),
-                        visibleFrames=3,
-                        evidence="visible-2d",
-                    ),
-                    trajectory=TrajectorySummary(
-                        # Three adjacent 2D samples establish a direction
-                        # change only, not a flight endpoint/time or 3D height.
-                        observedPoints=3,
-                        evidence="partial-2d",
-                    ),
                 )
             )
             last_event_us = time_us
