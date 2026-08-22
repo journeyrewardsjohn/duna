@@ -7,6 +7,8 @@ import {
   videoPlaybackSchema,
   videoAnalysisMarkerInputSchema,
   videoAnalysisWorkerResultSchema,
+  videoPerformanceReviewSchema,
+  visionImprovementProposalSchema,
   videoAssociationOptionSchema,
   videoUsageSchema,
   visionSessionSettingsSchema,
@@ -17,11 +19,23 @@ import {
   isMuxLivePlanUnavailable,
   isMuxSignedPlaybackConfigured,
   isMuxVideoConfigured,
+  isR2MultipartUploadAlreadyAbsent,
   isR2VideoConfigured,
   muxDataEnvironmentKey,
   R2_VIDEO_PART_SIZE_BYTES,
 } from "./video-providers";
-import { normalizeStoredCourtCalibration } from "./video-service";
+import {
+  normalizeStoredCourtCalibration,
+  validateAuthoritativeResumableVideoUploadParts,
+  validateAuthoritativeVideoUploadParts,
+} from "./video-service";
+import {
+  assertAdultOwnerPerformanceReviewRequest,
+  buildVisionImprovementEvidence,
+  isAdultLearningConsentedVisionRun,
+  isVideoPerformanceReviewGatewayConfigured,
+  resolveVideoPerformanceReviewModel,
+} from "./video-analysis-service";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -168,6 +182,161 @@ describe("Duna Video contracts", () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it("queues governed improvement evidence only for adult learning-consented completed analyses", () => {
+    expect(
+      isAdultLearningConsentedVisionRun({
+        analysisStatus: "ready",
+        visionLearningConsent: true,
+        ageBand: "adult",
+      }),
+    ).toBe(true);
+    expect(
+      isAdultLearningConsentedVisionRun({
+        analysisStatus: "ready",
+        visionLearningConsent: false,
+        ageBand: "adult",
+      }),
+    ).toBe(false);
+    expect(
+      isAdultLearningConsentedVisionRun({
+        analysisStatus: "needs-review",
+        visionLearningConsent: true,
+        ageBand: "teen",
+      }),
+    ).toBe(false);
+    expect(
+      isAdultLearningConsentedVisionRun({
+        analysisStatus: "failed",
+        visionLearningConsent: true,
+        ageBand: "adult",
+      }),
+    ).toBe(false);
+
+    const evidence = buildVisionImprovementEvidence({
+      run: {
+        pipelineVersion: "duna-vision-event-graph-v1",
+        modelVersion: "duna-ball-v1",
+        coverage: {
+          sampledDurationUs: 12_000_000,
+          usableDurationUs: 7_000_000,
+          sourceVideoAvailable: true,
+          scoreTimelineAvailable: false,
+        },
+        qualityGate: null,
+        failureCode: null,
+      },
+      result: videoAnalysisWorkerResultSchema.parse({
+        runId: crypto.randomUUID(),
+        status: "needs-review",
+        modelVersion: "duna-ball-v1",
+        coverage: {
+          sampledDurationUs: 12_000_000,
+          usableDurationUs: 7_000_000,
+          sourceVideoAvailable: true,
+          scoreTimelineAvailable: false,
+        },
+        events: [
+          {
+            id: crypto.randomUUID(),
+            eventType: "ball-contact",
+            sessionTimeUs: 1_000_000,
+            confidence: 0.42,
+            payload: {
+              contactKind: "attack",
+              contactUncertaintyMeters: 2.2,
+              rallySequenceComplete: false,
+              contactQuality: {
+                evidenceVersion: "duna-contact-evidence-v1",
+                evidence: "unavailable",
+              },
+              trajectory: {
+                evidenceVersion: "duna-trajectory-2d-v1",
+                coordinateFrame: "canonical-court-2d",
+                observedPoints: 0,
+                evidence: "unavailable",
+              },
+              ruleFindings: [
+                {
+                  ruleVersion: "beach-volleyball-2s-v1",
+                  ruleId: "three-team-contacts",
+                  verdict: "unavailable",
+                  evidence: "Rally sequence is not complete.",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    expect(evidence).toMatchObject({
+      allowedUse: "questions-and-evaluation-design-only",
+      derivedMetrics: {
+        unavailableContactEvidenceCount: 1,
+        uncertainContactCount: 1,
+        incompleteRallySequenceCount: 1,
+        unavailableTrajectoryCount: 1,
+        unavailableRuleFindingCount: 1,
+      },
+    });
+    expect(evidence.prohibitedActions).toContain("automatic-promotion");
+    expect(evidence).not.toHaveProperty("videoId");
+    expect(evidence).not.toHaveProperty("videoUrl");
+  });
+
+  it("keeps Vision improvement proposal output bounded to research drafts", () => {
+    expect(
+      visionImprovementProposalSchema.parse({
+        id: crypto.randomUUID(),
+        videoId: crypto.randomUUID(),
+        analysisRunId: crypto.randomUUID(),
+        status: "succeeded",
+        provider: "vercel-ai-gateway",
+        model: "openai/gpt-5.6-sol",
+        reasoningEffort: "xhigh",
+        promptVersion: "duna-vision-improvement-proposal-v1",
+        schemaVersion: "duna-vision-improvement-proposal-schema-v1",
+        evidenceSha256: "a".repeat(64),
+        proposals: [
+          {
+            question: "Which occlusion slice most affects contact timing?",
+            hypothesis:
+              "Partial two-dimensional evidence increases timing uncertainty.",
+            requiredLabels: ["contact frame", "occlusion state"],
+            evaluationSlices: ["partial-2d contacts"],
+            physicsOrRulesGap: "No single-camera 3D height is available.",
+            evidence: ["1 unavailable contact-quality observation"],
+          },
+        ],
+        reviews: [
+          {
+            id: crypto.randomUUID(),
+            reviewerPersonId: crypto.randomUUID(),
+            reviewerName: "Vision Steward",
+            decision: "approved",
+            notes: "Approved as an evaluation-design question only.",
+            reviewedAt: "2026-08-21T00:05:00.000Z",
+          },
+          {
+            id: crypto.randomUUID(),
+            reviewerPersonId: crypto.randomUUID(),
+            reviewerName: "Second Vision Steward",
+            decision: "rejected",
+            notes:
+              "Rejected for this slice; no training or promotion occurred.",
+            reviewedAt: "2026-08-21T00:06:00.000Z",
+          },
+        ],
+        createdAt: "2026-08-21T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      reviews: [
+        { decision: "approved", reviewerName: "Vision Steward" },
+        { decision: "rejected", reviewerName: "Second Vision Steward" },
+      ],
+    });
   });
 
   it("requires benchmark provenance before a worker can declare production readiness", () => {
@@ -517,7 +686,110 @@ describe("Duna Video provider readiness", () => {
     vi.stubEnv("CF_ACCESS_KEY_ID", "r2-access-key");
     vi.stubEnv("CE_SECRET_ACCESS_KEY", "r2-secret-key");
     expect(isR2VideoConfigured()).toBe(true);
-    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(16 * 1024 * 1024);
+    expect(R2_VIDEO_PART_SIZE_BYTES).toBe(64 * 1024 * 1024);
+  });
+
+  it("requires an exact ordered R2 part list before a video can complete", () => {
+    const bytes = 64 * 1024 * 1024 + 13;
+    const partSizeBytes = 64 * 1024 * 1024;
+    expect(
+      validateAuthoritativeVideoUploadParts({
+        videoBytes: bytes,
+        partSizeBytes,
+        parts: [
+          { partNumber: 1, etag: '"one"', sizeBytes: partSizeBytes },
+          { partNumber: 2, etag: '"two"', sizeBytes: 13 },
+        ],
+      }),
+    ).toHaveLength(2);
+    expect(() =>
+      validateAuthoritativeVideoUploadParts({
+        videoBytes: bytes,
+        partSizeBytes,
+        parts: [{ partNumber: 1, etag: '"one"', sizeBytes: partSizeBytes }],
+      }),
+    ).toThrow("Every video part must finish");
+  });
+
+  it("only treats a provider-confirmed missing multipart upload as an idempotent abort", () => {
+    expect(
+      isR2MultipartUploadAlreadyAbsent({
+        name: "NoSuchUpload",
+        $metadata: { httpStatusCode: 404 },
+      }),
+    ).toBe(true);
+    expect(
+      isR2MultipartUploadAlreadyAbsent({
+        name: "TimeoutError",
+        $metadata: { httpStatusCode: 504 },
+      }),
+    ).toBe(false);
+  });
+
+  it("resumes from R2 ListParts when a client acknowledgement was lost", () => {
+    const partSizeBytes = 64 * 1024 * 1024;
+    // There is intentionally no client/DB record for part 1 here. R2's
+    // ListParts response is sufficient to skip it on foreground resume.
+    const resumed = validateAuthoritativeResumableVideoUploadParts({
+      videoBytes: partSizeBytes * 2,
+      partSizeBytes,
+      parts: [
+        { partNumber: 1, etag: '"r2-confirmed"', sizeBytes: partSizeBytes },
+      ],
+    });
+    expect(resumed.map((part) => part.partNumber)).toEqual([1]);
+    expect(() =>
+      validateAuthoritativeVideoUploadParts({
+        videoBytes: partSizeBytes * 2,
+        partSizeBytes,
+        parts: resumed,
+      }),
+    ).toThrow("Every video part must finish");
+  });
+
+  it("keeps governed Sol review model selection and evidence-only result schema explicit", () => {
+    expect(resolveVideoPerformanceReviewModel()).toBe("openai/gpt-5.6-sol");
+    vi.stubEnv("DUNA_VIDEO_REVIEW_MODEL", "openai/test-review-model");
+    expect(resolveVideoPerformanceReviewModel()).toBe(
+      "openai/test-review-model",
+    );
+    expect(
+      videoPerformanceReviewSchema.parse({
+        id: crypto.randomUUID(),
+        videoId: crypto.randomUUID(),
+        analysisRunId: crypto.randomUUID(),
+        status: "unavailable",
+        provider: "vercel-ai-gateway",
+        model: "openai/gpt-5.6-sol",
+        reasoningEffort: "xhigh",
+        promptVersion: "duna-video-performance-review-v1",
+        schemaVersion: "duna-video-performance-review-schema-v1",
+        evidenceSha256: "a".repeat(64),
+        recommendations: [],
+        fallbackReason: "Vercel AI Gateway is not configured.",
+        createdAt: "2026-08-21T00:00:00.000Z",
+      }),
+    ).toMatchObject({ status: "unavailable", recommendations: [] });
+  });
+
+  it("fails closed for a non-owner, a minor, or a missing review gateway", () => {
+    const adult = { personId: crypto.randomUUID(), ageBand: "adult" as const };
+    expect(() =>
+      assertAdultOwnerPerformanceReviewRequest({
+        actor: adult,
+        ownerPersonId: crypto.randomUUID(),
+      }),
+    ).toThrow("Only the video owner");
+    expect(() =>
+      assertAdultOwnerPerformanceReviewRequest({
+        actor: { ...adult, ageBand: "teen" },
+        ownerPersonId: adult.personId,
+      }),
+    ).toThrow("An adult video owner");
+    vi.stubEnv("VERCEL_AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "");
+    expect(isVideoPerformanceReviewGatewayConfigured()).toBe(false);
   });
 
   it("places Duna passthrough on the live stream for inherited asset metadata", () => {
