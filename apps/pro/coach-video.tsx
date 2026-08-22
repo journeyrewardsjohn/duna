@@ -1,9 +1,19 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
+import { Directory, File, Paths } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  cancelFileBackedUpload,
+  enqueueFileBackedParts,
+  getCompletedFileBackedParts,
+  isBackgroundUploadAvailable,
+} from "@duna/expo-background-upload";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,6 +37,111 @@ type PreparedVideo = {
   readonly durationSeconds: number;
 };
 
+type ProVideoUploadDraft = {
+  readonly id: string;
+  readonly prepared: PreparedVideo;
+  readonly title: string;
+  readonly category: "practice" | "event";
+  readonly eventId?: string;
+  readonly beginIdempotencyKey: string;
+  readonly completeIdempotencyKey: string;
+  readonly cancelIdempotencyKey: string;
+  readonly upload?: {
+    readonly videoId: string;
+    readonly uploadId: string;
+  };
+};
+
+const proVideoDraftKey = "duna.pro.coach-video.upload.v1";
+const proVideoDirectory = new Directory(Paths.document, "duna-pro-coach-video");
+
+function isProVideoUploadDraft(value: unknown): value is ProVideoUploadDraft {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ProVideoUploadDraft>;
+  return Boolean(
+    typeof candidate.id === "string" &&
+    candidate.prepared &&
+    typeof candidate.prepared.uri === "string" &&
+    typeof candidate.prepared.bytes === "number" &&
+    typeof candidate.prepared.durationSeconds === "number" &&
+    typeof candidate.title === "string" &&
+    (candidate.category === "practice" || candidate.category === "event") &&
+    typeof candidate.beginIdempotencyKey === "string" &&
+    typeof candidate.completeIdempotencyKey === "string" &&
+    typeof candidate.cancelIdempotencyKey === "string",
+  );
+}
+
+async function loadProVideoUploadDraft(): Promise<
+  ProVideoUploadDraft | undefined
+> {
+  try {
+    const stored = await AsyncStorage.getItem(proVideoDraftKey);
+    if (!stored) return undefined;
+    const parsed = JSON.parse(stored) as unknown;
+    return isProVideoUploadDraft(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveProVideoUploadDraft(
+  draft: ProVideoUploadDraft,
+): Promise<void> {
+  await AsyncStorage.setItem(proVideoDraftKey, JSON.stringify(draft));
+}
+
+async function removeProVideoUploadDraft(
+  draft: ProVideoUploadDraft,
+): Promise<void> {
+  await AsyncStorage.removeItem(proVideoDraftKey);
+  const file = new File(draft.prepared.uri);
+  if (file.exists) file.delete();
+}
+
+async function retainProVideo(input: {
+  readonly id: string;
+  readonly sourceUri: string;
+  readonly name: string;
+}): Promise<string> {
+  proVideoDirectory.create({ idempotent: true, intermediates: true });
+  const extension = input.name.split(".").at(-1) || "mp4";
+  const destination = new File(proVideoDirectory, `${input.id}.${extension}`);
+  const source = new File(input.sourceUri);
+  if (!source.exists) {
+    throw new Error("Duna Pro could not retain the selected coaching video.");
+  }
+  if (destination.exists) destination.delete();
+  await source.copy(destination);
+  return destination.uri;
+}
+
+/** Android/web keep a foreground, file-backed range upload. The iOS native
+ * module owns durable background scheduling; this fallback makes no claim
+ * that Android will continue after the app is suspended. */
+async function uploadForegroundFileRange(input: {
+  readonly fileUri: string;
+  readonly uploadUrl: string;
+  readonly offset: number;
+  readonly length: number;
+  readonly contentType: string;
+}): Promise<string> {
+  const source = new File(input.fileUri);
+  const response = await fetch(input.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": input.contentType },
+    body: source.slice(
+      input.offset,
+      input.offset + input.length,
+      input.contentType,
+    ),
+  });
+  if (!response.ok) throw new Error("Private storage rejected an upload part.");
+  const etag = response.headers.get("etag");
+  if (!etag) throw new Error("Private storage did not confirm an upload part.");
+  return etag;
+}
+
 function duration(value: number | undefined) {
   if (!value) return "Processing";
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
@@ -45,8 +160,10 @@ export function CoachVideoScreen({
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [durableUpload, setDurableUpload] = useState<ProVideoUploadDraft>();
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState<string>();
+  const uploadFlight = useRef(false);
   const events = (workspace?.sessions ?? []).filter((session) =>
     ["tournament", "league", "clinic", "open-play", "lesson"].includes(
       session.kind,
@@ -75,29 +192,75 @@ export function CoachVideoScreen({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let active = true;
+    void loadProVideoUploadDraft().then((draft) => {
+      if (!active || !draft) return;
+      const source = new File(draft.prepared.uri);
+      if (!source.exists) {
+        void AsyncStorage.removeItem(proVideoDraftKey);
+        setNotice(
+          "The saved coaching-video source is no longer available. Please choose it again.",
+        );
+        return;
+      }
+      setDurableUpload(draft);
+      setPrepared(draft.prepared);
+      setSelectedEventId(draft.eventId);
+      setNotice(
+        "Your coaching video is safely retained on this device. Resume its upload when you are ready.",
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const prepare = async (result: ImagePicker.ImagePickerResult) => {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     if (!asset.uri) return;
-    const file = await fetch(asset.uri).then(async (response) => {
-      if (!response.ok)
-        throw new Error("Duna Pro could not prepare that video file.");
-      return response.blob();
-    });
+    if (!asset.fileSize || asset.fileSize <= 0) {
+      throw new Error(
+        "Duna Pro could not read the selected video size. Please choose the original file again.",
+      );
+    }
     const mimeType =
       asset.mimeType === "video/quicktime" ? "video/quicktime" : "video/mp4";
-    setPrepared({
-      uri: asset.uri,
-      name:
-        asset.fileName ??
-        `duna-coach-video-${Date.now()}.${mimeType === "video/quicktime" ? "mov" : "mp4"}`,
+    if (durableUpload) {
+      throw new Error(
+        "Finish or explicitly cancel the saved coaching-video upload before choosing another video.",
+      );
+    }
+    const id = Crypto.randomUUID();
+    const name =
+      asset.fileName ??
+      `duna-coach-video-${Date.now()}.${mimeType === "video/quicktime" ? "mov" : "mp4"}`;
+    const retained: PreparedVideo = {
+      uri: await retainProVideo({ id, sourceUri: asset.uri, name }),
+      name,
       mimeType,
-      bytes: asset.fileSize ?? file.size,
+      bytes: asset.fileSize,
       durationSeconds: Math.max(
         1,
         Math.ceil((asset.duration ?? 1_000) / 1_000),
       ),
-    });
+    };
+    const draft: ProVideoUploadDraft = {
+      id,
+      prepared: retained,
+      title: selectedEvent
+        ? `${selectedEvent.title} coaching video`
+        : "Coach recording",
+      category: selectedEvent ? "event" : "practice",
+      eventId: selectedEvent?.id,
+      beginIdempotencyKey: Crypto.randomUUID(),
+      completeIdempotencyKey: Crypto.randomUUID(),
+      cancelIdempotencyKey: Crypto.randomUUID(),
+    };
+    await saveProVideoUploadDraft(draft);
+    setDurableUpload(draft);
+    setPrepared(retained);
     setNotice(undefined);
   };
 
@@ -143,71 +306,128 @@ export function CoachVideoScreen({
   };
 
   const upload = async () => {
-    if (!client || !prepared) return;
+    if (!client || !durableUpload || uploadFlight.current) return;
+    uploadFlight.current = true;
     setUploading(true);
     setProgress(0);
     setNotice(undefined);
-    let videoId: string | undefined;
     try {
-      const blob = await fetch(prepared.uri).then(async (response) => {
-        if (!response.ok)
-          throw new Error(
-            "The selected video is no longer available on this device.",
-          );
-        return response.blob();
-      });
-      const session = await client.player.beginVideoUpload.mutate({
-        title: selectedEvent
-          ? `${selectedEvent.title} coaching video`
-          : "Coach recording",
-        category: selectedEvent ? "event" : "practice",
-        ...(selectedEvent ? { eventId: selectedEvent.id } : {}),
-        recordingVisibility: "private",
-        publishedToProfile: false,
-        hasAudio: true,
-        visionLearningConsent: false,
-        originalFileName: prepared.name,
-        mimeType: prepared.mimeType,
-        bytes: blob.size,
-        durationSeconds: prepared.durationSeconds,
-        idempotencyKey: Crypto.randomUUID(),
-      });
-      videoId = session.videoId;
-      for (let part = 1; part <= session.totalParts; part++) {
-        const offset = (part - 1) * session.partSizeBytes;
-        const piece = blob.slice(
-          offset,
-          Math.min(blob.size, offset + session.partSizeBytes),
-          prepared.mimeType,
-        );
-        const signed = await client.player.videoUploadPartUrl.mutate({
-          videoId: session.videoId,
-          partNumber: part,
-        });
-        const response = await fetch(signed.url, {
-          method: "PUT",
-          headers: { "content-type": prepared.mimeType },
-          body: piece,
-        });
-        if (!response.ok)
-          throw new Error(
-            `Upload failed on part ${part}. Your original video is still on this device.`,
-          );
-        const etag = response.headers.get("etag");
-        if (!etag)
-          throw new Error("Video storage did not confirm the uploaded part.");
+      let draft = durableUpload;
+      const session = draft.upload
+        ? await client.player.resumeVideoUpload.query({
+            videoId: draft.upload.videoId,
+          })
+        : await client.player.beginVideoUpload.mutate({
+            title: draft.title,
+            category: draft.category,
+            ...(draft.eventId ? { eventId: draft.eventId } : {}),
+            recordingVisibility: "private",
+            publishedToProfile: false,
+            hasAudio: true,
+            visionLearningConsent: false,
+            originalFileName: draft.prepared.name,
+            mimeType: draft.prepared.mimeType,
+            bytes: draft.prepared.bytes,
+            durationSeconds: draft.prepared.durationSeconds,
+            idempotencyKey: draft.beginIdempotencyKey,
+          });
+      if (!draft.upload) {
+        draft = {
+          ...draft,
+          upload: { videoId: session.videoId, uploadId: session.uploadId },
+        };
+        await saveProVideoUploadDraft(draft);
+        setDurableUpload(draft);
+      }
+      // iOS persists staged ranges and completed ETags. Reconcile anything
+      // completed while JavaScript was suspended before scheduling new parts.
+      const completed = await getCompletedFileBackedParts(session.uploadId);
+      for (const part of completed) {
         await client.player.recordVideoUploadPart.mutate({
           videoId: session.videoId,
-          partNumber: part,
-          etag,
-          sizeBytes: piece.size,
+          partNumber: part.partNumber,
+          etag: part.etag,
+          sizeBytes: part.sizeBytes,
         });
-        setProgress(part / session.totalParts);
+      }
+      const resumed = await client.player.resumeVideoUpload.query({
+        videoId: session.videoId,
+      });
+      const uploadedPartNumbers = new Set(resumed.uploadedParts);
+      const missingPartNumbers = Array.from(
+        { length: session.totalParts },
+        (_, index) => index + 1,
+      ).filter((partNumber) => !uploadedPartNumbers.has(partNumber));
+      setProgress(uploadedPartNumbers.size / session.totalParts);
+      if (
+        missingPartNumbers.length > 0 &&
+        Platform.OS === "ios" &&
+        isBackgroundUploadAvailable()
+      ) {
+        const parts = await Promise.all(
+          missingPartNumbers.map(async (partNumber) => {
+            const offset = (partNumber - 1) * session.partSizeBytes;
+            const signed = await client.player.videoUploadPartUrl.mutate({
+              videoId: session.videoId,
+              partNumber,
+            });
+            return {
+              partNumber,
+              uploadUrl: signed.url,
+              offset,
+              length: Math.min(
+                session.partSizeBytes,
+                draft.prepared.bytes - offset,
+              ),
+              contentType: draft.prepared.mimeType,
+            };
+          }),
+        );
+        await enqueueFileBackedParts({
+          uploadId: session.uploadId,
+          fileUri: draft.prepared.uri,
+          allowCellular: false,
+          parts,
+        });
+        setNotice(
+          "Every remaining part is queued with iOS. Reopen Duna Pro to reconcile completion.",
+        );
+        return;
+      }
+      // Android and web intentionally use a foreground, file-backed fallback.
+      // It remains retryable but does not claim iOS-style background durability.
+      for (const partNumber of missingPartNumbers) {
+        const offset = (partNumber - 1) * session.partSizeBytes;
+        const signed = await client.player.videoUploadPartUrl.mutate({
+          videoId: session.videoId,
+          partNumber,
+        });
+        const length = Math.min(
+          session.partSizeBytes,
+          draft.prepared.bytes - offset,
+        );
+        const etag = await uploadForegroundFileRange({
+          fileUri: draft.prepared.uri,
+          uploadUrl: signed.url,
+          offset,
+          length,
+          contentType: draft.prepared.mimeType,
+        });
+        await client.player.recordVideoUploadPart.mutate({
+          videoId: session.videoId,
+          partNumber,
+          etag,
+          sizeBytes: length,
+        });
+        setProgress(partNumber / session.totalParts);
       }
       await client.player.completeVideoUpload.mutate({
         videoId: session.videoId,
-        idempotencyKey: Crypto.randomUUID(),
+        idempotencyKey: draft.completeIdempotencyKey,
       });
+      await cancelFileBackedUpload(session.uploadId).catch(() => undefined);
+      await removeProVideoUploadDraft(draft);
+      setDurableUpload(undefined);
       setPrepared(undefined);
       setNotice(
         "Private coaching video saved. It is not published to any player profile.",
@@ -215,21 +435,62 @@ export function CoachVideoScreen({
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (reason) {
-      if (videoId)
-        void client.player.abortVideoUpload.mutate({
-          videoId,
-          idempotencyKey: Crypto.randomUUID(),
-        });
       setNotice(
         reason instanceof Error
           ? reason.message
-          : "Video upload could not finish.",
+          : "Video upload paused safely. It will reconcile when you retry.",
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
+      uploadFlight.current = false;
       setUploading(false);
     }
   };
+
+  const cancelUpload = async () => {
+    if (!durableUpload || uploading || uploadFlight.current) return;
+    uploadFlight.current = true;
+    setUploading(true);
+    try {
+      if (durableUpload.upload) {
+        if (!client) {
+          throw new Error(
+            "Reconnect Duna Pro before cancelling an active cloud upload.",
+          );
+        }
+        await client.player.abortVideoUpload.mutate({
+          videoId: durableUpload.upload.videoId,
+          idempotencyKey: durableUpload.cancelIdempotencyKey,
+        });
+        await cancelFileBackedUpload(durableUpload.upload.uploadId).catch(
+          () => undefined,
+        );
+      }
+      await removeProVideoUploadDraft(durableUpload);
+      setDurableUpload(undefined);
+      setPrepared(undefined);
+      setNotice(
+        "Coaching-video upload cancelled and its retained local copy removed.",
+      );
+    } catch (reason) {
+      setNotice(
+        reason instanceof Error
+          ? reason.message
+          : "Duna Pro could not cancel this upload.",
+      );
+    } finally {
+      uploadFlight.current = false;
+      setUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!durableUpload?.upload || !client) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void upload();
+    });
+    return () => subscription.remove();
+  }, [client, durableUpload?.upload?.videoId]);
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
@@ -266,6 +527,12 @@ export function CoachVideoScreen({
             <Text numberOfLines={1} style={styles.readyMeta}>
               {prepared.name} · {Math.round(prepared.bytes / 1_048_576)} MB
             </Text>
+            {Platform.OS !== "ios" && (
+              <Text style={styles.readyMeta}>
+                Foreground upload only on this device. Keep Duna Pro open until
+                it finishes; leaving the app pauses safely for retry.
+              </Text>
+            )}
             <Pressable
               disabled={uploading}
               onPress={upload}
@@ -279,12 +546,10 @@ export function CoachVideoScreen({
             </Pressable>
             <Pressable
               disabled={uploading}
-              onPress={() => setPrepared(undefined)}
+              onPress={() => void cancelUpload()}
               style={styles.textButton}
             >
-              <Text style={styles.textButtonText}>
-                Choose a different video
-              </Text>
+              <Text style={styles.textButtonText}>Cancel saved upload</Text>
             </Pressable>
           </View>
         ) : (

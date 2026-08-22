@@ -111,6 +111,26 @@ credential with `AI_GATEWAY_PROFILE_MODEL` and
 `AI_GATEWAY_SPORTSWRITER_MODEL`. Duna does not call an OpenAI provider endpoint
 directly.
 
+Adult owner-requested video performance reviews use the same Gateway-only
+credential and `DUNA_VIDEO_REVIEW_MODEL` (default `openai/gpt-5.6-sol`). The
+request contains derived Vision evidence only, with a privacy/safety identifier
+and structured output. It never sends raw video, starts training, calibrates a
+model, or promotes a model. Each run persists its evidence hash, prompt/schema
+version, provider metadata, status, and draft recommendations; a missing or
+failed Gateway produces an audited unavailable review rather than fabricated
+advice.
+
+Learning-consented adult Vision runs independently enqueue one governed
+improvement-proposal record after `ready` or `needs-review`. The HQ cron at
+`/api/cron/vision-improvement` processes at most ten queued records per run
+through the same Gateway model and `xhigh` reasoning. It receives only derived
+metrics, uncertainty, errors, and rule gaps; it persists questions,
+hypotheses, label/evaluation needs, provenance, and an evidence hash. It never
+receives raw video or performs training, calibration, shadowing, or promotion.
+Super Admins can inspect the queue through the `visionImprovementProposals`
+API. A stale processor claim is requeued, transient Gateway failures retry up
+to three times, and a missing or exhausted Gateway is recorded as unavailable.
+
 Event and match broadcast options, including match overrides, are audited
 super-admin changes. Seasonal AVP team mappings and date-bounded substitutions
 are also audited; approved historical matches are not silently rewritten.
