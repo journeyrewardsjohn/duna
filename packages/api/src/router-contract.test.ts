@@ -3,6 +3,18 @@ import { createApiContext, createDemoActor } from "./context";
 import { createCaller } from "./router";
 
 describe("tRPC contract surface", () => {
+  it("keeps the demo player dashboard inside its output contract", async () => {
+    const caller = createCaller(
+      createApiContext({ requestId: crypto.randomUUID() }),
+    );
+
+    await expect(caller.player.dashboard()).resolves.toMatchObject({
+      feed: expect.arrayContaining([
+        expect.objectContaining({ id: expect.any(String) }),
+      ]),
+    });
+  });
+
   it("returns typed public discovery and pricing contracts", async () => {
     const caller = createCaller(
       createApiContext({ requestId: crypto.randomUUID() }),

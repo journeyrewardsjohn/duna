@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { organizationMoneyWorkspaceSchema } from "./contracts";
 import {
+  buildStripeCaptureAmounts,
   calculateFundAvailability,
   loadDemoOrganizationMoneyWorkspace,
 } from "./money-service";
@@ -52,5 +53,33 @@ describe("organization fund availability", () => {
     expect(
       workspace.refundPolicies.filter((policy) => policy.isDefault),
     ).toHaveLength(1);
+  });
+
+  it("builds an exact balanced Stripe capture from gross, fee, and net", () => {
+    expect(
+      buildStripeCaptureAmounts({
+        grossMinor: 4_000,
+        feeMinor: 355,
+        netMinor: 3_645,
+        taxMinor: 0,
+      }),
+    ).toEqual({
+      grossMinor: 4_000,
+      feeMinor: 355,
+      netMinor: 3_645,
+      taxMinor: 0,
+      revenueMinor: 4_000,
+    });
+  });
+
+  it("fails closed when Stripe gross cannot be reconciled", () => {
+    expect(() =>
+      buildStripeCaptureAmounts({
+        grossMinor: 4_000,
+        feeMinor: 355,
+        netMinor: 3_644,
+        taxMinor: 0,
+      }),
+    ).toThrow("gross does not equal fee plus net");
   });
 });

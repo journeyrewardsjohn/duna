@@ -644,7 +644,7 @@ export const demoAuditEvents: readonly AuditEvent[] = [
 
 export const demoFeed = [
   {
-    id: "feed-1",
+    id: "10000000-0000-4000-8000-000000000401",
     eyebrow: "RATING MOMENT",
     title: "Mara + Theo closed it in three",
     body: "A 15–12 finish against a higher-rated pair moved Mara to 4.62.",
@@ -652,7 +652,7 @@ export const demoFeed = [
     accent: "aqua",
   },
   {
-    id: "feed-2",
+    id: "10000000-0000-4000-8000-000000000402",
     eyebrow: "PURSE PAID",
     title: "$1,500 landed before sunset",
     body: "The Summer Open purse reached eight player wallets within 92 seconds of bracket close.",
@@ -660,7 +660,7 @@ export const demoFeed = [
     accent: "flare",
   },
   {
-    id: "feed-3",
+    id: "10000000-0000-4000-8000-000000000403",
     eyebrow: "NEARBY",
     title: "Two spots at Golden Hour 4s",
     body: "Theo is hosting a 4.0–5.0 run tonight. Your regular partner is already in.",

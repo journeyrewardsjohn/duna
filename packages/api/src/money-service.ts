@@ -5,6 +5,8 @@ import {
   eventBlueprints,
   getDatabase,
   getTransactionalDatabase,
+  ledgerEntries,
+  ledgerJournals,
   orderItems,
   orders,
   organizationMoneySettings,
@@ -21,6 +23,7 @@ import {
   ticketTypes,
   tickets,
 } from "@duna/db";
+import { assertBalancedJournal, type LedgerPosting } from "@duna/core";
 import {
   and,
   asc,
@@ -34,6 +37,7 @@ import {
 } from "drizzle-orm";
 import type { OrganizationMoneyWorkspace } from "./contracts";
 import type { ApiActor } from "./context";
+import { ensureLedgerAccount } from "./catalog-service";
 import {
   configureConnectedAccountMoney,
   createConnectedAccountPayout,
@@ -657,8 +661,274 @@ export async function recordStripePaymentLineage(input: {
         ...input.lineage,
         createdAt: input.now,
       })
-      .onConflictDoNothing(),
+      .onConflictDoUpdate({
+        target: stripeTransactionLinks.paymentId,
+        set: {
+          stripePaymentIntentId: input.lineage.stripePaymentIntentId,
+          stripeChargeId: input.lineage.stripeChargeId,
+          stripeTransferId: input.lineage.stripeTransferId,
+          stripeDestinationPaymentId: input.lineage.stripeDestinationPaymentId,
+          stripeBalanceTransactionId: input.lineage.stripeBalanceTransactionId,
+          stripeApplicationFeeId: input.lineage.stripeApplicationFeeId,
+          grossMinor: input.lineage.grossMinor,
+          feeMinor: input.lineage.feeMinor,
+          netMinor: input.lineage.netMinor,
+          currency: input.lineage.currency,
+          availableAt: input.lineage.availableAt,
+          livemode: input.lineage.livemode,
+        },
+      }),
   ]);
+}
+
+function stripeLineageFromStored(
+  stored: typeof stripeTransactionLinks.$inferSelect,
+): StripePaymentLineage {
+  return {
+    stripePaymentIntentId: stored.stripePaymentIntentId,
+    stripeChargeId: stored.stripeChargeId,
+    stripeTransferId: stored.stripeTransferId ?? undefined,
+    stripeDestinationPaymentId: stored.stripeDestinationPaymentId ?? undefined,
+    stripeBalanceTransactionId: stored.stripeBalanceTransactionId ?? undefined,
+    stripeApplicationFeeId: stored.stripeApplicationFeeId ?? undefined,
+    grossMinor: stored.grossMinor,
+    feeMinor: stored.feeMinor,
+    netMinor: stored.netMinor,
+    currency: stored.currency,
+    availableAt: stored.availableAt ?? undefined,
+    livemode: stored.livemode,
+  };
+}
+
+export function buildStripeCaptureAmounts(input: {
+  readonly grossMinor: number;
+  readonly feeMinor: number;
+  readonly netMinor: number;
+  readonly taxMinor: number;
+}): {
+  readonly grossMinor: number;
+  readonly feeMinor: number;
+  readonly netMinor: number;
+  readonly taxMinor: number;
+  readonly revenueMinor: number;
+} {
+  for (const amount of [
+    input.grossMinor,
+    input.feeMinor,
+    input.netMinor,
+    input.taxMinor,
+  ]) {
+    if (!Number.isSafeInteger(amount) || amount < 0) {
+      throw new Error("Stripe capture amounts must be non-negative cents.");
+    }
+  }
+  if (input.grossMinor <= 0) {
+    throw new Error("Stripe capture gross must be positive.");
+  }
+  if (input.feeMinor + input.netMinor !== input.grossMinor) {
+    throw new Error("Stripe capture gross does not equal fee plus net.");
+  }
+  if (input.taxMinor > input.grossMinor) {
+    throw new Error("Stripe capture tax cannot exceed gross.");
+  }
+  return {
+    ...input,
+    revenueMinor: input.grossMinor - input.taxMinor,
+  };
+}
+
+async function postGenericPaymentCaptureJournal(input: {
+  readonly order: typeof orders.$inferSelect;
+  readonly payment: typeof payments.$inferSelect;
+  readonly lineage: StripePaymentLineage;
+  readonly now: Date;
+}): Promise<void> {
+  if (!input.order.organizationId) return;
+  const database = getDatabase();
+  const idempotencyKey = `payment:${input.payment.id}:stripe-capture`;
+  const [existing, legacyCatalogJournal] = await Promise.all([
+    database.query.ledgerJournals.findFirst({
+      where: and(
+        eq(ledgerJournals.organizationId, input.order.organizationId),
+        eq(ledgerJournals.sourceType, "payment-capture"),
+        eq(ledgerJournals.sourceId, input.payment.id),
+      ),
+    }),
+    database.query.ledgerJournals.findFirst({
+      where: and(
+        eq(ledgerJournals.organizationId, input.order.organizationId),
+        eq(
+          ledgerJournals.idempotencyKey,
+          `catalog-order:${input.order.id}:money`,
+        ),
+      ),
+    }),
+  ]);
+  if (existing || legacyCatalogJournal) return;
+
+  const captureRatio = Math.min(
+    1,
+    input.lineage.grossMinor / Math.max(1, input.order.totalMinor),
+  );
+  const amounts = buildStripeCaptureAmounts({
+    grossMinor: input.lineage.grossMinor,
+    feeMinor: input.lineage.feeMinor,
+    netMinor: input.lineage.netMinor,
+    taxMinor: Math.min(
+      input.lineage.grossMinor,
+      Math.round(input.order.taxTotalMinor * captureRatio),
+    ),
+  });
+  const [clearingId, feeExpenseId, revenueId, taxPayableId, itemRows] =
+    await Promise.all([
+      amounts.netMinor > 0
+        ? ensureLedgerAccount({
+            organizationId: input.order.organizationId,
+            code: "STRIPE_CLEARING",
+            name: "Payment processor clearing",
+            accountType: "asset",
+            normalSide: "debit",
+            unitKind: "money",
+            unit: input.order.currency,
+            currency: input.order.currency,
+          })
+        : Promise.resolve(undefined),
+      amounts.feeMinor > 0
+        ? ensureLedgerAccount({
+            organizationId: input.order.organizationId,
+            code: "PAYMENT_PROCESSING_FEES",
+            name: "Payment processing fees",
+            accountType: "expense",
+            normalSide: "debit",
+            unitKind: "money",
+            unit: input.order.currency,
+            currency: input.order.currency,
+          })
+        : Promise.resolve(undefined),
+      amounts.revenueMinor > 0
+        ? ensureLedgerAccount({
+            organizationId: input.order.organizationId,
+            code: "PAYMENT_REVENUE",
+            name: "Payment revenue",
+            accountType: "revenue",
+            normalSide: "credit",
+            unitKind: "money",
+            unit: input.order.currency,
+            currency: input.order.currency,
+          })
+        : Promise.resolve(undefined),
+      amounts.taxMinor > 0
+        ? ensureLedgerAccount({
+            organizationId: input.order.organizationId,
+            code: "SALES_TAX_PAYABLE",
+            name: "Sales tax payable",
+            accountType: "liability",
+            normalSide: "credit",
+            unitKind: "money",
+            unit: input.order.currency,
+            currency: input.order.currency,
+          })
+        : Promise.resolve(undefined),
+      database
+        .select({ description: orderItems.description })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, input.order.id)),
+    ]);
+  const postings: LedgerPosting[] = [];
+  if (clearingId && amounts.netMinor > 0) {
+    postings.push({
+      accountId: clearingId,
+      side: "debit",
+      amount: amounts.netMinor,
+      unit: input.order.currency,
+      unitKind: "money",
+      currency: input.order.currency,
+    });
+  }
+  if (feeExpenseId && amounts.feeMinor > 0) {
+    postings.push({
+      accountId: feeExpenseId,
+      side: "debit",
+      amount: amounts.feeMinor,
+      unit: input.order.currency,
+      unitKind: "money",
+      currency: input.order.currency,
+    });
+  }
+  if (revenueId && amounts.revenueMinor > 0) {
+    postings.push({
+      accountId: revenueId,
+      side: "credit",
+      amount: amounts.revenueMinor,
+      unit: input.order.currency,
+      unitKind: "money",
+      currency: input.order.currency,
+    });
+  }
+  if (taxPayableId && amounts.taxMinor > 0) {
+    postings.push({
+      accountId: taxPayableId,
+      side: "credit",
+      amount: amounts.taxMinor,
+      unit: input.order.currency,
+      unitKind: "money",
+      currency: input.order.currency,
+    });
+  }
+  assertBalancedJournal(postings);
+  const journalId = crypto.randomUUID();
+  const title =
+    itemRows.map((item) => item.description).join(", ") || "Duna payment";
+  await database.batch([
+    database.insert(ledgerJournals).values({
+      id: journalId,
+      organizationId: input.order.organizationId,
+      idempotencyKey,
+      sourceType: "payment-capture",
+      sourceId: input.payment.id,
+      description: `Payment captured · ${title}`,
+      status: "draft",
+      actorPersonId: input.order.buyerPersonId,
+      occurredAt: input.payment.createdAt,
+      metadata: {
+        orderId: input.order.id,
+        paymentId: input.payment.id,
+        stripePaymentIntentId: input.lineage.stripePaymentIntentId,
+        stripeChargeId: input.lineage.stripeChargeId,
+        stripeTransferId: input.lineage.stripeTransferId,
+        stripeDestinationPaymentId: input.lineage.stripeDestinationPaymentId,
+        stripeBalanceTransactionId: input.lineage.stripeBalanceTransactionId,
+        grossMinor: amounts.grossMinor,
+        feeMinor: amounts.feeMinor,
+        netMinor: amounts.netMinor,
+        taxMinor: amounts.taxMinor,
+        backfilledAt: input.now.toISOString(),
+      },
+    }),
+    database.insert(ledgerEntries).values(
+      postings.map((posting, sequence) => ({
+        id: crypto.randomUUID(),
+        organizationId: input.order.organizationId!,
+        journalId,
+        sequence,
+        ...posting,
+      })),
+    ),
+    database
+      .update(ledgerJournals)
+      .set({ status: "posted", postedAt: input.now })
+      .where(eq(ledgerJournals.id, journalId)),
+  ]);
+}
+
+export async function postReconciledPaymentJournal(input: {
+  readonly order: typeof orders.$inferSelect;
+  readonly payment: typeof payments.$inferSelect;
+  readonly lineage: StripePaymentLineage;
+  readonly now: Date;
+}): Promise<void> {
+  await postCatalogPaymentCapture(input.order.id, input.payment.id, input.now);
+  await postGenericPaymentCaptureJournal(input);
 }
 
 export async function reconcileStripePaymentLineage(input?: {
@@ -676,6 +946,7 @@ export async function reconcileStripePaymentLineage(input?: {
       payment: payments,
       order: orders,
       organization: organizations,
+      stripeLink: stripeTransactionLinks,
     })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
@@ -684,12 +955,37 @@ export async function reconcileStripePaymentLineage(input?: {
       stripeTransactionLinks,
       eq(stripeTransactionLinks.paymentId, payments.id),
     )
+    .leftJoin(
+      paymentFundSchedules,
+      eq(paymentFundSchedules.paymentId, payments.id),
+    )
+    .leftJoin(
+      ledgerJournals,
+      and(
+        eq(ledgerJournals.organizationId, organizations.id),
+        eq(ledgerJournals.sourceType, "payment-capture"),
+        sql`${ledgerJournals.sourceId} = ${payments.id}::text`,
+      ),
+    )
     .where(
       and(
         eq(payments.status, "succeeded"),
         isNotNull(organizations.stripeAccountId),
-        sql`${stripeTransactionLinks.id} IS NULL`,
         sql`COALESCE(${payments.stripePaymentIntentId}, ${orders.stripePaymentIntentId}) IS NOT NULL`,
+        or(
+          sql`${stripeTransactionLinks.id} IS NULL`,
+          sql`${stripeTransactionLinks.stripeBalanceTransactionId} IS NULL`,
+          sql`${paymentFundSchedules.id} IS NULL`,
+          and(
+            sql`${ledgerJournals.id} IS NULL`,
+            sql`NOT EXISTS (
+              SELECT 1
+              FROM ledger_journals legacy_journal
+              WHERE legacy_journal.organization_id = ${organizations.id}
+                AND legacy_journal.idempotency_key = 'catalog-order:' || ${orders.id}::text || ':money'
+            )`,
+          ),
+        ),
       ),
     )
     .orderBy(asc(payments.createdAt))
@@ -703,10 +999,12 @@ export async function reconcileStripePaymentLineage(input?: {
     const connectedAccountId = candidate.organization.stripeAccountId;
     if (!paymentIntentId || !connectedAccountId) continue;
     try {
-      const lineage = await retrieveStripePaymentLineage({
-        paymentIntentId,
-        connectedAccountId,
-      });
+      const lineage = candidate.stripeLink?.stripeBalanceTransactionId
+        ? stripeLineageFromStored(candidate.stripeLink)
+        : await retrieveStripePaymentLineage({
+            paymentIntentId,
+            connectedAccountId,
+          });
       await recordStripePaymentLineage({
         organizationId: candidate.organization.id,
         orderId: candidate.order.id,
@@ -720,11 +1018,12 @@ export async function reconcileStripePaymentLineage(input?: {
         lineage,
         now,
       });
-      await postCatalogPaymentCapture(
-        candidate.order.id,
-        candidate.payment.id,
+      await postReconciledPaymentJournal({
+        order: candidate.order,
+        payment: candidate.payment,
+        lineage,
         now,
-      );
+      });
       linked += 1;
     } catch {
       failed += 1;
