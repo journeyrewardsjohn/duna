@@ -49,6 +49,7 @@ import {
   createCourtBookingPaymentIntent,
   createCourtCheckoutSession,
   createMobilePaymentCustomerSession,
+  automaticTaxEnabledInCurrentStripeMode,
   getStripeClient,
   getOrCreatePlayerStripeCustomer,
   getStripePublishableKey,
@@ -1835,7 +1836,10 @@ export async function startCourtCheckout(input: {
         organizerOperatorFee +
         organizerOrganizationCommission,
     );
-    if (input.paymentSurface === "native" && !resource.stripeTaxEnabled) {
+    const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+      resource.stripeTaxEnabled,
+    );
+    if (input.paymentSurface === "native" && !automaticTaxEnabled) {
       const customerId = await getOrCreatePlayerStripeCustomer({
         personId: buyer.id,
         existingCustomerId: buyer.stripeCustomerId ?? undefined,
@@ -1927,7 +1931,7 @@ export async function startCourtCheckout(input: {
       organizationCommissionMinor: organizerOrganizationCommission,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: resource.stripeAccountId!,
-      automaticTaxEnabled: resource.stripeTaxEnabled,
+      automaticTaxEnabled,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       expiresAt: checkoutExpiresAt,

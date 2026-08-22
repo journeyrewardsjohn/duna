@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "d57f28d5c900655821eaa83357c5749f23b1dcd62b5efdd1ccf466fb3756aa02",
+    "20acd4ed15ca7e1a2dc15bc3cfdc37322249bde82f99aa487d11817c744515cf",
   modules: [
     {
       id: "M1",
@@ -151,6 +151,7 @@ export const generatedDunaFeatureKnowledge = {
     "assignTrainingPracticePlan",
     "attachVisionSessionToVideo",
     "audience",
+    "audienceBuilder",
     "audienceDetail",
     "audiences",
     "audit",
@@ -317,6 +318,7 @@ export const generatedDunaFeatureKnowledge = {
     "proMatchPredictionMarkets",
     "proTeam",
     "proTeams",
+    "processVisionImprovementProposals",
     "professionalEventFollowState",
     "professionalEventMediaUploadContext",
     "promoCodeWorkspace",
@@ -362,6 +364,7 @@ export const generatedDunaFeatureKnowledge = {
     "replaceCatalogItem",
     "replaceCourtSchedule",
     "requestAccountDeletion",
+    "requestOwnerVideoPerformanceReview",
     "requestPickupJoin",
     "requestProfileClaim",
     "requestVideoAnalysis",
@@ -375,6 +378,7 @@ export const generatedDunaFeatureKnowledge = {
     "restoreTrainingPracticePlanVersion",
     "restoreTrainingProgramArchive",
     "restoreTrainingProgramVersion",
+    "resumeVideoUpload",
     "retryPlayerSource",
     "revertCatalogItemVersion",
     "reviewGuardianship",
@@ -386,10 +390,12 @@ export const generatedDunaFeatureKnowledge = {
     "reviewSandMatch",
     "reviewVideoAnalysisEvent",
     "reviewVisionCalibrationSample",
+    "reviewVisionImprovementProposal",
     "reviewVisionModel",
     "reviseAudience",
     "revisePromoCode",
     "revokeComplimentaryDunaPlus",
+    "revokeVideoVisionLearningConsent",
     "revokeVisionRemote",
     "sandData",
     "sandPlayerSearch",
@@ -492,6 +498,7 @@ export const generatedDunaFeatureKnowledge = {
     "videoViewHeartbeat",
     "videos",
     "virtualSessions",
+    "visionImprovementProposals",
     "visionOverview",
     "visionRemoteSession",
     "visionSession",
