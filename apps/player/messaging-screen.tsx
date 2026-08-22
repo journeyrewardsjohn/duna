@@ -38,7 +38,11 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
-import VideoCapture from "./modules/duna-video-capture";
+import {
+  cancelFileBackedUpload,
+  isBackgroundUploadAvailable,
+  uploadFileBackedPart,
+} from "@duna/expo-background-upload";
 import { createPlayerMessagingOutbox } from "./messaging-outbox";
 import {
   messagingNotificationsEnabled,
@@ -177,18 +181,27 @@ function fallbackMediaType(fileName: string, kind?: "image" | "video") {
 async function uploadMessageAttachmentPart(input: {
   readonly file: File;
   readonly fileUri: string;
+  readonly uploadId: string;
+  readonly partNumber: number;
   readonly mediaType: string;
   readonly offset: number;
   readonly length: number;
   readonly uploadUrl: string;
 }): Promise<string> {
-  if (VideoCapture) {
-    const uploaded = await VideoCapture.uploadPart(
-      input.fileUri,
-      input.uploadUrl,
-      input.offset,
-      input.length,
-    );
+  if (isBackgroundUploadAvailable()) {
+    const uploaded = await uploadFileBackedPart({
+      uploadId: input.uploadId,
+      partNumber: input.partNumber,
+      fileUri: input.fileUri,
+      uploadUrl: input.uploadUrl,
+      offset: input.offset,
+      length: input.length,
+      contentType: input.mediaType,
+      // Messaging currently permits cellular uploads; the native module still
+      // persists the range and reports retryable errors rather than claiming
+      // Android background durability.
+      allowCellular: true,
+    });
     if (uploaded.sizeBytes !== input.length || !uploaded.etag) {
       throw new Error("Private storage did not confirm the upload.");
     }
@@ -1326,6 +1339,8 @@ export function PlayerMessagingScreen({
             const etag = await uploadMessageAttachmentPart({
               file,
               fileUri: attachment.uri,
+              uploadId: session.id,
+              partNumber,
               mediaType: attachment.mediaType,
               offset: start,
               length: end - start,
@@ -1356,6 +1371,9 @@ export function PlayerMessagingScreen({
             (left, right) => left.partNumber - right.partNumber,
           ),
         });
+        await cancelFileBackedUpload(session.id).catch(() => undefined);
+        const uploadIndex = activeUploadIds.indexOf(session.id);
+        if (uploadIndex >= 0) activeUploadIds.splice(uploadIndex, 1);
       }
       return activeUploadIds;
     } catch (reason) {
@@ -1363,6 +1381,7 @@ export function PlayerMessagingScreen({
         activeUploadIds.map((uploadId) =>
           client.messaging.abortAttachmentUpload
             .mutate({ uploadId })
+            .then(() => cancelFileBackedUpload(uploadId))
             .catch(() => undefined),
         ),
       );
@@ -1512,6 +1531,7 @@ export function PlayerMessagingScreen({
           attachmentUploadIds.map((uploadId) =>
             client.messaging.abortAttachmentUpload
               .mutate({ uploadId })
+              .then(() => cancelFileBackedUpload(uploadId))
               .catch(() => undefined),
           ),
         );

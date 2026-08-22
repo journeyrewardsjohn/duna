@@ -54,6 +54,24 @@ class CourtPoint(BaseModel):
     observed: Literal["visible", "edge", "out-of-frame"]
 
 
+class ContactQuality(BaseModel):
+    evidenceVersion: Literal["duna-contact-evidence-v1"] = "duna-contact-evidence-v1"
+    detectorConfidence: float | None = Field(default=None, ge=0, le=1)
+    temporalConfidence: float | None = Field(default=None, ge=0, le=1)
+    occluded: bool | None = None
+    visibleFrames: int | None = Field(default=None, ge=0, le=10_000)
+    evidence: Literal["visible-2d", "partial-2d", "unavailable"]
+
+
+class TrajectorySummary(BaseModel):
+    evidenceVersion: Literal["duna-trajectory-2d-v1"] = "duna-trajectory-2d-v1"
+    coordinateFrame: Literal["canonical-court-2d"] = "canonical-court-2d"
+    endPoint: CourtPoint | None = None
+    flightTimeUs: int | None = Field(default=None, gt=0, le=10_000_000)
+    observedPoints: int = Field(ge=0, le=10_000)
+    evidence: Literal["visible-2d", "partial-2d", "unavailable"]
+
+
 class WorkerEvent(BaseModel):
     id: UUID
     eventType: Literal[
@@ -198,6 +216,10 @@ class RawObservation(BaseModel):
     xMeters: float | None = None
     yMeters: float | None = None
     side: Literal["a", "b", "unknown"] = "unknown"
+    contactPoint: CourtPoint | None = None
+    contactUncertaintyMeters: float | None = Field(default=None, ge=0, le=20)
+    contactQuality: ContactQuality | None = None
+    trajectory: TrajectorySummary | None = None
 
     @model_validator(mode="after")
     def typed_observation(self) -> RawObservation:
