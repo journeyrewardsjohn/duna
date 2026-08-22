@@ -1,4 +1,9 @@
-import type { AppRouter } from "@duna/api";
+import type {
+  AppRouter,
+  DunaAiActionOutcome,
+  DunaAiClientContext,
+  DunaAiResponse,
+} from "@duna/api";
 import {
   createCursorSyncEngine,
   type DeliveryEngine,
@@ -24,6 +29,83 @@ export const dunaHqUrl = (
 
 export type DunaApiClient = TRPCClient<AppRouter>;
 export type TokenGetter = () => Promise<string | null>;
+
+export type ProDunaAiResponse = DunaAiResponse;
+export type ProDunaAiActionOutcome = DunaAiActionOutcome;
+
+async function postDunaAi<T>(
+  getToken: TokenGetter,
+  body: Readonly<Record<string, unknown>>,
+): Promise<T> {
+  const token = await getToken();
+  if (!token) throw new Error("Sign in again before using Duna AI.");
+  const response = await fetch(`${dunaApiBaseUrl}/api/duna-ai`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as T | { readonly error?: string };
+  const errorMessage =
+    payload &&
+    typeof payload === "object" &&
+    "error" in payload &&
+    typeof payload.error === "string"
+      ? payload.error
+      : undefined;
+  if (!response.ok || errorMessage) {
+    throw new Error(errorMessage ?? "Duna AI could not complete that request.");
+  }
+  return payload as T;
+}
+
+export function askDunaAi(
+  getToken: TokenGetter,
+  input: {
+    readonly message: string;
+    readonly context: DunaAiClientContext;
+    readonly history?: readonly { role: "assistant" | "user"; body: string }[];
+  },
+): Promise<ProDunaAiResponse> {
+  return postDunaAi(getToken, {
+    mode: "ask",
+    surface: "pro",
+    page: input.context.pathname,
+    context: input.context,
+    message: input.message,
+    history: input.history,
+    researchMode: "off",
+  });
+}
+
+export function getDunaAiSuggestions(
+  getToken: TokenGetter,
+  context: DunaAiClientContext,
+): Promise<ProDunaAiResponse> {
+  return postDunaAi(getToken, {
+    mode: "suggestions",
+    surface: "pro",
+    page: context.pathname,
+    context,
+  });
+}
+
+export async function confirmProDunaAiAction(
+  getToken: TokenGetter,
+  input: { readonly draftId: string; readonly confirmationNonce?: string },
+): Promise<ProDunaAiActionOutcome> {
+  const payload = await postDunaAi<{ result: ProDunaAiActionOutcome }>(
+    getToken,
+    {
+      mode: "confirm",
+      draftId: input.draftId,
+      confirmationNonce: input.confirmationNonce,
+    },
+  );
+  return payload.result;
+}
 
 export function createDunaApiClient(getToken: TokenGetter): DunaApiClient {
   return createTRPCClient<AppRouter>({

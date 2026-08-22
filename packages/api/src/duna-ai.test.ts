@@ -3,11 +3,14 @@ import {
   classifyDunaAiAction,
   confirmDunaAiAction,
   dunaAiRequestSchema,
+  findResourceScheduleConflicts,
   findScheduleConflicts,
   fetchDunaAiGatewayWithRetry,
+  getDunaAiSuggestions,
   hasDunaAiGatewayCredential,
   isRetryableDunaAiGatewayStatus,
   rankDiscoveryItems,
+  resolveDunaAiRescheduleRequest,
   resolveDunaAiCopilotModel,
   resolveDunaAiGatewayCredential,
   resolveDunaAiGatewayCredentialSource,
@@ -56,6 +59,17 @@ describe("Duna AI action classification", () => {
       classifyDunaAiAction("What is the coach availability next Tuesday?"),
     ).toBeUndefined();
   });
+
+  it("classifies a single-session move as a governed reschedule", () => {
+    expect(
+      classifyDunaAiAction(
+        "Move my 9:30am group lesson to a 10:00am start time tomorrow",
+      ),
+    ).toMatchObject({
+      toolName: "bookings.reschedule",
+      scope: "sessions:write",
+    });
+  });
 });
 
 describe("Duna AI context", () => {
@@ -79,6 +93,77 @@ describe("Duna AI context", () => {
         },
       ]),
     ).toEqual(["Morning clinic overlaps Private lesson"]);
+  });
+
+  it("only calls an organization overlap a conflict when a court or coach is shared", () => {
+    expect(
+      findResourceScheduleConflicts([
+        {
+          id: "session-1",
+          title: "U16 clinic",
+          startsAt: "2026-08-22T13:00:00.000Z",
+          endsAt: "2026-08-22T14:30:00.000Z",
+          courtId: "court-1",
+          courtName: "Court 1",
+          coachPersonId: "coach-1",
+          coachName: "Coach Taylor",
+        },
+        {
+          id: "session-2",
+          title: "Private lesson",
+          startsAt: "2026-08-22T14:00:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          courtId: "court-2",
+          courtName: "Court 2",
+          coachPersonId: "coach-1",
+          coachName: "Coach Taylor",
+        },
+        {
+          id: "session-3",
+          title: "Open play",
+          startsAt: "2026-08-22T14:00:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          courtId: "court-3",
+          courtName: "Court 3",
+          coachPersonId: "coach-2",
+          coachName: "Coach Morgan",
+        },
+      ]),
+    ).toEqual([
+      "Coach Taylor is double-booked: U16 clinic overlaps Private lesson",
+    ]);
+  });
+
+  it("suggests grounded marketing, pricing, and coach-coverage questions", async () => {
+    const response = await getDunaAiSuggestions({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000001",
+        displayName: "Coach Taylor",
+        roles: ["coach"],
+        scopes: ["sessions:read", "members:read", "payments:read"],
+        ageBand: "adult",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        isDemo: true,
+      },
+      surface: "pro",
+      page: "/today",
+      now: new Date("2026-08-21T16:00:00.000Z"),
+    });
+    expect(response.suggestions).toEqual(
+      expect.arrayContaining([
+        "Help market Sunset doubles training to fill 5 open spots",
+        "Which available coach could cover Sunset doubles training?",
+        "Should we adjust the $90 price for Sunset doubles training?",
+      ]),
+    );
+    expect(response.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "link",
+          title: "Sunset doubles training",
+        }),
+      ]),
+    );
   });
 
   it("ranks discovery against the user's request", () => {
@@ -123,6 +208,69 @@ describe("Duna AI context", () => {
     ).toEqual([]);
   });
 
+  it("resolves one coach session and preserves its duration", () => {
+    const resolution = resolveDunaAiRescheduleRequest({
+      message: "Move my 9:30am group lesson to a 10:00am start time tomorrow",
+      actorPersonId: "10000000-0000-4000-8000-000000000001",
+      timezone: "America/New_York",
+      now: new Date("2026-08-21T12:00:00.000Z"),
+      entries: [
+        {
+          id: "20000000-0000-4000-8000-000000000001",
+          sourceType: "session",
+          title: "U16 group lesson",
+          startsAt: "2026-08-22T13:30:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          timezone: "America/New_York",
+          status: "registration-open",
+          kind: "clinic",
+          courtId: "30000000-0000-4000-8000-000000000001",
+          courtName: "Court 2",
+          coachPersonId: "10000000-0000-4000-8000-000000000001",
+          coachName: "Coach Taylor",
+          participantCount: 8,
+          capacity: 10,
+          draggable: true,
+          activeAttendeeCount: 8,
+        },
+      ],
+    });
+    expect(resolution.status).toBe("ready");
+    if (resolution.status !== "ready") return;
+    expect(resolution.startsAt.toISOString()).toBe("2026-08-22T14:00:00.000Z");
+    expect(resolution.endsAt.toISOString()).toBe("2026-08-22T15:30:00.000Z");
+  });
+
+  it("asks for clarification when two sessions match", () => {
+    const base = {
+      sourceType: "session" as const,
+      startsAt: "2026-08-22T13:30:00.000Z",
+      endsAt: "2026-08-22T14:30:00.000Z",
+      timezone: "America/New_York",
+      status: "registration-open",
+      kind: "clinic",
+      coachPersonId: "10000000-0000-4000-8000-000000000001",
+      participantCount: 6,
+      capacity: 8,
+      draggable: true,
+      activeAttendeeCount: 6,
+    };
+    const resolution = resolveDunaAiRescheduleRequest({
+      message: "Move my 9:30am lesson to 10:00am tomorrow",
+      actorPersonId: "10000000-0000-4000-8000-000000000001",
+      timezone: "America/New_York",
+      now: new Date("2026-08-21T12:00:00.000Z"),
+      entries: [
+        { ...base, id: "session-1", title: "Group lesson A" },
+        { ...base, id: "session-2", title: "Group lesson B" },
+      ],
+    });
+    expect(resolution).toMatchObject({
+      status: "clarify",
+      candidates: [{ title: "Group lesson A" }, { title: "Group lesson B" }],
+    });
+  });
+
   it("re-checks current permission before confirming a write", async () => {
     const now = new Date("2026-08-17T12:00:00.000Z");
     const draft = await proposeAgentAction({
@@ -152,13 +300,18 @@ describe("Duna AI context", () => {
 });
 
 describe("Duna AI model", () => {
-  it("uses a provider-qualified Terra model through Gateway by default", () => {
-    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-terra");
+  it("uses provider-qualified GPT-5.6 Sol through Gateway by default", () => {
+    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-sol");
   });
 
-  it("supports a dedicated co-pilot model override", () => {
+  it("supports Kimi K3 as the other approved co-pilot model", () => {
+    process.env.DUNA_COPILOT_MODEL = "moonshotai/kimi-k3";
+    expect(resolveDunaAiCopilotModel()).toBe("moonshotai/kimi-k3");
+  });
+
+  it("fails closed to Sol for an unapproved co-pilot model", () => {
     process.env.DUNA_COPILOT_MODEL = "openai/gpt-5.6-luna";
-    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-luna");
+    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-sol");
   });
 
   it("requires Vercel AI Gateway credentials and ignores a direct OpenAI key", () => {
@@ -208,7 +361,7 @@ describe("Duna AI model", () => {
     await expect(
       fetchDunaAiGatewayWithRetry({
         credential: "gateway-key",
-        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        body: JSON.stringify({ model: "openai/gpt-5.6-sol" }),
         fetchImpl,
         wait,
       }),
@@ -224,7 +377,7 @@ describe("Duna AI model", () => {
     await expect(
       fetchDunaAiGatewayWithRetry({
         credential: "invalid-key",
-        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        body: JSON.stringify({ model: "openai/gpt-5.6-sol" }),
         fetchImpl,
       }),
     ).resolves.toMatchObject({ status: 401 });
@@ -249,6 +402,16 @@ describe("Duna AI model", () => {
         ],
       }),
     ).toMatchObject({ attachments: [{ name: "court.png" }] });
+  });
+
+  it("accepts Duna Pro as an organization-aware copilot surface", () => {
+    expect(
+      dunaAiRequestSchema.parse({
+        mode: "ask",
+        message: "What is on my schedule?",
+        surface: "pro",
+      }),
+    ).toMatchObject({ surface: "pro" });
   });
 
   it("routes signed-in voice transcription through Vercel AI Gateway", async () => {

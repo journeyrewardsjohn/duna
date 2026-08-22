@@ -17,6 +17,16 @@ import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import {
+  CalendarDays,
+  ChevronDown,
+  Ellipsis,
+  House,
+  Moon,
+  Plus,
+  Sun,
+  type LucideIcon,
+} from "lucide-react-native";
+import {
   createContext,
   useContext,
   useEffect,
@@ -43,6 +53,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GetPaidScreen } from "./get-paid";
 import { MoneyScreen } from "./money-screen";
+import { DunaAiScreen } from "./duna-ai-screen";
 import {
   connectProCalendar,
   loadProPersonalEvents,
@@ -80,28 +91,28 @@ const dunaProWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 const dunaProWordmarkWhite = require("./assets/duna-horizontal-white.png");
 
 const lightColors = {
-  canvas: "#f6f5f1",
-  ink: "#1b1b19",
+  canvas: "#eef4f8",
+  ink: "#173b65",
   depth: "#ffffff",
-  navy: "#b5ccd3",
-  navyLift: "#edece6",
-  bone: "#1b1b19",
-  muted: "#766f61",
-  aqua: "#22343b",
-  aquaDeep: "#3a3a36",
-  sand: "#c9a96a",
-  flare: "#e8683a",
-  positive: "#2f6b3a",
-  warning: "#8a6a2f",
-  danger: "#9a4a2e",
+  navy: "#d8e8f2",
+  navyLift: "#f4f8fb",
+  bone: "#173b65",
+  muted: "#687b8e",
+  aqua: "#214b7a",
+  aquaDeep: "#173b65",
+  sand: "#d6a874",
+  flare: "#f0a06d",
+  positive: "#3c7a5b",
+  warning: "#d9955f",
+  danger: "#a64b43",
   onAccent: "#ffffff",
-  overlayRgb: "27,27,25",
-  accentRgb: "34,52,59",
-  warningRgb: "138,106,47",
-  positiveRgb: "47,107,58",
-  dangerRgb: "154,74,46",
-  flareRgb: "232,104,58",
-  inkRgb: "27,27,25",
+  overlayRgb: "23,59,101",
+  accentRgb: "33,75,122",
+  warningRgb: "217,149,95",
+  positiveRgb: "60,122,91",
+  dangerRgb: "166,75,67",
+  flareRgb: "240,160,109",
+  inkRgb: "23,59,101",
   depthRgb: "255,255,255",
 } as const;
 
@@ -168,8 +179,11 @@ const ThemeContext = createContext<{
   readonly toggle: () => void;
 }>({ theme: "light", preference: "light", toggle: () => undefined });
 
+const OpenDunaAiContext = createContext<() => void>(() => undefined);
+
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
+  const ThemeIcon = theme === "light" ? Moon : Sun;
   return (
     <Pressable
       accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
@@ -179,22 +193,24 @@ function ThemeButton() {
       }}
       style={styles.themeButton}
     >
-      <Text style={styles.themeButtonText}>
-        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
-      </Text>
+      <ThemeIcon color={colors.bone} size={20} strokeWidth={1.75} />
     </Pressable>
   );
 }
 
 type Tab = "today" | "calendar" | "people" | "more";
-type NavDestination = Tab | "paid";
+type NavDestination = Tab | "ai" | "create";
 
-const tabs: readonly { key: NavDestination; label: string; icon: string }[] = [
-  { key: "today", label: "Today", icon: "⌂" },
-  { key: "calendar", label: "Courts", icon: "▦" },
-  { key: "paid", label: "Money", icon: ")))" },
-  { key: "people", label: "People", icon: "◎" },
-  { key: "more", label: "More", icon: "•••" },
+const tabs: readonly {
+  key: NavDestination;
+  label: string;
+  icon?: LucideIcon;
+}[] = [
+  { key: "today", label: "Today", icon: House },
+  { key: "calendar", label: "Calendar", icon: CalendarDays },
+  { key: "ai", label: "Duna AI" },
+  { key: "create", label: "Create", icon: Plus },
+  { key: "more", label: "More", icon: Ellipsis },
 ];
 
 type ProCalendarEntry = NonNullable<
@@ -381,18 +397,15 @@ function PreviewBanner() {
   );
 }
 
-function Mark() {
+function BrandMark() {
   const { theme } = useContext(ThemeContext);
   return (
-    <View style={styles.wordmark}>
-      <Image
-        accessibilityLabel="Duna Pro"
-        resizeMode="contain"
-        source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
-        style={styles.wordmarkImage}
-      />
-      <Text style={styles.proPill}>PRO</Text>
-    </View>
+    <Image
+      accessibilityLabel="Duna"
+      resizeMode="contain"
+      source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
+      style={styles.wordmarkImage}
+    />
   );
 }
 
@@ -437,7 +450,11 @@ function Pill({
   );
 }
 
-function Header({ context }: { readonly context: string }) {
+function Header({
+  showOperations = false,
+}: {
+  readonly showOperations?: boolean;
+}) {
   const {
     activeAuthOrganizationId,
     authOrganizations,
@@ -470,26 +487,29 @@ function Header({ context }: { readonly context: string }) {
     (match) => match.status === "live",
   ).length;
   const exceptionCount =
-    (dashboard?.alerts.length ?? 0) +
+    (dashboard?.alerts.filter((alert) => alert.tone !== "positive").length ??
+      0) +
     (workspace?.eventRegistrations.filter((registration) =>
       ["cancelled", "refunded", "waitlisted"].includes(registration.status),
     ).length ?? 0);
-  const grossSales =
-    dashboard?.metrics.find((metric) => metric.label === "Gross sales")
-      ?.value ?? "—";
+  const organizationName =
+    dashboard?.organization.name ?? demoOrganization.name;
   return (
     <>
       <View style={styles.headerShell}>
         <View style={styles.header}>
-          <View>
-            <Mark />
-            <Text style={styles.headerContext}>{context}</Text>
-          </View>
+          <Pressable
+            accessibilityLabel={`Current organization: ${organizationName}. Change organization`}
+            onPress={() => setOrganizationSheetOpen(true)}
+            style={styles.headerOrganization}
+          >
+            <Text numberOfLines={1} style={styles.headerOrganizationName}>
+              {organizationName}
+            </Text>
+            <ChevronDown color={colors.muted} size={18} strokeWidth={1.75} />
+          </Pressable>
           <View style={styles.headerButtons}>
             <ThemeButton />
-            <Pressable accessibilityLabel="Ask Duna" style={styles.aiButton}>
-              <Text style={styles.aiButtonText}>✦</Text>
-            </Pressable>
             <Pressable
               accessibilityLabel="Open organization switcher"
               onPress={() => setOrganizationSheetOpen(true)}
@@ -500,33 +520,35 @@ function Header({ context }: { readonly context: string }) {
             </Pressable>
           </View>
         </View>
-        <View
-          accessibilityLabel={`Watch: ${liveCount} live matches, ${exceptionCount} exceptions, ${grossSales} gross sales`}
-          style={styles.watchStrip}
-        >
-          <View style={styles.watchBrand}>
-            <View style={styles.watchPulse} />
-            <Text style={styles.watchBrandText}>WATCH</Text>
+        {showOperations && (
+          <View
+            accessibilityLabel={`Today: ${todayMatches.length} matches, ${liveCount} live now, ${exceptionCount} needing review`}
+            style={styles.watchStrip}
+          >
+            <View style={styles.watchBrand}>
+              <View style={styles.watchPulse} />
+              <Text style={styles.watchBrandText}>TODAY</Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{todayMatches.length}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                MATCHES
+              </Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{liveCount}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                LIVE NOW
+              </Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{exceptionCount}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                TO DO
+              </Text>
+            </View>
           </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{liveCount}</Text>
-            <Text style={styles.watchMetricLabel}>LIVE</Text>
-          </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{todayMatches.length}</Text>
-            <Text style={styles.watchMetricLabel}>MATCHES</Text>
-          </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{exceptionCount}</Text>
-            <Text style={styles.watchMetricLabel}>ALERTS</Text>
-          </View>
-          <View style={[styles.watchMetric, styles.watchMoney]}>
-            <Text numberOfLines={1} style={styles.watchMetricValue}>
-              {grossSales}
-            </Text>
-            <Text style={styles.watchMetricLabel}>TAKINGS</Text>
-          </View>
-        </View>
+        )}
       </View>
       <Modal
         animationType="slide"
@@ -1056,7 +1078,7 @@ function TodayScreen({
       contentContainerStyle={styles.todayContent}
       showsVerticalScrollIndicator={false}
     >
-      <Header context={organization.name.toUpperCase()} />
+      <Header showOperations />
       <PageTitle
         action="Calendar"
         eyebrow={today}
@@ -1769,9 +1791,7 @@ function CalendarScreen({
         contentContainerStyle={styles.calendarContent}
         showsVerticalScrollIndicator={false}
       >
-        <Header
-          context={`${dashboard?.organization.name ?? "DUNA PRO"} · COURTS`}
-        />
+        <Header />
         <PageTitle
           action="New"
           eyebrow="THE OPERATING HUB"
@@ -3065,8 +3085,7 @@ function PeopleScreen({
   const [guardianEmail, setGuardianEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteFeedback, setInviteFeedback] = useState<string>();
-  const { client, dashboard, members, mode, refresh, workspace } =
-    useProRuntime();
+  const { client, members, mode, refresh, workspace } = useProRuntime();
   const people = members ?? demoPeople;
   const filteredPeople = people.filter((person) => {
     const query = search.trim().toLowerCase();
@@ -3165,9 +3184,7 @@ function PeopleScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Header
-          context={`${dashboard?.organization.name ?? "PEOPLE"} · PEOPLE + HOUSEHOLDS`}
-        />
+        <Header />
         <PageTitle
           action="Add person"
           eyebrow="CRM + ELIGIBILITY"
@@ -3599,7 +3616,7 @@ function MatchPicker({
           <Text style={styles.scorerExitMeta}>Back to schedule</Text>
         </View>
       </Pressable>
-      <Header context="AUTHORIZED MATCH SCORING" />
+      <Header />
       <PageTitle eyebrow="SELECT A MATCH" title="Score." />
       <Text style={styles.subhead}>
         Scheduled matches can be claimed by one device. Live matches remain
@@ -4486,7 +4503,7 @@ function MoreScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Header context={organization.name.toUpperCase()} />
+        <Header />
         <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
         <View style={styles.moreQuickActions}>
           <Pressable onPress={onGetPaid} style={styles.moreQuickPrimary}>
@@ -4540,7 +4557,7 @@ function MoreScreen({
           </View>
         ))}
         <View style={styles.proNote}>
-          <Mark />
+          <BrandMark />
           <Text style={styles.metaText}>
             Duna Pro keeps core workflows available in the field. Drafts and
             score events persist on-device, then sync when a connection returns.
@@ -4637,6 +4654,7 @@ function TabBar({
     <View style={styles.tabBar}>
       {tabs.map((tab) => (
         <Pressable
+          accessibilityLabel={tab.label}
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.key }}
           key={tab.key}
@@ -4644,27 +4662,34 @@ function TabBar({
             selectionHaptic();
             onChange(tab.key);
           }}
-          style={[styles.tabItem, tab.key === "paid" && styles.scoreTab]}
+          style={[styles.tabItem, tab.key === "ai" && styles.aiTab]}
         >
-          <Text
-            style={[
-              styles.tabIcon,
-              active === tab.key && styles.tabActive,
-              tab.key === "paid" && styles.scoreTabIcon,
-            ]}
-          >
-            {tab.icon}
-          </Text>
-          <Text
-            style={[
-              styles.tabLabel,
-              active === tab.key && styles.tabActive,
-              tab.key === "paid" && styles.scoreTabLabel,
-            ]}
-          >
-            {tab.label}
-          </Text>
-          {active === tab.key && <View style={styles.tabIndicator} />}
+          {tab.key === "ai" ? (
+            <View style={styles.aiTabMarkCrop}>
+              <Image
+                accessibilityLabel="Duna AI"
+                accessibilityIgnoresInvertColors
+                resizeMode="contain"
+                source={dunaProWordmarkBlue}
+                style={styles.aiTabMarkImage}
+              />
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.tabIconShell,
+                active === tab.key && styles.tabIconShellActive,
+              ]}
+            >
+              {tab.icon ? (
+                <tab.icon
+                  color={active === tab.key ? colors.warning : colors.muted}
+                  size={24}
+                  strokeWidth={active === tab.key ? 2.25 : 1.75}
+                />
+              ) : null}
+            </View>
+          )}
         </Pressable>
       ))}
     </View>
@@ -4683,6 +4708,7 @@ function ProApp() {
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("today");
   const [surface, setSurface] = useState<
+    | "ai"
     | "create"
     | "get-paid"
     | "money"
@@ -4731,8 +4757,8 @@ function ProApp() {
   };
 
   const changeTab = (nextTab: NavDestination) => {
-    if (nextTab === "paid") {
-      setSurface("money");
+    if (nextTab === "ai" || nextTab === "create") {
+      setSurface(nextTab);
       return;
     }
     if (nextTab === "calendar") setCalendarEntryId(undefined);
@@ -4836,99 +4862,70 @@ function ProApp() {
   activeStyles = surfaceTheme === "dark" ? darkStyles : lightStyles;
 
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        preference: themePreference,
-        toggle: () => {
-          const next: ThemePreference =
-            themePreference === "system"
-              ? "light"
-              : themePreference === "light"
-                ? "dark"
-                : "system";
-          setThemePreference(next);
-          void AsyncStorage.setItem("duna-theme", next);
-        },
-      }}
-    >
-      {sessionNotesId ? (
-        <SessionNotesScreen
-          initialPersonId={sessionNotePersonId}
-          onClose={() => {
-            setSessionNotesId(undefined);
-            setSessionNotePersonId(undefined);
-          }}
-          onSaved={refresh}
-          sessionId={sessionNotesId}
-        />
-      ) : surface === "create" ? (
-        <OperatorCreateScreen
-          onClose={() => setSurface(undefined)}
-          onCreated={refresh}
-          onGetPaid={() => setSurface("get-paid")}
-        />
-      ) : surface === "get-paid" ? (
-        <GetPaidScreen
-          onClose={() => setSurface(undefined)}
-          onCreate={() => setSurface("create")}
-        />
-      ) : surface === "money" ? (
-        <MoneyScreen
-          onClose={() => setSurface(undefined)}
-          onCollect={() => setSurface("get-paid")}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            border: rgba(colors.overlayRgb, 0.12),
-            text: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            navy: colors.navy,
-          }}
-        />
-      ) : surface === "messages" ? (
-        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
-          <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          <ProMessagingScreen
-            initialAudienceKey={messagesAudienceKey}
-            initialConversationId={messagesConversationId}
-            initialPersonId={messagesPersonId}
+    <OpenDunaAiContext.Provider value={() => setSurface("ai")}>
+      <ThemeContext.Provider
+        value={{
+          theme,
+          preference: themePreference,
+          toggle: () => {
+            const next: ThemePreference =
+              themePreference === "system"
+                ? "light"
+                : themePreference === "light"
+                  ? "dark"
+                  : "system";
+            setThemePreference(next);
+            void AsyncStorage.setItem("duna-theme", next);
+          },
+        }}
+      >
+        {sessionNotesId ? (
+          <SessionNotesScreen
+            initialPersonId={sessionNotePersonId}
             onClose={() => {
-              setMessagesConversationId(undefined);
-              setMessagesPersonId(undefined);
-              setMessagesAudienceKey(undefined);
-              setSurface(undefined);
+              setSessionNotesId(undefined);
+              setSessionNotePersonId(undefined);
             }}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              border: rgba(colors.overlayRgb, 0.12),
-              text: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              positive: colors.positive,
-              warning: colors.warning,
-              danger: colors.danger,
-            }}
+            onSaved={refresh}
+            sessionId={sessionNotesId}
           />
-        </SafeAreaView>
-      ) : surface === "scan" ? (
-        <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
-          <StatusBar style="light" />
-          <TicketScannerScreen
+        ) : surface === "ai" ? (
+          <DunaAiScreen
             onClose={() => setSurface(undefined)}
             palette={{
               canvas: colors.canvas,
               surface: colors.depth,
               surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              warning: colors.warning,
+              positive: colors.positive,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+            pathname={`/${tab}`}
+          />
+        ) : surface === "create" ? (
+          <OperatorCreateScreen
+            onClose={() => setSurface(undefined)}
+            onCreated={refresh}
+            onGetPaid={() => setSurface("get-paid")}
+          />
+        ) : surface === "get-paid" ? (
+          <GetPaidScreen
+            onClose={() => setSurface(undefined)}
+            onCreate={() => setSurface("create")}
+          />
+        ) : surface === "money" ? (
+          <MoneyScreen
+            onClose={() => setSurface(undefined)}
+            onCollect={() => setSurface("get-paid")}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
               border: rgba(colors.overlayRgb, 0.12),
               text: colors.bone,
               muted: colors.muted,
@@ -4937,143 +4934,192 @@ function ProApp() {
               positive: colors.positive,
               warning: colors.warning,
               danger: colors.danger,
-              overlay: rgba(colors.inkRgb, 0.35),
+              navy: colors.navy,
             }}
           />
-        </SafeAreaView>
-      ) : surface === "score" ? (
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style="light" />
-          <View style={styles.app}>
-            <ScorerScreen
-              initialMatchId={scoreMatchId}
-              onExit={() => {
-                setScoreMatchId(undefined);
+        ) : surface === "messages" ? (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+            <ProMessagingScreen
+              initialAudienceKey={messagesAudienceKey}
+              initialConversationId={messagesConversationId}
+              initialPersonId={messagesPersonId}
+              onClose={() => {
+                setMessagesConversationId(undefined);
+                setMessagesPersonId(undefined);
+                setMessagesAudienceKey(undefined);
                 setSurface(undefined);
               }}
+              palette={{
+                canvas: colors.canvas,
+                surface: colors.depth,
+                surfaceAlt: colors.navyLift,
+                border: rgba(colors.overlayRgb, 0.12),
+                text: colors.bone,
+                muted: colors.muted,
+                accent: colors.aqua,
+                onAccent: colors.onAccent,
+                positive: colors.positive,
+                warning: colors.warning,
+                danger: colors.danger,
+              }}
             />
-          </View>
-        </SafeAreaView>
-      ) : surface === "tournament" ? (
-        <TournamentControl
-          onClose={() => setSurface(undefined)}
-          onScore={openScore}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            ink: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            border: rgba(colors.overlayRgb, 0.12),
-          }}
-        />
-      ) : surface === "video" ? (
-        <CoachVideoScreen
-          onClose={() => setSurface(undefined)}
-          palette={{
-            canvas: colors.canvas,
-            surface: colors.depth,
-            surfaceAlt: colors.navyLift,
-            ink: colors.bone,
-            muted: colors.muted,
-            accent: colors.aqua,
-            onAccent: colors.onAccent,
-            positive: colors.positive,
-            warning: colors.warning,
-            danger: colors.danger,
-            border: rgba(colors.overlayRgb, 0.12),
-          }}
-        />
-      ) : (
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          <View style={styles.app}>
-            <PreviewBanner />
-            <Animated.View
-              style={[
-                styles.animatedScreen,
-                {
-                  opacity: screenTransition,
-                  transform: [
-                    {
-                      translateY: screenTransition.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [8, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {tab === "today" && (
-                <TodayScreen
-                  onCalendar={openCalendar}
-                  onCreate={() => setSurface("create")}
-                  onGetPaid={() => setSurface("get-paid")}
-                  onMessageGroup={openGroupMessaging}
-                  onPeople={() => setTab("people")}
-                  onRecordNotes={(sessionId) => {
-                    setSessionNotePersonId(undefined);
-                    setSessionNotesId(sessionId);
-                  }}
-                  onScore={openScore}
-                />
-              )}
-              {tab === "calendar" && (
-                <CalendarScreen
-                  focusEntryId={calendarEntryId}
-                  onCreate={() => setSurface("create")}
-                  onMessageGroup={openGroupMessaging}
-                  onRecordNotes={(sessionId) => {
-                    setSessionNotePersonId(undefined);
-                    setSessionNotesId(sessionId);
-                  }}
-                  onScan={() => setSurface("scan")}
-                  onScore={openScore}
-                />
-              )}
-              {tab === "people" && (
-                <PeopleScreen
-                  onMessage={(personId) => {
-                    setMessagesPersonId(personId);
-                    setMessagesAudienceKey(undefined);
-                    setMessagesConversationId(undefined);
-                    setSurface("messages");
-                  }}
-                  onRecordNotes={(sessionId, personId) => {
-                    setSessionNotePersonId(personId);
-                    setSessionNotesId(sessionId);
-                  }}
-                />
-              )}
-              {tab === "more" && (
-                <MoreScreen
-                  onCalendar={() => openCalendar()}
-                  onCreate={() => setSurface("create")}
-                  onGetPaid={() => setSurface("get-paid")}
-                  onMoney={() => setSurface("money")}
-                  onMessages={() => {
-                    setMessagesConversationId(undefined);
-                    setMessagesPersonId(undefined);
-                    setMessagesAudienceKey(undefined);
-                    setSurface("messages");
-                  }}
-                  onPeople={() => setTab("people")}
-                  onTournament={() => setSurface("tournament")}
-                  onVideo={() => setSurface("video")}
-                />
-              )}
-            </Animated.View>
-            <TabBar active={tab} onChange={changeTab} />
-          </View>
-        </SafeAreaView>
-      )}
-    </ThemeContext.Provider>
+          </SafeAreaView>
+        ) : surface === "scan" ? (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+            <StatusBar style="light" />
+            <TicketScannerScreen
+              onClose={() => setSurface(undefined)}
+              palette={{
+                canvas: colors.canvas,
+                surface: colors.depth,
+                surfaceAlt: colors.navyLift,
+                border: rgba(colors.overlayRgb, 0.12),
+                text: colors.bone,
+                muted: colors.muted,
+                accent: colors.aqua,
+                onAccent: colors.onAccent,
+                positive: colors.positive,
+                warning: colors.warning,
+                danger: colors.danger,
+                overlay: rgba(colors.inkRgb, 0.35),
+              }}
+            />
+          </SafeAreaView>
+        ) : surface === "score" ? (
+          <SafeAreaView edges={["top"]} style={styles.safe}>
+            <StatusBar style="light" />
+            <View style={styles.app}>
+              <ScorerScreen
+                initialMatchId={scoreMatchId}
+                onExit={() => {
+                  setScoreMatchId(undefined);
+                  setSurface(undefined);
+                }}
+              />
+            </View>
+          </SafeAreaView>
+        ) : surface === "tournament" ? (
+          <TournamentControl
+            onClose={() => setSurface(undefined)}
+            onScore={openScore}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+          />
+        ) : surface === "video" ? (
+          <CoachVideoScreen
+            onClose={() => setSurface(undefined)}
+            palette={{
+              canvas: colors.canvas,
+              surface: colors.depth,
+              surfaceAlt: colors.navyLift,
+              ink: colors.bone,
+              muted: colors.muted,
+              accent: colors.aqua,
+              onAccent: colors.onAccent,
+              positive: colors.positive,
+              warning: colors.warning,
+              danger: colors.danger,
+              border: rgba(colors.overlayRgb, 0.12),
+            }}
+          />
+        ) : (
+          <SafeAreaView edges={["top"]} style={styles.safe}>
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+            <View style={styles.app}>
+              <PreviewBanner />
+              <Animated.View
+                style={[
+                  styles.animatedScreen,
+                  {
+                    opacity: screenTransition,
+                    transform: [
+                      {
+                        translateY: screenTransition.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [8, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {tab === "today" && (
+                  <TodayScreen
+                    onCalendar={openCalendar}
+                    onCreate={() => setSurface("create")}
+                    onGetPaid={() => setSurface("get-paid")}
+                    onMessageGroup={openGroupMessaging}
+                    onPeople={() => setTab("people")}
+                    onRecordNotes={(sessionId) => {
+                      setSessionNotePersonId(undefined);
+                      setSessionNotesId(sessionId);
+                    }}
+                    onScore={openScore}
+                  />
+                )}
+                {tab === "calendar" && (
+                  <CalendarScreen
+                    focusEntryId={calendarEntryId}
+                    onCreate={() => setSurface("create")}
+                    onMessageGroup={openGroupMessaging}
+                    onRecordNotes={(sessionId) => {
+                      setSessionNotePersonId(undefined);
+                      setSessionNotesId(sessionId);
+                    }}
+                    onScan={() => setSurface("scan")}
+                    onScore={openScore}
+                  />
+                )}
+                {tab === "people" && (
+                  <PeopleScreen
+                    onMessage={(personId) => {
+                      setMessagesPersonId(personId);
+                      setMessagesAudienceKey(undefined);
+                      setMessagesConversationId(undefined);
+                      setSurface("messages");
+                    }}
+                    onRecordNotes={(sessionId, personId) => {
+                      setSessionNotePersonId(personId);
+                      setSessionNotesId(sessionId);
+                    }}
+                  />
+                )}
+                {tab === "more" && (
+                  <MoreScreen
+                    onCalendar={() => openCalendar()}
+                    onCreate={() => setSurface("create")}
+                    onGetPaid={() => setSurface("get-paid")}
+                    onMoney={() => setSurface("money")}
+                    onMessages={() => {
+                      setMessagesConversationId(undefined);
+                      setMessagesPersonId(undefined);
+                      setMessagesAudienceKey(undefined);
+                      setSurface("messages");
+                    }}
+                    onPeople={() => setTab("people")}
+                    onTournament={() => setSurface("tournament")}
+                    onVideo={() => setSurface("video")}
+                  />
+                )}
+              </Animated.View>
+              <TabBar active={tab} onChange={changeTab} />
+            </View>
+          </SafeAreaView>
+        )}
+      </ThemeContext.Provider>
+    </OpenDunaAiContext.Provider>
   );
 }
 
@@ -6760,32 +6806,29 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       fontWeight: "900",
     },
-    wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
-    wordmarkImage: { height: 35, width: 104 },
-    proPill: {
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderRadius: 6,
-      color: colors.warning,
-      fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 1,
-      overflow: "hidden",
-      paddingHorizontal: 5,
-      paddingVertical: 3,
-    },
+    wordmarkImage: { height: 30, width: 96 },
     header: {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: 14,
-      paddingTop: 10,
+      minHeight: 44,
+      paddingBottom: 8,
+      paddingTop: 4,
     },
-    headerShell: { marginBottom: 20 },
-    headerContext: {
-      color: colors.muted,
-      fontSize: 12,
-      letterSpacing: 1,
-      marginTop: 5,
+    headerShell: { marginBottom: 14 },
+    headerOrganization: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      marginRight: 12,
+      minHeight: 38,
+    },
+    headerOrganizationName: {
+      color: colors.bone,
+      flexShrink: 1,
+      fontSize: 14,
+      fontWeight: "800",
     },
     headerButtons: { flexDirection: "row", gap: 8 },
     themeButton: {
@@ -6798,22 +6841,6 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 38,
     },
-    themeButtonText: {
-      color: colors.bone,
-      fontSize: 17,
-      lineHeight: 20,
-    },
-    aiButton: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.08),
-      borderColor: rgba(colors.warningRgb, 0.18),
-      borderRadius: 19,
-      borderWidth: 1,
-      height: 38,
-      justifyContent: "center",
-      width: 38,
-    },
-    aiButtonText: { color: colors.warning, fontSize: 16 },
     profileButton: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
@@ -6842,9 +6869,9 @@ function createStyles(palette: Palette) {
       borderRadius: 16,
       borderWidth: 1,
       flexDirection: "row",
-      minHeight: 56,
+      minHeight: 50,
       overflow: "hidden",
-      paddingHorizontal: 11,
+      paddingHorizontal: 10,
     },
     watchBrand: {
       alignItems: "center",
@@ -6852,8 +6879,8 @@ function createStyles(palette: Palette) {
       borderRightWidth: 1,
       flexDirection: "row",
       gap: 6,
-      marginRight: 7,
-      paddingRight: 9,
+      marginRight: 4,
+      paddingRight: 8,
     },
     watchPulse: {
       backgroundColor: colors.flare,
@@ -6867,20 +6894,27 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
       letterSpacing: 0.8,
     },
-    watchMetric: { flex: 1, minWidth: 0, paddingHorizontal: 4 },
-    watchMoney: { flex: 1.35 },
+    watchMetric: {
+      alignItems: "baseline",
+      flex: 1,
+      flexDirection: "row",
+      gap: 4,
+      justifyContent: "center",
+      minWidth: 0,
+      paddingHorizontal: 3,
+    },
     watchMetricValue: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: "900",
     },
     watchMetricLabel: {
       color: colors.muted,
       fontSize: 12,
       fontWeight: "800",
-      letterSpacing: 0.5,
-      marginTop: 3,
+      flexShrink: 1,
+      letterSpacing: 0.25,
     },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     sheetHeader: {
@@ -7992,46 +8026,59 @@ function createStyles(palette: Palette) {
       padding: 15,
     },
     tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.98),
-      borderTopColor: rgba(colors.overlayRgb, 0.08),
-      borderTopWidth: 1,
-      bottom: 0,
+      backgroundColor: rgba(colors.depthRgb, 0.99),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 32,
+      borderWidth: 1,
+      bottom: Platform.OS === "ios" ? 14 : 10,
       flexDirection: "row",
-      left: 0,
-      paddingBottom: Platform.OS === "ios" ? 22 : 9,
+      left: 12,
+      minHeight: 62,
+      paddingBottom: 6,
       paddingHorizontal: 8,
-      paddingTop: 8,
+      paddingTop: 6,
       position: "absolute",
-      right: 0,
+      right: 12,
+      shadowColor: "#173b65",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
     },
     tabItem: {
       alignItems: "center",
       flex: 1,
-      gap: 3,
-      paddingVertical: 4,
+      justifyContent: "center",
+      minHeight: 50,
       position: "relative",
     },
-    tabIcon: { color: colors.muted, fontSize: 17 },
-    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-    tabActive: { color: colors.warning },
-    tabIndicator: {
-      backgroundColor: colors.warning,
-      borderRadius: 2,
-      height: 2,
+    tabIconShell: {
+      alignItems: "center",
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    tabIconShellActive: {
+      backgroundColor: rgba(colors.warningRgb, 0.1),
+    },
+    aiTab: { marginTop: -15 },
+    aiTabMarkCrop: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.depth,
+      borderRadius: 30,
+      borderWidth: 4,
+      height: 60,
+      overflow: "hidden",
+      position: "relative",
+      width: 60,
+    },
+    aiTabMarkImage: {
+      height: 60,
+      left: -3,
       position: "absolute",
-      top: -9,
-      width: 20,
+      top: -2,
+      width: 137,
     },
-    scoreTab: {
-      backgroundColor: colors.warning,
-      borderRadius: 25,
-      height: 50,
-      marginTop: -18,
-      maxWidth: 50,
-      paddingTop: 5,
-    },
-    scoreTabIcon: { color: colors.onAccent, fontSize: 22, lineHeight: 23 },
-    scoreTabLabel: { color: colors.onAccent, fontWeight: "800" },
   });
 }
 

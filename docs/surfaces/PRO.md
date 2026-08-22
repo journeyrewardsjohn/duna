@@ -16,10 +16,22 @@ against the same server contracts.
 | Destination | Job                                                                           |
 | ----------- | ----------------------------------------------------------------------------- |
 | Today       | Current sessions, arrivals, work queue, quick create, scoring, notes          |
-| Courts      | Schedule, resources, blocks, attendance, scanning, session detail             |
-| Money       | Guided in-person collection and earnings state                                |
-| People      | Members, players, guardians, staff, profiles, invitations                     |
-| More        | Messaging, team/roles, policies, organization tools, links to focused actions |
+| Calendar    | Schedule, resources, blocks, attendance, scanning, session detail             |
+| Duna AI     | Organization-aware copilot, clarification, review, and governed field actions |
+| Create      | `+` entry into guided session, event, program, product, and payment creation  |
+| More        | People, Money, messaging, video, tournaments, policies, and focused tools     |
+
+The persistent native navigation is icon-only: equal-size Lucide icons for
+Today, Calendar, Create, and More surround the elevated Duna mark for Duna AI.
+Accessible labels remain on every destination even though visible tab text is
+removed. The compact header shows the active organization and utility controls;
+the Today screen alone adds a one-line operational snapshot for matches, live
+play, and items needing review.
+
+Duna AI's opening suggestions compare event registrations, reach, conversion,
+current price, marketing activity, resource conflicts, and coach coverage. They
+name the event or session behind each question and never infer that low fill by
+itself requires a discount.
 
 Focused full-screen surfaces handle creation, Get Paid, messaging, ticket/player
 scanning, live scoring, and LiveKit session notes. Deep links can open an exact
@@ -37,6 +49,14 @@ token. It also owns the organization-principal messaging delivery engine,
 product-media upload, and LiveKit note-room request. Business rules remain in
 `operator.*` procedures; the device does not decide organization scope,
 inventory truth, fees, refunds, admission, or final payment state.
+
+The same bearer session also calls `/api/duna-ai` with `surface: "pro"`.
+`ProRuntimeProvider` supplies the active organization and server-resolved actor;
+the client supplies only bounded page and conversation context. The copilot may
+prepare a session reschedule after the calendar service confirms court and coach
+availability. Applying it still requires review, a fresh permission check, the
+calendar transaction, an audit record, and queued player notifications. See
+[`../DUNA_AI_COPILOT.md`](../DUNA_AI_COPILOT.md).
 
 ## Native capability map
 
