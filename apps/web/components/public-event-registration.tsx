@@ -16,6 +16,7 @@ import {
   Trophy,
 } from "lucide-react";
 import Link from "next/link";
+import { AuthenticatedEventCheckoutHandoff } from "./authenticated-event-checkout-handoff";
 
 type Selection =
   | { readonly kind: "division"; readonly item: EventDivisionSummary }
@@ -68,11 +69,13 @@ export function PublicEventRegistration({
   initialDivisionId,
   initialTicketTypeId,
   initialTicketQuantity,
+  authConfigured,
 }: {
   readonly event: EventSummary;
   readonly initialDivisionId?: string;
   readonly initialTicketTypeId?: string;
   readonly initialTicketQuantity?: number;
+  readonly authConfigured: boolean;
 }) {
   const selection = selectionFrom(event, {
     divisionId: initialDivisionId,
@@ -101,6 +104,9 @@ export function PublicEventRegistration({
 
   return (
     <main className="public-registration" data-zone="editorial">
+      {authConfigured ? (
+        <AuthenticatedEventCheckoutHandoff checkoutHref={returnTo} />
+      ) : null}
       <section className="public-registration__hero">
         <div>
           <span className="section__eyebrow">YOUR EVENT CART</span>
