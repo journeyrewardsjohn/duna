@@ -2,9 +2,19 @@
 
 import { getServerCaller } from "@/lib/api";
 
-export async function previewAudienceAction(ruleAst: unknown) {
+export async function previewAudienceAction(input: {
+  readonly mode: "static" | "dynamic" | "hybrid";
+  readonly ruleAst: unknown;
+  readonly includePersonIds: readonly string[];
+  readonly excludePersonIds: readonly string[];
+}) {
   const caller = await getServerCaller();
-  return caller.operator.previewAudience({ ruleAst: ruleAst as never });
+  return caller.operator.previewAudience({
+    ...input,
+    ruleAst: input.ruleAst as never,
+    includePersonIds: [...input.includePersonIds],
+    excludePersonIds: [...input.excludePersonIds],
+  });
 }
 
 export async function createAudienceAction(input: {
@@ -13,6 +23,7 @@ export async function createAudienceAction(input: {
   readonly ruleAst: unknown;
   readonly includePersonIds: readonly string[];
   readonly excludePersonIds: readonly string[];
+  readonly idempotencyKey: string;
 }) {
   const caller = await getServerCaller();
   return caller.operator.createAudience({
@@ -20,7 +31,7 @@ export async function createAudienceAction(input: {
     ruleAst: input.ruleAst as never,
     includePersonIds: [...input.includePersonIds],
     excludePersonIds: [...input.excludePersonIds],
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: input.idempotencyKey,
   });
 }
 

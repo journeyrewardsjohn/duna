@@ -154,8 +154,6 @@ import {
   videoAnalysisMarkerInputSchema,
   videoAnalysisReportSchema,
   videoAnalysisRunSchema,
-  videoPerformanceReviewSchema,
-  visionImprovementProposalQueueSchema,
   videoPlaybackSchema,
   videoStudioSchema,
   videoSummarySchema,
@@ -170,6 +168,7 @@ import {
   AudienceServiceError,
   createAudience,
   getAudience,
+  getAudienceBuilderWorkspace,
   getAudienceDetail,
   listAudiences,
   previewAudienceRule,
@@ -415,7 +414,6 @@ import {
   presignVideoUploadPart,
   recordVideoUploadPart,
   recordVideoViewHeartbeat,
-  resumeVideoUpload,
   requestVideoMusicRemoval,
   reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
@@ -486,10 +484,6 @@ import {
 import {
   createVideoAnalysisMarker,
   loadVideoAnalysisReport,
-  loadVisionImprovementProposalQueue,
-  processQueuedVisionImprovementProposals,
-  reviewVisionImprovementProposal,
-  requestOwnerVideoPerformanceReview,
   requestVideoAnalysis,
   reviewVideoAnalysisEvent,
   VideoAnalysisError,
@@ -1439,15 +1433,11 @@ function throwDomainError(error: unknown): never {
       error.code === "ANALYSIS_EVENT_NOT_FOUND"
         ? "NOT_FOUND"
         : error.code === "ANALYSIS_NOT_ALLOWED" ||
-            error.code === "ANALYSIS_EVENT_WRONG_VIDEO" ||
-            error.code === "OWNER_REQUIRED" ||
-            error.code === "ADULT_REQUIRED"
+            error.code === "ANALYSIS_EVENT_WRONG_VIDEO"
           ? "FORBIDDEN"
           : error.code === "INVALID_REVIEW"
             ? "BAD_REQUEST"
-            : error.code === "ANALYSIS_NOT_READY"
-              ? "PRECONDITION_FAILED"
-              : "INTERNAL_SERVER_ERROR";
+            : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof VisionModelError) {
@@ -3105,42 +3095,6 @@ const playerRouter = router({
         },
       }),
     ),
-  requestOwnerVideoPerformanceReview: protectedProcedure
-    .use(
-      rateLimitMiddleware({
-        id: "video-performance-review-request",
-        capacity: 6,
-        refillPerMinute: 2,
-      }),
-    )
-    .input(
-      z.object({
-        videoId: z.string().uuid(),
-        idempotencyKey: z.string().uuid(),
-      }),
-    )
-    .output(videoPerformanceReviewSchema)
-    .mutation(({ input, ctx }) =>
-      runIdempotentMutation({
-        key: input.idempotencyKey,
-        procedure: "player.requestOwnerVideoPerformanceReview",
-        request: input,
-        ctx,
-        execute: async () => {
-          try {
-            return await requestOwnerVideoPerformanceReview({
-              actor: ctx.actor!,
-              videoId: input.videoId,
-              requestId: ctx.requestId,
-              ipAddress: ctx.ipAddress,
-              now: ctx.now,
-            });
-          } catch (error) {
-            return throwDomainError(error);
-          }
-        },
-      }),
-    ),
   createVideoAnalysisMarker: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -3674,16 +3628,6 @@ const playerRouter = router({
         },
       }),
     ),
-  resumeVideoUpload: protectedProcedure
-    .input(z.object({ videoId: z.string().uuid() }))
-    .output(videoUploadSessionSchema)
-    .query(async ({ input, ctx }) => {
-      try {
-        return await resumeVideoUpload({ actor: ctx.actor!, ...input });
-      } catch (error) {
-        return throwDomainError(error);
-      }
-    }),
   videoUploadPartUrl: protectedProcedure
     .input(
       z.object({
@@ -7606,6 +7550,27 @@ const operatorRouter = router({
   audiences: organizationProcedure("audiences:read")
     .output(z.array(audienceSummarySchema).readonly())
     .query(({ ctx }) => listAudiences(ctx.actor!)),
+  audienceBuilder: organizationProcedure("audiences:read")
+    .output(
+      z.object({
+        candidateCount: z.number().int().nonnegative(),
+        people: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              displayName: z.string(),
+              initials: z.string(),
+              avatarUrl: z.string().optional(),
+              homeMarket: z.string().optional(),
+              isMinor: z.boolean(),
+              roles: z.array(z.enum(["player", "member", "parent"])).readonly(),
+              sandRating: z.number().optional(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .query(({ ctx }) => getAudienceBuilderWorkspace(ctx.actor!)),
   audience: organizationProcedure("audiences:read")
     .input(z.object({ audienceId: z.string().uuid() }))
     .output(audienceSummarySchema)
@@ -7644,10 +7609,18 @@ const operatorRouter = router({
       getAudienceDetail(ctx.actor!, input.audienceId),
     ),
   previewAudience: organizationProcedure("audiences:write")
-    .input(z.object({ ruleAst: audienceRuleAstSchema }))
+    .input(
+      z.object({
+        mode: z.enum(["static", "dynamic", "hybrid"]),
+        ruleAst: audienceRuleAstSchema,
+        includePersonIds: z.array(z.string().uuid()).max(5_000),
+        excludePersonIds: z.array(z.string().uuid()).max(5_000),
+      }),
+    )
     .output(
       z.object({
         ruleHash: z.string(),
+        candidateCount: z.number().int().nonnegative(),
         estimatedSize: z.number().int(),
         unavailableFactKeys: z.array(z.string()).readonly(),
         members: z
@@ -7673,7 +7646,10 @@ const operatorRouter = router({
       }),
     )
     .query(({ input, ctx }) =>
-      previewAudienceRule(ctx.actor!, input.ruleAst as never),
+      previewAudienceRule(ctx.actor!, {
+        ...input,
+        ruleAst: input.ruleAst as never,
+      }),
     ),
   createAudience: organizationProcedure("audiences:write")
     .input(
@@ -12914,86 +12890,6 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
-  visionImprovementProposals: superAdminProcedure
-    .output(visionImprovementProposalQueueSchema)
-    .query(async () => {
-      try {
-        return await loadVisionImprovementProposalQueue();
-      } catch (error) {
-        return throwDomainError(error);
-      }
-    }),
-  processVisionImprovementProposals: superAdminProcedure
-    .input(
-      z.object({
-        limit: z.number().int().min(1).max(20).optional(),
-        idempotencyKey: z.string().uuid(),
-      }),
-    )
-    .output(
-      z.object({
-        processed: z.number().int().nonnegative(),
-        succeeded: z.number().int().nonnegative(),
-      }),
-    )
-    .mutation(({ input, ctx }) =>
-      runIdempotentMutation({
-        key: input.idempotencyKey,
-        procedure: "admin.processVisionImprovementProposals",
-        request: input,
-        ctx,
-        execute: async () => {
-          try {
-            return await processQueuedVisionImprovementProposals({
-              limit: input.limit ?? 10,
-              now: ctx.now,
-              requestId: ctx.requestId,
-              ipAddress: ctx.ipAddress,
-            });
-          } catch (error) {
-            return throwDomainError(error);
-          }
-        },
-      }),
-    ),
-  reviewVisionImprovementProposal: superAdminProcedure
-    .input(
-      z.object({
-        proposalId: z.string().uuid(),
-        decision: z.enum(["approved", "rejected"]),
-        notes: z.string().trim().min(8).max(1_000),
-        idempotencyKey: z.string().uuid(),
-      }),
-    )
-    .output(
-      z.object({
-        id: z.string().uuid(),
-        decision: z.enum(["approved", "rejected"]),
-      }),
-    )
-    .mutation(({ input, ctx }) =>
-      runIdempotentMutation({
-        key: input.idempotencyKey,
-        procedure: "admin.reviewVisionImprovementProposal",
-        request: input,
-        ctx,
-        execute: async () => {
-          try {
-            return await reviewVisionImprovementProposal({
-              actor: ctx.actor!,
-              proposalId: input.proposalId,
-              decision: input.decision,
-              notes: input.notes,
-              requestId: ctx.requestId,
-              ipAddress: ctx.ipAddress,
-              now: ctx.now,
-            });
-          } catch (error) {
-            return throwDomainError(error);
-          }
-        },
-      }),
-    ),
   people: superAdminProcedure
     .input(
       z.object({

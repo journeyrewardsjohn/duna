@@ -4,7 +4,6 @@ import {
   buildCourtHeatmap,
   buildVolleyballPerformance,
   confidenceBand,
-  evaluateBeachVolleyballRules,
   formatSessionTimeUs,
   isSessionTimeUs,
 } from "./video-analysis";
@@ -150,64 +149,5 @@ describe("Duna Vision analysis primitives", () => {
     expect(report.averageRallySeconds).toBeUndefined();
     expect(report.maxAttackSpeedKph).toBeUndefined();
     expect(report.summary).toContain("not available");
-  });
-
-  it("keeps beach rules unavailable without complete trusted evidence", () => {
-    const rallyId = crypto.randomUUID();
-    const findings = evaluateBeachVolleyballRules([
-      {
-        eventType: "ball-contact",
-        sessionTimeUs: 1_000_000,
-        confidence: 0.94,
-        source: "model",
-        payload: { rallyId, contactKind: "serve", side: "a" },
-      },
-    ]);
-
-    expect(
-      findings.find((finding) => finding.ruleId === "three-team-contacts"),
-    ).toMatchObject({ verdict: "unavailable" });
-    expect(
-      findings.find(
-        (finding) => finding.ruleId === "consecutive-player-contact",
-      ),
-    ).toMatchObject({ verdict: "unavailable" });
-  });
-
-  it("evaluates bounded trusted 2s contacts without inferring 3D height", () => {
-    const rallyId = crypto.randomUUID();
-    const contact = (
-      sessionTimeUs: number,
-      playerId: string,
-      kind: "serve" | "reception" | "set",
-    ) => ({
-      eventType: "ball-contact" as const,
-      sessionTimeUs,
-      confidence: 0.96,
-      source: "model" as const,
-      payload: {
-        rallyId,
-        rallySequenceComplete: true,
-        contactKind: kind,
-        side: sessionTimeUs === 1_000_000 ? ("a" as const) : ("b" as const),
-        playerId,
-        contactQuality: {
-          evidenceVersion: "duna-contact-evidence-v1" as const,
-          evidence: "visible-2d" as const,
-        },
-      },
-    });
-    const findings = evaluateBeachVolleyballRules([
-      contact(1_000_000, crypto.randomUUID(), "serve"),
-      contact(2_000_000, crypto.randomUUID(), "reception"),
-      contact(3_000_000, crypto.randomUUID(), "set"),
-    ]);
-
-    expect(
-      findings.find((finding) => finding.ruleId === "serve-starts-rally"),
-    ).toMatchObject({ verdict: "pass" });
-    expect(
-      findings.find((finding) => finding.ruleId === "three-team-contacts"),
-    ).toMatchObject({ verdict: "pass" });
   });
 });

@@ -10,6 +10,7 @@ import {
   organizationParticipants,
   people,
   guardianships,
+  ratings,
 } from "@duna/db";
 import {
   audienceRuleHash,
@@ -50,6 +51,20 @@ export interface AudienceSummary {
     readonly displayName: string;
     readonly initials: string;
     readonly avatarUrl?: string;
+  }[];
+}
+
+export interface AudienceBuilderWorkspace {
+  readonly candidateCount: number;
+  readonly people: readonly {
+    readonly id: string;
+    readonly displayName: string;
+    readonly initials: string;
+    readonly avatarUrl?: string;
+    readonly homeMarket?: string;
+    readonly isMinor: boolean;
+    readonly roles: readonly ("player" | "member" | "parent")[];
+    readonly sandRating?: number;
   }[];
 }
 
@@ -123,6 +138,7 @@ async function validateAudienceDefinition(input: {
       "Only managers and owners can create or revise dynamic audiences.",
     );
   if (
+    input.mode !== "static" &&
     audienceRuleRequiresScope(ruleAst, "payments:read") &&
     !hasScope(input.actor, "payments:read")
   )
@@ -186,6 +202,144 @@ const demoAudience: AudienceSummary = {
     },
   ],
 };
+
+const demoBuilderPeople: AudienceBuilderWorkspace["people"] = [
+  {
+    id: "10000000-0000-4000-8000-000000000201",
+    displayName: "Maya Chen",
+    initials: "MC",
+    homeMarket: "Santa Monica, CA",
+    isMinor: false,
+    roles: ["player"],
+    sandRating: 5.42,
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000202",
+    displayName: "Jordan Smith",
+    initials: "JS",
+    homeMarket: "Manhattan Beach, CA",
+    isMinor: false,
+    roles: ["player"],
+    sandRating: 4.86,
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000203",
+    displayName: "Ava Patel",
+    initials: "AP",
+    homeMarket: "Hermosa Beach, CA",
+    isMinor: true,
+    roles: ["player"],
+    sandRating: 3.91,
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000204",
+    displayName: "Elena Patel",
+    initials: "EP",
+    homeMarket: "Hermosa Beach, CA",
+    isMinor: false,
+    roles: ["parent"],
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000205",
+    displayName: "Noah Martinez",
+    initials: "NM",
+    homeMarket: "Long Beach, CA",
+    isMinor: false,
+    roles: ["member", "player"],
+    sandRating: 4.25,
+  },
+];
+
+export async function getAudienceBuilderWorkspace(
+  actor: ApiActor,
+): Promise<AudienceBuilderWorkspace> {
+  requireAudienceDatabase(actor);
+  if (actor.isDemo)
+    return {
+      candidateCount: demoBuilderPeople.length,
+      people: demoBuilderPeople,
+    };
+  const db = getDatabase();
+  const orgId = organizationId(actor);
+  const rows = await db
+    .select({
+      personId: people.id,
+      displayName: people.displayName,
+      avatarUrl: people.avatarUrl,
+      homeMarket: people.homeMarket,
+      isMinor: people.isMinor,
+      relationship: organizationParticipants.relationship,
+    })
+    .from(organizationParticipants)
+    .innerJoin(people, eq(organizationParticipants.personId, people.id))
+    .where(
+      and(
+        eq(organizationParticipants.organizationId, orgId),
+        eq(organizationParticipants.status, "active"),
+      ),
+    );
+  const peopleById = new Map<
+    string,
+    {
+      id: string;
+      displayName: string;
+      initials: string;
+      avatarUrl?: string;
+      homeMarket?: string;
+      isMinor: boolean;
+      roles: Set<"player" | "member" | "parent">;
+    }
+  >();
+  for (const row of rows) {
+    const current = peopleById.get(row.personId) ?? {
+      id: row.personId,
+      displayName: row.displayName,
+      initials: row.displayName
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase(),
+      ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+      ...(row.homeMarket ? { homeMarket: row.homeMarket } : {}),
+      isMinor: row.isMinor,
+      roles: new Set<"player" | "member" | "parent">(),
+    };
+    current.roles.add(
+      row.relationship === "guardian"
+        ? "parent"
+        : row.relationship === "member"
+          ? "member"
+          : "player",
+    );
+    peopleById.set(row.personId, current);
+  }
+  const candidateIds = [...peopleById.keys()];
+  const ratingRows = candidateIds.length
+    ? await db
+        .select({ personId: ratings.personId, display: ratings.display })
+        .from(ratings)
+        .where(
+          and(
+            inArray(ratings.personId, candidateIds),
+            eq(ratings.discipline, "beach-2s"),
+          ),
+        )
+    : [];
+  const ratingByPerson = new Map(
+    ratingRows.map((row) => [row.personId, row.display] as const),
+  );
+  const builderPeople = [...peopleById.values()]
+    .sort((left, right) => left.displayName.localeCompare(right.displayName))
+    .map((person) => ({
+      ...person,
+      roles: [...person.roles],
+      ...(ratingByPerson.has(person.id)
+        ? { sandRating: ratingByPerson.get(person.id) }
+        : {}),
+    }));
+  return { candidateCount: builderPeople.length, people: builderPeople };
+}
 
 async function projectAudience(input: {
   organizationId: string;
@@ -268,6 +422,7 @@ async function projectAudience(input: {
     };
   });
   return {
+    candidateCount: candidates.length,
     members,
     unavailable: [...unavailable],
     status: unavailable.size ? ("partial" as const) : ("complete" as const),
@@ -569,32 +724,72 @@ export async function createAudience(input: {
 
 export async function previewAudienceRule(
   actor: ApiActor,
-  ruleAst: AudienceRuleAst,
+  input: {
+    readonly mode: AudienceMode;
+    readonly ruleAst: AudienceRuleAst;
+    readonly includePersonIds: readonly string[];
+    readonly excludePersonIds: readonly string[];
+  },
 ) {
   const canonical = await validateAudienceDefinition({
     actor,
-    mode: "dynamic",
-    ruleAst,
-    includePersonIds: [],
-    excludePersonIds: [],
+    ...input,
   });
-  if (actor.isDemo)
+  if (actor.isDemo) {
+    const unavailable = new Set<string>();
+    const members = demoBuilderPeople.map((person) => {
+      const facts = {
+        personType: person.isMinor
+          ? ("minor" as const)
+          : person.roles.includes("parent")
+            ? ("adult-guardian" as const)
+            : ("player" as const),
+        verifiedDependentCount: person.roles.includes("parent") ? 1 : 0,
+      };
+      const evaluation =
+        input.mode === "static"
+          ? { matches: false, unavailable: [], reasons: [] }
+          : evaluateAudienceRule(canonical, facts);
+      evaluation.unavailable.forEach((fact) => unavailable.add(fact));
+      const included = input.excludePersonIds.includes(person.id)
+        ? false
+        : input.includePersonIds.includes(person.id)
+          ? true
+          : evaluation.matches;
+      return {
+        personId: person.id,
+        included,
+        reasonCode: input.excludePersonIds.includes(person.id)
+          ? "explicit-exclude"
+          : input.includePersonIds.includes(person.id)
+            ? "static-include"
+            : evaluation.matches
+              ? "dynamic-match"
+              : evaluation.unavailable.length
+                ? "fact-unavailable"
+                : "rule-no-match",
+        reasons: evaluation.reasons,
+      };
+    });
     return {
       ruleHash: audienceRuleHash(canonical),
-      estimatedSize: 0,
-      unavailableFactKeys: ["demo-preview"],
-      members: [],
-      exclusions: [],
+      candidateCount: demoBuilderPeople.length,
+      estimatedSize: members.filter((member) => member.included).length,
+      unavailableFactKeys: [...unavailable],
+      members: members.filter((member) => member.included).slice(0, 10),
+      exclusions: members.filter((member) => !member.included).slice(0, 10),
     };
+  }
   const projection = await projectAudience({
     organizationId: organizationId(actor),
-    mode: "dynamic",
+    mode: input.mode,
     ruleAst: canonical,
-    includePersonIds: [],
-    excludePersonIds: [],
+    includePersonIds: input.includePersonIds,
+    excludePersonIds: input.excludePersonIds,
   });
   return {
     ruleHash: audienceRuleHash(canonical),
+    candidateCount: projection.candidateCount,
     estimatedSize: projection.members.filter((member) => member.included)
       .length,
     unavailableFactKeys: projection.unavailable,

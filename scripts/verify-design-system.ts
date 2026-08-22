@@ -17,6 +17,7 @@ const requiredFiles = [
   "docs/design/duna-font-usage-guide.md",
   "docs/design/duna-design-system.md",
   "docs/design/duna-design-system-v3.md",
+  "docs/design/duna-hq-component-system.md",
   "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
   "docs/design/duna-theming-light-dark.md",
@@ -191,6 +192,10 @@ if (
 
 const agentsContract = readFileSync(join(root, "AGENTS.md"), "utf8");
 const designIndex = readFileSync(join(root, "docs/design/README.md"), "utf8");
+const hqComponentGuide = readFileSync(
+  join(root, "docs/design/duna-hq-component-system.md"),
+  "utf8",
+);
 const fontGuide = readFileSync(
   join(root, "docs/design/duna-font-usage-guide.md"),
   "utf8",
@@ -214,6 +219,63 @@ if (/Fraunces|Figtree|JetBrains Mono/i.test(fontGuide)) {
   violations.push(
     "docs/design/duna-font-usage-guide.md must not restore a third product family",
   );
+}
+for (const contract of [
+  "PageHeader",
+  "buttonClassName",
+  "AddressEntry",
+  "PlayerCombobox",
+  "All rules (AND)",
+  "Any rule (OR)",
+] as const) {
+  if (!hqComponentGuide.includes(contract)) {
+    violations.push(
+      `docs/design/duna-hq-component-system.md must preserve ${contract}`,
+    );
+  }
+}
+
+const sharedWebComponents = readFileSync(
+  join(root, "packages/ui/src/web.tsx"),
+  "utf8",
+);
+for (const contract of [
+  "buttonClassName",
+  "PageHeader",
+  "AvatarStack",
+  "StatCard",
+  "EmptyState",
+  "ProgressBar",
+] as const) {
+  if (!sharedWebComponents.includes(`function ${contract}`)) {
+    violations.push(`packages/ui/src/web.tsx must provide ${contract}`);
+  }
+}
+
+const hqGlobals = readFileSync(join(root, "apps/hq/app/globals.css"), "utf8");
+if (hqGlobals.includes(".hq-page-heading > div:last-child {")) {
+  violations.push(
+    "HQ page headers must not treat a single copy block as an action group",
+  );
+}
+
+const audienceEditorSource = readFileSync(
+  join(root, "apps/hq/app/audiences/audience-editor.tsx"),
+  "utf8",
+);
+for (const contract of [
+  "All rules",
+  "Any rule",
+  "Add rule",
+  "Audience preview",
+  "Search by name, role, city, or Sand Rating",
+  "Create audience",
+] as const) {
+  if (!audienceEditorSource.includes(contract)) {
+    violations.push(
+      `apps/hq/app/audiences/audience-editor.tsx must preserve ${contract}`,
+    );
+  }
 }
 
 const sharedTypographyCss = readFileSync(

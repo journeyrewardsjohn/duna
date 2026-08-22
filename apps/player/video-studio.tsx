@@ -3,7 +3,6 @@ import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
 import {
   useCallback,
@@ -85,17 +84,10 @@ import {
   removeOfflineVideoDraft,
   retainVideoForOfflineUpload,
   subscribeToVideoNetwork,
-  uploadOfflineVideoRange,
   updateOfflineVideoDraft,
   type OfflineVideoDraft,
   type VideoNetworkPreferences,
 } from "./video-offline";
-import {
-  cancelFileBackedUpload,
-  enqueueFileBackedParts,
-  getCompletedFileBackedParts,
-  isBackgroundUploadAvailable,
-} from "@duna/expo-background-upload";
 import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
 import { startDunaLiveActivity } from "./live-activities";
 
@@ -117,11 +109,6 @@ type VideoPlayback = Awaited<
 >;
 type VideoAnalysisReport = Awaited<
   ReturnType<DunaApiClient["player"]["videoAnalysisReport"]["query"]>
->;
-type VideoPerformanceReview = Awaited<
-  ReturnType<
-    DunaApiClient["player"]["requestOwnerVideoPerformanceReview"]["mutate"]
-  >
 >;
 type VisionSessionAccess = Awaited<
   ReturnType<DunaApiClient["player"]["createVisionSession"]["mutate"]>
@@ -164,20 +151,9 @@ interface CaptureForm {
 
 interface OfflineUploadPayload {
   readonly form: CaptureForm;
-  /** Written with the local draft before begin, so a lost response is safe. */
-  readonly beginIdempotencyKey: string;
-  /** Completion can also be retried after a database/network acknowledgement loss. */
-  readonly completeIdempotencyKey: string;
-  readonly cancelIdempotencyKey: string;
   readonly visionSessionId?: string;
   readonly calibration?: DunaCourtCalibration;
   readonly importedVision?: ImportedVisionPayload;
-  /** Stable server-side multipart identity. Native completion is reconciled
-   * against this session on foreground rather than trusting local progress. */
-  readonly upload?: {
-    readonly videoId: string;
-    readonly uploadId: string;
-  };
 }
 
 interface ImportedVisionPayload {
@@ -997,7 +973,6 @@ function VideoDetailsForm({
   onIdentifyImportedPlayers,
   onImportedVisionChange,
   preparedVideo,
-  foregroundOnlyUpload,
 }: {
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
@@ -1012,7 +987,6 @@ function VideoDetailsForm({
   readonly onEditImportedCourt: () => void;
   readonly onIdentifyImportedPlayers: () => void;
   readonly onImportedVisionChange: (setup: ImportedVisionSetup) => void;
-  readonly foregroundOnlyUpload: boolean;
 }) {
   const associationRequired =
     form.category === "event" || form.category === "match";
@@ -1355,9 +1329,7 @@ function VideoDetailsForm({
           >
             <Text style={styles.primaryButtonText}>
               {mode === "upload"
-                ? foregroundOnlyUpload
-                  ? "Start foreground upload"
-                  : "Start upload in background"
+                ? "Start upload in background"
                 : "Continue to camera guide"}
             </Text>
           </Pressable>
@@ -3137,8 +3109,6 @@ function VisionAnalysisCard({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string>();
-  const [performanceReview, setPerformanceReview] =
-    useState<VideoPerformanceReview>();
   const [courtSize, setCourtSize] = useState({ width: 0, height: 0 });
 
   const loadReport = useCallback(async () => {
@@ -3170,29 +3140,6 @@ function VisionAnalysisCard({
           : "Duna Vision is processing the available evidence.",
       );
       await loadReport();
-    } catch (reason) {
-      setNotice(displayError(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const requestPerformanceReview = async () => {
-    if (!report?.run || busy) return;
-    setBusy(true);
-    try {
-      const review =
-        await client.player.requestOwnerVideoPerformanceReview.mutate({
-          videoId,
-          idempotencyKey: idempotencyKey(),
-        });
-      setPerformanceReview(review);
-      setNotice(
-        review.status === "succeeded"
-          ? "Your evidence-only review is ready as private draft insights."
-          : (review.fallbackReason ??
-              "The evidence-only review is unavailable. Your Vision report remains private and unchanged."),
-      );
     } catch (reason) {
       setNotice(displayError(reason));
     } finally {
@@ -3470,62 +3417,6 @@ function VisionAnalysisCard({
               )}
             </View>
           )}
-
-          {report.run &&
-            (report.run.status === "ready" ||
-              report.run.status === "needs-review") && (
-              <View style={styles.visionOwnerReviewCard}>
-                <Text style={styles.visionOwnerReviewEyebrow}>
-                  OWNER REVIEW · ADULT ONLY
-                </Text>
-                <Text style={styles.visionOwnerReviewTitle}>
-                  Turn this evidence into private coaching drafts.
-                </Text>
-                <Text style={styles.visionOwnerReviewBody}>
-                  Duna sends the completed 2D report—not raw video, identity, or
-                  unseen play—to the governed review service. Nothing trains or
-                  promotes a model. Available only to the adult video owner;
-                  eligibility is checked again when requested.
-                </Text>
-                <Pressable
-                  accessibilityLabel="Request an evidence-only performance review"
-                  disabled={busy}
-                  onPress={() => void requestPerformanceReview()}
-                  style={[
-                    styles.visionOwnerReviewButton,
-                    busy && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.visionOwnerReviewButtonText}>
-                    {busy
-                      ? "Preparing review…"
-                      : performanceReview?.status === "succeeded"
-                        ? "Request another evidence review"
-                        : "Request evidence-only review"}
-                  </Text>
-                </Pressable>
-                {performanceReview?.status === "succeeded" &&
-                  performanceReview.recommendations.length > 0 && (
-                    <View style={styles.visionOwnerReviewDrafts}>
-                      {performanceReview.recommendations.map(
-                        (recommendation) => (
-                          <View
-                            key={`${recommendation.category}-${recommendation.headline}`}
-                            style={styles.visionOwnerReviewDraft}
-                          >
-                            <Text style={styles.visionOwnerReviewDraftTitle}>
-                              {recommendation.headline}
-                            </Text>
-                            <Text style={styles.visionOwnerReviewDraftBody}>
-                              {recommendation.guidance}
-                            </Text>
-                          </View>
-                        ),
-                      )}
-                    </View>
-                  )}
-              </View>
-            )}
 
           {report.reviewQueue.length > 0 && (
             <View style={styles.visionReviewRail}>
@@ -4086,6 +3977,10 @@ export function VideoStudioScreen({
   };
 
   const chooseLibrary = async () => {
+    if (!VideoCapture) {
+      setError("Video upload requires the Duna iOS app.");
+      return;
+    }
     const importId = Crypto.randomUUID();
     reportTransfer({
       id: importId,
@@ -4095,40 +3990,7 @@ export function VideoStudioScreen({
         "Duna is preparing a reliable local upload. You can keep using the app.",
     });
     try {
-      const selected = VideoCapture
-        ? await VideoCapture.pickVideo()
-        : await (async (): Promise<PreparedVideo | null> => {
-            const permission =
-              await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permission.granted) {
-              throw new Error(
-                "Photo library permission is needed to upload a video.",
-              );
-            }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["videos"],
-            });
-            const asset = result.assets?.[0];
-            if (result.canceled || !asset?.uri) return null;
-            if (!asset.fileSize || asset.fileSize <= 0) {
-              throw new Error("Duna could not read the selected video size.");
-            }
-            if (asset.mimeType && asset.mimeType !== "video/mp4") {
-              throw new Error(
-                "Android uploads currently require an MP4 video.",
-              );
-            }
-            return {
-              fileUri: asset.uri,
-              fileName: asset.fileName ?? `duna-upload-${Date.now()}.mp4`,
-              mimeType: "video/mp4",
-              bytes: asset.fileSize,
-              durationSeconds: Math.max(
-                1,
-                Math.ceil((asset.duration ?? 1_000) / 1_000),
-              ),
-            };
-          })();
+      const selected = await VideoCapture.pickVideo();
       if (!selected) {
         reportTransfer(undefined);
         return;
@@ -4144,7 +4006,7 @@ export function VideoStudioScreen({
         }),
       );
       setSamplingImportedFrames(true);
-      const sampler = VideoCapture?.sampleVideoFrames;
+      const sampler = VideoCapture.sampleVideoFrames;
       if (typeof sampler === "function") {
         void sampler(selected.fileUri, 14)
           .then((frames) => {
@@ -4232,9 +4094,6 @@ export function VideoStudioScreen({
         durationSeconds: input.video.durationSeconds,
         payload: {
           form: input.nextForm,
-          beginIdempotencyKey: idempotencyKey(),
-          completeIdempotencyKey: idempotencyKey(),
-          cancelIdempotencyKey: idempotencyKey(),
           visionSessionId: input.sessionId,
           calibration: input.calibration,
           importedVision: input.importedVision,
@@ -4325,9 +4184,8 @@ export function VideoStudioScreen({
     async (
       draft: OfflineVideoDraft,
       onProgress?: (progress: number) => void,
-      allowCellular = false,
     ) => {
-      if (!client) {
+      if (!client || !VideoCapture) {
         throw new Error(
           "Duna will upload this video when the Player app is ready.",
         );
@@ -4336,38 +4194,14 @@ export function VideoStudioScreen({
       if (!rawPayload) {
         throw new Error("This local video is missing its Duna upload details.");
       }
-      const payloadWithStableKeys: OfflineUploadPayload = {
-        ...rawPayload,
-        beginIdempotencyKey: rawPayload.beginIdempotencyKey ?? idempotencyKey(),
-        completeIdempotencyKey:
-          rawPayload.completeIdempotencyKey ?? idempotencyKey(),
-        cancelIdempotencyKey:
-          rawPayload.cancelIdempotencyKey ?? idempotencyKey(),
-      };
-      if (
-        payloadWithStableKeys.beginIdempotencyKey !==
-          rawPayload.beginIdempotencyKey ||
-        payloadWithStableKeys.completeIdempotencyKey !==
-          rawPayload.completeIdempotencyKey ||
-        payloadWithStableKeys.cancelIdempotencyKey !==
-          rawPayload.cancelIdempotencyKey
-      ) {
-        await updateOfflineVideoDraft({
-          ...draft,
-          payload: { ...payloadWithStableKeys },
-        });
-      }
-      let payload = await ensureImportedVisionSession(
-        draft,
-        payloadWithStableKeys,
-      );
+      const payload = await ensureImportedVisionSession(draft, rawPayload);
       const attachVisionSession = async (videoId: string) => {
         if (!payload.visionSessionId) return true;
         try {
           await client.player.attachVisionSessionToVideo.mutate({
             sessionId: payload.visionSessionId,
             videoId,
-            idempotencyKey: payload.beginIdempotencyKey,
+            idempotencyKey: idempotencyKey(),
           });
           return true;
         } catch {
@@ -4384,166 +4218,79 @@ export function VideoStudioScreen({
           : "vision-link-pending";
       }
 
-      const session = payload.upload
-        ? await client.player.resumeVideoUpload.query({
-            videoId: payload.upload.videoId,
-          })
-        : await client.player.beginVideoUpload.mutate({
-            title: payload.form.title,
-            category: payload.form.category,
-            ...associationInput(payload.form.association),
-            venue: payload.form.venue,
-            recordingVisibility: payload.form.recordingVisibility,
-            publishedToProfile: payload.form.publishedToProfile,
-            hasAudio: payload.form.hasAudio,
-            visionLearningConsent: payload.form.contributeCalibration,
-            originalFileName: draft.fileName,
-            mimeType: draft.mimeType,
-            bytes: draft.bytes,
-            durationSeconds: draft.durationSeconds,
-            courtCalibration: payload.calibration,
-            idempotencyKey: payload.beginIdempotencyKey,
-          });
-      if (!payload.upload) {
-        payload = {
-          ...payload,
-          upload: { videoId: session.videoId, uploadId: session.uploadId },
-        };
-        await updateOfflineVideoDraft({ ...draft, payload: { ...payload } });
-      }
-      // Background URLSession may have finished while React Native was not
-      // running. Its persisted ETags are submitted only as reconciliation
-      // hints; the API verifies each one with R2 ListParts.
-      const completedParts = await getCompletedFileBackedParts(
-        session.uploadId,
-      );
-      for (const part of completedParts) {
-        await client.player.recordVideoUploadPart.mutate({
-          videoId: session.videoId,
-          partNumber: part.partNumber,
-          etag: part.etag,
-          sizeBytes: part.sizeBytes,
+      let videoId: string | undefined;
+      let uploadCompleted = false;
+      try {
+        const session = await client.player.beginVideoUpload.mutate({
+          title: payload.form.title,
+          category: payload.form.category,
+          ...associationInput(payload.form.association),
+          venue: payload.form.venue,
+          recordingVisibility: payload.form.recordingVisibility,
+          publishedToProfile: payload.form.publishedToProfile,
+          hasAudio: payload.form.hasAudio,
+          visionLearningConsent: payload.form.contributeCalibration,
+          originalFileName: draft.fileName,
+          mimeType: draft.mimeType,
+          bytes: draft.bytes,
+          durationSeconds: draft.durationSeconds,
+          courtCalibration: payload.calibration,
+          idempotencyKey: idempotencyKey(),
         });
-      }
-      const authoritative = await client.player.resumeVideoUpload.query({
-        videoId: session.videoId,
-      });
-      const uploadedPartNumbers = new Set(authoritative.uploadedParts);
-      const missingPartNumbers = Array.from(
-        { length: session.totalParts },
-        (_, index) => index + 1,
-      ).filter((partNumber) => !uploadedPartNumbers.has(partNumber));
-      onProgress?.(uploadedPartNumbers.size / session.totalParts);
-      if (missingPartNumbers.length > 0) {
-        // Presign first, then enqueue all missing parts in one native call.
-        // Returning now is intentional: iOS owns the persisted URLSession
-        // tasks after React Native is suspended, and foreground reconciliation
-        // below will record ETags and complete only after R2 confirms them.
-        const queuedParts = await Promise.all(
-          missingPartNumbers.map(async (partNumber) => {
-            const offset = (partNumber - 1) * session.partSizeBytes;
-            const signed = await client.player.videoUploadPartUrl.mutate({
-              videoId: session.videoId,
-              partNumber,
-            });
-            return {
-              partNumber,
-              uploadUrl: signed.url,
-              offset,
-              length: Math.min(session.partSizeBytes, draft.bytes - offset),
-              contentType: draft.mimeType,
-            };
-          }),
-        );
-        if (Platform.OS === "ios" && isBackgroundUploadAvailable()) {
-          await enqueueFileBackedParts({
-            uploadId: session.uploadId,
-            fileUri: draft.fileUri,
-            allowCellular,
-            parts: queuedParts,
+        videoId = session.videoId;
+        for (
+          let partNumber = 1;
+          partNumber <= session.totalParts;
+          partNumber++
+        ) {
+          const offset = (partNumber - 1) * session.partSizeBytes;
+          const length = Math.min(session.partSizeBytes, draft.bytes - offset);
+          const signed = await client.player.videoUploadPartUrl.mutate({
+            videoId: session.videoId,
+            partNumber,
           });
-          return "upload-queued";
-        }
-        // Android and web keep their original foreground behavior. This path
-        // uses a file slice directly and makes no background-durability claim.
-        for (const part of queuedParts) {
-          const etag = await uploadOfflineVideoRange({
-            fileUri: draft.fileUri,
-            uploadUrl: part.uploadUrl,
-            offset: part.offset,
-            length: part.length,
-            contentType: part.contentType,
-          });
+          const uploaded = await VideoCapture.uploadPart(
+            draft.fileUri,
+            signed.url,
+            offset,
+            length,
+          );
           await client.player.recordVideoUploadPart.mutate({
             videoId: session.videoId,
-            partNumber: part.partNumber,
-            etag,
-            sizeBytes: part.length,
+            partNumber,
+            etag: uploaded.etag,
+            sizeBytes: uploaded.sizeBytes,
           });
-          onProgress?.(part.partNumber / session.totalParts);
+          onProgress?.(partNumber / session.totalParts);
         }
+        await client.player.completeVideoUpload.mutate({
+          videoId: session.videoId,
+          idempotencyKey: idempotencyKey(),
+        });
+        uploadCompleted = true;
+        const completedDraft = { ...draft, completedVideoId: session.videoId };
+        // Persist the completed object before attaching metadata. If Wi-Fi
+        // drops on the next request, the retry only links Vision evidence; it
+        // never creates a duplicate full-video upload.
+        await updateOfflineVideoDraft(completedDraft);
+        return (await attachVisionSession(session.videoId))
+          ? "complete"
+          : "vision-link-pending";
+      } catch (reason) {
+        if (videoId && !uploadCompleted) {
+          void client.player.abortVideoUpload.mutate({
+            videoId,
+            idempotencyKey: idempotencyKey(),
+          });
+        }
+        throw reason;
       }
-      await client.player.completeVideoUpload.mutate({
-        videoId: session.videoId,
-        idempotencyKey: payload.completeIdempotencyKey,
-      });
-      // R2 completion is authoritative. Only now may native local state be
-      // discarded; a transient completion failure keeps every staged retry.
-      await cancelFileBackedUpload(session.uploadId).catch(() => undefined);
-      const completedDraft = {
-        ...draft,
-        completedVideoId: session.videoId,
-        payload: { ...payload },
-      };
-      // Persist the completed object before attaching metadata. If Wi-Fi
-      // drops on the next request, the retry only links Vision evidence; it
-      // never creates a duplicate full-video upload.
-      await updateOfflineVideoDraft(completedDraft);
-      return (await attachVisionSession(session.videoId))
-        ? "complete"
-        : "vision-link-pending";
     },
     [client, ensureImportedVisionSession],
   );
 
-  const cancelOfflineVideoDraft = useCallback(
-    async (draft: OfflineVideoDraft) => {
-      const rawPayload = offlineUploadPayload(draft.payload);
-      let payload = rawPayload;
-      if (rawPayload && !rawPayload.cancelIdempotencyKey) {
-        payload = {
-          ...rawPayload,
-          beginIdempotencyKey:
-            rawPayload.beginIdempotencyKey ?? idempotencyKey(),
-          completeIdempotencyKey:
-            rawPayload.completeIdempotencyKey ?? idempotencyKey(),
-          cancelIdempotencyKey: idempotencyKey(),
-        };
-        await updateOfflineVideoDraft({ ...draft, payload: { ...payload } });
-      }
-      if (payload?.upload) {
-        if (!client) {
-          throw new Error("Reconnect Duna before cancelling an active upload.");
-        }
-        await client.player.abortVideoUpload.mutate({
-          videoId: payload.upload.videoId,
-          idempotencyKey: payload.cancelIdempotencyKey,
-        });
-        await cancelFileBackedUpload(payload.upload.uploadId).catch(
-          () => undefined,
-        );
-      }
-      await removeOfflineVideoDraft(draft.id);
-      setOfflineDrafts((current) =>
-        current.filter((item) => item.id !== draft.id),
-      );
-      setOfflineNotice("Saved video upload cancelled and local copy removed.");
-    },
-    [client],
-  );
-
   const flushOfflineUploads = useCallback(async () => {
-    if (!client || flushingOfflineUploads.current) return;
+    if (!client || !VideoCapture || flushingOfflineUploads.current) return;
     flushingOfflineUploads.current = true;
     try {
       const { preferences, drafts } = await refreshOfflineDrafts();
@@ -4572,33 +4319,16 @@ export function VideoStudioScreen({
             progress: 0,
           });
           void updateUploadLiveActivity(draft, "uploading", 0);
-          const result = await transferOfflineDraft(
-            draft,
-            (progress) => {
-              reportTransfer({
-                id: draft.id,
-                stage: "uploading",
-                title: "Uploading to Duna Cloud",
-                detail: `${Math.round(progress * 100)}% · You can keep using Duna.`,
-                progress,
-              });
-              void updateUploadLiveActivity(draft, "uploading", progress);
-            },
-            preferences.allowCellularUploads,
-          );
-          if (result === "upload-queued") {
-            setOfflineNotice(
-              "All video parts are safely queued with iOS. Duna will reconcile them when the app returns to the foreground.",
-            );
+          const result = await transferOfflineDraft(draft, (progress) => {
             reportTransfer({
               id: draft.id,
               stage: "uploading",
-              title: "Upload running in the background",
-              detail:
-                "Every remaining video part is scheduled. Keep the original safe until Duna confirms completion.",
+              title: "Uploading to Duna Cloud",
+              detail: `${Math.round(progress * 100)}% · You can keep using Duna.`,
+              progress,
             });
-            break;
-          }
+            void updateUploadLiveActivity(draft, "uploading", progress);
+          });
           if (result === "vision-link-pending") {
             setOfflineNotice(
               "Your video reached Duna Cloud. Its court evidence will link as soon as the connection is stable.",
@@ -4683,9 +4413,7 @@ export function VideoStudioScreen({
         importedVision: importedVisionPayload(importedVision),
       });
       setOfflineNotice(
-        Platform.OS === "ios"
-          ? "Your video is safe on this iPhone. Duna will upload it in the background on your next allowed connection."
-          : "Your video is saved on this device. Keep Duna open while its foreground upload runs; it will pause safely if you leave the app.",
+        "Your video is safe on this iPhone. Duna will upload it in the background on your next allowed connection.",
       );
       reportTransfer({
         id: draft.id,
@@ -4774,9 +4502,8 @@ export function VideoStudioScreen({
           )}
           {!isIos && (
             <Text style={styles.iosNote}>
-              Live capture launches on iPhone first. You can import an MP4 from
-              this device library, then keep Duna open while its foreground
-              upload runs.
+              Capture and upload launch on iPhone first. Public video remains
+              available on the Duna web experience.
             </Text>
           )}
           <View style={styles.captureChoiceStack}>
@@ -4833,15 +4560,18 @@ export function VideoStudioScreen({
             </Pressable>
           </View>
           <Pressable
-            disabled={!client}
+            disabled={!isIos || !client}
             onPress={() => void chooseLibrary()}
-            style={[styles.libraryButton, !client && styles.disabled]}
+            style={[
+              styles.libraryButton,
+              (!isIos || !client) && styles.disabled,
+            ]}
           >
             <Text style={styles.libraryButtonText}>
               Upload an existing video
             </Text>
             <Text style={styles.libraryButtonMeta}>
-              From your device library
+              From your iPhone library
             </Text>
           </Pressable>
         </View>
@@ -4854,10 +4584,8 @@ export function VideoStudioScreen({
             <View style={styles.flex}>
               <Text style={styles.readyImportTitle}>Video ready to review</Text>
               <Text style={styles.readyImportBody}>
-                Add optional court and player hints, then{" "}
-                {isIos
-                  ? "Duna uploads in the background."
-                  : "keep Duna open while its foreground upload runs."}
+                Add optional court and player hints, then Duna uploads in the
+                background.
               </Text>
             </View>
             <Pressable
@@ -4877,41 +4605,24 @@ export function VideoStudioScreen({
             <View style={styles.flex}>
               <Text style={styles.offlineQueueTitle}>
                 {offlineDrafts.length > 0
-                  ? `${offlineDrafts.length} video${offlineDrafts.length === 1 ? "" : "s"} safely on this device`
+                  ? `${offlineDrafts.length} video${offlineDrafts.length === 1 ? "" : "s"} safely on this iPhone`
                   : "Duna Cloud sync"}
               </Text>
               <Text style={styles.offlineQueueBody}>
                 {offlineNotice ??
                   (networkPreferences.allowCellularUploads
-                    ? isIos
-                      ? "Duna will use Wi‑Fi or cellular data to finish the upload."
-                      : "Keep Duna open to use Wi‑Fi or cellular data for this upload."
-                    : isIos
-                      ? "Duna will start uploading automatically on Wi‑Fi."
-                      : "Keep Duna open and connect to Wi‑Fi to continue this upload.")}
+                    ? "Duna will use Wi‑Fi or cellular data to finish the upload."
+                    : "Duna will start uploading automatically on Wi‑Fi.")}
               </Text>
             </View>
             {offlineDrafts.length > 0 && (
-              <View style={styles.offlineQueueActions}>
-                <Pressable
-                  accessibilityLabel="Retry saved video uploads"
-                  onPress={() => void flushOfflineUploads()}
-                  style={styles.offlineQueueAction}
-                >
-                  <Text style={styles.offlineQueueActionText}>Sync now</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Cancel saved video upload"
-                  onPress={() =>
-                    void cancelOfflineVideoDraft(offlineDrafts[0]!).catch(
-                      (reason) => setError(displayError(reason)),
-                    )
-                  }
-                  style={styles.offlineQueueCancel}
-                >
-                  <Text style={styles.offlineQueueCancelText}>Cancel</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                accessibilityLabel="Retry saved video uploads"
+                onPress={() => void flushOfflineUploads()}
+                style={styles.offlineQueueAction}
+              >
+                <Text style={styles.offlineQueueActionText}>Sync now</Text>
+              </Pressable>
             )}
           </View>
         )}
@@ -5161,7 +4872,6 @@ export function VideoStudioScreen({
               }
               onImportedVisionChange={setImportedVision}
               preparedVideo={preparedVideo}
-              foregroundOnlyUpload={!isIos}
             />
           )}
       </Modal>
@@ -5350,18 +5060,6 @@ const styles = StyleSheet.create({
     color: palette.aqua,
     fontSize: 12,
     fontWeight: "900",
-  },
-  offlineQueueActions: { gap: 6 },
-  offlineQueueCancel: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 28,
-    paddingHorizontal: 8,
-  },
-  offlineQueueCancelText: {
-    color: palette.danger,
-    fontSize: 12,
-    fontWeight: "800",
   },
   offlineQueueBody: {
     color: "#526d65",
@@ -7000,52 +6698,6 @@ const styles = StyleSheet.create({
   },
   visionPerformanceReview: {
     color: "#d4b77c",
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  visionOwnerReviewCard: {
-    backgroundColor: "rgba(212,183,124,0.09)",
-    borderColor: "rgba(212,183,124,0.28)",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-    padding: 12,
-  },
-  visionOwnerReviewEyebrow: {
-    color: "#d4b77c",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  visionOwnerReviewTitle: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  visionOwnerReviewBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
-  visionOwnerReviewButton: {
-    alignItems: "center",
-    backgroundColor: "#a8d9bf",
-    borderRadius: 10,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 10,
-  },
-  visionOwnerReviewButtonText: {
-    color: "#111719",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  visionOwnerReviewDrafts: { gap: 7, marginTop: 2 },
-  visionOwnerReviewDraft: {
-    borderTopColor: "rgba(255,255,255,0.12)",
-    borderTopWidth: 1,
-    gap: 2,
-    paddingTop: 7,
-  },
-  visionOwnerReviewDraftTitle: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  visionOwnerReviewDraftBody: {
-    color: "#c7cfcb",
     fontSize: 12,
     lineHeight: 15,
   },

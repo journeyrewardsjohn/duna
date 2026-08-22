@@ -25,6 +25,12 @@ declare class DunaVideoCaptureNativeModule extends NativeModule<DunaVideoCapture
     fileUri: string,
     maximumFrames?: number,
   ): Promise<readonly VideoFrameSample[]>;
+  uploadPart(
+    fileUri: string,
+    uploadUrl: string,
+    offset: number,
+    length: number,
+  ): Promise<{ readonly etag: string; readonly sizeBytes: number }>;
   lockCalibration(): DunaCourtCalibration | null;
   releasePreview(): void;
 }

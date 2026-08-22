@@ -81,6 +81,25 @@ export function DunaLoader({
   );
 }
 
+export function buttonClassName({
+  className,
+  size = "medium",
+  tone = "primary",
+}: {
+  readonly className?: string;
+  readonly size?: "small" | "medium" | "large";
+  readonly tone?: "primary" | "secondary" | "ghost" | "danger";
+} = {}): string {
+  return [
+    "duna-button",
+    `duna-button--${tone}`,
+    `duna-button--${size}`,
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function Button({
   children,
   tone = "primary",
@@ -93,19 +112,166 @@ export function Button({
   readonly size?: "small" | "medium" | "large";
 }) {
   return (
-    <button
-      className={[
-        "duna-button",
-        `duna-button--${tone}`,
-        `duna-button--${size}`,
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      {...props}
-    >
+    <button className={buttonClassName({ className, size, tone })} {...props}>
       {children}
     </button>
+  );
+}
+
+export function PageHeader({
+  actions,
+  children,
+  className,
+  description,
+  eyebrow,
+  title,
+}: {
+  readonly actions?: ReactNode;
+  readonly children?: ReactNode;
+  readonly className?: string;
+  readonly description?: ReactNode;
+  readonly eyebrow?: ReactNode;
+  readonly title: ReactNode;
+}) {
+  return (
+    <header
+      className={["duna-page-header", className].filter(Boolean).join(" ")}
+    >
+      <div className="duna-page-header__copy">
+        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+        {children}
+      </div>
+      {actions && <div className="duna-page-header__actions">{actions}</div>}
+    </header>
+  );
+}
+
+function initialsFor(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+export function Avatar({
+  className,
+  name,
+  size = "medium",
+  src,
+}: {
+  readonly className?: string;
+  readonly name: string;
+  readonly size?: "small" | "medium" | "large";
+  readonly src?: string;
+}) {
+  return (
+    <span
+      aria-label={name}
+      className={["duna-avatar", `duna-avatar--${size}`, className]
+        .filter(Boolean)
+        .join(" ")}
+      role="img"
+      title={name}
+    >
+      {src ? <img alt="" aria-hidden src={src} /> : initialsFor(name)}
+    </span>
+  );
+}
+
+export function AvatarStack({
+  className,
+  people,
+  total = people.length,
+}: {
+  readonly className?: string;
+  readonly people: readonly { name: string; src?: string }[];
+  readonly total?: number;
+}) {
+  const visible = people.slice(0, 4);
+  const remaining = Math.max(0, total - visible.length);
+  return (
+    <span
+      aria-label={`${total} ${total === 1 ? "person" : "people"}`}
+      className={["duna-avatar-stack", className].filter(Boolean).join(" ")}
+    >
+      {visible.map((person, index) => (
+        <Avatar
+          key={`${person.name}-${index}`}
+          name={person.name}
+          size="small"
+          src={person.src}
+        />
+      ))}
+      {remaining > 0 && (
+        <span className="duna-avatar-stack__more">+{remaining}</span>
+      )}
+    </span>
+  );
+}
+
+export function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  readonly icon?: ReactNode;
+  readonly label: ReactNode;
+  readonly value: ReactNode;
+}) {
+  return (
+    <article className="duna-stat-card">
+      {icon && <span className="duna-stat-card__icon">{icon}</span>}
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </article>
+  );
+}
+
+export function EmptyState({
+  action,
+  description,
+  icon,
+  title,
+}: {
+  readonly action?: ReactNode;
+  readonly description: ReactNode;
+  readonly icon?: ReactNode;
+  readonly title: ReactNode;
+}) {
+  return (
+    <div className="duna-empty-state">
+      {icon && <span className="duna-empty-state__icon">{icon}</span>}
+      <h2>{title}</h2>
+      <p>{description}</p>
+      {action}
+    </div>
+  );
+}
+
+export function ProgressBar({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: number;
+}) {
+  const bounded = Math.max(0, Math.min(100, value));
+  return (
+    <span
+      aria-label={`${label}: ${bounded}%`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={bounded}
+      className="duna-progress"
+      role="progressbar"
+    >
+      <i style={{ width: `${bounded}%` }} />
+    </span>
   );
 }
 
