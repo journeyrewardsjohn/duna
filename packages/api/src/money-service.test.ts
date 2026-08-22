@@ -121,20 +121,4 @@ describe("organization fund availability", () => {
       pendingMinor: 7_404,
     });
   });
-
-  it("never presents ledger history as withdrawable when Stripe is unavailable", () => {
-    expect(
-      projectOrganizationBalance({
-        ledgerAvailableMinor: 51_345,
-        ledgerHeldMinor: 0,
-        ledgerPendingMinor: 7_404,
-        processorDataRequired: true,
-      }),
-    ).toEqual({
-      totalMinor: 7_404,
-      availableMinor: 0,
-      heldMinor: 0,
-      pendingMinor: 7_404,
-    });
-  });
 });

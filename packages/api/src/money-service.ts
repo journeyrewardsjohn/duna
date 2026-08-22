@@ -35,17 +35,13 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type {
-  OrganizationMoneyWorkspace,
-  OrganizationPayoutReceipt,
-} from "./contracts";
+import type { OrganizationMoneyWorkspace } from "./contracts";
 import type { ApiActor } from "./context";
 import { ensureLedgerAccount } from "./catalog-service";
 import {
   configureConnectedAccountMoney,
   createConnectedAccountPayout,
   loadConnectedAccountMoney,
-  retrieveConnectedAccountPayout,
   retrieveStripePaymentLineage,
   type StripePaymentLineage,
 } from "./payments";
@@ -57,42 +53,12 @@ type Weekday = OrganizationMoneyWorkspace["settings"]["weeklyPayoutDay"];
 
 const DEFAULT_REFUND_MINUTES = 24 * 60;
 
-function payoutReceipt(
-  row: typeof payouts.$inferSelect,
-  live?: Awaited<ReturnType<typeof retrieveConnectedAccountPayout>>,
-): OrganizationPayoutReceipt {
-  return {
-    id: row.id,
-    requestKey: row.idempotencyKey ?? undefined,
-    stripePayoutId: live?.id ?? row.stripePayoutId ?? undefined,
-    amountMinor: Math.max(0, live?.amountMinor ?? row.amountMinor),
-    currency: currency(live?.currency ?? row.currency),
-    status: live?.status ?? row.status,
-    method: live?.method ?? row.method ?? "standard",
-    destinationId: live?.destinationId ?? row.destinationId ?? undefined,
-    destinationName: row.destinationName ?? "Connected bank account",
-    destinationLast4: row.destinationLast4 ?? undefined,
-    statementDescriptor:
-      live?.statementDescriptor ?? row.statementDescriptor ?? undefined,
-    livemode: live?.livemode ?? row.livemode ?? undefined,
-    traceId: live?.traceId ?? row.traceId ?? undefined,
-    traceStatus: live?.traceStatus ?? row.traceStatus ?? undefined,
-    failureCode: live?.failureCode ?? row.failureCode ?? undefined,
-    failureMessage: live?.failureMessage ?? row.failureMessage ?? undefined,
-    expectedArrivalAt: (
-      live?.expectedArrivalAt ?? row.expectedArrivalAt
-    )?.toISOString(),
-    createdAt: (live?.createdAt ?? row.createdAt).toISOString(),
-  };
-}
-
 export function projectOrganizationBalance(input: {
   readonly ledgerAvailableMinor: number;
   readonly ledgerHeldMinor: number;
   readonly ledgerPendingMinor: number;
   readonly processorAvailableMinor?: number;
   readonly processorPendingMinor?: number;
-  readonly processorDataRequired?: boolean;
 }): {
   readonly totalMinor: number;
   readonly availableMinor: number;
@@ -103,14 +69,6 @@ export function projectOrganizationBalance(input: {
     input.processorAvailableMinor === undefined ||
     input.processorPendingMinor === undefined
   ) {
-    if (input.processorDataRequired) {
-      return {
-        totalMinor: input.ledgerHeldMinor + input.ledgerPendingMinor,
-        availableMinor: 0,
-        heldMinor: input.ledgerHeldMinor,
-        pendingMinor: input.ledgerPendingMinor,
-      };
-    }
     return {
       totalMinor:
         input.ledgerAvailableMinor +
@@ -337,45 +295,11 @@ export function loadDemoOrganizationMoneyWorkspace(
         amountMinor: 24_800,
         currency: "USD",
         status: "in_transit",
-        method: "standard",
-        destinationName: "Duna Demo Bank",
-        destinationLast4: "4242",
         expectedArrivalAt: day(1),
         createdAt: day(-1),
       },
     ],
     disputes: [],
-  };
-}
-
-export function loadDemoOrganizationPayoutReceipt(
-  payoutId: string,
-  now = new Date(),
-): OrganizationPayoutReceipt {
-  const money = loadDemoOrganizationMoneyWorkspace(now);
-  const destination = money.connect.bankAccounts[0];
-  const expectedArrivalAt = new Date(now);
-  let businessDays = 0;
-  while (businessDays < 2) {
-    expectedArrivalAt.setUTCDate(expectedArrivalAt.getUTCDate() + 1);
-    if (![0, 6].includes(expectedArrivalAt.getUTCDay())) businessDays += 1;
-  }
-  return {
-    id: payoutId,
-    requestKey: payoutId,
-    stripePayoutId: `po_demo_${payoutId.slice(0, 8)}`,
-    amountMinor: money.balance.availableMinor,
-    currency: money.currency,
-    status: "pending",
-    method: "standard",
-    destinationId: destination?.id,
-    destinationName: destination?.name ?? "Demo bank account",
-    destinationLast4: destination?.last4,
-    statementDescriptor: money.settings.payoutStatementDescriptor,
-    livemode: false,
-    traceStatus: "pending",
-    expectedArrivalAt: expectedArrivalAt.toISOString(),
-    createdAt: now.toISOString(),
   };
 }
 
@@ -1356,7 +1280,6 @@ export async function loadOrganizationMoneyWorkspace(
     processorPendingMinor: connect.liveData
       ? connect.stripePendingMinor
       : undefined,
-    processorDataRequired: Boolean(organization.stripeAccountId),
   });
   const nextRelease = fundRows
     .filter(
@@ -1466,7 +1389,15 @@ export async function loadOrganizationMoneyWorkspace(
         reconciled: Boolean(stripeLink?.stripeBalanceTransactionId),
       }),
     ),
-    payouts: payoutRows.map((row) => payoutReceipt(row)),
+    payouts: payoutRows.map((row) => ({
+      id: row.id,
+      stripePayoutId: row.stripePayoutId ?? undefined,
+      amountMinor: Math.max(0, row.amountMinor),
+      currency: currency(row.currency),
+      status: row.status,
+      expectedArrivalAt: row.expectedArrivalAt?.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    })),
     disputes: [
       ...connect.disputes
         .filter(
@@ -1674,7 +1605,7 @@ async function createEligibleOrganizationPayout(input: {
   readonly minimumPayoutMinor: number;
   readonly idempotencyKey: string;
   readonly now: Date;
-}): Promise<OrganizationPayoutReceipt | undefined> {
+}): Promise<{ readonly id: string; readonly amountMinor: number } | undefined> {
   const stripeAccountId = input.organization.stripeAccountId;
   if (!stripeAccountId) return undefined;
   if (input.stripeSettingsStatus !== "synced") {
@@ -1686,17 +1617,6 @@ async function createEligibleOrganizationPayout(input: {
     await transaction.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`money-payout:${input.organization.id}`}))`,
     );
-    const [existing] = await transaction
-      .select()
-      .from(payouts)
-      .where(
-        and(
-          eq(payouts.organizationId, input.organization.id),
-          eq(payouts.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (existing) return payoutReceipt(existing);
     const eligible = await transaction
       .select()
       .from(paymentFundSchedules)
@@ -1734,12 +1654,6 @@ async function createEligibleOrganizationPayout(input: {
     if (amountMinor < input.minimumPayoutMinor || amountMinor <= 0) {
       return undefined;
     }
-    const destination =
-      stripeMoney.bankAccounts.find((item) => item.defaultForCurrency) ??
-      stripeMoney.bankAccounts[0];
-    if (!destination || destination.status !== "connected") {
-      throw new Error("Connect and verify a payout bank before paying out.");
-    }
     const payout = await createConnectedAccountPayout({
       accountId: stripeAccountId,
       amountMinor,
@@ -1747,43 +1661,23 @@ async function createEligibleOrganizationPayout(input: {
       idempotencyKey: input.idempotencyKey,
     });
     const payoutId = crypto.randomUUID();
-    const [storedPayout] = await transaction
-      .insert(payouts)
-      .values({
-        id: payoutId,
-        organizationId: input.organization.id,
-        idempotencyKey: input.idempotencyKey,
-        stripePayoutId: payout.id,
-        amountMinor,
-        currency: input.organization.currency,
-        status: payout.status,
-        method: payout.method,
-        destinationId: payout.destinationId ?? destination.id,
-        destinationName: destination.name,
-        destinationLast4: destination.last4,
-        statementDescriptor: payout.statementDescriptor,
-        livemode: payout.livemode,
-        traceId: payout.traceId,
-        traceStatus: payout.traceStatus,
-        failureCode: payout.failureCode,
-        failureMessage: payout.failureMessage,
-        expectedArrivalAt: payout.expectedArrivalAt,
-        composition: Object.fromEntries(
-          selected.map((fund) => [
-            fund.id,
-            Math.max(
-              0,
-              fund.netMinor - fund.refundedMinor - fund.disputedMinor,
-            ),
-          ]),
-        ),
-        createdAt: input.now,
-        updatedAt: input.now,
-      })
-      .returning();
-    if (!storedPayout) {
-      throw new Error("The payout receipt could not be recorded.");
-    }
+    await transaction.insert(payouts).values({
+      id: payoutId,
+      organizationId: input.organization.id,
+      stripePayoutId: payout.id,
+      amountMinor,
+      currency: input.organization.currency,
+      status: payout.status,
+      expectedArrivalAt: payout.expectedArrivalAt,
+      composition: Object.fromEntries(
+        selected.map((fund) => [
+          fund.id,
+          Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor),
+        ]),
+      ),
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
     await transaction.insert(payoutAllocations).values(
       selected.map((fund) => ({
         payoutId,
@@ -1809,7 +1703,7 @@ async function createEligibleOrganizationPayout(input: {
           selected.map((fund) => fund.id),
         ),
       );
-    return payoutReceipt(storedPayout);
+    return { id: payoutId, amountMinor };
   });
 }
 
@@ -1817,7 +1711,7 @@ export async function createManualOrganizationPayout(input: {
   readonly actor: ApiActor;
   readonly idempotencyKey: string;
   readonly now: Date;
-}): Promise<OrganizationPayoutReceipt> {
+}): Promise<{ readonly id: string; readonly amountMinor: number }> {
   const organizationId = input.actor.organizationId;
   if (!organizationId) throw new Error("Choose an organization first.");
   await releaseEligibleFunds(input.now);
@@ -1835,48 +1729,13 @@ export async function createManualOrganizationPayout(input: {
     organization,
     stripeSettingsStatus: settings?.stripeSettingsStatus ?? "not-synced",
     minimumPayoutMinor: 0,
-    idempotencyKey: input.idempotencyKey,
+    idempotencyKey: `duna-manual-payout:${organizationId}:${input.idempotencyKey}`,
     now: input.now,
   });
   if (!result) {
     throw new Error("There are no cleared, refund-safe funds to pay out.");
   }
   return result;
-}
-
-export async function loadOrganizationPayoutReceipt(input: {
-  readonly actor: ApiActor;
-  readonly payoutId: string;
-}): Promise<OrganizationPayoutReceipt> {
-  const organizationId = input.actor.organizationId;
-  if (!organizationId) throw new Error("Choose an organization first.");
-  const database = getDatabase();
-  const [row, organization] = await Promise.all([
-    database.query.payouts.findFirst({
-      where: and(
-        eq(payouts.id, input.payoutId),
-        eq(payouts.organizationId, organizationId),
-      ),
-    }),
-    database.query.organizations.findFirst({
-      where: eq(organizations.id, organizationId),
-    }),
-  ]);
-  if (!row) throw new Error("Payout receipt was not found.");
-  let live: Awaited<ReturnType<typeof retrieveConnectedAccountPayout>>;
-  if (organization?.stripeAccountId && row.stripePayoutId) {
-    try {
-      live = await retrieveConnectedAccountPayout({
-        accountId: organization.stripeAccountId,
-        payoutId: row.stripePayoutId,
-      });
-    } catch {
-      return payoutReceipt(row);
-    }
-  } else {
-    return payoutReceipt(row);
-  }
-  return payoutReceipt(row, live);
 }
 
 export async function processAutomaticOrganizationPayouts(
@@ -1931,14 +1790,6 @@ export async function synchronizeMoneyPayout(input: {
   if (!stripePayoutId) return;
   const nextStatus =
     typeof input.object.status === "string" ? input.object.status : "pending";
-  const trace =
-    input.object.trace_id && typeof input.object.trace_id === "object"
-      ? (input.object.trace_id as Readonly<Record<string, unknown>>)
-      : undefined;
-  const arrivalDate =
-    typeof input.object.arrival_date === "number"
-      ? new Date(input.object.arrival_date * 1_000)
-      : undefined;
   const database = getDatabase();
   const payout = await database.query.payouts.findFirst({
     where: eq(payouts.stripePayoutId, stripePayoutId),
@@ -1947,39 +1798,7 @@ export async function synchronizeMoneyPayout(input: {
   await database.batch([
     database
       .update(payouts)
-      .set({
-        status: nextStatus,
-        method:
-          typeof input.object.method === "string"
-            ? input.object.method
-            : payout.method,
-        destinationId:
-          typeof input.object.destination === "string"
-            ? input.object.destination
-            : payout.destinationId,
-        statementDescriptor:
-          typeof input.object.statement_descriptor === "string"
-            ? input.object.statement_descriptor
-            : payout.statementDescriptor,
-        livemode:
-          typeof input.object.livemode === "boolean"
-            ? input.object.livemode
-            : payout.livemode,
-        traceId:
-          typeof trace?.value === "string" ? trace.value : payout.traceId,
-        traceStatus:
-          typeof trace?.status === "string" ? trace.status : payout.traceStatus,
-        failureCode:
-          typeof input.object.failure_code === "string"
-            ? input.object.failure_code
-            : payout.failureCode,
-        failureMessage:
-          typeof input.object.failure_message === "string"
-            ? input.object.failure_message
-            : payout.failureMessage,
-        expectedArrivalAt: arrivalDate ?? payout.expectedArrivalAt,
-        updatedAt: input.now,
-      })
+      .set({ status: nextStatus, updatedAt: input.now })
       .where(eq(payouts.id, payout.id)),
     database
       .update(paymentFundSchedules)

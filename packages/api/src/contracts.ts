@@ -5187,27 +5187,6 @@ export const organizationWalletSummarySchema = z.object({
   membershipManageable: z.boolean().optional(),
 });
 
-export const organizationPayoutReceiptSchema = z.object({
-  id: z.string().uuid(),
-  requestKey: z.string().optional(),
-  stripePayoutId: z.string().optional(),
-  amountMinor: z.number().int().nonnegative(),
-  currency: currencySchema,
-  status: z.string(),
-  method: z.string(),
-  destinationId: z.string().optional(),
-  destinationName: z.string(),
-  destinationLast4: z.string().optional(),
-  statementDescriptor: z.string().optional(),
-  livemode: z.boolean().optional(),
-  traceId: z.string().optional(),
-  traceStatus: z.string().optional(),
-  failureCode: z.string().optional(),
-  failureMessage: z.string().optional(),
-  expectedArrivalAt: z.iso.datetime().optional(),
-  createdAt: z.iso.datetime(),
-});
-
 export const organizationMoneyWorkspaceSchema = z.object({
   generatedAt: z.iso.datetime(),
   currency: currencySchema,
@@ -5382,7 +5361,19 @@ export const organizationMoneyWorkspaceSchema = z.object({
       }),
     )
     .readonly(),
-  payouts: z.array(organizationPayoutReceiptSchema).readonly(),
+  payouts: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        stripePayoutId: z.string().optional(),
+        amountMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+        status: z.string(),
+        expectedArrivalAt: z.iso.datetime().optional(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .readonly(),
   disputes: z
     .array(
       z.object({
@@ -5746,9 +5737,6 @@ export const ticketApprovalResultSchema = z.object({
 export type OperatorWorkspace = z.infer<typeof operatorWorkspaceSchema>;
 export type OrganizationMoneyWorkspace = z.infer<
   typeof organizationMoneyWorkspaceSchema
->;
-export type OrganizationPayoutReceipt = z.infer<
-  typeof organizationPayoutReceiptSchema
 >;
 export type WaiverWorkspace = z.infer<typeof waiverWorkspaceSchema>;
 export type WaiverRequirement = z.infer<typeof waiverRequirementSchema>;
