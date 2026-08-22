@@ -16,6 +16,7 @@ import type {
   PublicWorldRankings,
   VenueSummary,
 } from "@duna/api";
+import { clubFeatures } from "./club-features";
 import { absolutePublicUrl } from "./pro-seo";
 
 const markdownContentType = "text/markdown; charset=utf-8";
@@ -140,6 +141,30 @@ export const staticPublicPages = [
       "The page shows the Drill Studio, Practice Builder, and Program Designer screens from Duna HQ using the sample content the product ships: a First-Ball Sideout Lab drill, the 90-minute Sideout Under Pressure session that contains it across two courts, and the Fall Competition Build program that session belongs to, drawn as an eight-week strip whose phases, weekly load, current week, and Atlantic Coast Open tournament come from the program's own scheduling logic.",
     ],
   },
+  {
+    path: "/run-your-club/features",
+    title: "Duna HQ features",
+    description:
+      "The connected operating system for products, people, teams, events, leagues, venues, training, money, marketing, messaging, safety, video, and courtside work.",
+    sections: [
+      "Build the offer with services, memberships, credit packs, goods, equipment, rentals, pricing, fulfillment, and story-first public pages.",
+      "Run the operation with team, people, event, league, venue, and training context connected to the same day.",
+      "Grow with control through traceable money, relationship-aware marketing and messaging, guardian and privacy safeguards, Duna Vision, and Duna Pro courtside tools.",
+    ],
+  },
+  ...clubFeatures.map((feature) => ({
+    path: feature.href,
+    title: feature.title,
+    description: feature.summary,
+    sections: [
+      `Problem: ${feature.problemTitle} ${feature.problem}`,
+      `Duna solution: ${feature.solutionTitle} ${feature.solution}`,
+      ...feature.capabilities.map(
+        (capability) => `${capability.title}: ${capability.description}`,
+      ),
+      ...(feature.statusNote ? [feature.statusNote] : []),
+    ],
+  })),
   {
     path: "/safety",
     title: "Duna safety",

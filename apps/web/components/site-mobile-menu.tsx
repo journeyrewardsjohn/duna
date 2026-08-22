@@ -22,19 +22,10 @@ import {
   useState,
 } from "react";
 import type { SiteNavigationQuickAction } from "@/lib/site-navigation";
+import { clubFeatureByKey, clubFeatureGroups } from "@/lib/club-features";
+import { siteExperienceNavigations } from "@/lib/site-experience-navigation";
 
 const mainNavigation = [
-  {
-    href: "/discover",
-    label: "Play",
-    detail: "Games, sessions, and courts",
-  },
-  { href: "/pro", label: "Watch", detail: "The pro tour and live matches" },
-  {
-    href: "/rankings",
-    label: "Sand Rating",
-    detail: "Rankings and the rating system",
-  },
   {
     href: "/run-your-club",
     label: "Clubs + coaches",
@@ -364,7 +355,7 @@ function SiteMobileMenuView({
                     className="site-mobile-sheet__nav"
                   >
                     <span className="site-mobile-sheet__section-heading">
-                      Explore Duna
+                      For organizations
                     </span>
                     {mainNavigation.map((item) => (
                       <Link href={item.href} key={item.href} onClick={close}>
@@ -383,6 +374,88 @@ function SiteMobileMenuView({
                       Create an event <ArrowRight aria-hidden size={18} />
                     </Link>
                   </nav>
+
+                  <section
+                    aria-label="Play and Watch"
+                    className="site-mobile-sheet__experiences"
+                  >
+                    {siteExperienceNavigations.map((navigation) => (
+                      <div key={navigation.id}>
+                        <header>
+                          <span>
+                            <strong>{navigation.label}</strong>
+                            <small>{navigation.description}</small>
+                          </span>
+                          <Link href={navigation.href} onClick={close}>
+                            View all <ArrowRight aria-hidden size={15} />
+                          </Link>
+                        </header>
+                        <nav aria-label={`${navigation.label} navigation`}>
+                          {navigation.groups.flatMap((group) =>
+                            group.items.map((item) => (
+                              <Link
+                                href={item.href}
+                                key={item.href}
+                                onClick={close}
+                              >
+                                <span>
+                                  <strong>{item.label}</strong>
+                                  <small>{item.description}</small>
+                                </span>
+                                <ArrowRight aria-hidden size={16} />
+                              </Link>
+                            )),
+                          )}
+                          <Link
+                            className="site-mobile-sheet__experience-featured"
+                            href={navigation.featured.href}
+                            onClick={close}
+                          >
+                            <span>
+                              <strong>{navigation.featured.title}</strong>
+                              <small>{navigation.featured.description}</small>
+                            </span>
+                            <ArrowRight aria-hidden size={16} />
+                          </Link>
+                        </nav>
+                      </div>
+                    ))}
+                  </section>
+
+                  <section
+                    aria-label="Duna HQ features"
+                    className="site-mobile-sheet__features"
+                  >
+                    <div className="site-mobile-sheet__section-heading">
+                      <span>Run your club</span>
+                      <Link href="/run-your-club/features" onClick={close}>
+                        All features
+                      </Link>
+                    </div>
+                    {clubFeatureGroups.map((group) => (
+                      <div key={group.label}>
+                        <header>
+                          <strong>{group.label}</strong>
+                          <small>{group.description}</small>
+                        </header>
+                        <nav aria-label={group.label}>
+                          {group.keys.map((key) => {
+                            const item = clubFeatureByKey.get(key);
+                            return item ? (
+                              <Link
+                                href={item.href}
+                                key={item.key}
+                                onClick={close}
+                              >
+                                {item.navLabel}
+                                <ArrowRight aria-hidden size={16} />
+                              </Link>
+                            ) : null;
+                          })}
+                        </nav>
+                      </div>
+                    ))}
+                  </section>
 
                   {user ? (
                     <footer className="site-mobile-sheet__account">

@@ -88,6 +88,7 @@ export default function RootLayout({
   };
   return (
     <html
+      data-scroll-behavior="smooth"
       data-theme="light"
       data-theme-preference="system"
       lang="en"

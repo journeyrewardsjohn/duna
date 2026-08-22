@@ -1142,6 +1142,7 @@ export function RunYourBusinessPage({
         <div>
           <Link href="#club-owner">Club owners</Link>
           <Link href="#solo-coach">Solo coaches</Link>
+          <Link href="/run-your-club/features">Features</Link>
           <Link href="#platform">Platform</Link>
           <Link href="#plans">Plans</Link>
         </div>
@@ -1180,9 +1181,9 @@ export function RunYourBusinessPage({
                 </a>
                 <Link
                   className={styles.secondaryButton}
-                  href="#choose-your-path"
+                  href="/run-your-club/features"
                 >
-                  Find your path
+                  Explore every feature
                 </Link>
               </div>
               <small>
@@ -1212,6 +1213,9 @@ export function RunYourBusinessPage({
           </p>
           <Link href="/run-your-club/training-os">
             Explore Program Designer + Training OS <ArrowRight size={17} />
+          </Link>
+          <Link href="/run-your-club/features">
+            Browse the complete Duna HQ feature system <ArrowRight size={17} />
           </Link>
         </div>
         <div className={styles.pathGrid}>
@@ -1311,6 +1315,9 @@ export function RunYourBusinessPage({
             </article>
           ))}
         </div>
+        <Link href="/run-your-club/features">
+          Explore every connected feature <ArrowRight size={17} />
+        </Link>
       </section>
 
       <section className={styles.trainingPromo}>

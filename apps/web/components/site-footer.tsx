@@ -27,12 +27,19 @@ export function SiteFooter() {
             <strong>Run</strong>
             <a href={DUNA_HQ_URL}>Duna HQ</a>
             <Link href="/run-your-club">For clubs + coaches</Link>
+            <Link href="/run-your-club/features">All features</Link>
+            <Link href="/run-your-club/features/products">Products</Link>
+            <Link href="/run-your-club/features/team-management">Team</Link>
             <Link href="/create">Create an event</Link>
           </div>
           <div>
             <strong>Duna</strong>
             <Link href="/about">About</Link>
             <Link href="/apps/apple-watch">Duna for Apple Watch</Link>
+            <Link href="/run-your-club/features/coach-video">Coach video</Link>
+            <Link href="/run-your-club/features/safety-privacy">
+              Safety + privacy
+            </Link>
             <Link href="/methodology">Rating methodology</Link>
             <Link href="/safety">Safety</Link>
             <Link href="/legal/privacy">Privacy</Link>
