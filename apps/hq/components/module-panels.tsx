@@ -65,6 +65,12 @@ const moduleCopy: Record<
     description:
       "Members, players, parents, purchases, credits, and participation signals scoped to this organization.",
   },
+  audiences: {
+    eyebrow: "People + reusable groups",
+    title: "Audiences",
+    description:
+      "Saved organization-scoped groups for drafts, marketing, and future automations.",
+  },
   team: {
     eyebrow: "Coaches + operators",
     title: "Team",

@@ -115,6 +115,8 @@ const roleScopes: Readonly<Record<PersonRole, readonly string[]>> = {
     "messages:write",
     "messages:propose",
     "reports:read",
+    "audiences:read",
+    "audiences:write",
   ],
   owner: ["*"],
   manager: [
@@ -133,6 +135,8 @@ const roleScopes: Readonly<Record<PersonRole, readonly string[]>> = {
     "messages:propose",
     "payments:read",
     "reports:read",
+    "audiences:read",
+    "audiences:write",
   ],
   "front-desk": [
     "members:read",

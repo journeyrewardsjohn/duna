@@ -64,6 +64,7 @@ export const operatorModules = [
     icon: MessageSquareText,
     group: "Run",
   },
+  { slug: "audiences", label: "Audiences", icon: UsersRound, group: "Run" },
   { slug: "payments", label: "Money", icon: CreditCard, group: "Grow" },
   {
     slug: "promo-codes",

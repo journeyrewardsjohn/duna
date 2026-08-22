@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -1711,6 +1712,180 @@ export const organizationParticipants = pgTable(
     check(
       "organization_participant_status_valid",
       sql`${table.status} IN ('active', 'inactive', 'pending')`,
+    ),
+  ],
+);
+
+// Audiences are organization-scoped, versioned selection definitions. Their
+// snapshots are projections only; organization participants remain the
+// authority for candidate membership and message eligibility is rechecked by
+// the Messaging service at send time.
+export const audiences = pgTable(
+  "audiences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    mode: varchar("mode", { length: 16 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    currentVersionId: uuid("current_version_id").references(
+      (): AnyPgColumn => audienceVersions.id,
+      { onDelete: "restrict" },
+    ),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("audience_org_name_unique").on(
+      table.organizationId,
+      table.name,
+    ),
+    index("audience_org_status_updated_idx").on(
+      table.organizationId,
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "audience_mode_valid",
+      sql`${table.mode} IN ('static', 'dynamic', 'hybrid')`,
+    ),
+    check(
+      "audience_status_valid",
+      sql`${table.status} IN ('active', 'archived')`,
+    ),
+  ],
+);
+
+export const audienceVersions = pgTable(
+  "audience_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    audienceId: uuid("audience_id")
+      .notNull()
+      .references(() => audiences.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    ruleVersion: integer("rule_version").notNull().default(1),
+    ruleAst: jsonb("rule_ast")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    ruleHash: varchar("rule_hash", { length: 96 }).notNull(),
+    createdByPersonId: uuid("created_by_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    notes: text("notes"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("audience_version_revision_unique").on(
+      table.audienceId,
+      table.revision,
+    ),
+    uniqueIndex("audience_version_hash_unique").on(
+      table.audienceId,
+      table.ruleHash,
+    ),
+    index("audience_version_audience_created_idx").on(
+      table.audienceId,
+      table.createdAt,
+    ),
+    check("audience_version_positive", sql`${table.revision} > 0`),
+    check("audience_rule_version_positive", sql`${table.ruleVersion} > 0`),
+  ],
+);
+
+export const audienceVersionMembers = pgTable(
+  "audience_version_members",
+  {
+    audienceVersionId: uuid("audience_version_id")
+      .notNull()
+      .references(() => audienceVersions.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    disposition: varchar("disposition", { length: 12 }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.audienceVersionId, table.personId] }),
+    index("audience_version_member_person_idx").on(table.personId),
+    check(
+      "audience_version_member_disposition_valid",
+      sql`${table.disposition} IN ('include', 'exclude')`,
+    ),
+  ],
+);
+
+export const audienceSnapshots = pgTable(
+  "audience_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    audienceVersionId: uuid("audience_version_id")
+      .notNull()
+      .references(() => audienceVersions.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 16 }).notNull().default("complete"),
+    memberCount: integer("member_count").notNull().default(0),
+    unavailableFactKeys: jsonb("unavailable_fact_keys")
+      .notNull()
+      .$type<readonly string[]>()
+      .default([]),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("audience_snapshot_version_evaluated_idx").on(
+      table.audienceVersionId,
+      table.evaluatedAt,
+    ),
+    index("audience_snapshot_org_evaluated_idx").on(
+      table.organizationId,
+      table.evaluatedAt,
+    ),
+    check(
+      "audience_snapshot_status_valid",
+      sql`${table.status} IN ('complete', 'partial', 'unavailable')`,
+    ),
+    check(
+      "audience_snapshot_member_count_valid",
+      sql`${table.memberCount} >= 0`,
+    ),
+  ],
+);
+
+export const audienceSnapshotMembers = pgTable(
+  "audience_snapshot_members",
+  {
+    audienceSnapshotId: uuid("audience_snapshot_id")
+      .notNull()
+      .references(() => audienceSnapshots.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    included: boolean("included").notNull(),
+    reasonCode: varchar("reason_code", { length: 48 }).notNull(),
+    reasons: jsonb("reasons").notNull().$type<readonly string[]>().default([]),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.audienceSnapshotId, table.personId] }),
+    index("audience_snapshot_member_included_idx").on(
+      table.audienceSnapshotId,
+      table.included,
+    ),
+    check(
+      "audience_snapshot_reason_code_valid",
+      sql`${table.reasonCode} IN ('dynamic-match', 'static-include', 'explicit-exclude', 'rule-no-match', 'fact-unavailable')`,
     ),
   ],
 );
@@ -9291,6 +9466,10 @@ export const marketingFlows = pgTable(
     sessionId: uuid("session_id").references(() => sessions.id, {
       onDelete: "cascade",
     }),
+    audienceVersionId: uuid("audience_version_id").references(
+      () => audienceVersions.id,
+      { onDelete: "set null" },
+    ),
     name: text("name").notNull(),
     description: text("description"),
     segment: jsonb("segment")
@@ -9327,6 +9506,7 @@ export const marketingFlows = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("marketing_flow_audience_version_idx").on(table.audienceVersionId),
     check(
       "marketing_flow_status_valid",
       sql`${table.status} IN ('draft', 'active', 'paused', 'archived')`,
@@ -9342,6 +9522,10 @@ export const marketingCampaigns = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    audienceVersionId: uuid("audience_version_id").references(
+      () => audienceVersions.id,
+      { onDelete: "set null" },
+    ),
     segment: jsonb("segment")
       .notNull()
       .$type<Record<string, unknown>>()
@@ -9382,6 +9566,9 @@ export const marketingCampaigns = pgTable(
       table.organizationId,
       table.status,
       table.createdAt,
+    ),
+    index("marketing_campaign_audience_version_idx").on(
+      table.audienceVersionId,
     ),
     check(
       "marketing_campaign_status_valid",

@@ -70,6 +70,98 @@ export const organizationSummarySchema = z.object({
     .optional(),
 });
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
+
+const audienceRuleConditionSchema = z.object({
+  kind: z.literal("condition"),
+  fact: z.enum([
+    "person-type",
+    "verified-dependent-count",
+    "registration",
+    "session-count",
+    "lifetime-value-minor",
+    "payment-state",
+    "membership-status",
+    "last-activity-at",
+  ]),
+  operator: z.enum([
+    "is",
+    "is-not",
+    "any-of",
+    "none-of",
+    "greater-than",
+    "greater-than-or-equal",
+    "less-than",
+    "less-than-or-equal",
+    "before",
+    "after",
+  ]),
+  value: z.unknown(),
+});
+const audienceRuleSchema: z.ZodTypeAny = z.lazy(() =>
+  z.union([
+    audienceRuleConditionSchema,
+    z.object({
+      kind: z.literal("group"),
+      operator: z.enum(["all", "any"]),
+      rules: z.array(audienceRuleSchema).min(1),
+    }),
+  ]),
+);
+export const audienceRuleAstSchema = z.object({
+  version: z.literal(1),
+  root: z.object({
+    kind: z.literal("group"),
+    operator: z.enum(["all", "any"]),
+    rules: z.array(audienceRuleSchema).min(1),
+  }),
+});
+export const audienceSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  mode: z.enum(["static", "dynamic", "hybrid"]),
+  status: z.enum(["active", "archived"]),
+  currentVersionId: z.string().uuid().optional(),
+  revision: z.number().int().nonnegative(),
+  estimatedSize: z.number().int().nonnegative(),
+  projectionStatus: z.enum(["complete", "partial", "unavailable"]),
+  unavailableFactKeys: z.array(z.string()).readonly(),
+  updatedAt: z.iso.datetime(),
+  members: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        displayName: z.string(),
+        initials: z.string(),
+        avatarUrl: z.string().optional(),
+      }),
+    )
+    .readonly(),
+});
+export const transactionSummarySchema = z.object({
+  id: z.union([
+    z.string().uuid(),
+    z
+      .string()
+      .regex(
+        /^(collection|order|membership-invoice|payout):[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i,
+      ),
+  ]),
+  occurredAt: z.iso.datetime(),
+  status: z.string(),
+  buyerName: z.string(),
+  description: z.string(),
+  source: z.string(),
+  currency: currencySchema,
+  grossMinor: z.number().int(),
+  processingFeeMinor: z.number().int().optional(),
+  organizationFeeMinor: z.number().int().optional(),
+  taxMinor: z.number().int().optional(),
+  discountMinor: z.number().int().optional(),
+  refundMinor: z.number().int().optional(),
+  disputedMinor: z.number().int().optional(),
+  netMinor: z.number().int().optional(),
+  amountStatus: z.enum(["complete", "partial"]),
+});
 export const organizationCommissionPolicySchema = z.object({
   organizationId: z.string().uuid(),
   configuredPlan: z.enum(["coach", "small-club", "club"]),

@@ -56,6 +56,9 @@ import {
   courtScheduleProposalSchema,
   discoveryMapSchema,
   availabilityAlertResultSchema,
+  audienceRuleAstSchema,
+  audienceSummarySchema,
+  transactionSummarySchema,
   courtAvailabilitySchema,
   courtBookingInviteSummarySchema,
   courtBookingInventorySchema,
@@ -160,6 +163,21 @@ import {
   visionSessionSettingsSchema,
   visionTimelineEventSchema,
 } from "./contracts";
+import {
+  archiveAudience,
+  AudienceServiceError,
+  createAudience,
+  getAudience,
+  getAudienceDetail,
+  listAudiences,
+  previewAudienceRule,
+  reviseAudience,
+} from "./audience-service";
+import {
+  getTransaction,
+  listTransactions,
+  TransactionServiceError,
+} from "./transaction-service";
 import { cancelPlayerBooking } from "./player-bookings";
 import {
   loadSessionArrivalBoard,
@@ -7497,6 +7515,195 @@ const playerRouter = router({
 });
 
 const operatorRouter = router({
+  transactions: organizationProcedure("payments:read")
+    .output(z.array(transactionSummarySchema).readonly())
+    .query(({ ctx }) => listTransactions(ctx.actor!)),
+  transaction: organizationProcedure("payments:read")
+    .input(z.object({ transactionId: z.string().min(1).max(160) }))
+    .output(
+      transactionSummarySchema.extend({
+        timeline: z
+          .array(
+            z.object({
+              at: z.iso.datetime(),
+              label: z.string(),
+              detail: z.string(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await getTransaction(ctx.actor!, input.transactionId);
+      } catch (error) {
+        if (error instanceof TransactionServiceError) {
+          throw new TRPCError({
+            code: error.code === "NOT_FOUND" ? "NOT_FOUND" : "FORBIDDEN",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    }),
+  audiences: organizationProcedure("audiences:read")
+    .output(z.array(audienceSummarySchema).readonly())
+    .query(({ ctx }) => listAudiences(ctx.actor!)),
+  audience: organizationProcedure("audiences:read")
+    .input(z.object({ audienceId: z.string().uuid() }))
+    .output(audienceSummarySchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await getAudience(ctx.actor!, input.audienceId);
+      } catch (error) {
+        if (error instanceof AudienceServiceError) {
+          throw new TRPCError({
+            code: error.code === "NOT_FOUND" ? "NOT_FOUND" : "FORBIDDEN",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    }),
+  audienceDetail: organizationProcedure("audiences:read")
+    .input(z.object({ audienceId: z.string().uuid() }))
+    .output(
+      audienceSummarySchema.extend({
+        ruleAst: z.unknown(),
+        includePersonIds: z.array(z.string().uuid()).readonly(),
+        excludePersonIds: z.array(z.string().uuid()).readonly(),
+        history: z
+          .array(
+            z.object({
+              revision: z.number().int(),
+              createdAt: z.iso.datetime(),
+              current: z.boolean(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .query(async ({ input, ctx }) =>
+      getAudienceDetail(ctx.actor!, input.audienceId),
+    ),
+  previewAudience: organizationProcedure("audiences:write")
+    .input(z.object({ ruleAst: audienceRuleAstSchema }))
+    .output(
+      z.object({
+        ruleHash: z.string(),
+        estimatedSize: z.number().int(),
+        unavailableFactKeys: z.array(z.string()).readonly(),
+        members: z
+          .array(
+            z.object({
+              personId: z.string().uuid(),
+              included: z.boolean(),
+              reasonCode: z.string(),
+              reasons: z.array(z.string()).readonly(),
+            }),
+          )
+          .readonly(),
+        exclusions: z
+          .array(
+            z.object({
+              personId: z.string().uuid(),
+              included: z.boolean(),
+              reasonCode: z.string(),
+              reasons: z.array(z.string()).readonly(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .query(({ input, ctx }) =>
+      previewAudienceRule(ctx.actor!, input.ruleAst as never),
+    ),
+  createAudience: organizationProcedure("audiences:write")
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(140),
+        mode: z.enum(["static", "dynamic", "hybrid"]),
+        ruleAst: audienceRuleAstSchema,
+        includePersonIds: z.array(z.string().uuid()).max(5_000),
+        excludePersonIds: z.array(z.string().uuid()).max(5_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(audienceSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createAudience",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createAudience({
+              ...input,
+              ruleAst: input.ruleAst as never,
+              actor: ctx.actor!,
+              now: ctx.now,
+            });
+          } catch (error) {
+            if (error instanceof AudienceServiceError) {
+              throw new TRPCError({
+                code:
+                  error.code === "NOT_FOUND"
+                    ? "NOT_FOUND"
+                    : error.code === "FORBIDDEN"
+                      ? "FORBIDDEN"
+                      : "PRECONDITION_FAILED",
+                message: error.message,
+              });
+            }
+            throw error;
+          }
+        },
+      }),
+    ),
+  reviseAudience: organizationProcedure("audiences:write")
+    .input(
+      z.object({
+        audienceId: z.string().uuid(),
+        ruleAst: audienceRuleAstSchema,
+        includePersonIds: z.array(z.string().uuid()).max(5_000),
+        excludePersonIds: z.array(z.string().uuid()).max(5_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(audienceSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.reviseAudience",
+        request: input,
+        ctx,
+        execute: () =>
+          reviseAudience({
+            ...input,
+            ruleAst: input.ruleAst as never,
+            actor: ctx.actor!,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  archiveAudience: organizationProcedure("audiences:write")
+    .input(
+      z.object({
+        audienceId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(audienceSummarySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.archiveAudience",
+        request: input,
+        ctx,
+        execute: () => archiveAudience(ctx.actor!, input.audienceId, ctx.now),
+      }),
+    ),
   dashboard: organizationProcedure("reports:read")
     .output(operatorDashboardSchema)
     .query(({ ctx }) =>
@@ -11960,6 +12167,7 @@ const operatorRouter = router({
         channel: z.enum(["email", "sms", "push"]),
         subject: z.string().trim().max(180).optional(),
         body: z.string().trim().min(1).max(8_000),
+        audienceVersionId: z.string().uuid().optional(),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
       }),
@@ -12000,6 +12208,7 @@ const operatorRouter = router({
         channel: z.enum(["email", "sms", "push"]),
         subject: z.string().trim().max(180).optional(),
         body: z.string().trim().min(1).max(8_000),
+        audienceVersionId: z.string().uuid().optional(),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
       }),
