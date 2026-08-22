@@ -1444,6 +1444,9 @@ export const videoStatusSchema = z.enum([
 ]);
 export const videoLiveVisibilitySchema = z.enum(["public", "link-only"]);
 export const videoRecordingVisibilitySchema = z.enum(["public", "private"]);
+// Learning use is always an explicit, per-video opt-in. Older or partial
+// clients that omit the field must never grant consent by accident.
+export const visionLearningConsentInputSchema = z.boolean().default(false);
 export const videoMusicRemovalStatusSchema = z.enum([
   "not-requested",
   "queued",
@@ -1659,15 +1662,58 @@ export const volleyballContactOutcomeSchema = z.enum([
   "positive",
   "negative",
 ]);
+const videoAnalysisPlanarCourtPointSchema = z.object({
+  xMeters: z.number().finite().min(0).max(30),
+  yMeters: z.number().finite().min(0).max(40),
+  observed: z.enum(["visible", "edge", "out-of-frame"]),
+});
+export const videoAnalysisContactQualitySchema = z.object({
+  evidenceVersion: z.literal("duna-contact-evidence-v1"),
+  detectorConfidence: z.number().finite().min(0).max(1).optional(),
+  temporalConfidence: z.number().finite().min(0).max(1).optional(),
+  occluded: z.boolean().optional(),
+  visibleFrames: z.number().int().min(0).max(10_000).optional(),
+  evidence: z.enum(["visible-2d", "partial-2d", "unavailable"]),
+});
+export const videoAnalysisTrajectorySchema = z.object({
+  evidenceVersion: z.literal("duna-trajectory-2d-v1"),
+  coordinateFrame: z.literal("canonical-court-2d"),
+  endPoint: videoAnalysisPlanarCourtPointSchema.optional(),
+  flightTimeUs: z.number().int().positive().max(10_000_000).optional(),
+  observedPoints: z.number().int().min(0).max(10_000),
+  evidence: z.enum(["visible-2d", "partial-2d", "unavailable"]),
+});
+export const volleyballRuleFindingSchema = z.object({
+  ruleVersion: z.literal("beach-volleyball-2s-v1"),
+  ruleId: z.enum([
+    "three-team-contacts",
+    "consecutive-player-contact",
+    "serve-starts-rally",
+  ]),
+  verdict: z.enum(["pass", "violation", "unavailable"]),
+  rallyId: z.string().uuid().optional(),
+  evidence: z.string().trim().min(1).max(360),
+});
 export const videoAnalysisEventPayloadSchema = z
   .object({
     label: z.string().trim().min(1).max(160).optional(),
     rallyId: z.string().uuid().optional(),
+    /** Rules only evaluate a rally when a trusted producer says its sequence is complete. */
+    rallySequenceComplete: z.boolean().optional(),
     contactKind: volleyballContactKindSchema.optional(),
     outcome: volleyballContactOutcomeSchema.optional(),
     side: volleyballSideSchema.optional(),
     playerId: z.string().uuid().optional(),
     speedKph: z.number().finite().min(0).max(180).optional(),
+    contactPoint: videoAnalysisPlanarCourtPointSchema.optional(),
+    contactUncertaintyMeters: z.number().finite().min(0).max(20).optional(),
+    contactQuality: videoAnalysisContactQualitySchema.optional(),
+    trajectory: videoAnalysisTrajectorySchema.optional(),
+    ruleFindings: z
+      .array(volleyballRuleFindingSchema)
+      .max(12)
+      .readonly()
+      .optional(),
   })
   .passthrough();
 export const videoAnalysisEventStateSchema = z.enum([
@@ -1683,11 +1729,8 @@ export const videoAnalysisConfidenceSchema = z.enum([
   "low",
   "unavailable",
 ]);
-export const videoAnalysisCourtPointSchema = z.object({
-  xMeters: z.number().finite().min(0).max(30),
-  yMeters: z.number().finite().min(0).max(40),
-  observed: z.enum(["visible", "edge", "out-of-frame"]),
-});
+export const videoAnalysisCourtPointSchema =
+  videoAnalysisPlanarCourtPointSchema;
 export const videoAnalysisCourtMapSchema = z.object({
   widthMeters: z.number().positive().max(30),
   lengthMeters: z.number().positive().max(40),
@@ -1903,6 +1946,7 @@ export const videoAnalysisReportSchema = z.object({
       )
       .readonly(),
   }),
+  ruleFindings: z.array(volleyballRuleFindingSchema).readonly(),
   highlights: z
     .array(
       z.object({
@@ -1935,6 +1979,100 @@ export const videoAnalysisReportSchema = z.object({
     trainingEligible: z.boolean(),
     disclaimer: z.string(),
   }),
+});
+export const videoPerformanceRecommendationSchema = z.object({
+  category: z.enum([
+    "hitting",
+    "passing",
+    "setting",
+    "serving",
+    "movement",
+    "strategy",
+  ]),
+  headline: z.string().trim().min(1).max(180),
+  guidance: z.string().trim().min(1).max(1_200),
+  evidence: z.array(z.string().trim().min(1).max(360)).min(1).max(6).readonly(),
+  confidence: z.number().finite().min(0).max(1),
+});
+export const videoPerformanceReviewSchema = z.object({
+  id: z.string().uuid(),
+  videoId: z.string().uuid(),
+  analysisRunId: z.string().uuid(),
+  status: z.enum([
+    "queued",
+    "processing",
+    "succeeded",
+    "unavailable",
+    "failed",
+  ]),
+  provider: z.literal("vercel-ai-gateway"),
+  model: z.string().min(1).max(120),
+  reasoningEffort: z.literal("xhigh"),
+  promptVersion: z.string().min(1).max(80),
+  schemaVersion: z.string().min(1).max(80),
+  evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  recommendations: z.array(videoPerformanceRecommendationSchema).readonly(),
+  fallbackReason: z.string().max(240).optional(),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().optional(),
+});
+// These are model-improvement research questions, not player coaching and
+// never an instruction to train, calibrate, shadow, or promote a model.
+export const visionImprovementProposalItemSchema = z.object({
+  question: z.string().trim().min(1).max(360),
+  hypothesis: z.string().trim().min(1).max(720),
+  requiredLabels: z
+    .array(z.string().trim().min(1).max(160))
+    .min(1)
+    .max(8)
+    .readonly(),
+  evaluationSlices: z
+    .array(z.string().trim().min(1).max(160))
+    .min(1)
+    .max(8)
+    .readonly(),
+  physicsOrRulesGap: z.string().trim().min(1).max(720),
+  evidence: z.array(z.string().trim().min(1).max(360)).min(1).max(6).readonly(),
+});
+// Append-only Super Admin disposition ledger. A review authorizes neither
+// training nor a model-state change; it is visible with its reviewer and time
+// so research questions remain auditable after later disagreement.
+export const visionImprovementProposalReviewSchema = z.object({
+  id: z.string().uuid(),
+  reviewerPersonId: z.string().uuid(),
+  reviewerName: z.string().trim().min(1).max(240),
+  decision: z.enum(["approved", "rejected"]),
+  notes: z.string().trim().min(8).max(1_000),
+  reviewedAt: z.iso.datetime(),
+});
+export const visionImprovementProposalSchema = z.object({
+  id: z.string().uuid(),
+  videoId: z.string().uuid(),
+  analysisRunId: z.string().uuid(),
+  status: z.enum([
+    "queued",
+    "processing",
+    "succeeded",
+    "unavailable",
+    "failed",
+  ]),
+  provider: z.literal("vercel-ai-gateway"),
+  model: z.string().min(1).max(120),
+  reasoningEffort: z.literal("xhigh"),
+  promptVersion: z.string().min(1).max(80),
+  schemaVersion: z.string().min(1).max(80),
+  evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  proposals: z.array(visionImprovementProposalItemSchema).readonly(),
+  reviews: z
+    .array(visionImprovementProposalReviewSchema)
+    .readonly()
+    .default([]),
+  fallbackReason: z.string().max(240).optional(),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().optional(),
+});
+export const visionImprovementProposalQueueSchema = z.object({
+  proposals: z.array(visionImprovementProposalSchema).readonly(),
 });
 export const videoAnalysisMarkerInputSchema = z
   .object({
@@ -2613,9 +2751,25 @@ export const videoUploadSessionSchema = z.object({
   partSizeBytes: z
     .number()
     .int()
-    .min(5 * 1024 * 1024),
+    .min(5 * 1024 * 1024)
+    .max(64 * 1024 * 1024),
   totalParts: z.number().int().min(1).max(10_000),
   uploadedParts: z.array(z.number().int().min(1).max(10_000)).readonly(),
+  // R2 ListParts, not this client's local queue or the upload-parts mirror,
+  // is the source of truth for an upload that is resumed or completed.
+  authoritativeParts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().min(1).max(10_000),
+        etag: z.string().trim().min(1).max(512),
+        sizeBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(64 * 1024 * 1024),
+      }),
+    )
+    .readonly(),
   expiresAt: z.iso.datetime(),
 });
 export const videoUploadPartUrlSchema = z.object({
@@ -6766,6 +6920,12 @@ export type VisionSession = z.infer<typeof visionSessionSchema>;
 export type VisionSessionSettings = z.infer<typeof visionSessionSettingsSchema>;
 export type VisionTimelineEvent = z.infer<typeof visionTimelineEventSchema>;
 export type VideoAnalysisReport = z.infer<typeof videoAnalysisReportSchema>;
+export type VideoPerformanceReview = z.infer<
+  typeof videoPerformanceReviewSchema
+>;
+export type VisionImprovementProposal = z.infer<
+  typeof visionImprovementProposalSchema
+>;
 export type VideoAnalysisRun = z.infer<typeof videoAnalysisRunSchema>;
 export type VideoAnalysisEvent = z.infer<typeof videoAnalysisEventSchema>;
 export type VideoAnalysisMarkerInput = z.infer<
