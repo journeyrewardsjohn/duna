@@ -44,9 +44,13 @@ export function OrganizationInvitationPanel({
       setComplete(true);
       setNextPath(response.result.nextPath);
       setNotice(
-        response.result.guardianReviewRequired
-          ? "The player has been added privately. The guardian relationship is now queued for review."
-          : "You are connected to the organization.",
+        invitation.event?.paymentTreatment === "complimentary"
+          ? "Your Duna profile is connected and the organizer has covered your entry."
+          : invitation.event?.paymentTreatment === "to-be-paid"
+            ? "Your Duna profile is connected. Your place is registered and payment is still required."
+            : response.result.guardianReviewRequired
+              ? "The player has been added privately. The guardian relationship is now queued for review."
+              : "You are connected to the organization.",
       );
     });
   }
@@ -60,7 +64,7 @@ export function OrganizationInvitationPanel({
       <h1>
         {complete
           ? invitation.event
-            ? "Your tournament spot is connected."
+            ? "You’re in."
             : "You’re connected."
           : invitation.isMinor
             ? `Connect ${invitation.invitedName}.`
@@ -69,11 +73,13 @@ export function OrganizationInvitationPanel({
               : `Join as ${invitation.invitedName}.`}
       </h1>
       <p>
-        {invitation.isMinor
-          ? "A parent or guardian accepts this invitation. The child’s profile stays private and no spending authority is granted until Duna completes its guardian review."
-          : invitation.event
-            ? `Accept to connect your Duna identity to ${invitation.event.divisionName} at ${invitation.event.title}.`
-            : "Accept to add your Duna identity to this organization’s player roster."}
+        {complete && invitation.event
+          ? `Your Duna profile is now connected to ${invitation.event.divisionName} at ${invitation.event.title}.`
+          : invitation.isMinor
+            ? "A parent or guardian accepts this invitation. The child’s profile stays private and no spending authority is granted until Duna completes its guardian review."
+            : invitation.event
+              ? `Accept to connect your Duna identity to ${invitation.event.divisionName} at ${invitation.event.title}.`
+              : "Accept to add your Duna identity to this organization’s player roster."}
       </p>
       {invitation.event && (
         <div className="organization-invite-card__event">
@@ -102,13 +108,13 @@ export function OrganizationInvitationPanel({
             <i>
               <strong>
                 {invitation.event.paymentTreatment === "complimentary"
-                  ? "Complimentary entry"
-                  : "Payment due after claim"}
+                  ? "Your entry is comped"
+                  : "Payment required after acceptance"}
               </strong>
               <small>
                 {invitation.event.paymentTreatment === "complimentary"
-                  ? "The organizer covered your entry."
-                  : "Your place is registered and held. Checkout is next."}
+                  ? "The organizer covered your entry. You will not be charged."
+                  : "Your place is registered and held, but remains unpaid until checkout is complete."}
               </small>
             </i>
           </span>
@@ -170,7 +176,11 @@ export function OrganizationInvitationPanel({
           className="duna-button duna-button--primary"
           href={nextPath ?? "/app"}
         >
-          {invitation.event ? "Continue to my entry" : "Open Duna"}
+          {invitation.event?.paymentTreatment === "to-be-paid"
+            ? "Continue to payment"
+            : invitation.event
+              ? "See my tournament spot"
+              : "Open Duna"}
         </Link>
       )}
     </section>

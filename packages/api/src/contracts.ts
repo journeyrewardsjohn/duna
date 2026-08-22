@@ -8,6 +8,14 @@ export const moneySchema = z.object({
 });
 // Individual King/Queen of the Beach entries are intentionally one-player teams.
 export const expectedTeamSizeSchema = z.number().int().min(1).max(6);
+// Checkout-created entries use UUIDs while organizer-created guest entries use
+// a longer opaque token. Both are non-secret identifiers carried in claim URLs.
+export const teamClaimTokenSchema = z
+  .string()
+  .trim()
+  .min(16)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
 export const personRoleSchema = z.enum([
   "player",
   "guardian",
@@ -918,7 +926,7 @@ export const bookingSummarySchema = z.object({
   team: z
     .object({
       divisionId: z.string().uuid(),
-      claimToken: z.string().uuid(),
+      claimToken: teamClaimTokenSchema,
       expectedTeamSize: expectedTeamSizeSchema,
       paymentMode: z.enum(["self", "team"]),
       status: z.enum([
@@ -6826,7 +6834,7 @@ export const eventCheckoutResultSchema = z.object({
   registrationId: z.string().uuid().optional(),
   registrationStatus: z.enum(["confirmed", "waitlisted", "pending"]).optional(),
   fulfillmentStatus: z.enum(["confirmed", "pending-approval"]).optional(),
-  teamClaimToken: z.string().min(16).max(128).optional(),
+  teamClaimToken: teamClaimTokenSchema.optional(),
   checkoutSessionId: z.string().optional(),
   checkoutUrl: z.url().optional(),
   paymentSheet: z
@@ -6877,6 +6885,10 @@ export const eventCheckoutStatusSchema = z.object({
 export const teamClaimSummarySchema = z.object({
   eventTitle: z.string(),
   eventSlug: z.string(),
+  eventStartsAt: z.iso.datetime(),
+  eventEndsAt: z.iso.datetime(),
+  eventTimezone: z.string(),
+  venueName: z.string().optional(),
   divisionId: z.string().uuid(),
   divisionName: z.string(),
   captainName: z.string(),
@@ -6888,6 +6900,7 @@ export const teamClaimSummarySchema = z.object({
   expiresAt: z.iso.datetime(),
   alreadyClaimed: z.boolean(),
   paymentRequired: z.boolean(),
+  paymentStatus: z.enum(["complimentary", "payment-required", "paid", "free"]),
   isOrganizer: z.boolean(),
   canManageRoster: z.boolean(),
   registrationClosesAt: z.iso.datetime(),

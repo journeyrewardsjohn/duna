@@ -133,6 +133,7 @@ import {
   sessionArrivalBoardSchema,
   sessionArrivalSignalSchema,
   teamClaimSummarySchema,
+  teamClaimTokenSchema,
   teammateSearchResultSchema,
   ticketApprovalResultSchema,
   ticketApprovalSummarySchema,
@@ -6998,7 +6999,7 @@ const playerRouter = router({
         ticketTypeId: z.string().uuid().optional(),
         ticketQuantity: z.number().int().min(1).max(10).optional(),
         teamPaymentMode: z.enum(["self", "team"]).optional(),
-        teamClaimToken: z.string().uuid().optional(),
+        teamClaimToken: teamClaimTokenSchema.optional(),
         teamRoster: z
           .array(
             z
@@ -7206,7 +7207,7 @@ const playerRouter = router({
       }
     }),
   teamClaim: protectedProcedure
-    .input(z.object({ claimToken: z.string().uuid() }))
+    .input(z.object({ claimToken: teamClaimTokenSchema }))
     .output(teamClaimSummarySchema)
     .query(async ({ input, ctx }) => {
       try {
@@ -7229,7 +7230,7 @@ const playerRouter = router({
     )
     .input(
       z.object({
-        claimToken: z.string().uuid(),
+        claimToken: teamClaimTokenSchema,
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
       }),
@@ -7266,7 +7267,7 @@ const playerRouter = router({
     )
     .input(
       z.object({
-        claimToken: z.string().uuid(),
+        claimToken: teamClaimTokenSchema,
         roster: z
           .array(
             z
