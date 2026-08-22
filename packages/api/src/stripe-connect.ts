@@ -21,6 +21,25 @@ export function connectAccountMetadataEntityId(
 }
 
 /**
+ * `on_behalf_of` makes the connected account the settlement merchant and is
+ * valid only when that account can accept card payments. Recipient-only
+ * accounts can still receive destination transfers, so callers must omit
+ * `on_behalf_of` instead of blocking the whole destination charge.
+ */
+export function connectAccountSupportsOnBehalfOf(
+  object: StripeObject,
+): boolean {
+  const legacyCapabilities = nestedRecord(object, "capabilities");
+  if (legacyCapabilities?.card_payments === "active") return true;
+
+  const configuration = nestedRecord(object, "configuration");
+  const merchant = nestedRecord(configuration, "merchant");
+  const merchantCapabilities = nestedRecord(merchant, "capabilities");
+  const cardPayments = nestedRecord(merchantCapabilities, "card_payments");
+  return merchant?.applied === true && cardPayments?.status === "active";
+}
+
+/**
  * Accounts created through v2 still have a v1 projection, but v2 webhooks and
  * retrievals expose capability status under configuration.recipient. Accept
  * either representation so payment readiness cannot depend on payload style.

@@ -3,6 +3,7 @@ export * from "./eligibility";
 export * from "./division-eligibility";
 export * from "./event-media";
 export * from "./event-lifecycle";
+export * from "./event-division-presentation";
 export * from "./product-media";
 export * from "./forms";
 export * from "./identity";

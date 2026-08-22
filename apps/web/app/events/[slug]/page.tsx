@@ -1,4 +1,9 @@
-import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
+import {
+  defaultEventMedia,
+  eventDivisionTeamSize,
+  formatMoney,
+  formatVenueTime,
+} from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -250,6 +255,9 @@ export default async function EventPage({
   const startingPlayerPrice = event.divisions
     ?.map((division) => division.playerPrice)
     .sort((left, right) => left.amountMinor - right.amountMinor)[0];
+  const hasOnlyIndividualDivisions = event.divisions?.every(
+    (division) => eventDivisionTeamSize(division) === 1,
+  );
   const lifecyclePhase = event.live
     ? "live"
     : event.lifecycleStatus === "completed"
@@ -933,7 +941,21 @@ export default async function EventPage({
         <aside className="event-public__booking">
           <div className="event-public__booking-label">
             <CircleDollarSign aria-hidden size={18} />
-            {startingTeamPrice && startingPlayerPrice ? (
+            {startingPlayerPrice && hasOnlyIndividualDivisions ? (
+              <span>
+                <small>
+                  Player entry{event.divisions!.length > 1 ? " from" : ""}
+                </small>
+                <Numeric>
+                  {startingPlayerPrice.amountMinor === 0
+                    ? "Free"
+                    : formatMoney(
+                        startingPlayerPrice.amountMinor,
+                        startingPlayerPrice.currency,
+                      )}
+                </Numeric>
+              </span>
+            ) : startingTeamPrice && startingPlayerPrice ? (
               <div>
                 <span>
                   <small>

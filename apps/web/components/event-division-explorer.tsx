@@ -1,6 +1,18 @@
 "use client";
 
-import { formatMoney, type EventDivisionSummary } from "@duna/core";
+import {
+  eventDivisionAgeLabel,
+  eventDivisionCompetitionLabel,
+  eventDivisionEntryLabel,
+  eventDivisionFieldLabel,
+  eventDivisionFilledCount,
+  eventDivisionFilledPercent,
+  eventDivisionRatingLabel,
+  eventDivisionSeedingLabel,
+  eventDivisionTeamSize,
+  formatMoney,
+  type EventDivisionSummary,
+} from "@duna/core";
 import { Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -97,19 +109,7 @@ function price(value: EventDivisionSummary["price"]) {
 }
 
 function ratingLabel(division: EventDivisionSummary) {
-  if (
-    division.ratingMinimum !== undefined &&
-    division.ratingMaximum !== undefined
-  ) {
-    return `${division.ratingMinimum.toFixed(2)}–${division.ratingMaximum.toFixed(2)}`;
-  }
-  if (division.ratingMinimum !== undefined) {
-    return `${division.ratingMinimum.toFixed(2)}+`;
-  }
-  if (division.ratingMaximum !== undefined) {
-    return `Up to ${division.ratingMaximum.toFixed(2)}`;
-  }
-  return "Open rating";
+  return eventDivisionRatingLabel(division);
 }
 
 function uniqueFacets(
@@ -211,41 +211,44 @@ export function EventDivisionExplorer({
 
   return (
     <div className="division-explorer">
-      <div className="division-explorer__filters">
-        <div className="division-explorer__filter-heading">
-          <span>
-            <SlidersHorizontal aria-hidden size={18} /> Quick find
-          </span>
-          <strong>
-            {filtered.length} {filtered.length === 1 ? "division" : "divisions"}
-          </strong>
-          {isFiltered && (
-            <button
-              onClick={() => {
-                setAge("all-options");
-                setLevel("all-options");
-                setFormat("all-options");
-              }}
-              type="button"
-            >
-              Clear
-            </button>
-          )}
+      {divisions.length > 1 && (
+        <div className="division-explorer__filters">
+          <div className="division-explorer__filter-heading">
+            <span>
+              <SlidersHorizontal aria-hidden size={18} /> Quick find
+            </span>
+            <strong>
+              {filtered.length}{" "}
+              {filtered.length === 1 ? "division" : "divisions"}
+            </strong>
+            {isFiltered && (
+              <button
+                onClick={() => {
+                  setAge("all-options");
+                  setLevel("all-options");
+                  setFormat("all-options");
+                }}
+                type="button"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {ages.length > 1 &&
+            renderFacet("Age group", age, setAge, ages, ageFacet, "age")}
+          {levels.length > 1 &&
+            renderFacet("Level", level, setLevel, levels, levelFacet, "level")}
+          {formats.length > 1 &&
+            renderFacet(
+              "Format",
+              format,
+              setFormat,
+              formats,
+              formatFacet,
+              "format",
+            )}
         </div>
-        {ages.length > 1 &&
-          renderFacet("Age group", age, setAge, ages, ageFacet, "age")}
-        {levels.length > 1 &&
-          renderFacet("Level", level, setLevel, levels, levelFacet, "level")}
-        {formats.length > 1 &&
-          renderFacet(
-            "Format",
-            format,
-            setFormat,
-            formats,
-            formatFacet,
-            "format",
-          )}
-      </div>
+      )}
 
       {ages.length > 1 && levels.length > 1 && (
         <div className="division-explorer__matrix-wrap">
@@ -325,41 +328,67 @@ export function EventDivisionExplorer({
                 <p>{division.description}</p>
               </div>
               <span>
-                <UsersRound aria-hidden size={18} /> {division.teamSize ?? 1}{" "}
-                players
+                <UsersRound aria-hidden size={18} />{" "}
+                {eventDivisionEntryLabel(division)}
               </span>
             </div>
             <div className="division-explorer__details">
               <span>
-                <small>Format</small>
-                <strong>
-                  {words(division.teamFormat ?? division.discipline)}
-                </strong>
+                <small>Competition</small>
+                <strong>{eventDivisionCompetitionLabel(division)}</strong>
               </span>
               <span>
                 <small>Eligibility</small>
-                <strong>{ratingLabel(division)}</strong>
-              </span>
-              <span>
-                <small>Field</small>
                 <strong>
-                  {words(division.gender)} · {words(division.surface)}
+                  {eventDivisionAgeLabel(division)} · {ratingLabel(division)}
                 </strong>
               </span>
               <span>
-                <small>Play</small>
-                <strong>{words(division.tournamentFormat)}</strong>
+                <small>Field</small>
+                <strong>{eventDivisionFieldLabel(division)}</strong>
               </span>
+              <span>
+                <small>Seeding</small>
+                <strong>{eventDivisionSeedingLabel(division)}</strong>
+              </span>
+            </div>
+            <div className="division-explorer__availability">
+              <span>
+                <strong>{division.spotsRemaining} spots open</strong>
+                <small>
+                  {eventDivisionFilledCount(division)}/{division.capacity}{" "}
+                  claimed
+                </small>
+              </span>
+              <div
+                aria-label={`${eventDivisionFilledCount(division)} of ${division.capacity} places claimed`}
+                aria-valuemax={division.capacity}
+                aria-valuemin={0}
+                aria-valuenow={eventDivisionFilledCount(division)}
+                role="progressbar"
+              >
+                <i
+                  style={{ width: `${eventDivisionFilledPercent(division)}%` }}
+                />
+              </div>
             </div>
             <footer>
               <div className="division-explorer__prices">
+                {eventDivisionTeamSize(division) > 1 && (
+                  <>
+                    <span>
+                      <small>Full team</small>
+                      <Numeric>{price(division.teamPrice)}</Numeric>
+                    </span>
+                    <i aria-hidden />
+                  </>
+                )}
                 <span>
-                  <small>Team entry</small>
-                  <Numeric>{price(division.teamPrice)}</Numeric>
-                </span>
-                <i aria-hidden />
-                <span>
-                  <small>Pay per player</small>
+                  <small>
+                    {eventDivisionTeamSize(division) === 1
+                      ? "Player entry"
+                      : "Per player"}
+                  </small>
                   <Numeric>{price(division.playerPrice)}</Numeric>
                 </span>
               </div>

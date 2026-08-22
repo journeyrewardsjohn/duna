@@ -11,6 +11,7 @@ import Stripe from "stripe";
 import {
   connectAccountMetadataEntityId,
   connectAccountMoneyReady,
+  connectAccountSupportsOnBehalfOf,
 } from "./stripe-connect";
 import {
   STRIPE_TAX_CODES,
@@ -45,6 +46,18 @@ export function getStripePublishableKey(): string {
     throw new Error("STRIPE_PUBLISHABLE_KEY is not configured");
   }
   return publishableKey;
+}
+
+async function destinationChargeRouting(connectedAccountId: string) {
+  const account = await getStripeClient().accounts.retrieve(connectedAccountId);
+  return {
+    ...(connectAccountSupportsOnBehalfOf(
+      account as unknown as Readonly<Record<string, unknown>>,
+    )
+      ? { on_behalf_of: connectedAccountId }
+      : {}),
+    transfer_data: { destination: connectedAccountId },
+  } as const;
 }
 
 export function automaticTaxEnabledInCurrentStripeMode(
@@ -417,6 +430,9 @@ export async function createEventCheckoutSession(input: {
   const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
     input.automaticTaxEnabled,
   );
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "payment",
@@ -443,8 +459,7 @@ export async function createEventCheckoutSession(input: {
       automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
-        on_behalf_of: input.connectedAccountId,
-        transfer_data: { destination: input.connectedAccountId },
+        ...chargeRouting,
         metadata: {
           dunaOrderId: input.orderId,
           dunaEventId: input.eventId,
@@ -501,6 +516,10 @@ export async function createEventPaymentIntent(input: {
     throw new Error("Connected payment application fee is invalid");
   }
 
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
+
   const intent = await getStripeClient().paymentIntents.create(
     {
       amount: input.amountMinor,
@@ -510,8 +529,7 @@ export async function createEventPaymentIntent(input: {
       description: input.eventTitle,
       automatic_payment_methods: { enabled: true },
       application_fee_amount: input.applicationFeeMinor,
-      on_behalf_of: input.connectedAccountId,
-      transfer_data: { destination: input.connectedAccountId },
+      ...chargeRouting,
       metadata: {
         dunaOrderId: input.orderId,
         dunaEventId: input.eventId,
@@ -562,6 +580,10 @@ export async function createCourtBookingPaymentIntent(input: {
     throw new Error("Court payment application fee is invalid");
   }
 
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
+
   const intent = await getStripeClient().paymentIntents.create(
     {
       amount: input.amountMinor,
@@ -571,8 +593,7 @@ export async function createCourtBookingPaymentIntent(input: {
       description: input.description,
       automatic_payment_methods: { enabled: true },
       application_fee_amount: input.applicationFeeMinor,
-      on_behalf_of: input.connectedAccountId,
-      transfer_data: { destination: input.connectedAccountId },
+      ...chargeRouting,
       metadata: {
         dunaOrderId: input.orderId,
         dunaBookingId: input.bookingId,
@@ -678,6 +699,9 @@ export async function createCatalogNativePayment(
     throw new Error("Catalog payment application fee is invalid");
   }
   const metadata = catalogPaymentMetadata(input);
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
   if (!input.recurringInterval) {
     const intent = await getStripeClient().paymentIntents.create(
       {
@@ -688,8 +712,7 @@ export async function createCatalogNativePayment(
         description: input.title,
         automatic_payment_methods: { enabled: true },
         application_fee_amount: input.applicationFeeMinor,
-        on_behalf_of: input.connectedAccountId,
-        transfer_data: { destination: input.connectedAccountId },
+        ...chargeRouting,
         metadata,
       },
       { idempotencyKey: `${input.idempotencyKey}:native-payment` },
@@ -732,8 +755,7 @@ export async function createCatalogNativePayment(
           : []),
       ],
       application_fee_percent: applicationFeePercent,
-      on_behalf_of: input.connectedAccountId,
-      transfer_data: { destination: input.connectedAccountId },
+      ...chargeRouting,
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       metadata,
@@ -791,6 +813,9 @@ export async function createCourtCheckoutSession(input: {
   const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
     input.automaticTaxEnabled,
   );
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "payment",
@@ -819,8 +844,7 @@ export async function createCourtCheckoutSession(input: {
       automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
-        on_behalf_of: input.connectedAccountId,
-        transfer_data: { destination: input.connectedAccountId },
+        ...chargeRouting,
         metadata: {
           dunaOrderId: input.orderId,
           dunaBookingId: input.bookingId,
@@ -956,6 +980,9 @@ export async function createCatalogCheckoutSession(input: {
   const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
     input.automaticTaxEnabled,
   );
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
   if (automaticTaxEnabled) {
     await ensureStripePriceTaxCode(input.stripePriceId, input.stripeTaxCode);
   }
@@ -1036,14 +1063,12 @@ export async function createCatalogCheckoutSession(input: {
         ? undefined
         : {
             application_fee_amount: input.applicationFeeMinor,
-            on_behalf_of: input.connectedAccountId,
-            transfer_data: { destination: input.connectedAccountId },
+            ...chargeRouting,
             metadata,
           },
       subscription_data: recurring
         ? {
-            on_behalf_of: input.connectedAccountId,
-            transfer_data: { destination: input.connectedAccountId },
+            ...chargeRouting,
             ...(input.installmentPlan && input.applicationFeeMinor > 0
               ? {
                   application_fee_percent: Number(
@@ -1107,6 +1132,14 @@ export async function capCatalogInstallmentSubscription(input: {
   );
   const phase = schedule.phases[0];
   if (!phase) throw new Error("Stripe did not return an installment phase");
+  const phaseDestination = phase.transfer_data?.destination
+    ? typeof phase.transfer_data.destination === "string"
+      ? phase.transfer_data.destination
+      : phase.transfer_data.destination.id
+    : undefined;
+  const phaseChargeRouting = phaseDestination
+    ? await destinationChargeRouting(phaseDestination)
+    : {};
   await stripe.subscriptionSchedules.update(
     schedule.id,
     {
@@ -1125,24 +1158,7 @@ export async function capCatalogInstallmentSubscription(input: {
           ...(phase.application_fee_percent !== null
             ? { application_fee_percent: phase.application_fee_percent }
             : {}),
-          ...(phase.on_behalf_of
-            ? {
-                on_behalf_of:
-                  typeof phase.on_behalf_of === "string"
-                    ? phase.on_behalf_of
-                    : phase.on_behalf_of.id,
-              }
-            : {}),
-          ...(phase.transfer_data?.destination
-            ? {
-                transfer_data: {
-                  destination:
-                    typeof phase.transfer_data.destination === "string"
-                      ? phase.transfer_data.destination
-                      : phase.transfer_data.destination.id,
-                },
-              }
-            : {}),
+          ...phaseChargeRouting,
         },
       ],
     },
@@ -1641,6 +1657,9 @@ export async function createBookingPaymentIntent(input: {
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
     throw new Error("Payment amount must be a positive minor-unit integer");
   }
+  const chargeRouting = input.connectedAccountId
+    ? await destinationChargeRouting(input.connectedAccountId)
+    : {};
   const intent = await getStripeClient().paymentIntents.create(
     {
       amount: input.amountMinor,
@@ -1649,10 +1668,7 @@ export async function createBookingPaymentIntent(input: {
       application_fee_amount: input.connectedAccountId
         ? input.applicationFeeMinor
         : undefined,
-      on_behalf_of: input.connectedAccountId,
-      transfer_data: input.connectedAccountId
-        ? { destination: input.connectedAccountId }
-        : undefined,
+      ...chargeRouting,
       metadata: { dunaOrderId: input.orderId },
     },
     { idempotencyKey: input.idempotencyKey },
@@ -2309,6 +2325,9 @@ export async function createTerminalPaymentIntent(input: {
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
     throw new Error("Terminal amount must be a positive minor-unit integer");
   }
+  const chargeRouting = await destinationChargeRouting(
+    input.connectedAccountId,
+  );
   const intent = await getStripeClient().paymentIntents.create(
     {
       amount: input.amountMinor,
@@ -2316,8 +2335,7 @@ export async function createTerminalPaymentIntent(input: {
       capture_method: "automatic",
       payment_method_types: ["card_present"],
       application_fee_amount: input.applicationFeeMinor,
-      on_behalf_of: input.connectedAccountId,
-      transfer_data: { destination: input.connectedAccountId },
+      ...chargeRouting,
       metadata: {
         dunaOrderId: input.orderId,
         dunaCollectionId: input.collectionId,

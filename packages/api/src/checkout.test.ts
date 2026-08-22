@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CheckoutError,
+  normalizeDivisionTeamRoster,
   resolveRegistrationUnitAmount,
   type CheckoutPolicy,
   validatePickupCoverPayment,
@@ -109,6 +110,20 @@ describe("native event payment contract", () => {
         paymentSheet: partialPaymentSheet,
       }),
     ).toThrow();
+  });
+});
+
+describe("division roster normalization", () => {
+  it("does not count the primary player twice when an older client resends the captain", () => {
+    expect(
+      normalizeDivisionTeamRoster(
+        [
+          { personId: "captain", displayName: "Captain" },
+          { personId: "teammate", displayName: "Teammate" },
+        ],
+        "captain",
+      ),
+    ).toEqual([{ personId: "teammate", displayName: "Teammate" }]);
   });
 });
 

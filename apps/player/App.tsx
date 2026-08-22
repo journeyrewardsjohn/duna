@@ -1,6 +1,15 @@
 import {
   defaultEventMedia,
   evaluateDivisionCriteria,
+  eventDivisionAgeLabel,
+  eventDivisionCompetitionLabel,
+  eventDivisionEntryLabel,
+  eventDivisionFieldLabel,
+  eventDivisionFilledCount,
+  eventDivisionFilledPercent,
+  eventDivisionRatingLabel,
+  eventDivisionSeedingLabel,
+  eventDivisionTeamSize,
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
@@ -12440,6 +12449,11 @@ function BookingModal({
                 <View style={styles.checkoutSection}>
                   <Text style={styles.eyebrow}>DIVISION</Text>
                   <ScrollView
+                    contentContainerStyle={
+                      event.divisions.length === 1
+                        ? styles.mobileDivisionRailSingle
+                        : undefined
+                    }
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     style={styles.mobileDivisionRail}
@@ -12457,39 +12471,71 @@ function BookingModal({
                         }}
                         style={[
                           styles.mobileDivisionOption,
+                          event.divisions!.length === 1 &&
+                            styles.mobileDivisionOptionSingle,
                           division?.id === option.id &&
                             styles.mobileDivisionOptionActive,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.mobileDivisionOptionName,
-                            division?.id === option.id &&
-                              styles.mobileDivisionOptionNameActive,
-                          ]}
-                        >
-                          {option.name}
+                        <View style={styles.mobileDivisionOptionHeader}>
+                          <View style={styles.flex}>
+                            <Text
+                              style={[
+                                styles.mobileDivisionOptionName,
+                                division?.id === option.id &&
+                                  styles.mobileDivisionOptionNameActive,
+                              ]}
+                            >
+                              {option.name}
+                            </Text>
+                            <Text style={styles.mobileDivisionOptionMeta}>
+                              {eventDivisionAgeLabel(option)} ·{" "}
+                              {eventDivisionEntryLabel(option)}
+                            </Text>
+                          </View>
+                          {division?.id === option.id && (
+                            <View style={styles.mobileDivisionSelectedChip}>
+                              <Text
+                                style={styles.mobileDivisionSelectedChipText}
+                              >
+                                SELECTED
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.mobileDivisionCompetition}>
+                          {eventDivisionCompetitionLabel(option)}
                         </Text>
-                        <Text style={styles.mobileDivisionOptionMeta}>
-                          {option.ageMaximum
-                            ? `${option.ageMaximum}U · `
-                            : "All ages · "}
-                          {option.spotsRemaining} spots
-                        </Text>
-                        <View style={styles.mobileDivisionPrices}>
+                        <View style={styles.mobileDivisionCapacityRow}>
+                          <Text style={styles.mobileDivisionCapacityStrong}>
+                            {option.spotsRemaining} spots open
+                          </Text>
+                          <Text style={styles.mobileDivisionCapacityMeta}>
+                            {eventDivisionFilledCount(option)}/{option.capacity}{" "}
+                            claimed
+                          </Text>
+                        </View>
+                        <View style={styles.mobileDivisionCapacityTrack}>
+                          <View
+                            style={[
+                              styles.mobileDivisionCapacityFill,
+                              {
+                                width: `${eventDivisionFilledPercent(option)}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <View style={styles.mobileDivisionPriceRow}>
+                          <Text style={styles.mobileDivisionPriceLabel}>
+                            {eventDivisionTeamSize(option) === 1
+                              ? "PLAYER ENTRY"
+                              : "FROM PER PLAYER"}
+                          </Text>
                           <Text style={styles.mobileDivisionPrice}>
                             {formatMoney(
                               option.playerPrice.amountMinor,
                               option.playerPrice.currency,
-                            )}{" "}
-                            player
-                          </Text>
-                          <Text style={styles.mobileDivisionPrice}>
-                            {formatMoney(
-                              option.teamPrice.amountMinor,
-                              option.teamPrice.currency,
-                            )}{" "}
-                            team
+                            )}
                           </Text>
                         </View>
                       </Pressable>
@@ -12497,27 +12543,70 @@ function BookingModal({
                   </ScrollView>
                   {division && (
                     <View style={styles.mobileDivisionDetail}>
-                      <View>
-                        <Text style={styles.rowMeta}>TEAM</Text>
-                        <Text style={styles.rowTitle}>
-                          {division.teamFormat?.replace("-", " ") ??
-                            division.discipline.replace("-", " ")}
-                        </Text>
+                      <View style={styles.mobileDivisionDetailHeader}>
+                        <View style={styles.flex}>
+                          <Text style={styles.mobileDivisionDetailEyebrow}>
+                            HOW THIS DIVISION WORKS
+                          </Text>
+                          <Text style={styles.mobileDivisionDetailTitle}>
+                            {eventDivisionCompetitionLabel(division)}
+                          </Text>
+                        </View>
+                        <View style={styles.mobileDivisionEntryChip}>
+                          <Text style={styles.mobileDivisionEntryChipText}>
+                            {eventDivisionEntryLabel(division)}
+                          </Text>
+                        </View>
                       </View>
-                      <View>
-                        <Text style={styles.rowMeta}>FORMAT</Text>
-                        <Text style={styles.rowTitle}>
-                          {division.tournamentFormat?.replaceAll("-", " ") ??
-                            "Configured play"}
-                        </Text>
+                      <View style={styles.mobileDivisionFactGrid}>
+                        <View style={styles.mobileDivisionFact}>
+                          <Text style={styles.mobileDivisionFactLabel}>
+                            ELIGIBILITY
+                          </Text>
+                          <Text style={styles.mobileDivisionFactValue}>
+                            {eventDivisionAgeLabel(division)} ·{" "}
+                            {eventDivisionRatingLabel(division)}
+                          </Text>
+                        </View>
+                        <View style={styles.mobileDivisionFact}>
+                          <Text style={styles.mobileDivisionFactLabel}>
+                            FIELD
+                          </Text>
+                          <Text style={styles.mobileDivisionFactValue}>
+                            {eventDivisionFieldLabel(division)}
+                          </Text>
+                        </View>
+                        <View style={styles.mobileDivisionFact}>
+                          <Text style={styles.mobileDivisionFactLabel}>
+                            SEEDING
+                          </Text>
+                          <Text style={styles.mobileDivisionFactValue}>
+                            {eventDivisionSeedingLabel(division)}
+                          </Text>
+                        </View>
+                        <View style={styles.mobileDivisionFact}>
+                          <Text style={styles.mobileDivisionFactLabel}>
+                            {eventDivisionTeamSize(division) === 1
+                              ? "PRICE"
+                              : "FULL TEAM"}
+                          </Text>
+                          <Text style={styles.mobileDivisionFactValue}>
+                            {formatMoney(
+                              eventDivisionTeamSize(division) === 1
+                                ? division.playerPrice.amountMinor
+                                : division.teamPrice.amountMinor,
+                              eventDivisionTeamSize(division) === 1
+                                ? division.playerPrice.currency
+                                : division.teamPrice.currency,
+                            )}
+                          </Text>
+                        </View>
                       </View>
-                      <View>
-                        <Text style={styles.rowMeta}>SEEDING</Text>
-                        <Text style={styles.rowTitle}>
-                          {division.seeding?.replaceAll("-", " ") ??
-                            division.ratingBasis.replaceAll("-", " ")}
+                      {division.description && (
+                        <Text style={styles.mobileDivisionDescription}>
+                          {division.description}
                         </Text>
-                      </View>
+                      )}
                     </View>
                   )}
                 </View>
@@ -13025,29 +13114,6 @@ function BookingModal({
                 </View>
               </View>
             )}
-            <View style={styles.checkoutSection}>
-              <Text style={styles.eyebrow}>PAYMENT</Text>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentIcon}>◇</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>
-                    {listedPrice.amountMinor
-                      ? "Pay securely in Duna"
-                      : "Free registration"}
-                  </Text>
-                  <Text style={styles.rowMeta}>
-                    {listedPrice.amountMinor
-                      ? "Use a saved card, Link, or add a card without leaving the app. Payment details go directly to Stripe."
-                      : "No payment method is required."}
-                  </Text>
-                </View>
-                <Text style={styles.moneyAmount}>
-                  {listedSubtotalMinor
-                    ? formatMoney(listedSubtotalMinor, listedPrice.currency)
-                    : "FREE"}
-                </Text>
-              </View>
-            </View>
             <View style={styles.orderMath}>
               <View>
                 <Text style={styles.bodyText}>
@@ -23507,43 +23573,184 @@ function createStyles(palette: Palette) {
       padding: 13,
     },
     mobileDivisionDetail: {
-      borderTopColor: rgba(colors.overlayRgb, 0.08),
-      borderTopWidth: 1,
-      marginTop: 9,
-      paddingTop: 9,
+      backgroundColor: rgba(colors.overlayRgb, 0.025),
+      borderColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 18,
+      borderWidth: 1,
+      gap: 14,
+      marginTop: 12,
+      padding: 14,
     },
     mobileDivisionRail: { marginHorizontal: -13, marginTop: 10 },
+    mobileDivisionRailSingle: { flexGrow: 1, paddingRight: 10 },
     mobileDivisionOption: {
       backgroundColor: rgba(colors.overlayRgb, 0.025),
       borderColor: rgba(colors.overlayRgb, 0.09),
-      borderRadius: 15,
+      borderRadius: 18,
       borderWidth: 1,
       marginLeft: 10,
-      minHeight: 132,
-      padding: 12,
-      width: 188,
+      minHeight: 224,
+      padding: 14,
+      width: 260,
     },
+    mobileDivisionOptionSingle: { flex: 1, width: "auto" },
     mobileDivisionOptionActive: {
-      backgroundColor: rgba(colors.accentRgb, 0.1),
+      backgroundColor: rgba(colors.accentRgb, 0.08),
       borderColor: colors.aqua,
+    },
+    mobileDivisionOptionHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "space-between",
     },
     mobileDivisionOptionName: {
       color: colors.bone,
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: "900",
-      letterSpacing: -0.6,
+      letterSpacing: -0.4,
+      lineHeight: 24,
     },
     mobileDivisionOptionNameActive: { color: colors.aqua },
     mobileDivisionOptionMeta: {
       color: colors.muted,
-      fontSize: 12,
+      fontSize: 13,
+      lineHeight: 18,
       marginTop: 5,
     },
-    mobileDivisionPrices: { gap: 3, marginTop: "auto" },
-    mobileDivisionPrice: {
+    mobileDivisionSelectedChip: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    mobileDivisionSelectedChipText: {
+      color: colors.aqua,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    mobileDivisionCompetition: {
       color: colors.bone,
+      fontSize: 15,
+      fontWeight: "700",
+      lineHeight: 20,
+      marginTop: 14,
+    },
+    mobileDivisionCapacityRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 16,
+    },
+    mobileDivisionCapacityStrong: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    mobileDivisionCapacityMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      fontVariant: ["tabular-nums"],
+    },
+    mobileDivisionCapacityTrack: {
+      backgroundColor: rgba(colors.overlayRgb, 0.1),
+      borderRadius: 999,
+      height: 5,
+      marginTop: 7,
+      overflow: "hidden",
+    },
+    mobileDivisionCapacityFill: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      height: "100%",
+    },
+    mobileDivisionPriceRow: {
+      alignItems: "flex-end",
+      borderTopColor: rgba(colors.overlayRgb, 0.08),
+      borderTopWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: "auto",
+      paddingTop: 12,
+    },
+    mobileDivisionPriceLabel: {
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "800",
+      letterSpacing: 0.7,
+    },
+    mobileDivisionPrice: {
+      color: colors.bone,
+      fontSize: 18,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "900",
+    },
+    mobileDivisionDetailHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+    },
+    mobileDivisionDetailEyebrow: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    mobileDivisionDetailTitle: {
+      color: colors.bone,
+      fontSize: 19,
+      fontWeight: "900",
+      lineHeight: 23,
+      marginTop: 5,
+    },
+    mobileDivisionEntryChip: {
+      backgroundColor: colors.aqua,
+      borderRadius: 999,
+      maxWidth: 132,
+      paddingHorizontal: 9,
+      paddingVertical: 7,
+    },
+    mobileDivisionEntryChipText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+      lineHeight: 15,
+      textAlign: "center",
+    },
+    mobileDivisionFactGrid: {
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      overflow: "hidden",
+    },
+    mobileDivisionFact: {
+      borderBottomColor: rgba(colors.overlayRgb, 0.08),
+      borderBottomWidth: 1,
+      minHeight: 76,
+      padding: 10,
+      width: "50%",
+    },
+    mobileDivisionFactLabel: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.7,
+    },
+    mobileDivisionFactValue: {
+      color: colors.bone,
+      fontSize: 13,
+      fontWeight: "800",
+      lineHeight: 18,
+      marginTop: 5,
+    },
+    mobileDivisionDescription: {
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 21,
     },
     mobileTicketList: { gap: 8, marginTop: 10 },
     mobileTicketRow: {

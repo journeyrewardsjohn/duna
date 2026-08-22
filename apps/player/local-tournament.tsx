@@ -1,4 +1,5 @@
 import type { TournamentCompetitionSnapshot } from "@duna/api";
+import * as Network from "expo-network";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { DunaApiClient } from "./mobile-api";
@@ -109,7 +110,10 @@ export function LocalTournamentPanel({
   readonly sessionId: string;
 }) {
   const [snapshot, setSnapshot] = useState<TournamentCompetitionSnapshot>();
-  const [error, setError] = useState(false);
+  const [refreshProblem, setRefreshProblem] = useState<
+    "offline" | "unavailable"
+  >();
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>();
   const [divisionId, setDivisionId] = useState<string>();
   const [roundKey, setRoundKey] = useState<string>();
 
@@ -123,10 +127,21 @@ export function LocalTournamentPanel({
           if (!active) return;
           setSnapshot(next);
           setDivisionId((current) => current ?? next.divisions[0]?.id);
-          setError(false);
+          setLastUpdatedAt(new Date());
+          setRefreshProblem(undefined);
         })
-        .catch(() => {
-          if (active) setError(true);
+        .catch(async () => {
+          const network = await Network.getNetworkStateAsync().catch(
+            () => undefined,
+          );
+          if (active) {
+            setRefreshProblem(
+              network &&
+                (!network.isConnected || network.isInternetReachable === false)
+                ? "offline"
+                : "unavailable",
+            );
+          }
         });
     void refresh();
     const interval = setInterval(() => void refresh(), 30_000);
@@ -150,16 +165,19 @@ export function LocalTournamentPanel({
     competitionRounds.find((round) => round.key === roundKey) ??
     competitionRounds[0];
 
-  if (!client || (!snapshot && !error)) return null;
-  if (error || !snapshot || !division) {
+  if (!client || (!snapshot && !refreshProblem)) return null;
+  if (!snapshot || !division) {
     return (
       <View style={styles.unavailable}>
         <Text style={styles.unavailableTitle}>
-          Tournament updates reconnecting
+          {refreshProblem === "offline"
+            ? "Tournament updates paused"
+            : "Tournament updates unavailable"}
         </Text>
         <Text style={styles.unavailableBody}>
-          Pull down or reopen this event when you have signal. Your event
-          details stay in the app.
+          {refreshProblem === "offline"
+            ? "You’re offline. Your event details stay in the app and updates resume when your connection returns."
+            : "Duna could not refresh the tournament desk. Your event details are still available; try again in a moment."}
         </Text>
       </View>
     );
@@ -168,6 +186,23 @@ export function LocalTournamentPanel({
 
   return (
     <View style={styles.root}>
+      {refreshProblem && (
+        <View style={[styles.unavailable, styles.refreshNotice]}>
+          <Text style={styles.unavailableTitle}>
+            {refreshProblem === "offline"
+              ? "Offline · showing saved tournament data"
+              : "Live refresh paused"}
+          </Text>
+          <Text style={styles.unavailableBody}>
+            {lastUpdatedAt
+              ? `Last updated ${lastUpdatedAt.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}. Duna will keep trying.`
+              : "Duna will keep trying while this event is open."}
+          </Text>
+        </View>
+      )}
       <View style={styles.titleRow}>
         <View>
           <Text style={styles.eyebrow}>TOURNAMENT DESK</Text>
@@ -337,6 +372,7 @@ export function LocalTournamentPanel({
 
 const styles = StyleSheet.create({
   root: { gap: 14, marginTop: 20 },
+  refreshNotice: { marginTop: 0 },
   titleRow: {
     alignItems: "center",
     flexDirection: "row",
