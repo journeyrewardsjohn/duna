@@ -214,8 +214,12 @@ Terminal connection tokens. The webhook endpoint is
 `/api/stripe/webhook`; configure its signing secret only after a stable deployed
 URL exists.
 
-Automatic Tax remains disabled until Beach Elite LLC’s verified head-office
-address is entered in Stripe. Do not invent that legal address.
+Automatic Tax is always disabled with Stripe test or restricted-test keys.
+Live mode enables it only after Beach Elite LLC has a verified head-office
+address and an active tax registration in Stripe. Do not invent the legal
+address or registration. After switching Duna to live Stripe credentials,
+refresh Stripe onboarding before expecting organization checkout to collect
+tax.
 
 Organization-plan Checkout uses the six `STRIPE_HQ_*_PRICE_ID` variables for
 Club, Facility, and Network monthly/annual prices. `stripe-bootstrap.ts` creates
