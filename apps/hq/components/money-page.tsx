@@ -6,6 +6,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { MoneyWorkspace, type MoneyView } from "@/components/money-workspace";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
@@ -22,6 +23,13 @@ const moneyNavigation: readonly {
     href: "/payments",
     label: "Balance",
     description: "Balances, earnings, and activity",
+    icon: WalletCards,
+  },
+  {
+    view: "transactions",
+    href: "/payments/transactions",
+    label: "Transactions",
+    description: "Read-only payment timelines",
     icon: WalletCards,
   },
   {
@@ -53,6 +61,11 @@ const pageCopy: Record<MoneyView, { title: string; description: string }> = {
     description:
       "See Duna eligibility beside Stripe’s available, pending, payout, and activity truth.",
   },
+  transactions: {
+    title: "Transactions",
+    description:
+      "Read-only payment evidence, fees, refunds, disputes, and timelines.",
+  },
   disputes: {
     title: "Handle disputes before the deadline.",
     description:
@@ -73,9 +86,11 @@ const pageCopy: Record<MoneyView, { title: string; description: string }> = {
 export async function MoneyPageContent({
   view,
   stripe,
+  children,
 }: {
   readonly view: MoneyView;
   readonly stripe?: string;
+  readonly children?: ReactNode;
 }) {
   const caller = await getServerCaller();
   if (stripe === "return") {
@@ -114,7 +129,7 @@ export async function MoneyPageContent({
                 aria-current={item.view === view ? "page" : undefined}
                 className={item.view === view ? "active" : ""}
                 href={item.href}
-                key={item.view}
+                key={item.href}
               >
                 <Icon size={18} />
                 <span>
@@ -136,11 +151,13 @@ export async function MoneyPageContent({
             Overview <ArrowRight size={15} />
           </Link>
         </section>
-        <MoneyWorkspace
-          money={money}
-          organizationName={dashboard.organization.name}
-          view={view}
-        />
+        {children ?? (
+          <MoneyWorkspace
+            money={money}
+            organizationName={dashboard.organization.name}
+            view={view}
+          />
+        )}
       </main>
     </OperatorShell>
   );

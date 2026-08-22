@@ -34,7 +34,11 @@ import {
 const initialState: OperatorActionState = { status: "idle", message: "" };
 type ActivityFilter = "all" | "available" | "held" | "fees" | "refunds";
 export type MoneyView =
-  "balance" | "disputes" | "payout-settings" | "refund-policies";
+  | "balance"
+  | "transactions"
+  | "disputes"
+  | "payout-settings"
+  | "refund-policies";
 
 function Notice({ state }: { readonly state: OperatorActionState }) {
   if (state.status === "idle") return null;

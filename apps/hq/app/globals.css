@@ -1181,6 +1181,81 @@ button.money-movement-card {
   }
 }
 
+.audience-editor {
+  display: grid;
+  gap: 1.25rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+
+.audience-editor label,
+.audience-editor section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.audience-editor fieldset {
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.9rem;
+}
+
+.audience-editor fieldset legend {
+  font-weight: 800;
+  padding: 0 0.35rem;
+}
+
+.audience-mode-options > label {
+  align-items: center;
+  display: flex;
+  min-height: 44px;
+  padding: 0.35rem 0.5rem;
+}
+
+.audience-editor input:not([type="radio"]),
+.audience-editor select,
+.audience-editor button {
+  min-height: 44px;
+}
+
+.audience-editor input:not([type="radio"]),
+.audience-editor select {
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  max-width: 100%;
+  padding: 0.65rem 0.75rem;
+}
+
+.audience-editor section h2 {
+  margin: 0;
+}
+
+.audience-person-row {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding-top: 0.75rem;
+}
+
+.audience-person-row button {
+  min-width: 82px;
+}
+
+@media (max-width: 520px) {
+  .audience-person-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .audience-person-row strong {
+    grid-column: 1 / -1;
+  }
+}
+
 .money-page-heading {
   margin-bottom: 0;
 }
@@ -37448,5 +37523,80 @@ body {
 
   .money-subnav > a {
     min-height: 62px;
+  }
+}
+
+.transaction-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.transaction-table th,
+.transaction-table td {
+  border-bottom: 1px solid var(--color-line);
+  padding: 0.85rem 0.7rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.transaction-table small {
+  color: var(--color-bone-muted);
+}
+
+@media (max-width: 680px) {
+  .transaction-table thead {
+    display: none;
+  }
+
+  .transaction-table,
+  .transaction-table tbody,
+  .transaction-table tr,
+  .transaction-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .transaction-table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .transaction-table tr {
+    background: var(--color-canvas);
+    border: 1px solid var(--color-line);
+    border-radius: 16px;
+    display: grid;
+    gap: 0.55rem 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0.9rem;
+  }
+
+  .transaction-table td {
+    border: 0;
+    display: grid;
+    gap: 0.2rem;
+    padding: 0;
+  }
+
+  .transaction-table td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .transaction-table td::before {
+    color: var(--color-bone-muted);
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .transaction-table td:nth-child(even) {
+    justify-items: start;
+  }
+
+  .transaction-table td:nth-child(odd):not(:first-child) {
+    justify-items: end;
+    text-align: right;
   }
 }

@@ -1,5 +1,7 @@
 import {
   auditLog,
+  audiences,
+  audienceVersions,
   brackets,
   communicationUsagePeriods,
   consents,
@@ -6792,6 +6794,7 @@ export async function createMarketingFlow(input: {
   readonly subject?: string;
   readonly body: string;
   readonly confirmed: boolean;
+  readonly audienceVersionId?: string;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -6804,6 +6807,24 @@ export async function createMarketingFlow(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
+  if (input.audienceVersionId) {
+    const [selected] = await getDatabase()
+      .select({ id: audienceVersions.id })
+      .from(audienceVersions)
+      .innerJoin(audiences, eq(audienceVersions.audienceId, audiences.id))
+      .where(
+        and(
+          eq(audienceVersions.id, input.audienceVersionId),
+          eq(audiences.organizationId, organizationId),
+          eq(audiences.status, "active"),
+        ),
+      );
+    if (!selected)
+      throw new OperatorServiceError(
+        "FORBIDDEN",
+        "Selected audience revision does not belong to this organization.",
+      );
+  }
   const id = crypto.randomUUID();
   const segment = {
     kind: input.segment,
@@ -6832,6 +6853,7 @@ export async function createMarketingFlow(input: {
       name: input.name.trim(),
       description: input.description?.trim() || undefined,
       segment,
+      audienceVersionId: input.audienceVersionId,
       trigger,
       action,
       status: "draft",
@@ -6847,6 +6869,7 @@ export async function createMarketingFlow(input: {
       afterHash: stableHash({
         name: input.name.trim(),
         description: input.description?.trim(),
+        audienceVersionId: input.audienceVersionId,
         segment,
         trigger,
         action: {
@@ -6877,6 +6900,7 @@ export async function createMarketingCampaignDraft(input: {
   readonly subject?: string;
   readonly body: string;
   readonly confirmed: boolean;
+  readonly audienceVersionId?: string;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
@@ -6889,6 +6913,24 @@ export async function createMarketingCampaignDraft(input: {
     );
   }
   const organizationId = requireOrganization(input.actor);
+  if (input.audienceVersionId) {
+    const [selected] = await getDatabase()
+      .select({ id: audienceVersions.id })
+      .from(audienceVersions)
+      .innerJoin(audiences, eq(audienceVersions.audienceId, audiences.id))
+      .where(
+        and(
+          eq(audienceVersions.id, input.audienceVersionId),
+          eq(audiences.organizationId, organizationId),
+          eq(audiences.status, "active"),
+        ),
+      );
+    if (!selected)
+      throw new OperatorServiceError(
+        "FORBIDDEN",
+        "Selected audience revision does not belong to this organization.",
+      );
+  }
   const id = crypto.randomUUID();
   const segment = {
     kind: input.segment,
@@ -6902,6 +6944,7 @@ export async function createMarketingCampaignDraft(input: {
       organizationId,
       name: input.name.trim(),
       segment,
+      audienceVersionId: input.audienceVersionId,
       channel: input.channel,
       subject: input.subject?.trim() || undefined,
       body: input.body.trim(),
@@ -6918,6 +6961,7 @@ export async function createMarketingCampaignDraft(input: {
       afterHash: stableHash({
         name: input.name.trim(),
         segment,
+        audienceVersionId: input.audienceVersionId,
         channel: input.channel,
         subject: input.subject?.trim(),
         contentHash: stableHash({ body: input.body.trim() }),
