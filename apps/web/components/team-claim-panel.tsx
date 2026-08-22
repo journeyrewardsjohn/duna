@@ -4,13 +4,19 @@ import type { TeamClaimSummary } from "@duna/api";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
-  Check,
+  CalendarDays,
+  CheckCircle2,
   Clock3,
+  Gift,
   Mail,
+  MapPin,
   Minus,
+  PartyPopper,
   Plus,
+  ReceiptText,
   ShieldCheck,
   UsersRound,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
@@ -24,6 +30,65 @@ const initialState: TeamClaimActionState = {
   status: "idle",
   message: "",
 };
+
+function eventDateLabel(claim: TeamClaimSummary): string {
+  const start = new Date(claim.eventStartsAt);
+  const end = new Date(claim.eventEndsAt);
+  const startDate = start.toLocaleDateString(undefined, {
+    timeZone: claim.eventTimezone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const endDate = end.toLocaleDateString(undefined, {
+    timeZone: claim.eventTimezone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const startTime = start.toLocaleTimeString(undefined, {
+    timeZone: claim.eventTimezone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const endTime = end.toLocaleTimeString(undefined, {
+    timeZone: claim.eventTimezone,
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+  return startDate === endDate
+    ? `${startDate} · ${startTime}–${endTime}`
+    : `${startDate}, ${startTime} – ${endDate}, ${endTime}`;
+}
+
+function paymentMessage(status: TeamClaimSummary["paymentStatus"]): {
+  readonly title: string;
+  readonly detail: string;
+} {
+  if (status === "complimentary") {
+    return {
+      title: "Comped by the organizer",
+      detail: "Your entry is covered. No payment is due.",
+    };
+  }
+  if (status === "payment-required") {
+    return {
+      title: "Payment is still required",
+      detail: "Your place is registered and held. Complete checkout next.",
+    };
+  }
+  if (status === "free") {
+    return {
+      title: "Free entry",
+      detail: "Your event entry has no charge.",
+    };
+  }
+  return {
+    title: "Entry paid",
+    detail: "Your event payment is complete.",
+  };
+}
 
 export function TeamClaimPanel({
   claim,
@@ -50,25 +115,94 @@ export function TeamClaimPanel({
   const [savingRoster, startRosterTransition] = useTransition();
   const inactive = claim.status === "cancelled" || claim.status === "expired";
   const paymentRequired = state.paymentRequired || managedClaim.paymentRequired;
+  const claimed = state.status === "success" || managedClaim.alreadyClaimed;
+  const payment = paymentMessage(managedClaim.paymentStatus);
 
   return (
     <main className="team-claim-page">
       <section className="team-claim-card">
-        <header>
+        <header className={claimed ? "team-claim-card__success-header" : ""}>
           <span>
-            <UsersRound aria-hidden size={27} />
+            {claimed ? (
+              <PartyPopper aria-hidden size={27} />
+            ) : (
+              <UsersRound aria-hidden size={27} />
+            )}
           </span>
           <Badge tone={inactive ? "warning" : "positive"}>
-            {managedClaim.status}
+            {claimed ? "Claimed" : managedClaim.status}
           </Badge>
         </header>
-        <span className="page-eyebrow">Duna team invitation</span>
-        <h1>{claim.captainName} saved you a place.</h1>
+        {claimed && (
+          <div className="team-claim-confetti" aria-hidden>
+            {Array.from({ length: 12 }, (_, index) => (
+              <i key={index} />
+            ))}
+          </div>
+        )}
+        <span className="page-eyebrow">
+          {claimed ? "Registration connected" : "Duna team invitation"}
+        </span>
+        <h1>
+          {claimed ? "You’re in." : `${claim.captainName} saved you a place.`}
+        </h1>
         <p>
-          Join <strong>{claim.divisionName}</strong> for{" "}
-          <strong>{claim.eventTitle}</strong>. Claiming connects your Duna
-          profile to the roster; event agreements remain individual.
+          {claimed ? (
+            <>
+              Your Duna profile is connected to{" "}
+              <strong>{claim.divisionName}</strong> at{" "}
+              <strong>{claim.eventTitle}</strong>.
+            </>
+          ) : (
+            <>
+              Join <strong>{claim.divisionName}</strong> for{" "}
+              <strong>{claim.eventTitle}</strong>. Claiming connects your Duna
+              profile to the roster; event agreements remain individual.
+            </>
+          )}
         </p>
+
+        <div
+          className={`team-claim-payment-callout team-claim-payment-callout--${managedClaim.paymentStatus}`}
+        >
+          {managedClaim.paymentStatus === "complimentary" ? (
+            <Gift aria-hidden size={21} />
+          ) : (
+            <ReceiptText aria-hidden size={21} />
+          )}
+          <span>
+            <strong>{payment.title}</strong>
+            <small>{payment.detail}</small>
+          </span>
+        </div>
+
+        {claimed && (
+          <div className="team-claim-event-details">
+            <span>
+              <CalendarDays aria-hidden size={19} />
+              <i>
+                <small>When</small>
+                <strong>{eventDateLabel(managedClaim)}</strong>
+              </i>
+            </span>
+            <span>
+              <UsersRound aria-hidden size={19} />
+              <i>
+                <small>Division</small>
+                <strong>{managedClaim.divisionName}</strong>
+              </i>
+            </span>
+            {managedClaim.venueName && (
+              <span>
+                <MapPin aria-hidden size={19} />
+                <i>
+                  <small>Venue</small>
+                  <strong>{managedClaim.venueName}</strong>
+                </i>
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="team-claim-progress">
           <span>
@@ -244,9 +378,13 @@ export function TeamClaimPanel({
         <div className="team-claim-meta">
           <span>
             <ShieldCheck aria-hidden size={17} />
-            {managedClaim.paymentMode === "team"
-              ? "The captain selected whole-team payment."
-              : "Each invited player pays their own entry."}
+            {managedClaim.paymentStatus === "complimentary"
+              ? "The organizer comped this entry."
+              : managedClaim.paymentStatus === "free"
+                ? "This division has free entry."
+                : managedClaim.paymentMode === "team"
+                  ? "The captain selected whole-team payment."
+                  : "Each invited player pays their own entry."}
           </span>
           <span>
             <Clock3 aria-hidden size={17} />
@@ -258,26 +396,36 @@ export function TeamClaimPanel({
           </span>
         </div>
 
-        {state.status === "success" || managedClaim.alreadyClaimed ? (
-          <div className="team-claim-success">
-            <Check aria-hidden size={19} />
+        {claimed ? (
+          <div className="team-claim-success" role="status">
+            <CheckCircle2 aria-hidden size={23} />
             <span>
-              <strong>{state.message || "Your place is claimed."}</strong>
+              <strong>
+                {paymentRequired
+                  ? "Your spot is saved. Finish payment to complete your entry."
+                  : state.message || "Your registration is confirmed."}
+              </strong>
               <small>
                 {paymentRequired
-                  ? "Complete your own entry payment and event agreements next."
-                  : "Open the event to review required agreements and your plans."}
+                  ? "You are registered but unpaid. Your checkout will retain this claimed spot."
+                  : "Open the event for the schedule, updates, agreements, pools, and matches."}
               </small>
             </span>
-            <Link
-              href={
-                paymentRequired
-                  ? `/app/checkout/${claim.eventSlug}?division=${claim.divisionId}&team=${claimToken}`
-                  : `/events/${claim.eventSlug}`
-              }
-            >
-              Continue <ArrowRight aria-hidden size={16} />
-            </Link>
+            <div className="team-claim-success__actions">
+              {paymentRequired && (
+                <Link
+                  href={`/app/checkout/${claim.eventSlug}?division=${claim.divisionId}&team=${claimToken}`}
+                >
+                  Pay for my entry <ArrowRight aria-hidden size={16} />
+                </Link>
+              )}
+              <Link
+                className={paymentRequired ? "secondary" : undefined}
+                href={`/events/${claim.eventSlug}`}
+              >
+                View event <ArrowRight aria-hidden size={16} />
+              </Link>
+            </div>
           </div>
         ) : (
           <form action={action}>
@@ -295,7 +443,15 @@ export function TeamClaimPanel({
                 This does not accept a waiver or charge a payment.
               </span>
             </label>
-            {state.status === "error" && <p role="alert">{state.message}</p>}
+            {state.status === "error" && (
+              <div className="team-claim-failure" role="alert">
+                <XCircle aria-hidden size={21} />
+                <span>
+                  <strong>We couldn’t claim your spot.</strong>
+                  <small>{state.message}</small>
+                </span>
+              </div>
+            )}
             <button disabled={inactive || pending} type="submit">
               {pending ? "Claiming place…" : "Claim my place"}
               <ArrowRight aria-hidden size={16} />

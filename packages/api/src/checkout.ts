@@ -154,6 +154,10 @@ export function validatePickupCoverPayment(input: {
 export interface TeamClaimSummary {
   readonly eventTitle: string;
   readonly eventSlug: string;
+  readonly eventStartsAt: string;
+  readonly eventEndsAt: string;
+  readonly eventTimezone: string;
+  readonly venueName?: string;
   readonly divisionId: string;
   readonly divisionName: string;
   readonly captainName: string;
@@ -166,6 +170,8 @@ export interface TeamClaimSummary {
   readonly expiresAt: string;
   readonly alreadyClaimed: boolean;
   readonly paymentRequired: boolean;
+  readonly paymentStatus:
+    "complimentary" | "payment-required" | "paid" | "free";
   readonly isOrganizer: boolean;
   readonly canManageRoster: boolean;
   readonly registrationClosesAt: string;
@@ -2517,6 +2523,10 @@ async function loadTeamClaimRecord(claimToken: string) {
         claimExpiresAt: teamEntries.claimExpiresAt,
         eventTitle: sessions.title,
         eventSlug: sessions.slug,
+        eventStartsAt: sessions.startsAt,
+        eventEndsAt: sessions.endsAt,
+        eventTimezone: sessions.timezone,
+        venueName: venues.name,
         sessionId: sessions.id,
         registrationClosesAt: sessions.startsAt,
         registrationSettings: eventBlueprints.registrationSettings,
@@ -2526,6 +2536,7 @@ async function loadTeamClaimRecord(claimToken: string) {
         originalPlayerPriceMinor: orderItems.unitAmountMinor,
         divisionId: divisions.id,
         divisionName: divisions.name,
+        entryFeeMinor: divisions.entryFeeMinor,
         captainName: people.displayName,
         organizationId: sql<
           string | null
@@ -2740,9 +2751,32 @@ async function buildTeamClaimSummary(
   const actorRosterMember = roster.find(
     (member) => member.personId === actorPersonId,
   );
+  const paymentTreatment = operatorEventPaymentTreatment(
+    record.eligibilityDecision,
+  );
+  const actorPaymentCovered =
+    record.payingPersonId === actorPersonId
+      ? captainPaid
+      : record.paymentMode === "team"
+        ? captainPaid
+        : Boolean(actorRosterMember?.paidAt);
+  const paymentStatus =
+    paymentTreatment === "complimentary"
+      ? ("complimentary" as const)
+      : record.entryFeeMinor === 0
+        ? ("free" as const)
+        : actorPaymentCovered
+          ? ("paid" as const)
+          : ("payment-required" as const);
+  const paymentRequired =
+    alreadyClaimed && paymentStatus === "payment-required";
   return {
     eventTitle: record.eventTitle,
     eventSlug: record.eventSlug,
+    eventStartsAt: record.eventStartsAt.toISOString(),
+    eventEndsAt: record.eventEndsAt.toISOString(),
+    eventTimezone: record.eventTimezone,
+    venueName: record.venueName ?? undefined,
     divisionId: record.divisionId,
     divisionName: record.divisionName,
     captainName: record.captainName,
@@ -2753,12 +2787,8 @@ async function buildTeamClaimSummary(
     status: expired ? "expired" : teamEntryStatus(record.status),
     expiresAt: record.claimExpiresAt.toISOString(),
     alreadyClaimed,
-    paymentRequired:
-      record.paymentMode !== "team" &&
-      alreadyClaimed &&
-      (record.payingPersonId === actorPersonId
-        ? !captainPaid
-        : !actorRosterMember?.paidAt),
+    paymentRequired,
+    paymentStatus,
     isOrganizer,
     canManageRoster,
     registrationClosesAt: record.registrationClosesAt.toISOString(),

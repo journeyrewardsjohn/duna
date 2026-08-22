@@ -13357,7 +13357,9 @@ a.play-day__booking {
   box-shadow: var(--shadow-large);
   margin: auto;
   max-width: 680px;
+  overflow: hidden;
   padding: clamp(1.2rem, 4vw, 2.4rem);
+  position: relative;
   width: 100%;
 }
 
@@ -13379,6 +13381,118 @@ a.play-day__booking {
   width: 52px;
 }
 
+.team-claim-card > .team-claim-card__success-header > span {
+  background: rgb(var(--positive-rgb) / 12%);
+  color: var(--color-positive);
+}
+
+.team-claim-card > header,
+.team-claim-card > .page-eyebrow,
+.team-claim-card > h1,
+.team-claim-card > p,
+.team-claim-card > div,
+.team-claim-card > section,
+.team-claim-card > form {
+  position: relative;
+  z-index: 1;
+}
+
+.team-claim-confetti {
+  height: 118px;
+  inset: 0 0 auto;
+  pointer-events: none;
+  position: absolute !important;
+  z-index: 0 !important;
+}
+
+.team-claim-confetti i {
+  background: var(--color-aqua);
+  border-radius: 2px;
+  height: 13px;
+  left: 8%;
+  position: absolute;
+  top: 18px;
+  transform: rotate(18deg);
+  width: 7px;
+}
+
+.team-claim-confetti i:nth-child(2) {
+  background: #d7b667;
+  left: 17%;
+  top: 70px;
+  transform: rotate(-28deg);
+}
+
+.team-claim-confetti i:nth-child(3) {
+  background: #e97851;
+  left: 29%;
+  top: 35px;
+  transform: rotate(42deg);
+}
+
+.team-claim-confetti i:nth-child(4) {
+  background: var(--color-positive);
+  left: 42%;
+  top: 78px;
+  transform: rotate(-12deg);
+}
+
+.team-claim-confetti i:nth-child(5) {
+  background: #6389d7;
+  left: 55%;
+  top: 22px;
+  transform: rotate(62deg);
+}
+
+.team-claim-confetti i:nth-child(6) {
+  background: #d7b667;
+  left: 66%;
+  top: 68px;
+  transform: rotate(25deg);
+}
+
+.team-claim-confetti i:nth-child(7) {
+  background: #e97851;
+  left: 76%;
+  top: 28px;
+  transform: rotate(-44deg);
+}
+
+.team-claim-confetti i:nth-child(8) {
+  background: var(--color-positive);
+  left: 88%;
+  top: 76px;
+  transform: rotate(35deg);
+}
+
+.team-claim-confetti i:nth-child(9) {
+  background: #6389d7;
+  left: 94%;
+  top: 18px;
+  transform: rotate(-18deg);
+}
+
+.team-claim-confetti i:nth-child(10) {
+  background: #d7b667;
+  left: 36%;
+  top: 10px;
+  transform: rotate(78deg);
+}
+
+.team-claim-confetti i:nth-child(11) {
+  background: var(--color-aqua);
+  left: 61%;
+  top: 96px;
+  transform: rotate(-65deg);
+}
+
+.team-claim-confetti i:nth-child(12) {
+  background: #e97851;
+  left: 4%;
+  top: 98px;
+  transform: rotate(56deg);
+}
+
 .team-claim-card h1 {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 7vw, 4.6rem);
@@ -13395,6 +13509,90 @@ a.play-day__booking {
 
 .team-claim-card > p strong {
   color: var(--color-bone);
+}
+
+.team-claim-payment-callout {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-aqua) 8%, var(--color-canvas));
+  border: 1px solid color-mix(in srgb, var(--color-aqua) 25%, var(--color-line));
+  border-radius: 15px;
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+  padding: 0.85rem;
+}
+
+.team-claim-payment-callout--complimentary,
+.team-claim-payment-callout--free,
+.team-claim-payment-callout--paid {
+  background: rgb(var(--positive-rgb) / 7%);
+  border-color: rgb(var(--positive-rgb) / 22%);
+}
+
+.team-claim-payment-callout > svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.team-claim-payment-callout--complimentary > svg,
+.team-claim-payment-callout--free > svg,
+.team-claim-payment-callout--paid > svg {
+  color: var(--color-positive);
+}
+
+.team-claim-payment-callout > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.team-claim-payment-callout small {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.team-claim-event-details {
+  border: 1px solid var(--color-line);
+  border-radius: 15px;
+  display: grid;
+  margin-top: 0.75rem;
+  overflow: hidden;
+}
+
+.team-claim-event-details > span {
+  align-items: flex-start;
+  background: var(--color-canvas);
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.8rem;
+}
+
+.team-claim-event-details > span + span {
+  border-top: 1px solid var(--color-line);
+}
+
+.team-claim-event-details svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.team-claim-event-details i {
+  display: flex;
+  flex-direction: column;
+  font-style: normal;
+  gap: 0.15rem;
+}
+
+.team-claim-event-details small {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.team-claim-event-details strong {
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .team-claim-progress {
@@ -13672,7 +13870,8 @@ a.play-day__booking {
 }
 
 .team-claim-card form > button,
-.team-claim-success > a {
+.team-claim-success__actions > a,
+.team-claim-recovery__actions > a {
   align-items: center;
   background: var(--color-aqua);
   border: 0;
@@ -13698,6 +13897,38 @@ a.play-day__booking {
   font-size: 0.75rem;
 }
 
+.team-claim-failure,
+.team-claim-recovery {
+  align-items: flex-start;
+  background: rgb(var(--danger-rgb) / 7%);
+  border: 1px solid rgb(var(--danger-rgb) / 22%);
+  border-radius: 14px;
+  color: var(--color-danger);
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+}
+
+.team-claim-failure > svg,
+.team-claim-recovery > svg {
+  flex: 0 0 auto;
+}
+
+.team-claim-failure > span,
+.team-claim-recovery > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.team-claim-failure small,
+.team-claim-recovery small {
+  color: var(--color-bone-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
 .team-claim-success {
   align-items: center;
   background: rgb(var(--positive-rgb) / 8%);
@@ -13705,7 +13936,7 @@ a.play-day__booking {
   border-radius: 15px;
   display: grid;
   gap: 0.65rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   padding: 0.8rem;
 }
 
@@ -13727,9 +13958,37 @@ a.play-day__booking {
   font-size: 0.75rem;
 }
 
-.team-claim-success > a {
+.team-claim-success__actions,
+.team-claim-recovery__actions {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.team-claim-success__actions > a,
+.team-claim-recovery__actions > a {
   margin: 0;
-  width: auto;
+  text-decoration: none;
+}
+
+.team-claim-success__actions > a.secondary,
+.team-claim-recovery__actions > a.secondary {
+  background: transparent;
+  border: 1px solid var(--color-line);
+  color: var(--color-bone);
+}
+
+.team-claim-card--failure > header > span {
+  background: rgb(var(--danger-rgb) / 9%);
+  color: var(--color-danger);
+}
+
+.team-claim-card--failure .team-claim-recovery {
+  background: var(--color-canvas);
+  border-color: var(--color-line);
+  color: var(--color-aqua);
+  margin: 1.2rem 0;
 }
 
 .public-create-page {
@@ -14103,9 +14362,9 @@ a.play-day__booking {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .team-claim-success > a {
-    grid-column: 1 / -1;
-    width: 100%;
+  .team-claim-success__actions,
+  .team-claim-recovery__actions {
+    grid-template-columns: 1fr;
   }
 
   .public-create-page {
