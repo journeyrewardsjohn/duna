@@ -86,6 +86,9 @@ type PublicDiscoveryMap = Awaited<
 type OrganizationWallets = Awaited<
   ReturnType<DunaApiClient["player"]["organizationWallets"]["query"]>
 >;
+type PlayerPaymentSchedules = Awaited<
+  ReturnType<DunaApiClient["player"]["paymentSchedules"]["query"]>
+>;
 type PlayerOrganizationAccess = Awaited<
   ReturnType<DunaApiClient["player"]["organizationAccess"]["query"]>
 >;
@@ -107,10 +110,11 @@ interface PlayerRuntimeSnapshot {
   readonly coaches: PublicCoaches;
   readonly discoveryMap?: PublicDiscoveryMap;
   readonly organizationWallets: OrganizationWallets;
+  readonly paymentSchedules: PlayerPaymentSchedules;
   readonly organizationAccess?: PlayerOrganizationAccess;
 }
 
-const runtimeCacheKey = "duna.player.runtime-snapshot.v1";
+const runtimeCacheKey = "duna.player.runtime-snapshot.v2";
 
 function isPlayerRuntimeSnapshot(
   value: unknown,
@@ -128,7 +132,8 @@ function isPlayerRuntimeSnapshot(
     Array.isArray(candidate.people) &&
     Array.isArray(candidate.venues) &&
     Array.isArray(candidate.coaches) &&
-    Array.isArray(candidate.organizationWallets)
+    Array.isArray(candidate.organizationWallets) &&
+    Array.isArray(candidate.paymentSchedules)
   );
 }
 
@@ -155,6 +160,7 @@ export interface PlayerRuntime {
   readonly coaches?: PublicCoaches;
   readonly discoveryMap?: PublicDiscoveryMap;
   readonly organizationWallets?: OrganizationWallets;
+  readonly paymentSchedules?: PlayerPaymentSchedules;
   readonly organizationAccess?: PlayerOrganizationAccess;
   readonly authOrganizations?: readonly WorkOSMobileOrganization[];
   readonly activeAuthOrganizationId?: string;
@@ -429,6 +435,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [discoveryMap, setDiscoveryMap] = useState<PublicDiscoveryMap>();
   const [organizationWallets, setOrganizationWallets] =
     useState<OrganizationWallets>();
+  const [paymentSchedules, setPaymentSchedules] =
+    useState<PlayerPaymentSchedules>();
   const [organizationAccess, setOrganizationAccess] =
     useState<PlayerOrganizationAccess>();
   const [error, setError] = useState<string>();
@@ -453,6 +461,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     setCoaches(snapshot.coaches);
     setDiscoveryMap(snapshot.discoveryMap);
     setOrganizationWallets(snapshot.organizationWallets);
+    setPaymentSchedules(snapshot.paymentSchedules);
     setOrganizationAccess(snapshot.organizationAccess);
     setLastSuccessfulSyncAt(snapshot.cachedAt);
   }, []);
@@ -494,6 +503,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         nextCoaches,
         nextDiscoveryMap,
         nextOrganizationWallets,
+        nextPaymentSchedules,
         nextOrganizationAccess,
       ] = await Promise.all([
         client.player.dashboard.query(),
@@ -513,6 +523,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         client.public.coaches.query().catch(() => []),
         client.public.discoveryMap.query().catch(() => undefined),
         client.player.organizationWallets.query().catch(() => []),
+        client.player.paymentSchedules.query().catch(() => []),
         client.player.organizationAccess.query().catch(() => undefined),
       ]);
       const snapshot: PlayerRuntimeSnapshot = {
@@ -532,6 +543,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         coaches: nextCoaches,
         discoveryMap: nextDiscoveryMap,
         organizationWallets: nextOrganizationWallets,
+        paymentSchedules: nextPaymentSchedules,
         organizationAccess: nextOrganizationAccess,
       };
       applySnapshot(snapshot);
@@ -613,7 +625,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     people &&
     venues &&
     coaches &&
-    organizationWallets,
+    organizationWallets &&
+    paymentSchedules,
   );
   if (!hasUsableSnapshot) {
     return (
@@ -650,6 +663,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         coaches,
         discoveryMap,
         organizationWallets,
+        paymentSchedules,
         organizationAccess,
         authOrganizations: organizations,
         activeAuthOrganizationId: organizationId,

@@ -19,6 +19,8 @@ import {
   orders,
   orderTaxContexts,
   organizations,
+  paymentScheduleInstallments,
+  paymentSchedules,
   payments,
   people,
   pickupParticipants,
@@ -36,6 +38,7 @@ import {
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import {
   fulfillPaidCatalogOrder,
+  postCatalogPaymentCapture,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
 import { reconcileTeamEntryPayment } from "./checkout";
@@ -62,6 +65,7 @@ import {
   ensureMembershipSubscriptionSchedule,
   getStripeClient,
   retrieveChargeSettlementAvailableAt,
+  retrieveStripePaymentLineage,
   withholdDestinationChargeTax,
   withholdDestinationChargePlatformFee,
 } from "./payments";
@@ -72,10 +76,17 @@ import {
 } from "./messaging-notifications";
 import {
   recordPaymentFundSchedule,
+  recordStripePaymentLineage,
   synchronizeMoneyDispute,
   synchronizeMoneyPayout,
   synchronizeMoneyRefund,
 } from "./money-service";
+import {
+  attachInstallmentSubscription,
+  findPaymentScheduleBySubscription,
+  markInstallmentFailed,
+  recordInstallmentPayment,
+} from "./payment-schedules";
 import { sendTransactionalEmail } from "./resend";
 import {
   redeemPromoCodeForOrder,
@@ -132,6 +143,32 @@ function optionalString(
 ): string | undefined {
   const field = value[key];
   return typeof field === "string" && field.length > 0 ? field : undefined;
+}
+
+function stripeInvoicePaymentIntentId(
+  invoice: Readonly<Record<string, unknown>>,
+): string | undefined {
+  if (typeof invoice.payment_intent === "string") return invoice.payment_intent;
+  const paymentsValue = invoice.payments as
+    | { readonly data?: readonly Readonly<Record<string, unknown>>[] }
+    | undefined;
+  for (const invoicePayment of paymentsValue?.data ?? []) {
+    const payment = invoicePayment.payment as
+      Readonly<Record<string, unknown>> | string | undefined;
+    if (typeof payment === "object") {
+      const paymentIntent = payment.payment_intent;
+      if (typeof paymentIntent === "string") return paymentIntent;
+      if (
+        typeof paymentIntent === "object" &&
+        paymentIntent &&
+        "id" in paymentIntent &&
+        typeof paymentIntent.id === "string"
+      ) {
+        return paymentIntent.id;
+      }
+    }
+  }
+  return undefined;
 }
 
 function unixDate(value: unknown): Date | undefined {
@@ -734,6 +771,30 @@ async function markMembershipPaymentFailed(input: {
     });
     return;
   }
+  const installmentSchedule =
+    await findPaymentScheduleBySubscription(subscriptionId);
+  if (installmentSchedule) {
+    const invoiceId = optionalString(input.object, "id") ?? input.traceId;
+    const lastPaymentError = input.object.last_payment_error as
+      Readonly<Record<string, unknown>> | undefined;
+    await markInstallmentFailed({
+      stripeSubscriptionId: subscriptionId,
+      stripeInvoiceId: invoiceId,
+      message: optionalString(lastPaymentError ?? {}, "message"),
+      now: input.occurredAt,
+    });
+    await database.insert(auditLog).values({
+      organizationId: installmentSchedule.organizationId,
+      actorType: "system",
+      action: "catalog.installment_payment_failed",
+      entityType: "payment-schedule",
+      entityId: installmentSchedule.id,
+      reason: "Stripe reported a failed scheduled catalog payment.",
+      traceId: input.traceId,
+      createdAt: input.occurredAt,
+    });
+    return;
+  }
   const membership = await database.query.memberships.findFirst({
     where: eq(memberships.stripeSubscriptionId, subscriptionId),
   });
@@ -785,6 +846,107 @@ async function markMembershipPaymentFailed(input: {
         ]
       : []),
   ]);
+}
+
+async function applyCatalogInstallmentInvoice(input: {
+  readonly object: Readonly<Record<string, unknown>>;
+  readonly stripeSubscriptionId: string;
+  readonly occurredAt: Date;
+  readonly traceId: string;
+}): Promise<boolean> {
+  const schedule = await findPaymentScheduleBySubscription(
+    input.stripeSubscriptionId,
+  );
+  if (!schedule) return false;
+  const invoiceId = optionalString(input.object, "id") ?? input.traceId;
+  const hydratedInvoice = stripeInvoicePaymentIntentId(input.object)
+    ? input.object
+    : ((await getStripeClient().invoices.retrieve(invoiceId, {
+        expand: ["payments.data.payment.payment_intent"],
+      })) as unknown as Readonly<Record<string, unknown>>);
+  const amountPaidMinor =
+    typeof hydratedInvoice.amount_paid === "number"
+      ? hydratedInvoice.amount_paid
+      : 0;
+  if (!Number.isSafeInteger(amountPaidMinor) || amountPaidMinor <= 0) {
+    throw new Error("Paid installment invoice has no captured amount");
+  }
+  const database = getDatabase();
+  const order = await database.query.orders.findFirst({
+    where: eq(orders.id, schedule.orderId),
+  });
+  if (!order?.organizationId) {
+    throw new Error("Installment order was not found");
+  }
+  const paymentIntentId = stripeInvoicePaymentIntentId(hydratedInvoice);
+  const existing = await database.query.payments.findFirst({
+    where: eq(payments.stripeInvoiceId, invoiceId),
+  });
+  const paymentId = existing?.id ?? crypto.randomUUID();
+  if (!existing) {
+    await database.insert(payments).values({
+      id: paymentId,
+      orderId: order.id,
+      method: "stripe-installment",
+      amountMinor: amountPaidMinor,
+      currency:
+        typeof hydratedInvoice.currency === "string"
+          ? hydratedInvoice.currency.toUpperCase()
+          : order.currency,
+      stripeInvoiceId: invoiceId,
+      stripeSubscriptionId: input.stripeSubscriptionId,
+      stripePaymentIntentId: paymentIntentId,
+      status: "succeeded",
+      createdAt: input.occurredAt,
+      updatedAt: input.occurredAt,
+    });
+  }
+  const installmentId = await recordInstallmentPayment({
+    scheduleId: schedule.id,
+    paymentId,
+    amountMinor: amountPaidMinor,
+    stripeInvoiceId: invoiceId,
+    stripePaymentIntentId: paymentIntentId,
+    now: input.occurredAt,
+  });
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, order.organizationId),
+  });
+  const lineage =
+    paymentIntentId && organization?.stripeAccountId
+      ? await retrieveStripePaymentLineage({
+          paymentIntentId,
+          connectedAccountId: organization.stripeAccountId,
+        })
+      : undefined;
+  if (lineage) {
+    await recordStripePaymentLineage({
+      organizationId: order.organizationId,
+      orderId: order.id,
+      paymentId,
+      lineage,
+      now: input.occurredAt,
+    });
+  }
+  await recordPaymentFundSchedule({
+    orderId: order.id,
+    paymentId,
+    installmentId,
+    lineage,
+    now: input.occurredAt,
+  });
+  await postCatalogPaymentCapture(order.id, paymentId, input.occurredAt);
+  await database.insert(auditLog).values({
+    organizationId: order.organizationId,
+    actorType: "system",
+    action: "catalog.installment_payment_succeeded",
+    entityType: "payment-schedule",
+    entityId: schedule.id,
+    reason: `Stripe captured installment ${invoiceId}.`,
+    traceId: input.traceId,
+    createdAt: input.occurredAt,
+  });
+  return true;
 }
 
 async function applyMembershipCycleBenefits(input: {
@@ -846,6 +1008,16 @@ async function applyMembershipCycleBenefits(input: {
         now: input.occurredAt,
       });
     }
+    return;
+  }
+  if (
+    await applyCatalogInstallmentInvoice({
+      object: input.object,
+      stripeSubscriptionId: subscriptionId,
+      occurredAt: input.occurredAt,
+      traceId: input.traceId,
+    })
+  ) {
     return;
   }
   const membership = await database.query.memberships.findFirst({
@@ -1375,6 +1547,35 @@ async function processStripeWorkflow(
           .onConflictDoNothing(),
       ]);
     }
+    const capturedPayment = await database.query.payments.findFirst({
+      where: and(
+        eq(payments.orderId, order.id),
+        latestCharge ? eq(payments.stripeChargeId, latestCharge) : undefined,
+        eq(payments.status, "succeeded"),
+      ),
+      orderBy: [asc(payments.createdAt)],
+    });
+    const organization = order.organizationId
+      ? await database.query.organizations.findFirst({
+          where: eq(organizations.id, order.organizationId),
+        })
+      : undefined;
+    const lineage =
+      capturedPayment && organization?.stripeAccountId
+        ? await retrieveStripePaymentLineage({
+            paymentIntentId,
+            connectedAccountId: organization.stripeAccountId,
+          })
+        : undefined;
+    if (capturedPayment && lineage && order.organizationId) {
+      await recordStripePaymentLineage({
+        organizationId: order.organizationId,
+        orderId: order.id,
+        paymentId: capturedPayment.id,
+        lineage,
+        now: occurredAt,
+      });
+    }
     await fulfillPaidCatalogOrder(order.id, occurredAt);
     await redeemPromoCodeForOrder(order.id, occurredAt);
     await reconcileTeamEntryPayment(order.id, occurredAt);
@@ -1385,6 +1586,8 @@ async function processStripeWorkflow(
     });
     await recordPaymentFundSchedule({
       orderId: order.id,
+      paymentId: capturedPayment?.id,
+      lineage,
       processorAvailableAt: latestCharge
         ? await retrieveChargeSettlementAvailableAt(latestCharge)
         : undefined,
@@ -1429,10 +1632,17 @@ async function processStripeWorkflow(
         if (!subscriptionId) {
           throw new Error("Installment checkout is missing its subscription");
         }
-        await capCatalogInstallmentSubscription({
-          subscriptionId,
-          installmentCount,
-          idempotencyKey: `stripe:${webhook.providerEventId}:installment`,
+        const stripeSubscriptionScheduleId =
+          await capCatalogInstallmentSubscription({
+            subscriptionId,
+            installmentCount,
+            idempotencyKey: `stripe:${webhook.providerEventId}:installment`,
+          });
+        await attachInstallmentSubscription({
+          orderId,
+          stripeSubscriptionId: subscriptionId,
+          stripeSubscriptionScheduleId,
+          now: occurredAt,
         });
       }
       const amountTotal =
@@ -1482,23 +1692,57 @@ async function processStripeWorkflow(
           })
           .where(eq(orderTaxContexts.orderId, order.id)),
       ]);
-      const existingPayment = await database.query.payments.findFirst({
-        where: and(
-          eq(payments.orderId, order.id),
-          eq(payments.method, "stripe-subscription-checkout"),
-          eq(payments.status, "succeeded"),
-        ),
-      });
-      if (!existingPayment) {
-        await database.insert(payments).values({
-          orderId: order.id,
-          method: "stripe-subscription-checkout",
-          amountMinor: amountTotal,
-          currency: order.currency,
-          status: "succeeded",
-          createdAt: occurredAt,
-          updatedAt: occurredAt,
+      if (installmentCheckout && taxTotalMinor > 0) {
+        const schedule = await database.query.paymentSchedules.findFirst({
+          where: eq(paymentSchedules.orderId, order.id),
         });
+        if (schedule) {
+          await database.batch([
+            database
+              .update(paymentSchedules)
+              .set({
+                totalMinor: order.totalMinor + taxTotalMinor,
+                termsSnapshot: {
+                  ...schedule.termsSnapshot,
+                  taxTotalMinor,
+                },
+                updatedAt: occurredAt,
+              })
+              .where(eq(paymentSchedules.id, schedule.id)),
+            database
+              .update(paymentScheduleInstallments)
+              .set({
+                amountMinor: firstInvoiceMinor + taxTotalMinor,
+                updatedAt: occurredAt,
+              })
+              .where(
+                and(
+                  eq(paymentScheduleInstallments.scheduleId, schedule.id),
+                  eq(paymentScheduleInstallments.sequence, 1),
+                ),
+              ),
+          ]);
+        }
+      }
+      if (!installmentCheckout) {
+        const existingPayment = await database.query.payments.findFirst({
+          where: and(
+            eq(payments.orderId, order.id),
+            eq(payments.method, "stripe-subscription-checkout"),
+            eq(payments.status, "succeeded"),
+          ),
+        });
+        if (!existingPayment) {
+          await database.insert(payments).values({
+            orderId: order.id,
+            method: "stripe-subscription-checkout",
+            amountMinor: amountTotal,
+            currency: order.currency,
+            status: "succeeded",
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          });
+        }
       }
       await fulfillPaidCatalogOrder(order.id, occurredAt);
       await redeemPromoCodeForOrder(order.id, occurredAt);
@@ -1508,7 +1752,9 @@ async function processStripeWorkflow(
         now: occurredAt,
         requestId: `payment-selection:${webhook.providerEventId}`,
       });
-      await recordPaymentFundSchedule({ orderId: order.id, now: occurredAt });
+      if (!installmentCheckout) {
+        await recordPaymentFundSchedule({ orderId: order.id, now: occurredAt });
+      }
     }
   } else if (
     action === "order.payment_failed" ||

@@ -38,6 +38,81 @@ function money(amountMinor: number, currency: string): string {
   }).format(amountMinor / 100);
 }
 
+type CatalogCheckoutActionResult = Awaited<
+  ReturnType<typeof catalogCheckoutStatusAction>
+>;
+type CustomerPaymentSchedule = NonNullable<
+  Extract<
+    CatalogCheckoutActionResult,
+    { readonly ok: true }
+  >["status"]["paymentSchedule"]
+>;
+
+function PaymentScheduleCard({
+  schedule,
+}: {
+  readonly schedule: CustomerPaymentSchedule;
+}) {
+  return (
+    <section
+      className="customer-payment-schedule"
+      aria-label="Payment schedule"
+    >
+      <header>
+        <span>
+          <CalendarClock aria-hidden size={19} />
+          <strong>{schedule.installmentCount}-payment schedule</strong>
+        </span>
+        <small>
+          {schedule.status === "past-due" ? "Needs attention" : "Automatic"}
+        </small>
+      </header>
+      <p>
+        Your saved payment method is charged on each date. You can always see
+        this schedule with your purchase details.
+      </p>
+      <ol>
+        {schedule.installments.map((installment) => (
+          <li key={installment.id} data-status={installment.status}>
+            <span>
+              <small>Payment {installment.sequence}</small>
+              <strong>
+                {new Intl.DateTimeFormat("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                }).format(new Date(installment.dueAt))}
+              </strong>
+            </span>
+            <b>{money(installment.amountMinor, schedule.currency)}</b>
+            <em>
+              {installment.status === "paid"
+                ? "Paid"
+                : installment.status === "failed"
+                  ? "Retrying"
+                  : installment.status === "refunded"
+                    ? "Refunded"
+                    : "Upcoming"}
+            </em>
+          </li>
+        ))}
+      </ol>
+      <footer>
+        <span>
+          Paid {money(schedule.paidMinor, schedule.currency)} of{" "}
+          {money(schedule.totalMinor, schedule.currency)}
+        </span>
+        <strong>
+          {Math.round(
+            (schedule.paidMinor / Math.max(1, schedule.totalMinor)) * 100,
+          )}
+          %
+        </strong>
+      </footer>
+    </section>
+  );
+}
+
 export function CatalogCheckoutPanel({
   item,
   organization,
@@ -104,6 +179,9 @@ export function CatalogCheckoutPanel({
   const [completionMode, setCompletionMode] = useState<
     "purchase" | "cash-reservation" | null
   >(null);
+  const [customerPaymentSchedule, setCustomerPaymentSchedule] = useState<
+    CustomerPaymentSchedule | undefined
+  >();
   const [isPending, startTransition] = useTransition();
   const idempotencyKey = useRef(crypto.randomUUID());
   const membershipIdempotencyKey = useRef(crypto.randomUUID());
@@ -300,25 +378,37 @@ export function CatalogCheckoutPanel({
   useEffect(() => {
     if (!initialCheckoutSessionId) return;
     let cancelled = false;
-    startTransition(async () => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const poll = async () => {
+      attempt += 1;
       const response = await catalogCheckoutStatusAction(
         initialCheckoutSessionId,
       );
       if (cancelled) return;
-      if (response.ok && response.status.complete) {
-        setComplete(true);
-        setCompletionMode("purchase");
-        setNotice(
-          "Purchase confirmed. Complete the participation waiver below before you arrive.",
-        );
-      } else if (response.ok) {
+      if (response.ok) {
+        setCustomerPaymentSchedule(response.status.paymentSchedule);
+        if (response.status.complete) {
+          setComplete(true);
+          setCompletionMode("purchase");
+          setNotice(
+            response.status.paymentSchedule
+              ? "Purchase confirmed. Your automatic payment schedule is below."
+              : "Purchase confirmed. Complete the participation waiver below before you arrive.",
+          );
+          return;
+        }
         setNotice("Payment received. Duna is finishing fulfillment.");
-      } else {
+      } else if (attempt >= 15) {
         setNotice(response.error);
+        return;
       }
-    });
+      if (attempt < 15) timeout = setTimeout(poll, 1_500);
+    };
+    startTransition(() => void poll());
     return () => {
       cancelled = true;
+      if (timeout) clearTimeout(timeout);
     };
   }, [initialCheckoutSessionId]);
 
@@ -605,6 +695,9 @@ export function CatalogCheckoutPanel({
             </small>
           </span>
         </div>
+      )}
+      {customerPaymentSchedule && (
+        <PaymentScheduleCard schedule={customerPaymentSchedule} />
       )}
       {(complete || membershipComplete) &&
         (membershipComplete

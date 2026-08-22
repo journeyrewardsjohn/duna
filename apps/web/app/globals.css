@@ -30233,6 +30233,128 @@ html {
   color: #2b67a4;
 }
 
+.customer-payment-schedule {
+  display: grid;
+  gap: 14px;
+  margin: 4px 0 8px;
+  padding: 18px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 20px;
+  background: var(--surface-1);
+  box-shadow: 0 14px 36px rgb(var(--overlay-rgb) / 8%);
+}
+
+.customer-payment-schedule > header,
+.customer-payment-schedule > header span,
+.customer-payment-schedule > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.customer-payment-schedule > header span {
+  justify-content: flex-start;
+}
+
+.customer-payment-schedule > header small {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--gain);
+  background: color-mix(in srgb, var(--gain) 10%, var(--surface-1));
+  font-weight: 700;
+}
+
+.customer-payment-schedule > p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.customer-payment-schedule ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.customer-payment-schedule li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  background: var(--surface-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.customer-payment-schedule li span {
+  display: grid;
+  gap: 2px;
+}
+
+.customer-payment-schedule li small {
+  color: var(--text-2);
+}
+
+.customer-payment-schedule li b {
+  white-space: nowrap;
+}
+
+.customer-payment-schedule li em {
+  min-width: 72px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+}
+
+.customer-payment-schedule li[data-status="paid"] em {
+  color: var(--gain);
+  background: color-mix(in srgb, var(--gain) 10%, var(--surface-1));
+}
+
+.customer-payment-schedule li[data-status="failed"] em {
+  color: var(--loss);
+  background: color-mix(in srgb, var(--loss) 10%, var(--surface-1));
+}
+
+.customer-payment-schedule > footer {
+  padding-top: 4px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.customer-payment-schedule > footer strong {
+  color: var(--text-1);
+}
+
+@media (max-width: 520px) {
+  .customer-payment-schedule {
+    padding: 14px;
+    border-radius: 17px;
+  }
+
+  .customer-payment-schedule li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .customer-payment-schedule li em {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
 @media (max-width: 560px) {
   .catalog-payment-plan-choice > div {
     grid-template-columns: 1fr;

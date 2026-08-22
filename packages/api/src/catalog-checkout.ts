@@ -22,6 +22,7 @@ import {
   orderItems,
   orders,
   orderTaxContexts,
+  payments,
   organizationCreditGrants,
   organizationParticipants,
   organizationStaffProfiles,
@@ -47,7 +48,7 @@ import {
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
-import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   ensureLedgerAccount,
@@ -55,6 +56,10 @@ import {
 } from "./catalog-service";
 import type { ApiActor } from "./context";
 import { hasActiveDunaPlusMembership } from "./membership";
+import {
+  createInstallmentPaymentSchedule,
+  loadCustomerPaymentSchedule,
+} from "./payment-schedules";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import {
   createCatalogCheckoutSession,
@@ -218,6 +223,9 @@ export interface CatalogCheckoutStatus {
   readonly fulfillmentStatus?:
     "held" | "pending" | "ready" | "fulfilled" | "cancelled" | "refunded";
   readonly complete: boolean;
+  readonly paymentSchedule?: Awaited<
+    ReturnType<typeof loadCustomerPaymentSchedule>
+  >;
 }
 
 function currency(value: string): CurrencyCode {
@@ -1675,6 +1683,19 @@ export async function startCatalogCheckout(input: {
         updatedAt: input.now,
       })
       .where(eq(orders.id, orderId));
+    if (installmentsRequested) {
+      await createInstallmentPaymentSchedule({
+        orderId,
+        organizationId: row.organization.id,
+        buyerPersonId: input.actor.personId,
+        installmentCount,
+        installmentAmountMinor,
+        firstInvoiceMinor: installmentAmountMinor + serviceFeeMinor,
+        totalMinor: priced.totalMinor,
+        currency: orderCurrency,
+        now: input.now,
+      });
+    }
     return {
       mode: "stripe",
       orderId,
@@ -1702,8 +1723,9 @@ export async function startCatalogCheckout(input: {
   }
 }
 
-async function postPaidCatalogOrderJournal(input: {
+export async function postCapturedCatalogPaymentJournal(input: {
   readonly order: typeof orders.$inferSelect;
+  readonly payment: typeof payments.$inferSelect;
   readonly fulfillment: typeof catalogFulfillments.$inferSelect;
   readonly item: typeof catalogItems.$inferSelect;
   readonly now: Date;
@@ -1716,7 +1738,7 @@ async function postPaidCatalogOrderJournal(input: {
     return;
   }
   const database = getDatabase();
-  const idempotencyKey = `catalog-order:${input.order.id}:money`;
+  const idempotencyKey = `catalog-payment:${input.payment.id}:money`;
   const existing = await database.query.ledgerJournals.findFirst({
     where: and(
       eq(ledgerJournals.organizationId, input.order.organizationId),
@@ -1725,12 +1747,19 @@ async function postPaidCatalogOrderJournal(input: {
   });
   if (existing) return;
 
+  const captureRatio = Math.min(
+    1,
+    input.payment.amountMinor / input.order.totalMinor,
+  );
   const configuredFee = input.fulfillment.details.applicationFeeMinor;
   const applicationFeeMinor =
     typeof configuredFee === "number" &&
     Number.isSafeInteger(configuredFee) &&
     configuredFee > 0
-      ? Math.min(input.order.totalMinor, configuredFee)
+      ? Math.min(
+          input.payment.amountMinor,
+          Math.round(configuredFee * captureRatio),
+        )
       : 0;
   const configuredConsumerServiceFee =
     input.fulfillment.details.consumerServiceFeeMinor;
@@ -1738,8 +1767,14 @@ async function postPaidCatalogOrderJournal(input: {
     typeof configuredConsumerServiceFee === "number" &&
     Number.isSafeInteger(configuredConsumerServiceFee) &&
     configuredConsumerServiceFee >= 0
-      ? Math.min(applicationFeeMinor, configuredConsumerServiceFee)
-      : Math.min(applicationFeeMinor, input.order.feeTotalMinor);
+      ? Math.min(
+          applicationFeeMinor,
+          Math.round(configuredConsumerServiceFee * captureRatio),
+        )
+      : Math.min(
+          applicationFeeMinor,
+          Math.round(input.order.feeTotalMinor * captureRatio),
+        );
   const configuredOperatorProcessingFee =
     input.fulfillment.details.operatorProcessingFeeMinor;
   const remainingOperatorFees = applicationFeeMinor - consumerServiceFeeMinor;
@@ -1747,7 +1782,10 @@ async function postPaidCatalogOrderJournal(input: {
     typeof configuredOperatorProcessingFee === "number" &&
     Number.isSafeInteger(configuredOperatorProcessingFee) &&
     configuredOperatorProcessingFee >= 0
-      ? Math.min(remainingOperatorFees, configuredOperatorProcessingFee)
+      ? Math.min(
+          remainingOperatorFees,
+          Math.round(configuredOperatorProcessingFee * captureRatio),
+        )
       : remainingOperatorFees;
   const configuredOrganizationCommission =
     input.fulfillment.details.organizationCommissionMinor;
@@ -1757,10 +1795,18 @@ async function postPaidCatalogOrderJournal(input: {
     configuredOrganizationCommission >= 0
       ? Math.min(
           remainingOperatorFees - operatorProcessingFeeMinor,
-          configuredOrganizationCommission,
+          Math.round(configuredOrganizationCommission * captureRatio),
         )
       : 0;
-  const clearingMinor = input.order.totalMinor - applicationFeeMinor;
+  const capturedTaxMinor = Math.min(
+    input.payment.amountMinor,
+    Math.round(input.order.taxTotalMinor * captureRatio),
+  );
+  const capturedSubtotalMinor = Math.max(
+    0,
+    input.payment.amountMinor - consumerServiceFeeMinor - capturedTaxMinor,
+  );
+  const clearingMinor = input.payment.amountMinor - applicationFeeMinor;
   const creditPack =
     input.item.type === "plan" && input.item.subtype === "credit-pack";
   const revenueCode =
@@ -1831,7 +1877,7 @@ async function postPaidCatalogOrderJournal(input: {
       unit: input.order.currency,
       currency: input.order.currency,
     }),
-    input.order.taxTotalMinor > 0
+    capturedTaxMinor > 0
       ? ensureLedgerAccount({
           organizationId: input.order.organizationId,
           code: "SALES_TAX_PAYABLE",
@@ -1875,21 +1921,21 @@ async function postPaidCatalogOrderJournal(input: {
       currency: input.order.currency,
     });
   }
-  if (input.order.subtotalMinor > 0) {
+  if (capturedSubtotalMinor > 0) {
     postings.push({
       accountId: revenueId,
       side: "credit",
-      amount: input.order.subtotalMinor,
+      amount: capturedSubtotalMinor,
       unit: input.order.currency,
       unitKind: "money",
       currency: input.order.currency,
     });
   }
-  if (taxPayableId && input.order.taxTotalMinor > 0) {
+  if (taxPayableId && capturedTaxMinor > 0) {
     postings.push({
       accountId: taxPayableId,
       side: "credit",
-      amount: input.order.taxTotalMinor,
+      amount: capturedTaxMinor,
       unit: input.order.currency,
       unitKind: "money",
       currency: input.order.currency,
@@ -1902,9 +1948,9 @@ async function postPaidCatalogOrderJournal(input: {
       id: journalId,
       organizationId: input.order.organizationId,
       idempotencyKey,
-      sourceType: "catalog-order",
-      sourceId: input.order.id,
-      description: `Catalog sale · ${input.item.title}`,
+      sourceType: "payment-capture",
+      sourceId: input.payment.id,
+      description: `Payment captured · ${input.item.title}`,
       status: "draft",
       actorPersonId: input.order.buyerPersonId,
       occurredAt: input.now,
@@ -1915,7 +1961,10 @@ async function postPaidCatalogOrderJournal(input: {
         consumerServiceFeeMinor,
         operatorProcessingFeeMinor,
         organizationCommissionMinor,
-        taxTotalMinor: input.order.taxTotalMinor,
+        orderId: input.order.id,
+        paymentId: input.payment.id,
+        capturedMinor: input.payment.amountMinor,
+        taxTotalMinor: capturedTaxMinor,
         deferredRevenue: creditPack,
       },
     }),
@@ -1933,6 +1982,40 @@ async function postPaidCatalogOrderJournal(input: {
       .set({ status: "posted", postedAt: input.now })
       .where(eq(ledgerJournals.id, journalId)),
   ]);
+}
+
+export async function postCatalogPaymentCapture(
+  orderId: string,
+  paymentId: string,
+  now = new Date(),
+): Promise<void> {
+  const database = getDatabase();
+  const [order, payment, fulfillment] = await Promise.all([
+    database.query.orders.findFirst({ where: eq(orders.id, orderId) }),
+    database.query.payments.findFirst({ where: eq(payments.id, paymentId) }),
+    database.query.catalogFulfillments.findFirst({
+      where: eq(catalogFulfillments.orderId, orderId),
+    }),
+  ]);
+  if (!order?.organizationId || !payment || !fulfillment) return;
+  const legacyJournal = await database.query.ledgerJournals.findFirst({
+    where: and(
+      eq(ledgerJournals.organizationId, order.organizationId),
+      eq(ledgerJournals.idempotencyKey, `catalog-order:${order.id}:money`),
+    ),
+  });
+  if (legacyJournal) return;
+  const item = await database.query.catalogItems.findFirst({
+    where: eq(catalogItems.id, fulfillment.catalogItemId),
+  });
+  if (!item) return;
+  await postCapturedCatalogPaymentJournal({
+    order,
+    payment,
+    fulfillment,
+    item,
+    now,
+  });
 }
 
 export async function fulfillPaidCatalogOrder(
@@ -1958,7 +2041,16 @@ export async function fulfillPaidCatalogOrder(
     }
     return;
   }
-  await postPaidCatalogOrderJournal({ order, fulfillment, item, now });
+  const payment = await database.query.payments.findFirst({
+    where: and(
+      eq(payments.orderId, order.id),
+      eq(payments.status, "succeeded"),
+    ),
+    orderBy: [desc(payments.createdAt)],
+  });
+  if (payment) {
+    await postCatalogPaymentCapture(order.id, payment.id, now);
+  }
 
   if (item.type === "good" && item.subtype === "digital-content") {
     const trainingDrillId =
@@ -2191,6 +2283,10 @@ export async function getCatalogCheckoutStatus(
   const fulfillment = await database.query.catalogFulfillments.findFirst({
     where: eq(catalogFulfillments.orderId, order.id),
   });
+  const paymentSchedule = await loadCustomerPaymentSchedule({
+    orderId: order.id,
+    buyerPersonId: personId,
+  });
   return {
     orderId: order.id,
     orderStatus: order.status,
@@ -2205,9 +2301,11 @@ export async function getCatalogCheckoutStatus(
         : undefined,
     complete:
       order.status === "paid" &&
+      (!paymentSchedule || paymentSchedule.paidMinor > 0) &&
       Boolean(
         fulfillment &&
         ["ready", "fulfilled", "pending"].includes(fulfillment.status),
       ),
+    paymentSchedule,
   };
 }

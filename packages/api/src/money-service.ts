@@ -10,23 +10,38 @@ import {
   organizationMoneySettings,
   organizationRefundPolicies,
   organizations,
+  payoutAllocations,
   paymentFundSchedules,
   payments,
   payouts,
   people,
   registrations,
   sessions,
+  stripeTransactionLinks,
   ticketTypes,
   tickets,
 } from "@duna/db";
-import { and, asc, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { OrganizationMoneyWorkspace } from "./contracts";
 import type { ApiActor } from "./context";
 import {
   configureConnectedAccountMoney,
   createConnectedAccountPayout,
   loadConnectedAccountMoney,
+  retrieveStripePaymentLineage,
+  type StripePaymentLineage,
 } from "./payments";
+import { postCatalogPaymentCapture } from "./catalog-checkout";
 
 type Currency = OrganizationMoneyWorkspace["currency"];
 type PayoutInterval = OrganizationMoneyWorkspace["settings"]["payoutInterval"];
@@ -57,6 +72,7 @@ export function loadDemoOrganizationMoneyWorkspace(
       policyName: "Flexible · 24 hours",
       availableAt: day(1),
       occurredAt: day(-2),
+      reconciled: true,
     },
     {
       id: "demo-fund-2",
@@ -75,6 +91,7 @@ export function loadDemoOrganizationMoneyWorkspace(
       policyName: "Non-refundable",
       availableAt: day(-1),
       occurredAt: day(-4),
+      reconciled: true,
     },
     {
       id: "demo-fund-3",
@@ -93,6 +110,7 @@ export function loadDemoOrganizationMoneyWorkspace(
       policyName: "Flexible · 7 days",
       availableAt: day(8),
       occurredAt: day(-1),
+      reconciled: true,
     },
   ];
   return {
@@ -449,6 +467,9 @@ async function resolveOrderPolicy(orderId: string) {
 
 export async function recordPaymentFundSchedule(input: {
   readonly orderId: string;
+  readonly paymentId?: string;
+  readonly installmentId?: string;
+  readonly lineage?: StripePaymentLineage;
   readonly processorAvailableAt?: Date;
   readonly policyOverride?: {
     readonly mode: "refundable" | "non-refundable";
@@ -467,7 +488,9 @@ export async function recordPaymentFundSchedule(input: {
   await ensureMoneyDefaults(order.organizationId);
   const [payment, fees, resolvedPolicy] = await Promise.all([
     database.query.payments.findFirst({
-      where: eq(payments.orderId, order.id),
+      where: input.paymentId
+        ? and(eq(payments.id, input.paymentId), eq(payments.orderId, order.id))
+        : eq(payments.orderId, order.id),
       orderBy: [desc(payments.createdAt)],
     }),
     database
@@ -476,6 +499,7 @@ export async function recordPaymentFundSchedule(input: {
       .where(eq(appliedFees.orderId, order.id)),
     resolveOrderPolicy(order.id),
   ]);
+  if (!payment || payment.status !== "succeeded") return;
   const policy = input.policyOverride
     ? {
         sessionId: undefined,
@@ -487,7 +511,8 @@ export async function recordPaymentFundSchedule(input: {
         policyId: undefined,
       }
     : resolvedPolicy;
-  const processingFeeMinor = fees
+  const captureRatio = Math.min(1, payment.amountMinor / order.totalMinor);
+  const configuredProcessingFeeMinor = fees
     .filter(
       (fee) =>
         fee.payer === "operator" &&
@@ -497,6 +522,9 @@ export async function recordPaymentFundSchedule(input: {
           fee.ruleId.includes("operator-ach")),
     )
     .reduce((sum, fee) => sum + fee.amountMinor, 0);
+  const processingFeeMinor =
+    input.lineage?.feeMinor ??
+    Math.round(configuredProcessingFeeMinor * captureRatio);
   const organizationFeeMinor = fees
     .filter(
       (fee) =>
@@ -510,7 +538,13 @@ export async function recordPaymentFundSchedule(input: {
   const consumerFeeMinor = fees
     .filter((fee) => fee.payer === "consumer")
     .reduce((sum, fee) => sum + fee.amountMinor, 0);
-  const processorAvailableAt = input.processorAvailableAt ?? input.now;
+  const allocatedOrganizationFeeMinor = Math.round(
+    organizationFeeMinor * captureRatio,
+  );
+  const allocatedConsumerFeeMinor = Math.round(consumerFeeMinor * captureRatio);
+  const allocatedTaxMinor = Math.round(order.taxTotalMinor * captureRatio);
+  const processorAvailableAt =
+    input.lineage?.availableAt ?? input.processorAvailableAt ?? input.now;
   const availability = calculateFundAvailability({
     policyMode: policy.mode,
     refundBeforeMinutes: policy.refundBeforeMinutes,
@@ -524,7 +558,10 @@ export async function recordPaymentFundSchedule(input: {
     .values({
       organizationId: order.organizationId,
       orderId: order.id,
-      paymentId: payment?.id,
+      paymentId: payment.id,
+      installmentId: input.installmentId,
+      stripeTransferId: input.lineage?.stripeTransferId,
+      stripeBalanceTransactionId: input.lineage?.stripeBalanceTransactionId,
       sessionId: policy.sessionId,
       policyId: policy.policyId,
       policyName: policy.name,
@@ -535,52 +572,165 @@ export async function recordPaymentFundSchedule(input: {
       policyReleaseAt: availability.policyReleaseAt,
       processorAvailableAt,
       availableAt: availability.availableAt,
-      grossMinor: order.totalMinor,
-      consumerFeeMinor,
+      grossMinor: payment.amountMinor,
+      consumerFeeMinor: allocatedConsumerFeeMinor,
       processingFeeMinor,
-      organizationFeeMinor,
-      taxMinor: order.taxTotalMinor,
-      netMinor: Math.max(
-        0,
-        order.totalMinor -
-          consumerFeeMinor -
-          processingFeeMinor -
-          organizationFeeMinor -
-          order.taxTotalMinor,
-      ),
+      organizationFeeMinor: allocatedOrganizationFeeMinor,
+      taxMinor: allocatedTaxMinor,
+      netMinor:
+        input.lineage?.netMinor ??
+        Math.max(
+          0,
+          payment.amountMinor -
+            allocatedConsumerFeeMinor -
+            processingFeeMinor -
+            allocatedOrganizationFeeMinor -
+            allocatedTaxMinor,
+        ),
       currency: order.currency,
       status: availability.status,
       updatedAt: input.now,
     })
     .onConflictDoUpdate({
-      target: paymentFundSchedules.orderId,
+      target: paymentFundSchedules.paymentId,
+      targetWhere: sql`${paymentFundSchedules.paymentId} IS NOT NULL`,
       set: {
-        paymentId: payment?.id,
+        installmentId: input.installmentId,
+        stripeTransferId: input.lineage?.stripeTransferId,
+        stripeBalanceTransactionId: input.lineage?.stripeBalanceTransactionId,
         policyName: policy.name,
         policyVersion: policy.version,
         policyMode: policy.mode,
         refundBeforeMinutes: policy.refundBeforeMinutes,
         eventStartsAt: policy.startsAt,
         policyReleaseAt: availability.policyReleaseAt,
-        grossMinor: order.totalMinor,
-        consumerFeeMinor,
+        grossMinor: payment.amountMinor,
+        consumerFeeMinor: allocatedConsumerFeeMinor,
         processingFeeMinor,
-        organizationFeeMinor,
-        taxMinor: order.taxTotalMinor,
-        netMinor: Math.max(
-          0,
-          order.totalMinor -
-            consumerFeeMinor -
-            processingFeeMinor -
-            organizationFeeMinor -
-            order.taxTotalMinor,
-        ),
+        organizationFeeMinor: allocatedOrganizationFeeMinor,
+        taxMinor: allocatedTaxMinor,
+        netMinor:
+          input.lineage?.netMinor ??
+          Math.max(
+            0,
+            payment.amountMinor -
+              allocatedConsumerFeeMinor -
+              processingFeeMinor -
+              allocatedOrganizationFeeMinor -
+              allocatedTaxMinor,
+          ),
         processorAvailableAt,
         availableAt: availability.availableAt,
         status: availability.status,
         updatedAt: input.now,
       },
     });
+}
+
+export async function recordStripePaymentLineage(input: {
+  readonly organizationId: string;
+  readonly orderId: string;
+  readonly paymentId: string;
+  readonly lineage: StripePaymentLineage;
+  readonly now: Date;
+}): Promise<void> {
+  const database = getDatabase();
+  await database.batch([
+    database
+      .update(payments)
+      .set({
+        stripePaymentIntentId: input.lineage.stripePaymentIntentId,
+        stripeChargeId: input.lineage.stripeChargeId,
+        stripeApplicationFeeId: input.lineage.stripeApplicationFeeId,
+        stripeTransferId: input.lineage.stripeTransferId,
+        stripeDestinationPaymentId: input.lineage.stripeDestinationPaymentId,
+        stripeBalanceTransactionId: input.lineage.stripeBalanceTransactionId,
+        updatedAt: input.now,
+      })
+      .where(eq(payments.id, input.paymentId)),
+    database
+      .insert(stripeTransactionLinks)
+      .values({
+        organizationId: input.organizationId,
+        orderId: input.orderId,
+        paymentId: input.paymentId,
+        ...input.lineage,
+        createdAt: input.now,
+      })
+      .onConflictDoNothing(),
+  ]);
+}
+
+export async function reconcileStripePaymentLineage(input?: {
+  readonly limit?: number;
+  readonly now?: Date;
+}): Promise<{
+  readonly inspected: number;
+  readonly linked: number;
+  readonly failed: number;
+}> {
+  const database = getDatabase();
+  const now = input?.now ?? new Date();
+  const candidates = await database
+    .select({
+      payment: payments,
+      order: orders,
+      organization: organizations,
+    })
+    .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
+    .innerJoin(organizations, eq(orders.organizationId, organizations.id))
+    .leftJoin(
+      stripeTransactionLinks,
+      eq(stripeTransactionLinks.paymentId, payments.id),
+    )
+    .where(
+      and(
+        eq(payments.status, "succeeded"),
+        isNotNull(organizations.stripeAccountId),
+        sql`${stripeTransactionLinks.id} IS NULL`,
+        sql`COALESCE(${payments.stripePaymentIntentId}, ${orders.stripePaymentIntentId}) IS NOT NULL`,
+      ),
+    )
+    .orderBy(asc(payments.createdAt))
+    .limit(Math.min(500, Math.max(1, input?.limit ?? 100)));
+  let linked = 0;
+  let failed = 0;
+  for (const candidate of candidates) {
+    const paymentIntentId =
+      candidate.payment.stripePaymentIntentId ??
+      candidate.order.stripePaymentIntentId;
+    const connectedAccountId = candidate.organization.stripeAccountId;
+    if (!paymentIntentId || !connectedAccountId) continue;
+    try {
+      const lineage = await retrieveStripePaymentLineage({
+        paymentIntentId,
+        connectedAccountId,
+      });
+      await recordStripePaymentLineage({
+        organizationId: candidate.organization.id,
+        orderId: candidate.order.id,
+        paymentId: candidate.payment.id,
+        lineage,
+        now,
+      });
+      await recordPaymentFundSchedule({
+        orderId: candidate.order.id,
+        paymentId: candidate.payment.id,
+        lineage,
+        now,
+      });
+      await postCatalogPaymentCapture(
+        candidate.order.id,
+        candidate.payment.id,
+        now,
+      );
+      linked += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { inspected: candidates.length, linked, failed };
 }
 
 export async function releaseEligibleFunds(now = new Date()): Promise<number> {
@@ -618,6 +768,7 @@ function emptyConnect(
     disputes: [],
     requirementsDue: [],
     liveData: false,
+    livemode: undefined,
   };
 }
 
@@ -650,10 +801,17 @@ export async function loadOrganizationMoneyWorkspace(
           fund: paymentFundSchedules,
           order: orders,
           customerName: people.displayName,
+          payment: payments,
+          stripeLink: stripeTransactionLinks,
         })
         .from(paymentFundSchedules)
         .innerJoin(orders, eq(paymentFundSchedules.orderId, orders.id))
         .innerJoin(people, eq(orders.buyerPersonId, people.id))
+        .leftJoin(payments, eq(paymentFundSchedules.paymentId, payments.id))
+        .leftJoin(
+          stripeTransactionLinks,
+          eq(stripeTransactionLinks.paymentId, payments.id),
+        )
         .where(eq(paymentFundSchedules.organizationId, organizationId))
         .orderBy(desc(paymentFundSchedules.createdAt))
         .limit(250),
@@ -789,24 +947,39 @@ export async function loadOrganizationMoneyWorkspace(
       isDefault: policy.isDefault,
       active: policy.active,
     })),
-    transactions: fundRows.map(({ fund, order, customerName }) => ({
-      id: fund.id,
-      orderId: order.id,
-      description: descriptions.get(order.id) ?? "Duna purchase",
-      customerName,
-      grossMinor: fund.grossMinor,
-      consumerFeeMinor: fund.consumerFeeMinor,
-      processingFeeMinor: fund.processingFeeMinor,
-      organizationFeeMinor: fund.organizationFeeMinor,
-      taxMinor: fund.taxMinor,
-      netMinor: fund.netMinor,
-      refundedMinor: fund.refundedMinor,
-      currency: currency(fund.currency),
-      status: status(fund.status),
-      policyName: fund.policyName,
-      availableAt: fund.availableAt?.toISOString(),
-      occurredAt: fund.createdAt.toISOString(),
-    })),
+    transactions: fundRows.map(
+      ({ fund, order, customerName, payment, stripeLink }) => ({
+        id: fund.id,
+        orderId: order.id,
+        paymentId: payment?.id,
+        description: descriptions.get(order.id) ?? "Duna purchase",
+        customerName,
+        grossMinor: fund.grossMinor,
+        consumerFeeMinor: fund.consumerFeeMinor,
+        processingFeeMinor: fund.processingFeeMinor,
+        organizationFeeMinor: fund.organizationFeeMinor,
+        taxMinor: fund.taxMinor,
+        netMinor: fund.netMinor,
+        refundedMinor: fund.refundedMinor,
+        currency: currency(fund.currency),
+        status: status(fund.status),
+        policyName: fund.policyName,
+        availableAt: fund.availableAt?.toISOString(),
+        occurredAt: fund.createdAt.toISOString(),
+        stripePaymentIntentId:
+          stripeLink?.stripePaymentIntentId ??
+          payment?.stripePaymentIntentId ??
+          undefined,
+        stripeChargeId:
+          stripeLink?.stripeChargeId ?? payment?.stripeChargeId ?? undefined,
+        stripeTransferId: stripeLink?.stripeTransferId ?? undefined,
+        stripeDestinationPaymentId:
+          stripeLink?.stripeDestinationPaymentId ?? undefined,
+        stripeBalanceTransactionId:
+          stripeLink?.stripeBalanceTransactionId ?? undefined,
+        reconciled: Boolean(stripeLink?.stripeBalanceTransactionId),
+      }),
+    ),
     payouts: payoutRows.map((row) => ({
       id: row.id,
       stripePayoutId: row.stripePayoutId ?? undefined,
@@ -1019,12 +1192,18 @@ function payoutDue(
 
 async function createEligibleOrganizationPayout(input: {
   readonly organization: typeof organizations.$inferSelect;
+  readonly stripeSettingsStatus: string;
   readonly minimumPayoutMinor: number;
   readonly idempotencyKey: string;
   readonly now: Date;
 }): Promise<{ readonly id: string; readonly amountMinor: number } | undefined> {
   const stripeAccountId = input.organization.stripeAccountId;
   if (!stripeAccountId) return undefined;
+  if (input.stripeSettingsStatus !== "synced") {
+    throw new Error(
+      "Payouts stay locked until Stripe is synchronized to Duna's refund-safe manual rail.",
+    );
+  }
   return getTransactionalDatabase().transaction(async (transaction) => {
     await transaction.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`money-payout:${input.organization.id}`}))`,
@@ -1036,6 +1215,7 @@ async function createEligibleOrganizationPayout(input: {
         and(
           eq(paymentFundSchedules.organizationId, input.organization.id),
           eq(paymentFundSchedules.status, "available"),
+          isNotNull(paymentFundSchedules.stripeBalanceTransactionId),
         ),
       )
       .orderBy(asc(paymentFundSchedules.availableAt));
@@ -1089,6 +1269,18 @@ async function createEligibleOrganizationPayout(input: {
       createdAt: input.now,
       updatedAt: input.now,
     });
+    await transaction.insert(payoutAllocations).values(
+      selected.map((fund) => ({
+        payoutId,
+        paymentFundScheduleId: fund.id,
+        amountMinor: Math.max(
+          0,
+          fund.netMinor - fund.refundedMinor - fund.disputedMinor,
+        ),
+        currency: fund.currency,
+        createdAt: input.now,
+      })),
+    );
     await transaction
       .update(paymentFundSchedules)
       .set({
@@ -1120,8 +1312,13 @@ export async function createManualOrganizationPayout(input: {
   if (!organization?.stripeAccountId) {
     throw new Error("Connect and verify a payout bank before paying out.");
   }
+  const settings =
+    await getDatabase().query.organizationMoneySettings.findFirst({
+      where: eq(organizationMoneySettings.organizationId, organizationId),
+    });
   const result = await createEligibleOrganizationPayout({
     organization,
+    stripeSettingsStatus: settings?.stripeSettingsStatus ?? "not-synced",
     minimumPayoutMinor: 0,
     idempotencyKey: `duna-manual-payout:${organizationId}:${input.idempotencyKey}`,
     now: input.now,
@@ -1160,6 +1357,7 @@ export async function processAutomaticOrganizationPayouts(
       continue;
     const payout = await createEligibleOrganizationPayout({
       organization: row.organization,
+      stripeSettingsStatus: row.settings.stripeSettingsStatus,
       minimumPayoutMinor: row.settings.minimumPayoutMinor,
       idempotencyKey: `duna-auto-payout:${row.organization.id}:${now.toISOString().slice(0, 10)}`,
       now,
@@ -1223,16 +1421,26 @@ export async function synchronizeMoneyRefund(input: {
   const amount =
     typeof input.object.amount === "number" ? input.object.amount : 0;
   if (!paymentIntentId || amount <= 0) return;
-  const order = await getDatabase().query.orders.findFirst({
-    where: eq(orders.stripePaymentIntentId, paymentIntentId),
+  const database = getDatabase();
+  const payment = await database.query.payments.findFirst({
+    where: eq(payments.stripePaymentIntentId, paymentIntentId),
   });
+  const order = payment
+    ? await database.query.orders.findFirst({
+        where: eq(orders.id, payment.orderId),
+      })
+    : await database.query.orders.findFirst({
+        where: eq(orders.stripePaymentIntentId, paymentIntentId),
+      });
   if (!order) return;
-  const fund = await getDatabase().query.paymentFundSchedules.findFirst({
-    where: eq(paymentFundSchedules.orderId, order.id),
+  const fund = await database.query.paymentFundSchedules.findFirst({
+    where: payment
+      ? eq(paymentFundSchedules.paymentId, payment.id)
+      : eq(paymentFundSchedules.orderId, order.id),
   });
   if (!fund) return;
   const refundedMinor = Math.min(fund.netMinor, fund.refundedMinor + amount);
-  await getDatabase()
+  await database
     .update(paymentFundSchedules)
     .set({
       refundedMinor,

@@ -1014,6 +1014,16 @@ export async function createCatalogCheckoutSession(input: {
         ? {
             on_behalf_of: input.connectedAccountId,
             transfer_data: { destination: input.connectedAccountId },
+            ...(input.installmentPlan && input.applicationFeeMinor > 0
+              ? {
+                  application_fee_percent: Number(
+                    (
+                      (input.applicationFeeMinor / totalAmountMinor) *
+                      100
+                    ).toFixed(2),
+                  ),
+                }
+              : {}),
             invoice_settings: input.automaticTaxEnabled
               ? { issuer: { type: "self" } }
               : undefined,
@@ -1052,7 +1062,7 @@ export async function capCatalogInstallmentSubscription(input: {
   readonly subscriptionId: string;
   readonly installmentCount: number;
   readonly idempotencyKey: string;
-}): Promise<void> {
+}): Promise<string> {
   if (
     !Number.isSafeInteger(input.installmentCount) ||
     input.installmentCount < 2 ||
@@ -1108,6 +1118,7 @@ export async function capCatalogInstallmentSubscription(input: {
     },
     { idempotencyKey: `${input.idempotencyKey}:cap-schedule` },
   );
+  return schedule.id;
 }
 
 async function ensureStripePriceTaxCode(
@@ -1829,6 +1840,7 @@ export async function loadConnectedAccountMoney(input: {
   readonly requirementsDue: readonly string[];
   readonly settingsUrl?: string;
   readonly liveData: boolean;
+  readonly livemode?: boolean;
 }> {
   const stripe = getStripeClient();
   const [
@@ -2046,6 +2058,7 @@ export async function loadConnectedAccountMoney(input: {
     requirementsDue: currentlyDue,
     settingsUrl: loginLink?.url,
     liveData: true,
+    livemode: process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ?? false,
   };
 }
 
@@ -2125,6 +2138,85 @@ export async function retrieveChargeSettlementAvailableAt(
   return balanceTransaction?.available_on
     ? new Date(balanceTransaction.available_on * 1_000)
     : undefined;
+}
+
+export interface StripePaymentLineage {
+  readonly stripePaymentIntentId: string;
+  readonly stripeChargeId: string;
+  readonly stripeTransferId?: string;
+  readonly stripeDestinationPaymentId?: string;
+  readonly stripeBalanceTransactionId?: string;
+  readonly stripeApplicationFeeId?: string;
+  readonly grossMinor: number;
+  readonly feeMinor: number;
+  readonly netMinor: number;
+  readonly currency: string;
+  readonly availableAt?: Date;
+  readonly livemode: boolean;
+}
+
+export async function retrieveStripePaymentLineage(input: {
+  readonly paymentIntentId: string;
+  readonly connectedAccountId: string;
+}): Promise<StripePaymentLineage> {
+  const stripe = getStripeClient();
+  const intent = await stripe.paymentIntents.retrieve(input.paymentIntentId, {
+    expand: [
+      "latest_charge",
+      "latest_charge.transfer",
+      "latest_charge.application_fee",
+    ],
+  });
+  const charge =
+    typeof intent.latest_charge === "object" ? intent.latest_charge : undefined;
+  if (!charge || charge.status !== "succeeded") {
+    throw new Error("Stripe payment lineage requires a succeeded charge");
+  }
+  const transfer =
+    typeof charge.transfer === "object"
+      ? charge.transfer
+      : typeof charge.transfer === "string"
+        ? await stripe.transfers.retrieve(charge.transfer)
+        : undefined;
+  const destinationPayment = transfer?.destination_payment;
+  const destinationPaymentId =
+    typeof destinationPayment === "string"
+      ? destinationPayment
+      : destinationPayment?.id;
+  const connectedCharge = destinationPaymentId
+    ? await stripe.charges.retrieve(
+        destinationPaymentId,
+        { expand: ["balance_transaction"] },
+        { stripeAccount: input.connectedAccountId },
+      )
+    : undefined;
+  const balanceTransaction =
+    connectedCharge && typeof connectedCharge.balance_transaction === "object"
+      ? connectedCharge.balance_transaction
+      : undefined;
+  const applicationFeeId =
+    typeof charge.application_fee === "string"
+      ? charge.application_fee
+      : charge.application_fee?.id;
+  return {
+    stripePaymentIntentId: intent.id,
+    stripeChargeId: charge.id,
+    stripeTransferId: transfer?.id,
+    stripeDestinationPaymentId: destinationPaymentId,
+    stripeBalanceTransactionId: balanceTransaction?.id,
+    stripeApplicationFeeId: applicationFeeId,
+    grossMinor: connectedCharge?.amount ?? charge.amount,
+    feeMinor: Math.max(0, balanceTransaction?.fee ?? 0),
+    netMinor: Math.max(
+      0,
+      balanceTransaction?.net ?? connectedCharge?.amount ?? charge.amount,
+    ),
+    currency: (connectedCharge?.currency ?? charge.currency).toUpperCase(),
+    availableAt: balanceTransaction?.available_on
+      ? new Date(balanceTransaction.available_on * 1_000)
+      : undefined,
+    livemode: charge.livemode,
+  };
 }
 
 export async function createTerminalLocation(input: {
