@@ -17,6 +17,16 @@ import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import {
+  CalendarDays,
+  ChevronDown,
+  Ellipsis,
+  House,
+  Moon,
+  Plus,
+  Sun,
+  type LucideIcon,
+} from "lucide-react-native";
+import {
   createContext,
   useContext,
   useEffect,
@@ -173,6 +183,7 @@ const OpenDunaAiContext = createContext<() => void>(() => undefined);
 
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
+  const ThemeIcon = theme === "light" ? Moon : Sun;
   return (
     <Pressable
       accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
@@ -182,9 +193,7 @@ function ThemeButton() {
       }}
       style={styles.themeButton}
     >
-      <Text style={styles.themeButtonText}>
-        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
-      </Text>
+      <ThemeIcon color={colors.bone} size={20} strokeWidth={1.75} />
     </Pressable>
   );
 }
@@ -192,12 +201,16 @@ function ThemeButton() {
 type Tab = "today" | "calendar" | "people" | "more";
 type NavDestination = Tab | "ai" | "create";
 
-const tabs: readonly { key: NavDestination; label: string; icon: string }[] = [
-  { key: "today", label: "Today", icon: "⌂" },
-  { key: "calendar", label: "Calendar", icon: "▦" },
-  { key: "ai", label: "Duna AI", icon: "" },
-  { key: "create", label: "Create", icon: "+" },
-  { key: "more", label: "More", icon: "•••" },
+const tabs: readonly {
+  key: NavDestination;
+  label: string;
+  icon?: LucideIcon;
+}[] = [
+  { key: "today", label: "Today", icon: House },
+  { key: "calendar", label: "Calendar", icon: CalendarDays },
+  { key: "ai", label: "Duna AI" },
+  { key: "create", label: "Create", icon: Plus },
+  { key: "more", label: "More", icon: Ellipsis },
 ];
 
 type ProCalendarEntry = NonNullable<
@@ -384,18 +397,15 @@ function PreviewBanner() {
   );
 }
 
-function Mark() {
+function BrandMark() {
   const { theme } = useContext(ThemeContext);
   return (
-    <View style={styles.wordmark}>
-      <Image
-        accessibilityLabel="Duna Pro"
-        resizeMode="contain"
-        source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
-        style={styles.wordmarkImage}
-      />
-      <Text style={styles.proPill}>PRO</Text>
-    </View>
+    <Image
+      accessibilityLabel="Duna"
+      resizeMode="contain"
+      source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
+      style={styles.wordmarkImage}
+    />
   );
 }
 
@@ -440,8 +450,11 @@ function Pill({
   );
 }
 
-function Header({ context }: { readonly context: string }) {
-  const openDunaAi = useContext(OpenDunaAiContext);
+function Header({
+  showOperations = false,
+}: {
+  readonly showOperations?: boolean;
+}) {
   const {
     activeAuthOrganizationId,
     authOrganizations,
@@ -474,30 +487,29 @@ function Header({ context }: { readonly context: string }) {
     (match) => match.status === "live",
   ).length;
   const exceptionCount =
-    (dashboard?.alerts.length ?? 0) +
+    (dashboard?.alerts.filter((alert) => alert.tone !== "positive").length ??
+      0) +
     (workspace?.eventRegistrations.filter((registration) =>
       ["cancelled", "refunded", "waitlisted"].includes(registration.status),
     ).length ?? 0);
-  const grossSales =
-    dashboard?.metrics.find((metric) => metric.label === "Gross sales")
-      ?.value ?? "—";
+  const organizationName =
+    dashboard?.organization.name ?? demoOrganization.name;
   return (
     <>
       <View style={styles.headerShell}>
         <View style={styles.header}>
-          <View>
-            <Mark />
-            <Text style={styles.headerContext}>{context}</Text>
-          </View>
+          <Pressable
+            accessibilityLabel={`Current organization: ${organizationName}. Change organization`}
+            onPress={() => setOrganizationSheetOpen(true)}
+            style={styles.headerOrganization}
+          >
+            <Text numberOfLines={1} style={styles.headerOrganizationName}>
+              {organizationName}
+            </Text>
+            <ChevronDown color={colors.muted} size={18} strokeWidth={1.75} />
+          </Pressable>
           <View style={styles.headerButtons}>
             <ThemeButton />
-            <Pressable
-              accessibilityLabel="Ask Duna"
-              onPress={openDunaAi}
-              style={styles.aiButton}
-            >
-              <Text style={styles.aiButtonText}>✦</Text>
-            </Pressable>
             <Pressable
               accessibilityLabel="Open organization switcher"
               onPress={() => setOrganizationSheetOpen(true)}
@@ -508,33 +520,35 @@ function Header({ context }: { readonly context: string }) {
             </Pressable>
           </View>
         </View>
-        <View
-          accessibilityLabel={`Watch: ${liveCount} live matches, ${exceptionCount} exceptions, ${grossSales} gross sales`}
-          style={styles.watchStrip}
-        >
-          <View style={styles.watchBrand}>
-            <View style={styles.watchPulse} />
-            <Text style={styles.watchBrandText}>WATCH</Text>
+        {showOperations && (
+          <View
+            accessibilityLabel={`Today: ${todayMatches.length} matches, ${liveCount} live now, ${exceptionCount} needing review`}
+            style={styles.watchStrip}
+          >
+            <View style={styles.watchBrand}>
+              <View style={styles.watchPulse} />
+              <Text style={styles.watchBrandText}>TODAY</Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{todayMatches.length}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                MATCHES
+              </Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{liveCount}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                LIVE NOW
+              </Text>
+            </View>
+            <View style={styles.watchMetric}>
+              <Text style={styles.watchMetricValue}>{exceptionCount}</Text>
+              <Text numberOfLines={1} style={styles.watchMetricLabel}>
+                TO DO
+              </Text>
+            </View>
           </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{liveCount}</Text>
-            <Text style={styles.watchMetricLabel}>LIVE</Text>
-          </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{todayMatches.length}</Text>
-            <Text style={styles.watchMetricLabel}>MATCHES</Text>
-          </View>
-          <View style={styles.watchMetric}>
-            <Text style={styles.watchMetricValue}>{exceptionCount}</Text>
-            <Text style={styles.watchMetricLabel}>ALERTS</Text>
-          </View>
-          <View style={[styles.watchMetric, styles.watchMoney]}>
-            <Text numberOfLines={1} style={styles.watchMetricValue}>
-              {grossSales}
-            </Text>
-            <Text style={styles.watchMetricLabel}>TAKINGS</Text>
-          </View>
-        </View>
+        )}
       </View>
       <Modal
         animationType="slide"
@@ -1064,7 +1078,7 @@ function TodayScreen({
       contentContainerStyle={styles.todayContent}
       showsVerticalScrollIndicator={false}
     >
-      <Header context={organization.name.toUpperCase()} />
+      <Header showOperations />
       <PageTitle
         action="Calendar"
         eyebrow={today}
@@ -1777,9 +1791,7 @@ function CalendarScreen({
         contentContainerStyle={styles.calendarContent}
         showsVerticalScrollIndicator={false}
       >
-        <Header
-          context={`${dashboard?.organization.name ?? "DUNA PRO"} · COURTS`}
-        />
+        <Header />
         <PageTitle
           action="New"
           eyebrow="THE OPERATING HUB"
@@ -3073,8 +3085,7 @@ function PeopleScreen({
   const [guardianEmail, setGuardianEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteFeedback, setInviteFeedback] = useState<string>();
-  const { client, dashboard, members, mode, refresh, workspace } =
-    useProRuntime();
+  const { client, members, mode, refresh, workspace } = useProRuntime();
   const people = members ?? demoPeople;
   const filteredPeople = people.filter((person) => {
     const query = search.trim().toLowerCase();
@@ -3173,9 +3184,7 @@ function PeopleScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Header
-          context={`${dashboard?.organization.name ?? "PEOPLE"} · PEOPLE + HOUSEHOLDS`}
-        />
+        <Header />
         <PageTitle
           action="Add person"
           eyebrow="CRM + ELIGIBILITY"
@@ -3607,7 +3616,7 @@ function MatchPicker({
           <Text style={styles.scorerExitMeta}>Back to schedule</Text>
         </View>
       </Pressable>
-      <Header context="AUTHORIZED MATCH SCORING" />
+      <Header />
       <PageTitle eyebrow="SELECT A MATCH" title="Score." />
       <Text style={styles.subhead}>
         Scheduled matches can be claimed by one device. Live matches remain
@@ -4494,7 +4503,7 @@ function MoreScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Header context={organization.name.toUpperCase()} />
+        <Header />
         <PageTitle eyebrow="EVERYTHING ELSE" title="More." />
         <View style={styles.moreQuickActions}>
           <Pressable onPress={onGetPaid} style={styles.moreQuickPrimary}>
@@ -4548,7 +4557,7 @@ function MoreScreen({
           </View>
         ))}
         <View style={styles.proNote}>
-          <Mark />
+          <BrandMark />
           <Text style={styles.metaText}>
             Duna Pro keeps core workflows available in the field. Drafts and
             score events persist on-device, then sync when a connection returns.
@@ -4645,6 +4654,7 @@ function TabBar({
     <View style={styles.tabBar}>
       {tabs.map((tab) => (
         <Pressable
+          accessibilityLabel={tab.label}
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.key }}
           key={tab.key}
@@ -4652,15 +4662,12 @@ function TabBar({
             selectionHaptic();
             onChange(tab.key);
           }}
-          style={[
-            styles.tabItem,
-            tab.key === "ai" && styles.aiTab,
-            tab.key === "create" && styles.createTab,
-          ]}
+          style={[styles.tabItem, tab.key === "ai" && styles.aiTab]}
         >
           {tab.key === "ai" ? (
             <View style={styles.aiTabMarkCrop}>
               <Image
+                accessibilityLabel="Duna AI"
                 accessibilityIgnoresInvertColors
                 resizeMode="contain"
                 source={dunaProWordmarkBlue}
@@ -4668,27 +4675,21 @@ function TabBar({
               />
             </View>
           ) : (
-            <Text
+            <View
               style={[
-                styles.tabIcon,
-                active === tab.key && styles.tabActive,
-                tab.key === "create" && styles.createTabIcon,
+                styles.tabIconShell,
+                active === tab.key && styles.tabIconShellActive,
               ]}
             >
-              {tab.icon}
-            </Text>
+              {tab.icon ? (
+                <tab.icon
+                  color={active === tab.key ? colors.warning : colors.muted}
+                  size={24}
+                  strokeWidth={active === tab.key ? 2.25 : 1.75}
+                />
+              ) : null}
+            </View>
           )}
-          <Text
-            style={[
-              styles.tabLabel,
-              active === tab.key && styles.tabActive,
-              tab.key === "ai" && styles.aiTabLabel,
-              tab.key === "create" && styles.createTabLabel,
-            ]}
-          >
-            {tab.label}
-          </Text>
-          {active === tab.key && <View style={styles.tabIndicator} />}
         </Pressable>
       ))}
     </View>
@@ -6805,32 +6806,29 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       fontWeight: "900",
     },
-    wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
-    wordmarkImage: { height: 35, width: 104 },
-    proPill: {
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderRadius: 6,
-      color: colors.warning,
-      fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 1,
-      overflow: "hidden",
-      paddingHorizontal: 5,
-      paddingVertical: 3,
-    },
+    wordmarkImage: { height: 30, width: 96 },
     header: {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: 14,
-      paddingTop: 10,
+      minHeight: 44,
+      paddingBottom: 8,
+      paddingTop: 4,
     },
-    headerShell: { marginBottom: 20 },
-    headerContext: {
-      color: colors.muted,
-      fontSize: 12,
-      letterSpacing: 1,
-      marginTop: 5,
+    headerShell: { marginBottom: 14 },
+    headerOrganization: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      marginRight: 12,
+      minHeight: 38,
+    },
+    headerOrganizationName: {
+      color: colors.bone,
+      flexShrink: 1,
+      fontSize: 14,
+      fontWeight: "800",
     },
     headerButtons: { flexDirection: "row", gap: 8 },
     themeButton: {
@@ -6843,22 +6841,6 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 38,
     },
-    themeButtonText: {
-      color: colors.bone,
-      fontSize: 17,
-      lineHeight: 20,
-    },
-    aiButton: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.08),
-      borderColor: rgba(colors.warningRgb, 0.18),
-      borderRadius: 19,
-      borderWidth: 1,
-      height: 38,
-      justifyContent: "center",
-      width: 38,
-    },
-    aiButtonText: { color: colors.warning, fontSize: 16 },
     profileButton: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
@@ -6887,9 +6869,9 @@ function createStyles(palette: Palette) {
       borderRadius: 16,
       borderWidth: 1,
       flexDirection: "row",
-      minHeight: 56,
+      minHeight: 50,
       overflow: "hidden",
-      paddingHorizontal: 11,
+      paddingHorizontal: 10,
     },
     watchBrand: {
       alignItems: "center",
@@ -6897,8 +6879,8 @@ function createStyles(palette: Palette) {
       borderRightWidth: 1,
       flexDirection: "row",
       gap: 6,
-      marginRight: 7,
-      paddingRight: 9,
+      marginRight: 4,
+      paddingRight: 8,
     },
     watchPulse: {
       backgroundColor: colors.flare,
@@ -6912,20 +6894,27 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
       letterSpacing: 0.8,
     },
-    watchMetric: { flex: 1, minWidth: 0, paddingHorizontal: 4 },
-    watchMoney: { flex: 1.35 },
+    watchMetric: {
+      alignItems: "baseline",
+      flex: 1,
+      flexDirection: "row",
+      gap: 4,
+      justifyContent: "center",
+      minWidth: 0,
+      paddingHorizontal: 3,
+    },
     watchMetricValue: {
       color: colors.bone,
       fontFamily: "Archivo-Chip",
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: "900",
     },
     watchMetricLabel: {
       color: colors.muted,
       fontSize: 12,
       fontWeight: "800",
-      letterSpacing: 0.5,
-      marginTop: 3,
+      flexShrink: 1,
+      letterSpacing: 0.25,
     },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     sheetHeader: {
@@ -8039,15 +8028,15 @@ function createStyles(palette: Palette) {
     tabBar: {
       backgroundColor: rgba(colors.depthRgb, 0.99),
       borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 30,
+      borderRadius: 32,
       borderWidth: 1,
       bottom: Platform.OS === "ios" ? 14 : 10,
       flexDirection: "row",
       left: 12,
-      minHeight: 64,
-      paddingBottom: 7,
+      minHeight: 62,
+      paddingBottom: 6,
       paddingHorizontal: 8,
-      paddingTop: 7,
+      paddingTop: 6,
       position: "absolute",
       right: 12,
       shadowColor: "#173b65",
@@ -8058,47 +8047,38 @@ function createStyles(palette: Palette) {
     tabItem: {
       alignItems: "center",
       flex: 1,
-      gap: 3,
-      paddingVertical: 4,
+      justifyContent: "center",
+      minHeight: 50,
       position: "relative",
     },
-    tabIcon: { color: colors.muted, fontSize: 17 },
-    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-    tabActive: { color: colors.warning },
-    tabIndicator: {
-      backgroundColor: colors.warning,
-      borderRadius: 2,
-      height: 2,
-      position: "absolute",
-      top: -9,
-      width: 20,
+    tabIconShell: {
+      alignItems: "center",
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
     },
-    aiTab: { marginTop: -18 },
+    tabIconShellActive: {
+      backgroundColor: rgba(colors.warningRgb, 0.1),
+    },
+    aiTab: { marginTop: -15 },
     aiTabMarkCrop: {
       backgroundColor: colors.aqua,
       borderColor: colors.depth,
-      borderRadius: 28,
+      borderRadius: 30,
       borderWidth: 4,
-      height: 56,
+      height: 60,
       overflow: "hidden",
       position: "relative",
-      width: 56,
+      width: 60,
     },
     aiTabMarkImage: {
-      height: 56,
+      height: 60,
       left: -3,
       position: "absolute",
       top: -2,
-      width: 128,
+      width: 137,
     },
-    aiTabLabel: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
-    createTab: { justifyContent: "center" },
-    createTabIcon: {
-      color: colors.aqua,
-      fontSize: 30,
-      lineHeight: 30,
-    },
-    createTabLabel: { color: colors.aqua, fontWeight: "800" },
   });
 }
 

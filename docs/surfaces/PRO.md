@@ -21,6 +21,13 @@ against the same server contracts.
 | Create      | `+` entry into guided session, event, program, product, and payment creation  |
 | More        | People, Money, messaging, video, tournaments, policies, and focused tools     |
 
+The persistent native navigation is icon-only: equal-size Lucide icons for
+Today, Calendar, Create, and More surround the elevated Duna mark for Duna AI.
+Accessible labels remain on every destination even though visible tab text is
+removed. The compact header shows the active organization and utility controls;
+the Today screen alone adds a one-line operational snapshot for matches, live
+play, and items needing review.
+
 Focused full-screen surfaces handle creation, Get Paid, messaging, ticket/player
 scanning, live scoring, and LiveKit session notes. Deep links can open an exact
 conversation, match scorer, session, or organization.
