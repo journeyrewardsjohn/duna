@@ -29,6 +29,10 @@ import { MatchHostPanel } from "./match-host-panel";
 import { presentNativeEventPayment } from "./native-payments";
 import type { MobileSocialPalette } from "./player-social";
 import { shareBooking, type ShareableBookingDetails } from "./booking-share";
+import {
+  canPayForEveryone,
+  unpaidAdditionalPlayers,
+} from "./booking-payment-state";
 
 export type ManagedBooking = {
   readonly id: string;
@@ -603,6 +607,15 @@ export function BookingManagementModal({
   }
 
   const paid = booking.paymentStatus === "paid";
+  const teamPaymentPlayers = booking.team
+    ? unpaidAdditionalPlayers(booking.team.roster)
+    : [];
+  const showTeamPayment = booking.team
+    ? canPayForEveryone({
+        expectedTeamSize: booking.team.expectedTeamSize,
+        roster: booking.team.roster,
+      })
+    : false;
   const statusLabel =
     booking.status === "needs-action"
       ? "Action needed"
@@ -819,9 +832,27 @@ export function BookingManagementModal({
             {!cancelled &&
               booking.paymentStatus === "payment-required" &&
               (booking.sessionId || booking.source === "court") && (
-                <View style={styles.paymentActionCard}>
-                  <Text style={styles.sectionEyebrow}>PAYMENT NEEDED</Text>
-                  <Text style={styles.paymentActionTitle}>
+                <View
+                  style={[
+                    styles.paymentActionCard,
+                    {
+                      backgroundColor: `rgba(${palette.dangerRgb},0.1)`,
+                      borderColor: `rgba(${palette.dangerRgb},0.34)`,
+                      borderLeftColor: palette.danger,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.sectionEyebrow, { color: palette.danger }]}
+                  >
+                    PAYMENT NEEDED
+                  </Text>
+                  <Text
+                    style={[
+                      styles.paymentActionTitle,
+                      { color: palette.danger },
+                    ]}
+                  >
                     Finish this booking here.
                   </Text>
                   <Text style={styles.policy}>
@@ -837,9 +868,19 @@ export function BookingManagementModal({
                           ? finishCourtCheckout()
                           : finishPickupCheckout())
                       }
-                      style={[styles.primary, busy && styles.actionDisabled]}
+                      style={[
+                        styles.primary,
+                        styles.paymentPrimary,
+                        { backgroundColor: palette.aqua },
+                        busy && styles.actionDisabled,
+                      ]}
                     >
-                      <Text style={styles.primaryText}>
+                      <Text
+                        style={[
+                          styles.primaryText,
+                          { color: palette.onAccent },
+                        ]}
+                      >
                         {busy
                           ? "Preparing payment…"
                           : booking.source === "court"
@@ -847,38 +888,32 @@ export function BookingManagementModal({
                             : "Pay for me"}
                       </Text>
                     </Pressable>
-                    {booking.source !== "court" &&
-                      booking.team?.roster.some(
-                        (member) => !member.paid && member.personId,
-                      ) && (
-                        <Pressable
-                          disabled={busy}
-                          onPress={() =>
-                            void finishPickupCheckout(
-                              booking.team!.roster.flatMap((member) =>
-                                !member.paid && member.personId
-                                  ? [
-                                      {
-                                        person: {
-                                          id: member.personId,
-                                          displayName: member.displayName,
-                                        },
-                                      },
-                                    ]
-                                  : [],
-                              ),
-                            )
-                          }
+                    {booking.source !== "court" && showTeamPayment && (
+                      <Pressable
+                        disabled={busy}
+                        onPress={() =>
+                          void finishPickupCheckout(teamPaymentPlayers)
+                        }
+                        style={[
+                          styles.secondary,
+                          styles.paymentSecondary,
+                          {
+                            backgroundColor: palette.depth,
+                            borderColor: `rgba(${palette.overlayRgb},0.18)`,
+                          },
+                          busy && styles.actionDisabled,
+                        ]}
+                      >
+                        <Text
                           style={[
-                            styles.secondary,
-                            busy && styles.actionDisabled,
+                            styles.secondaryText,
+                            { color: palette.aqua },
                           ]}
                         >
-                          <Text style={styles.secondaryText}>
-                            Pay for everyone
-                          </Text>
-                        </Pressable>
-                      )}
+                          Pay for everyone
+                        </Text>
+                      </Pressable>
+                    )}
                   </View>
                 </View>
               )}
@@ -2098,9 +2133,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   paymentActionCard: {
-    backgroundColor: "#eef3f4",
-    borderColor: "#c9dce0",
     borderRadius: 20,
+    borderLeftWidth: 5,
     borderWidth: 1,
     marginTop: 18,
     padding: 18,
@@ -2112,10 +2146,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   paymentActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: 9,
     marginTop: 15,
+  },
+  paymentPrimary: {
+    marginTop: 0,
+    minHeight: 56,
+    paddingHorizontal: 22,
+    width: "100%",
+  },
+  paymentSecondary: {
+    borderWidth: 1,
+    minHeight: 52,
+    paddingHorizontal: 18,
+    width: "100%",
   },
   paymentText: { color: "#2d6a3c", fontSize: 12, fontWeight: "900" },
   playerMeta: {

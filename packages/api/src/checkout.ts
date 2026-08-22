@@ -1153,6 +1153,13 @@ interface CheckoutTeamMember {
   readonly orderId?: string;
 }
 
+export function normalizeDivisionTeamRoster(
+  roster: readonly CheckoutTeamMember[],
+  subjectPersonId: string,
+): readonly CheckoutTeamMember[] {
+  return roster.filter((member) => member.personId !== subjectPersonId);
+}
+
 async function saveTeamEntry(input: {
   readonly registrationId: string;
   readonly payingPersonId: string;
@@ -1401,7 +1408,11 @@ export async function startEventCheckout(input: {
     readPolicyIds: input.readPolicyIds ?? [],
   });
   const expectedTeamSize = Math.max(1, event.teamSize ?? 1);
-  const teamRoster = input.teamRoster ?? [];
+  const requestedTeamRoster = input.teamRoster ?? [];
+  const teamRoster =
+    event.source === "session"
+      ? normalizeDivisionTeamRoster(requestedTeamRoster, subjectPersonId)
+      : requestedTeamRoster;
   const pickupRosterPersonIds =
     event.source === "pickup" && input.teamPaymentMode === "team"
       ? teamRoster
