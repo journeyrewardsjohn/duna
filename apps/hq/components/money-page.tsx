@@ -149,17 +149,6 @@ export async function MoneyPageContent({
             );
           })}
         </nav>
-        <section className="module-context-strip">
-          <span>
-            <strong>{dashboard.organization.name}</strong>
-            <small>
-              {dashboard.organization.plan} · {dashboard.organization.timezone}
-            </small>
-          </span>
-          <Link href="/">
-            Overview <ArrowRight size={15} />
-          </Link>
-        </section>
         {children ?? (
           <MoneyWorkspace
             money={money}
