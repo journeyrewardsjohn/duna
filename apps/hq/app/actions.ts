@@ -1407,6 +1407,8 @@ export async function persistDivisionBracketAction(
       "double-elimination-crossover",
       "round-robin",
       "pool-play",
+      "kob-individual-rotation",
+      "kob-team-progressive",
     ] as const;
     if (!allowed.includes(format as (typeof allowed)[number])) {
       throw new Error("Choose a supported bracket or pool format.");

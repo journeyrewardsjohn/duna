@@ -1124,9 +1124,11 @@ async function saveTeamEntry(input: {
         ...member,
         status: member.personId ? ("selected" as const) : ("invited" as const),
       })),
-      status: "assembling",
+      status: input.expectedTeamSize === 1 ? "ready" : "assembling",
       claimToken,
       claimExpiresAt: new Date(input.now.getTime() + 14 * 24 * 60 * 60_000),
+      claimedAt: input.expectedTeamSize === 1 ? input.now : undefined,
+      rosterLockedAt: input.expectedTeamSize === 1 ? input.now : undefined,
     });
   return { id, claimToken, created: true };
 }
@@ -1599,7 +1601,6 @@ export async function startEventCheckout(input: {
         : registration.participantId;
     const savedTeamEntry =
       event.source === "session" &&
-      expectedTeamSize > 1 &&
       !joiningTeam &&
       registration.status !== "waitlisted"
         ? await saveTeamEntry({
@@ -1611,7 +1612,7 @@ export async function startEventCheckout(input: {
             now: input.now,
           })
         : undefined;
-    if (savedTeamEntry?.created) {
+    if (expectedTeamSize > 1 && savedTeamEntry?.created) {
       await deliverTeamInvitations({
         teamEntryId: savedTeamEntry.id,
         claimToken: savedTeamEntry.claimToken,
@@ -1623,7 +1624,8 @@ export async function startEventCheckout(input: {
         now: input.now,
       }).catch(() => undefined);
     }
-    const teamClaimToken = savedTeamEntry?.claimToken;
+    const teamClaimToken =
+      expectedTeamSize > 1 ? savedTeamEntry?.claimToken : undefined;
     if (joiningTeam && input.teamClaimToken) {
       await markTeamMemberPaid({
         record: joiningTeam,
@@ -1842,7 +1844,6 @@ export async function startEventCheckout(input: {
   const savedTeamEntry =
     !event.ticketTypeId &&
     event.source === "session" &&
-    expectedTeamSize > 1 &&
     !joiningTeam &&
     hold?.result_status === "pending" &&
     hold.registration_id
@@ -1855,7 +1856,7 @@ export async function startEventCheckout(input: {
           now: input.now,
         })
       : undefined;
-  if (savedTeamEntry?.created) {
+  if (expectedTeamSize > 1 && savedTeamEntry?.created) {
     await deliverTeamInvitations({
       teamEntryId: savedTeamEntry.id,
       claimToken: savedTeamEntry.claimToken,
@@ -1867,7 +1868,8 @@ export async function startEventCheckout(input: {
       now: input.now,
     }).catch(() => undefined);
   }
-  const teamClaimToken = savedTeamEntry?.claimToken;
+  const teamClaimToken =
+    expectedTeamSize > 1 ? savedTeamEntry?.claimToken : undefined;
   if (
     joiningTeam &&
     input.teamClaimToken &&

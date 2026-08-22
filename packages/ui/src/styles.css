@@ -784,7 +784,10 @@
 }
 
 .duna-date-range button,
-.duna-date-range input {
+.duna-date-range input,
+.duna-date-range select,
+.duna-date-time button,
+.duna-date-time select {
   color: inherit;
   font-size: 1rem;
 }
@@ -855,17 +858,17 @@
   text-transform: uppercase;
 }
 
-.duna-date-range__inputs input {
+.duna-date-range__date-display {
   background: transparent;
   border: 0;
   min-height: 44px;
   min-width: 0;
   padding: 0.35rem;
+  text-align: left;
 }
 
-.duna-date-range__inputs input[type="time"] {
+.duna-date-range__inputs .duna-time-select {
   border-left: 1px solid var(--hairline);
-  font-family: var(--font-data);
   max-width: 7.5rem;
 }
 
@@ -1122,6 +1125,173 @@
   font-size: 0.85rem;
 }
 
+.duna-time-select {
+  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 44px;
+  min-width: 0;
+  padding-inline: 0.6rem;
+}
+
+.duna-time-select > span,
+.duna-time-select > i {
+  color: var(--text-2);
+  font-style: normal;
+  pointer-events: none;
+}
+
+.duna-time-select select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-1);
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  min-height: 44px;
+  min-width: 0;
+  outline: 0;
+  padding-inline: 0.45rem;
+  width: 100%;
+}
+
+.duna-time-select:focus-within {
+  box-shadow: inset 0 0 0 2px var(--hq-ink);
+}
+
+.duna-date-time {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-large);
+  color: var(--text-1);
+  overflow: hidden;
+  width: min(100%, 640px);
+}
+
+.duna-date-time > header {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.2rem;
+}
+
+.duna-date-time > header > span:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.duna-date-time > header small {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.duna-date-time__value {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-input);
+  display: flex;
+  gap: 0.5rem;
+  padding-left: 0.75rem;
+}
+
+.duna-date-time__value b {
+  font-size: 0.9rem;
+}
+
+.duna-date-time__value .duna-time-select {
+  border-left: 1px solid var(--hairline);
+}
+
+.duna-date-time__navigation {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.8rem 1rem 0.25rem;
+}
+
+.duna-date-time__navigation button {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  height: 44px;
+  width: 44px;
+}
+
+.duna-date-time__weekdays,
+.duna-date-time__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding-inline: 1rem;
+}
+
+.duna-date-time__weekdays span {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+.duna-date-time__days {
+  padding-bottom: 1rem;
+}
+
+.duna-date-time__days button {
+  background: transparent;
+  border: 0;
+  min-height: 48px;
+}
+
+.duna-date-time__days button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-radius: var(--radius-input);
+}
+
+.duna-date-time__days button.is-selected {
+  background: var(--hq-deep);
+  border-radius: var(--radius-input);
+  color: var(--hq-tint);
+  font-weight: 800;
+}
+
+.duna-date-time__days button.is-outside {
+  color: var(--text-3);
+  opacity: 0.48;
+}
+
+.duna-date-time__days button:disabled {
+  opacity: 0.28;
+}
+
+.duna-date-time > footer {
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  padding: 0.8rem 1rem;
+}
+
+.duna-date-time > footer button {
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-input);
+  min-height: 48px;
+  padding-inline: 1rem;
+}
+
+.duna-date-time > footer button.is-primary {
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-weight: 800;
+}
+
 @media (max-width: 860px) {
   .duna-date-range__body {
     grid-template-columns: 1fr;
@@ -1170,11 +1340,29 @@
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .duna-date-range__inputs input[type="time"] {
+  .duna-date-range__inputs .duna-time-select {
     border-left: 0;
     border-top: 1px solid var(--hairline);
     grid-column: 1 / -1;
     max-width: none;
+  }
+
+  .duna-date-time > header,
+  .duna-date-time__value {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .duna-date-time__value {
+    padding-left: 0;
+  }
+
+  .duna-date-time__value b {
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .duna-date-time__value .duna-time-select {
+    border-left: 0;
   }
 
   .duna-date-range__calendar {

@@ -65,6 +65,7 @@ import {
   courtHoldResultSchema,
   eventSummarySchema,
   eventDraftEditorSchema,
+  kobCompetitionConfigSchema,
   eventCheckoutResultSchema,
   eventCheckoutStatusSchema,
   featureFlagCollectionSchema,
@@ -299,7 +300,10 @@ import {
 } from "./catalog-service";
 import {
   addManualDivisionEntry,
+  adjustKobHeatScore,
+  advanceIndividualKobStage,
   cancelEventWithRefunds,
+  completeKobHeat,
   expandDivisionField,
   launchDivisionTournament,
   loadOperatorDivisionDetail,
@@ -842,6 +846,7 @@ const eventDraftDivisionSchema = z
       "double-elimination-true",
       "double-elimination-crossover",
     ]),
+    kobConfig: kobCompetitionConfigSchema.optional(),
     poolPlay: z.object({
       enabled: z.boolean(),
       teamsPerPool: z.number().int().min(2).max(64),
@@ -897,6 +902,113 @@ const eventDraftDivisionSchema = z
         path: ["poolPlay", "teamsAdvancing"],
         message: "Advancing teams cannot exceed teams per pool.",
       });
+    }
+    if (division.tournamentFormat === "kob-qob" && !division.kobConfig) {
+      context.addIssue({
+        code: "custom",
+        path: ["kobConfig"],
+        message:
+          "Configure how KOB/QOB registration, rounds, and advancement work.",
+      });
+    }
+    if (
+      division.kobConfig?.entryMode === "individual" &&
+      division.teamFormat !== "solo"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["teamFormat"],
+        message: "Individual KOB/QOB entries must register as solo players.",
+      });
+    }
+    if (
+      division.kobConfig?.entryMode === "team" &&
+      division.teamFormat !== "doubles"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["teamFormat"],
+        message: "Team KOB/QOB entries register with one teammate.",
+      });
+    }
+    for (const [index, stage] of (division.kobConfig?.stages ?? []).entries()) {
+      const entryMode = division.kobConfig?.entryMode;
+      if (entryMode === "individual" && stage.format !== "partner-rotation") {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "format"],
+          message: "Individual KOB/QOB rounds use rotating-partner pools.",
+        });
+      }
+      if (entryMode === "team" && stage.format !== "timed-elimination") {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "format"],
+          message: "Team KOB/QOB rounds use timed survival heats.",
+        });
+      }
+      if (stage.format === "partner-rotation" && stage.poolSize < 4) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "poolSize"],
+          message: "Partner rotation needs at least four players per pool.",
+        });
+      }
+      if (stage.format === "timed-elimination" && !stage.durationMinutes) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "durationMinutes"],
+          message: "Timed elimination rounds need a duration.",
+        });
+      }
+      if (stage.advanceCount > division.maximumTeams) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "advanceCount"],
+          message: "Advancement cannot exceed the division field.",
+        });
+      }
+      if (
+        entryMode === "individual" &&
+        index < (division.kobConfig?.stages.length ?? 0) - 1 &&
+        stage.advanceCount < 4
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "advanceCount"],
+          message: "At least four players must advance into another rotation.",
+        });
+      }
+      if (
+        entryMode === "team" &&
+        index < (division.kobConfig?.stages.length ?? 0) - 1 &&
+        stage.advanceCount < 2
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "advanceCount"],
+          message: "At least two teams must advance into another heat.",
+        });
+      }
+      const previousField =
+        index === 0
+          ? division.maximumTeams
+          : division.kobConfig!.stages[index - 1]!.advanceCount;
+      if (stage.advanceCount > previousField) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "advanceCount"],
+          message: "A round cannot advance more entries than it receives.",
+        });
+      }
+      if (entryMode === "individual" && stage.poolSize > previousField) {
+        context.addIssue({
+          code: "custom",
+          path: ["kobConfig", "stages", index, "poolSize"],
+          message:
+            "Pool size cannot exceed the players or teams in this round.",
+        });
+      }
     }
   });
 
@@ -10185,6 +10297,8 @@ const operatorRouter = router({
           "double-elimination-crossover",
           "round-robin",
           "pool-play",
+          "kob-individual-rotation",
+          "kob-team-progressive",
         ]),
         poolCount: z.number().int().min(2).max(64).optional(),
         reason: z.string().trim().min(3).max(500),
@@ -10205,6 +10319,33 @@ const operatorRouter = router({
             divisionId: input.divisionId,
             format: input.format,
             poolCount: input.poolCount,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  advanceIndividualKobStage: organizationProcedure("matches:score")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.advanceIndividualKobStage",
+        request: input,
+        ctx,
+        execute: () =>
+          advanceIndividualKobStage({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
             reason: input.reason,
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,
@@ -10238,6 +10379,61 @@ const operatorRouter = router({
             scheduledAt: input.scheduledAt
               ? new Date(input.scheduledAt)
               : undefined,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  adjustKobHeatScore: organizationProcedure("matches:score")
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        teamId: z.string().uuid(),
+        delta: z.union([z.literal(-1), z.literal(1)]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.adjustKobHeatScore",
+        request: input,
+        ctx,
+        execute: () =>
+          adjustKobHeatScore({
+            actor: ctx.actor!,
+            matchId: input.matchId,
+            teamId: input.teamId,
+            delta: input.delta,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  completeKobHeat: organizationProcedure("matches:score")
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.completeKobHeat",
+        request: input,
+        ctx,
+        execute: () =>
+          completeKobHeat({
+            actor: ctx.actor!,
+            matchId: input.matchId,
             reason: input.reason,
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,

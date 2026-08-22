@@ -28,6 +28,7 @@ import {
 import {
   generateDoubleElimination,
   generatePoolPlay,
+  generateKobPartnerRotation,
   generateRoundRobin,
   generateSingleElimination,
   foldScore,
@@ -35,6 +36,7 @@ import {
   type Bracket,
   type ScoreEvent,
   type SeededTeam,
+  type KobCompetitionConfig,
 } from "@duna/league-engine";
 import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
@@ -64,6 +66,7 @@ interface DivisionSettings {
     readonly format: "full" | "olympic-crossover";
     readonly teamsAdvancing: number;
   };
+  readonly kobConfig?: KobCompetitionConfig;
   readonly seeding?:
     | "first-come"
     | "sand-rating-score"
@@ -1110,6 +1113,7 @@ interface DivisionOperationsDetail {
     readonly seeding: string;
     readonly tournamentFormat: string;
     readonly poolPlay?: DivisionSettings["poolPlay"];
+    readonly kobConfig?: KobCompetitionConfig;
     readonly registrationClosesAt?: string;
   };
   readonly teams: readonly TeamOperationalSummary[];
@@ -1130,6 +1134,17 @@ interface DivisionOperationsDetail {
     readonly courtId?: string;
     readonly courtName?: string;
     readonly scheduledAt?: string;
+    readonly heat?: {
+      readonly durationMinutes: number;
+      readonly advanceCount: number;
+      readonly participants: readonly {
+        readonly teamId: string;
+        readonly teamName: string;
+        readonly points: number;
+        readonly rank: number;
+        readonly advances: boolean;
+      }[];
+    };
   }[];
   readonly courts: readonly { readonly id: string; readonly name: string }[];
 }
@@ -1168,13 +1183,52 @@ export async function loadOperatorDivisionDetail(input: {
         )
         .orderBy(asc(courts.name))
     : [];
+  const heatEventRows = matchRows.length
+    ? await database
+        .select({
+          matchId: rallyEvents.matchId,
+          eventType: rallyEvents.eventType,
+          payload: rallyEvents.payload,
+        })
+        .from(rallyEvents)
+        .where(
+          inArray(
+            rallyEvents.matchId,
+            matchRows.map((match) => match.id),
+          ),
+        )
+        .orderBy(asc(rallyEvents.sequence))
+    : [];
+  const heatScores = new Map<string, Map<string, number>>();
+  for (const event of heatEventRows) {
+    if (event.eventType !== "kob-heat-adjusted") continue;
+    const payload = event.payload as Record<string, unknown>;
+    if (
+      typeof payload.teamId !== "string" ||
+      typeof payload.delta !== "number"
+    ) {
+      continue;
+    }
+    const scores = heatScores.get(event.matchId) ?? new Map<string, number>();
+    scores.set(
+      payload.teamId,
+      Math.max(0, (scores.get(payload.teamId) ?? 0) + payload.delta),
+    );
+    heatScores.set(event.matchId, scores);
+  }
   const matchTeamIds = [
     ...new Set(
-      matchRows.flatMap((match) =>
-        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
-          Boolean(teamId),
-        ),
-      ),
+      matchRows.flatMap((match) => {
+        const format = match.format as Record<string, unknown>;
+        const heatTeamIds = Array.isArray(format.participantTeamIds)
+          ? format.participantTeamIds.filter(
+              (teamId): teamId is string => typeof teamId === "string",
+            )
+          : [];
+        return [match.teamAId, match.teamBId, ...heatTeamIds].filter(
+          (teamId): teamId is string => Boolean(teamId),
+        );
+      }),
     ),
   ];
   const matchTeamRows = matchTeamIds.length
@@ -1212,6 +1266,7 @@ export async function loadOperatorDivisionDetail(input: {
       seeding: settings.seeding ?? "first-come",
       tournamentFormat: settings.tournamentFormat ?? "single-elimination",
       poolPlay: settings.poolPlay,
+      kobConfig: settings.kobConfig,
       registrationClosesAt: closesAt?.toISOString(),
     },
     teams: record.teams,
@@ -1231,7 +1286,27 @@ export async function loadOperatorDivisionDetail(input: {
         bracket?: string;
         round?: number;
         position?: number;
+        kobHeat?: boolean;
+        durationMinutes?: number;
+        advanceCount?: number;
+        participantTeamIds?: readonly string[];
       };
+      const participants = (format.participantTeamIds ?? [])
+        .map((teamId) => ({
+          teamId,
+          teamName: teamNameById.get(teamId) ?? "Team",
+          points:
+            ((
+              (format as Record<string, unknown>).initialHeatScores as
+                Record<string, number> | undefined
+            )?.[teamId] ?? 0) + (heatScores.get(match.id)?.get(teamId) ?? 0),
+        }))
+        .sort(
+          (left, right) =>
+            right.points - left.points ||
+            left.teamName.localeCompare(right.teamName),
+        );
+      const advanceCount = Math.max(1, format.advanceCount ?? 1);
       return {
         id: match.id,
         status: match.status,
@@ -1243,6 +1318,19 @@ export async function loadOperatorDivisionDetail(input: {
         courtId: match.courtId ?? undefined,
         courtName: match.courtId ? courtNameById.get(match.courtId) : undefined,
         scheduledAt: match.scheduledAt?.toISOString(),
+        ...(format.kobHeat
+          ? {
+              heat: {
+                durationMinutes: Math.max(1, format.durationMinutes ?? 15),
+                advanceCount,
+                participants: participants.map((participant, index) => ({
+                  ...participant,
+                  rank: index + 1,
+                  advances: index < advanceCount,
+                })),
+              },
+            }
+          : {}),
       };
     }),
     courts: courtRows,
@@ -1410,13 +1498,30 @@ export async function loadTournamentCompetitionSnapshot(input: {
   const matchIds = matchRows.map((row) => row.match.id);
   const rallyRows = matchIds.length
     ? await database
-        .select({ matchId: rallyEvents.matchId, payload: rallyEvents.payload })
+        .select({
+          matchId: rallyEvents.matchId,
+          eventType: rallyEvents.eventType,
+          payload: rallyEvents.payload,
+        })
         .from(rallyEvents)
         .where(inArray(rallyEvents.matchId, matchIds))
         .orderBy(asc(rallyEvents.sequence))
     : [];
   const rallyEventsByMatch = new Map<string, ScoreEvent[]>();
+  const heatScoresByMatch = new Map<string, Map<string, number>>();
   for (const row of rallyRows) {
+    if (row.eventType === "kob-heat-adjusted") {
+      const heat = row.payload as Record<string, unknown>;
+      if (typeof heat.teamId === "string" && typeof heat.delta === "number") {
+        const scores = heatScoresByMatch.get(row.matchId) ?? new Map();
+        scores.set(
+          heat.teamId,
+          Math.max(0, (scores.get(heat.teamId) ?? 0) + heat.delta),
+        );
+        heatScoresByMatch.set(row.matchId, scores);
+      }
+      continue;
+    }
     const payload = row.payload as Partial<ScoreEvent>;
     if (
       payload &&
@@ -1432,27 +1537,38 @@ export async function loadTournamentCompetitionSnapshot(input: {
   }
   const allTeamIds = [
     ...new Set(
-      matchRows.flatMap(({ match }) =>
-        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
-          Boolean(teamId),
-        ),
-      ),
+      matchRows.flatMap(({ match }) => {
+        const format = match.format as Record<string, unknown>;
+        const heatTeamIds = Array.isArray(format.participantTeamIds)
+          ? format.participantTeamIds.filter(
+              (teamId): teamId is string => typeof teamId === "string",
+            )
+          : [];
+        return [match.teamAId, match.teamBId, ...heatTeamIds].filter(
+          (teamId): teamId is string => Boolean(teamId),
+        );
+      }),
     ),
   ];
-  const myTeamIds = input.personId
+  const competitionMemberRows = allTeamIds.length
     ? await database
-        .select({ teamId: teamMembers.teamId })
+        .select({ teamId: teamMembers.teamId, personId: teamMembers.personId })
         .from(teamMembers)
-        .where(
-          and(
-            eq(teamMembers.personId, input.personId),
-            allTeamIds.length
-              ? inArray(teamMembers.teamId, allTeamIds)
-              : sql`false`,
-          ),
-        )
-        .then((rows) => new Set(rows.map((row) => row.teamId)))
-    : new Set<string>();
+        .where(inArray(teamMembers.teamId, allTeamIds))
+    : [];
+  const membersByTeam = new Map<string, string[]>();
+  for (const member of competitionMemberRows) {
+    const values = membersByTeam.get(member.teamId) ?? [];
+    values.push(member.personId);
+    membersByTeam.set(member.teamId, values);
+  }
+  const myTeamIds = new Set(
+    input.personId
+      ? competitionMemberRows
+          .filter((member) => member.personId === input.personId)
+          .map((member) => member.teamId)
+      : [],
+  );
   const rowsByBracket = new Map<string, typeof matchRows>();
   for (const row of matchRows) {
     if (!row.match.bracketId) continue;
@@ -1500,6 +1616,7 @@ export async function loadTournamentCompetitionSnapshot(input: {
       const row = matchByLogicalId.get(definition.id);
       if (!row) return [];
       const scoreEvents = rallyEventsByMatch.get(row.match.id) ?? [];
+      const matchFormat = row.match.format as Record<string, unknown>;
       let score:
         | {
             status: "not-started" | "live" | "complete" | "forfeit";
@@ -1510,7 +1627,7 @@ export async function loadTournamentCompetitionSnapshot(input: {
         try {
           const folded = foldScore(scoreEvents, {
             ...standardBeachFormat,
-            ...(row.match.format as Record<string, unknown>),
+            ...matchFormat,
           });
           score = {
             status: folded.status,
@@ -1548,10 +1665,68 @@ export async function loadTournamentCompetitionSnapshot(input: {
           ? { completedAt: row.match.completedAt.toISOString() }
           : {}),
         ...(score ? { score } : {}),
+        ...(matchFormat.kobHeat === true
+          ? (() => {
+              const participantIds = Array.isArray(
+                matchFormat.participantTeamIds,
+              )
+                ? matchFormat.participantTeamIds.filter(
+                    (teamId): teamId is string => typeof teamId === "string",
+                  )
+                : [];
+              const advanceCount =
+                typeof matchFormat.advanceCount === "number"
+                  ? Math.max(1, Math.trunc(matchFormat.advanceCount))
+                  : 1;
+              const initialHeatScores =
+                matchFormat.initialHeatScores &&
+                typeof matchFormat.initialHeatScores === "object"
+                  ? (matchFormat.initialHeatScores as Record<string, number>)
+                  : {};
+              const participants = participantIds
+                .flatMap((teamId) => {
+                  const team = teamById.get(teamId);
+                  return team
+                    ? [
+                        {
+                          team,
+                          points:
+                            (initialHeatScores[teamId] ?? 0) +
+                            (heatScoresByMatch.get(row.match.id)?.get(teamId) ??
+                              0),
+                        },
+                      ]
+                    : [];
+                })
+                .sort(
+                  (left, right) =>
+                    right.points - left.points ||
+                    left.team.seed - right.team.seed,
+                );
+              return {
+                heat: {
+                  durationMinutes:
+                    typeof matchFormat.durationMinutes === "number"
+                      ? Math.max(1, Math.trunc(matchFormat.durationMinutes))
+                      : 15,
+                  advanceCount,
+                  participants: participants.map((participant, index) => ({
+                    ...participant,
+                    rank: index + 1,
+                    advances: index < advanceCount,
+                  })),
+                },
+              };
+            })()
+          : {}),
       };
       const isMyMatch =
         (row.match.teamAId && myTeamIds.has(row.match.teamAId)) ||
-        (row.match.teamBId && myTeamIds.has(row.match.teamBId));
+        (row.match.teamBId && myTeamIds.has(row.match.teamBId)) ||
+        (competitionMatch.heat?.participants.some((participant) =>
+          myTeamIds.has(participant.team.id),
+        ) ??
+          false);
       if (
         isMyMatch &&
         !myNextMatch &&
@@ -1623,6 +1798,139 @@ export async function loadTournamentCompetitionSnapshot(input: {
         ),
       };
     });
+    const rawStructure = bracket.structure as Record<string, unknown>;
+    const kobConfig = rawStructure.kobConfig as
+      KobCompetitionConfig | undefined;
+    const kobEntrants = Array.isArray(rawStructure.kobEntrants)
+      ? (rawStructure.kobEntrants as readonly {
+          readonly id: string;
+          readonly name: string;
+        }[])
+      : [];
+    const currentKobStageIndex =
+      typeof rawStructure.generatedStageCount === "number"
+        ? Math.max(0, Math.trunc(rawStructure.generatedStageCount) - 1)
+        : 0;
+    const currentKobCarryPoints =
+      rawStructure.kobCarryPoints &&
+      typeof rawStructure.kobCarryPoints === "object"
+        ? (rawStructure.kobCarryPoints as Record<string, number>)
+        : {};
+    const savedKobStageStandings = Array.isArray(rawStructure.kobStageStandings)
+      ? (rawStructure.kobStageStandings as readonly Record<string, unknown>[])
+      : [];
+    const kobStandings =
+      bracket.format === "kob-individual-rotation" && kobConfig
+        ? kobConfig.stages.flatMap((stage, stageIndex) => {
+            const saved = savedKobStageStandings.find(
+              (candidate) => candidate.stageId === stage.id,
+            );
+            if (saved && Array.isArray(saved.players)) {
+              return [
+                {
+                  stageIndex,
+                  name: stage.name,
+                  complete: true,
+                  players: (saved.players as readonly Record<string, unknown>[])
+                    .filter(
+                      (player) =>
+                        typeof player.id === "string" &&
+                        typeof player.name === "string" &&
+                        typeof player.points === "number" &&
+                        typeof player.wins === "number" &&
+                        typeof player.rank === "number",
+                    )
+                    .map((player) => ({
+                      personId: player.id as string,
+                      name: player.name as string,
+                      points: player.points as number,
+                      wins: player.wins as number,
+                      rank: player.rank as number,
+                      advances: player.advanced === true,
+                    })),
+                },
+              ];
+            }
+            const stageMatches = competitionMatches.filter((match) => {
+              const row = matchByLogicalId.get(match.logicalId);
+              return (
+                (row?.match.format as Record<string, unknown> | undefined)
+                  ?.kobStageIndex === stageIndex
+              );
+            });
+            if (!stageMatches.length) return [];
+            const stagePlayerIds = new Set(
+              stageMatches.flatMap((match) => [
+                ...(match.teamA
+                  ? (membersByTeam.get(match.teamA.id) ?? [])
+                  : []),
+                ...(match.teamB
+                  ? (membersByTeam.get(match.teamB.id) ?? [])
+                  : []),
+              ]),
+            );
+            const points = new Map(
+              kobEntrants.map((player) => [
+                player.id,
+                stageIndex === currentKobStageIndex
+                  ? (currentKobCarryPoints[player.id] ?? 0)
+                  : 0,
+              ]),
+            );
+            const wins = new Map(kobEntrants.map((player) => [player.id, 0]));
+            for (const match of stageMatches) {
+              if (!match.teamA || !match.teamB || !match.score) continue;
+              const leftPoints = match.score.sets.reduce(
+                (total, set) => total + set[0],
+                0,
+              );
+              const rightPoints = match.score.sets.reduce(
+                (total, set) => total + set[1],
+                0,
+              );
+              for (const personId of membersByTeam.get(match.teamA.id) ?? []) {
+                points.set(personId, (points.get(personId) ?? 0) + leftPoints);
+                if (match.winnerTeamId === match.teamA.id) {
+                  wins.set(personId, (wins.get(personId) ?? 0) + 1);
+                }
+              }
+              for (const personId of membersByTeam.get(match.teamB.id) ?? []) {
+                points.set(personId, (points.get(personId) ?? 0) + rightPoints);
+                if (match.winnerTeamId === match.teamB.id) {
+                  wins.set(personId, (wins.get(personId) ?? 0) + 1);
+                }
+              }
+            }
+            const ranked = kobEntrants
+              .filter((player) => stagePlayerIds.has(player.id))
+              .sort(
+                (left, right) =>
+                  (points.get(right.id) ?? 0) - (points.get(left.id) ?? 0) ||
+                  (wins.get(right.id) ?? 0) - (wins.get(left.id) ?? 0) ||
+                  left.name.localeCompare(right.name),
+              );
+            const complete = stageMatches.every(
+              (match) =>
+                Boolean(match.completedAt || match.winnerTeamId) ||
+                ["complete", "verified", "forfeit"].includes(match.status),
+            );
+            return [
+              {
+                stageIndex,
+                name: stage.name,
+                complete,
+                players: ranked.map((player, index) => ({
+                  personId: player.id,
+                  name: player.name,
+                  points: points.get(player.id) ?? 0,
+                  wins: wins.get(player.id) ?? 0,
+                  rank: index + 1,
+                  advances: index < stage.advanceCount,
+                })),
+              },
+            ];
+          })
+        : undefined;
     const rounds = [
       ...new Map(
         competitionMatches
@@ -1662,6 +1970,7 @@ export async function loadTournamentCompetitionSnapshot(input: {
         competitionVersion: bracket.version,
         format: bracket.format,
         ...(bracket.liveAt ? { liveAt: bracket.liveAt.toISOString() } : {}),
+        ...(kobStandings ? { kobStandings } : {}),
         pools,
         rounds,
         matches: competitionMatches,
@@ -2611,7 +2920,151 @@ function generateBracket(input: {
         ...input,
         poolCount: input.poolCount ?? 2,
       });
+    case "kob-individual-rotation":
+    case "kob-team-progressive":
+      throw new Error(
+        "KOB draws require the division's saved round blueprint.",
+      );
   }
+}
+
+interface DerivedKobTeam extends SeededTeam {
+  readonly personIds: readonly [string, string];
+}
+
+function kobMatchMetadata(
+  stage: KobCompetitionConfig["stages"][number],
+  stageIndex: number,
+): Readonly<Record<string, unknown>> {
+  const maximumSets = Math.max(1, stage.setsToWin * 2 - 1);
+  return {
+    kobStageIndex: stageIndex,
+    kobStageId: stage.id,
+    kobStageName: stage.name,
+    carryPoints: stage.carryPoints,
+    scoringMode: stage.scoringMode,
+    setsToWin: stage.setsToWin,
+    maximumSets,
+    pointTargets: Array.from({ length: maximumSets }, () => stage.pointsToWin),
+    winBy: stage.winBy === 1 ? 1 : 2,
+    hardCaps: Array.from({ length: maximumSets }, () => stage.pointCap ?? null),
+    scoringSystem: "rally",
+    sideSwitchIntervals: Array.from({ length: maximumSets }, () => 7),
+    timeoutsPerTeamPerSet: 1,
+    lockedServeOrder: false,
+  };
+}
+
+function buildIndividualKobStage(input: {
+  readonly bracketId: string;
+  readonly players: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly seed: number;
+    readonly rating?: number;
+  }[];
+  readonly config: KobCompetitionConfig;
+  readonly stageIndex: number;
+}): {
+  readonly teams: readonly DerivedKobTeam[];
+  readonly matches: readonly Bracket["matches"][number][];
+  readonly pools: Readonly<Record<string, readonly string[]>>;
+} {
+  const stage = input.config.stages[input.stageIndex];
+  if (!stage || stage.format !== "partner-rotation") {
+    throw new Error("Individual KOB stages must use partner rotation.");
+  }
+  const pools = generateKobPartnerRotation({
+    players: input.players,
+    poolSize: stage.poolSize,
+    guaranteedGames: stage.guaranteedGames,
+    balanceByRating: input.config.balanceByRating,
+    avoidRepeatOpponents: input.config.avoidRepeatOpponents,
+  });
+  const pairByKey = new Map<string, DerivedKobTeam>();
+  const teamFor = (
+    pair: readonly [
+      (typeof input.players)[number],
+      (typeof input.players)[number],
+    ],
+  ) => {
+    const personIds = [pair[0].id, pair[1].id].sort() as [string, string];
+    const key = personIds.join(":");
+    const existing = pairByKey.get(key);
+    if (existing) return existing;
+    const team: DerivedKobTeam = {
+      id: crypto.randomUUID(),
+      seed: pairByKey.size + 1,
+      name: `${pair[0].name} + ${pair[1].name}`,
+      personIds,
+    };
+    pairByKey.set(key, team);
+    return team;
+  };
+  let position = 0;
+  const matches = pools.flatMap((pool) =>
+    pool.matchups.map((matchup) => {
+      const left = teamFor(matchup.teamA);
+      const right = teamFor(matchup.teamB);
+      position += 1;
+      return {
+        id: `${input.bracketId}-kob-s${input.stageIndex + 1}-${matchup.id}`,
+        bracket: "pool" as const,
+        round: input.stageIndex + 1,
+        position,
+        sideA: { kind: "seed" as const, seed: left.seed },
+        sideB: { kind: "seed" as const, seed: right.seed },
+        label: `${stage.name} · Pool ${pool.key} · rotation ${matchup.round}`,
+        metadata: {
+          ...kobMatchMetadata(stage, input.stageIndex),
+          kobPoolKey: pool.key,
+          kobPlayerIds: pool.players.map((player) => player.id),
+        },
+      };
+    }),
+  );
+  return {
+    teams: [...pairByKey.values()],
+    matches,
+    pools: Object.fromEntries(
+      pools.map((pool) => [pool.key, pool.players.map((player) => player.id)]),
+    ),
+  };
+}
+
+function buildTeamKobBracket(input: {
+  readonly bracketId: string;
+  readonly teams: readonly SeededTeam[];
+  readonly config: KobCompetitionConfig;
+  readonly version: number;
+}): Bracket {
+  const matches = input.config.stages.map((stage, stageIndex) => ({
+    id: `${input.bracketId}-kob-heat-${stageIndex + 1}`,
+    bracket: (stageIndex === input.config.stages.length - 1
+      ? "final"
+      : "pool") as "final" | "pool",
+    round: stageIndex + 1,
+    position: 1,
+    sideA: { kind: "bye" as const },
+    sideB: { kind: "bye" as const },
+    label: stage.name,
+    metadata: {
+      ...kobMatchMetadata(stage, stageIndex),
+      kobHeat: true,
+      durationMinutes: stage.durationMinutes ?? 15,
+      advanceCount: stage.advanceCount,
+      participantTeamIds:
+        stageIndex === 0 ? input.teams.map((team) => team.id) : [],
+    },
+  }));
+  return {
+    id: input.bracketId,
+    version: input.version,
+    format: "kob-team-progressive",
+    teams: input.teams,
+    matches,
+    rounds: matches.length,
+  };
 }
 
 export async function persistDivisionBracket(
@@ -2640,22 +3093,97 @@ export async function persistDivisionBracket(
   });
   const bracketId = crypto.randomUUID();
   const version = (current?.version ?? 0) + 1;
-  const generated = generateBracket({
-    id: bracketId,
-    format: input.format,
-    teams: confirmed.map((team) => ({
-      id: team.teamId!,
-      seed: team.seed!,
-      name: team.name,
-    })),
-    version,
-    poolCount: input.poolCount,
-  });
+  const settings = record.division.settings as DivisionSettings;
+  const configuredTeams = confirmed.map((team) => ({
+    id: team.teamId!,
+    seed: team.seed!,
+    name: team.name,
+  }));
+  let derivedTeams: readonly DerivedKobTeam[] = [];
+  let generated: Bracket;
+  if (input.format === "kob-individual-rotation") {
+    const config = settings.kobConfig;
+    if (!config || config.entryMode !== "individual") {
+      throw new Error("Save an individual KOB round blueprint first.");
+    }
+    const players = confirmed.map((team) => {
+      const player = team.roster[0];
+      if (!player?.personId) {
+        throw new Error("Every individual KOB entry needs one claimed player.");
+      }
+      return {
+        id: player.personId,
+        name: player.displayName,
+        seed: team.seed!,
+        rating: player.qualificationRating ?? player.ratingDisplay,
+      };
+    });
+    const stage = buildIndividualKobStage({
+      bracketId,
+      players,
+      config,
+      stageIndex: 0,
+    });
+    derivedTeams = stage.teams;
+    generated = {
+      id: bracketId,
+      version,
+      format: "kob-individual-rotation",
+      teams: stage.teams,
+      matches: stage.matches,
+      rounds: config.stages.length,
+      ...({
+        pools: stage.pools,
+        kobConfig: config,
+        kobEntrants: players,
+        generatedStageCount: 1,
+      } as Record<string, unknown>),
+    } as Bracket;
+  } else if (input.format === "kob-team-progressive") {
+    const config = settings.kobConfig;
+    if (!config || config.entryMode !== "team") {
+      throw new Error("Save a team KOB round blueprint first.");
+    }
+    generated = buildTeamKobBracket({
+      bracketId,
+      teams: configuredTeams,
+      config,
+      version,
+    });
+  } else {
+    generated = generateBracket({
+      id: bracketId,
+      format: input.format,
+      teams: configuredTeams,
+      version,
+      poolCount: input.poolCount,
+    });
+  }
   const teamIdBySeed = new Map(
     generated.teams.map((team) => [team.seed, team.id] as const),
   );
   const database = getTransactionalDatabase();
   await database.transaction(async (transaction) => {
+    if (derivedTeams.length) {
+      await transaction.insert(teams).values(
+        derivedTeams.map((team) => ({
+          id: team.id,
+          divisionId: input.divisionId,
+          name: team.name,
+          seed: team.seed,
+          status: "active",
+        })),
+      );
+      await transaction.insert(teamMembers).values(
+        derivedTeams.flatMap((team) =>
+          team.personIds.map((personId) => ({
+            teamId: team.id,
+            personId,
+            role: "player",
+          })),
+        ),
+      );
+    }
     await transaction.insert(brackets).values({
       id: bracketId,
       divisionId: input.divisionId,
@@ -2690,6 +3218,7 @@ export async function persistDivisionBracket(
           sideB: match.sideB,
           ifNecessary: match.ifNecessary,
           label: match.label,
+          ...(match.metadata ?? {}),
         },
       })),
     );
@@ -2711,6 +3240,293 @@ export async function persistDivisionBracket(
     id: bracketId,
     entity: "bracket",
     status: `version-${version}`,
+  };
+}
+
+export async function advanceIndividualKobStage(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const owned = await ownedDivision(organizationId, input.divisionId);
+  const bracket = await getDatabase().query.brackets.findFirst({
+    where: eq(brackets.divisionId, input.divisionId),
+    orderBy: [desc(brackets.version)],
+  });
+  if (!bracket || bracket.format !== "kob-individual-rotation") {
+    throw new Error("Generate the individual KOB rotation first.");
+  }
+  const structure = bracket.structure as Record<string, unknown>;
+  const config = structure.kobConfig as KobCompetitionConfig | undefined;
+  const entrants = Array.isArray(structure.kobEntrants)
+    ? (structure.kobEntrants as readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly seed: number;
+        readonly rating?: number;
+      }[])
+    : [];
+  const generatedStageCount =
+    typeof structure.generatedStageCount === "number"
+      ? Math.max(1, Math.trunc(structure.generatedStageCount))
+      : 1;
+  if (!config || config.entryMode !== "individual" || entrants.length < 4) {
+    throw new Error("The saved individual KOB blueprint is incomplete.");
+  }
+  if (generatedStageCount >= config.stages.length) {
+    return { id: bracket.id, entity: "bracket", status: "all-rounds-built" };
+  }
+  const currentStageIndex = generatedStageCount - 1;
+  const currentStage = config.stages[currentStageIndex]!;
+  const matchRows = await getDatabase()
+    .select()
+    .from(matches)
+    .where(eq(matches.bracketId, bracket.id))
+    .orderBy(asc(matches.createdAt));
+  const currentMatches = matchRows.filter(
+    (match) =>
+      (match.format as Record<string, unknown>).kobStageIndex ===
+      currentStageIndex,
+  );
+  if (!currentMatches.length) {
+    throw new Error("The current KOB round has no generated matches.");
+  }
+  if (
+    currentMatches.some(
+      (match) =>
+        !match.winnerTeamId &&
+        !["complete", "verified", "forfeit"].includes(match.status),
+    )
+  ) {
+    throw new Error("Finish every match in this KOB round before advancing.");
+  }
+  const matchIds = currentMatches.map((match) => match.id);
+  const scoreRows = await getDatabase()
+    .select({ matchId: rallyEvents.matchId, payload: rallyEvents.payload })
+    .from(rallyEvents)
+    .where(inArray(rallyEvents.matchId, matchIds))
+    .orderBy(asc(rallyEvents.sequence));
+  const eventsByMatch = new Map<string, ScoreEvent[]>();
+  for (const row of scoreRows) {
+    const payload = row.payload as Partial<ScoreEvent>;
+    if (
+      typeof payload.id !== "string" ||
+      typeof payload.type !== "string" ||
+      typeof payload.occurredAt !== "string"
+    ) {
+      continue;
+    }
+    const events = eventsByMatch.get(row.matchId) ?? [];
+    events.push(payload as ScoreEvent);
+    eventsByMatch.set(row.matchId, events);
+  }
+  const stageTeamIds = [
+    ...new Set(
+      currentMatches.flatMap((match) =>
+        [match.teamAId, match.teamBId].filter((teamId): teamId is string =>
+          Boolean(teamId),
+        ),
+      ),
+    ),
+  ];
+  const memberRows = await getDatabase()
+    .select({ teamId: teamMembers.teamId, personId: teamMembers.personId })
+    .from(teamMembers)
+    .where(inArray(teamMembers.teamId, stageTeamIds));
+  const membersByTeam = new Map<string, string[]>();
+  for (const member of memberRows) {
+    const values = membersByTeam.get(member.teamId) ?? [];
+    values.push(member.personId);
+    membersByTeam.set(member.teamId, values);
+  }
+  const carriedPoints =
+    structure.kobCarryPoints && typeof structure.kobCarryPoints === "object"
+      ? (structure.kobCarryPoints as Record<string, number>)
+      : {};
+  const pointsByPlayer = new Map(
+    entrants.map((player) => [player.id, carriedPoints[player.id] ?? 0]),
+  );
+  const winsByPlayer = new Map(entrants.map((player) => [player.id, 0]));
+  for (const match of currentMatches) {
+    if (!match.teamAId || !match.teamBId) continue;
+    const events = eventsByMatch.get(match.id) ?? [];
+    const folded = foldScore(events, {
+      ...standardBeachFormat,
+      ...(match.format as Record<string, unknown>),
+    });
+    const leftPoints = folded.sets.reduce((total, set) => total + set.a, 0);
+    const rightPoints = folded.sets.reduce((total, set) => total + set.b, 0);
+    for (const personId of membersByTeam.get(match.teamAId) ?? []) {
+      pointsByPlayer.set(
+        personId,
+        (pointsByPlayer.get(personId) ?? 0) + leftPoints,
+      );
+      if (match.winnerTeamId === match.teamAId) {
+        winsByPlayer.set(personId, (winsByPlayer.get(personId) ?? 0) + 1);
+      }
+    }
+    for (const personId of membersByTeam.get(match.teamBId) ?? []) {
+      pointsByPlayer.set(
+        personId,
+        (pointsByPlayer.get(personId) ?? 0) + rightPoints,
+      );
+      if (match.winnerTeamId === match.teamBId) {
+        winsByPlayer.set(personId, (winsByPlayer.get(personId) ?? 0) + 1);
+      }
+    }
+  }
+  const ranked = [...entrants].sort(
+    (left, right) =>
+      (pointsByPlayer.get(right.id) ?? 0) -
+        (pointsByPlayer.get(left.id) ?? 0) ||
+      (winsByPlayer.get(right.id) ?? 0) - (winsByPlayer.get(left.id) ?? 0) ||
+      left.seed - right.seed,
+  );
+  const advancing = ranked.slice(
+    0,
+    Math.min(currentStage.advanceCount, ranked.length),
+  );
+  if (advancing.length < 4) {
+    throw new Error(
+      "Partner rotation needs at least four advancing players. Increase this round's advance count.",
+    );
+  }
+  const nextStageIndex = generatedStageCount;
+  const next = buildIndividualKobStage({
+    bracketId: bracket.id,
+    players: advancing.map((player, index) => ({ ...player, seed: index + 1 })),
+    config,
+    stageIndex: nextStageIndex,
+  });
+  const teamIdBySeed = new Map(next.teams.map((team) => [team.seed, team.id]));
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    await transaction.insert(teams).values(
+      next.teams.map((team) => ({
+        id: team.id,
+        divisionId: input.divisionId,
+        name: team.name,
+        seed: team.seed,
+        status: "active",
+      })),
+    );
+    await transaction.insert(teamMembers).values(
+      next.teams.flatMap((team) =>
+        team.personIds.map((personId) => ({
+          teamId: team.id,
+          personId,
+          role: "player",
+        })),
+      ),
+    );
+    await transaction.insert(matches).values(
+      next.matches.map((match) => ({
+        id: crypto.randomUUID(),
+        divisionId: input.divisionId,
+        bracketId: bracket.id,
+        teamAId:
+          match.sideA.kind === "seed"
+            ? teamIdBySeed.get(match.sideA.seed)
+            : undefined,
+        teamBId:
+          match.sideB.kind === "seed"
+            ? teamIdBySeed.get(match.sideB.seed)
+            : undefined,
+        venueId: owned.session.venueId,
+        createdByPersonId: input.actor.personId,
+        status: "scheduled" as const,
+        format: {
+          logicalId: match.id,
+          bracket: match.bracket,
+          round: match.round,
+          position: match.position,
+          sideA: match.sideA,
+          sideB: match.sideB,
+          label: match.label,
+          ...(match.metadata ?? {}),
+        },
+      })),
+    );
+    const advanced = await transaction
+      .update(brackets)
+      .set({
+        structure: {
+          ...structure,
+          teams: [
+            ...(Array.isArray(structure.teams) ? structure.teams : []),
+            ...next.teams,
+          ],
+          matches: [
+            ...(Array.isArray(structure.matches) ? structure.matches : []),
+            ...next.matches,
+          ],
+          generatedStageCount: generatedStageCount + 1,
+          kobCarryPoints: currentStage.carryPoints
+            ? Object.fromEntries(
+                advancing.map((player) => [
+                  player.id,
+                  pointsByPlayer.get(player.id) ?? 0,
+                ]),
+              )
+            : {},
+          kobStageStandings: [
+            ...(Array.isArray(structure.kobStageStandings)
+              ? structure.kobStageStandings
+              : []),
+            {
+              stageId: currentStage.id,
+              completedAt: input.now.toISOString(),
+              players: ranked.map((player, index) => ({
+                id: player.id,
+                name: player.name,
+                rank: index + 1,
+                points: pointsByPlayer.get(player.id) ?? 0,
+                wins: winsByPlayer.get(player.id) ?? 0,
+                advanced: advancing.some(
+                  (candidate) => candidate.id === player.id,
+                ),
+              })),
+            },
+          ],
+        },
+      })
+      .where(
+        and(
+          eq(brackets.id, bracket.id),
+          sql`coalesce((${brackets.structure}->>'generatedStageCount')::int, 1) = ${generatedStageCount}`,
+        ),
+      )
+      .returning({ id: brackets.id });
+    if (!advanced.length) {
+      throw new Error(
+        "This KOB round was already advanced. Refresh Tournament Control.",
+      );
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "kob.stage_advanced",
+      entityType: "bracket",
+      entityId: bracket.id,
+      afterHash: stableHash({
+        currentStageIndex,
+        nextStageIndex,
+        advancing: advancing.map((player) => player.id),
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: bracket.id,
+    entity: "bracket",
+    status: `round-${nextStageIndex + 1}-ready`,
   };
 }
 
@@ -3081,4 +3897,306 @@ export async function updateDivisionMatchSchedule(
       }),
   ]);
   return { id: input.matchId, entity: "match", status: "scheduled" };
+}
+
+async function loadOwnedKobHeat(organizationId: string, matchId: string) {
+  const row = await getDatabase()
+    .select({
+      match: matches,
+      bracket: brackets,
+      organizationId: sql<
+        string | null
+      >`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
+    })
+    .from(matches)
+    .innerJoin(divisions, eq(matches.divisionId, divisions.id))
+    .innerJoin(sessions, eq(divisions.sessionId, sessions.id))
+    .innerJoin(brackets, eq(matches.bracketId, brackets.id))
+    .leftJoin(programs, eq(sessions.programId, programs.id))
+    .leftJoin(eventTypes, eq(sessions.eventTypeId, eventTypes.id))
+    .leftJoin(venues, eq(sessions.venueId, venues.id))
+    .where(eq(matches.id, matchId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  const format = row?.match.format as Record<string, unknown> | undefined;
+  if (
+    !row ||
+    row.organizationId !== organizationId ||
+    format?.kobHeat !== true
+  ) {
+    throw new Error("KOB heat was not found in this organization.");
+  }
+  return { ...row, format };
+}
+
+export async function adjustKobHeatScore(
+  input: MutationContext & {
+    readonly matchId: string;
+    readonly teamId: string;
+    readonly delta: -1 | 1;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const row = await loadOwnedKobHeat(organizationId, input.matchId);
+  const participantTeamIds = Array.isArray(row.format.participantTeamIds)
+    ? row.format.participantTeamIds.filter(
+        (teamId): teamId is string => typeof teamId === "string",
+      )
+    : [];
+  if (!participantTeamIds.includes(input.teamId)) {
+    throw new Error("That team is not taking part in this heat.");
+  }
+  if (["complete", "cancelled", "forfeit"].includes(row.match.status)) {
+    throw new Error("A completed heat cannot be changed.");
+  }
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select id from matches where id = ${input.matchId}::uuid for update`,
+    );
+    const lockedMatch = await transaction
+      .select({ status: matches.status, format: matches.format })
+      .from(matches)
+      .where(eq(matches.id, input.matchId))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (
+      !lockedMatch ||
+      ["complete", "cancelled", "forfeit"].includes(lockedMatch.status)
+    ) {
+      throw new Error("A completed heat cannot be changed.");
+    }
+    const existing = await transaction
+      .select({
+        sequence: rallyEvents.sequence,
+        eventType: rallyEvents.eventType,
+        payload: rallyEvents.payload,
+      })
+      .from(rallyEvents)
+      .where(eq(rallyEvents.matchId, input.matchId))
+      .orderBy(asc(rallyEvents.sequence));
+    const lockedFormat = lockedMatch.format as Record<string, unknown>;
+    const initialHeatScores =
+      lockedFormat.initialHeatScores &&
+      typeof lockedFormat.initialHeatScores === "object"
+        ? (lockedFormat.initialHeatScores as Record<string, number>)
+        : {};
+    const currentPoints = existing.reduce((total, event) => {
+      if (event.eventType !== "kob-heat-adjusted") return total;
+      const payload = event.payload as Record<string, unknown>;
+      return payload.teamId === input.teamId &&
+        typeof payload.delta === "number"
+        ? Math.max(0, total + payload.delta)
+        : total;
+    }, initialHeatScores[input.teamId] ?? 0);
+    if (input.delta < 0 && currentPoints === 0) {
+      throw new Error("A team's heat score cannot be below zero.");
+    }
+    const sequence = (existing.at(-1)?.sequence ?? 0) + 1;
+    await transaction.insert(rallyEvents).values({
+      id: crypto.randomUUID(),
+      matchId: input.matchId,
+      reportedByPersonId: input.actor.personId,
+      sequence,
+      deviceId: `duna-pro:${input.actor.personId}`,
+      monotonicCounter: sequence,
+      eventType: "kob-heat-adjusted",
+      payload: {
+        id: crypto.randomUUID(),
+        type: "kob-heat-adjusted",
+        teamId: input.teamId,
+        delta: input.delta,
+        occurredAt: input.now.toISOString(),
+      },
+      wallClockAt: input.now,
+      receivedAt: input.now,
+    });
+    if (lockedMatch.status === "scheduled" || lockedMatch.status === "warmup") {
+      await transaction
+        .update(matches)
+        .set({ status: "live", startedAt: input.now, updatedAt: input.now })
+        .where(eq(matches.id, input.matchId));
+    }
+  });
+  return { id: input.matchId, entity: "match", status: "live" };
+}
+
+export async function completeKobHeat(
+  input: MutationContext & {
+    readonly matchId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const row = await loadOwnedKobHeat(organizationId, input.matchId);
+  if (row.match.status === "complete") {
+    return { id: input.matchId, entity: "match", status: "complete" };
+  }
+  if (["cancelled", "forfeit"].includes(row.match.status)) {
+    throw new Error("A cancelled heat cannot be completed.");
+  }
+  const participantTeamIds = Array.isArray(row.format.participantTeamIds)
+    ? row.format.participantTeamIds.filter(
+        (teamId): teamId is string => typeof teamId === "string",
+      )
+    : [];
+  if (participantTeamIds.length < 2) {
+    throw new Error("At least two teams must enter the heat before it closes.");
+  }
+  const seedRows = await getDatabase()
+    .select({ id: teams.id, seed: teams.seed })
+    .from(teams)
+    .where(inArray(teams.id, participantTeamIds));
+  const seedByTeam = new Map(
+    seedRows.map((team) => [team.id, team.seed ?? 9999]),
+  );
+  const advanceCount =
+    typeof row.format.advanceCount === "number"
+      ? Math.max(1, Math.trunc(row.format.advanceCount))
+      : 1;
+  const stageIndex =
+    typeof row.format.kobStageIndex === "number" ? row.format.kobStageIndex : 0;
+  const siblingRows = await getDatabase()
+    .select()
+    .from(matches)
+    .where(eq(matches.bracketId, row.bracket.id));
+  const nextMatch = siblingRows.find((match) => {
+    const format = match.format as Record<string, unknown>;
+    return format.kobHeat === true && format.kobStageIndex === stageIndex + 1;
+  });
+  const database = getTransactionalDatabase();
+  const completed = await database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select id from matches where id = ${input.matchId}::uuid for update`,
+    );
+    const lockedMatch = await transaction
+      .select({ status: matches.status, format: matches.format })
+      .from(matches)
+      .where(eq(matches.id, input.matchId))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!lockedMatch) throw new Error("KOB heat was not found.");
+    if (lockedMatch.status === "complete") return false;
+    if (["cancelled", "forfeit"].includes(lockedMatch.status)) {
+      throw new Error("A cancelled heat cannot be completed.");
+    }
+    const lockedFormat = lockedMatch.format as Record<string, unknown>;
+    const eventRows = await transaction
+      .select({
+        eventType: rallyEvents.eventType,
+        payload: rallyEvents.payload,
+      })
+      .from(rallyEvents)
+      .where(eq(rallyEvents.matchId, input.matchId))
+      .orderBy(asc(rallyEvents.sequence));
+    const initialHeatScores =
+      lockedFormat.initialHeatScores &&
+      typeof lockedFormat.initialHeatScores === "object"
+        ? (lockedFormat.initialHeatScores as Record<string, number>)
+        : {};
+    const scoreByTeam = new Map(
+      participantTeamIds.map((teamId) => [
+        teamId,
+        initialHeatScores[teamId] ?? 0,
+      ]),
+    );
+    for (const event of eventRows) {
+      if (event.eventType !== "kob-heat-adjusted") continue;
+      const payload = event.payload as Record<string, unknown>;
+      if (
+        typeof payload.teamId !== "string" ||
+        typeof payload.delta !== "number"
+      ) {
+        continue;
+      }
+      scoreByTeam.set(
+        payload.teamId,
+        Math.max(0, (scoreByTeam.get(payload.teamId) ?? 0) + payload.delta),
+      );
+    }
+    const ranked = [...participantTeamIds].sort(
+      (left, right) =>
+        (scoreByTeam.get(right) ?? 0) - (scoreByTeam.get(left) ?? 0) ||
+        (seedByTeam.get(left) ?? 9999) - (seedByTeam.get(right) ?? 9999),
+    );
+    const advancing = ranked.slice(0, Math.min(advanceCount, ranked.length));
+    await transaction
+      .update(matches)
+      .set({
+        status: "complete",
+        winnerTeamId: ranked[0],
+        startedAt: row.match.startedAt ?? input.now,
+        completedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(matches.id, input.matchId));
+    if (nextMatch) {
+      await transaction
+        .update(matches)
+        .set({
+          format: {
+            ...(nextMatch.format as Record<string, unknown>),
+            participantTeamIds: advancing,
+            initialHeatScores:
+              lockedFormat.carryPoints === true
+                ? Object.fromEntries(
+                    advancing.map((teamId) => [
+                      teamId,
+                      scoreByTeam.get(teamId) ?? 0,
+                    ]),
+                  )
+                : {},
+          },
+          updatedAt: input.now,
+        })
+        .where(eq(matches.id, nextMatch.id));
+    }
+    const structure = row.bracket.structure as Record<string, unknown>;
+    const logicalNextId = nextMatch
+      ? (nextMatch.format as Record<string, unknown>).logicalId
+      : undefined;
+    const structureMatches = Array.isArray(structure.matches)
+      ? structure.matches.map((candidate) => {
+          if (!candidate || typeof candidate !== "object") return candidate;
+          const definition = candidate as Record<string, unknown>;
+          return definition.id === logicalNextId
+            ? {
+                ...definition,
+                metadata: {
+                  ...((definition.metadata as Record<string, unknown>) ?? {}),
+                  participantTeamIds: advancing,
+                },
+              }
+            : definition;
+        })
+      : structure.matches;
+    await transaction
+      .update(brackets)
+      .set({ structure: { ...structure, matches: structureMatches } })
+      .where(eq(brackets.id, row.bracket.id));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "kob.heat_completed",
+      entityType: "match",
+      entityId: input.matchId,
+      afterHash: stableHash({
+        ranked,
+        scoreByTeam: Object.fromEntries(scoreByTeam),
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+    return true;
+  });
+  return {
+    id: input.matchId,
+    entity: "match",
+    status: completed && nextMatch ? "complete-next-round-ready" : "complete",
+  };
 }

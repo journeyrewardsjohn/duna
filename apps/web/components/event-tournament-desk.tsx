@@ -37,33 +37,62 @@ function CompetitionMatchCard({
       <span className="tournament-desk__match-status">
         {live ? "Live" : complete ? "Final" : (match.courtName ?? "Upcoming")}
       </span>
-      <div
-        className={
-          match.winnerTeamId === match.teamA?.id
-            ? "tournament-desk__team tournament-desk__team--winner"
-            : "tournament-desk__team"
-        }
-      >
-        <span className="tournament-desk__seed">
-          {match.teamA?.seed ?? "–"}
-        </span>
-        <strong>{match.teamA?.name ?? "To be decided"}</strong>
-      </div>
-      <div
-        className={
-          match.winnerTeamId === match.teamB?.id
-            ? "tournament-desk__team tournament-desk__team--winner"
-            : "tournament-desk__team"
-        }
-      >
-        <span className="tournament-desk__seed">
-          {match.teamB?.seed ?? "–"}
-        </span>
-        <strong>{match.teamB?.name ?? "To be decided"}</strong>
-      </div>
+      {match.heat ? (
+        <div className="tournament-desk__heat">
+          {match.heat.participants.length ? (
+            match.heat.participants.map((participant) => (
+              <div
+                className={
+                  participant.advances
+                    ? "tournament-desk__team tournament-desk__team--winner"
+                    : "tournament-desk__team"
+                }
+                key={participant.team.id}
+              >
+                <span className="tournament-desk__seed">
+                  {participant.rank}
+                </span>
+                <strong>{participant.team.name}</strong>
+                <b>{participant.points}</b>
+              </div>
+            ))
+          ) : (
+            <p>Qualifiers appear when the prior round closes.</p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div
+            className={
+              match.winnerTeamId === match.teamA?.id
+                ? "tournament-desk__team tournament-desk__team--winner"
+                : "tournament-desk__team"
+            }
+          >
+            <span className="tournament-desk__seed">
+              {match.teamA?.seed ?? "–"}
+            </span>
+            <strong>{match.teamA?.name ?? "To be decided"}</strong>
+          </div>
+          <div
+            className={
+              match.winnerTeamId === match.teamB?.id
+                ? "tournament-desk__team tournament-desk__team--winner"
+                : "tournament-desk__team"
+            }
+          >
+            <span className="tournament-desk__seed">
+              {match.teamB?.seed ?? "–"}
+            </span>
+            <strong>{match.teamB?.name ?? "To be decided"}</strong>
+          </div>
+        </>
+      )}
       <footer>
         <span>
-          {score ?? (match.scheduledAt ? "Scheduled" : "Awaiting court")}
+          {match.heat
+            ? `${match.heat.durationMinutes} minutes · top ${match.heat.advanceCount} advance`
+            : (score ?? (match.scheduledAt ? "Scheduled" : "Awaiting court"))}
         </span>
         {match.courtName && <span>{match.courtName}</span>}
       </footer>
@@ -81,14 +110,19 @@ export function EventTournamentDesk({
   const division =
     snapshot.divisions.find((candidate) => candidate.id === divisionId) ??
     snapshot.divisions[0];
-  const bracketRounds = useMemo(
-    () => division?.rounds.filter((round) => round.bracket !== "pool") ?? [],
+  const competitionRounds = useMemo(
+    () =>
+      division?.format.startsWith("kob-")
+        ? division.rounds
+        : (division?.rounds.filter((round) => round.bracket !== "pool") ?? []),
     [division],
   );
-  const [roundKey, setRoundKey] = useState(bracketRounds[0]?.key);
-  const activeRoundKey = bracketRounds.some((round) => round.key === roundKey)
+  const [roundKey, setRoundKey] = useState(competitionRounds[0]?.key);
+  const activeRoundKey = competitionRounds.some(
+    (round) => round.key === roundKey,
+  )
     ? roundKey
-    : bracketRounds[0]?.key;
+    : competitionRounds[0]?.key;
   const hasLiveDivision = snapshot.divisions.some((candidate) =>
     Boolean(candidate.liveAt),
   );
@@ -138,8 +172,10 @@ export function EventTournamentDesk({
               onClick={() => {
                 setDivisionId(candidate.id);
                 setRoundKey(
-                  candidate.rounds.find((round) => round.bracket !== "pool")
-                    ?.key,
+                  candidate.format.startsWith("kob-")
+                    ? candidate.rounds[0]?.key
+                    : candidate.rounds.find((round) => round.bracket !== "pool")
+                        ?.key,
                 );
               }}
               role="tab"
@@ -178,14 +214,40 @@ export function EventTournamentDesk({
         </div>
       )}
 
-      {bracketRounds.length > 0 ? (
+      {division.kobStandings?.length ? (
+        <article className="tournament-desk__kob-board">
+          <header>
+            <span>
+              <small>Individual points</small>
+              <strong>{division.kobStandings.at(-1)!.name}</strong>
+            </span>
+            <b>{division.kobStandings.at(-1)!.complete ? "Final" : "Live"}</b>
+          </header>
+          <ol>
+            {division.kobStandings.at(-1)!.players.map((player) => (
+              <li key={player.personId}>
+                <span>{player.rank}</span>
+                <strong>{player.name}</strong>
+                <small>{player.wins} wins</small>
+                <b>{player.points}</b>
+              </li>
+            ))}
+          </ol>
+          <p>
+            Rally points stay with the athlete as partners rotate. The advance
+            line follows the saved round blueprint.
+          </p>
+        </article>
+      ) : null}
+
+      {competitionRounds.length > 0 ? (
         <>
           <div
             aria-label="Bracket rounds"
             className="tournament-desk__round-tabs"
             role="tablist"
           >
-            {bracketRounds.map((round) => (
+            {competitionRounds.map((round) => (
               <button
                 aria-selected={round.key === activeRoundKey}
                 key={round.key}
@@ -202,7 +264,7 @@ export function EventTournamentDesk({
             role="region"
             aria-label={`${division.name} bracket`}
           >
-            {bracketRounds.map((round) => (
+            {competitionRounds.map((round) => (
               <section
                 data-active={round.key === activeRoundKey}
                 className="tournament-desk__round"

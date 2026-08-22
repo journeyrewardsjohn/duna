@@ -1,7 +1,7 @@
 "use client";
 
 import type { OperatorDivisionDetail } from "@duna/api";
-import { Badge } from "@duna/ui";
+import { Badge, SmartDateTimePicker } from "@duna/ui";
 import {
   ArrowLeft,
   ArrowRight,
@@ -56,6 +56,19 @@ function venueLocalInput(instant: string, timezone: string): string {
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((item) => item.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+function venueLocalDisplay(value: string): string {
+  if (!value) return "Choose match time";
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return "Choose match time";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(instant);
 }
 
 function Notice({ state }: { readonly state: OperatorActionState }) {
@@ -127,6 +140,12 @@ function MatchScheduleControl({
     updateDivisionMatchScheduleAction,
     initialState,
   );
+  const [localScheduledAt, setLocalScheduledAt] = useState(
+    match.scheduledAt
+      ? venueLocalInput(match.scheduledAt, detail.session.timezone)
+      : "",
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
   return (
     <form action={action} className="division-match-schedule">
       <input name="matchId" type="hidden" value={match.id} />
@@ -137,17 +156,19 @@ function MatchScheduleControl({
         type="hidden"
         value="Updated by the event organizer."
       />
-      <label>
+      <label className="division-match-schedule__time">
         <span>Time</span>
-        <input
-          defaultValue={
-            match.scheduledAt
-              ? venueLocalInput(match.scheduledAt, detail.session.timezone)
-              : undefined
-          }
-          name="localScheduledAt"
-          type="datetime-local"
-        />
+        <input name="localScheduledAt" type="hidden" value={localScheduledAt} />
+        <button
+          className="division-match-schedule__date-trigger"
+          onClick={() => setEditorOpen((open) => !open)}
+          type="button"
+        >
+          <CalendarClock aria-hidden size={16} />
+          {localScheduledAt
+            ? venueLocalDisplay(localScheduledAt)
+            : "Choose match time"}
+        </button>
       </label>
       <label>
         <span>Court</span>
@@ -163,6 +184,19 @@ function MatchScheduleControl({
       <button disabled={pending} type="submit">
         {pending ? "Saving…" : "Save assignment"}
       </button>
+      {editorOpen ? (
+        <div className="division-match-schedule__date-editor">
+          <SmartDateTimePicker
+            applyLabel="Set match time"
+            clearLabel="Unscheduled"
+            label="Match date and time"
+            onApply={() => setEditorOpen(false)}
+            onCancel={() => setEditorOpen(false)}
+            onChange={setLocalScheduledAt}
+            value={localScheduledAt}
+          />
+        </div>
+      ) : null}
       <Notice state={state} />
     </form>
   );
@@ -378,15 +412,19 @@ export function DivisionCompetitionWorkspace({
   const pendingTeams = detail.teams.filter(
     (team) => team.selectionStatus === "pending",
   );
-  const defaultFormat = detail.division.poolPlay?.enabled
-    ? "pool-play"
-    : detail.session.kind === "league"
-      ? "round-robin"
-      : detail.division.tournamentFormat === "double-elimination-true"
-        ? "double-elimination-true-reset"
-        : detail.division.tournamentFormat === "double-elimination-crossover"
-          ? "double-elimination-crossover"
-          : "single-elimination";
+  const defaultFormat = detail.division.kobConfig
+    ? detail.division.kobConfig.entryMode === "individual"
+      ? "kob-individual-rotation"
+      : "kob-team-progressive"
+    : detail.division.poolPlay?.enabled
+      ? "pool-play"
+      : detail.session.kind === "league"
+        ? "round-robin"
+        : detail.division.tournamentFormat === "double-elimination-true"
+          ? "double-elimination-true-reset"
+          : detail.division.tournamentFormat === "double-elimination-crossover"
+            ? "double-elimination-crossover"
+            : "single-elimination";
   const bracketStructure = detail.bracket?.structure as
     | {
         readonly teams?: readonly {
@@ -594,6 +632,16 @@ export function DivisionCompetitionWorkspace({
           <label>
             <span>Competition format</span>
             <select defaultValue={defaultFormat} name="format">
+              {detail.division.kobConfig?.entryMode === "individual" && (
+                <option value="kob-individual-rotation">
+                  KOB individual partner rotation
+                </option>
+              )}
+              {detail.division.kobConfig?.entryMode === "team" && (
+                <option value="kob-team-progressive">
+                  KOB progressive team survival
+                </option>
+              )}
               <option value="pool-play">Pool play</option>
               <option value="round-robin">Round robin / league</option>
               <option value="single-elimination">Single elimination</option>

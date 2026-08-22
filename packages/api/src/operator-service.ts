@@ -41,6 +41,7 @@ import {
   venues,
 } from "@duna/db";
 import { demoOrganization } from "@duna/core/demo";
+import type { KobCompetitionConfig } from "@duna/core";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
@@ -49,6 +50,7 @@ import {
   eventLocationSchema,
   eventMediaSchema,
   eventPolicySchema,
+  kobCompetitionConfigSchema,
   leagueRecurrenceSchema,
 } from "./contracts";
 import {
@@ -108,6 +110,7 @@ export interface EventDraftDivisionInput {
     | "single-elimination"
     | "double-elimination-true"
     | "double-elimination-crossover";
+  readonly kobConfig?: KobCompetitionConfig;
   readonly poolPlay: {
     readonly enabled: boolean;
     readonly teamsPerPool: number;
@@ -378,6 +381,8 @@ function eventDivisionSettings(
     ageMinimum: division.ageEnabled ? division.ageMinimum : undefined,
     ageMaximum: division.ageEnabled ? division.ageMaximum : undefined,
     tournamentFormat: division.tournamentFormat,
+    kobConfig:
+      division.tournamentFormat === "kob-qob" ? division.kobConfig : undefined,
     poolPlay: division.poolPlay,
     seeding: division.seeding,
   };
@@ -2747,6 +2752,9 @@ export async function loadEventDraft(
         settings.poolPlay && typeof settings.poolPlay === "object"
           ? (settings.poolPlay as Record<string, unknown>)
           : {};
+      const parsedKobConfig = kobCompetitionConfigSchema.safeParse(
+        settings.kobConfig,
+      );
       const teamsPerPool = Math.max(
         2,
         Math.min(
@@ -2815,6 +2823,7 @@ export async function loadEventDraft(
           ] as const,
           "double-elimination-true",
         ),
+        kobConfig: parsedKobConfig.success ? parsedKobConfig.data : undefined,
         poolPlay: {
           enabled:
             typeof rawPoolPlay.enabled === "boolean"
@@ -5570,6 +5579,58 @@ async function prepareEventDraftWrite(
         `${division.name}: pool progression cannot exceed the pool or division size.`,
       );
     }
+    if (division.tournamentFormat === "kob-qob") {
+      if (!division.kobConfig?.stages.length) {
+        throw new OperatorServiceError(
+          "INVALID_CONFIGURATION",
+          `${division.name}: add at least one KOB/QOB round.`,
+        );
+      }
+      if (
+        division.kobConfig.entryMode === "individual" &&
+        division.teamFormat !== "solo"
+      ) {
+        throw new OperatorServiceError(
+          "INVALID_CONFIGURATION",
+          `${division.name}: individual KOB/QOB registration must use solo entries.`,
+        );
+      }
+      if (
+        division.kobConfig.entryMode === "team" &&
+        division.teamFormat !== "doubles"
+      ) {
+        throw new OperatorServiceError(
+          "INVALID_CONFIGURATION",
+          `${division.name}: team KOB/QOB registration must use two-player entries.`,
+        );
+      }
+      let availableEntries = division.maximumTeams;
+      for (const [stageIndex, stage] of division.kobConfig.stages.entries()) {
+        const anotherRoundFollows =
+          stageIndex < division.kobConfig.stages.length - 1;
+        const requiredAdvance = anotherRoundFollows
+          ? division.kobConfig.entryMode === "individual"
+            ? 4
+            : 2
+          : 1;
+        if (
+          stage.advanceCount > availableEntries ||
+          stage.advanceCount < requiredAdvance ||
+          (division.kobConfig.entryMode === "individual" &&
+            (stage.format !== "partner-rotation" ||
+              stage.poolSize < 4 ||
+              stage.poolSize > availableEntries)) ||
+          (division.kobConfig.entryMode === "team" &&
+            (stage.format !== "timed-elimination" || !stage.durationMinutes))
+        ) {
+          throw new OperatorServiceError(
+            "INVALID_CONFIGURATION",
+            `${division.name}: ${stage.name} does not fit the field entering that round.`,
+          );
+        }
+        availableEntries = stage.advanceCount;
+      }
+    }
   }
   for (const ticket of input.tickets) {
     if (!ticket.availableOnline && !ticket.availableInPerson) {
@@ -6097,11 +6158,13 @@ export async function updateEventDraft(
     const competitionStructureChanged =
       stableHash({
         tournamentFormat: currentSettings.tournamentFormat,
+        kobConfig: currentSettings.kobConfig,
         poolPlay: currentSettings.poolPlay,
         seeding: currentSettings.seeding ?? current.ratingBasis,
       }) !==
       stableHash({
         tournamentFormat: division.tournamentFormat,
+        kobConfig: division.kobConfig,
         poolPlay: division.poolPlay,
         seeding: division.seeding,
       });
