@@ -23,7 +23,13 @@ export default async function TransactionDetailPage({
 }: {
   readonly params: Promise<{ transactionId: string }>;
 }) {
-  const { transactionId } = await params;
+  const { transactionId: routeTransactionId } = await params;
+  let transactionId: string;
+  try {
+    transactionId = decodeURIComponent(routeTransactionId);
+  } catch {
+    notFound();
+  }
   const caller = await getServerCaller();
   try {
     const transaction = await caller.operator.transaction({ transactionId });

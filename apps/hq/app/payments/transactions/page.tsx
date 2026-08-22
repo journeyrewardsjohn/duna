@@ -41,7 +41,9 @@ export default async function TransactionsPage() {
             {transactions.map((item) => (
               <tr key={item.id}>
                 <td data-label="Customer">
-                  <Link href={`/payments/transactions/${item.id}`}>
+                  <Link
+                    href={`/payments/transactions/${encodeURIComponent(item.id)}`}
+                  >
                     {item.buyerName}
                     <br />
                     <small>{item.description}</small>
