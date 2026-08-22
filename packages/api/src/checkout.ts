@@ -1329,6 +1329,7 @@ export async function startEventCheckout(input: {
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly userAgent?: string;
   readonly now: Date;
 }): Promise<EventCheckoutResult> {
   if (!process.env.DATABASE_URL) {
@@ -1569,6 +1570,9 @@ export async function startEventCheckout(input: {
           taxTotalMinor: 0,
           totalMinor: 0,
           idempotencyKey: input.idempotencyKey,
+          checkoutIpAddress: input.ipAddress,
+          checkoutUserAgent: input.userAgent,
+          checkoutSurface: input.paymentSurface ?? "hosted",
         }),
         database.insert(orderItems).values({
           orderId,
@@ -1805,6 +1809,9 @@ export async function startEventCheckout(input: {
         taxTotalMinor: 0,
         totalMinor: priced.totalMinor,
         idempotencyKey: input.idempotencyKey,
+        checkoutIpAddress: input.ipAddress,
+        checkoutUserAgent: input.userAgent,
+        checkoutSurface: input.paymentSurface ?? "hosted",
         expiresAt: checkoutExpiresAt,
       }),
       database.insert(orderItems).values({

@@ -13,7 +13,25 @@ describe("transactions v2 projection", () => {
     expect(first?.amountStatus).toBe("complete");
     await expect(getTransaction(actor, first!.id)).resolves.toMatchObject({
       id: first!.id,
-      timeline: expect.any(Array),
+      people: [
+        expect.objectContaining({
+          name: "Maya Chen",
+          profileHref: expect.stringMatching(/^\/members\//),
+        }),
+      ],
+      items: [
+        expect.objectContaining({
+          description: "Camp registration",
+          href: expect.stringMatching(/^\/events\//),
+        }),
+      ],
+      evidence: expect.objectContaining({
+        ipAddress: expect.any(String),
+        userAgent: expect.any(String),
+      }),
+      timeline: [
+        expect.objectContaining({ kind: "payment", status: "succeeded" }),
+      ],
     });
   });
 

@@ -150,6 +150,7 @@ export const transactionSummarySchema = z.object({
   ]),
   occurredAt: z.iso.datetime(),
   status: z.string(),
+  buyerPersonId: z.string().uuid().optional(),
   buyerName: z.string(),
   description: z.string(),
   source: z.string(),

@@ -1,8 +1,9 @@
 import {
   ArrowRight,
+  Landmark,
+  ReceiptText,
   Scale,
   ShieldCheck,
-  SlidersHorizontal,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,6 +18,7 @@ const moneyNavigation: readonly {
   label: string;
   description: string;
   icon: typeof WalletCards;
+  tone: string;
 }[] = [
   {
     view: "balance",
@@ -24,13 +26,15 @@ const moneyNavigation: readonly {
     label: "Balance",
     description: "Balances, earnings, and activity",
     icon: WalletCards,
+    tone: "aqua",
   },
   {
     view: "transactions",
     href: "/payments/transactions",
     label: "Transactions",
-    description: "Read-only payment timelines",
-    icon: WalletCards,
+    description: "Search payments and follow every event",
+    icon: ReceiptText,
+    tone: "violet",
   },
   {
     view: "disputes",
@@ -38,13 +42,15 @@ const moneyNavigation: readonly {
     label: "Disputes",
     description: "Review and respond in Stripe",
     icon: Scale,
+    tone: "coral",
   },
   {
     view: "payout-settings",
     href: "/payments/payout-settings",
     label: "Payout Settings",
-    description: "Schedule, minimum, and descriptors",
-    icon: SlidersHorizontal,
+    description: "Schedule, minimums, and bank descriptors",
+    icon: Landmark,
+    tone: "gold",
   },
   {
     view: "refund-policies",
@@ -52,6 +58,7 @@ const moneyNavigation: readonly {
     label: "Refund Policies",
     description: "One default and clear purchase rules",
     icon: ShieldCheck,
+    tone: "green",
   },
 ];
 
@@ -128,6 +135,7 @@ export async function MoneyPageContent({
               <Link
                 aria-current={item.view === view ? "page" : undefined}
                 className={item.view === view ? "active" : ""}
+                data-tone={item.tone}
                 href={item.href}
                 key={item.href}
               >
@@ -136,6 +144,7 @@ export async function MoneyPageContent({
                   <strong>{item.label}</strong>
                   <small>{item.description}</small>
                 </span>
+                <ArrowRight className="money-subnav__arrow" size={16} />
               </Link>
             );
           })}
