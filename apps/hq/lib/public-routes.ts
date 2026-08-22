@@ -9,6 +9,7 @@ export function isPublicHqRoute(pathname: string): boolean {
     routeMatches(pathname, "/auth/callback") ||
     pathname === "/api/cron/sand" ||
     pathname === "/api/cron/event-operations" ||
+    pathname === "/api/cron/vision-improvement" ||
     routeMatches(pathname, "/api/health")
   );
 }
