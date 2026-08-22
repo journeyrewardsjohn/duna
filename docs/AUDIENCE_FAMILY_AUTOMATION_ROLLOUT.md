@@ -49,7 +49,7 @@ adapters are added. HQ exposes that partial status and the unavailable fact keys
 
 ## Rollout order and inactive gates
 
-1. Apply migrations `0091` through `0093` to an isolated Neon branch with the API
+1. Apply migrations `0093` and `0094` to an isolated Neon branch with the API
    and HQ build that understands nullable marketing references, current-version
    lineage, and immutable audience-version guards.
 2. Backfill nothing automatically; existing segment JSON remains authoritative for
