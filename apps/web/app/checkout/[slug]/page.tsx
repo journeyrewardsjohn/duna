@@ -56,6 +56,7 @@ export default async function PublicCheckoutPage({
             : undefined
         }
         initialTicketTypeId={query.ticket}
+        authConfigured={isWorkOSAuthKitConfigured()}
       />
       <SiteFooter />
     </>
