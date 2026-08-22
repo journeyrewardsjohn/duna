@@ -1392,6 +1392,121 @@ export async function refundEventRegistrationAction(
   }
 }
 
+export async function closeEventRegistrationAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.closeEventRegistration({
+      sessionId: field(formData, "sessionId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Registration is closed. Review and finalize seeding for each division.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function finalizeDivisionSeedingAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.finalizeDivisionSeeding({
+      divisionId: field(formData, "divisionId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Seeding is final. Generate the draw, then review pools and matchups.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function finalizeDivisionDrawAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.finalizeDivisionDraw({
+      divisionId: field(formData, "divisionId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "The draw is final. Assign every match time before publishing live.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function swapDivisionPoolTeamsAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.swapDivisionPoolTeams({
+      divisionId: field(formData, "divisionId"),
+      teamAId: field(formData, "teamAId"),
+      teamBId: field(formData, "teamBId"),
+      reason: field(formData, "reason"),
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Pool override saved with its note. Review and finalize the pools again.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function publishTournamentLiveAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const caller = await getServerCaller();
+    await caller.operator.publishTournamentLive({
+      sessionId: field(formData, "sessionId"),
+      participantMessage: field(formData, "participantMessage"),
+      reason:
+        field(formData, "reason") ||
+        "Director published the finalized tournament field.",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    return result(
+      "success",
+      "Tournament is live. Participants were alerted with the pools and schedule link.",
+    );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
 export async function reconcileDivisionSelectionAction(
   _previous: OperatorActionState,
   formData: FormData,

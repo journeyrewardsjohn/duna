@@ -83,6 +83,27 @@ interface DivisionSettings {
     | "manual";
   readonly qualificationFinalizedAt?: string;
   readonly qualificationFinalizedRegistrationClosesAt?: string;
+  readonly seedingFinalizedAt?: string;
+  readonly seedingFinalizedByPersonId?: string;
+}
+
+interface TournamentStructureLifecycle {
+  readonly seedingFinalizedAt?: string;
+  readonly drawFinalizedAt?: string;
+  readonly drawFinalizedByPersonId?: string;
+  readonly poolsFinalizedAt?: string;
+  readonly poolsFinalizedByPersonId?: string;
+  readonly publishedAt?: string;
+  readonly publishedByPersonId?: string;
+  readonly poolOverrides?: readonly {
+    readonly at: string;
+    readonly actorPersonId: string;
+    readonly reason: string;
+    readonly teamAId: string;
+    readonly teamBId: string;
+    readonly poolA: string;
+    readonly poolB: string;
+  }[];
 }
 
 type SelectionStatus = "pending" | "confirmed" | "waitlisted" | "withdrawn";
@@ -202,6 +223,60 @@ function registrationClose(
     return undefined;
   }
   return new Date(value);
+}
+
+function tournamentLifecycle(
+  structure: Record<string, unknown> | null | undefined,
+): TournamentStructureLifecycle {
+  const value = structure?.lifecycle;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as TournamentStructureLifecycle)
+    : {};
+}
+
+export function tournamentPublishReadiness(input: {
+  readonly registrationClosed: boolean;
+  readonly divisions: readonly {
+    readonly name: string;
+    readonly seedingFinalizedAt?: string;
+    readonly bracketCreatedAt?: string;
+    readonly drawFinalizedAt?: string;
+    readonly matchCount: number;
+    readonly scheduledMatchCount: number;
+  }[];
+}): { readonly ready: boolean; readonly issues: readonly string[] } {
+  const issues: string[] = [];
+  if (!input.registrationClosed) issues.push("Close registration.");
+  if (!input.divisions.length) issues.push("Add at least one division.");
+  for (const division of input.divisions) {
+    if (!division.seedingFinalizedAt) {
+      issues.push(`${division.name}: finalize seeding.`);
+      continue;
+    }
+    if (!division.bracketCreatedAt) {
+      issues.push(`${division.name}: generate the competition draw.`);
+      continue;
+    }
+    if (
+      new Date(division.bracketCreatedAt).getTime() <
+      new Date(division.seedingFinalizedAt).getTime()
+    ) {
+      issues.push(
+        `${division.name}: regenerate the draw from the final seeds.`,
+      );
+    }
+    if (!division.drawFinalizedAt) {
+      issues.push(`${division.name}: finalize the draw or pools.`);
+    }
+    if (!division.matchCount) {
+      issues.push(`${division.name}: generate at least one match.`);
+    } else if (division.scheduledMatchCount < division.matchCount) {
+      issues.push(
+        `${division.name}: schedule all ${division.matchCount} matches (${division.scheduledMatchCount} ready).`,
+      );
+    }
+  }
+  return { ready: issues.length === 0, issues };
 }
 
 export interface EventCancellationOrderPreview {
@@ -514,6 +589,83 @@ export async function updateEventSession(
     });
   });
   return { id: input.sessionId, entity: "session", status: "updated" };
+}
+
+/**
+ * Closes checkout and roster editing immediately while preserving the
+ * originally configured cutoff in the audit record. Seeding remains a
+ * separate, reviewable director decision.
+ */
+export async function closeEventRegistration(
+  input: MutationContext & {
+    readonly sessionId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const current = await ownedSession(organizationId, input.sessionId);
+  if (current.status === "cancelled" || current.status === "completed") {
+    throw new Error(
+      "Cancelled and completed events cannot close registration.",
+    );
+  }
+  if (current.status === "live") {
+    return { id: current.id, entity: "session", status: "registration-closed" };
+  }
+  const database = getTransactionalDatabase();
+  await database.transaction(async (transaction) => {
+    const blueprint = await transaction.query.eventBlueprints.findFirst({
+      where: eq(eventBlueprints.sessionId, input.sessionId),
+    });
+    const previousSettings = blueprint?.registrationSettings ?? {};
+    const previousClose = registrationClose(previousSettings);
+    const registrationSettings = {
+      ...previousSettings,
+      registrationClosesAt: input.now.toISOString(),
+      directorClosedAt: input.now.toISOString(),
+      directorClosedByPersonId: input.actor.personId,
+    };
+    await transaction
+      .insert(eventBlueprints)
+      .values({ sessionId: input.sessionId, registrationSettings })
+      .onConflictDoUpdate({
+        target: eventBlueprints.sessionId,
+        set: { registrationSettings, updatedAt: input.now },
+      });
+    if (current.status === "registration-open") {
+      await transaction
+        .update(sessions)
+        .set({ status: "published", updatedAt: input.now })
+        .where(eq(sessions.id, input.sessionId));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "tournament.registration_closed",
+      entityType: "session",
+      entityId: input.sessionId,
+      beforeHash: stableHash({
+        status: current.status,
+        registrationClosesAt: previousClose?.toISOString(),
+      }),
+      afterHash: stableHash({
+        status:
+          current.status === "registration-open" ? "published" : current.status,
+        registrationClosesAt: input.now.toISOString(),
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: input.sessionId,
+    entity: "session",
+    status: "registration-closed",
+  };
 }
 
 export async function cancelEventWithRefunds(
@@ -1125,6 +1277,7 @@ interface DivisionOperationsDetail {
     readonly poolPlay?: DivisionSettings["poolPlay"];
     readonly kobConfig?: KobCompetitionConfig;
     readonly registrationClosesAt?: string;
+    readonly seedingFinalizedAt?: string;
   };
   readonly teams: readonly TeamOperationalSummary[];
   readonly bracket?: {
@@ -1133,6 +1286,10 @@ interface DivisionOperationsDetail {
     readonly format: string;
     readonly structure: Record<string, unknown>;
     readonly liveAt?: string;
+    readonly drawFinalizedAt?: string;
+    readonly poolsFinalizedAt?: string;
+    readonly publishedAt?: string;
+    readonly poolOverrideCount: number;
     readonly createdAt: string;
   };
   readonly matches: readonly {
@@ -1255,6 +1412,7 @@ export async function loadOperatorDivisionDetail(input: {
   );
   const settings = record.division.settings as DivisionSettings;
   const closesAt = registrationClose(record.registrationSettings);
+  const lifecycle = tournamentLifecycle(latestBracket?.structure);
   return {
     session: {
       id: record.session.id,
@@ -1278,6 +1436,7 @@ export async function loadOperatorDivisionDetail(input: {
       poolPlay: settings.poolPlay,
       kobConfig: settings.kobConfig,
       registrationClosesAt: closesAt?.toISOString(),
+      seedingFinalizedAt: settings.seedingFinalizedAt,
     },
     teams: record.teams,
     bracket: latestBracket
@@ -1287,6 +1446,10 @@ export async function loadOperatorDivisionDetail(input: {
           format: latestBracket.format,
           structure: latestBracket.structure,
           liveAt: latestBracket.liveAt?.toISOString(),
+          drawFinalizedAt: lifecycle.drawFinalizedAt,
+          poolsFinalizedAt: lifecycle.poolsFinalizedAt,
+          publishedAt: lifecycle.publishedAt,
+          poolOverrideCount: lifecycle.poolOverrides?.length ?? 0,
           createdAt: latestBracket.createdAt.toISOString(),
         }
       : undefined,
@@ -1457,6 +1620,7 @@ function competitionRoundLabel(input: {
 export async function loadTournamentCompetitionSnapshot(input: {
   readonly sessionId: string;
   readonly personId?: string;
+  readonly visibility?: "published" | "operator";
 }) {
   requireDatabase();
   const database = getDatabase();
@@ -1491,6 +1655,7 @@ export async function loadTournamentCompetitionSnapshot(input: {
     typeof brackets.$inferSelect
   >();
   for (const bracket of bracketRows) {
+    if (input.visibility !== "operator" && !bracket.liveAt) continue;
     if (!latestBracketByDivision.has(bracket.divisionId)) {
       latestBracketByDivision.set(bracket.divisionId, bracket);
     }
@@ -2304,7 +2469,11 @@ export async function reconcileDivisionSelection(
   const confirmedCount = plan.filter(
     (decision) => decision.selectionStatus === "confirmed",
   ).length;
-  if (record.kind === "league" && confirmedCount >= 2) {
+  if (
+    record.kind === "league" &&
+    confirmedCount >= 2 &&
+    Boolean(settings.seedingFinalizedAt)
+  ) {
     const latest = await getDatabase().query.brackets.findFirst({
       where: eq(brackets.divisionId, input.divisionId),
       orderBy: [desc(brackets.version)],
@@ -2341,6 +2510,70 @@ export async function reconcileDivisionSelection(
     id: input.divisionId,
     entity: "division",
     status: `confirmed-${confirmedCount}`,
+  };
+}
+
+/** Freezes the reviewed qualification order without creating a draw. */
+export async function finalizeDivisionSeeding(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const owned = await ownedDivision(organizationId, input.divisionId);
+  const closesAt = registrationClose(owned.registrationSettings);
+  if (!closesAt || closesAt > input.now) {
+    throw new Error("Close event registration before finalizing seeds.");
+  }
+  if (owned.session.status === "live") {
+    throw new Error("Live tournament seeds cannot be finalized again.");
+  }
+  await reconcileDivisionSelection({
+    ...input,
+    force: true,
+    requestId: `${input.requestId}:reconcile`,
+  });
+  const current = await getDatabase().query.divisions.findFirst({
+    where: eq(divisions.id, input.divisionId),
+  });
+  if (!current) throw new Error("Division was not found.");
+  const settings = current.settings as DivisionSettings;
+  const finalizedAt = input.now.toISOString();
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .update(divisions)
+      .set({
+        settings: {
+          ...settings,
+          seedingFinalizedAt: finalizedAt,
+          seedingFinalizedByPersonId: input.actor.personId,
+        },
+        updatedAt: input.now,
+      })
+      .where(eq(divisions.id, input.divisionId));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "tournament.seeding_finalized",
+      entityType: "division",
+      entityId: input.divisionId,
+      beforeHash: stableHash({
+        seedingFinalizedAt: settings.seedingFinalizedAt,
+      }),
+      afterHash: stableHash({ seedingFinalizedAt: finalizedAt }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return {
+    id: input.divisionId,
+    entity: "division",
+    status: "seeding-finalized",
   };
 }
 
@@ -2587,6 +2820,8 @@ export async function setTeamSelection(
       teamEntry: teamEntries,
       registration: registrations,
       divisionId: divisions.id,
+      divisionSettings: divisions.settings,
+      sessionStatus: sessions.status,
       organizationId: sql<
         string | null
       >`coalesce(${programs.organizationId}, ${eventTypes.organizationId}, ${venues.organizationId})`,
@@ -2603,6 +2838,9 @@ export async function setTeamSelection(
     .then((rows) => rows[0]);
   if (!row || row.organizationId !== organizationId) {
     throw new Error("Team was not found in this organization.");
+  }
+  if (row.sessionStatus === "live") {
+    throw new Error("Seeds cannot be changed after the tournament is live.");
   }
   if (input.seed) {
     const seedConflict = await getDatabase()
@@ -2633,6 +2871,11 @@ export async function setTeamSelection(
       : input.selectionStatus === "waitlisted"
         ? "waitlisted"
         : "cancelled";
+  const invalidatedSettings = {
+    ...(row.divisionSettings as DivisionSettings),
+  } as Record<string, unknown>;
+  delete invalidatedSettings.seedingFinalizedAt;
+  delete invalidatedSettings.seedingFinalizedByPersonId;
   const database = getDatabase();
   await database.batch([
     database
@@ -2675,6 +2918,10 @@ export async function setTeamSelection(
           .update(teams)
           .set({ updatedAt: input.now })
           .where(sql`false`),
+    database
+      .update(divisions)
+      .set({ settings: invalidatedSettings, updatedAt: input.now })
+      .where(eq(divisions.id, row.divisionId)),
     database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
@@ -2724,6 +2971,14 @@ export async function expandDivisionField(
   if (input.maximumTeams < currentMaximum) {
     throw new Error("Use team actions before reducing a published field.");
   }
+  if (record.session.status === "live") {
+    throw new Error("The field cannot expand after the tournament is live.");
+  }
+  const nextSettings = {
+    ...(record.division.settings as DivisionSettings),
+  } as Record<string, unknown>;
+  delete nextSettings.seedingFinalizedAt;
+  delete nextSettings.seedingFinalizedByPersonId;
   await getDatabase().batch([
     getDatabase()
       .update(divisions)
@@ -2733,6 +2988,7 @@ export async function expandDivisionField(
           record.division.capacity,
           input.maximumTeams * record.division.teamSize,
         ),
+        settings: nextSettings,
         updatedAt: input.now,
       })
       .where(eq(divisions.id, input.divisionId)),
@@ -3104,6 +3360,12 @@ export async function persistDivisionBracket(
   const bracketId = crypto.randomUUID();
   const version = (current?.version ?? 0) + 1;
   const settings = record.division.settings as DivisionSettings;
+  if (!settings.seedingFinalizedAt) {
+    throw new Error("Finalize seeding before generating the competition draw.");
+  }
+  if (current?.liveAt || record.session.status === "live") {
+    throw new Error("A live competition draw cannot be replaced.");
+  }
   const configuredTeams = confirmed.map((team) => ({
     id: team.teamId!,
     seed: team.seed!,
@@ -3172,6 +3434,12 @@ export async function persistDivisionBracket(
   const teamIdBySeed = new Map(
     generated.teams.map((team) => [team.seed, team.id] as const),
   );
+  const persistedStructure = {
+    ...(generated as unknown as Record<string, unknown>),
+    lifecycle: {
+      seedingFinalizedAt: settings.seedingFinalizedAt,
+    } satisfies TournamentStructureLifecycle,
+  };
   const database = getTransactionalDatabase();
   await database.transaction(async (transaction) => {
     if (derivedTeams.length) {
@@ -3199,7 +3467,7 @@ export async function persistDivisionBracket(
       divisionId: input.divisionId,
       version,
       format: generated.format,
-      structure: generated as unknown as Record<string, unknown>,
+      structure: persistedStructure,
       supersedesBracketId: current?.id,
       changeReason: input.reason,
     });
@@ -3239,7 +3507,7 @@ export async function persistDivisionBracket(
       action: "division.bracket_published",
       entityType: "bracket",
       entityId: bracketId,
-      afterHash: stableHash(generated),
+      afterHash: stableHash(persistedStructure),
       reason: input.reason,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
@@ -3541,6 +3809,470 @@ export async function advanceIndividualKobStage(
 }
 
 /**
+ * Swaps two teams between equally sized standard pools and regenerates the
+ * affected round-robin sides. This keeps every saved match aligned with the
+ * director's reviewed pool board.
+ */
+export async function swapDivisionPoolTeams(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly teamAId: string;
+    readonly teamBId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  await ownedDivision(organizationId, input.divisionId);
+  const current = await getDatabase().query.brackets.findFirst({
+    where: eq(brackets.divisionId, input.divisionId),
+    orderBy: [desc(brackets.version)],
+  });
+  if (!current || current.format !== "pool-play") {
+    throw new Error("Generate standard pool play before overriding pools.");
+  }
+  if (current.liveAt) {
+    throw new Error("Pool assignments cannot change after publication.");
+  }
+  const structure = current.structure as Record<string, unknown>;
+  const parsed = competitionStructure(structure);
+  const poolA = Object.entries(parsed.pools).find(([, ids]) =>
+    ids.includes(input.teamAId),
+  )?.[0];
+  const poolB = Object.entries(parsed.pools).find(([, ids]) =>
+    ids.includes(input.teamBId),
+  )?.[0];
+  if (!poolA || !poolB || poolA === poolB) {
+    throw new Error("Choose teams from two different pools.");
+  }
+  const matchRows = await getDatabase()
+    .select()
+    .from(matches)
+    .where(eq(matches.bracketId, current.id));
+  if (
+    matchRows.some(
+      (match) =>
+        match.startedAt ||
+        match.completedAt ||
+        !["scheduled", "not-started"].includes(match.status),
+    )
+  ) {
+    throw new Error("Pool assignments cannot change after a match starts.");
+  }
+  const nextPools = Object.fromEntries(
+    Object.entries(parsed.pools).map(([key, ids]) => [
+      key,
+      ids.map((id) =>
+        id === input.teamAId
+          ? input.teamBId
+          : id === input.teamBId
+            ? input.teamAId
+            : id,
+      ),
+    ]),
+  );
+  const teamById = new Map(parsed.teams.map((team) => [team.id, team]));
+  const regeneratedPoolMatches = Object.entries(nextPools).flatMap(
+    ([key, ids]) =>
+      generateRoundRobin({
+        id: `${current.id}-pool-${key}`,
+        teams: ids.map((id) => {
+          const team = teamById.get(id);
+          if (!team) throw new Error("A pool team is missing from the draw.");
+          return team;
+        }),
+      }).matches,
+  );
+  const rawMatches = Array.isArray(structure.matches)
+    ? (structure.matches as readonly Record<string, unknown>[])
+    : [];
+  const nonPoolMatches = rawMatches.filter((match) => match.bracket !== "pool");
+  const lifecycle = tournamentLifecycle(structure);
+  const nextLifecycle = {
+    ...lifecycle,
+    drawFinalizedAt: undefined,
+    drawFinalizedByPersonId: undefined,
+    poolsFinalizedAt: undefined,
+    poolsFinalizedByPersonId: undefined,
+    poolOverrides: [
+      ...(lifecycle.poolOverrides ?? []),
+      {
+        at: input.now.toISOString(),
+        actorPersonId: input.actor.personId,
+        reason: input.reason,
+        teamAId: input.teamAId,
+        teamBId: input.teamBId,
+        poolA,
+        poolB,
+      },
+    ],
+  } satisfies TournamentStructureLifecycle;
+  const nextStructure = {
+    ...structure,
+    pools: nextPools,
+    matches: [...nonPoolMatches, ...regeneratedPoolMatches],
+    lifecycle: nextLifecycle,
+  };
+  const rowByLogicalId = new Map(
+    matchRows.map((match) => [
+      (match.format as Record<string, unknown>).logicalId,
+      match,
+    ]),
+  );
+  const teamIdBySeed = new Map(
+    parsed.teams.map((team) => [team.seed, team.id]),
+  );
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .update(brackets)
+      .set({ structure: nextStructure })
+      .where(eq(brackets.id, current.id));
+    for (const definition of regeneratedPoolMatches) {
+      const row = rowByLogicalId.get(definition.id);
+      if (!row) continue;
+      await transaction
+        .update(matches)
+        .set({
+          teamAId:
+            definition.sideA.kind === "seed"
+              ? teamIdBySeed.get(definition.sideA.seed)
+              : null,
+          teamBId:
+            definition.sideB.kind === "seed"
+              ? teamIdBySeed.get(definition.sideB.seed)
+              : null,
+          format: {
+            ...(row.format as Record<string, unknown>),
+            sideA: definition.sideA,
+            sideB: definition.sideB,
+          },
+          updatedAt: input.now,
+        })
+        .where(eq(matches.id, row.id));
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "tournament.pool_assignment_overridden",
+      entityType: "bracket",
+      entityId: current.id,
+      beforeHash: stableHash(parsed.pools),
+      afterHash: stableHash(nextPools),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: current.id, entity: "bracket", status: "pool-override-saved" };
+}
+
+export async function finalizeDivisionDraw(
+  input: MutationContext & {
+    readonly divisionId: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const owned = await ownedDivision(organizationId, input.divisionId);
+  const settings = owned.division.settings as DivisionSettings;
+  const current = await getDatabase().query.brackets.findFirst({
+    where: eq(brackets.divisionId, input.divisionId),
+    orderBy: [desc(brackets.version)],
+  });
+  if (!settings.seedingFinalizedAt || !current) {
+    throw new Error("Finalize seeding and generate the draw first.");
+  }
+  if (current.liveAt) {
+    return { id: current.id, entity: "bracket", status: "draw-finalized" };
+  }
+  if (current.createdAt < new Date(settings.seedingFinalizedAt)) {
+    throw new Error("Regenerate this draw from the latest finalized seeds.");
+  }
+  const structure = current.structure as Record<string, unknown>;
+  const hasPools =
+    Object.keys(competitionStructure(structure).pools).length > 0;
+  const lifecycle = tournamentLifecycle(structure);
+  const finalizedAt = input.now.toISOString();
+  const nextLifecycle = {
+    ...lifecycle,
+    drawFinalizedAt: finalizedAt,
+    drawFinalizedByPersonId: input.actor.personId,
+    ...(hasPools
+      ? {
+          poolsFinalizedAt: finalizedAt,
+          poolsFinalizedByPersonId: input.actor.personId,
+        }
+      : {}),
+  } satisfies TournamentStructureLifecycle;
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .update(brackets)
+      .set({ structure: { ...structure, lifecycle: nextLifecycle } })
+      .where(eq(brackets.id, current.id));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: hasPools
+        ? "tournament.pools_finalized"
+        : "tournament.draw_finalized",
+      entityType: "bracket",
+      entityId: current.id,
+      beforeHash: stableHash(lifecycle),
+      afterHash: stableHash(nextLifecycle),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { id: current.id, entity: "bracket", status: "draw-finalized" };
+}
+
+/** Publishes every finalized division together and alerts the active field. */
+export async function publishTournamentLive(
+  input: MutationContext & {
+    readonly sessionId: string;
+    readonly participantMessage: string;
+    readonly reason: string;
+  },
+): Promise<OperatorMutationResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const session = await ownedSession(organizationId, input.sessionId);
+  if (session.status === "cancelled" || session.status === "completed") {
+    throw new Error("A cancelled or completed event cannot be published live.");
+  }
+  const database = getDatabase();
+  const blueprint = await database.query.eventBlueprints.findFirst({
+    where: eq(eventBlueprints.sessionId, input.sessionId),
+  });
+  const closesAt = registrationClose(blueprint?.registrationSettings ?? null);
+  const divisionRows = await database
+    .select()
+    .from(divisions)
+    .where(eq(divisions.sessionId, input.sessionId));
+  const bracketRows = divisionRows.length
+    ? await database
+        .select()
+        .from(brackets)
+        .where(
+          inArray(
+            brackets.divisionId,
+            divisionRows.map((row) => row.id),
+          ),
+        )
+        .orderBy(desc(brackets.version))
+    : [];
+  const bracketByDivision = new Map<string, typeof brackets.$inferSelect>();
+  for (const bracket of bracketRows) {
+    if (!bracketByDivision.has(bracket.divisionId)) {
+      bracketByDivision.set(bracket.divisionId, bracket);
+    }
+  }
+  const activeBrackets = [...bracketByDivision.values()];
+  const matchRows = activeBrackets.length
+    ? await database
+        .select()
+        .from(matches)
+        .where(
+          inArray(
+            matches.bracketId,
+            activeBrackets.map((row) => row.id),
+          ),
+        )
+    : [];
+  const readiness = tournamentPublishReadiness({
+    registrationClosed: Boolean(closesAt && closesAt <= input.now),
+    divisions: divisionRows.map((division) => {
+      const settings = division.settings as DivisionSettings;
+      const bracket = bracketByDivision.get(division.id);
+      const divisionMatches = matchRows.filter(
+        (match) => match.bracketId === bracket?.id,
+      );
+      return {
+        name: division.name,
+        seedingFinalizedAt: settings.seedingFinalizedAt,
+        bracketCreatedAt: bracket?.createdAt.toISOString(),
+        drawFinalizedAt: tournamentLifecycle(bracket?.structure)
+          .drawFinalizedAt,
+        matchCount: divisionMatches.length,
+        scheduledMatchCount: divisionMatches.filter((match) =>
+          Boolean(match.scheduledAt),
+        ).length,
+      };
+    }),
+  });
+  if (!readiness.ready) {
+    throw new Error(readiness.issues.join(" "));
+  }
+  if (
+    session.status === "live" &&
+    activeBrackets.every((bracket) => bracket.liveAt)
+  ) {
+    return { id: session.id, entity: "session", status: "live" };
+  }
+  const eventUrl = canonicalPublicWebUrl(`/events/${session.slug}`);
+  const notificationBody = `${input.participantMessage.trim()}\n\nView pools and match times: ${eventUrl}`;
+  const registrationRows = await database
+    .select({ personId: registrations.personId })
+    .from(registrations)
+    .where(
+      and(
+        eq(registrations.sessionId, input.sessionId),
+        inArray(registrations.status, [
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "checked-in",
+        ]),
+      ),
+    );
+  const recipientPersonIds = [
+    ...new Set(registrationRows.map((row) => row.personId)),
+  ];
+  const guestInvitations = await database
+    .select({
+      id: organizationInvitations.id,
+      personId: organizationInvitations.provisionalPersonId,
+      name: organizationInvitations.invitedName,
+      email: organizationInvitations.invitedEmail,
+      phoneE164: organizationInvitations.invitedPhoneE164,
+    })
+    .from(organizationInvitations)
+    .where(
+      and(
+        eq(organizationInvitations.eventSessionId, input.sessionId),
+        eq(organizationInvitations.status, "pending"),
+      ),
+    );
+  const publishedAt = input.now.toISOString();
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .update(sessions)
+      .set({ status: "live", updatedAt: input.now })
+      .where(eq(sessions.id, input.sessionId));
+    for (const bracket of activeBrackets) {
+      const structure = bracket.structure as Record<string, unknown>;
+      await transaction
+        .update(brackets)
+        .set({
+          liveAt: bracket.liveAt ?? input.now,
+          structure: {
+            ...structure,
+            lifecycle: {
+              ...tournamentLifecycle(structure),
+              publishedAt,
+              publishedByPersonId: input.actor.personId,
+            } satisfies TournamentStructureLifecycle,
+          },
+        })
+        .where(eq(brackets.id, bracket.id));
+    }
+    if (recipientPersonIds.length) {
+      await transaction.insert(messages).values(
+        recipientPersonIds.flatMap((personId) =>
+          (["in-app", "push"] as const).map((channel) => ({
+            id: crypto.randomUUID(),
+            organizationId,
+            senderPersonId: input.actor.personId,
+            recipientPersonId: personId,
+            guardianCopyPersonIds: [],
+            channel,
+            kind: "tournament-live",
+            subject: `${session.title} pools and schedule are live`,
+            body: notificationBody,
+            status: "queued",
+            scheduledAt: input.now,
+          })),
+        ),
+      );
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "tournament.published_live",
+      entityType: "session",
+      entityId: input.sessionId,
+      beforeHash: stableHash({ status: session.status }),
+      afterHash: stableHash({
+        status: "live",
+        bracketIds: activeBrackets.map((bracket) => bracket.id),
+        recipientCount: recipientPersonIds.length,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  for (const guest of guestInvitations) {
+    if (!guest.personId || (!guest.phoneE164 && !guest.email)) continue;
+    let channel: "sms" | "email" = guest.phoneE164 ? "sms" : "email";
+    let delivery: { readonly sent: boolean; readonly messageId?: string };
+    if (guest.phoneE164) {
+      delivery = await sendTemplateSms({
+        to: guest.phoneE164,
+        templateName:
+          process.env.SENT_DM_TOURNAMENT_LIVE_TEMPLATE_NAME ??
+          "duna_tournament_live",
+        parameters: {
+          player_name: guest.name,
+          event_title: session.title,
+          event_url: eventUrl,
+          message: input.participantMessage.trim(),
+        },
+        idempotencyKey: `tournament-live:${input.sessionId}:${guest.id}`,
+      }).catch(() => ({
+        configured: true,
+        sent: false,
+        messageId: undefined,
+      }));
+    } else {
+      delivery = await sendTransactionalEmail({
+        to: guest.email!,
+        subject: `${session.title} pools and schedule are live`,
+        text: `Hi ${guest.name},\n\n${notificationBody}`,
+        idempotencyKey: `tournament-live-email:${input.sessionId}:${guest.id}`,
+      }).catch(() => ({
+        configured: true,
+        sent: false,
+        messageId: undefined,
+      }));
+    }
+    if (!delivery.sent && guest.email && channel === "sms") {
+      channel = "email";
+      delivery = await sendTransactionalEmail({
+        to: guest.email,
+        subject: `${session.title} pools and schedule are live`,
+        text: `Hi ${guest.name},\n\n${notificationBody}`,
+        idempotencyKey: `tournament-live-email:${input.sessionId}:${guest.id}`,
+      }).catch(() => ({ sent: false, messageId: undefined }));
+    }
+    await database.insert(messages).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      senderPersonId: input.actor.personId,
+      recipientPersonId: guest.personId,
+      guardianCopyPersonIds: [],
+      channel,
+      kind: "tournament-live",
+      subject: `${session.title} pools and schedule are live`,
+      body: notificationBody,
+      status: delivery.sent ? "sent" : "failed",
+      providerMessageId: delivery.messageId,
+      scheduledAt: input.now,
+      sentAt: delivery.sent ? input.now : undefined,
+    });
+  }
+  return { id: session.id, entity: "session", status: "live" };
+}
+
+/**
  * Puts an already generated competition structure into the live operating
  * state. Generating a bracket deliberately stays separate from this action:
  * directors can inspect the field, pools and assignments before changing the
@@ -3555,56 +4287,12 @@ export async function launchDivisionTournament(
   requireDatabase();
   const organizationId = requireOrganization(input.actor);
   const record = await loadDivisionRecord(organizationId, input.divisionId);
-  const current = await getDatabase().query.brackets.findFirst({
-    where: eq(brackets.divisionId, input.divisionId),
-    orderBy: [desc(brackets.version)],
+  return publishTournamentLive({
+    ...input,
+    sessionId: record.session.id,
+    participantMessage:
+      "The official pools and match schedule are now live. Check your next match before heading to the courts.",
   });
-  if (!current) {
-    throw new Error(
-      "Build the pools or bracket before launching the tournament.",
-    );
-  }
-  if (
-    record.session.status === "cancelled" ||
-    record.session.status === "completed"
-  ) {
-    throw new Error("A cancelled or completed event cannot be launched.");
-  }
-  if (record.session.status === "live" && current.liveAt) {
-    return { id: current.id, entity: "bracket", status: "live" };
-  }
-  const database = getTransactionalDatabase();
-  await database.transaction(async (transaction) => {
-    await transaction
-      .update(sessions)
-      .set({ status: "live", updatedAt: input.now })
-      .where(eq(sessions.id, record.session.id));
-    await transaction
-      .update(brackets)
-      .set({ liveAt: current.liveAt ?? input.now })
-      .where(eq(brackets.id, current.id));
-    await transaction.insert(auditLog).values({
-      organizationId,
-      actorPersonId: input.actor.personId,
-      actorType: "person",
-      action: "tournament.launched",
-      entityType: "bracket",
-      entityId: current.id,
-      beforeHash: stableHash({
-        sessionStatus: record.session.status,
-        bracketLiveAt: current.liveAt,
-      }),
-      afterHash: stableHash({
-        sessionStatus: "live",
-        bracketLiveAt: input.now,
-      }),
-      reason: input.reason,
-      traceId: input.requestId,
-      ipAddress: input.ipAddress,
-      createdAt: input.now,
-    });
-  });
-  return { id: current.id, entity: "bracket", status: "live" };
 }
 
 /**

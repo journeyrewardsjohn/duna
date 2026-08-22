@@ -20,6 +20,11 @@ export default async function EventOperationsPage({
     notFound();
   }
   const detail = await caller.operator.sessionDetail({ sessionId });
+  const competitionDivisions = await Promise.all(
+    detail.entryDivisions.map((division) =>
+      caller.operator.divisionDetail({ divisionId: division.id }),
+    ),
+  );
   return (
     <OperatorShell
       active="events"
@@ -27,6 +32,7 @@ export default async function EventOperationsPage({
       organization={dashboard.organization}
     >
       <EventOperationsWorkspace
+        competitionDivisions={competitionDivisions}
         detail={detail}
         liveKitConfigured={Boolean(
           process.env.LIVEKIT_URL &&

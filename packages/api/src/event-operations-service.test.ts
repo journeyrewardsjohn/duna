@@ -5,6 +5,7 @@ import {
   planDivisionSelection,
   registrationCanReceiveEventCancellationRefund,
   registrationRefundIsComplete,
+  tournamentPublishReadiness,
 } from "./event-operations-service";
 
 describe("event player invitations", () => {
@@ -198,6 +199,47 @@ describe("planDivisionSelection", () => {
       selectionStatus: "waitlisted",
       seed: 4,
     });
+  });
+});
+
+describe("tournament publish readiness", () => {
+  const readyDivision = {
+    name: "Open",
+    seedingFinalizedAt: "2026-08-22T10:00:00.000Z",
+    bracketCreatedAt: "2026-08-22T10:05:00.000Z",
+    drawFinalizedAt: "2026-08-22T10:10:00.000Z",
+    matchCount: 6,
+    scheduledMatchCount: 6,
+  } as const;
+
+  it("requires registration, final seeds, a current draw, and every match time", () => {
+    expect(
+      tournamentPublishReadiness({
+        registrationClosed: true,
+        divisions: [readyDivision],
+      }),
+    ).toEqual({ ready: true, issues: [] });
+  });
+
+  it("names every remaining launch gate", () => {
+    const result = tournamentPublishReadiness({
+      registrationClosed: false,
+      divisions: [
+        {
+          ...readyDivision,
+          bracketCreatedAt: "2026-08-22T09:59:00.000Z",
+          drawFinalizedAt: undefined,
+          scheduledMatchCount: 3,
+        },
+      ],
+    });
+    expect(result.ready).toBe(false);
+    expect(result.issues).toEqual([
+      "Close registration.",
+      "Open: regenerate the draw from the final seeds.",
+      "Open: finalize the draw or pools.",
+      "Open: schedule all 6 matches (3 ready).",
+    ]);
   });
 });
 
