@@ -12,7 +12,10 @@ Every turn is assembled server-side from four bounded layers:
 1. **Identity and tenancy** — person, roles, scopes, age band, and active
    organization resolved from the WorkOS session or bearer token.
 2. **Live operating context** — current schedule, sessions, courts, coaches,
-   attendees, conflicts, weather, metrics, and the current app surface.
+   attendees, resource conflicts, weather, metrics, event registrations,
+   impressions, conversion, current price, marketing flows and campaign
+   performance, coach availability and workload, unassigned sessions, and the
+   current app surface.
 3. **Organization context** — published theme, palette, brand voice, tagline,
    and operator-approved brand knowledge. Organization content may guide an
    answer or draft but never overrides permissions, pricing, safety, or live
@@ -24,6 +27,32 @@ Every turn is assembled server-side from four bounded layers:
 The client may send the current page and recent conversation, but it never sends
 or decides authorization. The server rebuilds identity and organization scope on
 every request.
+
+CoPilot answers and proactive organization suggestions use Vercel AI Gateway.
+The quality-first default is `openai/gpt-5.6-sol`; the only current alternative
+is `moonshotai/kimi-k3`. An unsupported `DUNA_COPILOT_MODEL` value fails closed
+to Sol. Direct OpenAI credentials are not used by this path. Explicit external
+web research stays on Sol because Kimi K3 does not expose Gateway web search;
+ordinary organization questions continue to honor the configured Sol/Kimi
+choice.
+
+## Proactive operating suggestions
+
+Opening Duna AI triggers a bounded opportunity review for the active
+organization. The model receives permission-scoped evidence and returns two to
+four tap-ready questions. It prioritizes:
+
+- near-term events that may need stronger marketing, using registrations,
+  capacity, impressions, viewers, conversion, campaign state, and time to start;
+- price review when reach and conversion evidence makes price worth
+  investigating—low fill alone never proves the price is wrong;
+- actual court or coach double-bookings, never merely simultaneous events;
+- unassigned sessions and coach availability or workload that could cover them.
+
+When the provider is unavailable, Duna produces the same categories from
+deterministic operating signals rather than inventing a recommendation. Sending
+a campaign, publishing, changing a price, moving a session, or assigning a coach
+still requires the normal exact review and approval flow.
 
 ## Release-time feature knowledge
 

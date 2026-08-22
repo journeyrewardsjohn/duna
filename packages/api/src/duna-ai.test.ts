@@ -3,8 +3,10 @@ import {
   classifyDunaAiAction,
   confirmDunaAiAction,
   dunaAiRequestSchema,
+  findResourceScheduleConflicts,
   findScheduleConflicts,
   fetchDunaAiGatewayWithRetry,
+  getDunaAiSuggestions,
   hasDunaAiGatewayCredential,
   isRetryableDunaAiGatewayStatus,
   rankDiscoveryItems,
@@ -91,6 +93,77 @@ describe("Duna AI context", () => {
         },
       ]),
     ).toEqual(["Morning clinic overlaps Private lesson"]);
+  });
+
+  it("only calls an organization overlap a conflict when a court or coach is shared", () => {
+    expect(
+      findResourceScheduleConflicts([
+        {
+          id: "session-1",
+          title: "U16 clinic",
+          startsAt: "2026-08-22T13:00:00.000Z",
+          endsAt: "2026-08-22T14:30:00.000Z",
+          courtId: "court-1",
+          courtName: "Court 1",
+          coachPersonId: "coach-1",
+          coachName: "Coach Taylor",
+        },
+        {
+          id: "session-2",
+          title: "Private lesson",
+          startsAt: "2026-08-22T14:00:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          courtId: "court-2",
+          courtName: "Court 2",
+          coachPersonId: "coach-1",
+          coachName: "Coach Taylor",
+        },
+        {
+          id: "session-3",
+          title: "Open play",
+          startsAt: "2026-08-22T14:00:00.000Z",
+          endsAt: "2026-08-22T15:00:00.000Z",
+          courtId: "court-3",
+          courtName: "Court 3",
+          coachPersonId: "coach-2",
+          coachName: "Coach Morgan",
+        },
+      ]),
+    ).toEqual([
+      "Coach Taylor is double-booked: U16 clinic overlaps Private lesson",
+    ]);
+  });
+
+  it("suggests grounded marketing, pricing, and coach-coverage questions", async () => {
+    const response = await getDunaAiSuggestions({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000001",
+        displayName: "Coach Taylor",
+        roles: ["coach"],
+        scopes: ["sessions:read", "members:read", "payments:read"],
+        ageBand: "adult",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        isDemo: true,
+      },
+      surface: "pro",
+      page: "/today",
+      now: new Date("2026-08-21T16:00:00.000Z"),
+    });
+    expect(response.suggestions).toEqual(
+      expect.arrayContaining([
+        "Help market Sunset doubles training to fill 5 open spots",
+        "Which available coach could cover Sunset doubles training?",
+        "Should we adjust the $90 price for Sunset doubles training?",
+      ]),
+    );
+    expect(response.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "link",
+          title: "Sunset doubles training",
+        }),
+      ]),
+    );
   });
 
   it("ranks discovery against the user's request", () => {
@@ -227,13 +300,18 @@ describe("Duna AI context", () => {
 });
 
 describe("Duna AI model", () => {
-  it("uses a provider-qualified Terra model through Gateway by default", () => {
-    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-terra");
+  it("uses provider-qualified GPT-5.6 Sol through Gateway by default", () => {
+    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-sol");
   });
 
-  it("supports a dedicated co-pilot model override", () => {
+  it("supports Kimi K3 as the other approved co-pilot model", () => {
+    process.env.DUNA_COPILOT_MODEL = "moonshotai/kimi-k3";
+    expect(resolveDunaAiCopilotModel()).toBe("moonshotai/kimi-k3");
+  });
+
+  it("fails closed to Sol for an unapproved co-pilot model", () => {
     process.env.DUNA_COPILOT_MODEL = "openai/gpt-5.6-luna";
-    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-luna");
+    expect(resolveDunaAiCopilotModel()).toBe("openai/gpt-5.6-sol");
   });
 
   it("requires Vercel AI Gateway credentials and ignores a direct OpenAI key", () => {
@@ -283,7 +361,7 @@ describe("Duna AI model", () => {
     await expect(
       fetchDunaAiGatewayWithRetry({
         credential: "gateway-key",
-        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        body: JSON.stringify({ model: "openai/gpt-5.6-sol" }),
         fetchImpl,
         wait,
       }),
@@ -299,7 +377,7 @@ describe("Duna AI model", () => {
     await expect(
       fetchDunaAiGatewayWithRetry({
         credential: "invalid-key",
-        body: JSON.stringify({ model: "openai/gpt-5.6-terra" }),
+        body: JSON.stringify({ model: "openai/gpt-5.6-sol" }),
         fetchImpl,
       }),
     ).resolves.toMatchObject({ status: 401 });

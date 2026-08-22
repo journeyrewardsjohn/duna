@@ -157,20 +157,20 @@ be mixed in source.
 
 ## AI, research, Sand data, and media generation
 
-| Name                                   | Class                  | Purpose                                                            |
-| -------------------------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `AI_GATEWAY_API_KEY`                   | Server secret          | Vercel AI Gateway credential outside workload identity             |
-| `VERCEL_OIDC_TOKEN`                    | Provider/system secret | Short-lived Vercel workload identity used by Gateway-capable code  |
-| `OPENAI_API_KEY`                       | Server secret          | OpenAI Agents/LiveKit paths that are explicitly direct-provider    |
-| `DUNA_AI_MODEL`                        | Server config          | Duna messaging/support agent model                                 |
-| `DUNA_SAFETY_MODEL`                    | Server config          | Youth/safety screening model                                       |
-| `DUNA_COPILOT_MODEL`                   | Server config          | Provider-qualified Duna CoPilot model used only through AI Gateway |
-| `OPENAI_ZERO_DATA_RETENTION_CONFIRMED` | Server config          | Fail-closed environment attestation for minor-content provider use |
-| `FIRECRAWL_API_KEY`                    | Server secret          | Firecrawl access for rendered/source research                      |
-| `SAND_SCRAPER_ENGINE`                  | Server config          | Explicit native/scraper selection                                  |
-| `DUNA_MEDIA_CONCURRENCY`               | Tool config            | Bounded media-generation script concurrency                        |
-| `HF_CREDENTIALS`                       | Server/tool secret     | Higgsfield product-media generation credentials                    |
-| `HIGGSFIELD_BIN`                       | Tool config            | Optional local Higgsfield CLI path override                        |
+| Name                                   | Class                  | Purpose                                                                             |
+| -------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
+| `AI_GATEWAY_API_KEY`                   | Server secret          | Vercel AI Gateway credential outside workload identity                              |
+| `VERCEL_OIDC_TOKEN`                    | Provider/system secret | Short-lived Vercel workload identity used by Gateway-capable code                   |
+| `OPENAI_API_KEY`                       | Server secret          | OpenAI Agents/LiveKit paths that are explicitly direct-provider                     |
+| `DUNA_AI_MODEL`                        | Server config          | Duna messaging/support agent model                                                  |
+| `DUNA_SAFETY_MODEL`                    | Server config          | Youth/safety screening model                                                        |
+| `DUNA_COPILOT_MODEL`                   | Server config          | Duna CoPilot model: `openai/gpt-5.6-sol` or `moonshotai/kimi-k3` through AI Gateway |
+| `OPENAI_ZERO_DATA_RETENTION_CONFIRMED` | Server config          | Fail-closed environment attestation for minor-content provider use                  |
+| `FIRECRAWL_API_KEY`                    | Server secret          | Firecrawl access for rendered/source research                                       |
+| `SAND_SCRAPER_ENGINE`                  | Server config          | Explicit native/scraper selection                                                   |
+| `DUNA_MEDIA_CONCURRENCY`               | Tool config            | Bounded media-generation script concurrency                                         |
+| `HF_CREDENTIALS`                       | Server/tool secret     | Higgsfield product-media generation credentials                                     |
+| `HIGGSFIELD_BIN`                       | Tool config            | Optional local Higgsfield CLI path override                                         |
 
 Gateway model selectors (server config, provider-qualified values):
 

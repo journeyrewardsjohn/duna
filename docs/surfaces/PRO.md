@@ -28,6 +28,11 @@ removed. The compact header shows the active organization and utility controls;
 the Today screen alone adds a one-line operational snapshot for matches, live
 play, and items needing review.
 
+Duna AI's opening suggestions compare event registrations, reach, conversion,
+current price, marketing activity, resource conflicts, and coach coverage. They
+name the event or session behind each question and never infer that low fill by
+itself requires a discount.
+
 Focused full-screen surfaces handle creation, Get Paid, messaging, ticket/player
 scanning, live scoring, and LiveKit session notes. Deep links can open an exact
 conversation, match scorer, session, or organization.

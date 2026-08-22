@@ -54,9 +54,10 @@ function previewResponse(): ProDunaAiResponse {
       },
     ],
     suggestions: [
-      "What is on my schedule tomorrow?",
-      "Move my 9:30am group lesson to 10:00am tomorrow",
-      "Which sessions need my attention?",
+      "Which event should I market more aggressively this week?",
+      "Are any event prices worth reviewing?",
+      "Where do I have a court or coach conflict?",
+      "Where could another coach help most?",
     ],
     toolsUsed: [],
     reasoningEffort: "high",
@@ -80,15 +81,16 @@ export function DunaAiScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [suggestions, setSuggestions] = useState<string[]>([
-    "What needs my attention today?",
-    "Move my 9:30am group lesson to 10:00am tomorrow",
-    "Help me plan around coaches and courts",
+    "Which event should I market more aggressively this week?",
+    "Are any event prices worth reviewing?",
+    "Where do I have a court or coach conflict?",
+    "Where could another coach help most?",
   ]);
   const [turns, setTurns] = useState<ChatTurn[]>([
     {
       id: "welcome",
       role: "assistant",
-      body: "I’m ready to help run today’s operation. I know who you are, which organization is active, its approved brand context, and the schedule your role allows you to see.",
+      body: "I’m ready to help run the operation. I can compare event demand, marketing reach, price, schedule conflicts, and coach coverage using the organization context your role allows you to see.",
     },
   ]);
   const styles = useMemo(() => createStyles(palette), [palette]);

@@ -97,6 +97,7 @@ export async function POST(request: Request) {
           surface: input.surface,
           page: input.page,
           context: input.context,
+          requestOidcToken,
           now: context.now,
         }),
       );
