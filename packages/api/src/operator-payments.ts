@@ -1058,6 +1058,7 @@ export async function startOperatorPaymentCollection(input: {
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly userAgent?: string;
   readonly now: Date;
 }): Promise<OperatorPaymentStart> {
   requireDatabase();
@@ -1176,6 +1177,9 @@ export async function startOperatorPaymentCollection(input: {
       taxTotalMinor: 0,
       totalMinor: input.amountMinor,
       idempotencyKey: `operator-payment:${input.idempotencyKey}`,
+      checkoutIpAddress: input.ipAddress,
+      checkoutUserAgent: input.userAgent,
+      checkoutSurface: "operator",
       expiresAt: new Date(input.now.getTime() + 24 * 60 * 60_000),
       createdAt: input.now,
       updatedAt: input.now,

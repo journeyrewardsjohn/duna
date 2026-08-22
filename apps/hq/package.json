@@ -18,6 +18,7 @@
     "@duna/ui": "workspace:*",
     "@higgsfield/client": "0.2.1",
     "@livekit/protocol": "1.50.4",
+    "@tanstack/react-table": "9.1.2",
     "@turf/turf": "7.4.0",
     "@vercel/blob": "^2.6.1",
     "@workos-inc/authkit-nextjs": "4.3.1",

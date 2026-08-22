@@ -6648,6 +6648,9 @@ export const orders = pgTable(
     stripeCheckoutSessionId: varchar("stripe_checkout_session_id", {
       length: 128,
     }).unique(),
+    checkoutIpAddress: varchar("checkout_ip_address", { length: 64 }),
+    checkoutUserAgent: text("checkout_user_agent"),
+    checkoutSurface: varchar("checkout_surface", { length: 24 }),
     idempotencyKey: varchar("idempotency_key", { length: 128 })
       .notNull()
       .unique(),

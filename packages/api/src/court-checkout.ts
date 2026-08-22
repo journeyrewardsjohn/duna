@@ -1362,6 +1362,7 @@ export async function startCourtCheckout(input: {
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly userAgent?: string;
   readonly now: Date;
 }): Promise<CourtCheckoutResult> {
   if (!process.env.DATABASE_URL) {
@@ -1716,6 +1717,9 @@ export async function startCourtCheckout(input: {
       taxTotalMinor: 0,
       totalMinor: organizerShare,
       idempotencyKey: input.idempotencyKey,
+      checkoutIpAddress: input.ipAddress,
+      checkoutUserAgent: input.userAgent,
+      checkoutSurface: input.paymentSurface,
       expiresAt: checkoutExpiresAt,
     }),
     database.insert(orderItems).values({
@@ -2112,6 +2116,7 @@ export async function startParticipantShareCheckout(input: {
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly userAgent?: string;
   readonly now: Date;
 }): Promise<CourtCheckoutResult> {
   if (!process.env.DATABASE_URL) {
@@ -2289,6 +2294,9 @@ export async function startParticipantShareCheckout(input: {
       taxTotalMinor: 0,
       totalMinor: shareAmountMinor,
       idempotencyKey: input.idempotencyKey,
+      checkoutIpAddress: input.ipAddress,
+      checkoutUserAgent: input.userAgent,
+      checkoutSurface: "hosted",
       expiresAt: checkoutExpiresAt,
     }),
     database.insert(orderItems).values({

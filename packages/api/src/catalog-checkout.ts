@@ -620,6 +620,7 @@ export async function startCatalogCheckout(input: {
   readonly membershipPolicyAccepted?: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
+  readonly userAgent?: string;
   readonly now: Date;
 }): Promise<CatalogCheckoutResult> {
   if (!process.env.DATABASE_URL) {
@@ -1119,6 +1120,9 @@ export async function startCatalogCheckout(input: {
       feeTotalMinor: serviceFeeMinor,
       totalMinor: priced.totalMinor,
       idempotencyKey: input.idempotencyKey,
+      checkoutIpAddress: input.ipAddress,
+      checkoutUserAgent: input.userAgent,
+      checkoutSurface: input.paymentSurface ?? "hosted",
       expiresAt:
         input.paymentMethod === "card" || input.paymentMethod === "cash"
           ? reservationExpiresAt

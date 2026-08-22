@@ -4633,6 +4633,7 @@ const playerRouter = router({
               ...input,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
               now: ctx.now,
             });
           } catch (error) {
@@ -6784,6 +6785,7 @@ const playerRouter = router({
               idempotencyKey: input.idempotencyKey,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
               now: ctx.now,
             });
           } catch (error) {
@@ -6931,6 +6933,7 @@ const playerRouter = router({
               idempotencyKey: input.idempotencyKey,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
               now: ctx.now,
             });
           } catch (error) {
@@ -7053,6 +7056,7 @@ const playerRouter = router({
               idempotencyKey: input.idempotencyKey,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
               now: ctx.now,
             });
           } catch (error) {
@@ -7612,10 +7616,64 @@ const operatorRouter = router({
     .input(z.object({ transactionId: z.string().min(1).max(160) }))
     .output(
       transactionSummarySchema.extend({
+        orderId: z.string().uuid().optional(),
+        people: z
+          .array(
+            z.object({
+              personId: z.string().uuid(),
+              name: z.string(),
+              email: z.string().optional(),
+              role: z.string(),
+              profileHref: z.string(),
+            }),
+          )
+          .readonly(),
+        items: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              kind: z.string(),
+              description: z.string(),
+              quantity: z.number().int().positive(),
+              unitAmountMinor: z.number().int(),
+              totalAmountMinor: z.number().int(),
+              href: z.string().optional(),
+            }),
+          )
+          .readonly(),
+        processor: z.object({
+          connectedAccountId: z.string().optional(),
+          paymentId: z.string().uuid().optional(),
+          paymentStatus: z.string().optional(),
+          paymentMethod: z.string().optional(),
+          stripePaymentIntentId: z.string().optional(),
+          stripeChargeId: z.string().optional(),
+          stripeTransferId: z.string().optional(),
+          stripeBalanceTransactionId: z.string().optional(),
+          stripeCheckoutSessionId: z.string().optional(),
+          livemode: z.boolean(),
+          dashboardUrl: z.url().optional(),
+          accountUrl: z.url().optional(),
+        }),
+        evidence: z.object({
+          ipAddress: z.string().optional(),
+          userAgent: z.string().optional(),
+          surface: z.string().optional(),
+          capturedAt: z.iso.datetime(),
+        }),
         timeline: z
           .array(
             z.object({
               at: z.iso.datetime(),
+              kind: z.enum([
+                "order",
+                "policy",
+                "payment",
+                "refund",
+                "collection",
+                "payout",
+              ]),
+              status: z.string(),
               label: z.string(),
               detail: z.string(),
             }),
@@ -8883,6 +8941,7 @@ const operatorRouter = router({
           ...input,
           requestId: ctx.requestId,
           ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
           now: ctx.now,
         });
       } catch (error) {

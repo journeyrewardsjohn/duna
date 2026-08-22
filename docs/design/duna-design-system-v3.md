@@ -466,6 +466,23 @@ content
 - **Numbers:** right-aligned in tables (so digits stack), left-aligned in cards.
 - **Ghost type:** optically centered on the composition, not the container.
 
+## 8.7 Interactive data tables
+
+TanStack Table v9 is the standard headless engine for sortable, filterable,
+searchable HQ tables. Duna owns the semantic HTML, responsive behavior, and
+visual design; the library owns deterministic row models and table state.
+
+- Register only the features and row models a table uses.
+- Keep search and the most important filters visible above the table.
+- Make useful headers sortable and show the current direction.
+- Put tables inside a bounded horizontal scroller on narrow screens; do not
+  remove evidence just to avoid overflow.
+- Keep the first identifying column visible when horizontal scrolling is
+  required, and provide an explicit link to the full record.
+- Use server-side pagination and filtering once a result set can exceed the
+  bounded response for the route. Never fetch an unbounded ledger into the
+  browser.
+
 ---
 
 # PART 9 — PERFORMANCE PAGE ARCHITECTURE
