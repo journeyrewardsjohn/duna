@@ -17,7 +17,6 @@
     "@bacons/apple-targets": "5.0.0",
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
-    "@duna/expo-background-upload": "workspace:*",
     "@duna/messaging-client": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
     "@duna/ui": "workspace:*",

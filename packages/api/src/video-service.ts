@@ -37,6 +37,7 @@ import {
 } from "@duna/db";
 import {
   and,
+  asc,
   desc,
   eq,
   gte,
@@ -70,32 +71,24 @@ import {
   completeR2VideoUpload,
   createMuxLiveVideo,
   createR2VideoUpload,
-  headR2VideoObject,
-  isR2MultipartUploadAlreadyAbsent,
   isMuxSignedPlaybackConfigured,
   isMuxLivePlanUnavailable,
   isMuxVideoConfigured,
   isR2VideoConfigured,
   loadMuxVideoMetrics,
   muxDataEnvironmentKey,
-  listR2VideoUploadParts,
   presignR2VideoPart,
   presignR2VideoPlayback,
   R2_VIDEO_PART_SIZE_BYTES,
   replaceMuxAssetPlaybackPolicy,
   replaceMuxLivePlaybackPolicy,
   signMuxPlayback,
-  type R2MultipartPart,
 } from "./video-providers";
 import { loadVisionPlayback } from "./vision-service";
 
 const DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS = 8 * 60 * 60;
 const DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS = 30 * 60 * 60;
 const VIDEO_UPLOAD_SESSION_SECONDS = 24 * 60 * 60;
-// Uploads opened before the durable part-size column was introduced used
-// 16 MiB parts. Keep their layout stable until they complete instead of
-// reinterpreting a partially uploaded object after rollout.
-const LEGACY_R2_VIDEO_PART_SIZE_BYTES = 16 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 ** 4;
 const PUBLIC_VIDEO_STATUSES = ["live", "ready", "ended", "processing"] as const;
 
@@ -1494,7 +1487,6 @@ export async function beginVideoUpload(input: {
   readonly partSizeBytes: number;
   readonly totalParts: number;
   readonly uploadedParts: readonly number[];
-  readonly authoritativeParts: readonly R2MultipartPart[];
   readonly expiresAt: string;
 }> {
   requireDatabase();
@@ -1571,7 +1563,6 @@ export async function beginVideoUpload(input: {
     mimeType: input.mimeType,
     bytes: input.bytes,
     durationSeconds: input.durationSeconds,
-    r2PartSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
     r2ObjectKey: objectKey,
     courtCalibration: input.courtCalibration,
     createdAt: input.now,
@@ -1608,9 +1599,6 @@ export async function beginVideoUpload(input: {
       partSizeBytes: R2_VIDEO_PART_SIZE_BYTES,
       totalParts,
       uploadedParts: [],
-      authoritativeParts: [],
-      // This is a stable session boundary, not a rolling client-only timer.
-      // Individual presigned PUT URLs are valid for the same 24-hour window.
       expiresAt: new Date(
         input.now.getTime() + VIDEO_UPLOAD_SESSION_SECONDS * 1_000,
       ).toISOString(),
@@ -1653,157 +1641,6 @@ async function activeUpload(
   return video;
 }
 
-function uploadPartSizeBytes(video: typeof videos.$inferSelect): number {
-  const size = video.r2PartSizeBytes ?? LEGACY_R2_VIDEO_PART_SIZE_BYTES;
-  if (
-    !Number.isSafeInteger(size) ||
-    size < 5 * 1024 * 1024 ||
-    size > R2_VIDEO_PART_SIZE_BYTES
-  ) {
-    throw new VideoServiceError(
-      "UPLOAD_PART_INVALID",
-      "This upload has an invalid persisted part size.",
-    );
-  }
-  return size;
-}
-
-function totalUploadParts(video: typeof videos.$inferSelect): number {
-  return Math.ceil(video.bytes! / uploadPartSizeBytes(video));
-}
-
-function expectedUploadPartSize(
-  video: typeof videos.$inferSelect,
-  partNumber: number,
-): number {
-  const totalParts = totalUploadParts(video);
-  return partNumber === totalParts
-    ? video.bytes! - (totalParts - 1) * uploadPartSizeBytes(video)
-    : uploadPartSizeBytes(video);
-}
-
-function uploadSessionExpiresAt(video: typeof videos.$inferSelect): string {
-  return new Date(
-    video.createdAt.getTime() + VIDEO_UPLOAD_SESSION_SECONDS * 1_000,
-  ).toISOString();
-}
-
-function normalizedEtag(value: string): string {
-  return value.trim().replaceAll(/^"|"$/g, "");
-}
-
-/**
- * Reject anything that cannot be completed exactly as the original file. This
- * runs against R2 ListParts output, never the optimistic client-side mirror.
- */
-export function validateAuthoritativeVideoUploadParts(input: {
-  readonly videoBytes: number;
-  readonly partSizeBytes: number;
-  readonly parts: readonly R2MultipartPart[];
-}): readonly R2MultipartPart[] {
-  const expectedParts = Math.ceil(input.videoBytes / input.partSizeBytes);
-  validateAuthoritativeResumableVideoUploadParts(input);
-  if (input.parts.length !== expectedParts) {
-    throw new VideoServiceError(
-      "UPLOAD_INCOMPLETE",
-      "Every video part must finish uploading before completion.",
-    );
-  }
-  for (const [index, part] of input.parts.entries()) {
-    const partNumber = index + 1;
-    const expectedSize =
-      partNumber === expectedParts
-        ? input.videoBytes - (expectedParts - 1) * input.partSizeBytes
-        : input.partSizeBytes;
-    if (part.partNumber !== partNumber || part.sizeBytes !== expectedSize) {
-      throw new VideoServiceError(
-        "UPLOAD_INCOMPLETE",
-        "R2 did not confirm the expected video parts and bytes.",
-      );
-    }
-  }
-  return input.parts;
-}
-
-/**
- * ListParts can contain an R2-confirmed part whose client acknowledgement was
- * lost. Resume accepts that partial, authoritative set (including gaps) and
- * lets the client schedule only the remaining ranges. Completion calls the
- * stricter validator above.
- */
-export function validateAuthoritativeResumableVideoUploadParts(input: {
-  readonly videoBytes: number;
-  readonly partSizeBytes: number;
-  readonly parts: readonly R2MultipartPart[];
-}): readonly R2MultipartPart[] {
-  const expectedParts = Math.ceil(input.videoBytes / input.partSizeBytes);
-  const seen = new Set<number>();
-  for (const part of input.parts) {
-    const expectedSize =
-      part.partNumber === expectedParts
-        ? input.videoBytes - (expectedParts - 1) * input.partSizeBytes
-        : input.partSizeBytes;
-    if (
-      part.partNumber < 1 ||
-      part.partNumber > expectedParts ||
-      seen.has(part.partNumber) ||
-      !normalizedEtag(part.etag) ||
-      part.sizeBytes !== expectedSize
-    ) {
-      throw new VideoServiceError(
-        "UPLOAD_PART_INVALID",
-        "R2 returned an invalid video upload part.",
-      );
-    }
-    seen.add(part.partNumber);
-  }
-  return input.parts;
-}
-
-async function authoritativeUploadParts(
-  video: typeof videos.$inferSelect,
-): Promise<readonly R2MultipartPart[]> {
-  const parts = await listR2VideoUploadParts({
-    objectKey: video.r2ObjectKey!,
-    uploadId: video.r2UploadId!,
-  });
-  // A partial upload is valid for resume, but every returned part must still
-  // match the file layout. Completion separately requires the full sequence.
-  return validateAuthoritativeResumableVideoUploadParts({
-    videoBytes: video.bytes!,
-    partSizeBytes: uploadPartSizeBytes(video),
-    parts,
-  });
-}
-
-function uploadSessionFromVideo(input: {
-  readonly video: typeof videos.$inferSelect;
-  readonly parts: readonly R2MultipartPart[];
-}) {
-  return {
-    videoId: input.video.id,
-    uploadId: input.video.r2UploadId!,
-    objectKey: input.video.r2ObjectKey!,
-    partSizeBytes: uploadPartSizeBytes(input.video),
-    totalParts: totalUploadParts(input.video),
-    uploadedParts: input.parts.map((part) => part.partNumber),
-    authoritativeParts: input.parts,
-    expiresAt: uploadSessionExpiresAt(input.video),
-  };
-}
-
-export async function resumeVideoUpload(input: {
-  readonly actor: ApiActor;
-  readonly videoId: string;
-}) {
-  requireDatabase();
-  const video = await activeUpload(input.actor.personId, input.videoId);
-  return uploadSessionFromVideo({
-    video,
-    parts: await authoritativeUploadParts(video),
-  });
-}
-
 export async function presignVideoUploadPart(input: {
   readonly actor: ApiActor;
   readonly videoId: string;
@@ -1815,7 +1652,7 @@ export async function presignVideoUploadPart(input: {
 }> {
   requireDatabase();
   const video = await activeUpload(input.actor.personId, input.videoId);
-  const totalParts = totalUploadParts(video);
+  const totalParts = Math.ceil(video.bytes! / R2_VIDEO_PART_SIZE_BYTES);
   if (input.partNumber < 1 || input.partNumber > totalParts) {
     throw new VideoServiceError(
       "UPLOAD_PART_INVALID",
@@ -1844,32 +1681,21 @@ export async function recordVideoUploadPart(input: {
 }): Promise<{ readonly uploadedParts: readonly number[] }> {
   requireDatabase();
   const video = await activeUpload(input.actor.personId, input.videoId);
-  const totalParts = totalUploadParts(video);
-  const expectedMaximum = expectedUploadPartSize(video, input.partNumber);
+  const totalParts = Math.ceil(video.bytes! / R2_VIDEO_PART_SIZE_BYTES);
+  const expectedMaximum =
+    input.partNumber === totalParts
+      ? video.bytes! - (totalParts - 1) * R2_VIDEO_PART_SIZE_BYTES
+      : R2_VIDEO_PART_SIZE_BYTES;
   if (
     input.partNumber < 1 ||
     input.partNumber > totalParts ||
     input.sizeBytes <= 0 ||
-    input.sizeBytes !== expectedMaximum ||
+    input.sizeBytes > expectedMaximum ||
     (input.partNumber < totalParts && input.sizeBytes < 5 * 1024 * 1024)
   ) {
     throw new VideoServiceError(
       "UPLOAD_PART_INVALID",
       "The uploaded part metadata is invalid.",
-    );
-  }
-  const authoritativeParts = await authoritativeUploadParts(video);
-  const confirmed = authoritativeParts.find(
-    (part) => part.partNumber === input.partNumber,
-  );
-  if (
-    !confirmed ||
-    normalizedEtag(confirmed.etag) !== normalizedEtag(input.etag) ||
-    confirmed.sizeBytes !== input.sizeBytes
-  ) {
-    throw new VideoServiceError(
-      "UPLOAD_PART_INVALID",
-      "R2 has not confirmed this uploaded video part yet.",
     );
   }
   await getDatabase()
@@ -1889,65 +1715,12 @@ export async function recordVideoUploadPart(input: {
         uploadedAt: input.now,
       },
     });
-  return { uploadedParts: authoritativeParts.map((part) => part.partNumber) };
-}
-
-async function finalizeVideoUpload(input: {
-  readonly video: typeof videos.$inferSelect;
-  readonly actor: ApiActor;
-  readonly requestId: string;
-  readonly ipAddress?: string;
-  readonly now: Date;
-  readonly etag?: string;
-}): Promise<void> {
-  // Side effects happen before the ready transition. Metering uses a stable
-  // Stripe identifier and audit creation is guarded, so an R2-success retry
-  // can safely recover any interrupted completion without skipping history or
-  // usage reporting just because the video already became ready.
-  const existingAudit = await getDatabase()
-    .select({ id: auditLog.id })
-    .from(auditLog)
-    .where(
-      and(
-        eq(auditLog.entityId, input.video.id),
-        eq(auditLog.action, "video.upload-completed"),
-      ),
-    )
-    .limit(1)
-    .then((rows) => rows[0]);
-  await Promise.all([
-    existingAudit
-      ? Promise.resolve()
-      : recordAudit({
-          actorPersonId: input.actor.personId,
-          organizationId: input.video.organizationId ?? undefined,
-          action: "video.upload-completed",
-          entityType: "video",
-          entityId: input.video.id,
-          reason: `Completed direct R2 upload (${input.video.bytes} bytes).`,
-          requestId: input.requestId,
-          ipAddress: input.ipAddress,
-          now: input.now,
-        }),
-    reportOrganizationVideoOverage({
-      organizationId: input.video.organizationId,
-      personId: input.actor.personId,
-      kind: "upload",
-      completedSeconds: input.video.durationSeconds ?? 0,
-      videoId: input.video.id,
-      now: input.now,
-    }),
-  ]);
-  await getDatabase()
-    .update(videos)
-    .set({
-      status: "ready",
-      r2Etag: input.etag,
-      r2UploadId: null,
-      readyAt: input.now,
-      updatedAt: input.now,
-    })
-    .where(and(eq(videos.id, input.video.id), eq(videos.status, "uploading")));
+  const parts = await getDatabase()
+    .select({ partNumber: videoUploadParts.partNumber })
+    .from(videoUploadParts)
+    .where(eq(videoUploadParts.videoId, video.id))
+    .orderBy(asc(videoUploadParts.partNumber));
+  return { uploadedParts: parts.map((part) => part.partNumber) };
 }
 
 export async function completeVideoUpload(input: {
@@ -1958,49 +1731,23 @@ export async function completeVideoUpload(input: {
   readonly now: Date;
 }): Promise<VideoSummary> {
   requireDatabase();
-  const existing = await ownedVideo(input.actor.personId, input.videoId);
-  // A response may have reached R2 just before the database write failed. A
-  // later retry must return the ready object rather than attempting to complete
-  // the now-closed multipart upload again.
-  if (existing.source === "upload" && existing.status === "ready") {
-    await finalizeVideoUpload({
-      video: existing,
-      actor: input.actor,
-      requestId: input.requestId,
-      ipAddress: input.ipAddress,
-      now: input.now,
-      etag: existing.r2Etag ?? undefined,
-    });
-    return loadVideoSummary(existing.id);
-  }
   const video = await activeUpload(input.actor.personId, input.videoId);
-  let parts: readonly R2MultipartPart[];
-  try {
-    parts = validateAuthoritativeVideoUploadParts({
-      videoBytes: video.bytes!,
-      partSizeBytes: uploadPartSizeBytes(video),
-      parts: await authoritativeUploadParts(video),
-    });
-  } catch (error) {
-    // If ListParts cannot find an upload that was already completed, prove the
-    // immutable object size before treating it as an idempotent completion.
-    try {
-      const object = await headR2VideoObject(video.r2ObjectKey!);
-      if (object.sizeBytes === video.bytes) {
-        await finalizeVideoUpload({
-          video,
-          actor: input.actor,
-          requestId: input.requestId,
-          ipAddress: input.ipAddress,
-          now: input.now,
-          etag: object.etag,
-        });
-        return loadVideoSummary(video.id);
-      }
-    } catch {
-      // Preserve the original ListParts validation error below.
-    }
-    throw error;
+  const expectedParts = Math.ceil(video.bytes! / R2_VIDEO_PART_SIZE_BYTES);
+  const parts = await getDatabase()
+    .select()
+    .from(videoUploadParts)
+    .where(eq(videoUploadParts.videoId, video.id))
+    .orderBy(asc(videoUploadParts.partNumber));
+  const uploadedBytes = parts.reduce((sum, part) => sum + part.sizeBytes, 0);
+  if (
+    parts.length !== expectedParts ||
+    uploadedBytes !== video.bytes ||
+    parts.some((part, index) => part.partNumber !== index + 1)
+  ) {
+    throw new VideoServiceError(
+      "UPLOAD_INCOMPLETE",
+      "Every video part must finish uploading before completion.",
+    );
   }
   const completed = await completeR2VideoUpload({
     objectKey: video.r2ObjectKey!,
@@ -2010,14 +1757,36 @@ export async function completeVideoUpload(input: {
       etag: part.etag,
     })),
   });
-  await finalizeVideoUpload({
-    video,
-    actor: input.actor,
-    requestId: input.requestId,
-    ipAddress: input.ipAddress,
-    now: input.now,
-    etag: completed.etag,
-  });
+  await Promise.all([
+    getDatabase()
+      .update(videos)
+      .set({
+        status: "ready",
+        r2Etag: completed.etag,
+        r2UploadId: null,
+        readyAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(videos.id, video.id)),
+    recordAudit({
+      actorPersonId: input.actor.personId,
+      action: "video.upload-completed",
+      entityType: "video",
+      entityId: video.id,
+      reason: `Completed direct R2 upload (${video.bytes} bytes).`,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    }),
+    reportOrganizationVideoOverage({
+      organizationId: video.organizationId,
+      personId: input.actor.personId,
+      kind: "upload",
+      completedSeconds: video.durationSeconds ?? 0,
+      videoId: video.id,
+      now: input.now,
+    }),
+  ]);
   return loadVideoSummary(video.id);
 }
 
@@ -2029,50 +1798,11 @@ export async function abortVideoUpload(input: {
   readonly now: Date;
 }): Promise<{ readonly aborted: true }> {
   requireDatabase();
-  const existing = await ownedVideo(input.actor.personId, input.videoId);
-  if (
-    existing.source === "upload" &&
-    existing.status === "failed" &&
-    existing.failureReason === "Upload cancelled by player."
-  ) {
-    return { aborted: true };
-  }
   const video = await activeUpload(input.actor.personId, input.videoId);
-  try {
-    await abortR2VideoUpload({
-      objectKey: video.r2ObjectKey!,
-      uploadId: video.r2UploadId!,
-    });
-  } catch (error) {
-    if (!isR2MultipartUploadAlreadyAbsent(error)) {
-      // A timeout, permission issue, or transport failure is not proof that
-      // R2 accepted cancellation. Preserve the resumable upload state.
-      throw error;
-    }
-    // A previous cancel may have reached R2 while its response was lost. If an
-    // object exists at the exact source length, it actually completed and must
-    // not be overwritten as a cancelled video.
-    const completedObject = await headR2VideoObject(video.r2ObjectKey!)
-      .then((object) => object)
-      .catch(() => undefined);
-    if (completedObject?.sizeBytes === video.bytes) {
-      await finalizeVideoUpload({
-        video,
-        actor: input.actor,
-        requestId: input.requestId,
-        ipAddress: input.ipAddress,
-        now: input.now,
-        etag: completedObject.etag,
-      });
-      throw new VideoServiceError(
-        "UPLOAD_NOT_ACTIVE",
-        "This upload completed before it could be cancelled.",
-      );
-    }
-    // This specific provider response proves the multipart upload is gone.
-    // Treat an explicit repeated cancel as idempotent.
-    console.warn("Duna upload abort was already settled by R2", { error });
-  }
+  await abortR2VideoUpload({
+    objectKey: video.r2ObjectKey!,
+    uploadId: video.r2UploadId!,
+  });
   await Promise.all([
     getDatabase()
       .update(videos)
