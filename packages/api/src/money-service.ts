@@ -53,6 +53,51 @@ type Weekday = OrganizationMoneyWorkspace["settings"]["weeklyPayoutDay"];
 
 const DEFAULT_REFUND_MINUTES = 24 * 60;
 
+export function projectOrganizationBalance(input: {
+  readonly ledgerAvailableMinor: number;
+  readonly ledgerHeldMinor: number;
+  readonly ledgerPendingMinor: number;
+  readonly processorAvailableMinor?: number;
+  readonly processorPendingMinor?: number;
+}): {
+  readonly totalMinor: number;
+  readonly availableMinor: number;
+  readonly heldMinor: number;
+  readonly pendingMinor: number;
+} {
+  if (
+    input.processorAvailableMinor === undefined ||
+    input.processorPendingMinor === undefined
+  ) {
+    return {
+      totalMinor:
+        input.ledgerAvailableMinor +
+        input.ledgerHeldMinor +
+        input.ledgerPendingMinor,
+      availableMinor: input.ledgerAvailableMinor,
+      heldMinor: input.ledgerHeldMinor,
+      pendingMinor: input.ledgerPendingMinor,
+    };
+  }
+  const processorOutstandingMinor =
+    input.processorAvailableMinor + input.processorPendingMinor;
+  const heldMinor = Math.min(input.ledgerHeldMinor, processorOutstandingMinor);
+  const afterHeldMinor = processorOutstandingMinor - heldMinor;
+  const pendingMinor = Math.min(input.ledgerPendingMinor, afterHeldMinor);
+  const afterProtectedMinor = afterHeldMinor - pendingMinor;
+  const availableMinor = Math.min(
+    input.ledgerAvailableMinor,
+    Math.max(0, input.processorAvailableMinor - heldMinor),
+    afterProtectedMinor,
+  );
+  return {
+    totalMinor: availableMinor + heldMinor + pendingMinor,
+    availableMinor,
+    heldMinor,
+    pendingMinor,
+  };
+}
+
 export function loadDemoOrganizationMoneyWorkspace(
   now = new Date(),
 ): OrganizationMoneyWorkspace {
@@ -469,6 +514,51 @@ async function resolveOrderPolicy(orderId: string) {
   };
 }
 
+export function allocateStripeFundFees(input: {
+  readonly actualFeeMinor?: number;
+  readonly configuredProcessingFeeMinor: number;
+  readonly configuredOrganizationFeeMinor: number;
+  readonly configuredConsumerFeeMinor: number;
+}): {
+  readonly processingFeeMinor: number;
+  readonly organizationFeeMinor: number;
+  readonly consumerFeeMinor: number;
+} {
+  for (const amount of [
+    input.actualFeeMinor,
+    input.configuredProcessingFeeMinor,
+    input.configuredOrganizationFeeMinor,
+    input.configuredConsumerFeeMinor,
+  ]) {
+    if (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0)) {
+      throw new Error("Fund fees must be non-negative cents.");
+    }
+  }
+  if (input.actualFeeMinor === undefined) {
+    return {
+      processingFeeMinor: input.configuredProcessingFeeMinor,
+      organizationFeeMinor: input.configuredOrganizationFeeMinor,
+      consumerFeeMinor: input.configuredConsumerFeeMinor,
+    };
+  }
+  const organizationFeeMinor = Math.min(
+    input.actualFeeMinor,
+    input.configuredOrganizationFeeMinor,
+  );
+  const consumerFeeMinor = Math.min(
+    Math.max(0, input.actualFeeMinor - organizationFeeMinor),
+    input.configuredConsumerFeeMinor,
+  );
+  return {
+    organizationFeeMinor,
+    consumerFeeMinor,
+    processingFeeMinor: Math.max(
+      0,
+      input.actualFeeMinor - organizationFeeMinor - consumerFeeMinor,
+    ),
+  };
+}
+
 export async function recordPaymentFundSchedule(input: {
   readonly orderId: string;
   readonly paymentId?: string;
@@ -515,7 +605,8 @@ export async function recordPaymentFundSchedule(input: {
         policyId: undefined,
       }
     : resolvedPolicy;
-  const captureRatio = Math.min(1, payment.amountMinor / order.totalMinor);
+  const capturedGrossMinor = input.lineage?.grossMinor ?? payment.amountMinor;
+  const captureRatio = Math.min(1, capturedGrossMinor / order.totalMinor);
   const configuredProcessingFeeMinor = fees
     .filter(
       (fee) =>
@@ -526,9 +617,9 @@ export async function recordPaymentFundSchedule(input: {
           fee.ruleId.includes("operator-ach")),
     )
     .reduce((sum, fee) => sum + fee.amountMinor, 0);
-  const processingFeeMinor =
-    input.lineage?.feeMinor ??
-    Math.round(configuredProcessingFeeMinor * captureRatio);
+  const allocatedConfiguredProcessingFeeMinor = Math.round(
+    configuredProcessingFeeMinor * captureRatio,
+  );
   const organizationFeeMinor = fees
     .filter(
       (fee) =>
@@ -547,6 +638,23 @@ export async function recordPaymentFundSchedule(input: {
   );
   const allocatedConsumerFeeMinor = Math.round(consumerFeeMinor * captureRatio);
   const allocatedTaxMinor = Math.round(order.taxTotalMinor * captureRatio);
+  const reconciledFees = allocateStripeFundFees({
+    actualFeeMinor: input.lineage?.feeMinor,
+    configuredProcessingFeeMinor: allocatedConfiguredProcessingFeeMinor,
+    configuredOrganizationFeeMinor: allocatedOrganizationFeeMinor,
+    configuredConsumerFeeMinor: allocatedConsumerFeeMinor,
+  });
+  const netMinor =
+    input.lineage === undefined
+      ? Math.max(
+          0,
+          capturedGrossMinor -
+            reconciledFees.consumerFeeMinor -
+            reconciledFees.processingFeeMinor -
+            reconciledFees.organizationFeeMinor -
+            allocatedTaxMinor,
+        )
+      : Math.max(0, input.lineage.netMinor - allocatedTaxMinor);
   const processorAvailableAt =
     input.lineage?.availableAt ?? input.processorAvailableAt ?? input.now;
   const availability = calculateFundAvailability({
@@ -576,23 +684,15 @@ export async function recordPaymentFundSchedule(input: {
       policyReleaseAt: availability.policyReleaseAt,
       processorAvailableAt,
       availableAt: availability.availableAt,
-      grossMinor: payment.amountMinor,
-      consumerFeeMinor: allocatedConsumerFeeMinor,
-      processingFeeMinor,
-      organizationFeeMinor: allocatedOrganizationFeeMinor,
+      grossMinor: capturedGrossMinor,
+      consumerFeeMinor: reconciledFees.consumerFeeMinor,
+      processingFeeMinor: reconciledFees.processingFeeMinor,
+      organizationFeeMinor: reconciledFees.organizationFeeMinor,
       taxMinor: allocatedTaxMinor,
-      netMinor:
-        input.lineage?.netMinor ??
-        Math.max(
-          0,
-          payment.amountMinor -
-            allocatedConsumerFeeMinor -
-            processingFeeMinor -
-            allocatedOrganizationFeeMinor -
-            allocatedTaxMinor,
-        ),
+      netMinor,
       currency: order.currency,
       status: availability.status,
+      createdAt: payment.createdAt,
       updatedAt: input.now,
     })
     .onConflictDoUpdate({
@@ -608,24 +708,16 @@ export async function recordPaymentFundSchedule(input: {
         refundBeforeMinutes: policy.refundBeforeMinutes,
         eventStartsAt: policy.startsAt,
         policyReleaseAt: availability.policyReleaseAt,
-        grossMinor: payment.amountMinor,
-        consumerFeeMinor: allocatedConsumerFeeMinor,
-        processingFeeMinor,
-        organizationFeeMinor: allocatedOrganizationFeeMinor,
+        grossMinor: capturedGrossMinor,
+        consumerFeeMinor: reconciledFees.consumerFeeMinor,
+        processingFeeMinor: reconciledFees.processingFeeMinor,
+        organizationFeeMinor: reconciledFees.organizationFeeMinor,
         taxMinor: allocatedTaxMinor,
-        netMinor:
-          input.lineage?.netMinor ??
-          Math.max(
-            0,
-            payment.amountMinor -
-              allocatedConsumerFeeMinor -
-              processingFeeMinor -
-              allocatedOrganizationFeeMinor -
-              allocatedTaxMinor,
-          ),
+        netMinor,
         processorAvailableAt,
         availableAt: availability.availableAt,
         status: availability.status,
+        createdAt: payment.createdAt,
         updatedAt: input.now,
       },
     });
@@ -976,6 +1068,16 @@ export async function reconcileStripePaymentLineage(input?: {
           sql`${stripeTransactionLinks.id} IS NULL`,
           sql`${stripeTransactionLinks.stripeBalanceTransactionId} IS NULL`,
           sql`${paymentFundSchedules.id} IS NULL`,
+          sql`${paymentFundSchedules.createdAt} IS DISTINCT FROM ${payments.createdAt}`,
+          sql`(
+            ${paymentFundSchedules.consumerFeeMinor} +
+            ${paymentFundSchedules.processingFeeMinor} +
+            ${paymentFundSchedules.organizationFeeMinor}
+          ) IS DISTINCT FROM ${stripeTransactionLinks.feeMinor}`,
+          sql`${paymentFundSchedules.netMinor} IS DISTINCT FROM GREATEST(
+            0,
+            ${stripeTransactionLinks.netMinor} - ${paymentFundSchedules.taxMinor}
+          )`,
           and(
             sql`${ledgerJournals.id} IS NULL`,
             sql`NOT EXISTS (
@@ -1156,18 +1258,29 @@ export async function loadOrganizationMoneyWorkspace(
   }
   const remaining = (fund: typeof paymentFundSchedules.$inferSelect) =>
     Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor);
-  const availableMinor = fundRows
+  const ledgerAvailableMinor = fundRows
     .filter((row) => row.fund.status === "available")
     .reduce((sum, row) => sum + remaining(row.fund), 0);
-  const heldMinor = fundRows
+  const ledgerHeldMinor = fundRows
     .filter((row) => row.fund.status === "held")
     .reduce((sum, row) => sum + remaining(row.fund), 0);
-  const pendingMinor = fundRows
+  const ledgerPendingMinor = fundRows
     .filter((row) => row.fund.status === "pending-clearance")
     .reduce((sum, row) => sum + remaining(row.fund), 0);
   const inTransitMinor = payoutRows
     .filter((row) => ["pending", "in_transit"].includes(row.status))
     .reduce((sum, row) => sum + row.amountMinor, 0);
+  const projectedBalance = projectOrganizationBalance({
+    ledgerAvailableMinor,
+    ledgerHeldMinor,
+    ledgerPendingMinor,
+    processorAvailableMinor: connect.liveData
+      ? connect.stripeAvailableMinor
+      : undefined,
+    processorPendingMinor: connect.liveData
+      ? connect.stripePendingMinor
+      : undefined,
+  });
   const nextRelease = fundRows
     .filter(
       (row) =>
@@ -1196,10 +1309,7 @@ export async function loadOrganizationMoneyWorkspace(
     generatedAt: now.toISOString(),
     currency: currency(organization.currency),
     balance: {
-      totalMinor: availableMinor + heldMinor + pendingMinor,
-      availableMinor,
-      heldMinor,
-      pendingMinor,
+      ...projectedBalance,
       inTransitMinor,
       nextReleaseAt: nextRelease?.fund.availableAt?.toISOString(),
       nextReleaseMinor: nextRelease ? remaining(nextRelease.fund) : 0,
