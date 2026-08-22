@@ -3883,6 +3883,10 @@ export const videos = pgTable(
     }),
     r2ObjectKey: text("r2_object_key").unique(),
     r2UploadId: text("r2_upload_id"),
+    // Persist this with the upload so an in-flight pre-64 MiB upload can
+    // resume safely across a server rollout. It is only a layout contract;
+    // R2 ListParts remains authoritative for bytes and ETags.
+    r2PartSizeBytes: integer("r2_part_size_bytes"),
     r2Etag: text("r2_etag"),
     originalFileName: text("original_file_name"),
     mimeType: varchar("mime_type", { length: 128 }),
@@ -3986,6 +3990,10 @@ export const videos = pgTable(
     check(
       "video_bytes_nonnegative",
       sql`${table.bytes} IS NULL OR ${table.bytes} >= 0`,
+    ),
+    check(
+      "video_r2_part_size_valid",
+      sql`${table.r2PartSizeBytes} IS NULL OR ${table.r2PartSizeBytes} BETWEEN 5242880 AND 67108864`,
     ),
     check(
       "video_category_association",
@@ -4672,6 +4680,160 @@ export const videoAnalysisReviews = pgTable(
     check(
       "video_analysis_review_decision_valid",
       sql`${table.decision} IN ('confirmed', 'corrected', 'rejected')`,
+    ),
+  ],
+);
+
+// Evidence-only owner-requested reviews are separate from Vision calibration,
+// model training, and promotion. Gateway prompts receive no raw video or PII.
+export const videoPerformanceReviews = pgTable(
+  "video_performance_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    analysisRunId: uuid("analysis_run_id")
+      .notNull()
+      .references(() => videoAnalysisRuns.id, { onDelete: "cascade" }),
+    requestedByPersonId: uuid("requested_by_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    provider: varchar("provider", { length: 40 }).notNull(),
+    model: varchar("model", { length: 120 }).notNull(),
+    reasoningEffort: varchar("reasoning_effort", { length: 16 }).notNull(),
+    privacySafetyIdentifier: varchar("privacy_safety_identifier", {
+      length: 160,
+    }).notNull(),
+    promptVersion: varchar("prompt_version", { length: 80 }).notNull(),
+    schemaVersion: varchar("schema_version", { length: 80 }).notNull(),
+    evidenceSha256: varchar("evidence_sha256", { length: 64 }).notNull(),
+    providerResponseMetadata: jsonb("provider_response_metadata")
+      .notNull()
+      .default({})
+      .$type<Record<string, unknown>>(),
+    recommendations: jsonb("recommendations")
+      .notNull()
+      .default([])
+      .$type<readonly Record<string, unknown>[]>(),
+    failureCode: varchar("failure_code", { length: 120 }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("video_performance_review_video_created_idx").on(
+      table.videoId,
+      table.createdAt,
+    ),
+    index("video_performance_review_requester_created_idx").on(
+      table.requestedByPersonId,
+      table.createdAt,
+    ),
+    check(
+      "video_performance_review_status_valid",
+      sql`${table.status} IN ('queued', 'processing', 'succeeded', 'unavailable', 'failed')`,
+    ),
+    check(
+      "video_performance_review_evidence_sha_valid",
+      sql`${table.evidenceSha256} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+// Learning-consented adult analyses may produce governed, evidence-only
+// improvement questions. These records are deliberately independent from
+// owner coaching reviews and from every candidate/shadow/promotion workflow.
+// They never authorize training, calibration, or model activation.
+export const visionImprovementProposals = pgTable(
+  "vision_improvement_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    analysisRunId: uuid("analysis_run_id")
+      .notNull()
+      .references(() => videoAnalysisRuns.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    provider: varchar("provider", { length: 40 }).notNull(),
+    model: varchar("model", { length: 120 }).notNull(),
+    reasoningEffort: varchar("reasoning_effort", { length: 16 }).notNull(),
+    privacySafetyIdentifier: varchar("privacy_safety_identifier", {
+      length: 160,
+    }).notNull(),
+    promptVersion: varchar("prompt_version", { length: 80 }).notNull(),
+    schemaVersion: varchar("schema_version", { length: 80 }).notNull(),
+    evidenceSha256: varchar("evidence_sha256", { length: 64 }).notNull(),
+    evidence: jsonb("evidence").notNull().$type<Record<string, unknown>>(),
+    providerResponseMetadata: jsonb("provider_response_metadata")
+      .notNull()
+      .default({})
+      .$type<Record<string, unknown>>(),
+    proposals: jsonb("proposals")
+      .notNull()
+      .default([])
+      .$type<readonly Record<string, unknown>[]>(),
+    failureCode: varchar("failure_code", { length: 120 }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("vision_improvement_proposal_run_unique").on(
+      table.analysisRunId,
+    ),
+    index("vision_improvement_proposal_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("vision_improvement_proposal_video_created_idx").on(
+      table.videoId,
+      table.createdAt,
+    ),
+    check(
+      "vision_improvement_proposal_status_valid",
+      sql`${table.status} IN ('queued', 'processing', 'succeeded', 'unavailable', 'failed')`,
+    ),
+    check(
+      "vision_improvement_proposal_evidence_sha_valid",
+      sql`${table.evidenceSha256} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+// Human disposition is a review ledger only. An approval never starts model
+// training or changes candidate, shadow, or production state.
+export const visionImprovementProposalReviews = pgTable(
+  "vision_improvement_proposal_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => visionImprovementProposals.id, { onDelete: "cascade" }),
+    reviewerPersonId: uuid("reviewer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    decision: varchar("decision", { length: 16 }).notNull(),
+    notes: text("notes").notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("vision_improvement_proposal_review_created_idx").on(
+      table.proposalId,
+      table.createdAt,
+    ),
+    check(
+      "vision_improvement_proposal_review_decision_valid",
+      sql`${table.decision} IN ('approved', 'rejected')`,
     ),
   ],
 );

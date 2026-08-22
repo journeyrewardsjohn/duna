@@ -40,15 +40,48 @@ client analytics.
 
 1. iOS records an MP4 or converts a library selection to MP4 locally.
 2. The API creates a private R2 multipart upload.
-3. iOS sends 16 MiB parts directly to short-lived presigned URLs.
-4. The API validates every part number, ETag, and size before completing the
-   upload.
+3. iOS stages file-backed 64 MiB ranges using a bounded copy buffer, then a
+   background `URLSession` sends them to 24-hour presigned URLs. It persists
+   ETags locally and reconciles them when JavaScript returns to foreground.
+4. R2 `ListParts` is authoritative: the API validates its part numbers, ETags,
+   and exact bytes before completing the upload. Local client/DB part records
+   are resume hints only.
 5. Playback uses a short-lived signed R2 URL; the bucket does not need to be
    public.
 
 The API checks the proposed upload duration against the player's remaining
 plan allowance before creating an R2 multipart upload. Upload and live meters
 are enforced independently.
+
+Interrupted transport is retryable and never aborts a server upload. Only an
+explicit owner cancellation calls R2 abort; that operation is idempotent.
+
+Android library imports accept MP4 and keep a retained file-backed source, but
+their upload is foreground-only: the player must keep Duna open until it
+finishes. Android makes no background-transfer durability claim; leaving the
+app pauses a retryable draft rather than losing it.
+
+### Evidence-only performance review
+
+After a Vision run reaches `ready` or `needs-review`, an adult video owner may
+explicitly request a performance review. Duna sends only derived report
+evidence to Vercel AI Gateway (`DUNA_VIDEO_REVIEW_MODEL`, default
+`openai/gpt-5.6-sol`) with `xhigh` reasoning and a structured schema. It sends
+no raw video, identifiers, court image, or player IDs. Recommendations are
+stored as draft insights, remain separate from calibration/training/model
+promotion, and fall back to an audited unavailable result if Gateway is not
+configured or cannot respond.
+
+### Governed Vision improvement proposals
+
+For an adult owner who has opted a video into Vision learning, each completed
+`ready` or `needs-review` analysis queues exactly one separate proposal run.
+The bounded HQ processor sends Sol only derived metrics, quality failures,
+uncertainty, and rule-evidence gaps. Its structured output is limited to
+improvement questions, hypotheses, required labels, evaluation slices, and
+physics or rules gaps. It cannot receive raw video, generate weights, or train,
+calibrate, shadow, or promote a model; every resulting proposal remains a
+Super Admin research draft.
 
 ## Privacy and association rules
 

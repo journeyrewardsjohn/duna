@@ -63,12 +63,42 @@ export interface VolleyballAnalysisEvent {
   readonly source?: "human" | "model" | "watch" | "system";
   readonly payload: {
     readonly rallyId?: string;
+    /** Positive sequence-completeness evidence; absent is intentionally unknown. */
+    readonly rallySequenceComplete?: boolean;
     readonly contactKind?: VolleyballContactKind;
     readonly outcome?: VolleyballContactOutcome;
     readonly side?: VolleyballSide;
     readonly playerId?: string;
     readonly speedKph?: number;
+    /** Planar court evidence only. A single camera never yields 3D height. */
+    readonly contactPoint?: CourtObservation;
+    readonly contactUncertaintyMeters?: number;
+    readonly contactQuality?: {
+      readonly evidenceVersion: "duna-contact-evidence-v1";
+      readonly detectorConfidence?: number;
+      readonly temporalConfidence?: number;
+      readonly occluded?: boolean;
+      readonly visibleFrames?: number;
+      readonly evidence: "visible-2d" | "partial-2d" | "unavailable";
+    };
+    readonly trajectory?: {
+      readonly evidenceVersion: "duna-trajectory-2d-v1";
+      readonly coordinateFrame: "canonical-court-2d";
+      readonly endPoint?: CourtObservation;
+      readonly flightTimeUs?: number;
+      readonly observedPoints: number;
+      readonly evidence: "visible-2d" | "partial-2d" | "unavailable";
+    };
   };
+}
+
+export interface VolleyballRuleFinding {
+  readonly ruleVersion: "beach-volleyball-2s-v1";
+  readonly ruleId:
+    "three-team-contacts" | "consecutive-player-contact" | "serve-starts-rally";
+  readonly verdict: "pass" | "violation" | "unavailable";
+  readonly rallyId?: string;
+  readonly evidence: string;
 }
 
 export interface VolleyballSidePerformance {
@@ -100,6 +130,169 @@ export interface VolleyballPerformanceReport {
   readonly maxServeSpeedKph?: number;
   readonly maxAttackSpeedKph?: number;
   readonly sides: readonly VolleyballSidePerformance[];
+}
+
+const BEACH_RULE_VERSION = "beach-volleyball-2s-v1" as const;
+
+function trustedRuleContact(event: VolleyballAnalysisEvent): boolean {
+  return Boolean(
+    event.eventType === "ball-contact" &&
+    event.payload.contactKind &&
+    (event.source === "human" ||
+      event.source === "watch" ||
+      (event.confidence !== undefined && event.confidence >= 0.9)) &&
+    event.payload.contactQuality?.evidence !== undefined &&
+    event.payload.contactQuality.evidence !== "unavailable",
+  );
+}
+
+/**
+ * A deliberately bounded rules engine. It only evaluates a small set of
+ * evidence-complete 2s checks and emits `unavailable` rather than guessing
+ * from a single camera, missing player identity, or model-only uncertainty.
+ */
+export function evaluateBeachVolleyballRules(
+  events: readonly VolleyballAnalysisEvent[],
+): readonly VolleyballRuleFinding[] {
+  const byRally = new Map<string, VolleyballAnalysisEvent[]>();
+  for (const event of events) {
+    const rallyId = event.payload.rallyId;
+    if (!rallyId || event.eventType !== "ball-contact") continue;
+    const group = byRally.get(rallyId) ?? [];
+    group.push(event);
+    byRally.set(rallyId, group);
+  }
+  if (byRally.size === 0) {
+    return [
+      {
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "three-team-contacts",
+        verdict: "unavailable",
+        evidence: "No stable rally-scoped contacts were available.",
+      },
+      {
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "consecutive-player-contact",
+        verdict: "unavailable",
+        evidence:
+          "No stable rally-scoped player contact evidence was available.",
+      },
+      {
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "serve-starts-rally",
+        verdict: "unavailable",
+        evidence:
+          "No stable rally-scoped opening contact evidence was available.",
+      },
+    ];
+  }
+
+  return [...byRally.entries()].flatMap(([rallyId, unsorted]) => {
+    const contacts = [...unsorted].sort(
+      (left, right) => left.sessionTimeUs - right.sessionTimeUs,
+    );
+    const trusted = contacts.filter(trustedRuleContact);
+    const completeSequence =
+      trusted.length === contacts.length &&
+      trusted.every((event) => event.payload.rallySequenceComplete === true);
+    const completeSides =
+      completeSequence &&
+      trusted.every(
+        (event) => event.payload.side && event.payload.side !== "unknown",
+      );
+    const findings: VolleyballRuleFinding[] = [];
+    if (!completeSides) {
+      findings.push({
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "three-team-contacts",
+        verdict: "unavailable",
+        rallyId,
+        evidence:
+          "Team contact count requires high-confidence side attribution for every contact.",
+      });
+    } else {
+      let activeSide: VolleyballSide | undefined;
+      let contactsOnSide = 0;
+      let violation = false;
+      for (const contact of trusted) {
+        const side = contact.payload.side!;
+        if (side !== activeSide) {
+          activeSide = side;
+          contactsOnSide = 0;
+        }
+        contactsOnSide += 1;
+        if (contactsOnSide > 3) violation = true;
+      }
+      findings.push({
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "three-team-contacts",
+        verdict: violation ? "violation" : "pass",
+        rallyId,
+        evidence: violation
+          ? "More than three trusted consecutive contacts were attributed to one side."
+          : "Every trusted side sequence contained at most three contacts.",
+      });
+    }
+
+    const completePlayers =
+      completeSides &&
+      trusted.every((event) => Boolean(event.payload.playerId));
+    if (!completePlayers) {
+      findings.push({
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "consecutive-player-contact",
+        verdict: "unavailable",
+        rallyId,
+        evidence:
+          "Consecutive-player review requires trusted player identity for every contact.",
+      });
+    } else {
+      const violation = trusted.some((contact, index) => {
+        const previous = trusted[index - 1];
+        return Boolean(
+          previous &&
+          previous.payload.side === contact.payload.side &&
+          previous.payload.playerId === contact.payload.playerId &&
+          previous.payload.contactKind !== "block" &&
+          contact.payload.contactKind !== "block",
+        );
+      });
+      findings.push({
+        ruleVersion: BEACH_RULE_VERSION,
+        ruleId: "consecutive-player-contact",
+        verdict: violation ? "violation" : "pass",
+        rallyId,
+        evidence: violation
+          ? "Two trusted consecutive non-block contacts were attributed to one player."
+          : "No trusted consecutive non-block contacts were attributed to one player.",
+      });
+    }
+
+    const opening = contacts[0];
+    findings.push(
+      completeSequence && opening
+        ? {
+            ruleVersion: BEACH_RULE_VERSION,
+            ruleId: "serve-starts-rally",
+            verdict:
+              opening.payload.contactKind === "serve" ? "pass" : "unavailable",
+            rallyId,
+            evidence:
+              opening.payload.contactKind === "serve"
+                ? "The first trusted contact was classified as a serve."
+                : "The first trusted contact was not a serve; the recording may begin mid-rally.",
+          }
+        : {
+            ruleVersion: BEACH_RULE_VERSION,
+            ruleId: "serve-starts-rally",
+            verdict: "unavailable",
+            rallyId,
+            evidence:
+              "Opening-contact evidence was incomplete or below the trusted threshold.",
+          },
+    );
+    return findings;
+  });
 }
 
 export const STANDARD_BEACH_COURT: CourtDimensions = {
