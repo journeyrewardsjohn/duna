@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { organizationMoneyWorkspaceSchema } from "./contracts";
 import {
+  allocateStripeFundFees,
   buildStripeCaptureAmounts,
   calculateFundAvailability,
   loadDemoOrganizationMoneyWorkspace,
+  projectOrganizationBalance,
 } from "./money-service";
 
 describe("organization fund availability", () => {
@@ -81,5 +83,42 @@ describe("organization fund availability", () => {
         taxMinor: 0,
       }),
     ).toThrow("gross does not equal fee plus net");
+  });
+
+  it("splits Stripe's all-in fee without counting configured fees twice", () => {
+    const fees = allocateStripeFundFees({
+      actualFeeMinor: 355,
+      configuredProcessingFeeMinor: 155,
+      configuredOrganizationFeeMinor: 200,
+      configuredConsumerFeeMinor: 0,
+    });
+
+    expect(fees).toEqual({
+      processingFeeMinor: 155,
+      organizationFeeMinor: 200,
+      consumerFeeMinor: 0,
+    });
+    expect(
+      fees.processingFeeMinor +
+        fees.organizationFeeMinor +
+        fees.consumerFeeMinor,
+    ).toBe(355);
+  });
+
+  it("removes completed bank payouts from the current Duna balance", () => {
+    expect(
+      projectOrganizationBalance({
+        ledgerAvailableMinor: 51_345,
+        ledgerHeldMinor: 0,
+        ledgerPendingMinor: 7_404,
+        processorAvailableMinor: 0,
+        processorPendingMinor: 7_404,
+      }),
+    ).toEqual({
+      totalMinor: 7_404,
+      availableMinor: 0,
+      heldMinor: 0,
+      pendingMinor: 7_404,
+    });
   });
 });
