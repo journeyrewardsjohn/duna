@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -13,10 +14,15 @@ import { Readable } from "node:stream";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import Mux from "@mux/mux-node";
 
-// Keep each in-app upload comfortably below iOS memory pressure while still
-// clearing S3's 5 MiB minimum for every non-final multipart segment.
-export const R2_VIDEO_PART_SIZE_BYTES = 16 * 1024 * 1024;
-const R2_URL_EXPIRATION_SECONDS = 60 * 30;
+// The native uploader streams a file-backed 64 MiB range directly to
+// URLSession; it never materializes a multipart segment as `Data`. The larger
+// segment size materially reduces signed-request churn on longer recordings
+// while remaining comfortably inside R2's 10,000-part limit.
+export const R2_VIDEO_PART_SIZE_BYTES = 64 * 1024 * 1024;
+// Attachment uploads retain their existing smaller segment size. Video
+// durability must not unexpectedly change messaging's transport behavior.
+export const R2_MESSAGE_ATTACHMENT_PART_SIZE_BYTES = 16 * 1024 * 1024;
+const R2_URL_EXPIRATION_SECONDS = 24 * 60 * 60;
 const VIDEO_PLAYBACK_TOKEN_MINIMUM_SECONDS = 2 * 60 * 60;
 
 interface R2Configuration {
@@ -246,6 +252,59 @@ export async function presignR2VideoPart(input: {
   return { url, expiresAt };
 }
 
+export interface R2MultipartPart {
+  readonly partNumber: number;
+  readonly etag: string;
+  readonly sizeBytes: number;
+}
+
+/**
+ * ListParts is the source of truth for an in-progress multipart upload. The
+ * mobile database and a client's upload response are useful resume hints, but
+ * neither can safely decide which bytes R2 will complete.
+ */
+export async function listR2VideoUploadParts(input: {
+  readonly objectKey: string;
+  readonly uploadId: string;
+}): Promise<readonly R2MultipartPart[]> {
+  const { client, configuration } = getR2Client();
+  const parts: R2MultipartPart[] = [];
+  let marker: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListPartsCommand({
+        Bucket: configuration.bucket,
+        Key: input.objectKey,
+        UploadId: input.uploadId,
+        ...(marker ? { PartNumberMarker: marker } : {}),
+        MaxParts: 1_000,
+      }),
+    );
+    for (const part of response.Parts ?? []) {
+      if (
+        typeof part.PartNumber !== "number" ||
+        !Number.isInteger(part.PartNumber) ||
+        !part.ETag ||
+        typeof part.Size !== "number" ||
+        !Number.isSafeInteger(part.Size) ||
+        part.Size < 0
+      ) {
+        throw new Error("R2 returned invalid multipart upload metadata.");
+      }
+      const partNumber = part.PartNumber;
+      const sizeBytes = part.Size;
+      parts.push({ partNumber, etag: part.ETag, sizeBytes });
+    }
+    marker = response.IsTruncated ? response.NextPartNumberMarker : undefined;
+    if (response.IsTruncated && !marker) {
+      throw new Error("R2 returned an incomplete multipart upload page.");
+    }
+  } while (marker);
+
+  return parts.sort((left, right) => left.partNumber - right.partNumber);
+}
+
 export async function completeR2VideoUpload(input: {
   readonly objectKey: string;
   readonly uploadId: string;
@@ -287,6 +346,30 @@ export async function abortR2VideoUpload(input: {
   );
 }
 
+/** Only this narrow provider response proves an abort was already accepted. */
+export function isR2MultipartUploadAlreadyAbsent(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    readonly name?: unknown;
+    readonly Code?: unknown;
+    readonly code?: unknown;
+    readonly $metadata?: { readonly httpStatusCode?: unknown };
+  };
+  const code =
+    typeof candidate.name === "string"
+      ? candidate.name
+      : typeof candidate.Code === "string"
+        ? candidate.Code
+        : typeof candidate.code === "string"
+          ? candidate.code
+          : undefined;
+  return (
+    code === "NoSuchUpload" ||
+    code === "NoSuchKey" ||
+    (code === "NotFound" && candidate.$metadata?.httpStatusCode === 404)
+  );
+}
+
 export async function deleteR2VideoObject(objectKey: string): Promise<void> {
   const { client, configuration } = getR2Client();
   await client.send(
@@ -301,16 +384,31 @@ export async function verifyR2ObjectSize(input: {
   readonly objectKey: string;
   readonly expectedBytes: number;
 }): Promise<void> {
+  const object = await headR2VideoObject(input.objectKey);
+  if (object.sizeBytes !== input.expectedBytes) {
+    throw new Error("The completed attachment size did not match the upload.");
+  }
+}
+
+export async function headR2VideoObject(objectKey: string): Promise<{
+  readonly sizeBytes: number;
+  readonly etag?: string;
+}> {
   const { client, configuration } = getR2Client();
   const response = await client.send(
     new HeadObjectCommand({
       Bucket: configuration.bucket,
-      Key: input.objectKey,
+      Key: objectKey,
     }),
   );
-  if (response.ContentLength !== input.expectedBytes) {
-    throw new Error("The completed attachment size did not match the upload.");
+  if (
+    typeof response.ContentLength !== "number" ||
+    !Number.isSafeInteger(response.ContentLength) ||
+    response.ContentLength < 0
+  ) {
+    throw new Error("R2 did not return a valid completed object size.");
   }
+  return { sizeBytes: response.ContentLength, etag: response.ETag };
 }
 
 export async function presignR2AttachmentDownload(input: {

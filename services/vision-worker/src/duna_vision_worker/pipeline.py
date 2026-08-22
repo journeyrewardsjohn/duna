@@ -15,6 +15,14 @@ from .schemas import (
 )
 
 RALLY_GAP_US = 5_000_000
+# A rally is *not* complete merely because the worker reached the end of a
+# clip. The narrow proof below is intentionally conservative: dense usable
+# coverage, no material observation gap, room on both clip edges, and a
+# high-confidence visible landing are all required before bounded rules run.
+RALLY_CONTINUITY_MAX_GAP_US = 2_000_000
+RALLY_CLIP_EDGE_US = 1_000_000
+RALLY_MIN_USABLE_COVERAGE = 0.95
+RALLY_LANDING_CONFIDENCE = 0.85
 
 
 def stable_uuid(run_id: UUID, kind: str, time_us: int, sequence: int) -> UUID:
@@ -27,12 +35,21 @@ def build_events(command: AnalysisCommand, output: AnalysisOutput) -> list[Worke
     rally_started_us = 0
     rally_confidence = 1.0
     last_observation_us: int | None = None
+    rally_last_observation_us: int | None = None
+    rally_contact_events: list[WorkerEvent] = []
+    rally_has_continuity_gap = False
     sequence = 0
 
-    def close_rally(at_us: int) -> None:
-        nonlocal rally_id, sequence
+    def close_rally(at_us: int, proven_complete: bool = False) -> None:
+        nonlocal rally_id, sequence, rally_contact_events
+        nonlocal rally_has_continuity_gap, rally_last_observation_us
         if not rally_id:
             return
+        if proven_complete:
+            for contact in rally_contact_events:
+                # Rule findings remain bounded to this explicitly proven
+                # sequence; nothing about a single camera implies 3D facts.
+                contact.payload["rallySequenceComplete"] = True
         events.append(
             WorkerEvent(
                 id=stable_uuid(command.runId, "rally-ended", at_us, sequence),
@@ -44,6 +61,9 @@ def build_events(command: AnalysisCommand, output: AnalysisOutput) -> list[Worke
         )
         sequence += 1
         rally_id = None
+        rally_contact_events = []
+        rally_has_continuity_gap = False
+        rally_last_observation_us = None
 
     for observation in sorted(output.observations, key=lambda item: item.timeUs):
         starts_new = (
@@ -65,6 +85,9 @@ def build_events(command: AnalysisCommand, output: AnalysisOutput) -> list[Worke
             rally_id = stable_uuid(command.runId, "rally", observation.timeUs, sequence)
             rally_started_us = observation.timeUs
             rally_confidence = observation.confidence
+            rally_contact_events = []
+            rally_has_continuity_gap = False
+            rally_last_observation_us = None
             events.append(
                 WorkerEvent(
                     id=stable_uuid(
@@ -78,37 +101,78 @@ def build_events(command: AnalysisCommand, output: AnalysisOutput) -> list[Worke
             )
             sequence += 1
         rally_confidence = min(rally_confidence, observation.confidence)
+        if (
+            rally_last_observation_us is not None
+            and observation.timeUs - rally_last_observation_us
+            > RALLY_CONTINUITY_MAX_GAP_US
+        ):
+            rally_has_continuity_gap = True
         payload: dict[str, Any] = {"rallyId": str(rally_id)}
         court_point = None
         if observation.eventType == "ball-contact":
             payload.update(
                 {
+                    # Default to unavailable. A closed rally changes this only
+                    # after all conservative proof conditions are satisfied.
+                    "rallySequenceComplete": False,
                     "contactKind": observation.contactKind,
                     "side": observation.side,
                 }
             )
+            if observation.contactPoint:
+                payload["contactPoint"] = observation.contactPoint.model_dump(
+                    mode="json", exclude_none=True
+                )
+            if observation.contactUncertaintyMeters is not None:
+                payload["contactUncertaintyMeters"] = observation.contactUncertaintyMeters
+            if observation.contactQuality:
+                payload["contactQuality"] = observation.contactQuality.model_dump(
+                    mode="json", exclude_none=True
+                )
+            if observation.trajectory:
+                payload["trajectory"] = observation.trajectory.model_dump(
+                    mode="json", exclude_none=True
+                )
         else:
             court_point = CourtPoint(
                 xMeters=observation.xMeters,
                 yMeters=observation.yMeters,
                 observed="visible",
             )
-        events.append(
-            WorkerEvent(
-                id=stable_uuid(
-                    command.runId, observation.eventType, observation.timeUs, sequence
-                ),
-                eventType=observation.eventType,
-                sessionTimeUs=observation.timeUs,
-                confidence=observation.confidence,
-                courtPoint=court_point,
-                payload=payload,
-            )
+        event = WorkerEvent(
+            id=stable_uuid(
+                command.runId, observation.eventType, observation.timeUs, sequence
+            ),
+            eventType=observation.eventType,
+            sessionTimeUs=observation.timeUs,
+            confidence=observation.confidence,
+            courtPoint=court_point,
+            payload=payload,
         )
+        events.append(event)
+        if observation.eventType == "ball-contact":
+            rally_contact_events.append(event)
         sequence += 1
         last_observation_us = observation.timeUs
+        rally_last_observation_us = observation.timeUs
         if observation.eventType == "ball-landing":
-            close_rally(observation.timeUs)
+            usable_coverage = (
+                output.usableDurationUs / output.sampledDurationUs
+                if output.sampledDurationUs
+                else 0.0
+            )
+            close_rally(
+                observation.timeUs,
+                proven_complete=(
+                    bool(rally_contact_events)
+                    and observation.confidence >= RALLY_LANDING_CONFIDENCE
+                    and usable_coverage >= RALLY_MIN_USABLE_COVERAGE
+                    and not rally_has_continuity_gap
+                    and rally_started_us >= RALLY_CLIP_EDGE_US
+                    and observation.timeUs
+                    <= output.sampledDurationUs - RALLY_CLIP_EDGE_US
+                ),
+            )
 
     if rally_id is not None:
         close_rally(

@@ -154,6 +154,8 @@ import {
   videoAnalysisMarkerInputSchema,
   videoAnalysisReportSchema,
   videoAnalysisRunSchema,
+  videoPerformanceReviewSchema,
+  visionImprovementProposalQueueSchema,
   videoPlaybackSchema,
   videoStudioSchema,
   videoSummarySchema,
@@ -414,6 +416,7 @@ import {
   presignVideoUploadPart,
   recordVideoUploadPart,
   recordVideoViewHeartbeat,
+  resumeVideoUpload,
   requestVideoMusicRemoval,
   reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
@@ -484,6 +487,10 @@ import {
 import {
   createVideoAnalysisMarker,
   loadVideoAnalysisReport,
+  loadVisionImprovementProposalQueue,
+  processQueuedVisionImprovementProposals,
+  reviewVisionImprovementProposal,
+  requestOwnerVideoPerformanceReview,
   requestVideoAnalysis,
   reviewVideoAnalysisEvent,
   VideoAnalysisError,
@@ -1433,11 +1440,15 @@ function throwDomainError(error: unknown): never {
       error.code === "ANALYSIS_EVENT_NOT_FOUND"
         ? "NOT_FOUND"
         : error.code === "ANALYSIS_NOT_ALLOWED" ||
-            error.code === "ANALYSIS_EVENT_WRONG_VIDEO"
+            error.code === "ANALYSIS_EVENT_WRONG_VIDEO" ||
+            error.code === "OWNER_REQUIRED" ||
+            error.code === "ADULT_REQUIRED"
           ? "FORBIDDEN"
           : error.code === "INVALID_REVIEW"
             ? "BAD_REQUEST"
-            : "INTERNAL_SERVER_ERROR";
+            : error.code === "ANALYSIS_NOT_READY"
+              ? "PRECONDITION_FAILED"
+              : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof VisionModelError) {
@@ -3095,6 +3106,42 @@ const playerRouter = router({
         },
       }),
     ),
+  requestOwnerVideoPerformanceReview: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "video-performance-review-request",
+        capacity: 6,
+        refillPerMinute: 2,
+      }),
+    )
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoPerformanceReviewSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.requestOwnerVideoPerformanceReview",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await requestOwnerVideoPerformanceReview({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createVideoAnalysisMarker: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -3628,6 +3675,16 @@ const playerRouter = router({
         },
       }),
     ),
+  resumeVideoUpload: protectedProcedure
+    .input(z.object({ videoId: z.string().uuid() }))
+    .output(videoUploadSessionSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await resumeVideoUpload({ actor: ctx.actor!, ...input });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   videoUploadPartUrl: protectedProcedure
     .input(
       z.object({
@@ -12890,6 +12947,86 @@ const adminRouter = router({
         return throwDomainError(error);
       }
     }),
+  visionImprovementProposals: superAdminProcedure
+    .output(visionImprovementProposalQueueSchema)
+    .query(async () => {
+      try {
+        return await loadVisionImprovementProposalQueue();
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  processVisionImprovementProposals: superAdminProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(20).optional(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        processed: z.number().int().nonnegative(),
+        succeeded: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.processVisionImprovementProposals",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await processQueuedVisionImprovementProposals({
+              limit: input.limit ?? 10,
+              now: ctx.now,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  reviewVisionImprovementProposal: superAdminProcedure
+    .input(
+      z.object({
+        proposalId: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+        notes: z.string().trim().min(8).max(1_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.reviewVisionImprovementProposal",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await reviewVisionImprovementProposal({
+              actor: ctx.actor!,
+              proposalId: input.proposalId,
+              decision: input.decision,
+              notes: input.notes,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   people: superAdminProcedure
     .input(
       z.object({
