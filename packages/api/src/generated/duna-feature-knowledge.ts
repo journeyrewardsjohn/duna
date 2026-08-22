@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "7d569090e2fe5997313b3074746163a6fd187207c2fdffa8836f2502132c9184",
+    "0d5b4c5d21200c9af714089374e111bbf9386a7dc1e54d567d141847268da467",
   modules: [
     {
       id: "M1",
@@ -131,6 +131,7 @@ export const generatedDunaFeatureKnowledge = {
     "addBrandKnowledgeSource",
     "addCalendarEquipment",
     "addCalendarParticipant",
+    "addEventPlayerEntry",
     "addManualDivisionEntry",
     "adjustKobHeatScore",
     "admissionPasses",
@@ -412,6 +413,7 @@ export const generatedDunaFeatureKnowledge = {
     "scanPlayerRegistration",
     "scanTicket",
     "scorableMatches",
+    "searchEventPlayers",
     "searchPlayers",
     "selfEnrollOrganizationStaff",
     "sessionArrivalBoard",

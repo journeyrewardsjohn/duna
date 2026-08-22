@@ -43,6 +43,10 @@ import {
 } from "./commerce";
 import type { ApiActor } from "./context";
 import { evaluateDivisionCriteria } from "./division-eligibility";
+import {
+  eventCaptainPaymentComplete,
+  operatorEventPaymentTreatment,
+} from "./event-entry-payment";
 import { loadAttendanceReliability } from "./attendance-service";
 import { reconcileDivisionSelection } from "./event-operations-service";
 import { hasActiveDunaPlusMembership } from "./membership";
@@ -1361,6 +1365,13 @@ export async function startEventCheckout(input: {
       "The team invitation for this registration was not found.",
     );
   }
+  const organizerPaymentDue = Boolean(
+    joiningTeam &&
+    joiningTeam.payingPersonId === input.actor.personId &&
+    operatorEventPaymentTreatment(joiningTeam.eligibilityDecision) ===
+      "to-be-paid" &&
+    !captainPaymentComplete(joiningTeam),
+  );
   if (joiningTeam) {
     const member = joiningTeam.roster.find(
       (candidate) => candidate.personId === input.actor.personId,
@@ -1369,9 +1380,7 @@ export async function startEventCheckout(input: {
       joiningTeam.sessionId !== input.sessionId ||
       joiningTeam.divisionId !== input.divisionId ||
       joiningTeam.paymentMode === "team" ||
-      joiningTeam.payingPersonId === input.actor.personId ||
-      member?.status !== "claimed" ||
-      member.paidAt
+      (!organizerPaymentDue && (member?.status !== "claimed" || member.paidAt))
     ) {
       throw new CheckoutError(
         "EVENT_NOT_CHECKOUT_ELIGIBLE",
@@ -1689,11 +1698,45 @@ export async function startEventCheckout(input: {
     const teamClaimToken =
       expectedTeamSize > 1 ? savedTeamEntry?.claimToken : undefined;
     if (joiningTeam && input.teamClaimToken) {
-      await markTeamMemberPaid({
-        record: joiningTeam,
-        personId: input.actor.personId,
-        now: input.now,
-      });
+      if (organizerPaymentDue) {
+        const decision =
+          joiningTeam.eligibilityDecision &&
+          typeof joiningTeam.eligibilityDecision === "object" &&
+          !Array.isArray(joiningTeam.eligibilityDecision)
+            ? joiningTeam.eligibilityDecision
+            : {};
+        await database.batch([
+          database
+            .update(registrations)
+            .set({
+              eligibilityDecision: {
+                ...decision,
+                paymentTreatment: "zero-due",
+                settledAt: input.now.toISOString(),
+              },
+              updatedAt: input.now,
+            })
+            .where(eq(registrations.id, joiningTeam.registrationId)),
+          database
+            .update(teamEntries)
+            .set({
+              status:
+                joiningTeam.expectedTeamSize === 1 ? "ready" : "assembling",
+              claimedAt:
+                joiningTeam.expectedTeamSize === 1 ? input.now : undefined,
+              rosterLockedAt:
+                joiningTeam.expectedTeamSize === 1 ? input.now : undefined,
+              updatedAt: input.now,
+            })
+            .where(eq(teamEntries.id, joiningTeam.id)),
+        ]);
+      } else {
+        await markTeamMemberPaid({
+          record: joiningTeam,
+          personId: input.actor.personId,
+          now: input.now,
+        });
+      }
     }
     const changedDivisionId = input.divisionId ?? joiningTeam?.divisionId;
     if (changedDivisionId && event.organization?.id) {
@@ -1744,23 +1787,40 @@ export async function startEventCheckout(input: {
     event.organization.stripeTaxEnabled,
   );
 
-  const eligibility = event.ticketTypeId
-    ? undefined
-    : event.source === "pickup"
-      ? await evaluatePickupParticipant({
-          actor: input.actor,
-          pickupSessionId: event.id,
-          subjectPersonId,
-          now: input.now,
-        })
-      : await evaluateRegistrationForSession({
-          actor: input.actor,
-          sessionId: event.id,
-          divisionId: input.divisionId,
-          subjectPersonId,
-          inviteCodes: [],
-          now: input.now,
-        });
+  if (
+    organizerPaymentDue &&
+    joiningTeam?.registrationOrderId &&
+    joiningTeam.orderStatus === "pending"
+  ) {
+    const resumed = await existingCheckoutResult({
+      orderId: joiningTeam.registrationOrderId,
+      registrationId: joiningTeam.registrationId,
+      teamClaimToken: input.teamClaimToken,
+      paymentSurface: input.paymentSurface ?? "hosted",
+    });
+    if (resumed) return resumed;
+  }
+
+  const eligibility =
+    organizerPaymentDue && joiningTeam
+      ? { decision: joiningTeam.eligibilityDecision }
+      : event.ticketTypeId
+        ? undefined
+        : event.source === "pickup"
+          ? await evaluatePickupParticipant({
+              actor: input.actor,
+              pickupSessionId: event.id,
+              subjectPersonId,
+              now: input.now,
+            })
+          : await evaluateRegistrationForSession({
+              actor: input.actor,
+              sessionId: event.id,
+              divisionId: input.divisionId,
+              subjectPersonId,
+              inviteCodes: [],
+              now: input.now,
+            });
   const existingOrder = await database.query.orders.findFirst({
     where: eq(orders.idempotencyKey, input.idempotencyKey),
   });
@@ -1884,6 +1944,15 @@ export async function startEventCheckout(input: {
         result_status: participation.status,
         spots_remaining: participation.spotsRemaining,
       };
+    } else if (organizerPaymentDue && joiningTeam) {
+      await database
+        .update(registrations)
+        .set({ orderId, updatedAt: input.now })
+        .where(eq(registrations.id, joiningTeam.registrationId));
+      hold = {
+        registration_id: joiningTeam.registrationId,
+        result_status: "pending",
+      };
     } else {
       const result = await database.execute(sql`
         SELECT *
@@ -1941,6 +2010,7 @@ export async function startEventCheckout(input: {
   if (
     joiningTeam &&
     input.teamClaimToken &&
+    !organizerPaymentDue &&
     hold?.result_status === "pending" &&
     hold.registration_id
   ) {
@@ -2426,6 +2496,8 @@ async function loadTeamClaimRecord(claimToken: string) {
     await getDatabase()
       .select({
         id: teamEntries.id,
+        registrationId: registrations.id,
+        registrationOrderId: registrations.orderId,
         payingPersonId: teamEntries.payingPersonId,
         expectedTeamSize: teamEntries.expectedTeamSize,
         paymentMode: teamEntries.paymentMode,
@@ -2438,6 +2510,7 @@ async function loadTeamClaimRecord(claimToken: string) {
         registrationClosesAt: sessions.startsAt,
         registrationSettings: eventBlueprints.registrationSettings,
         registrationStatus: registrations.status,
+        eligibilityDecision: registrations.eligibilityDecision,
         orderStatus: orders.status,
         originalPlayerPriceMinor: orderItems.unitAmountMinor,
         divisionId: divisions.id,
@@ -2492,12 +2565,11 @@ type TeamClaimRecord = NonNullable<
 >;
 
 function captainPaymentComplete(record: TeamClaimRecord): boolean {
-  return (
-    record.orderStatus === "paid" ||
-    record.orderStatus === "partially-refunded" ||
-    record.registrationStatus === "confirmed" ||
-    record.registrationStatus === "checked-in"
-  );
+  return eventCaptainPaymentComplete({
+    eligibilityDecision: record.eligibilityDecision,
+    orderStatus: record.orderStatus,
+    registrationStatus: record.registrationStatus,
+  });
 }
 
 async function refreshTeamEntryStatus(
@@ -2641,11 +2713,7 @@ async function buildTeamClaimSummary(
     );
   const claimedPlayers =
     1 + roster.filter((member) => member.status === "claimed").length;
-  const captainPaid =
-    record.orderStatus === "paid" ||
-    record.orderStatus === "partially-refunded" ||
-    record.registrationStatus === "confirmed" ||
-    record.registrationStatus === "checked-in";
+  const captainPaid = captainPaymentComplete(record);
   const paidPlayers =
     record.paymentMode === "team" && captainPaid
       ? record.expectedTeamSize
@@ -2676,9 +2744,10 @@ async function buildTeamClaimSummary(
     alreadyClaimed,
     paymentRequired:
       record.paymentMode !== "team" &&
-      record.payingPersonId !== actorPersonId &&
       alreadyClaimed &&
-      !actorRosterMember?.paidAt,
+      (record.payingPersonId === actorPersonId
+        ? !captainPaid
+        : !actorRosterMember?.paidAt),
     isOrganizer,
     canManageRoster,
     registrationClosesAt: record.registrationClosesAt.toISOString(),
@@ -2812,11 +2881,7 @@ export async function claimTeamEntry(input: {
     };
     const claimedPlayers =
       1 + roster.filter((member) => member.status === "claimed").length;
-    const captainPaid =
-      record.orderStatus === "paid" ||
-      record.orderStatus === "partially-refunded" ||
-      record.registrationStatus === "confirmed" ||
-      record.registrationStatus === "checked-in";
+    const captainPaid = captainPaymentComplete(record);
     const paidPlayers =
       record.paymentMode === "team" && captainPaid
         ? record.expectedTeamSize

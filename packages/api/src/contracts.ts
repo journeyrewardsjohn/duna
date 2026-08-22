@@ -4612,6 +4612,17 @@ export const operatorActivityDetailSchema = z.object({
 export const operatorSessionDetailSchema = z.object({
   session: operatorSessionSchema,
   arrivalBoard: sessionArrivalBoardSchema,
+  entryDivisions: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        teamSize: expectedTeamSizeSchema,
+        entryFeeMinor: z.number().int().nonnegative(),
+        currency: currencySchema,
+      }),
+    )
+    .readonly(),
   coaches: z
     .array(
       z.object({
@@ -4632,6 +4643,20 @@ export const operatorSessionDetailSchema = z.object({
         ]),
         paidMinor: z.number().int().nonnegative(),
         refundedMinor: z.number().int().nonnegative(),
+        identityStatus: z.enum(["connected", "guest-invited", "guest-claimed"]),
+        paymentStatus: z.enum(["paid", "complimentary", "payment-due", "free"]),
+        invitation: z
+          .object({
+            status: z.enum(["pending", "claimed", "expired", "cancelled"]),
+            deliveryStatus: z.enum([
+              "not-configured",
+              "queued",
+              "sent",
+              "failed",
+            ]),
+            claimUrl: z.url(),
+          })
+          .optional(),
       }),
     )
     .readonly(),
@@ -5837,6 +5862,16 @@ export const playerInvitationSchema = z.object({
   relationship: z.enum(["player", "member"]),
   status: z.enum(["pending", "claimed", "expired", "cancelled"]),
   expiresAt: z.iso.datetime(),
+  event: z
+    .object({
+      title: z.string(),
+      startsAt: z.iso.datetime(),
+      timezone: z.string(),
+      divisionName: z.string(),
+      paymentTreatment: z.enum(["complimentary", "to-be-paid"]),
+      claimPath: z.string().startsWith("/app/team/claim/"),
+    })
+    .optional(),
 });
 
 export const playerInvitationClaimResultSchema = z.object({
@@ -5845,6 +5880,7 @@ export const playerInvitationClaimResultSchema = z.object({
   participantPersonId: z.string().uuid(),
   guardianReviewRequired: z.boolean(),
   status: z.literal("claimed"),
+  nextPath: z.string().startsWith("/").optional(),
 });
 
 export const courtScheduleProposalSchema = z.object({

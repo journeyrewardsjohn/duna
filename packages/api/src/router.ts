@@ -321,6 +321,7 @@ import {
   updateOrganizationTheme,
 } from "./catalog-service";
 import {
+  addEventPlayerEntry,
   addManualDivisionEntry,
   adjustKobHeatScore,
   advanceIndividualKobStage,
@@ -334,6 +335,7 @@ import {
   reconcileDivisionSelection,
   reconcileRegistrationDivisionSelection,
   refundEventRegistration,
+  searchEventPlayers,
   setTeamSelection,
   updateDivisionMatchSchedule,
   updateEventSession,
@@ -9253,6 +9255,99 @@ const operatorRouter = router({
       loadOperatorDivisionDetail({
         organizationId: ctx.actor!.organizationId!,
         divisionId: input.divisionId,
+      }),
+    ),
+  searchEventPlayers: organizationProcedure("sessions:read")
+    .use(
+      rateLimitMiddleware({
+        id: "operator-event-player-search",
+        capacity: 60,
+        refillPerMinute: 30,
+      }),
+    )
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        query: z.string().trim().min(2).max(80),
+      }),
+    )
+    .output(
+      z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            displayName: z.string(),
+            handle: z.string(),
+            avatarUrl: z.string().url().optional(),
+            rating: z.number().min(1).max(8).optional(),
+            connection: z.enum(["organization", "duna"]),
+          }),
+        )
+        .readonly(),
+    )
+    .query(({ input, ctx }) =>
+      searchEventPlayers({
+        actor: ctx.actor!,
+        sessionId: input.sessionId,
+        query: input.query,
+      }),
+    ),
+  addEventPlayerEntry: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        divisionId: z.string().uuid(),
+        identity: z.discriminatedUnion("kind", [
+          z.object({
+            kind: z.literal("duna"),
+            personId: z.string().uuid(),
+          }),
+          z.object({
+            kind: z.literal("guest"),
+            givenName: z.string().trim().min(1).max(80),
+            familyName: z.string().trim().min(1).max(80),
+            email: z.string().trim().email().optional(),
+            phoneE164: z
+              .string()
+              .trim()
+              .regex(/^\+[1-9]\d{7,14}$/)
+              .optional(),
+          }),
+        ]),
+        paymentTreatment: z.enum(["complimentary", "to-be-paid"]),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      operatorMutationResultSchema.extend({
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        paymentTreatment: z.enum(["complimentary", "to-be-paid"]),
+        identityStatus: z.enum(["connected", "guest-invited"]),
+        invitationUrl: z.url().optional(),
+        deliveryStatus: z.enum(["not-configured", "sent", "failed"]).optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.addEventPlayerEntry",
+        request: input,
+        ctx,
+        execute: () =>
+          addEventPlayerEntry({
+            actor: ctx.actor!,
+            sessionId: input.sessionId,
+            divisionId: input.divisionId,
+            identity: input.identity,
+            paymentTreatment: input.paymentTreatment,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
       }),
     ),
   addManualDivisionEntry: organizationProcedure("sessions:write")

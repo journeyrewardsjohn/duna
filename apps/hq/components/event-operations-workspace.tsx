@@ -12,9 +12,12 @@ import {
   CircleAlert,
   CloudSun,
   Coins,
+  Copy,
   Eye,
   FileLock2,
   FileText,
+  Gift,
+  Link2,
   Mail,
   MapPin,
   MessageCircle,
@@ -23,6 +26,8 @@ import {
   ReceiptText,
   RotateCcw,
   ShieldCheck,
+  WalletCards,
+  X,
   UserCheck,
   UserPlus,
   UserRoundX,
@@ -31,9 +36,9 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
-  addCalendarParticipantAction,
+  addEventPlayerEntryAction,
   cancelCalendarSessionAction,
   createSessionNoteAction,
   publishSessionNoteAction,
@@ -44,6 +49,7 @@ import {
   updateEventSessionAction,
 } from "@/app/actions";
 import { SessionNoteRecorder } from "./session-note-recorder";
+import { PlayerCombobox } from "./player-combobox";
 
 const initialState: OperatorActionState = { status: "idle", message: "" };
 
@@ -64,49 +70,348 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
   );
 }
 
-function RosterAddControl({
-  candidates,
-  sessionId,
+function EventPlayerEntryForm({
+  detail,
+  onClose,
 }: {
-  readonly candidates: readonly OperatorWorkspace["people"][number][];
-  readonly sessionId: string;
+  readonly detail: OperatorSessionDetail;
+  readonly onClose: () => void;
 }) {
   const [state, action, pending] = useActionState(
-    addCalendarParticipantAction,
+    addEventPlayerEntryAction,
     initialState,
   );
-  if (!candidates.length) return null;
+  const [identityKind, setIdentityKind] = useState<"duna" | "guest">("duna");
+  const [paymentTreatment, setPaymentTreatment] = useState<
+    "complimentary" | "to-be-paid" | undefined
+  >();
+  const [copied, setCopied] = useState(false);
+  const defaultDivision = detail.entryDivisions[0];
+
+  if (state.status === "success") {
+    return (
+      <div className="event-player-sheet__success">
+        <span>
+          <Check aria-hidden size={24} />
+        </span>
+        <small>Player added</small>
+        <h3>{state.personName ?? "The player"} is in the field.</h3>
+        <p>{state.message}</p>
+        {state.invitationUrl && (
+          <div className="event-player-sheet__claim-link">
+            <Link2 aria-hidden size={18} />
+            <span>
+              <strong>
+                {state.entryPaymentTreatment === "complimentary"
+                  ? "Claim entry link"
+                  : "Claim and payment link"}
+              </strong>
+              <small>
+                {state.deliveryStatus === "sent"
+                  ? "Sent. You can also copy it here."
+                  : "Share this private link with the player."}
+              </small>
+            </span>
+            <button
+              onClick={() => {
+                void navigator.clipboard.writeText(state.invitationUrl!);
+                setCopied(true);
+              }}
+              type="button"
+            >
+              <Copy aria-hidden size={16} /> {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        )}
+        <button
+          className="hq-button hq-button--primary"
+          onClick={onClose}
+          type="button"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <form action={action} className="event-roster-add">
-      <input name="sessionId" type="hidden" value={sessionId} />
+    <form action={action} className="event-player-sheet__form">
+      <input name="sessionId" type="hidden" value={detail.session.id} />
+      <input name="identityKind" type="hidden" value={identityKind} />
       <input
         name="reason"
         type="hidden"
-        value="Added directly to the event roster by an organization operator."
+        value="Organizer added a player from the event roster sheet and verified the entry treatment."
       />
-      <label>
-        <span className="sr-only">Add a connected player</span>
-        <select defaultValue="" name="personId" required>
-          <option disabled value="">
-            Add a connected player
-          </option>
-          {candidates.map((person) => (
-            <option key={person.personId} value={person.personId}>
-              {person.displayName}
-              {person.membershipName ? ` · ${person.membershipName}` : ""}
-            </option>
-          ))}
-        </select>
+      <div
+        aria-label="Choose player identity"
+        className="event-player-sheet__identity-tabs"
+        role="tablist"
+      >
+        <button
+          aria-selected={identityKind === "duna"}
+          onClick={() => setIdentityKind("duna")}
+          role="tab"
+          type="button"
+        >
+          Search Duna
+          <small>Find an existing player profile</small>
+        </button>
+        <button
+          aria-selected={identityKind === "guest"}
+          onClick={() => setIdentityKind("guest")}
+          role="tab"
+          type="button"
+        >
+          Guest player
+          <small>Create a claimable tournament spot</small>
+        </button>
+      </div>
+
+      {identityKind === "duna" ? (
+        <section className="event-player-sheet__identity-panel" role="tabpanel">
+          <PlayerCombobox
+            initialOptions={[]}
+            label="Search every eligible Duna player"
+            placeholder="Search by name or @handle…"
+            remoteSearchPath={`/api/events/player-search?sessionId=${encodeURIComponent(detail.session.id)}&q=`}
+          />
+          <p>
+            Duna shows public adult profiles plus players already connected to
+            your organization. Contact details remain private.
+          </p>
+        </section>
+      ) : (
+        <section className="event-player-sheet__identity-panel" role="tabpanel">
+          <div className="event-player-sheet__name-grid">
+            <label>
+              <span>First name</span>
+              <input autoComplete="given-name" name="givenName" required />
+            </label>
+            <label>
+              <span>Last name</span>
+              <input autoComplete="family-name" name="familyName" required />
+            </label>
+          </div>
+          <div className="event-player-sheet__name-grid">
+            <label>
+              <span>
+                Email <small>Optional</small>
+              </span>
+              <input autoComplete="email" name="email" type="email" />
+            </label>
+            <label>
+              <span>
+                Mobile <small>Optional</small>
+              </span>
+              <input
+                autoComplete="tel"
+                inputMode="tel"
+                name="phoneE164"
+                pattern="^\+[0-9 ()-]{7,20}$"
+                placeholder="+1 310 555 0123"
+                title="Use an international number beginning with +"
+              />
+            </label>
+          </div>
+          <p>
+            Add email or mobile to send the invitation now. Without either, Duna
+            still creates a private claim link you can copy. Direct guest
+            invitations are for players 18 or older; add minors through People
+            so a guardian can accept.
+          </p>
+        </section>
+      )}
+
+      <section className="event-player-sheet__entry">
+        <header>
+          <small>Entry details</small>
+          <strong>Where should this player compete?</strong>
+        </header>
+        {detail.entryDivisions.length ? (
+          <label>
+            <span>Division</span>
+            <select
+              defaultValue={defaultDivision?.id}
+              name="divisionId"
+              required
+            >
+              {detail.entryDivisions.map((division) => (
+                <option key={division.id} value={division.id}>
+                  {division.name} ·{" "}
+                  {division.teamSize === 1
+                    ? "Individual"
+                    : `${division.teamSize}-player team`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p role="alert">This event has no division available for entry.</p>
+        )}
+        <fieldset>
+          <legend>Payment treatment</legend>
+          <label data-selected={paymentTreatment === "complimentary"}>
+            <input
+              checked={paymentTreatment === "complimentary"}
+              name="paymentTreatment"
+              onChange={() => setPaymentTreatment("complimentary")}
+              type="radio"
+              value="complimentary"
+            />
+            <Gift aria-hidden size={20} />
+            <span>
+              <strong>Comp entry</strong>
+              <small>Registered and covered by the organizer.</small>
+            </span>
+          </label>
+          <label data-selected={paymentTreatment === "to-be-paid"}>
+            <input
+              checked={paymentTreatment === "to-be-paid"}
+              name="paymentTreatment"
+              onChange={() => setPaymentTreatment("to-be-paid")}
+              type="radio"
+              value="to-be-paid"
+            />
+            <WalletCards aria-hidden size={20} />
+            <span>
+              <strong>To be paid</strong>
+              <small>The spot is held. The player pays after claiming.</small>
+            </span>
+          </label>
+        </fieldset>
+      </section>
+
+      <label className="event-player-sheet__confirm">
+        <input name="confirmed" required type="checkbox" value="true" />
+        <span>
+          <strong>
+            I verified this player, division, and entry treatment.
+          </strong>
+          {identityKind === "guest" &&
+            " I also confirm this guest is 18 or older."}
+        </span>
       </label>
+      <ActionNotice state={state} />
       <button
-        className="hq-button hq-button--secondary"
-        disabled={pending}
+        className="hq-button hq-button--primary"
+        disabled={pending || !detail.entryDivisions.length || !paymentTreatment}
         type="submit"
       >
-        <UserPlus aria-hidden size={15} /> {pending ? "Adding…" : "Add player"}
+        <UserPlus aria-hidden size={17} />
+        {pending
+          ? "Registering player…"
+          : !paymentTreatment
+            ? "Choose entry payment"
+            : paymentTreatment === "complimentary"
+              ? "Add with comp entry"
+              : "Reserve spot with payment due"}
       </button>
-      <ActionNotice state={state} />
     </form>
+  );
+}
+
+function RosterAddControl({
+  detail,
+}: {
+  readonly detail: OperatorSessionDetail;
+}) {
+  const [open, setOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      sheetRef.current
+        ?.querySelector<HTMLInputElement>('input:not([type="hidden"])')
+        ?.focus();
+    });
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !sheetRef.current) return;
+      const focusable = Array.from(
+        sheetRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), a[href]',
+        ),
+      );
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", close);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", close);
+      triggerRef.current?.focus();
+    };
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    setFormKey((value) => value + 1);
+  };
+  return (
+    <>
+      <button
+        className="hq-button hq-button--secondary"
+        onClick={() => setOpen(true)}
+        ref={triggerRef}
+        type="button"
+      >
+        <UserPlus aria-hidden size={16} /> Add player
+      </button>
+      {open && (
+        <div
+          className="event-player-sheet-backdrop"
+          onClick={close}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="event-player-sheet-title"
+            aria-modal="true"
+            className="event-player-sheet"
+            onClick={(event) => event.stopPropagation()}
+            ref={sheetRef}
+            role="dialog"
+          >
+            <header>
+              <span>
+                <small>Add to the field</small>
+                <h2 id="event-player-sheet-title">Register a player.</h2>
+                <p>
+                  Find a Duna profile or create a guest spot they can claim.
+                </p>
+              </span>
+              <button
+                aria-label="Close add player sheet"
+                onClick={close}
+                type="button"
+              >
+                <X aria-hidden size={20} />
+              </button>
+            </header>
+            <EventPlayerEntryForm
+              detail={detail}
+              key={formKey}
+              onClose={close}
+            />
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -150,6 +455,33 @@ function AttendanceControl({
         <small data-state={state.status}>{state.message}</small>
       )}
     </form>
+  );
+}
+
+function CopyClaimLink({ claimUrl }: { readonly claimUrl: string }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
+  return (
+    <button
+      className="event-roster-list__open"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(claimUrl);
+          setStatus("copied");
+        } catch {
+          setStatus("error");
+        }
+      }}
+      type="button"
+    >
+      <span aria-live="polite">
+        {status === "copied"
+          ? "Claim link copied"
+          : status === "error"
+            ? "Copy failed"
+            : "Copy claim link"}
+      </span>
+      <Copy aria-hidden size={14} />
+    </button>
   );
 }
 
@@ -609,14 +941,6 @@ export function EventOperationsWorkspace({
   const weather = detail.operations.weather;
   const isTeamSession = detail.teams.length > 0;
   const isLeague = session.kind === "league";
-  const rosterCandidates = workspace.people.filter(
-    (person) =>
-      person.status === "active" &&
-      person.roles.includes("player") &&
-      !detail.attendees.some(
-        (attendee) => attendee.personId === person.personId,
-      ),
-  );
   const weatherHeading = weather
     ? weather.condition
     : detail.operations.weatherStatus === "forecast-pending"
@@ -1096,38 +1420,90 @@ export function EventOperationsWorkspace({
               </span>
               <span className="event-roster-card__tools">
                 <Badge>{detail.attendees.length} people</Badge>
-                <RosterAddControl
-                  candidates={rosterCandidates}
-                  sessionId={session.id}
-                />
+                <RosterAddControl detail={detail} />
               </span>
             </header>
             <div className="event-roster-list">
               {detail.attendees.map((attendee) => (
                 <article key={attendee.id}>
-                  <Link
-                    className="event-roster-list__person"
-                    href={`/members/${attendee.personId}`}
-                  >
-                    <span className="event-roster-list__avatar">
-                      {attendee.avatarUrl ? (
-                        <img alt="" src={attendee.avatarUrl} />
-                      ) : (
-                        initials(attendee.displayName)
-                      )}
+                  {attendee.identityStatus === "guest-invited" ? (
+                    <span className="event-roster-list__person">
+                      <span className="event-roster-list__avatar">
+                        {initials(attendee.displayName)}
+                      </span>
+                      <span>
+                        <strong>{attendee.displayName}</strong>
+                        <small>
+                          {attendee.email ??
+                            attendee.phoneE164 ??
+                            "Claim link ready"}
+                        </small>
+                      </span>
                     </span>
-                    <span>
-                      <strong>{attendee.displayName}</strong>
-                      <small>
-                        {attendee.email ??
-                          attendee.phoneE164 ??
-                          "No contact method"}
-                      </small>
-                    </span>
-                  </Link>
+                  ) : (
+                    <Link
+                      className="event-roster-list__person"
+                      href={`/members/${attendee.personId}`}
+                    >
+                      <span className="event-roster-list__avatar">
+                        {attendee.avatarUrl ? (
+                          <img alt="" src={attendee.avatarUrl} />
+                        ) : (
+                          initials(attendee.displayName)
+                        )}
+                      </span>
+                      <span>
+                        <strong>{attendee.displayName}</strong>
+                        <small>
+                          {attendee.email ??
+                            attendee.phoneE164 ??
+                            "Duna player"}
+                        </small>
+                      </span>
+                    </Link>
+                  )}
+                  <span className="event-roster-list__states">
+                    <Badge
+                      tone={
+                        attendee.identityStatus === "guest-invited"
+                          ? "warning"
+                          : "positive"
+                      }
+                    >
+                      {attendee.identityStatus === "guest-invited"
+                        ? attendee.invitation?.deliveryStatus === "sent"
+                          ? "Invite sent"
+                          : "Guest · unclaimed"
+                        : attendee.identityStatus === "guest-claimed"
+                          ? "Guest claimed"
+                          : "Duna player"}
+                    </Badge>
+                    <Badge
+                      tone={
+                        attendee.paymentStatus === "payment-due"
+                          ? "warning"
+                          : "positive"
+                      }
+                    >
+                      {attendee.paymentStatus === "complimentary"
+                        ? "Comped"
+                        : attendee.paymentStatus === "payment-due"
+                          ? "Payment due"
+                          : attendee.paymentStatus === "free"
+                            ? "Free entry"
+                            : "Paid"}
+                    </Badge>
+                  </span>
                   <span className="event-roster-list__money">
                     <strong>
-                      {formatMoney(attendee.paidMinor, detail.finance.currency)}
+                      {attendee.paymentStatus === "complimentary"
+                        ? "Comped"
+                        : attendee.paymentStatus === "payment-due"
+                          ? "Due"
+                          : formatMoney(
+                              attendee.paidMinor,
+                              detail.finance.currency,
+                            )}
                     </strong>
                     <small>
                       {attendee.refundedMinor
@@ -1144,12 +1520,17 @@ export function EventOperationsWorkspace({
                     )}
                     registrationId={attendee.id}
                   />
-                  <Link
-                    className="event-roster-list__open"
-                    href={`/members/${attendee.personId}`}
-                  >
-                    Open <ArrowRight aria-hidden size={14} />
-                  </Link>
+                  {attendee.identityStatus === "guest-invited" &&
+                  attendee.invitation ? (
+                    <CopyClaimLink claimUrl={attendee.invitation.claimUrl} />
+                  ) : (
+                    <Link
+                      className="event-roster-list__open"
+                      href={`/members/${attendee.personId}`}
+                    >
+                      Open <ArrowRight aria-hidden size={14} />
+                    </Link>
+                  )}
                 </article>
               ))}
               {detail.attendees.length === 0 && (
@@ -1157,7 +1538,8 @@ export function EventOperationsWorkspace({
                   <UsersRound aria-hidden size={22} />
                   <strong>No one is registered yet.</strong>
                   <span>
-                    Add a connected player with the roster control above.
+                    Add a Duna player or create a guest spot from the action
+                    above.
                   </span>
                 </div>
               )}

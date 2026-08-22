@@ -1919,6 +1919,26 @@ export const organizationInvitations = pgTable(
     deliveryMessageId: varchar("delivery_message_id", { length: 160 }),
     claimedByPersonId: uuid("claimed_by_person_id").references(() => people.id),
     claimedPersonId: uuid("claimed_person_id").references(() => people.id),
+    eventSessionId: uuid("event_session_id").references(() => sessions.id, {
+      onDelete: "cascade",
+    }),
+    eventDivisionId: uuid("event_division_id").references(() => divisions.id, {
+      onDelete: "cascade",
+    }),
+    provisionalPersonId: uuid("provisional_person_id").references(
+      () => people.id,
+      { onDelete: "restrict" },
+    ),
+    eventRegistrationId: uuid("event_registration_id").references(
+      () => registrations.id,
+      { onDelete: "cascade" },
+    ),
+    teamEntryId: uuid("team_entry_id").references(() => teamEntries.id, {
+      onDelete: "cascade",
+    }),
+    eventPaymentTreatment: varchar("event_payment_treatment", {
+      length: 24,
+    }),
     expiresAt: timestamp("expires_at", {
       withTimezone: true,
       mode: "date",
@@ -1936,6 +1956,9 @@ export const organizationInvitations = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("organization_invitation_event_registration_idx").on(
+      table.eventRegistrationId,
+    ),
     check(
       "organization_invitation_relationship_valid",
       sql`${table.relationship} IN ('player', 'member')`,
@@ -1945,12 +1968,20 @@ export const organizationInvitations = pgTable(
       sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
     ),
     check(
+      "organization_invitation_event_payment_valid",
+      sql`${table.eventPaymentTreatment} IS NULL OR ${table.eventPaymentTreatment} IN ('complimentary', 'to-be-paid')`,
+    ),
+    check(
+      "organization_invitation_event_context_complete",
+      sql`(${table.eventSessionId} IS NULL AND ${table.eventDivisionId} IS NULL AND ${table.provisionalPersonId} IS NULL AND ${table.eventRegistrationId} IS NULL AND ${table.teamEntryId} IS NULL AND ${table.eventPaymentTreatment} IS NULL) OR (${table.eventSessionId} IS NOT NULL AND ${table.eventDivisionId} IS NOT NULL AND ${table.provisionalPersonId} IS NOT NULL AND ${table.eventRegistrationId} IS NOT NULL AND ${table.teamEntryId} IS NOT NULL AND ${table.eventPaymentTreatment} IS NOT NULL)`,
+    ),
+    check(
       "organization_invitation_delivery_status_valid",
       sql`${table.deliveryStatus} IN ('not-configured', 'queued', 'sent', 'failed')`,
     ),
     check(
       "organization_invitation_destination_present",
-      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL OR ${table.guardianEmail} IS NOT NULL OR ${table.guardianPhoneE164} IS NOT NULL`,
+      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL OR ${table.guardianEmail} IS NOT NULL OR ${table.guardianPhoneE164} IS NOT NULL OR ${table.eventRegistrationId} IS NOT NULL`,
     ),
     check(
       "organization_invitation_minor_guardian_present",

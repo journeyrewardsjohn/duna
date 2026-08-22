@@ -15,6 +15,10 @@ export interface OperatorActionState {
   readonly onboardingUrl?: string;
   readonly entityId?: string;
   readonly privateClaimLink?: string;
+  readonly invitationUrl?: string;
+  readonly deliveryStatus?: "not-configured" | "sent" | "failed";
+  readonly personName?: string;
+  readonly entryPaymentTreatment?: "complimentary" | "to-be-paid";
   readonly scheduleProposal?: {
     readonly summary: string;
     readonly blocks: readonly {
@@ -55,6 +59,21 @@ function field(formData: FormData, name: string): string {
 
 function optionalField(formData: FormData, name: string): string | undefined {
   return field(formData, name) || undefined;
+}
+
+function optionalE164Field(
+  formData: FormData,
+  name: string,
+): string | undefined {
+  const value = optionalField(formData, name);
+  if (!value) return undefined;
+  const normalized = `${value.startsWith("+") ? "+" : ""}${value.replaceAll(/\D/g, "")}`;
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
+    throw new Error(
+      "Enter the mobile number with country code, such as +1 310 555 0123.",
+    );
+  }
+  return normalized;
 }
 
 function courtSurfaceField(formData: FormData): CourtSurface {
@@ -1205,6 +1224,69 @@ export async function addCalendarParticipantAction(
       "success",
       "Player added. Their in-app and push updates are queued.",
     );
+  } catch (error) {
+    return errorState(error);
+  }
+}
+
+export async function addEventPlayerEntryAction(
+  _previous: OperatorActionState,
+  formData: FormData,
+): Promise<OperatorActionState> {
+  try {
+    const sessionId = field(formData, "sessionId");
+    const identityKind = field(formData, "identityKind");
+    if (identityKind !== "duna" && identityKind !== "guest") {
+      throw new Error("Choose a Duna player or create a guest player.");
+    }
+    const paymentTreatment = field(formData, "paymentTreatment");
+    if (
+      paymentTreatment !== "complimentary" &&
+      paymentTreatment !== "to-be-paid"
+    ) {
+      throw new Error("Choose complimentary entry or payment due.");
+    }
+    const caller = await getServerCaller();
+    const entry = await caller.operator.addEventPlayerEntry({
+      sessionId,
+      divisionId: field(formData, "divisionId"),
+      identity:
+        identityKind === "duna"
+          ? {
+              kind: "duna",
+              personId: field(formData, "personId"),
+            }
+          : {
+              kind: "guest",
+              givenName: field(formData, "givenName"),
+              familyName: field(formData, "familyName"),
+              email: optionalField(formData, "email"),
+              phoneE164: optionalE164Field(formData, "phoneE164"),
+            },
+      paymentTreatment,
+      reason:
+        field(formData, "reason") ||
+        "Organizer added a player and confirmed the entry treatment.",
+      confirmed: confirmed(formData),
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidateOperator();
+    revalidatePath(`/events/${sessionId}`);
+    return {
+      status: "success",
+      message:
+        entry.identityStatus === "guest-invited"
+          ? entry.deliveryStatus === "sent"
+            ? `${entry.displayName} is registered and the claim invitation was sent.`
+            : `${entry.displayName} is registered. Copy the claim link to invite them.`
+          : entry.paymentTreatment === "complimentary"
+            ? `${entry.displayName} is registered with a complimentary entry.`
+            : `${entry.displayName} is registered with payment due.`,
+      invitationUrl: entry.invitationUrl,
+      deliveryStatus: entry.deliveryStatus,
+      personName: entry.displayName,
+      entryPaymentTreatment: entry.paymentTreatment,
+    };
   } catch (error) {
     return errorState(error);
   }

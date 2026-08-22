@@ -37,6 +37,8 @@ import {
   scheduleOverrides,
   schedules,
   sessions,
+  teamEntries,
+  teamMembers,
   teams,
   ticketTypes,
   tickets,
@@ -4010,11 +4012,26 @@ export async function loadPlayerInvitation(
       status: organizationInvitations.status,
       expiresAt: organizationInvitations.expiresAt,
       organizationName: organizations.name,
+      eventTitle: sessions.title,
+      eventStartsAt: sessions.startsAt,
+      eventTimezone: sessions.timezone,
+      divisionName: divisions.name,
+      eventPaymentTreatment: organizationInvitations.eventPaymentTreatment,
+      teamClaimToken: teamEntries.claimToken,
     })
     .from(organizationInvitations)
     .innerJoin(
       organizations,
       eq(organizationInvitations.organizationId, organizations.id),
+    )
+    .leftJoin(sessions, eq(organizationInvitations.eventSessionId, sessions.id))
+    .leftJoin(
+      divisions,
+      eq(organizationInvitations.eventDivisionId, divisions.id),
+    )
+    .leftJoin(
+      teamEntries,
+      eq(organizationInvitations.teamEntryId, teamEntries.id),
     )
     .where(eq(organizationInvitations.inviteToken, inviteToken))
     .limit(1)
@@ -4042,6 +4059,23 @@ export async function loadPlayerInvitation(
     relationship: row.relationship === "member" ? "member" : "player",
     status,
     expiresAt: row.expiresAt.toISOString(),
+    event:
+      row.eventTitle &&
+      row.eventStartsAt &&
+      row.eventTimezone &&
+      row.divisionName &&
+      row.teamClaimToken &&
+      (row.eventPaymentTreatment === "complimentary" ||
+        row.eventPaymentTreatment === "to-be-paid")
+        ? {
+            title: row.eventTitle,
+            startsAt: row.eventStartsAt.toISOString(),
+            timezone: row.eventTimezone,
+            divisionName: row.divisionName,
+            paymentTreatment: row.eventPaymentTreatment,
+            claimPath: `/app/team/claim/${encodeURIComponent(row.teamClaimToken)}`,
+          }
+        : undefined,
   };
 }
 
@@ -4074,6 +4108,178 @@ export async function claimPlayerInvitation(input: {
       "INVITATION_EXPIRED",
       "This invitation is no longer active.",
     );
+  }
+  if (
+    invitation.eventSessionId &&
+    invitation.eventDivisionId &&
+    invitation.provisionalPersonId &&
+    invitation.eventRegistrationId &&
+    invitation.teamEntryId &&
+    (invitation.eventPaymentTreatment === "complimentary" ||
+      invitation.eventPaymentTreatment === "to-be-paid")
+  ) {
+    const eventSessionId = invitation.eventSessionId;
+    const provisionalPersonId = invitation.provisionalPersonId;
+    const eventRegistrationId = invitation.eventRegistrationId;
+    const teamEntryId = invitation.teamEntryId;
+    const eventPaymentTreatment = invitation.eventPaymentTreatment;
+    const transactionDatabase = getTransactionalDatabase();
+    let teamClaimToken = "";
+    await transactionDatabase.transaction(async (transaction) => {
+      const claimed = await transaction
+        .update(organizationInvitations)
+        .set({
+          status: "claimed",
+          claimedByPersonId: input.actor.personId,
+          claimedPersonId: input.actor.personId,
+          claimedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(organizationInvitations.id, invitation.id),
+            eq(organizationInvitations.status, "pending"),
+            gt(organizationInvitations.expiresAt, input.now),
+          ),
+        )
+        .returning({ id: organizationInvitations.id });
+      if (!claimed[0]) {
+        throw new OperatorServiceError(
+          "INVITATION_ALREADY_CLAIMED",
+          "This tournament invitation was claimed in another session.",
+        );
+      }
+      const existingRegistration = await transaction
+        .select({ id: registrations.id })
+        .from(registrations)
+        .where(
+          and(
+            eq(registrations.sessionId, eventSessionId),
+            eq(registrations.personId, input.actor.personId),
+            inArray(registrations.status, [
+              "pending",
+              "confirmed",
+              "waitlisted",
+              "checked-in",
+            ]),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0]);
+      if (
+        existingRegistration &&
+        existingRegistration.id !== eventRegistrationId
+      ) {
+        throw new OperatorServiceError(
+          "INVITATION_ALREADY_CLAIMED",
+          "Your Duna profile is already registered for this event.",
+        );
+      }
+      const entry = await transaction
+        .select({
+          teamId: teamEntries.teamId,
+          claimToken: teamEntries.claimToken,
+          expectedTeamSize: teamEntries.expectedTeamSize,
+        })
+        .from(teamEntries)
+        .where(eq(teamEntries.id, teamEntryId))
+        .limit(1)
+        .then((rows) => rows[0]);
+      if (!entry?.teamId) {
+        throw new OperatorServiceError(
+          "INVITATION_NOT_FOUND",
+          "The tournament entry linked to this invitation is unavailable.",
+        );
+      }
+      teamClaimToken = entry.claimToken;
+      if (input.actor.personId !== provisionalPersonId) {
+        await transaction
+          .update(teamMembers)
+          .set({ personId: input.actor.personId })
+          .where(
+            and(
+              eq(teamMembers.teamId, entry.teamId),
+              eq(teamMembers.personId, provisionalPersonId),
+            ),
+          );
+        await transaction
+          .update(registrations)
+          .set({ personId: input.actor.personId, updatedAt: input.now })
+          .where(eq(registrations.id, eventRegistrationId));
+        await transaction
+          .update(people)
+          .set({
+            profileClaimStatus: "merged",
+            profileVisibility: "private",
+            status: "restricted",
+            updatedAt: input.now,
+          })
+          .where(eq(people.id, provisionalPersonId));
+      } else {
+        await transaction
+          .update(people)
+          .set({ profileClaimStatus: "claimed", updatedAt: input.now })
+          .where(eq(people.id, provisionalPersonId));
+      }
+      const readyOnClaim =
+        entry.expectedTeamSize === 1 &&
+        eventPaymentTreatment === "complimentary";
+      await transaction
+        .update(teamEntries)
+        .set({
+          payingPersonId: input.actor.personId,
+          status: readyOnClaim ? "ready" : "assembling",
+          claimedAt: readyOnClaim ? input.now : null,
+          rosterLockedAt: readyOnClaim ? input.now : null,
+          updatedAt: input.now,
+        })
+        .where(eq(teamEntries.id, teamEntryId));
+      await transaction
+        .insert(organizationParticipants)
+        .values({
+          organizationId: invitation.organizationId,
+          personId: input.actor.personId,
+          relationship: "player",
+          status: "active",
+          addedByPersonId: invitation.invitedByPersonId,
+          joinedAt: input.now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            organizationParticipants.organizationId,
+            organizationParticipants.personId,
+            organizationParticipants.relationship,
+          ],
+          set: { status: "active", joinedAt: input.now, updatedAt: input.now },
+        });
+      await transaction.insert(auditLog).values({
+        organizationId: invitation.organizationId,
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "tournament.player-invitation.claimed",
+        entityType: "player-invitation",
+        entityId: invitation.id,
+        afterHash: stableHash({
+          participantPersonId: input.actor.personId,
+          registrationId: eventRegistrationId,
+          teamEntryId,
+          paymentTreatment: eventPaymentTreatment,
+        }),
+        reason:
+          "Player claimed an organizer-created tournament entry and replaced its provisional identity.",
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      });
+    });
+    return {
+      invitationId: invitation.id,
+      organizationId: invitation.organizationId,
+      participantPersonId: input.actor.personId,
+      guardianReviewRequired: false,
+      status: "claimed",
+      nextPath: `/app/team/claim/${encodeURIComponent(teamClaimToken)}`,
+    };
   }
   if (invitation.isMinor && input.actor.ageBand !== "adult") {
     throw new OperatorServiceError(

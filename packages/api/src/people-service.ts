@@ -12,6 +12,7 @@ import {
   orderItems,
   orders,
   organizationCreditGrants,
+  organizationInvitations,
   organizations,
   organizationWallets,
   people,
@@ -28,8 +29,12 @@ import {
   videos,
 } from "@duna/db";
 import { arrivalSharingWindow } from "@duna/scheduling";
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import {
+  eventCaptainPaymentComplete,
+  operatorEventPaymentTreatment,
+} from "./event-entry-payment";
 import type {
   HealthProfile,
   OperatorMemberProfile,
@@ -39,6 +44,7 @@ import type {
   OperatorWorkspace,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { canonicalPublicWebUrl } from "./public-web-url";
 import { loadSessionArrivalBoard } from "./arrival-service";
 import { loadHealthProfile } from "./health-service";
 import {
@@ -1112,6 +1118,7 @@ export async function loadOperatorSessionDetail(
       divisionName: divisions.name,
       captainName: people.displayName,
       registrationStatus: registrations.status,
+      eligibilityDecision: registrations.eligibilityDecision,
       orderStatus: orders.status,
     })
     .from(teamEntries)
@@ -1120,6 +1127,29 @@ export async function loadOperatorSessionDetail(
     .innerJoin(people, eq(teamEntries.payingPersonId, people.id))
     .leftJoin(orders, eq(registrations.orderId, orders.id))
     .where(eq(registrations.sessionId, sessionId));
+  const [entryDivisionRows, invitationRows] = await Promise.all([
+    database
+      .select({
+        id: divisions.id,
+        name: divisions.name,
+        teamSize: divisions.teamSize,
+        entryFeeMinor: divisions.entryFeeMinor,
+        currency: divisions.currency,
+      })
+      .from(divisions)
+      .where(eq(divisions.sessionId, sessionId))
+      .orderBy(asc(divisions.createdAt)),
+    database
+      .select({
+        registrationId: organizationInvitations.eventRegistrationId,
+        status: organizationInvitations.status,
+        deliveryStatus: organizationInvitations.deliveryStatus,
+        inviteToken: organizationInvitations.inviteToken,
+        expiresAt: organizationInvitations.expiresAt,
+      })
+      .from(organizationInvitations)
+      .where(eq(organizationInvitations.eventSessionId, sessionId)),
+  ]);
   const orderIds = [
     ...new Set([
       ...registrationRows.flatMap((registration) =>
@@ -1267,9 +1297,24 @@ export async function loadOperatorSessionDetail(
   }).catch(() => ({
     weatherStatus: "temporarily-unavailable" as const,
   }));
+  const invitationByRegistration = new Map(
+    invitationRows.flatMap((invitation) =>
+      invitation.registrationId
+        ? [[invitation.registrationId, invitation] as const]
+        : [],
+    ),
+  );
+  const teamEntryByRegistration = new Map(
+    teamEntryRows.map((team) => [team.registrationId, team] as const),
+  );
   return {
     session,
     arrivalBoard,
+    entryDivisions: entryDivisionRows.map((division) => ({
+      ...division,
+      teamSize: Math.max(1, Math.min(6, division.teamSize)),
+      currency: currency(division.currency),
+    })),
     coaches: coach
       ? [
           {
@@ -1283,6 +1328,27 @@ export async function loadOperatorSessionDetail(
       const order = registration.orderId
         ? orderById.get(registration.orderId)
         : undefined;
+      const invitation = invitationByRegistration.get(registration.id);
+      const teamEntry = teamEntryByRegistration.get(registration.id);
+      const paymentTreatment = operatorEventPaymentTreatment(
+        teamEntry?.eligibilityDecision,
+      );
+      const entryPriceMinor = teamEntry
+        ? (entryDivisionRows.find(
+            (division) => division.id === teamEntry.divisionId,
+          )?.entryFeeMinor ?? session.priceMinor)
+        : session.priceMinor;
+      const paymentStatus =
+        order &&
+        ["paid", "partially-refunded", "refunded"].includes(order.status)
+          ? "paid"
+          : paymentTreatment === "complimentary"
+            ? "complimentary"
+            : paymentTreatment === "to-be-paid" || registration.orderId
+              ? "payment-due"
+              : entryPriceMinor === 0
+                ? "free"
+                : "payment-due";
       return {
         ...registration,
         attendanceStatus: (attendanceByPerson.get(registration.personId) ??
@@ -1297,6 +1363,33 @@ export async function loadOperatorSessionDetail(
         refundedMinor: registration.orderId
           ? (refundedByOrder.get(registration.orderId) ?? 0)
           : 0,
+        identityStatus: invitation
+          ? invitation.status === "claimed"
+            ? ("guest-claimed" as const)
+            : ("guest-invited" as const)
+          : ("connected" as const),
+        paymentStatus,
+        invitation: invitation
+          ? {
+              status:
+                invitation.status === "claimed" ||
+                invitation.status === "expired" ||
+                invitation.status === "cancelled"
+                  ? invitation.status
+                  : invitation.expiresAt <= now
+                    ? ("expired" as const)
+                    : ("pending" as const),
+              deliveryStatus:
+                invitation.deliveryStatus === "queued" ||
+                invitation.deliveryStatus === "sent" ||
+                invitation.deliveryStatus === "failed"
+                  ? invitation.deliveryStatus
+                  : ("not-configured" as const),
+              claimUrl: canonicalPublicWebUrl(
+                `/join/organization/${encodeURIComponent(invitation.inviteToken)}`,
+              ),
+            }
+          : undefined,
       };
     }),
     cancellationPreview: {
@@ -1305,11 +1398,11 @@ export async function loadOperatorSessionDetail(
     },
     teams: teamEntryRows.map((team) => {
       const operational = operationalTeamById.get(team.id);
-      const captainPaid =
-        team.orderStatus === "paid" ||
-        team.orderStatus === "partially-refunded" ||
-        team.registrationStatus === "confirmed" ||
-        team.registrationStatus === "checked-in";
+      const captainPaid = eventCaptainPaymentComplete({
+        eligibilityDecision: team.eligibilityDecision,
+        orderStatus: team.orderStatus,
+        registrationStatus: team.registrationStatus,
+      });
       const claimedPlayers =
         1 + team.roster.filter((member) => member.status === "claimed").length;
       const paidPlayers =
@@ -1466,6 +1559,8 @@ export async function loadDemoOperatorSessionDetail(
         registration.status === "refunded"
           ? session.priceMinor
           : 0,
+      identityStatus: "connected",
+      paymentStatus: session.priceMinor > 0 ? "paid" : "free",
     }),
   );
   const activeOrders = attendees.filter(
@@ -1561,6 +1656,7 @@ export async function loadDemoOperatorSessionDetail(
         };
       }),
     },
+    entryDivisions: [],
     coaches: [
       {
         personId: coachPersonId,

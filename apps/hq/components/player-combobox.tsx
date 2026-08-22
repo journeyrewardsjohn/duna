@@ -10,6 +10,7 @@ export interface PlayerComboboxOption {
   readonly isProfessional?: boolean;
   readonly profileClaimStatus?: string;
   readonly rating?: number;
+  readonly connection?: "organization" | "duna";
 }
 
 function uniqueOptions(
@@ -37,6 +38,7 @@ export function PlayerCombobox({
   label = "Duna player",
   name = "personId",
   placeholder = "Search name or @handle…",
+  remoteSearchPath = "/api/admin/player-search?q=",
   searchHint,
   suggestedConfidence,
   suggestedOption,
@@ -47,6 +49,7 @@ export function PlayerCombobox({
   readonly label?: string;
   readonly name?: string;
   readonly placeholder?: string;
+  readonly remoteSearchPath?: string;
   readonly searchHint?: string;
   readonly suggestedConfidence?: number;
   readonly suggestedOption?: PlayerComboboxOption;
@@ -140,7 +143,7 @@ export function PlayerCombobox({
       setLoading(true);
       try {
         const response = await fetch(
-          `/api/admin/player-search?q=${encodeURIComponent(query.trim())}`,
+          `${remoteSearchPath}${encodeURIComponent(query.trim())}`,
           { signal: controller.signal },
         );
         if (!response.ok) throw new Error("Search unavailable");
@@ -160,7 +163,7 @@ export function PlayerCombobox({
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [normalizedQuery, query, selected]);
+  }, [normalizedQuery, query, remoteSearchPath, selected]);
 
   const choose = (option: PlayerComboboxOption) => {
     setSelected(option);
@@ -265,6 +268,11 @@ export function PlayerCombobox({
                     ? ` · Sand ${option.rating.toFixed(2)}`
                     : option.isProfessional
                       ? " · Pro"
+                      : ""}
+                  {option.connection === "organization"
+                    ? " · Your organization"
+                    : option.connection === "duna"
+                      ? " · Duna player"
                       : ""}
                 </small>
               </span>
