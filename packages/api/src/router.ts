@@ -101,7 +101,6 @@ import {
   operatorSessionDetailSchema,
   operatorWorkspaceSchema,
   organizationMoneyWorkspaceSchema,
-  organizationPayoutReceiptSchema,
   publicVenueLayoutSchema,
   publicCatalogRecommendationsSchema,
   organizationCommissionPolicySchema,
@@ -709,9 +708,7 @@ import {
   createManualOrganizationPayout,
   createOrganizationRefundPolicy,
   loadDemoOrganizationMoneyWorkspace,
-  loadDemoOrganizationPayoutReceipt,
   loadOrganizationMoneyWorkspace,
-  loadOrganizationPayoutReceipt,
   updateOrganizationMoneySettings,
 } from "./money-service";
 import { loadWeatherForecast, resolveWeatherCoordinates } from "./weather";
@@ -8001,35 +7998,28 @@ const operatorRouter = router({
         idempotencyKey: z.string().uuid(),
       }),
     )
-    .output(organizationPayoutReceiptSchema)
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        amountMinor: z.number().int().positive(),
+        status: z.literal("submitted"),
+      }),
+    )
     .mutation(({ input, ctx }) =>
-      ctx.actor!.isDemo && !process.env.DATABASE_URL
-        ? Promise.resolve(
-            loadDemoOrganizationPayoutReceipt(input.idempotencyKey, ctx.now),
-          )
-        : runIdempotentMutation({
-            key: input.idempotencyKey,
-            procedure: "operator.createManualPayout",
-            request: input,
-            ctx,
-            execute: () =>
-              createManualOrganizationPayout({
-                actor: ctx.actor!,
-                idempotencyKey: input.idempotencyKey,
-                now: ctx.now,
-              }),
-          }),
-    ),
-  payoutReceipt: organizationProcedure("payments:read")
-    .input(z.object({ payoutId: z.string().uuid() }))
-    .output(organizationPayoutReceiptSchema)
-    .query(({ input, ctx }) =>
-      ctx.actor!.isDemo && !process.env.DATABASE_URL
-        ? loadDemoOrganizationPayoutReceipt(input.payoutId, ctx.now)
-        : loadOrganizationPayoutReceipt({
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.createManualPayout",
+        request: input,
+        ctx,
+        execute: async () => ({
+          ...(await createManualOrganizationPayout({
             actor: ctx.actor!,
-            payoutId: input.payoutId,
-          }),
+            idempotencyKey: input.idempotencyKey,
+            now: ctx.now,
+          })),
+          status: "submitted" as const,
+        }),
+      }),
     ),
   trainingWorkspace: organizationProcedure("training:read")
     .output(trainingWorkspaceSchema)
