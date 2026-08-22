@@ -168,6 +168,7 @@ import {
   AudienceServiceError,
   createAudience,
   getAudience,
+  getAudienceBuilderWorkspace,
   getAudienceDetail,
   listAudiences,
   previewAudienceRule,
@@ -7549,6 +7550,27 @@ const operatorRouter = router({
   audiences: organizationProcedure("audiences:read")
     .output(z.array(audienceSummarySchema).readonly())
     .query(({ ctx }) => listAudiences(ctx.actor!)),
+  audienceBuilder: organizationProcedure("audiences:read")
+    .output(
+      z.object({
+        candidateCount: z.number().int().nonnegative(),
+        people: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              displayName: z.string(),
+              initials: z.string(),
+              avatarUrl: z.string().optional(),
+              homeMarket: z.string().optional(),
+              isMinor: z.boolean(),
+              roles: z.array(z.enum(["player", "member", "parent"])).readonly(),
+              sandRating: z.number().optional(),
+            }),
+          )
+          .readonly(),
+      }),
+    )
+    .query(({ ctx }) => getAudienceBuilderWorkspace(ctx.actor!)),
   audience: organizationProcedure("audiences:read")
     .input(z.object({ audienceId: z.string().uuid() }))
     .output(audienceSummarySchema)
@@ -7587,10 +7609,18 @@ const operatorRouter = router({
       getAudienceDetail(ctx.actor!, input.audienceId),
     ),
   previewAudience: organizationProcedure("audiences:write")
-    .input(z.object({ ruleAst: audienceRuleAstSchema }))
+    .input(
+      z.object({
+        mode: z.enum(["static", "dynamic", "hybrid"]),
+        ruleAst: audienceRuleAstSchema,
+        includePersonIds: z.array(z.string().uuid()).max(5_000),
+        excludePersonIds: z.array(z.string().uuid()).max(5_000),
+      }),
+    )
     .output(
       z.object({
         ruleHash: z.string(),
+        candidateCount: z.number().int().nonnegative(),
         estimatedSize: z.number().int(),
         unavailableFactKeys: z.array(z.string()).readonly(),
         members: z
@@ -7616,7 +7646,10 @@ const operatorRouter = router({
       }),
     )
     .query(({ input, ctx }) =>
-      previewAudienceRule(ctx.actor!, input.ruleAst as never),
+      previewAudienceRule(ctx.actor!, {
+        ...input,
+        ruleAst: input.ruleAst as never,
+      }),
     ),
   createAudience: organizationProcedure("audiences:write")
     .input(

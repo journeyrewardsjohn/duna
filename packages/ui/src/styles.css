@@ -444,6 +444,213 @@
   padding: 0.9rem 1.4rem;
 }
 
+.duna-page-header {
+  align-items: end;
+  display: grid;
+  gap: 1rem 2rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.duna-page-header__copy {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.duna-page-header h1 {
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4vw, 4.25rem);
+  font-weight: 550;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+  margin: 0;
+  max-width: 24ch;
+}
+
+.duna-page-header p {
+  color: var(--text-2);
+  font-size: max(0.95rem, 15px);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 72ch;
+}
+
+.duna-page-header__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
+
+.duna-avatar {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  color: var(--text-1);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 750;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.duna-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.duna-avatar--small {
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+.duna-avatar--medium {
+  font-size: 0.82rem;
+  height: 3rem;
+  width: 3rem;
+}
+
+.duna-avatar--large {
+  font-size: 1rem;
+  height: 4rem;
+  width: 4rem;
+}
+
+.duna-avatar-stack {
+  align-items: center;
+  display: inline-flex;
+  padding-left: 0.35rem;
+}
+
+.duna-avatar-stack > * {
+  box-shadow: 0 0 0 3px var(--surface-1);
+  margin-left: -0.35rem;
+}
+
+.duna-avatar-stack__more {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: max(0.75rem, 12px);
+  font-weight: 750;
+  height: 2.25rem;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding-inline: 0.5rem;
+}
+
+.duna-stat-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  box-shadow: var(--shadow-small);
+  display: grid;
+  gap: 0.3rem;
+  min-height: 9rem;
+  padding: 1rem;
+}
+
+.duna-stat-card__icon {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 10px;
+  color: var(--text-2);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+  width: 2rem;
+}
+
+.duna-stat-card strong {
+  color: var(--text-1);
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.duna-stat-card > span:last-child {
+  color: var(--text-2);
+  font-size: max(0.8rem, 13px);
+}
+
+.duna-empty-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  justify-content: center;
+  min-height: 18rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.duna-empty-state__icon {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 16px;
+  color: var(--text-2);
+  display: inline-flex;
+  height: 3.25rem;
+  justify-content: center;
+  width: 3.25rem;
+}
+
+.duna-empty-state h2,
+.duna-empty-state p {
+  margin: 0;
+}
+
+.duna-empty-state h2 {
+  color: var(--text-1);
+  font-size: 1.25rem;
+}
+
+.duna-empty-state p {
+  color: var(--text-2);
+  line-height: 1.5;
+  max-width: 44ch;
+}
+
+.duna-progress {
+  background: var(--surface-2);
+  border-radius: 999px;
+  display: block;
+  height: 0.35rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.duna-progress > i {
+  background: var(--text-2);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+@media (max-width: 720px) {
+  .duna-page-header {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .duna-page-header__actions {
+    justify-content: stretch;
+  }
+
+  .duna-page-header__actions > * {
+    flex: 1;
+  }
+}
+
 .duna-badge,
 .duna-chip {
   align-items: center;
@@ -1442,7 +1649,7 @@
   align-items: baseline;
   color: var(--color-bone, var(--text-1, #1b1b19));
   display: flex;
-  font-size: max(0.75rem, 12px);
+  font-size: max(0.875rem, 14px);
   font-weight: 720;
   gap: 0.5rem;
   justify-content: space-between;
@@ -1483,9 +1690,9 @@
   box-sizing: border-box;
   color: var(--color-bone, var(--text-1, #1b1b19));
   font: inherit;
-  font-size: max(0.8rem, 13px);
+  font-size: max(1rem, 16px);
   line-height: 1.35;
-  min-height: 46px;
+  min-height: 48px;
   outline: 0;
   padding: 0.7rem 0.8rem;
   transition:

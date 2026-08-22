@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDemoActor } from "./context";
 import {
   createAudience,
+  getAudienceBuilderWorkspace,
   listAudiences,
   previewAudienceRule,
 } from "./audience-service";
@@ -27,8 +28,25 @@ describe("audience service", () => {
         ],
       },
     };
-    await expect(previewAudienceRule(actor, ruleAst)).resolves.toMatchObject({
-      estimatedSize: 0,
+    await expect(
+      previewAudienceRule(actor, {
+        mode: "dynamic",
+        ruleAst,
+        includePersonIds: [],
+        excludePersonIds: [],
+      }),
+    ).resolves.toMatchObject({
+      candidateCount: 5,
+      estimatedSize: 3,
+    });
+    await expect(getAudienceBuilderWorkspace(actor)).resolves.toMatchObject({
+      candidateCount: 5,
+      people: expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "Elena Patel",
+          roles: ["parent"],
+        }),
+      ]),
     });
     await expect(
       createAudience({

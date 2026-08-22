@@ -10,6 +10,8 @@ The current references are intentionally separate:
   web, HQ, Player, and Pro surfaces. It supersedes every earlier font rule.
 - `duna-design-system-v3.md` is the active amendment for ground inversion,
   athletic composition, typography, club color, and player identity.
+- `duna-hq-component-system.md` is the operational component, content, and
+  responsive usage contract for Duna HQ.
 - `duna-implementation-audit.md` records the verified production failures and
   their acceptance criteria.
 - `duna-design-system.md` defines the core brand and web system.
@@ -24,13 +26,10 @@ future design-system decision is amended.
 
 ## Typography assets
 
-Fellix web and app files in this repository came from the licensed Journey
-Rewards font package supplied for Duna. They may not be redistributed or reused
-outside the licensed product.
-
-Duna ships exactly two brand families: Fellix for every word and Archivo for
-meaningful numerals and the Duna wordmark. Supplied serif archives are design
-review inputs only and must not be copied into a web or native bundle.
+Duna ships Satoshi for every product word and number. The authoritative weights,
+loading sources, fallbacks, and verification rules live in
+`duna-font-usage-guide.md`. Older licensed or open-source font assets may remain
+in repository history, but they are not an active product typography contract.
 
 ## Generated media
 
