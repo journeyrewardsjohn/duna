@@ -65,6 +65,7 @@ import {
   createCatalogCheckoutSession,
   createCatalogNativePayment,
   createMobilePaymentCustomerSession,
+  automaticTaxEnabledInCurrentStripeMode,
   getOrCreatePlayerStripeCustomer,
   getStripePublishableKey,
 } from "./payments";
@@ -1531,13 +1532,16 @@ export async function startCatalogCheckout(input: {
     where: eq(people.id, input.actor.personId),
   });
   try {
+    const automaticTaxEnabled =
+      row.item.taxable &&
+      automaticTaxEnabledInCurrentStripeMode(row.organization.stripeTaxEnabled);
     const nativePaymentEligible =
       input.paymentSurface === "native" &&
       !promoQuote &&
       !installmentsRequested &&
       !isMembershipPlan &&
       row.item.type !== "good" &&
-      !(row.item.taxable && row.organization.stripeTaxEnabled);
+      !automaticTaxEnabled;
     if (nativePaymentEligible) {
       const publishableKey = getStripePublishableKey();
       const customerId = await getOrCreatePlayerStripeCustomer({
@@ -1647,8 +1651,7 @@ export async function startCatalogCheckout(input: {
           : undefined,
       recurringIntervalCount: price.recurringIntervalCount ?? undefined,
       subscriptionPolicy,
-      automaticTaxEnabled:
-        row.item.taxable && row.organization.stripeTaxEnabled,
+      automaticTaxEnabled,
       stripeTaxCode: resolveCatalogTaxCode({
         type: row.item.type,
         subtype: row.item.subtype,

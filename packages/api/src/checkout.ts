@@ -53,6 +53,7 @@ import {
   createEventCheckoutSession,
   createEventPaymentIntent,
   createMobilePaymentCustomerSession,
+  automaticTaxEnabledInCurrentStripeMode,
   getOrCreatePlayerStripeCustomer,
   getStripeClient,
   getStripePublishableKey,
@@ -1998,10 +1999,10 @@ export async function startEventCheckout(input: {
         operatorProcessingFee.amountMinor +
         organizationCommissionFee.amountMinor,
     );
-    if (
-      input.paymentSurface === "native" &&
-      !event.organization.stripeTaxEnabled
-    ) {
+    const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+      event.organization.stripeTaxEnabled,
+    );
+    if (input.paymentSurface === "native" && !automaticTaxEnabled) {
       const publishableKey = getStripePublishableKey();
       const customerId = await getOrCreatePlayerStripeCustomer({
         personId: input.actor.personId,
@@ -2071,7 +2072,7 @@ export async function startEventCheckout(input: {
       organizationCommissionMinor: organizationCommissionFee.amountMinor,
       organizationCommissionRateBps: commissionPolicy.rateBps,
       connectedAccountId: event.organization.stripeAccountId,
-      automaticTaxEnabled: event.organization.stripeTaxEnabled,
+      automaticTaxEnabled,
       stripeTaxCode: resolveEventTaxCode({
         spectatorTicket: Boolean(event.ticketTypeId),
         eventKind: event.kind,
