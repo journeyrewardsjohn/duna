@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MARKETPLACE_TAX_POLICY_VERSION,
   STRIPE_TAX_CODES,
+  automaticTaxEnabledForStripeSecret,
   marketplaceAutomaticTax,
   resolveCatalogTaxCode,
   resolveEventTaxCode,
@@ -89,5 +90,24 @@ describe("marketplace tax policy", () => {
       enabled: false,
       liability: undefined,
     });
+  });
+
+  it("keeps automatic tax off until Stripe is in live mode", () => {
+    expect(automaticTaxEnabledForStripeSecret(true, "sk_test_sandbox")).toBe(
+      false,
+    );
+    expect(automaticTaxEnabledForStripeSecret(true, "rk_test_sandbox")).toBe(
+      false,
+    );
+    expect(automaticTaxEnabledForStripeSecret(true, undefined)).toBe(false);
+    expect(
+      automaticTaxEnabledForStripeSecret(false, "sk_live_production"),
+    ).toBe(false);
+    expect(automaticTaxEnabledForStripeSecret(true, "sk_live_production")).toBe(
+      true,
+    );
+    expect(automaticTaxEnabledForStripeSecret(true, "rk_live_production")).toBe(
+      true,
+    );
   });
 });

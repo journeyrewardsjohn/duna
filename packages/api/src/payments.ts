@@ -12,7 +12,11 @@ import {
   connectAccountMetadataEntityId,
   connectAccountMoneyReady,
 } from "./stripe-connect";
-import { STRIPE_TAX_CODES, marketplaceAutomaticTax } from "./tax-policy";
+import {
+  STRIPE_TAX_CODES,
+  automaticTaxEnabledForStripeSecret,
+  marketplaceAutomaticTax,
+} from "./tax-policy";
 
 let stripeClient: Stripe | undefined;
 
@@ -43,7 +47,17 @@ export function getStripePublishableKey(): string {
   return publishableKey;
 }
 
+export function automaticTaxEnabledInCurrentStripeMode(
+  requested: boolean,
+): boolean {
+  return automaticTaxEnabledForStripeSecret(
+    requested,
+    process.env.STRIPE_SECRET_KEY,
+  );
+}
+
 export async function retrieveMarketplaceTaxReadiness(): Promise<{
+  readonly livemode: boolean;
   readonly status: "active" | "pending";
   readonly headOfficeConfigured: boolean;
   readonly activeRegistrationCount: number;
@@ -61,6 +75,7 @@ export async function retrieveMarketplaceTaxReadiness(): Promise<{
   const headOfficeConfigured = Boolean(settings.head_office?.address);
   const activeRegistrationCount = registrations.data.length;
   return {
+    livemode: settings.livemode,
     status:
       settings.status === "active" &&
       headOfficeConfigured &&
@@ -276,7 +291,9 @@ export async function createDunaPlusCheckout(input: {
       allow_promotion_codes: true,
       billing_address_collection: "auto",
       automatic_tax: {
-        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+        enabled: automaticTaxEnabledInCurrentStripeMode(
+          process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+        ),
       },
       tax_id_collection: { enabled: true },
       subscription_data: {
@@ -348,7 +365,9 @@ export async function createOrganizationPlanCheckout(input: {
       allow_promotion_codes: true,
       billing_address_collection: "required",
       automatic_tax: {
-        enabled: process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+        enabled: automaticTaxEnabledInCurrentStripeMode(
+          process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+        ),
       },
       tax_id_collection: { enabled: true },
       subscription_data: {
@@ -395,6 +414,9 @@ export async function createEventCheckoutSession(input: {
   ) {
     throw new Error("Connected checkout application fee is invalid");
   }
+  const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+    input.automaticTaxEnabled,
+  );
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "payment",
@@ -408,17 +430,17 @@ export async function createEventCheckoutSession(input: {
             unit_amount: input.amountMinor,
             product_data: {
               name: input.eventTitle,
-              tax_code: input.stripeTaxCode,
+              tax_code: automaticTaxEnabled ? input.stripeTaxCode : undefined,
               metadata: { dunaEventId: input.eventId },
             },
-            tax_behavior: "exclusive",
+            tax_behavior: automaticTaxEnabled ? "exclusive" : undefined,
           },
         },
       ],
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
+      automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
         on_behalf_of: input.connectedAccountId,
@@ -766,6 +788,9 @@ export async function createCourtCheckoutSession(input: {
   ) {
     throw new Error("Court checkout application fee is invalid");
   }
+  const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+    input.automaticTaxEnabled,
+  );
   const session = await getStripeClient().checkout.sessions.create(
     {
       mode: "payment",
@@ -779,17 +804,19 @@ export async function createCourtCheckoutSession(input: {
             unit_amount: input.amountMinor,
             product_data: {
               name: input.description,
-              tax_code: STRIPE_TAX_CODES.singleUseFacilityAccess,
+              tax_code: automaticTaxEnabled
+                ? STRIPE_TAX_CODES.singleUseFacilityAccess
+                : undefined,
               metadata: { dunaBookingId: input.bookingId },
             },
-            tax_behavior: "exclusive",
+            tax_behavior: automaticTaxEnabled ? "exclusive" : undefined,
           },
         },
       ],
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
+      automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
       payment_intent_data: {
         application_fee_amount: input.applicationFeeMinor,
         on_behalf_of: input.connectedAccountId,
@@ -926,7 +953,10 @@ export async function createCatalogCheckoutSession(input: {
         }
       : {}),
   };
-  if (input.automaticTaxEnabled) {
+  const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+    input.automaticTaxEnabled,
+  );
+  if (automaticTaxEnabled) {
     await ensureStripePriceTaxCode(input.stripePriceId, input.stripeTaxCode);
   }
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
@@ -956,10 +986,12 @@ export async function createCatalogCheckoutSession(input: {
           name: "Duna service fee",
           description:
             "Platform service fee for this organization transaction.",
-          tax_code: STRIPE_TAX_CODES.generalServices,
+          tax_code: automaticTaxEnabled
+            ? STRIPE_TAX_CODES.generalServices
+            : undefined,
           metadata: { dunaOrderId: input.orderId },
         },
-        tax_behavior: "exclusive",
+        tax_behavior: automaticTaxEnabled ? "exclusive" : undefined,
         recurring:
           input.recurringInterval && !input.installmentPlan
             ? {
@@ -982,9 +1014,7 @@ export async function createCatalogCheckoutSession(input: {
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      billing_address_collection: input.automaticTaxEnabled
-        ? "required"
-        : "auto",
+      billing_address_collection: automaticTaxEnabled ? "required" : "auto",
       shipping_address_collection: input.collectShippingAddress
         ? {
             allowed_countries: [
@@ -1001,7 +1031,7 @@ export async function createCatalogCheckoutSession(input: {
             ],
           }
         : undefined,
-      automatic_tax: marketplaceAutomaticTax(input.automaticTaxEnabled),
+      automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
       payment_intent_data: recurring
         ? undefined
         : {
@@ -1024,7 +1054,7 @@ export async function createCatalogCheckoutSession(input: {
                   ),
                 }
               : {}),
-            invoice_settings: input.automaticTaxEnabled
+            invoice_settings: automaticTaxEnabled
               ? { issuer: { type: "self" } }
               : undefined,
             metadata,

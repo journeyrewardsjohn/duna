@@ -81,3 +81,11 @@ export function marketplaceAutomaticTax(enabled: boolean) {
     liability: enabled ? ({ type: "self" } as const) : undefined,
   };
 }
+
+export function automaticTaxEnabledForStripeSecret(
+  requested: boolean,
+  secretKey: string | undefined,
+): boolean {
+  if (!requested) return false;
+  return /^(?:sk|rk)_live_/.test(secretKey ?? "");
+}
