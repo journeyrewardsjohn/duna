@@ -14,6 +14,7 @@ import {
   divisions,
   dunaPlusGrants,
   getDatabase,
+  getTransactionalDatabase,
   matches,
   organizationMemberships,
   organizations,
@@ -31,6 +32,7 @@ import {
   videoUploadParts,
   videoViews,
   videos,
+  idempotencyRecords,
   visionCalibrationSamples,
   visionSessions,
   webhookEvents,
@@ -1259,6 +1261,79 @@ async function ownedVideo(
     throw new VideoServiceError("VIDEO_NOT_FOUND", "Video not found.");
   }
   return video;
+}
+
+export function videoIdFromBeginUploadIdempotencyResult(
+  result: Readonly<Record<string, unknown>> | null | undefined,
+): string | undefined {
+  return typeof result?.videoId === "string" ? result.videoId : undefined;
+}
+
+/**
+ * Revocation is deliberately one-way and naturally idempotent. The update and
+ * its audit row share one transaction, while the begin idempotency lookup
+ * recovers a video whose successful response an older client never received.
+ */
+export async function revokeVideoVisionLearningConsent(input: {
+  readonly actor: ApiActor;
+  readonly videoId?: string;
+  readonly beginIdempotencyKey?: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly revoked: boolean; readonly videoId?: string }> {
+  requireDatabase();
+  const database = getDatabase();
+  let videoId = input.videoId;
+  if (!videoId && input.beginIdempotencyKey) {
+    const beginRecord = await database.query.idempotencyRecords.findFirst({
+      where: and(
+        eq(idempotencyRecords.procedure, "player.beginVideoUpload"),
+        eq(idempotencyRecords.key, input.beginIdempotencyKey),
+        eq(idempotencyRecords.personId, input.actor.personId),
+      ),
+    });
+    videoId = videoIdFromBeginUploadIdempotencyResult(beginRecord?.result);
+  }
+  if (!videoId) return { revoked: false };
+
+  const video = await ownedVideo(input.actor.personId, videoId);
+  if (!video.visionLearningConsent) return { revoked: false, videoId };
+
+  const revoked = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      const updated = await transaction
+        .update(videos)
+        .set({
+          visionLearningConsent: false,
+          visionLearningConsentedAt: null,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(videos.id, videoId),
+            eq(videos.ownerPersonId, input.actor.personId),
+            eq(videos.visionLearningConsent, true),
+          ),
+        )
+        .returning({ id: videos.id });
+      if (!updated[0]) return false;
+      await transaction.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        organizationId: video.organizationId,
+        actorType: "person",
+        action: "video.vision-learning-consent-revoked",
+        entityType: "video",
+        entityId: videoId,
+        reason: "Revoked Vision learning consent for this video.",
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      });
+      return true;
+    },
+  );
+  return { revoked, videoId };
 }
 
 export async function finishLiveVideo(input: {

@@ -364,25 +364,32 @@ export function CoachVideoScreen({
         Platform.OS === "ios" &&
         isBackgroundUploadAvailable()
       ) {
-        const parts = await Promise.all(
-          missingPartNumbers.map(async (partNumber) => {
-            const offset = (partNumber - 1) * session.partSizeBytes;
-            const signed = await client.player.videoUploadPartUrl.mutate({
-              videoId: session.videoId,
-              partNumber,
-            });
-            return {
-              partNumber,
-              uploadUrl: signed.url,
-              offset,
-              length: Math.min(
-                session.partSizeBytes,
-                draft.prepared.bytes - offset,
-              ),
-              contentType: draft.prepared.mimeType,
-            };
-          }),
-        );
+        const parts: Array<{
+          partNumber: number;
+          uploadUrl: string;
+          offset: number;
+          length: number;
+          contentType: string;
+        }> = [];
+        // Sign serially so one large coaching video cannot burst every part
+        // request at the API before native iOS transfer ownership begins.
+        for (const partNumber of missingPartNumbers) {
+          const offset = (partNumber - 1) * session.partSizeBytes;
+          const signed = await client.player.videoUploadPartUrl.mutate({
+            videoId: session.videoId,
+            partNumber,
+          });
+          parts.push({
+            partNumber,
+            uploadUrl: signed.url,
+            offset,
+            length: Math.min(
+              session.partSizeBytes,
+              draft.prepared.bytes - offset,
+            ),
+            contentType: draft.prepared.mimeType,
+          });
+        }
         await enqueueFileBackedParts({
           uploadId: session.uploadId,
           fileUri: draft.prepared.uri,

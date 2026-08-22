@@ -164,6 +164,7 @@ import {
   visionSessionSchema,
   visionSessionSettingsSchema,
   visionTimelineEventSchema,
+  visionLearningConsentInputSchema,
 } from "./contracts";
 import {
   archiveAudience,
@@ -418,6 +419,7 @@ import {
   recordVideoViewHeartbeat,
   resumeVideoUpload,
   requestVideoMusicRemoval,
+  revokeVideoVisionLearningConsent,
   reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
   searchVideoAssociations,
@@ -3463,7 +3465,7 @@ const playerRouter = router({
         liveVisibility: z.enum(["public", "link-only"]),
         recordingVisibility: z.enum(["public", "private"]),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(true),
+        visionLearningConsent: visionLearningConsentInputSchema,
         courtCalibration: courtCalibrationSchema.optional(),
         idempotencyKey: z.string().uuid(),
       }),
@@ -3636,7 +3638,7 @@ const playerRouter = router({
         recordingVisibility: z.enum(["public", "private"]),
         publishedToProfile: z.boolean(),
         hasAudio: z.boolean(),
-        visionLearningConsent: z.boolean().default(true),
+        visionLearningConsent: visionLearningConsentInputSchema,
         originalFileName: z.string().trim().min(1).max(255),
         mimeType: z.enum(["video/mp4", "video/quicktime"]),
         bytes: z
@@ -3675,6 +3677,36 @@ const playerRouter = router({
         },
       }),
     ),
+  revokeVideoVisionLearningConsent: protectedProcedure
+    .input(
+      z
+        .object({
+          videoId: z.string().uuid().optional(),
+          beginIdempotencyKey: z.string().uuid().optional(),
+        })
+        .refine((value) => value.videoId || value.beginIdempotencyKey, {
+          message: "A video or upload identity is required.",
+        }),
+    )
+    .output(
+      z.object({
+        revoked: z.boolean(),
+        videoId: z.string().uuid().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await revokeVideoVisionLearningConsent({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   resumeVideoUpload: protectedProcedure
     .input(z.object({ videoId: z.string().uuid() }))
     .output(videoUploadSessionSchema)

@@ -12,6 +12,7 @@ import {
   videoAssociationOptionSchema,
   videoUsageSchema,
   visionSessionSettingsSchema,
+  visionLearningConsentInputSchema,
   visionTimelineEventSchema,
 } from "./contracts";
 import {
@@ -26,6 +27,7 @@ import {
 } from "./video-providers";
 import {
   normalizeStoredCourtCalibration,
+  videoIdFromBeginUploadIdempotencyResult,
   validateAuthoritativeResumableVideoUploadParts,
   validateAuthoritativeVideoUploadParts,
 } from "./video-service";
@@ -42,6 +44,21 @@ afterEach(() => {
 });
 
 describe("Duna Video contracts", () => {
+  it("requires an explicit opt-in before a video can contribute to Vision learning", () => {
+    expect(visionLearningConsentInputSchema.parse(undefined)).toBe(false);
+    expect(visionLearningConsentInputSchema.parse(false)).toBe(false);
+    expect(visionLearningConsentInputSchema.parse(true)).toBe(true);
+  });
+
+  it("reconciles a lost begin-upload response only from its stored video result", () => {
+    const videoId = crypto.randomUUID();
+    expect(videoIdFromBeginUploadIdempotencyResult({ videoId })).toBe(videoId);
+    expect(videoIdFromBeginUploadIdempotencyResult({ uploadId: "other" })).toBe(
+      undefined,
+    );
+    expect(videoIdFromBeginUploadIdempotencyResult(undefined)).toBeUndefined();
+  });
+
   it("normalizes persisted database timestamps before returning video summaries", () => {
     const calibration = normalizeStoredCourtCalibration({
       courtWidthMeters: 8,

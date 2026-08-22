@@ -98,6 +98,14 @@ import {
 } from "@duna/expo-background-upload";
 import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
 import { startDunaLiveActivity } from "./live-activities";
+import {
+  acknowledgeLegacyVisionConsentRevocation,
+  createVisionLearningConsentReceipt,
+  legacyVisionConsentRevocationLocator,
+  normalizeVisionLearningConsent,
+  resetVisionLearningConsent,
+  type VisionLearningConsentReceipt,
+} from "./video-learning-consent";
 
 type VideoStudioData = Awaited<
   ReturnType<DunaApiClient["player"]["videoStudio"]["query"]>
@@ -164,6 +172,8 @@ interface CaptureForm {
 
 interface OfflineUploadPayload {
   readonly form: CaptureForm;
+  /** Proves that a current, default-off UI recorded an affirmative choice. */
+  readonly visionLearningConsentReceipt?: VisionLearningConsentReceipt;
   /** Written with the local draft before begin, so a lost response is safe. */
   readonly beginIdempotencyKey: string;
   /** Completion can also be retried after a database/network acknowledgement loss. */
@@ -220,7 +230,16 @@ function offlineUploadPayload(
   ) {
     return undefined;
   }
-  return candidate as OfflineUploadPayload;
+  return {
+    ...candidate,
+    form: {
+      ...candidate.form,
+      contributeCalibration: normalizeVisionLearningConsent({
+        requested: candidate.form.contributeCalibration,
+        receipt: candidate.visionLearningConsentReceipt,
+      }),
+    },
+  } as OfflineUploadPayload;
 }
 
 const initialCaptureForm: CaptureForm = {
@@ -234,10 +253,10 @@ const initialCaptureForm: CaptureForm = {
   courtLengthMeters: 16,
   netHeightMeters: 2.43,
   orientation: "landscape",
-  // This decision belongs to this recording only. It is intentionally not
-  // included in saved capture defaults, so turning it off once does not alter
-  // a player's consent for their future library.
-  contributeCalibration: true,
+  // This decision belongs to this recording only and always starts off. It is
+  // intentionally not included in saved capture defaults, so consent cannot
+  // silently carry into a future recording or library upload.
+  contributeCalibration: false,
 };
 
 interface StoredCaptureDefaults {
@@ -266,7 +285,7 @@ function captureFormFromDefaults(
       : (overrides.recordingVisibility ??
         stored?.recordingVisibility ??
         "private");
-  return {
+  return resetVisionLearningConsent({
     ...initialCaptureForm,
     ...stored,
     ...overrides,
@@ -275,7 +294,7 @@ function captureFormFromDefaults(
     publishedToProfile:
       recordingVisibility === "public" &&
       Boolean(overrides.publishedToProfile ?? stored?.publishedToProfile),
-  };
+  });
 }
 
 function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
@@ -4232,6 +4251,9 @@ export function VideoStudioScreen({
         durationSeconds: input.video.durationSeconds,
         payload: {
           form: input.nextForm,
+          visionLearningConsentReceipt: createVisionLearningConsentReceipt(
+            input.nextForm.contributeCalibration,
+          ),
           beginIdempotencyKey: idempotencyKey(),
           completeIdempotencyKey: idempotencyKey(),
           cancelIdempotencyKey: idempotencyKey(),
@@ -4344,14 +4366,46 @@ export function VideoStudioScreen({
         cancelIdempotencyKey:
           rawPayload.cancelIdempotencyKey ?? idempotencyKey(),
       };
-      if (
+      const storedForm =
+        draft.payload.form && typeof draft.payload.form === "object"
+          ? (draft.payload.form as Record<string, unknown>)
+          : undefined;
+      const consentWasNormalized =
+        storedForm?.contributeCalibration !==
+        rawPayload.form.contributeCalibration;
+      const stableKeysChanged =
         payloadWithStableKeys.beginIdempotencyKey !==
           rawPayload.beginIdempotencyKey ||
         payloadWithStableKeys.completeIdempotencyKey !==
           rawPayload.completeIdempotencyKey ||
         payloadWithStableKeys.cancelIdempotencyKey !==
-          rawPayload.cancelIdempotencyKey
-      ) {
+          rawPayload.cancelIdempotencyKey;
+      const legacyConsentRevocation = legacyVisionConsentRevocationLocator({
+        requested: storedForm?.contributeCalibration,
+        receipt: rawPayload.visionLearningConsentReceipt,
+        beginIdempotencyKey: payloadWithStableKeys.beginIdempotencyKey,
+        uploadVideoId: payloadWithStableKeys.upload?.videoId,
+        completedVideoId: draft.completedVideoId,
+      });
+      if (stableKeysChanged && !legacyConsentRevocation) {
+        await updateOfflineVideoDraft({
+          ...draft,
+          payload: { ...payloadWithStableKeys },
+        });
+      }
+      const reconciledLegacyVideo = legacyConsentRevocation
+        ? await acknowledgeLegacyVisionConsentRevocation({
+            locator: legacyConsentRevocation,
+            revoke: (locator) =>
+              client.player.revokeVideoVisionLearningConsent.mutate(locator),
+            persistNormalizedConsent: () =>
+              updateOfflineVideoDraft({
+                ...draft,
+                payload: { ...payloadWithStableKeys },
+              }),
+          })
+        : undefined;
+      if (consentWasNormalized && !legacyConsentRevocation) {
         await updateOfflineVideoDraft({
           ...draft,
           payload: { ...payloadWithStableKeys },
@@ -4384,9 +4438,11 @@ export function VideoStudioScreen({
           : "vision-link-pending";
       }
 
-      const session = payload.upload
+      const resumableVideoId =
+        payload.upload?.videoId ?? reconciledLegacyVideo?.videoId;
+      const session = resumableVideoId
         ? await client.player.resumeVideoUpload.query({
-            videoId: payload.upload.videoId,
+            videoId: resumableVideoId,
           })
         : await client.player.beginVideoUpload.mutate({
             title: payload.form.title,
@@ -4439,22 +4495,29 @@ export function VideoStudioScreen({
         // Returning now is intentional: iOS owns the persisted URLSession
         // tasks after React Native is suspended, and foreground reconciliation
         // below will record ETags and complete only after R2 confirms them.
-        const queuedParts = await Promise.all(
-          missingPartNumbers.map(async (partNumber) => {
-            const offset = (partNumber - 1) * session.partSizeBytes;
-            const signed = await client.player.videoUploadPartUrl.mutate({
-              videoId: session.videoId,
-              partNumber,
-            });
-            return {
-              partNumber,
-              uploadUrl: signed.url,
-              offset,
-              length: Math.min(session.partSizeBytes, draft.bytes - offset),
-              contentType: draft.mimeType,
-            };
-          }),
-        );
+        const queuedParts: Array<{
+          partNumber: number;
+          uploadUrl: string;
+          offset: number;
+          length: number;
+          contentType: string;
+        }> = [];
+        // Sign serially so a multi-gigabyte recording cannot create a burst of
+        // dozens of simultaneous API mutations before iOS owns the transfer.
+        for (const partNumber of missingPartNumbers) {
+          const offset = (partNumber - 1) * session.partSizeBytes;
+          const signed = await client.player.videoUploadPartUrl.mutate({
+            videoId: session.videoId,
+            partNumber,
+          });
+          queuedParts.push({
+            partNumber,
+            uploadUrl: signed.url,
+            offset,
+            length: Math.min(session.partSizeBytes, draft.bytes - offset),
+            contentType: draft.mimeType,
+          });
+        }
         if (Platform.OS === "ios" && isBackgroundUploadAvailable()) {
           await enqueueFileBackedParts({
             uploadId: session.uploadId,

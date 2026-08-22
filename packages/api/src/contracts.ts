@@ -1444,6 +1444,9 @@ export const videoStatusSchema = z.enum([
 ]);
 export const videoLiveVisibilitySchema = z.enum(["public", "link-only"]);
 export const videoRecordingVisibilitySchema = z.enum(["public", "private"]);
+// Learning use is always an explicit, per-video opt-in. Older or partial
+// clients that omit the field must never grant consent by accident.
+export const visionLearningConsentInputSchema = z.boolean().default(false);
 export const videoMusicRemovalStatusSchema = z.enum([
   "not-requested",
   "queued",
