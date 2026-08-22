@@ -1,6 +1,10 @@
 "use server";
 
-import type { VenueLayoutAsset, VenueLayoutGeometry } from "@duna/api";
+import type {
+  OrganizationPayoutReceipt,
+  VenueLayoutAsset,
+  VenueLayoutGeometry,
+} from "@duna/api";
 import { venueWallTimeToUtc } from "@duna/api";
 import { COURT_SURFACE_IDS, type CourtSurface } from "@duna/core";
 import { normalizeClubColor } from "@duna/ui";
@@ -15,6 +19,7 @@ export interface OperatorActionState {
   readonly onboardingUrl?: string;
   readonly entityId?: string;
   readonly privateClaimLink?: string;
+  readonly payoutReceipt?: OrganizationPayoutReceipt;
   readonly scheduleProposal?: {
     readonly summary: string;
     readonly blocks: readonly {
@@ -3051,15 +3056,16 @@ export async function createManualPayoutAction(
   void _previous;
   try {
     const caller = await getServerCaller();
-    await caller.operator.createManualPayout({
+    const payoutReceipt = await caller.operator.createManualPayout({
       confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: field(formData, "idempotencyKey"),
     });
     revalidatePath("/payments");
-    return result(
-      "success",
-      "Payout submitted to the organization’s connected bank. Refund-held funds were excluded.",
-    );
+    return {
+      status: "success",
+      message: "Stripe accepted the payout. Refund-held funds were excluded.",
+      payoutReceipt,
+    };
   } catch (error) {
     return errorState(error);
   }

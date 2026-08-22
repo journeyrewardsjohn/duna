@@ -2106,6 +2106,14 @@ export async function createConnectedAccountPayout(input: {
 }): Promise<{
   readonly id: string;
   readonly status: string;
+  readonly method: string;
+  readonly destinationId?: string;
+  readonly statementDescriptor?: string;
+  readonly livemode: boolean;
+  readonly traceId?: string;
+  readonly traceStatus?: string;
+  readonly failureCode?: string;
+  readonly failureMessage?: string;
   readonly expectedArrivalAt?: Date;
 }> {
   const payout = await getStripeClient().payouts.create(
@@ -2119,9 +2127,67 @@ export async function createConnectedAccountPayout(input: {
   return {
     id: payout.id,
     status: payout.status,
+    method: payout.method,
+    destinationId:
+      typeof payout.destination === "string"
+        ? payout.destination
+        : payout.destination?.id,
+    statementDescriptor: payout.statement_descriptor ?? undefined,
+    livemode: payout.livemode,
+    traceId: payout.trace_id?.value ?? undefined,
+    traceStatus: payout.trace_id?.status,
+    failureCode: payout.failure_code ?? undefined,
+    failureMessage: payout.failure_message ?? undefined,
     expectedArrivalAt: payout.arrival_date
       ? new Date(payout.arrival_date * 1_000)
       : undefined,
+  };
+}
+
+export async function retrieveConnectedAccountPayout(input: {
+  readonly accountId: string;
+  readonly payoutId: string;
+}): Promise<{
+  readonly id: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly status: string;
+  readonly method: string;
+  readonly destinationId?: string;
+  readonly statementDescriptor?: string;
+  readonly livemode: boolean;
+  readonly traceId?: string;
+  readonly traceStatus?: string;
+  readonly failureCode?: string;
+  readonly failureMessage?: string;
+  readonly expectedArrivalAt?: Date;
+  readonly createdAt: Date;
+}> {
+  const payout = await getStripeClient().payouts.retrieve(
+    input.payoutId,
+    {},
+    { stripeAccount: input.accountId },
+  );
+  return {
+    id: payout.id,
+    amountMinor: payout.amount,
+    currency: payout.currency,
+    status: payout.status,
+    method: payout.method,
+    destinationId:
+      typeof payout.destination === "string"
+        ? payout.destination
+        : payout.destination?.id,
+    statementDescriptor: payout.statement_descriptor ?? undefined,
+    livemode: payout.livemode,
+    traceId: payout.trace_id?.value ?? undefined,
+    traceStatus: payout.trace_id?.status,
+    failureCode: payout.failure_code ?? undefined,
+    failureMessage: payout.failure_message ?? undefined,
+    expectedArrivalAt: payout.arrival_date
+      ? new Date(payout.arrival_date * 1_000)
+      : undefined,
+    createdAt: new Date(payout.created * 1_000),
   };
 }
 

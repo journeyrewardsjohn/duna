@@ -8301,24 +8301,44 @@ export const ledgerReconciliations = pgTable(
   ],
 );
 
-export const payouts = pgTable("payouts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  walletAccountId: uuid("wallet_account_id").references(
-    () => walletAccounts.id,
-  ),
-  organizationId: uuid("organization_id").references(() => organizations.id),
-  stripePayoutId: varchar("stripe_payout_id", { length: 128 }).unique(),
-  amountMinor: integer("amount_minor").notNull(),
-  currency: varchar("currency", { length: 3 }).notNull(),
-  status: varchar("status", { length: 24 }).notNull(),
-  composition: jsonb("composition").notNull().$type<Record<string, number>>(),
-  expectedArrivalAt: timestamp("expected_arrival_at", {
-    withTimezone: true,
-    mode: "date",
-  }),
-  createdAt,
-  updatedAt,
-});
+export const payouts = pgTable(
+  "payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletAccountId: uuid("wallet_account_id").references(
+      () => walletAccounts.id,
+    ),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    idempotencyKey: varchar("idempotency_key", { length: 160 }),
+    stripePayoutId: varchar("stripe_payout_id", { length: 128 }).unique(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    method: varchar("method", { length: 16 }),
+    destinationId: varchar("destination_id", { length: 128 }),
+    destinationName: varchar("destination_name", { length: 128 }),
+    destinationLast4: varchar("destination_last4", { length: 4 }),
+    statementDescriptor: varchar("statement_descriptor", { length: 22 }),
+    livemode: boolean("livemode"),
+    traceId: varchar("trace_id", { length: 128 }),
+    traceStatus: varchar("trace_status", { length: 24 }),
+    failureCode: varchar("failure_code", { length: 64 }),
+    failureMessage: text("failure_message"),
+    composition: jsonb("composition").notNull().$type<Record<string, number>>(),
+    expectedArrivalAt: timestamp("expected_arrival_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("payout_organization_idempotency_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+  ],
+);
 
 export const payoutAllocations = pgTable(
   "payout_allocations",

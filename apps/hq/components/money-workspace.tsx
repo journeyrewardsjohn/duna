@@ -13,6 +13,7 @@ import {
   CreditCard,
   Download,
   Landmark,
+  LoaderCircle,
   LockKeyhole,
   ReceiptText,
   RefreshCw,
@@ -23,6 +24,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import {
   createManualPayoutAction,
@@ -306,17 +308,39 @@ function PayoutModal({
   onClose,
   payoutAction,
   payoutPending,
+  payoutRequestKey,
   payoutState,
 }: {
   readonly money: OrganizationMoneyWorkspace;
   readonly onClose: () => void;
   readonly payoutAction: (payload: FormData) => void;
   readonly payoutPending: boolean;
+  readonly payoutRequestKey: string;
   readonly payoutState: OperatorActionState;
 }) {
   const account =
     money.connect.bankAccounts.find((item) => item.defaultForCurrency) ??
     money.connect.bankAccounts[0];
+  const receipt =
+    payoutState.payoutReceipt?.requestKey === payoutRequestKey
+      ? payoutState.payoutReceipt
+      : undefined;
+  const unavailableMessage =
+    !money.connect.liveData && money.connect.bankStatus === "unavailable"
+      ? "Stripe’s live balance could not be verified. Payouts are paused until the connection responds."
+      : money.balance.availableMinor <= 0 &&
+          (money.connect.stripePendingMinor ?? 0) > 0
+        ? `${formatMoney(
+            money.connect.stripePendingMinor ?? 0,
+            money.currency,
+          )} is still clearing at Stripe. It will become withdrawable only after Stripe marks it available and every refund window has closed.`
+        : money.balance.availableMinor <= 0 &&
+            money.connect.earnings30d.payoutsMinor > 0
+          ? `${formatMoney(
+              money.connect.earnings30d.payoutsMinor,
+              money.currency,
+            )} is payout history already sent to the connected bank—not money available to withdraw again.`
+          : undefined;
   return (
     <div className="money-modal-backdrop" role="presentation">
       <section
@@ -328,75 +352,189 @@ function PayoutModal({
         <header>
           <div>
             <span className="hq-eyebrow">Move available funds</span>
-            <h2 id="payout-title">Transfer to your bank.</h2>
+            <h2 id="payout-title">
+              {payoutPending
+                ? "Moving your funds."
+                : receipt
+                  ? "Your payout is on the way."
+                  : "Transfer to your bank."}
+            </h2>
           </div>
           <button
             aria-label="Close payout dialog"
+            disabled={payoutPending}
             onClick={onClose}
             type="button"
           >
             <X size={20} />
           </button>
         </header>
-        <p>
-          Duna will send only funds that Stripe has cleared and that are outside
-          all cancellation windows.
-        </p>
-        <div className="money-modal__destination">
-          <Landmark size={21} />
-          <span>
-            <strong>
-              {account
-                ? `${account.name} •••• ${account.last4}`
-                : "No connected bank"}
-            </strong>
-            <small>
-              Standard payout · arrival timing is confirmed by Stripe
-            </small>
-          </span>
-          <Check size={18} />
-        </div>
-        <div className="money-modal__amount">
-          <span>Amount available now</span>
-          <Numeric>
-            {formatMoney(money.balance.availableMinor, money.currency)}
-          </Numeric>
-          <small>
-            {formatMoney(
-              money.balance.heldMinor + money.balance.pendingMinor,
-              money.currency,
-            )}{" "}
-            remains protected or clearing
-          </small>
-        </div>
-        <form action={payoutAction}>
-          <label className="money-check">
-            <input name="confirmed" required type="checkbox" value="true" />
-            <span>
-              I confirm this payout to the connected destination above.
-            </span>
-          </label>
-          <Notice state={payoutState} />
-          <footer>
-            <button
-              className="hq-button hq-button--secondary"
-              onClick={onClose}
-              type="button"
+        {payoutPending ? (
+          <div aria-live="polite" className="money-payout-progress">
+            <div className="money-payout-movement" aria-hidden="true">
+              <span>
+                <WalletCards size={25} />
+              </span>
+              <i />
+              <span>
+                <Landmark size={25} />
+              </span>
+            </div>
+            <h3>Moving your funds securely.</h3>
+            <p>
+              Duna is rechecking Stripe availability, protecting refund holds,
+              and creating the bank payout.
+            </p>
+            <div
+              aria-label="Payout request in progress"
+              className="money-payout-progress__bar"
+              role="progressbar"
             >
-              Cancel
-            </button>
-            <button
-              className="hq-button hq-button--primary"
-              disabled={
-                payoutPending || !account || money.balance.availableMinor <= 0
-              }
-              type="submit"
-            >
-              {payoutPending ? "Requesting…" : "Request payout"}{" "}
-              <ArrowRight size={15} />
-            </button>
-          </footer>
-        </form>
+              <i />
+            </div>
+            <ol>
+              <li>
+                <Check size={15} /> Destination verified
+              </li>
+              <li>
+                <LoaderCircle size={15} /> Confirming cleared funds
+              </li>
+              <li>Submitting securely to Stripe</li>
+            </ol>
+            <small>Keep this window open until Stripe responds.</small>
+          </div>
+        ) : receipt ? (
+          <div aria-live="polite" className="money-payout-success">
+            <div className="money-payout-success__mark">
+              <Check size={30} />
+            </div>
+            <span className="hq-eyebrow">Payout accepted by Stripe</span>
+            <Numeric>
+              {formatMoney(receipt.amountMinor, receipt.currency)}
+            </Numeric>
+            <h3>
+              On its way to {receipt.destinationName}
+              {receipt.destinationLast4
+                ? ` •••• ${receipt.destinationLast4}`
+                : ""}
+              .
+            </h3>
+            <div className="money-payout-success__details">
+              <span>
+                <small>Stripe status</small>
+                <strong>{receipt.status.replaceAll("_", " ")}</strong>
+              </span>
+              <span>
+                <small>Expected arrival</small>
+                <strong>{dateTime(receipt.expectedArrivalAt)}</strong>
+              </span>
+              <span>
+                <small>Stripe reference</small>
+                <strong>{receipt.stripePayoutId ?? "Processing"}</strong>
+              </span>
+            </div>
+            <p>
+              Stripe can update the status if the receiving bank reports a delay
+              or failure. Your receipt always shows the latest status.
+            </p>
+            <footer>
+              <button
+                className="hq-button hq-button--secondary"
+                onClick={onClose}
+                type="button"
+              >
+                Done
+              </button>
+              <Link
+                className="hq-button hq-button--primary"
+                href={`/payments/payouts/${receipt.id}`}
+              >
+                <ReceiptText size={16} /> View receipt
+              </Link>
+            </footer>
+          </div>
+        ) : (
+          <>
+            <p>
+              Duna will send only funds that Stripe has cleared and that are
+              outside all cancellation windows.
+            </p>
+            <div className="money-modal__destination">
+              <Landmark size={21} />
+              <span>
+                <strong>
+                  {account
+                    ? `${account.name} •••• ${account.last4}`
+                    : "No connected bank"}
+                </strong>
+                <small>
+                  Standard payout · arrival timing is confirmed by Stripe
+                </small>
+              </span>
+              <Check size={18} />
+            </div>
+            <div className="money-modal__amount">
+              <span>Available to withdraw now</span>
+              <Numeric>
+                {formatMoney(money.balance.availableMinor, money.currency)}
+              </Numeric>
+              <small>
+                {formatMoney(
+                  money.balance.heldMinor + money.balance.pendingMinor,
+                  money.currency,
+                )}{" "}
+                remains protected or clearing
+              </small>
+            </div>
+            <form action={payoutAction}>
+              <input
+                name="idempotencyKey"
+                type="hidden"
+                value={payoutRequestKey}
+              />
+              <label className="money-check">
+                <input name="confirmed" required type="checkbox" value="true" />
+                <span>
+                  I confirm this payout to the connected destination above.
+                </span>
+              </label>
+              {unavailableMessage ? (
+                <p className="money-notice money-notice--error" role="status">
+                  <CircleAlert size={15} /> {unavailableMessage}
+                </p>
+              ) : (
+                <Notice state={payoutState} />
+              )}
+              <footer>
+                <button
+                  className="hq-button hq-button--secondary"
+                  onClick={onClose}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="hq-button hq-button--primary"
+                  disabled={
+                    !account ||
+                    account.status !== "connected" ||
+                    !money.connect.payoutsEnabled ||
+                    money.balance.availableMinor <= 0 ||
+                    money.settings.stripeSettingsStatus !== "synced" ||
+                    money.transactions.some(
+                      (transaction) => !transaction.reconciled,
+                    )
+                  }
+                  type="submit"
+                >
+                  Request{" "}
+                  {formatMoney(money.balance.availableMinor, money.currency)}{" "}
+                  <ArrowRight size={15} />
+                </button>
+              </footer>
+            </form>
+          </>
+        )}
       </section>
     </div>
   );
@@ -414,6 +552,7 @@ export function MoneyWorkspace({
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [query, setQuery] = useState("");
   const [payoutOpen, setPayoutOpen] = useState(false);
+  const [payoutRequestKey, setPayoutRequestKey] = useState("");
   const [cardInfoOpen, setCardInfoOpen] = useState(false);
   const [selectedDisputeId, setSelectedDisputeId] = useState<string>();
   const [payoutInterval, setPayoutInterval] = useState(
@@ -473,12 +612,16 @@ export function MoneyWorkspace({
   const unreconciledCount = money.transactions.filter(
     (transaction) => !transaction.reconciled,
   ).length;
+  const openPayout = () => {
+    setPayoutRequestKey(crypto.randomUUID());
+    setPayoutOpen(true);
+  };
 
   return (
     <div className="money-workspace">
       {view === "balance" && (
         <>
-          <MoneyHero money={money} onPayout={() => setPayoutOpen(true)} />
+          <MoneyHero money={money} onPayout={openPayout} />
 
           <section className="money-movement-grid">
             <button
@@ -489,7 +632,7 @@ export function MoneyWorkspace({
                 money.settings.stripeSettingsStatus !== "synced" ||
                 unreconciledCount > 0
               }
-              onClick={() => setPayoutOpen(true)}
+              onClick={openPayout}
               type="button"
             >
               <span>
@@ -566,14 +709,14 @@ export function MoneyWorkspace({
               <span>Releases after cancellation cutoffs</span>
             </article>
             <article>
-              <small>Stripe payouts · 30 days</small>
+              <small>Already paid to bank · 30 days</small>
               <Numeric>
                 {formatMoney(
                   money.connect.earnings30d.payoutsMinor,
                   money.currency,
                 )}
               </Numeric>
-              <span>Sent from Stripe to the connected bank</span>
+              <span>Historical payouts—not available to withdraw again</span>
             </article>
           </section>
 
@@ -1403,6 +1546,7 @@ export function MoneyWorkspace({
           onClose={() => setPayoutOpen(false)}
           payoutAction={payoutAction}
           payoutPending={payoutPending}
+          payoutRequestKey={payoutRequestKey}
           payoutState={payoutState}
         />
       )}
