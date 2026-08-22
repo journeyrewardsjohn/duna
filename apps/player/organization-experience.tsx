@@ -392,6 +392,9 @@ export function OrganizationExperienceModal({
   const [paymentKind, setPaymentKind] = useState<"card" | "credit" | "cash">(
     "card",
   );
+  const [paymentOption, setPaymentOption] = useState<
+    "upfront" | "installments"
+  >("upfront");
   const [eligibility, setEligibility] = useState<Eligibility>();
   const [addMembership, setAddMembership] = useState(true);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -448,6 +451,7 @@ export function OrganizationExperienceModal({
     setPaymentKind(
       item?.allowCard ? "card" : item?.allowCredits ? "credit" : "cash",
     );
+    setPaymentOption("upfront");
     setAddMembership(true);
     setSelectedOccurrenceId(item?.upcomingOccurrences[0]?.key);
     setRecordingConsentAccepted(false);
@@ -501,7 +505,7 @@ export function OrganizationExperienceModal({
       const status = await client.player.catalogCheckoutStatus.query({
         orderId,
       });
-      if (status.complete) return;
+      if (status.complete) return status;
       if (["failed", "cancelled", "refunded"].includes(status.orderStatus)) {
         throw new Error(
           "The purchase did not complete. No new charge was made.",
@@ -581,6 +585,10 @@ export function OrganizationExperienceModal({
       catalogVariantId: variant.id,
       catalogPriceId: price.id,
       paymentMethod: requestedKind,
+      paymentOption:
+        purchasingSelectedItem && requestedKind === "card"
+          ? paymentOption
+          : "upfront",
       paymentSurface: Platform.OS === "web" ? "hosted" : "native",
       promoCode:
         purchasingSelectedItem && requestedKind === "card"
@@ -601,16 +609,23 @@ export function OrganizationExperienceModal({
           ? membershipTermsAccepted
           : undefined,
     });
+    let completedSchedule:
+      | Awaited<
+          ReturnType<DunaApiClient["player"]["catalogCheckoutStatus"]["query"]>
+        >["paymentSchedule"]
+      | undefined;
     if (result.paymentSheet) {
       const outcome = await presentNativePayment({
         paymentSheet: result.paymentSheet,
       });
       if (outcome === "cancelled") return false;
-      await pollOrder(result.orderId);
+      const status = await pollOrder(result.orderId);
+      completedSchedule = status?.paymentSchedule;
     } else if (result.checkoutUrl) {
       await WebBrowser.openBrowserAsync(result.checkoutUrl);
       if (Platform.OS === "web") return false;
-      await pollOrder(result.orderId);
+      const status = await pollOrder(result.orderId);
+      completedSchedule = status?.paymentSchedule;
     }
     if (result.mode === "cash-reservation") {
       Alert.alert(
@@ -619,7 +634,7 @@ export function OrganizationExperienceModal({
       );
     }
     await refresh();
-    return true;
+    return completedSchedule ?? true;
   }
 
   async function completePurchase() {
@@ -661,7 +676,9 @@ export function OrganizationExperienceModal({
           item.subtype === "credit-pack" ? "Credits added" : "You’re all set",
           item.subtype === "credit-pack"
             ? "Your club credit balance is ready to use."
-            : `${item.title} is now connected to your Duna account.`,
+            : typeof completed === "object"
+              ? `${item.title} is confirmed. ${money(completed.paidMinor, completed.currency)} of ${money(completed.totalMinor, completed.currency)} is paid. Your full automatic schedule is in Wallet.`
+              : `${item.title} is now connected to your Duna account.`,
         );
       }
     } catch (reason) {
@@ -812,6 +829,38 @@ export function OrganizationExperienceModal({
           (candidate) => candidate.id === selectedPriceId,
         ) ?? selectedPrice)
       : selectedPrice;
+  const paymentPlan =
+    selectedItem?.configuration.paymentPlan &&
+    typeof selectedItem.configuration.paymentPlan === "object" &&
+    !Array.isArray(selectedItem.configuration.paymentPlan)
+      ? (selectedItem.configuration.paymentPlan as Readonly<
+          Record<string, unknown>
+        >)
+      : undefined;
+  const installmentCount =
+    typeof paymentPlan?.installmentCount === "number"
+      ? Math.trunc(paymentPlan.installmentCount)
+      : 0;
+  const installmentIncreasePercent =
+    typeof paymentPlan?.priceIncreasePercent === "number"
+      ? Math.min(100, Math.max(0, paymentPlan.priceIncreasePercent))
+      : 0;
+  const installmentAmountMinor =
+    activeSelectedPrice?.amountMinor !== undefined && installmentCount >= 2
+      ? Math.ceil(
+          Math.round(
+            activeSelectedPrice.amountMinor *
+              (1 + installmentIncreasePercent / 100),
+          ) / installmentCount,
+        )
+      : 0;
+  const installmentsAvailable = Boolean(
+    paymentPlan?.enabled === true &&
+    paymentKind === "card" &&
+    installmentCount >= 2 &&
+    !activeSelectedPrice?.recurringInterval &&
+    selectedItem?.type !== "good",
+  );
   const monthlySelectedPrice = selectedCardPrices.find(
     (candidate) => candidate.recurringInterval === "month",
   );
@@ -1100,6 +1149,58 @@ export function OrganizationExperienceModal({
                         </Pressable>
                       );
                     })}
+                  </View>
+                </View>
+              ) : null}
+
+              {installmentsAvailable ? (
+                <View style={styles.billingChoice}>
+                  <Text style={styles.purchaseLabel}>Choose how to pay</Text>
+                  <View style={styles.billingChoiceRow}>
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{
+                        checked: paymentOption === "upfront",
+                      }}
+                      onPress={() => setPaymentOption("upfront")}
+                      style={[
+                        styles.billingChoiceCard,
+                        paymentOption === "upfront" && { borderColor: primary },
+                      ]}
+                    >
+                      <Text style={styles.billingChoiceTitle}>Pay upfront</Text>
+                      <Text style={styles.billingChoicePrice}>
+                        {priceLabel(activeSelectedPrice)}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{
+                        checked: paymentOption === "installments",
+                      }}
+                      onPress={() => setPaymentOption("installments")}
+                      style={[
+                        styles.billingChoiceCard,
+                        paymentOption === "installments" && {
+                          borderColor: primary,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.billingChoiceTitle}>
+                        {installmentCount} monthly payments
+                      </Text>
+                      <Text style={styles.billingChoicePrice}>
+                        {money(
+                          installmentAmountMinor,
+                          activeSelectedPrice?.currency ?? "USD",
+                        )}{" "}
+                        each
+                      </Text>
+                      <Text style={styles.billingChoiceNote}>
+                        Automatic, fixed, and ends after payment{" "}
+                        {installmentCount}
+                      </Text>
+                    </Pressable>
                   </View>
                 </View>
               ) : null}

@@ -780,6 +780,48 @@ button.money-movement-card {
   margin: 0.45rem 0 0.18rem;
 }
 
+.money-reconciliation-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-positive) 8%, var(--color-depth));
+  border: 1px solid color-mix(in srgb, var(--color-positive) 26%, transparent);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem 1rem;
+}
+
+.money-reconciliation-banner > span {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-positive) 14%, transparent);
+  border-radius: 999px;
+  color: var(--color-positive);
+  display: flex;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.money-reconciliation-banner > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.money-reconciliation-banner small {
+  color: var(--color-bone-muted);
+  line-height: 1.45;
+}
+
+.money-reconciliation-banner--attention {
+  background: color-mix(in srgb, var(--color-sand) 10%, var(--color-depth));
+  border-color: color-mix(in srgb, var(--color-sand) 30%, transparent);
+}
+
+.money-reconciliation-banner--attention > span {
+  background: color-mix(in srgb, var(--color-sand) 16%, transparent);
+  color: var(--color-sand);
+}
+
 .money-ledger-layout {
   align-items: start;
   display: grid;
@@ -1129,6 +1171,13 @@ button.money-movement-card {
   .money-ledger-tools input {
     flex: 1;
     width: auto;
+  }
+  .money-reconciliation-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .money-reconciliation-banner > .duna-badge {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 

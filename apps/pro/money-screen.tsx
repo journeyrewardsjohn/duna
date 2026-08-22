@@ -97,6 +97,7 @@ function previewMoney(): OrganizationMoneyWorkspace {
       disputes: [],
       requirementsDue: [],
       liveData: false,
+      livemode: false,
     },
     settings: {
       payoutInterval: "weekly",
@@ -126,6 +127,7 @@ function previewMoney(): OrganizationMoneyWorkspace {
         policyName: "Non-refundable",
         availableAt: day(-1),
         occurredAt: day(-4),
+        reconciled: true,
       },
       {
         id: "fund_preview_2",
@@ -144,6 +146,7 @@ function previewMoney(): OrganizationMoneyWorkspace {
         policyName: "Flexible · 24 hours",
         availableAt: day(1),
         occurredAt: day(-2),
+        reconciled: true,
       },
     ],
     payouts: [

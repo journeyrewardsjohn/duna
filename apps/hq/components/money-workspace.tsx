@@ -126,6 +126,13 @@ function exportTransactions(money: OrganizationMoneyWorkspace) {
     "Net",
     "Status",
     "Available at",
+    "Payment ID",
+    "Stripe payment intent",
+    "Stripe charge",
+    "Stripe transfer",
+    "Stripe connected payment",
+    "Stripe balance transaction",
+    "Reconciled",
   ];
   const rows = money.transactions.map((transaction) => [
     transaction.occurredAt,
@@ -139,6 +146,13 @@ function exportTransactions(money: OrganizationMoneyWorkspace) {
     (transaction.netMinor / 100).toFixed(2),
     transaction.status,
     transaction.availableAt ?? "",
+    transaction.paymentId ?? "",
+    transaction.stripePaymentIntentId ?? "",
+    transaction.stripeChargeId ?? "",
+    transaction.stripeTransferId ?? "",
+    transaction.stripeDestinationPaymentId ?? "",
+    transaction.stripeBalanceTransactionId ?? "",
+    transaction.reconciled ? "yes" : "no",
   ]);
   const csv = [header, ...rows]
     .map((row) =>
@@ -194,7 +208,10 @@ function MoneyHero({
         )}
         <button
           disabled={
-            !money.connect.payoutsEnabled || money.balance.availableMinor <= 0
+            !money.connect.payoutsEnabled ||
+            money.balance.availableMinor <= 0 ||
+            money.settings.stripeSettingsStatus !== "synced" ||
+            money.transactions.some((transaction) => !transaction.reconciled)
           }
           onClick={onPayout}
           type="button"
@@ -449,6 +466,9 @@ export function MoneyWorkspace({
   const selectedDispute = money.disputes.find(
     (dispute) => dispute.id === selectedDisputeId,
   );
+  const unreconciledCount = money.transactions.filter(
+    (transaction) => !transaction.reconciled,
+  ).length;
 
   return (
     <div className="money-workspace">
@@ -461,7 +481,9 @@ export function MoneyWorkspace({
               className="money-movement-card"
               disabled={
                 !money.connect.payoutsEnabled ||
-                money.balance.availableMinor <= 0
+                money.balance.availableMinor <= 0 ||
+                money.settings.stripeSettingsStatus !== "synced" ||
+                unreconciledCount > 0
               }
               onClick={() => setPayoutOpen(true)}
               type="button"
@@ -551,6 +573,33 @@ export function MoneyWorkspace({
             </article>
           </section>
 
+          <section
+            className={`money-reconciliation-banner${unreconciledCount ? " money-reconciliation-banner--attention" : ""}`}
+          >
+            <span>
+              {unreconciledCount ? (
+                <CircleAlert size={18} />
+              ) : (
+                <ShieldCheck size={18} />
+              )}
+            </span>
+            <div>
+              <strong>
+                {unreconciledCount
+                  ? `${unreconciledCount} payment${unreconciledCount === 1 ? "" : "s"} awaiting Stripe lineage`
+                  : "Duna ledger tied to Stripe"}
+              </strong>
+              <small>
+                {unreconciledCount
+                  ? "Payouts for these payments stay locked while Duna links the charge, transfer, connected payment, and balance transaction."
+                  : "Every listed payment has a connected Stripe balance transaction. Bank payouts remain a separate settlement rail."}
+              </small>
+            </div>
+            <Badge tone={unreconciledCount ? "warning" : "positive"}>
+              {money.connect.livemode ? "Live mode" : "Test mode"}
+            </Badge>
+          </section>
+
           <div className="money-ledger-layout">
             <section className="hq-card hq-card--inset money-activity-card">
               <header className="hq-card-heading">
@@ -615,6 +664,11 @@ export function MoneyWorkspace({
                         <small>
                           {transaction.customerName} ·{" "}
                           {dateTime(transaction.occurredAt)}
+                        </small>
+                        <small>
+                          {transaction.reconciled
+                            ? `Stripe ${transaction.stripeBalanceTransactionId}`
+                            : "Stripe lineage pending"}
                         </small>
                       </span>
                     </span>
@@ -741,7 +795,9 @@ export function MoneyWorkspace({
                   className="hq-button hq-button--primary"
                   disabled={
                     !money.connect.payoutsEnabled ||
-                    money.balance.availableMinor <= 0
+                    money.balance.availableMinor <= 0 ||
+                    money.settings.stripeSettingsStatus !== "synced" ||
+                    unreconciledCount > 0
                   }
                   onClick={() => setPayoutOpen(true)}
                   type="button"
@@ -762,7 +818,7 @@ export function MoneyWorkspace({
                   <Badge
                     tone={money.connect.payoutsEnabled ? "positive" : "warning"}
                   >
-                    {money.connect.liveData ? "Live" : "Preview"}
+                    {money.connect.livemode ? "Live mode" : "Test mode"}
                   </Badge>
                 </header>
                 <div>

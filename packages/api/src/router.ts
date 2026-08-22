@@ -50,6 +50,7 @@ import {
   bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  customerPaymentScheduleSchema,
   catalogOfferEligibilitySchema,
   consentRecordResultSchema,
   courtScheduleProposalSchema,
@@ -674,6 +675,7 @@ import {
   requestAccountDeletion,
 } from "./privacy";
 import { createDunaPlusCheckout, isStripeConfigured } from "./payments";
+import { loadCustomerPaymentSchedules } from "./payment-schedules";
 import { getRepository } from "./repository";
 import {
   confirmAgentAction,
@@ -4435,6 +4437,13 @@ const playerRouter = router({
     .output(catalogCheckoutStatusSchema)
     .query(({ ctx, input }) =>
       getCatalogCheckoutStatus(input, ctx.actor!.personId),
+    ),
+  paymentSchedules: protectedProcedure
+    .output(z.array(customerPaymentScheduleSchema).readonly())
+    .query(({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadCustomerPaymentSchedules(ctx.actor!.personId),
     ),
   organizationWallets: protectedProcedure
     .output(z.array(organizationWalletSummarySchema).readonly())

@@ -9448,8 +9448,15 @@ function PredictionWalletSummaryCard({
 }
 
 function WalletScreen({ onClose }: { readonly onClose: () => void }) {
-  const { client, memberCard, mode, organizationWallets, settings, wallet } =
-    usePlayerRuntime();
+  const {
+    client,
+    memberCard,
+    mode,
+    organizationWallets,
+    paymentSchedules,
+    settings,
+    wallet,
+  } = usePlayerRuntime();
   const entries = wallet?.entries ?? demoWalletEntries;
   const balance =
     wallet?.availableMinor ??
@@ -9647,6 +9654,74 @@ function WalletScreen({ onClose }: { readonly onClose: () => void }) {
               </View>
             ))}
           </View>
+        </>
+      )}
+      {paymentSchedules && paymentSchedules.length > 0 && (
+        <>
+          <SectionHeader
+            action={`${paymentSchedules.length} active`}
+            eyebrow="AUTOMATIC PAYMENTS"
+            title="Payment schedules."
+          />
+          {paymentSchedules.map((schedule) => (
+            <View key={schedule.id} style={styles.paymentScheduleCard}>
+              <View style={styles.paymentScheduleHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.cardTitle}>{schedule.title}</Text>
+                  <Text style={styles.rowMeta}>
+                    {schedule.installmentCount} monthly payments ·{" "}
+                    {schedule.status.replace("-", " ")}
+                  </Text>
+                </View>
+                <Pill
+                  tone={schedule.status === "past-due" ? "warning" : "positive"}
+                >
+                  {`${formatMoney(schedule.paidMinor, schedule.currency)} paid`}
+                </Pill>
+              </View>
+              <View style={styles.paymentScheduleRows}>
+                {schedule.installments.map((installment) => (
+                  <View key={installment.id} style={styles.paymentScheduleRow}>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>
+                        Payment {installment.sequence}
+                      </Text>
+                      <Text style={styles.rowMeta}>
+                        {new Date(installment.dueAt).toLocaleDateString(
+                          "en-US",
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}
+                      </Text>
+                    </View>
+                    <Text style={styles.paymentScheduleAmount}>
+                      {formatMoney(installment.amountMinor, schedule.currency)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.paymentScheduleStatus,
+                        installment.status === "paid" &&
+                          styles.paymentScheduleStatusPaid,
+                        installment.status === "failed" &&
+                          styles.paymentScheduleStatusFailed,
+                      ]}
+                    >
+                      {installment.status === "scheduled"
+                        ? "Upcoming"
+                        : installment.status}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.paymentScheduleTotal}>
+                {formatMoney(schedule.paidMinor, schedule.currency)} of{" "}
+                {formatMoney(schedule.totalMinor, schedule.currency)} paid
+              </Text>
+            </View>
+          ))}
         </>
       )}
       <SectionHeader
@@ -21024,6 +21099,56 @@ function createStyles(palette: Palette) {
       overflow: "hidden",
       padding: 18,
       position: "relative",
+    },
+    paymentScheduleCard: {
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: 22,
+      borderWidth: 1,
+      gap: 14,
+      marginBottom: 12,
+      padding: 16,
+    },
+    paymentScheduleHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    paymentScheduleRows: { gap: 8 },
+    paymentScheduleRow: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.035),
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 58,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    paymentScheduleAmount: {
+      color: colors.bone,
+      fontSize: 15,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "900",
+    },
+    paymentScheduleStatus: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+      minWidth: 66,
+      textAlign: "right",
+      textTransform: "capitalize",
+    },
+    paymentScheduleStatusPaid: { color: colors.positive },
+    paymentScheduleStatusFailed: { color: colors.warning },
+    paymentScheduleTotal: {
+      color: colors.bone,
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "900",
+      textAlign: "right",
     },
     memberCard: {
       backgroundColor: "#123b45",

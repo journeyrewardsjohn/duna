@@ -6653,10 +6653,134 @@ export const payments = pgTable("payments", {
   stripeApplicationFeeId: varchar("stripe_application_fee_id", {
     length: 128,
   }),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 128 }),
+  stripeInvoiceId: varchar("stripe_invoice_id", { length: 128 }).unique(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 128 }),
+  stripeTransferId: varchar("stripe_transfer_id", { length: 128 }),
+  stripeDestinationPaymentId: varchar("stripe_destination_payment_id", {
+    length: 128,
+  }),
+  stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", {
+    length: 128,
+  }).unique(),
   status: varchar("status", { length: 24 }).notNull(),
   createdAt,
   updatedAt,
 });
+
+export const paymentSchedules = pgTable(
+  "payment_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" })
+      .unique(),
+    buyerPersonId: uuid("buyer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    stripeSubscriptionId: varchar("stripe_subscription_id", {
+      length: 128,
+    }).unique(),
+    stripeSubscriptionScheduleId: varchar("stripe_subscription_schedule_id", {
+      length: 128,
+    }).unique(),
+    kind: varchar("kind", { length: 24 }).notNull().default("installment"),
+    status: varchar("status", { length: 24 }).notNull().default("scheduled"),
+    installmentCount: integer("installment_count").notNull(),
+    totalMinor: integer("total_minor").notNull(),
+    paidMinor: integer("paid_minor").notNull().default(0),
+    refundedMinor: integer("refunded_minor").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    cadence: varchar("cadence", { length: 16 }).notNull().default("monthly"),
+    termsSnapshot: jsonb("terms_snapshot")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancelledAt: timestamp("cancelled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("payment_schedule_buyer_status_idx").on(
+      table.buyerPersonId,
+      table.status,
+      table.createdAt,
+    ),
+    index("payment_schedule_org_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "payment_schedule_kind_valid",
+      sql`${table.kind} IN ('installment', 'membership')`,
+    ),
+    check(
+      "payment_schedule_status_valid",
+      sql`${table.status} IN ('scheduled', 'active', 'past-due', 'completed', 'cancelled', 'refunded')`,
+    ),
+    check(
+      "payment_schedule_amounts_valid",
+      sql`${table.installmentCount} > 0 AND ${table.totalMinor} >= 0 AND ${table.paidMinor} >= 0 AND ${table.refundedMinor} >= 0 AND ${table.paidMinor} <= ${table.totalMinor}`,
+    ),
+    check(
+      "payment_schedule_cadence_valid",
+      sql`${table.cadence} IN ('weekly', 'monthly', 'annual')`,
+    ),
+  ],
+);
+
+export const paymentScheduleInstallments = pgTable(
+  "payment_schedule_installments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scheduleId: uuid("schedule_id")
+      .notNull()
+      .references(() => paymentSchedules.id, { onDelete: "cascade" }),
+    paymentId: uuid("payment_id").references(() => payments.id, {
+      onDelete: "set null",
+    }),
+    sequence: integer("sequence").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true, mode: "date" }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("scheduled"),
+    stripeInvoiceId: varchar("stripe_invoice_id", { length: 128 }).unique(),
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 128 }),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
+    failedAt: timestamp("failed_at", { withTimezone: true, mode: "date" }),
+    failureMessage: text("failure_message"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("payment_schedule_installment_sequence_unique").on(
+      table.scheduleId,
+      table.sequence,
+    ),
+    index("payment_schedule_installment_due_idx").on(table.status, table.dueAt),
+    check(
+      "payment_schedule_installment_status_valid",
+      sql`${table.status} IN ('scheduled', 'processing', 'paid', 'failed', 'refunded', 'cancelled')`,
+    ),
+    check(
+      "payment_schedule_installment_amount_valid",
+      sql`${table.sequence} > 0 AND ${table.amountMinor} >= 0 AND ${table.attemptCount} >= 0`,
+    ),
+  ],
+);
 
 export const organizationTerminalLocations = pgTable(
   "organization_terminal_locations",
@@ -8021,6 +8145,29 @@ export const payouts = pgTable("payouts", {
   updatedAt,
 });
 
+export const payoutAllocations = pgTable(
+  "payout_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payoutId: uuid("payout_id")
+      .notNull()
+      .references(() => payouts.id, { onDelete: "cascade" }),
+    paymentFundScheduleId: uuid("payment_fund_schedule_id")
+      .notNull()
+      .references(() => paymentFundSchedules.id, { onDelete: "restrict" }),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("payout_allocation_fund_unique").on(
+      table.payoutId,
+      table.paymentFundScheduleId,
+    ),
+    check("payout_allocation_amount_valid", sql`${table.amountMinor} > 0`),
+  ],
+);
+
 export const organizationRefundPolicies = pgTable(
   "organization_refund_policies",
   {
@@ -8128,10 +8275,17 @@ export const paymentFundSchedules = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     orderId: uuid("order_id")
       .notNull()
-      .references(() => orders.id, { onDelete: "restrict" })
-      .unique(),
+      .references(() => orders.id, { onDelete: "restrict" }),
     paymentId: uuid("payment_id").references(() => payments.id, {
       onDelete: "set null",
+    }),
+    installmentId: uuid("installment_id").references(
+      () => paymentScheduleInstallments.id,
+      { onDelete: "set null" },
+    ),
+    stripeTransferId: varchar("stripe_transfer_id", { length: 128 }),
+    stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", {
+      length: 128,
     }),
     sessionId: uuid("session_id").references(() => sessions.id, {
       onDelete: "set null",
@@ -8178,6 +8332,12 @@ export const paymentFundSchedules = pgTable(
     updatedAt,
   },
   (table) => [
+    uniqueIndex("payment_fund_schedule_payment_unique")
+      .on(table.paymentId)
+      .where(sql`${table.paymentId} IS NOT NULL`),
+    uniqueIndex("payment_fund_schedule_installment_unique")
+      .on(table.installmentId)
+      .where(sql`${table.installmentId} IS NOT NULL`),
     index("payment_fund_schedule_release_idx").on(
       table.organizationId,
       table.status,
@@ -8199,6 +8359,61 @@ export const paymentFundSchedules = pgTable(
     check(
       "payment_fund_schedule_policy_window_valid",
       sql`(${table.policyMode} = 'refundable' AND ${table.refundBeforeMinutes} IS NOT NULL AND ${table.refundBeforeMinutes} >= 0) OR (${table.policyMode} = 'non-refundable' AND ${table.refundBeforeMinutes} IS NULL)`,
+    ),
+  ],
+);
+
+export const stripeTransactionLinks = pgTable(
+  "stripe_transaction_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.id, { onDelete: "restrict" })
+      .unique(),
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", {
+      length: 128,
+    }).notNull(),
+    stripeChargeId: varchar("stripe_charge_id", { length: 128 }).notNull(),
+    stripeTransferId: varchar("stripe_transfer_id", { length: 128 }),
+    stripeDestinationPaymentId: varchar("stripe_destination_payment_id", {
+      length: 128,
+    }),
+    stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", {
+      length: 128,
+    }).unique(),
+    stripeApplicationFeeId: varchar("stripe_application_fee_id", {
+      length: 128,
+    }),
+    grossMinor: integer("gross_minor").notNull(),
+    feeMinor: integer("fee_minor").notNull().default(0),
+    netMinor: integer("net_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    availableAt: timestamp("available_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    livemode: boolean("livemode").notNull(),
+    evidence: jsonb("evidence")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt,
+  },
+  (table) => [
+    index("stripe_transaction_link_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    check(
+      "stripe_transaction_link_amounts_valid",
+      sql`${table.grossMinor} >= 0 AND ${table.feeMinor} >= 0 AND ${table.netMinor} >= 0`,
     ),
   ],
 );

@@ -5108,6 +5108,7 @@ export const organizationMoneyWorkspaceSchema = z.object({
     requirementsDue: z.array(z.string()).readonly(),
     settingsUrl: z.url().optional(),
     liveData: z.boolean(),
+    livemode: z.boolean().optional(),
   }),
   settings: z.object({
     payoutInterval: z.enum(["manual", "daily", "weekly", "monthly"]),
@@ -5146,6 +5147,7 @@ export const organizationMoneyWorkspaceSchema = z.object({
       z.object({
         id: z.string(),
         orderId: z.string().uuid(),
+        paymentId: z.string().uuid().optional(),
         description: z.string(),
         customerName: z.string(),
         grossMinor: z.number().int().nonnegative(),
@@ -5169,6 +5171,12 @@ export const organizationMoneyWorkspaceSchema = z.object({
         policyName: z.string(),
         availableAt: z.iso.datetime().optional(),
         occurredAt: z.iso.datetime(),
+        stripePaymentIntentId: z.string().optional(),
+        stripeChargeId: z.string().optional(),
+        stripeTransferId: z.string().optional(),
+        stripeDestinationPaymentId: z.string().optional(),
+        stripeBalanceTransactionId: z.string().optional(),
+        reconciled: z.boolean(),
       }),
     )
     .readonly(),
@@ -6196,6 +6204,46 @@ export const catalogCheckoutResultSchema = z.object({
   currency: currencySchema,
 });
 
+export const customerPaymentScheduleSchema = z.object({
+  id: z.string().uuid(),
+  orderId: z.string().uuid(),
+  title: z.string(),
+  status: z.enum([
+    "scheduled",
+    "active",
+    "past-due",
+    "completed",
+    "cancelled",
+    "refunded",
+  ]),
+  installmentCount: z.number().int().positive(),
+  totalMinor: z.number().int().nonnegative(),
+  paidMinor: z.number().int().nonnegative(),
+  refundedMinor: z.number().int().nonnegative(),
+  currency: currencySchema,
+  cadence: z.enum(["weekly", "monthly", "annual"]),
+  installments: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        sequence: z.number().int().positive(),
+        amountMinor: z.number().int().nonnegative(),
+        dueAt: z.iso.datetime(),
+        status: z.enum([
+          "scheduled",
+          "processing",
+          "paid",
+          "failed",
+          "refunded",
+          "cancelled",
+        ]),
+        paidAt: z.iso.datetime().optional(),
+        failureMessage: z.string().optional(),
+      }),
+    )
+    .readonly(),
+});
+
 export const catalogCheckoutStatusSchema = z.object({
   orderId: z.string().uuid(),
   orderStatus: z.enum([
@@ -6212,6 +6260,7 @@ export const catalogCheckoutStatusSchema = z.object({
     .enum(["held", "pending", "ready", "fulfilled", "cancelled", "refunded"])
     .optional(),
   complete: z.boolean(),
+  paymentSchedule: customerPaymentScheduleSchema.optional(),
 });
 
 export const catalogOfferEligibilitySchema = z.object({
