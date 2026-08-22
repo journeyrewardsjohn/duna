@@ -67,6 +67,7 @@ import {
   type LeagueRecurrence,
   type TournamentFormat,
   type MatchSummary,
+  type KobCompetitionConfig,
   type Metric,
   MEMBERSHIP_PLANS,
   type OrganizationSummary,
@@ -920,6 +921,7 @@ interface StoredDivisionSettings {
   readonly ageMinimum?: number;
   readonly ageMaximum?: number;
   readonly tournamentFormat?: TournamentFormat;
+  readonly kobConfig?: KobCompetitionConfig;
   readonly poolPlay?: EventPoolPlay;
   readonly seeding?: EventSeedingMethod;
   readonly teamEntryFeeMinor?: number;
@@ -1391,6 +1393,7 @@ async function loadEvents(input?: {
           ageMinimum: settings.ageMinimum,
           ageMaximum: settings.ageMaximum,
           tournamentFormat: settings.tournamentFormat,
+          kobConfig: settings.kobConfig,
           poolPlay: settings.poolPlay,
           seeding: settings.seeding,
         };

@@ -1,0 +1,2 @@
+ALTER TABLE "team_entries" DROP CONSTRAINT "team_entry_expected_size";--> statement-breakpoint
+ALTER TABLE "team_entries" ADD CONSTRAINT "team_entry_expected_size" CHECK ("team_entries"."expected_team_size" >= 1);

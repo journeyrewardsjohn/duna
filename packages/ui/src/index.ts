@@ -3,5 +3,6 @@ export * from "./duna-action-center";
 export * from "./form-controls";
 export * from "./smart-date-range";
 export * from "./smart-date-range-picker";
+export * from "./smart-date-time-picker";
 export * from "./tokens";
 export * from "./web";

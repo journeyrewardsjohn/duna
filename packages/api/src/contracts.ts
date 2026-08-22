@@ -158,6 +158,35 @@ export const eventKindSchema = z.enum([
   "court-rental",
   "pickup",
 ]);
+export const kobStageConfigSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(80),
+  format: z.enum([
+    "partner-rotation",
+    "timed-elimination",
+    "pool-play",
+    "single-elimination",
+    "double-elimination-true",
+    "double-elimination-crossover",
+  ]),
+  scoringMode: z.enum(["rally-points", "timed-total"]),
+  durationMinutes: z.number().int().min(5).max(240).optional(),
+  setsToWin: z.number().int().min(1).max(5),
+  pointsToWin: z.number().int().min(1).max(99),
+  winBy: z.number().int().min(1).max(10),
+  pointCap: z.number().int().min(1).max(199).optional(),
+  poolSize: z.number().int().min(3).max(64),
+  advanceCount: z.number().int().min(1).max(512),
+  eliminationCount: z.number().int().min(0).max(511),
+  guaranteedGames: z.number().int().min(1).max(64),
+  carryPoints: z.boolean(),
+});
+export const kobCompetitionConfigSchema = z.object({
+  entryMode: z.enum(["individual", "team"]),
+  balanceByRating: z.boolean(),
+  avoidRepeatOpponents: z.boolean(),
+  stages: z.array(kobStageConfigSchema).min(1).max(12).readonly(),
+});
 export const eventDivisionSummarySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -190,6 +219,7 @@ export const eventDivisionSummarySchema = z.object({
       "double-elimination-crossover",
     ])
     .optional(),
+  kobConfig: kobCompetitionConfigSchema.optional(),
   poolPlay: z
     .object({
       enabled: z.boolean(),
@@ -352,6 +382,7 @@ export const eventDraftEditorSchema = z.object({
           "double-elimination-true",
           "double-elimination-crossover",
         ]),
+        kobConfig: kobCompetitionConfigSchema.optional(),
         poolPlay: z.object({
           enabled: z.boolean(),
           teamsPerPool: z.number().int().min(2),
@@ -517,6 +548,22 @@ const tournamentCompetitionMatchSchema = z.object({
       sets: z.array(z.tuple([z.number().int(), z.number().int()])).readonly(),
     })
     .optional(),
+  heat: z
+    .object({
+      durationMinutes: z.number().int().positive(),
+      advanceCount: z.number().int().positive(),
+      participants: z
+        .array(
+          z.object({
+            team: tournamentCompetitionTeamSchema,
+            points: z.number().int().nonnegative(),
+            rank: z.number().int().positive(),
+            advances: z.boolean(),
+          }),
+        )
+        .readonly(),
+    })
+    .optional(),
 });
 
 export const tournamentCompetitionSnapshotSchema = z.object({
@@ -535,6 +582,28 @@ export const tournamentCompetitionSnapshotSchema = z.object({
         competitionVersion: z.number().int().positive(),
         format: z.string(),
         liveAt: z.iso.datetime().optional(),
+        kobStandings: z
+          .array(
+            z.object({
+              stageIndex: z.number().int().nonnegative(),
+              name: z.string(),
+              complete: z.boolean(),
+              players: z
+                .array(
+                  z.object({
+                    personId: z.string().uuid(),
+                    name: z.string(),
+                    points: z.number().int().nonnegative(),
+                    wins: z.number().int().nonnegative(),
+                    rank: z.number().int().positive(),
+                    advances: z.boolean(),
+                  }),
+                )
+                .readonly(),
+            }),
+          )
+          .readonly()
+          .optional(),
         pools: z
           .array(
             z.object({
@@ -4488,6 +4557,7 @@ export const operatorDivisionDetailSchema = z.object({
     entryFeeMinor: z.number().int().nonnegative(),
     seeding: z.string(),
     tournamentFormat: z.string(),
+    kobConfig: kobCompetitionConfigSchema.optional(),
     poolPlay: z
       .object({
         enabled: z.boolean(),
@@ -4520,6 +4590,23 @@ export const operatorDivisionDetailSchema = z.object({
         courtId: z.string().uuid().optional(),
         courtName: z.string().optional(),
         scheduledAt: z.iso.datetime().optional(),
+        heat: z
+          .object({
+            durationMinutes: z.number().int().positive(),
+            advanceCount: z.number().int().positive(),
+            participants: z
+              .array(
+                z.object({
+                  teamId: z.string().uuid(),
+                  teamName: z.string(),
+                  points: z.number().int().nonnegative(),
+                  rank: z.number().int().positive(),
+                  advances: z.boolean(),
+                }),
+              )
+              .readonly(),
+          })
+          .optional(),
       }),
     )
     .readonly(),
@@ -5864,6 +5951,8 @@ export const bracketSchema = z.object({
     "double-elimination-crossover",
     "round-robin",
     "pool-play",
+    "kob-individual-rotation",
+    "kob-team-progressive",
   ]),
   teams: z
     .array(
@@ -5885,6 +5974,7 @@ export const bracketSchema = z.object({
         sideB: bracketSourceSchema,
         ifNecessary: z.boolean().optional(),
         label: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       }),
     )
     .readonly(),

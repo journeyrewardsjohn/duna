@@ -4,6 +4,7 @@ import {
   createUndoEvent,
   foldScore,
   generateDoubleElimination,
+  generateKobPartnerRotation,
   generateRoundRobin,
   generateSingleElimination,
   standardBeachFormat,
@@ -164,5 +165,92 @@ describe("bracket generators", () => {
       });
       expect(bracket.matches).toHaveLength((count * (count - 1)) / 2);
     }
+  });
+});
+
+describe("KOB partner rotation", () => {
+  const players = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `player-${index + 1}`,
+      name: `Player ${index + 1}`,
+      seed: index + 1,
+      rating: 5 - index * 0.1,
+    }));
+
+  it("gives every athlete every partner in a four-player pool", () => {
+    const [pool] = generateKobPartnerRotation({
+      players: players(4),
+      poolSize: 4,
+      guaranteedGames: 3,
+    });
+    expect(pool?.matchups).toHaveLength(3);
+    const partnerships = new Set(
+      pool?.matchups.flatMap((match) =>
+        [match.teamA, match.teamB].map((team) =>
+          team
+            .map((player) => player.id)
+            .sort()
+            .join(":"),
+        ),
+      ),
+    );
+    expect(partnerships).toHaveLength(6);
+  });
+
+  it("balances appearances while covering larger pools", () => {
+    const [pool] = generateKobPartnerRotation({
+      players: players(6),
+      poolSize: 6,
+      guaranteedGames: 6,
+    });
+    const appearances = new Map<string, number>();
+    for (const match of pool?.matchups ?? []) {
+      for (const player of [...match.teamA, ...match.teamB]) {
+        appearances.set(player.id, (appearances.get(player.id) ?? 0) + 1);
+      }
+    }
+    const values = [...appearances.values()];
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
+  });
+
+  it("uses every partnership before repeating one", () => {
+    for (const count of [4, 5, 6, 7, 8]) {
+      const [pool] = generateKobPartnerRotation({
+        players: players(count),
+        poolSize: count,
+        guaranteedGames: 1,
+      });
+      const partnerships = new Set(
+        pool?.matchups.flatMap((match) =>
+          [match.teamA, match.teamB].map((team) =>
+            team
+              .map((player) => player.id)
+              .sort()
+              .join(":"),
+          ),
+        ),
+      );
+      expect(
+        partnerships,
+        `partnership coverage for ${count} players`,
+      ).toHaveLength((count * (count - 1)) / 2);
+    }
+  });
+
+  it("never strands athletes in a pool too small to play", () => {
+    expect(
+      generateKobPartnerRotation({
+        players: players(5),
+        poolSize: 4,
+        guaranteedGames: 3,
+      }).map((pool) => pool.players.length),
+    ).toEqual([5]);
+    expect(
+      generateKobPartnerRotation({
+        players: players(9),
+        poolSize: 4,
+        guaranteedGames: 3,
+      }).map((pool) => pool.players.length),
+    ).toEqual([5, 4]);
   });
 });

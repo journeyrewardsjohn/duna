@@ -12,6 +12,7 @@ import {
   type SmartDatePreset,
   type SmartDateRangeValue,
 } from "./smart-date-range";
+import { SmartTimeSelect } from "./smart-date-time-picker";
 
 const presets: readonly {
   readonly key: SmartDatePreset;
@@ -265,26 +266,25 @@ export function SmartDateRangePicker({
       <div className="duna-date-range__inputs">
         <label>
           <span>Starts</span>
-          <input
-            min={minimumDate}
-            onChange={(event) => updateRange(event.target.value, end.date)}
-            type="date"
-            value={start.date}
-          />
+          <button
+            className="duna-date-range__date-display"
+            onClick={() => {
+              setSelectionPhase("start");
+              setVisibleMonth(calendarMonthFromDate(start.date));
+            }}
+            type="button"
+          >
+            {displayDate(start.date)}
+          </button>
           {resolvedTimeEnabled && (
-            <input
-              aria-label="Start time"
-              onChange={(event) =>
+            <SmartTimeSelect
+              label="Start time"
+              onChange={(time) =>
                 onChange({
                   ...value,
-                  start: combineLocalDateTime(
-                    start.date,
-                    event.target.value,
-                    true,
-                  ),
+                  start: combineLocalDateTime(start.date, time, true),
                 })
               }
-              type="time"
               value={start.time || "09:00"}
             />
           )}
@@ -292,22 +292,25 @@ export function SmartDateRangePicker({
         <span aria-hidden>to</span>
         <label>
           <span>Ends</span>
-          <input
-            min={start.date || minimumDate}
-            onChange={(event) => updateRange(start.date, event.target.value)}
-            type="date"
-            value={end.date}
-          />
+          <button
+            className="duna-date-range__date-display"
+            onClick={() => {
+              setSelectionPhase("end");
+              setVisibleMonth(calendarMonthFromDate(end.date));
+            }}
+            type="button"
+          >
+            {displayDate(end.date)}
+          </button>
           {resolvedTimeEnabled && (
-            <input
-              aria-label="End time"
-              onChange={(event) =>
+            <SmartTimeSelect
+              label="End time"
+              onChange={(time) =>
                 onChange({
                   ...value,
-                  end: combineLocalDateTime(end.date, event.target.value, true),
+                  end: combineLocalDateTime(end.date, time, true),
                 })
               }
-              type="time"
               value={end.time || "10:00"}
             />
           )}

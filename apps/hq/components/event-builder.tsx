@@ -10,8 +10,17 @@ import {
   eventMediaForKind,
   formatMoney,
   type EventKind as CoreEventKind,
+  type KobCompetitionConfig,
+  type KobStageConfig,
 } from "@duna/core";
-import { Badge, Numeric, SmartDateRangePicker } from "@duna/ui";
+import {
+  Badge,
+  Numeric,
+  QuantityStepper,
+  SmartDateRangePicker,
+  SmartDateTimePicker,
+  SmartTimeSelect,
+} from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
@@ -79,6 +88,7 @@ interface DivisionDraft {
     | "single-elimination"
     | "double-elimination-true"
     | "double-elimination-crossover";
+  readonly kobConfig?: KobCompetitionConfig;
   readonly poolPlay: {
     readonly enabled: boolean;
     readonly teamsPerPool: number;
@@ -177,6 +187,24 @@ function localDateTime(daysAhead: number, hour: number) {
   return new Date(value.getTime() - offset * 60_000).toISOString().slice(0, 16);
 }
 
+function displayLocalDate(value: string, options?: Intl.DateTimeFormatOptions) {
+  if (!value) return "Not set";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    ...options,
+  }).format(new Date(value));
+}
+
+function displayLocalTime(value: string) {
+  if (!value) return "Not set";
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function initialDivision(id = uid("division")): DivisionDraft {
   return {
     id,
@@ -196,6 +224,7 @@ function initialDivision(id = uid("division")): DivisionDraft {
     ageMinimum: "18",
     ageMaximum: "99",
     tournamentFormat: "double-elimination-true",
+    kobConfig: defaultIndividualKobConfig(),
     poolPlay: {
       enabled: true,
       teamsPerPool: 4,
@@ -209,6 +238,109 @@ function initialDivision(id = uid("division")): DivisionDraft {
     teamFormatLocked: false,
     competitionLocked: false,
   };
+}
+
+function kobStage(
+  id: string,
+  name: string,
+  overrides: Partial<KobStageConfig> = {},
+): KobStageConfig {
+  return {
+    id,
+    name,
+    format: "partner-rotation",
+    scoringMode: "rally-points",
+    setsToWin: 1,
+    pointsToWin: 15,
+    winBy: 2,
+    pointCap: 21,
+    poolSize: 4,
+    advanceCount: 2,
+    eliminationCount: 0,
+    guaranteedGames: 3,
+    carryPoints: false,
+    ...overrides,
+  };
+}
+
+function defaultIndividualKobConfig(): KobCompetitionConfig {
+  return {
+    entryMode: "individual",
+    balanceByRating: true,
+    avoidRepeatOpponents: true,
+    stages: [
+      kobStage("kob-round-1", "Round 1", { advanceCount: 8 }),
+      kobStage("kob-final", "Final", { advanceCount: 1 }),
+    ],
+  };
+}
+
+function defaultTeamKobConfig(): KobCompetitionConfig {
+  return {
+    entryMode: "team",
+    balanceByRating: true,
+    avoidRepeatOpponents: true,
+    stages: [
+      kobStage("kob-round-1", "Round 1", {
+        format: "timed-elimination",
+        scoringMode: "timed-total",
+        durationMinutes: 15,
+        poolSize: 5,
+        advanceCount: 4,
+        eliminationCount: 1,
+        guaranteedGames: 1,
+      }),
+      kobStage("kob-round-2", "Round 2", {
+        format: "timed-elimination",
+        scoringMode: "timed-total",
+        durationMinutes: 15,
+        poolSize: 4,
+        advanceCount: 3,
+        eliminationCount: 1,
+        guaranteedGames: 1,
+      }),
+      kobStage("kob-final", "Final", {
+        format: "timed-elimination",
+        scoringMode: "timed-total",
+        durationMinutes: 15,
+        poolSize: 3,
+        advanceCount: 1,
+        eliminationCount: 2,
+        guaranteedGames: 1,
+      }),
+    ],
+  };
+}
+
+function fitKobStagesToField(
+  config: KobCompetitionConfig,
+  maximumEntries: number,
+): KobCompetitionConfig {
+  let currentField = maximumEntries;
+  const stages = config.stages.map((stage, index) => {
+    const anotherRoundFollows = index < config.stages.length - 1;
+    const minimumAdvancing = anotherRoundFollows
+      ? config.entryMode === "individual"
+        ? 4
+        : 2
+      : 1;
+    const advanceCount = Math.min(
+      currentField,
+      Math.max(minimumAdvancing, stage.advanceCount),
+    );
+    const next = {
+      ...stage,
+      poolSize:
+        config.entryMode === "individual"
+          ? Math.max(4, Math.min(stage.poolSize, currentField))
+          : currentField,
+      advanceCount,
+      eliminationCount: Math.max(0, currentField - advanceCount),
+    };
+    currentField = advanceCount;
+    return next;
+  });
+  return { ...config, stages };
 }
 
 function initialTicket(): TicketDraft {
@@ -318,7 +450,7 @@ function ChoiceTiles<Value extends string>({
   );
 }
 
-function DivisionEditor({
+function DivisionEditorLegacy({
   canRemove,
   division,
   eventKind,
@@ -634,6 +766,716 @@ function DivisionEditor({
   );
 }
 
+function KobFormatBuilder({
+  config,
+  disabled,
+  maximumEntries,
+  onChange,
+}: {
+  readonly config: KobCompetitionConfig;
+  readonly disabled: boolean;
+  readonly maximumEntries: number;
+  readonly onChange: (value: KobCompetitionConfig) => void;
+}) {
+  const setStage = (id: string, next: KobStageConfig) =>
+    onChange(
+      fitKobStagesToField(
+        {
+          ...config,
+          stages: config.stages.map((stage) =>
+            stage.id === id ? next : stage,
+          ),
+        },
+        maximumEntries,
+      ),
+    );
+  return (
+    <section className="kob-builder">
+      <header className="kob-builder__intro">
+        <span>
+          <small>KOB / QOB blueprint</small>
+          <h4>Build the journey, round by round.</h4>
+          <p>
+            Registration, partner logic, scoring, and advancement stay together
+            so Duna can generate the draw and run it courtside.
+          </p>
+        </span>
+        <Badge>{config.stages.length} rounds</Badge>
+      </header>
+
+      <ChoiceTiles<KobCompetitionConfig["entryMode"]>
+        disabled={disabled}
+        detail="This changes what a player buys and who Duna places in matches."
+        label="Who registers?"
+        onChange={(entryMode) =>
+          onChange(
+            entryMode === "individual"
+              ? defaultIndividualKobConfig()
+              : defaultTeamKobConfig(),
+          )
+        }
+        options={[
+          {
+            value: "individual",
+            label: "Individual athletes",
+            detail: "Each player registers alone. Duna rotates partners.",
+          },
+          {
+            value: "team",
+            label: "Fixed teams",
+            detail: "A player registers with a teammate and stays together.",
+          },
+        ]}
+        value={config.entryMode}
+      />
+
+      <aside className="kob-builder__logic">
+        <span aria-hidden>{config.entryMode === "individual" ? "↻" : "◇"}</span>
+        <div>
+          <strong>
+            {config.entryMode === "individual"
+              ? "Every athlete gets a fair rotation."
+              : "Teams survive together across rounds."}
+          </strong>
+          <p>
+            {config.entryMode === "individual"
+              ? "The generator gives each athlete every available partner once before repeating, balances team strength when ratings exist, and minimizes repeat opponents. Points belong to the athlete, regardless of partner."
+              : "Every surviving team shares one live scoreboard. At each whistle, Duna ranks the field, cuts to the saved advance line, and opens the next round."}
+          </p>
+        </div>
+        {config.entryMode === "individual" && (
+          <div className="kob-builder__switches">
+            <Toggle
+              checked={config.balanceByRating}
+              disabled={disabled}
+              label="Balance team strength"
+              onChange={(balanceByRating) =>
+                onChange({ ...config, balanceByRating })
+              }
+            />
+            <Toggle
+              checked={config.avoidRepeatOpponents}
+              disabled={disabled}
+              label="Limit repeat opponents"
+              onChange={(avoidRepeatOpponents) =>
+                onChange({ ...config, avoidRepeatOpponents })
+              }
+            />
+          </div>
+        )}
+      </aside>
+
+      <div className="kob-builder__stages">
+        {config.stages.map((stage, index) => {
+          const timed = stage.scoringMode === "timed-total";
+          const nextStage = config.stages[index + 1];
+          const currentField =
+            index === 0
+              ? maximumEntries
+              : config.stages[index - 1]!.advanceCount;
+          return (
+            <article className="kob-stage" key={stage.id}>
+              <header>
+                <span className="kob-stage__number">
+                  <Numeric>{index + 1}</Numeric>
+                </span>
+                <label>
+                  <span>Round name</span>
+                  <input
+                    disabled={disabled}
+                    onChange={(event) =>
+                      setStage(stage.id, { ...stage, name: event.target.value })
+                    }
+                    value={stage.name}
+                  />
+                </label>
+                {config.stages.length > 1 && !disabled && (
+                  <button
+                    aria-label={`Remove ${stage.name}`}
+                    onClick={() =>
+                      onChange({
+                        ...config,
+                        stages: config.stages.filter(
+                          (candidate) => candidate.id !== stage.id,
+                        ),
+                      })
+                    }
+                    type="button"
+                  >
+                    <Trash2 aria-hidden size={16} />
+                  </button>
+                )}
+              </header>
+
+              <ChoiceTiles<KobStageConfig["format"]>
+                disabled={disabled}
+                label="How does this round play?"
+                onChange={(format) =>
+                  setStage(stage.id, {
+                    ...stage,
+                    format,
+                    scoringMode:
+                      format === "timed-elimination"
+                        ? "timed-total"
+                        : "rally-points",
+                    durationMinutes:
+                      format === "timed-elimination"
+                        ? (stage.durationMinutes ?? 15)
+                        : undefined,
+                  })
+                }
+                options={
+                  config.entryMode === "individual"
+                    ? [
+                        {
+                          value: "partner-rotation" as const,
+                          label: "Pool-based partner rotation",
+                          detail:
+                            "Everyone partners once before repeats; individual rally points decide advancement.",
+                        },
+                      ]
+                    : [
+                        {
+                          value: "timed-elimination" as const,
+                          label: "Timed survival",
+                          detail:
+                            "All surviving teams share the live board; the lowest total is cut at the whistle.",
+                        },
+                      ]
+                }
+                value={stage.format}
+              />
+
+              <div className="kob-stage__rules">
+                <div>
+                  <small>{timed ? "Round clock" : "Sets to win"}</small>
+                  <QuantityStepper
+                    disabled={disabled}
+                    max={timed ? 240 : 5}
+                    min={1}
+                    onValueChange={(value) =>
+                      setStage(stage.id, {
+                        ...stage,
+                        ...(timed
+                          ? { durationMinutes: Math.max(5, value) }
+                          : { setsToWin: value }),
+                      })
+                    }
+                    value={
+                      timed ? (stage.durationMinutes ?? 15) : stage.setsToWin
+                    }
+                  />
+                  <span>{timed ? "minutes" : "sets"}</span>
+                </div>
+                {!timed && (
+                  <div>
+                    <small>Play each set to</small>
+                    <QuantityStepper
+                      disabled={disabled}
+                      max={99}
+                      min={1}
+                      onValueChange={(pointsToWin) =>
+                        setStage(stage.id, { ...stage, pointsToWin })
+                      }
+                      value={stage.pointsToWin}
+                    />
+                    <span>points · win by {stage.winBy}</span>
+                  </div>
+                )}
+                {config.entryMode === "individual" ? (
+                  <div>
+                    <small>Players per rotation pool</small>
+                    <QuantityStepper
+                      disabled={disabled}
+                      max={Math.max(4, currentField)}
+                      min={4}
+                      onValueChange={(poolSize) =>
+                        setStage(stage.id, { ...stage, poolSize })
+                      }
+                      value={Math.min(stage.poolSize, currentField)}
+                    />
+                    <span>{stage.guaranteedGames} guaranteed games</span>
+                  </div>
+                ) : (
+                  <div>
+                    <small>Teams entering this round</small>
+                    <strong>{currentField}</strong>
+                    <span>Every surviving team shares the scoreboard</span>
+                  </div>
+                )}
+                <div>
+                  <small>
+                    {nextStage ? `Advance to ${nextStage.name}` : "Champions"}
+                  </small>
+                  <QuantityStepper
+                    disabled={disabled}
+                    max={Math.max(1, currentField)}
+                    min={nextStage && config.entryMode === "individual" ? 4 : 1}
+                    onValueChange={(advanceCount) =>
+                      setStage(stage.id, { ...stage, advanceCount })
+                    }
+                    value={stage.advanceCount}
+                  />
+                  <span>
+                    {nextStage
+                      ? `${stage.advanceCount} advance`
+                      : `${stage.advanceCount} winner${stage.advanceCount === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+              </div>
+              <footer>
+                <span>
+                  {timed
+                    ? `${stage.durationMinutes ?? 15} minutes. Points accumulate on one live scoreboard.`
+                    : `Best of ${stage.setsToWin * 2 - 1}. First to ${stage.pointsToWin}, win by ${stage.winBy}${stage.pointCap ? `, cap ${stage.pointCap}` : ""}.`}
+                </span>
+                <label>
+                  <input
+                    checked={stage.carryPoints}
+                    disabled={disabled || !nextStage}
+                    onChange={(event) =>
+                      setStage(stage.id, {
+                        ...stage,
+                        carryPoints: event.target.checked,
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  Carry points forward
+                </label>
+              </footer>
+            </article>
+          );
+        })}
+      </div>
+      {!disabled && (
+        <button
+          className="kob-builder__add"
+          onClick={() =>
+            onChange(
+              fitKobStagesToField(
+                {
+                  ...config,
+                  stages: [
+                    ...config.stages.map((stage, index) =>
+                      index === config.stages.length - 1 &&
+                      stage.name.trim().toLowerCase() === "final"
+                        ? { ...stage, name: `Round ${index + 1}` }
+                        : stage,
+                    ),
+                    kobStage(
+                      uid("kob-stage"),
+                      "Final",
+                      config.entryMode === "team"
+                        ? {
+                            format: "timed-elimination",
+                            scoringMode: "timed-total",
+                            durationMinutes: 15,
+                            advanceCount: 1,
+                            guaranteedGames: 1,
+                          }
+                        : { advanceCount: 1 },
+                    ),
+                  ],
+                },
+                maximumEntries,
+              ),
+            )
+          }
+          type="button"
+        >
+          <Plus aria-hidden size={16} /> Add another round
+        </button>
+      )}
+    </section>
+  );
+}
+
+function DivisionEditor({
+  canRemove,
+  division,
+  eventKind,
+  index,
+  onChange,
+  onRemove,
+}: {
+  readonly canRemove: boolean;
+  readonly division: DivisionDraft;
+  readonly eventKind: EventKind;
+  readonly index: number;
+  readonly onChange: (next: DivisionDraft) => void;
+  readonly onRemove: () => void;
+}) {
+  const set = <Key extends keyof DivisionDraft>(
+    key: Key,
+    value: DivisionDraft[Key],
+  ) => onChange({ ...division, [key]: value });
+  const entryWord = division.teamFormat === "solo" ? "players" : "teams";
+  const formatLabel = {
+    "kob-qob": "KOB / QOB",
+    "single-elimination": "Single elimination",
+    "double-elimination-true": "True double elimination",
+    "double-elimination-crossover": "Crossover double elimination",
+  }[division.tournamentFormat];
+  return (
+    <article className="division-craft">
+      <header className="division-craft__header">
+        <span className="division-craft__number">
+          <Numeric>{String(index + 1).padStart(2, "0")}</Numeric>
+        </span>
+        <span>
+          <small>Division blueprint</small>
+          <h4>{division.name || "Untitled division"}</h4>
+          <p>
+            {formatLabel} · {division.maximumTeams} {entryWord} ·{" "}
+            {division.surface}
+          </p>
+        </span>
+        {canRemove && (
+          <button
+            aria-label={`Remove ${division.name || `division ${index + 1}`}`}
+            disabled={division.removalLocked}
+            onClick={onRemove}
+            type="button"
+          >
+            <Trash2 aria-hidden size={16} /> Remove
+          </button>
+        )}
+      </header>
+
+      <section className="division-craft__identity">
+        <div>
+          <small>1 · Identity</small>
+          <h4>Name the field.</h4>
+          <p>This is what athletes choose during registration.</p>
+        </div>
+        <div className="event-form-grid event-form-grid--two">
+          <label>
+            <span>Division name</span>
+            <input
+              onChange={(event) => set("name", event.target.value)}
+              placeholder="Open"
+              value={division.name}
+            />
+          </label>
+          <ChoiceTiles<DivisionDraft["gender"]>
+            label="Who can enter?"
+            onChange={(gender) => set("gender", gender)}
+            options={[
+              { value: "open", label: "Open" },
+              { value: "mens", label: "Men's" },
+              { value: "womens", label: "Women's" },
+              { value: "coed", label: "Coed" },
+            ]}
+            value={division.gender}
+          />
+          <label className="event-field--full">
+            <span>Who this division is for</span>
+            <textarea
+              onChange={(event) => set("description", event.target.value)}
+              placeholder="Open competitive field for experienced beach athletes."
+              rows={2}
+              value={division.description}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="division-craft__format">
+        <div>
+          <small>2 · Competition</small>
+          <h4>Choose how a champion emerges.</h4>
+          <p>
+            The choice below controls registration, draw generation, and live
+            operations.
+          </p>
+        </div>
+        <ChoiceTiles<DivisionDraft["tournamentFormat"]>
+          disabled={division.competitionLocked}
+          label={
+            eventKind === "league" ? "Playoff format" : "Tournament format"
+          }
+          onChange={(tournamentFormat) => {
+            const kob = tournamentFormat === "kob-qob";
+            onChange({
+              ...division,
+              tournamentFormat,
+              teamFormat: kob
+                ? "solo"
+                : division.teamFormat === "solo"
+                  ? "doubles"
+                  : division.teamFormat,
+              priceBasis: kob ? "per-person" : division.priceBasis,
+              kobConfig: kob
+                ? (division.kobConfig ?? defaultIndividualKobConfig())
+                : division.kobConfig,
+            });
+          }}
+          options={[
+            {
+              value: "kob-qob",
+              label: "KOB / QOB",
+              detail: "Rotation or survival rounds",
+            },
+            {
+              value: "single-elimination",
+              label: "Single elimination",
+              detail: "One loss ends the run",
+            },
+            {
+              value: "double-elimination-true",
+              label: "True double",
+              detail: "Two losses with a reset final",
+            },
+            {
+              value: "double-elimination-crossover",
+              label: "Crossover double",
+              detail: "Fast contenders path",
+            },
+          ]}
+          value={division.tournamentFormat}
+        />
+
+        {division.tournamentFormat === "kob-qob" ? (
+          <KobFormatBuilder
+            config={division.kobConfig ?? defaultIndividualKobConfig()}
+            disabled={division.competitionLocked}
+            maximumEntries={division.maximumTeams}
+            onChange={(kobConfig) =>
+              onChange({
+                ...division,
+                kobConfig,
+                teamFormat:
+                  kobConfig.entryMode === "individual" ? "solo" : "doubles",
+                priceBasis:
+                  kobConfig.entryMode === "individual"
+                    ? "per-person"
+                    : "per-team",
+                ...(kobConfig.entryMode !== division.kobConfig?.entryMode
+                  ? {
+                      minimumTeams:
+                        kobConfig.entryMode === "individual" ? 4 : 3,
+                      maximumTeams:
+                        kobConfig.entryMode === "individual" ? 16 : 5,
+                    }
+                  : {}),
+              })
+            }
+          />
+        ) : (
+          <section className="division-craft__standard-plan">
+            <Toggle
+              checked={division.poolPlay.enabled}
+              detail="Seed the elimination bracket from preliminary pools."
+              disabled={division.competitionLocked}
+              label="Begin with pool play"
+              onChange={(enabled) =>
+                set("poolPlay", { ...division.poolPlay, enabled })
+              }
+            />
+            {division.poolPlay.enabled && (
+              <div className="division-craft__metrics">
+                <div>
+                  <small>Teams per pool</small>
+                  <QuantityStepper
+                    disabled={division.competitionLocked}
+                    max={division.maximumTeams}
+                    min={2}
+                    onValueChange={(teamsPerPool) =>
+                      set("poolPlay", { ...division.poolPlay, teamsPerPool })
+                    }
+                    value={division.poolPlay.teamsPerPool}
+                  />
+                </div>
+                <div>
+                  <small>Advance per pool</small>
+                  <QuantityStepper
+                    disabled={division.competitionLocked}
+                    max={division.poolPlay.teamsPerPool}
+                    min={1}
+                    onValueChange={(teamsAdvancing) =>
+                      set("poolPlay", { ...division.poolPlay, teamsAdvancing })
+                    }
+                    value={division.poolPlay.teamsAdvancing}
+                  />
+                </div>
+                <ChoiceTiles<DivisionDraft["poolPlay"]["format"]>
+                  disabled={division.competitionLocked}
+                  label="Pool shape"
+                  onChange={(format) =>
+                    set("poolPlay", { ...division.poolPlay, format })
+                  }
+                  options={[
+                    { value: "full", label: "Full pool" },
+                    { value: "olympic-crossover", label: "Olympic crossover" },
+                  ]}
+                  value={division.poolPlay.format}
+                />
+              </div>
+            )}
+          </section>
+        )}
+      </section>
+
+      <section className="division-craft__entry">
+        <div>
+          <small>3 · Field + entry</small>
+          <h4>Set the shape athletes see.</h4>
+          <p>
+            Capacity and eligibility stay visible without turning the page into
+            a database form.
+          </p>
+        </div>
+        {division.tournamentFormat !== "kob-qob" && (
+          <ChoiceTiles<DivisionDraft["teamFormat"]>
+            disabled={division.teamFormatLocked}
+            label="Roster size"
+            onChange={(teamFormat) => set("teamFormat", teamFormat)}
+            options={[
+              { value: "solo", label: "Solo", detail: "1 player" },
+              { value: "doubles", label: "Doubles", detail: "2 players" },
+              { value: "three-person", label: "Triples", detail: "3 players" },
+              { value: "four-person", label: "Fours", detail: "4 players" },
+              { value: "six-person", label: "Sixes", detail: "6 players" },
+            ]}
+            value={division.teamFormat}
+          />
+        )}
+        <div className="division-craft__metrics">
+          <div>
+            <small>Minimum {entryWord}</small>
+            <QuantityStepper
+              min={1}
+              max={division.maximumTeams}
+              onValueChange={(minimumTeams) =>
+                set("minimumTeams", minimumTeams)
+              }
+              value={division.minimumTeams}
+            />
+          </div>
+          <div>
+            <small>Maximum {entryWord}</small>
+            <QuantityStepper
+              min={division.minimumTeams}
+              max={512}
+              onValueChange={(maximumTeams) =>
+                onChange({
+                  ...division,
+                  maximumTeams,
+                  kobConfig:
+                    division.tournamentFormat === "kob-qob" &&
+                    division.kobConfig
+                      ? fitKobStagesToField(division.kobConfig, maximumTeams)
+                      : division.kobConfig,
+                })
+              }
+              value={division.maximumTeams}
+            />
+          </div>
+          <ChoiceTiles<DivisionDraft["surface"]>
+            label="Surface"
+            onChange={(surface) => set("surface", surface)}
+            options={[
+              { value: "sand", label: "Sand" },
+              { value: "grass", label: "Grass" },
+              { value: "water", label: "Water" },
+              { value: "indoor-sand", label: "Indoor sand" },
+            ]}
+            value={division.surface}
+          />
+          <ChoiceTiles<DivisionDraft["seeding"]>
+            disabled={division.competitionLocked}
+            label="Seed the opening field by"
+            onChange={(seeding) => set("seeding", seeding)}
+            options={[
+              { value: "first-come", label: "Paid first" },
+              { value: "sand-rating-score", label: "Sand Rating" },
+              { value: "sand-rating-best-8", label: "Best 8" },
+              { value: "sand-rating-ttm", label: "52-week peak" },
+              { value: "manual", label: "Director" },
+            ]}
+            value={division.seeding}
+          />
+        </div>
+      </section>
+
+      <details className="division-craft__eligibility">
+        <summary>
+          <span>
+            <strong>Optional eligibility gates</strong>
+            <small>Sand Rating and age ranges</small>
+          </span>
+          <span aria-hidden>+</span>
+        </summary>
+        <div className="division-eligibility">
+          <Toggle
+            checked={division.ratingEnabled}
+            detail="Require a minimum and maximum Sand Rating."
+            label="Rating range"
+            onChange={(ratingEnabled) => set("ratingEnabled", ratingEnabled)}
+          />
+          {division.ratingEnabled && (
+            <div>
+              <label>
+                <span>Minimum</span>
+                <input
+                  min="0"
+                  max="10"
+                  step="0.01"
+                  type="number"
+                  value={division.ratingMinimum}
+                  onChange={(event) => set("ratingMinimum", event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Maximum</span>
+                <input
+                  min="0"
+                  max="10"
+                  step="0.01"
+                  type="number"
+                  value={division.ratingMaximum}
+                  onChange={(event) => set("ratingMaximum", event.target.value)}
+                />
+              </label>
+            </div>
+          )}
+          <Toggle
+            checked={division.ageEnabled}
+            detail="Require a minimum and maximum player age."
+            label="Age range"
+            onChange={(ageEnabled) => set("ageEnabled", ageEnabled)}
+          />
+          {division.ageEnabled && (
+            <div>
+              <label>
+                <span>Minimum</span>
+                <input
+                  min="0"
+                  type="number"
+                  value={division.ageMinimum}
+                  onChange={(event) => set("ageMinimum", event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Maximum</span>
+                <input
+                  min="1"
+                  type="number"
+                  value={division.ageMaximum}
+                  onChange={(event) => set("ageMaximum", event.target.value)}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+void DivisionEditorLegacy;
+
 export function EventBuilder({
   initialDraft,
   initialKind = "tournament",
@@ -729,6 +1571,9 @@ export function EventBuilder({
   const [registrationClosesAt, setRegistrationClosesAt] = useState(
     initialDraft?.localRegistrationClosesAt ?? "",
   );
+  const [scheduleEditorOpen, setScheduleEditorOpen] = useState(!initialDraft);
+  const [registrationCloseEditorOpen, setRegistrationCloseEditorOpen] =
+    useState(false);
   const [divisions, setDivisions] = useState<readonly DivisionDraft[]>(
     initialDraft?.divisions.length
       ? initialDraft.divisions.map((division) => ({
@@ -822,6 +1667,30 @@ export function EventBuilder({
         `https://duna.coach${defaultEventMedia(nextKind, title).path}`,
       );
     }
+  };
+
+  const selectTournamentBlueprint = (
+    tournamentFormat: DivisionDraft["tournamentFormat"],
+  ) => {
+    setDivisions((currentDivisions) =>
+      currentDivisions.map((division) => {
+        if (division.competitionLocked) return division;
+        const kob = tournamentFormat === "kob-qob";
+        return {
+          ...division,
+          tournamentFormat,
+          teamFormat: kob
+            ? "solo"
+            : division.teamFormat === "solo"
+              ? "doubles"
+              : division.teamFormat,
+          priceBasis: kob ? "per-person" : division.priceBasis,
+          kobConfig: kob
+            ? (division.kobConfig ?? defaultIndividualKobConfig())
+            : division.kobConfig,
+        };
+      }),
+    );
   };
 
   const uploadMedia = async (file?: File) => {
@@ -968,6 +1837,10 @@ export function EventBuilder({
           ? Number(division.ageMaximum)
           : undefined,
         tournamentFormat: division.tournamentFormat,
+        kobConfig:
+          division.tournamentFormat === "kob-qob"
+            ? division.kobConfig
+            : undefined,
         poolPlay: division.poolPlay,
         seeding: division.seeding,
       })),
@@ -1093,7 +1966,9 @@ export function EventBuilder({
       divisions.every(
         (division) =>
           division.name.trim() &&
-          division.maximumTeams >= division.minimumTeams,
+          division.maximumTeams >= division.minimumTeams &&
+          (division.tournamentFormat !== "kob-qob" ||
+            Boolean(division.kobConfig?.stages.length)),
       )) ||
     (current.key === "pricing" &&
       [...divisions, ...tickets].every(
@@ -1288,6 +2163,107 @@ export function EventBuilder({
                   setup.
                 </p>
               </article>
+              {kind === "tournament" && (
+                <section className="event-format-first">
+                  <header>
+                    <span>
+                      <small>Start with the competition</small>
+                      <h3>What kind of tournament are you running?</h3>
+                      <p>
+                        This becomes the starting blueprint for every division.
+                        You can still tune a division later.
+                      </p>
+                    </span>
+                    <Badge>Asked first</Badge>
+                  </header>
+                  <ChoiceTiles<DivisionDraft["tournamentFormat"]>
+                    disabled={divisions.some(
+                      (division) => division.competitionLocked,
+                    )}
+                    label="Tournament format"
+                    onChange={selectTournamentBlueprint}
+                    options={[
+                      {
+                        value: "kob-qob",
+                        label: "KOB / QOB",
+                        detail:
+                          "Partner rotation or progressive survival rounds",
+                      },
+                      {
+                        value: "single-elimination",
+                        label: "Single elimination",
+                        detail: "One loss ends the run",
+                      },
+                      {
+                        value: "double-elimination-true",
+                        label: "True double elimination",
+                        detail: "Two losses with an if-necessary reset final",
+                      },
+                      {
+                        value: "double-elimination-crossover",
+                        label: "Crossover double elimination",
+                        detail: "Faster winners and contenders crossover",
+                      },
+                    ]}
+                    value={
+                      divisions[0]?.tournamentFormat ??
+                      "double-elimination-true"
+                    }
+                  />
+                  {divisions[0]?.tournamentFormat === "kob-qob" && (
+                    <ChoiceTiles<KobCompetitionConfig["entryMode"]>
+                      label="KOB / QOB registration"
+                      onChange={(entryMode) =>
+                        setDivisions((currentDivisions) =>
+                          currentDivisions.map((division) => ({
+                            ...division,
+                            teamFormat:
+                              entryMode === "individual" ? "solo" : "doubles",
+                            priceBasis:
+                              entryMode === "individual"
+                                ? "per-person"
+                                : "per-team",
+                            minimumTeams: entryMode === "individual" ? 4 : 3,
+                            maximumTeams: entryMode === "individual" ? 16 : 5,
+                            kobConfig:
+                              entryMode === "individual"
+                                ? defaultIndividualKobConfig()
+                                : defaultTeamKobConfig(),
+                          })),
+                        )
+                      }
+                      options={[
+                        {
+                          value: "individual",
+                          label: "Individuals",
+                          detail: "Players register alone and rotate partners",
+                        },
+                        {
+                          value: "team",
+                          label: "Teams",
+                          detail: "Players register with a teammate",
+                        },
+                      ]}
+                      value={divisions[0]?.kobConfig?.entryMode ?? "individual"}
+                    />
+                  )}
+                  {divisions[0]?.tournamentFormat !== "kob-qob" && (
+                    <Toggle
+                      checked={divisions[0]?.poolPlay.enabled ?? false}
+                      detail="Start with pools before the championship path."
+                      label="Include pool play"
+                      onChange={(enabled) =>
+                        setDivisions((currentDivisions) =>
+                          currentDivisions.map((division) => ({
+                            ...division,
+                            poolPlay: { ...division.poolPlay, enabled },
+                          })),
+                        )
+                      }
+                    />
+                  )}
+                </section>
+              )}
             </section>
           )}
 
@@ -1612,33 +2588,107 @@ export function EventBuilder({
                   />
                 </label>
               </div>
-              <SmartDateRangePicker
-                applyLabel="Set schedule"
-                label={kind === "league" ? "Season dates" : "Event dates"}
-                onChange={(range) => {
-                  setStartsAt(range.start);
-                  setEndsAt(range.end);
-                }}
-                timeMode="required"
-                value={{ start: startsAt, end: endsAt }}
-              />
-              <div className="event-form-grid event-form-grid--two event-registration-window">
-                <label>
-                  <span>Registration closes</span>
-                  <input
-                    max={startsAt}
-                    onChange={(event) =>
-                      setRegistrationClosesAt(event.target.value)
+              {!scheduleEditorOpen && (
+                <section className="event-schedule-applied">
+                  <header>
+                    <span>
+                      <Check aria-hidden size={18} />
+                    </span>
+                    <div>
+                      <small>Schedule set · {timezone}</small>
+                      <h4>
+                        {kind === "league" ? "Season window" : "Event window"}
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => setScheduleEditorOpen(true)}
+                      type="button"
+                    >
+                      Edit schedule
+                    </button>
+                  </header>
+                  <div>
+                    <article>
+                      <small>Starts</small>
+                      <strong>{displayLocalDate(startsAt)}</strong>
+                      <span>{displayLocalTime(startsAt)}</span>
+                    </article>
+                    <span aria-hidden>→</span>
+                    <article>
+                      <small>Ends</small>
+                      <strong>{displayLocalDate(endsAt)}</strong>
+                      <span>{displayLocalTime(endsAt)}</span>
+                    </article>
+                    <article className="event-schedule-applied__registration">
+                      <small>Registration closes</small>
+                      <strong>
+                        {registrationClosesAt
+                          ? displayLocalDate(registrationClosesAt)
+                          : "Uses smart rule"}
+                      </strong>
+                      <span>
+                        {registrationClosesAt
+                          ? displayLocalTime(registrationClosesAt)
+                          : `${bookingClosesMinutes} minutes before start`}
+                      </span>
+                    </article>
+                  </div>
+                </section>
+              )}
+              {scheduleEditorOpen && (
+                <SmartDateRangePicker
+                  applyLabel="Set schedule"
+                  label={kind === "league" ? "Season dates" : "Event dates"}
+                  onApply={() => setScheduleEditorOpen(false)}
+                  onCancel={() => setScheduleEditorOpen(false)}
+                  onChange={(range) => {
+                    setStartsAt(range.start);
+                    setEndsAt(range.end);
+                  }}
+                  timeMode="required"
+                  value={{ start: startsAt, end: endsAt }}
+                />
+              )}
+              <section className="event-registration-window">
+                <header>
+                  <span>
+                    <small>Registration cutoff</small>
+                    <strong>
+                      {registrationClosesAt
+                        ? `${displayLocalDate(registrationClosesAt)} at ${displayLocalTime(registrationClosesAt)}`
+                        : `Smart rule · ${bookingClosesMinutes} minutes before start`}
+                    </strong>
+                  </span>
+                  <button
+                    onClick={() =>
+                      setRegistrationCloseEditorOpen((open) => !open)
                     }
-                    type="datetime-local"
+                    type="button"
+                  >
+                    {registrationCloseEditorOpen
+                      ? "Close"
+                      : registrationClosesAt
+                        ? "Edit cutoff"
+                        : "Set exact cutoff"}
+                  </button>
+                </header>
+                <p>
+                  An exact cutoff overrides the relative booking-close rule in
+                  this event timezone.
+                </p>
+                {registrationCloseEditorOpen && (
+                  <SmartDateTimePicker
+                    applyLabel="Set registration cutoff"
+                    clearLabel="Use smart rule"
+                    label="Registration closes"
+                    maximumDate={startsAt.slice(0, 10)}
+                    onApply={() => setRegistrationCloseEditorOpen(false)}
+                    onCancel={() => setRegistrationCloseEditorOpen(false)}
+                    onChange={setRegistrationClosesAt}
                     value={registrationClosesAt}
                   />
-                  <small>
-                    Optional exact cutoff in the event timezone. This overrides
-                    the relative booking-close rule.
-                  </small>
-                </label>
-              </div>
+                )}
+              </section>
               {kind === "league" && (
                 <div className="league-recurrence">
                   <div className="league-recurrence__heading">
@@ -1693,36 +2743,36 @@ export function EventBuilder({
                         <strong>{entry.day}</strong>
                         <label>
                           <span>Starts</span>
-                          <input
-                            onChange={(event) =>
+                          <SmartTimeSelect
+                            label={`${entry.day} start time`}
+                            onChange={(time) =>
                               setRecurringDays((days) =>
                                 days.map((day) =>
                                   day.day === entry.day
                                     ? {
                                         ...day,
-                                        startsAt: event.target.value,
+                                        startsAt: time,
                                       }
                                     : day,
                                 ),
                               )
                             }
-                            type="time"
                             value={entry.startsAt}
                           />
                         </label>
                         <label>
                           <span>Ends</span>
-                          <input
-                            onChange={(event) =>
+                          <SmartTimeSelect
+                            label={`${entry.day} end time`}
+                            onChange={(time) =>
                               setRecurringDays((days) =>
                                 days.map((day) =>
                                   day.day === entry.day
-                                    ? { ...day, endsAt: event.target.value }
+                                    ? { ...day, endsAt: time }
                                     : day,
                                 ),
                               )
                             }
-                            type="time"
                             value={entry.endsAt}
                           />
                         </label>

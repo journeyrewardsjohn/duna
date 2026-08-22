@@ -1,13 +1,19 @@
 import type { TournamentCompetitionSnapshot } from "@duna/api";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { DunaApiClient } from "./mobile-api";
+import { DunaNumericText, SatoshiText as Text } from "./satoshi-text";
 
 type Division = TournamentCompetitionSnapshot["divisions"][number];
 type Round = Division["rounds"][number];
 type Match = Division["matches"][number];
 
 function matchScore(match: Match): string {
+  if (match.heat) {
+    return match.status === "complete"
+      ? "Round final"
+      : `${match.heat.durationMinutes} min · ${match.heat.advanceCount} advance`;
+  }
   if (!match.score?.sets.length) {
     return match.scheduledAt ? "Scheduled" : "Awaiting teams";
   }
@@ -33,30 +39,60 @@ function LocalMatchCard({ match }: { readonly match: Match }) {
         </Text>
         <Text style={styles.matchScore}>{matchScore(match)}</Text>
       </View>
-      <View style={styles.teamRow}>
-        <Text style={styles.seed}>{match.teamA?.seed ?? "–"}</Text>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.teamName,
-            match.winnerTeamId === match.teamA?.id && styles.winnerName,
-          ]}
-        >
-          {match.teamA?.name ?? "To be decided"}
-        </Text>
-      </View>
-      <View style={styles.teamRow}>
-        <Text style={styles.seed}>{match.teamB?.seed ?? "–"}</Text>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.teamName,
-            match.winnerTeamId === match.teamB?.id && styles.winnerName,
-          ]}
-        >
-          {match.teamB?.name ?? "To be decided"}
-        </Text>
-      </View>
+      {match.heat ? (
+        match.heat.participants.length ? (
+          match.heat.participants.map((participant) => (
+            <View key={participant.team.id} style={styles.teamRow}>
+              <DunaNumericText tier="table" style={styles.seed}>
+                {participant.rank}
+              </DunaNumericText>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.teamName,
+                  participant.advances && styles.winnerName,
+                ]}
+              >
+                {participant.team.name}
+              </Text>
+              <DunaNumericText tier="block" style={styles.heatPoints}>
+                {participant.points}
+              </DunaNumericText>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.awaitingQualifiers}>
+            Qualifiers appear when the prior round closes.
+          </Text>
+        )
+      ) : (
+        <>
+          <View style={styles.teamRow}>
+            <Text style={styles.seed}>{match.teamA?.seed ?? "–"}</Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.teamName,
+                match.winnerTeamId === match.teamA?.id && styles.winnerName,
+              ]}
+            >
+              {match.teamA?.name ?? "To be decided"}
+            </Text>
+          </View>
+          <View style={styles.teamRow}>
+            <Text style={styles.seed}>{match.teamB?.seed ?? "–"}</Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.teamName,
+                match.winnerTeamId === match.teamB?.id && styles.winnerName,
+              ]}
+            >
+              {match.teamB?.name ?? "To be decided"}
+            </Text>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -103,12 +139,16 @@ export function LocalTournamentPanel({
   const division =
     snapshot?.divisions.find((candidate) => candidate.id === divisionId) ??
     snapshot?.divisions[0];
-  const bracketRounds = useMemo(
-    () => division?.rounds.filter((round) => round.bracket !== "pool") ?? [],
+  const competitionRounds = useMemo(
+    () =>
+      division?.format.startsWith("kob-")
+        ? division.rounds
+        : (division?.rounds.filter((round) => round.bracket !== "pool") ?? []),
     [division],
   );
   const activeRound =
-    bracketRounds.find((round) => round.key === roundKey) ?? bracketRounds[0];
+    competitionRounds.find((round) => round.key === roundKey) ??
+    competitionRounds[0];
 
   if (!client || (!snapshot && !error)) return null;
   if (error || !snapshot || !division) {
@@ -144,8 +184,9 @@ export function LocalTournamentPanel({
         <View style={styles.nextCard}>
           <Text style={styles.nextEyebrow}>YOUR NEXT MATCH</Text>
           <Text style={styles.nextTitle}>
-            {snapshot.myNextMatch.teamA?.name ?? "Your team"} vs{" "}
-            {snapshot.myNextMatch.teamB?.name ?? "Opponent pending"}
+            {snapshot.myNextMatch.heat
+              ? snapshot.myNextMatch.label
+              : `${snapshot.myNextMatch.teamA?.name ?? "Your team"} vs ${snapshot.myNextMatch.teamB?.name ?? "Opponent pending"}`}
           </Text>
           <Text style={styles.nextMeta}>
             {snapshot.myNextMatch.courtName ?? "Court assignment coming"} ·{" "}
@@ -166,8 +207,10 @@ export function LocalTournamentPanel({
               onPress={() => {
                 setDivisionId(candidate.id);
                 setRoundKey(
-                  candidate.rounds.find((round) => round.bracket !== "pool")
-                    ?.key,
+                  candidate.format.startsWith("kob-")
+                    ? candidate.rounds[0]?.key
+                    : candidate.rounds.find((round) => round.bracket !== "pool")
+                        ?.key,
                 );
               }}
               style={[
@@ -188,6 +231,37 @@ export function LocalTournamentPanel({
           ))}
         </ScrollView>
       )}
+
+      {division.kobStandings?.length ? (
+        <View style={styles.kobBoard}>
+          <View style={styles.poolHeader}>
+            <View>
+              <Text style={styles.poolTitle}>INDIVIDUAL POINTS</Text>
+              <Text style={styles.poolNote}>
+                {division.kobStandings.at(-1)!.name} · points stay with the
+                athlete across partner rotations
+              </Text>
+            </View>
+            <Text style={styles.poolProgress}>
+              {division.kobStandings.at(-1)!.complete ? "FINAL" : "LIVE"}
+            </Text>
+          </View>
+          {division.kobStandings.at(-1)!.players.map((player) => (
+            <View key={player.personId} style={styles.standing}>
+              <DunaNumericText tier="table" style={styles.rank}>
+                {player.rank}
+              </DunaNumericText>
+              <Text numberOfLines={1} style={styles.standingName}>
+                {player.name}
+              </Text>
+              <Text style={styles.kobRecord}>{player.wins} wins</Text>
+              <DunaNumericText tier="block" style={styles.kobPoints}>
+                {player.points}
+              </DunaNumericText>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {division.pools.length > 0 && (
         <ScrollView
@@ -222,14 +296,14 @@ export function LocalTournamentPanel({
         </ScrollView>
       )}
 
-      {bracketRounds.length > 0 && activeRound && (
+      {competitionRounds.length > 0 && activeRound && (
         <>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.tabs}
           >
-            {bracketRounds.map((round) => (
+            {competitionRounds.map((round) => (
               <Pressable
                 key={round.key}
                 onPress={() => setRoundKey(round.key)}
@@ -328,6 +402,14 @@ const styles = StyleSheet.create({
     padding: 13,
     width: 260,
   },
+  kobBoard: {
+    backgroundColor: "#F7F9FB",
+    borderColor: "#DDE4EC",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 3,
+    padding: 14,
+  },
   poolHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -365,6 +447,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontVariant: ["tabular-nums"],
     fontWeight: "700",
+  },
+  kobRecord: { color: "#667085", fontSize: 12 },
+  kobPoints: {
+    color: "#172B4D",
+    fontSize: 22,
+    minWidth: 42,
+    textAlign: "right",
   },
   poolNote: { color: "#667085", fontSize: 12, lineHeight: 15, marginTop: 8 },
   bracket: { gap: 10 },
@@ -421,6 +510,8 @@ const styles = StyleSheet.create({
   },
   teamName: { color: "#253858", flex: 1, fontSize: 14, fontWeight: "700" },
   winnerName: { color: "#168B66" },
+  heatPoints: { color: "#172B4D", fontSize: 23, textAlign: "right" },
+  awaitingQualifiers: { color: "#667085", fontSize: 14, lineHeight: 20 },
   unavailable: {
     backgroundColor: "#F7F9FB",
     borderColor: "#DDE4EC",

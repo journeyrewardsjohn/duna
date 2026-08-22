@@ -179,6 +179,10 @@ export function TournamentControl({
     person.roles.includes("player"),
   );
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const bracketStructure = detail?.bracket?.structure as
+    { readonly generatedStageCount?: number } | undefined;
+  const builtKobRounds = bracketStructure?.generatedStageCount ?? 0;
+  const configuredKobRounds = detail?.division.kobConfig?.stages.length ?? 0;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
@@ -510,6 +514,52 @@ export function TournamentControl({
                       </View>
                     )}
 
+                    {detail.division.kobConfig?.entryMode === "individual" &&
+                    detail.bracket ? (
+                      <View style={styles.roundReadyCard}>
+                        <View style={styles.flex}>
+                          <Text style={styles.entryTitle}>
+                            Rotating-partner progression
+                          </Text>
+                          <Text style={styles.entryBody}>
+                            {builtKobRounds} of {configuredKobRounds} rounds
+                            built. Finish the current matches, then seed the
+                            next round from each player&apos;s rally-point
+                            total.
+                          </Text>
+                        </View>
+                        {builtKobRounds < configuredKobRounds ? (
+                          <Pressable
+                            disabled={busy === "advance-kob"}
+                            onPress={() =>
+                              void perform("advance-kob", () =>
+                                client!.operator.advanceIndividualKobStage.mutate(
+                                  {
+                                    divisionId: detail.division.id,
+                                    reason:
+                                      "Completed KOB round advanced by the courtside operator.",
+                                    confirmed: true,
+                                    idempotencyKey: Crypto.randomUUID(),
+                                  },
+                                ),
+                              )
+                            }
+                            style={styles.secondaryButton}
+                          >
+                            <Text style={styles.secondaryButtonText}>
+                              {busy === "advance-kob"
+                                ? "Calculating…"
+                                : "Build next round"}
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <Text style={styles.completeLabel}>
+                            ALL ROUNDS BUILT
+                          </Text>
+                        )}
+                      </View>
+                    ) : null}
+
                     <Text style={styles.sectionLabel}>MATCHES</Text>
                     {selectedDivision.matches.length === 0 ? (
                       <Text style={styles.emptyBody}>
@@ -529,11 +579,103 @@ export function TournamentControl({
                               {match.status.replaceAll("-", " ")}
                             </Text>
                           </View>
-                          <Text style={styles.matchTeams}>
-                            {match.teamA?.name ?? "TBD"}{" "}
-                            <Text style={styles.matchVersus}>vs</Text>{" "}
-                            {match.teamB?.name ?? "TBD"}
-                          </Text>
+                          {match.heat ? (
+                            <View style={styles.heatBoard}>
+                              <Text style={styles.heatInstruction}>
+                                {match.heat.durationMinutes} minute round · top{" "}
+                                {match.heat.advanceCount} advance
+                              </Text>
+                              {match.heat.participants.length === 0 ? (
+                                <Text style={styles.emptyBody}>
+                                  Qualifiers appear when the prior round closes.
+                                </Text>
+                              ) : (
+                                match.heat.participants.map((participant) => (
+                                  <View
+                                    key={participant.team.id}
+                                    style={styles.heatTeam}
+                                  >
+                                    <Text style={styles.heatRank}>
+                                      {participant.rank}
+                                    </Text>
+                                    <View style={styles.flex}>
+                                      <Text style={styles.heatTeamName}>
+                                        {participant.team.name}
+                                      </Text>
+                                      <Text style={styles.heatAdvance}>
+                                        {participant.advances
+                                          ? "Advancing line"
+                                          : "Chasing"}
+                                      </Text>
+                                    </View>
+                                    <Pressable
+                                      accessibilityLabel={`Remove one point from ${participant.team.name}`}
+                                      disabled={
+                                        participant.points === 0 ||
+                                        match.status === "complete" ||
+                                        busy === `heat:${match.id}`
+                                      }
+                                      onPress={() =>
+                                        void perform(`heat:${match.id}`, () =>
+                                          client!.operator.adjustKobHeatScore.mutate(
+                                            {
+                                              matchId: match.id,
+                                              teamId: participant.team.id,
+                                              delta: -1,
+                                              idempotencyKey:
+                                                Crypto.randomUUID(),
+                                            },
+                                          ),
+                                        )
+                                      }
+                                      style={styles.heatAdjust}
+                                    >
+                                      <Text style={styles.heatAdjustText}>
+                                        −
+                                      </Text>
+                                    </Pressable>
+                                    <DunaNumericText
+                                      tier="score"
+                                      style={styles.heatPoints}
+                                    >
+                                      {participant.points}
+                                    </DunaNumericText>
+                                    <Pressable
+                                      accessibilityLabel={`Add one point to ${participant.team.name}`}
+                                      disabled={
+                                        match.status === "complete" ||
+                                        busy === `heat:${match.id}`
+                                      }
+                                      onPress={() =>
+                                        void perform(`heat:${match.id}`, () =>
+                                          client!.operator.adjustKobHeatScore.mutate(
+                                            {
+                                              matchId: match.id,
+                                              teamId: participant.team.id,
+                                              delta: 1,
+                                              idempotencyKey:
+                                                Crypto.randomUUID(),
+                                            },
+                                          ),
+                                        )
+                                      }
+                                      style={styles.heatAdjust}
+                                    >
+                                      <Text style={styles.heatAdjustText}>
+                                        +
+                                      </Text>
+                                    </Pressable>
+                                  </View>
+                                ))
+                              )}
+                            </View>
+                          ) : (
+                            <Text style={styles.matchTeams}>
+                              {match.teamA?.name ?? "TBD"}{" "}
+                              <Text style={styles.matchVersus}>vs</Text>{" "}
+                              {match.teamB?.name ?? "TBD"}
+                            </Text>
+                          )}
                           <View style={styles.matchFooter}>
                             <Text style={styles.matchMeta}>
                               {match.courtName ?? "Court TBD"} ·{" "}
@@ -549,7 +691,45 @@ export function TournamentControl({
                               {score(match)}
                             </DunaNumericText>
                           </View>
-                          {match.teamA && match.teamB && (
+                          {match.heat &&
+                          match.heat.participants.length > 1 &&
+                          match.status !== "complete" ? (
+                            <Pressable
+                              onPress={() =>
+                                Alert.alert(
+                                  `Close ${match.label}?`,
+                                  `The top ${match.heat!.advanceCount} teams advance. This freezes the round and opens the next one.`,
+                                  [
+                                    { text: "Keep scoring", style: "cancel" },
+                                    {
+                                      text: "Close round",
+                                      style: "default",
+                                      onPress: () =>
+                                        void perform(
+                                          `complete:${match.id}`,
+                                          () =>
+                                            client!.operator.completeKobHeat.mutate(
+                                              {
+                                                matchId: match.id,
+                                                reason:
+                                                  "KOB round closed by the courtside operator.",
+                                                confirmed: true,
+                                                idempotencyKey:
+                                                  Crypto.randomUUID(),
+                                              },
+                                            ),
+                                        ),
+                                    },
+                                  ],
+                                )
+                              }
+                              style={styles.scoreButton}
+                            >
+                              <Text style={styles.scoreButtonText}>
+                                Lock results + advance
+                              </Text>
+                            </Pressable>
+                          ) : match.teamA && match.teamB ? (
                             <Pressable
                               onPress={() => onScore(match.id)}
                               style={styles.scoreButton}
@@ -560,7 +740,7 @@ export function TournamentControl({
                                   : "Score match"}
                               </Text>
                             </Pressable>
-                          )}
+                          ) : null}
                         </View>
                       ))
                     )}
@@ -731,6 +911,22 @@ function createStyles(palette: TournamentControlPalette) {
       gap: 12,
       padding: 15,
     },
+    roundReadyCard: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 15,
+    },
+    completeLabel: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
     entryTitle: { color: palette.ink, fontSize: 18, fontWeight: "800" },
     entryBody: { color: palette.muted, fontSize: 13, lineHeight: 19 },
     personGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -794,6 +990,44 @@ function createStyles(palette: TournamentControlPalette) {
     matchLive: { color: palette.warning },
     matchTeams: { color: palette.ink, fontSize: 15, fontWeight: "700" },
     matchVersus: { color: palette.muted, fontWeight: "400" },
+    heatBoard: { gap: 8 },
+    heatInstruction: { color: palette.muted, fontSize: 13 },
+    heatTeam: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 62,
+      padding: 8,
+    },
+    heatRank: {
+      color: palette.muted,
+      fontSize: 13,
+      fontWeight: "800",
+      textAlign: "center",
+      width: 20,
+    },
+    heatTeamName: { color: palette.ink, fontSize: 14, fontWeight: "800" },
+    heatAdvance: { color: palette.muted, fontSize: 12, marginTop: 2 },
+    heatAdjust: {
+      alignItems: "center",
+      borderColor: palette.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 42,
+    },
+    heatAdjustText: { color: palette.accent, fontSize: 24, fontWeight: "700" },
+    heatPoints: {
+      color: palette.ink,
+      fontSize: 28,
+      minWidth: 38,
+      textAlign: "center",
+    },
     matchFooter: {
       alignItems: "center",
       flexDirection: "row",

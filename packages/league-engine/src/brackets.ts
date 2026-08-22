@@ -19,6 +19,7 @@ export interface BracketMatch {
   readonly sideB: BracketSource;
   readonly ifNecessary?: boolean;
   readonly label?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 export interface Bracket {
@@ -30,7 +31,9 @@ export interface Bracket {
     | "double-elimination-modified"
     | "double-elimination-crossover"
     | "round-robin"
-    | "pool-play";
+    | "pool-play"
+    | "kob-individual-rotation"
+    | "kob-team-progressive";
   readonly teams: readonly SeededTeam[];
   readonly matches: readonly BracketMatch[];
   readonly rounds: number;

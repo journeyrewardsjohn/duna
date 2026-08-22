@@ -2934,6 +2934,64 @@
   margin: 0;
 }
 
+.tournament-desk__kob-board {
+  background: color-mix(in srgb, var(--color-canvas) 90%, var(--color-sand));
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.tournament-desk__kob-board > header,
+.tournament-desk__kob-board li {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+}
+
+.tournament-desk__kob-board header span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.tournament-desk__kob-board header small,
+.tournament-desk__kob-board li small,
+.tournament-desk__kob-board p {
+  color: var(--color-bone-muted);
+}
+
+.tournament-desk__kob-board ol {
+  list-style: none;
+  margin: 0.8rem 0;
+  padding: 0;
+}
+
+.tournament-desk__kob-board li {
+  border-top: 1px solid var(--color-line);
+  min-height: 2.6rem;
+}
+
+.tournament-desk__kob-board li > span {
+  color: var(--color-bone-muted);
+  width: 1.4rem;
+}
+
+.tournament-desk__kob-board li > strong {
+  flex: 1;
+}
+
+.tournament-desk__kob-board li > b {
+  font-family: var(--font-data);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tournament-desk__kob-board p {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
 .tournament-desk__bracket {
   display: grid;
   gap: 1rem;
@@ -3025,6 +3083,31 @@
 
 .tournament-desk__team--winner strong {
   color: var(--color-aqua);
+}
+
+.tournament-desk__heat {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.tournament-desk__heat .tournament-desk__team {
+  border-top: 1px solid var(--color-line);
+  padding-top: 0.3rem;
+}
+
+.tournament-desk__heat .tournament-desk__team b {
+  color: var(--color-ink);
+  font-family: var(--font-data);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+
+.tournament-desk__heat p {
+  color: var(--color-bone-muted);
+  font-size: 0.82rem;
+  margin: 0.4rem 0;
 }
 
 .tournament-desk__seed {

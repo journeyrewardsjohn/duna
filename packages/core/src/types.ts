@@ -224,6 +224,36 @@ export interface EventPoolPlay {
   readonly teamsAdvancing: number;
 }
 
+export interface KobStageConfig {
+  readonly id: string;
+  readonly name: string;
+  readonly format:
+    | "partner-rotation"
+    | "timed-elimination"
+    | "pool-play"
+    | "single-elimination"
+    | "double-elimination-true"
+    | "double-elimination-crossover";
+  readonly scoringMode: "rally-points" | "timed-total";
+  readonly durationMinutes?: number;
+  readonly setsToWin: number;
+  readonly pointsToWin: number;
+  readonly winBy: number;
+  readonly pointCap?: number;
+  readonly poolSize: number;
+  readonly advanceCount: number;
+  readonly eliminationCount: number;
+  readonly guaranteedGames: number;
+  readonly carryPoints: boolean;
+}
+
+export interface KobCompetitionConfig {
+  readonly entryMode: "individual" | "team";
+  readonly balanceByRating: boolean;
+  readonly avoidRepeatOpponents: boolean;
+  readonly stages: readonly KobStageConfig[];
+}
+
 export interface EventDivisionSummary {
   readonly id: string;
   readonly name: string;
@@ -249,6 +279,7 @@ export interface EventDivisionSummary {
   readonly ageMinimum?: number;
   readonly ageMaximum?: number;
   readonly tournamentFormat?: TournamentFormat;
+  readonly kobConfig?: KobCompetitionConfig;
   readonly poolPlay?: EventPoolPlay;
   readonly seeding?: EventSeedingMethod;
 }

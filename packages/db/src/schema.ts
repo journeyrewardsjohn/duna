@@ -8904,7 +8904,7 @@ export const teamEntries = pgTable(
     uniqueIndex("team_entry_team_unique")
       .on(table.teamId)
       .where(sql`${table.teamId} IS NOT NULL`),
-    check("team_entry_expected_size", sql`${table.expectedTeamSize} >= 2`),
+    check("team_entry_expected_size", sql`${table.expectedTeamSize} >= 1`),
     check(
       "team_entry_payment_mode",
       sql`${table.paymentMode} IN ('self', 'team')`,
