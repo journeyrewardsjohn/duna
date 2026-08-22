@@ -1055,6 +1055,63 @@ async function existingCheckoutResult(input: {
   };
 }
 
+async function replaceUnpaidHostedCheckoutWithNativePayment(input: {
+  readonly previousOrderId: string;
+  readonly replacementOrderId: string;
+  readonly registrationId: string;
+  readonly registrationSource: "pickup" | "session";
+  readonly holdExpiresAt: Date;
+  readonly now: Date;
+}): Promise<boolean> {
+  const database = getDatabase();
+  const previousOrder = await database.query.orders.findFirst({
+    where: eq(orders.id, input.previousOrderId),
+  });
+  if (
+    !previousOrder?.stripeCheckoutSessionId ||
+    previousOrder.status !== "pending" ||
+    previousOrder.stripePaymentIntentId ||
+    !isStripeConfigured()
+  ) {
+    return false;
+  }
+
+  const checkout = await getStripeClient().checkout.sessions.retrieve(
+    previousOrder.stripeCheckoutSessionId,
+  );
+  if (checkout.status === "complete" || checkout.payment_status === "paid") {
+    return false;
+  }
+  if (checkout.status === "open") {
+    await getStripeClient().checkout.sessions.expire(checkout.id);
+  }
+
+  await database.batch([
+    database
+      .update(orders)
+      .set({ status: "cancelled", updatedAt: input.now })
+      .where(eq(orders.id, input.previousOrderId)),
+    input.registrationSource === "pickup"
+      ? database
+          .update(pickupParticipants)
+          .set({
+            orderId: input.replacementOrderId,
+            holdExpiresAt: input.holdExpiresAt,
+            updatedAt: input.now,
+          })
+          .where(eq(pickupParticipants.id, input.registrationId))
+      : database
+          .update(registrations)
+          .set({
+            orderId: input.replacementOrderId,
+            holdExpiresAt: input.holdExpiresAt,
+            updatedAt: input.now,
+          })
+          .where(eq(registrations.id, input.registrationId)),
+  ]);
+  return true;
+}
+
 export function resolveRegistrationUnitAmount(input: {
   readonly currentUnitAmountMinor: number;
   readonly paidRegistration?: boolean;
@@ -1679,6 +1736,9 @@ export async function startEventCheckout(input: {
       "Secure checkout is not configured.",
     );
   }
+  const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
+    event.organization.stripeTaxEnabled,
+  );
 
   const eligibility = event.ticketTypeId
     ? undefined
@@ -1939,21 +1999,40 @@ export async function startEventCheckout(input: {
             where: eq(registrations.id, hold.registration_id),
           });
     if (heldRegistration?.orderId && heldRegistration.orderId !== orderId) {
-      await database
-        .update(orders)
-        .set({ status: "cancelled", updatedAt: input.now })
-        .where(eq(orders.id, orderId));
       const resumed = await existingCheckoutResult({
         orderId: heldRegistration.orderId,
         registrationId: heldRegistration.id,
         teamClaimToken,
         paymentSurface: input.paymentSurface ?? "hosted",
       });
-      if (resumed) return resumed;
-      throw new CheckoutError(
-        "CHECKOUT_UNAVAILABLE",
-        "A checkout is already active for this participant.",
-      );
+      if (resumed) {
+        await database
+          .update(orders)
+          .set({ status: "cancelled", updatedAt: input.now })
+          .where(eq(orders.id, orderId));
+        return resumed;
+      }
+      const replacedHostedCheckout =
+        input.paymentSurface === "native" &&
+        !automaticTaxEnabled &&
+        (await replaceUnpaidHostedCheckoutWithNativePayment({
+          previousOrderId: heldRegistration.orderId,
+          replacementOrderId: orderId,
+          registrationId: heldRegistration.id,
+          registrationSource: event.source,
+          holdExpiresAt,
+          now: input.now,
+        }));
+      if (!replacedHostedCheckout) {
+        await database
+          .update(orders)
+          .set({ status: "cancelled", updatedAt: input.now })
+          .where(eq(orders.id, orderId));
+        throw new CheckoutError(
+          "CHECKOUT_UNAVAILABLE",
+          "A checkout is already active for this participant.",
+        );
+      }
     }
     const resumed = await existingCheckoutResult({
       orderId,
@@ -1998,9 +2077,6 @@ export async function startEventCheckout(input: {
       feeTotalMinor +
         operatorProcessingFee.amountMinor +
         organizationCommissionFee.amountMinor,
-    );
-    const automaticTaxEnabled = automaticTaxEnabledInCurrentStripeMode(
-      event.organization.stripeTaxEnabled,
     );
     if (input.paymentSurface === "native" && !automaticTaxEnabled) {
       const publishableKey = getStripePublishableKey();
