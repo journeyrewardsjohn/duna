@@ -8,8 +8,12 @@ import {
   getDatabase,
   getTransactionalDatabase,
   matches,
+  messages,
+  organizationInvitations,
   organizationCreditApplications,
   organizationMemberships,
+  organizationParticipants,
+  organizations,
   orders,
   people,
   programs,
@@ -38,7 +42,7 @@ import {
   type SeededTeam,
   type KobCompetitionConfig,
 } from "@duna/league-engine";
-import { and, asc, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   cancelCalendarSession,
@@ -46,6 +50,10 @@ import {
 } from "./catalog-service";
 import type { OperatorMutationResult } from "./contracts";
 import type { ApiActor } from "./context";
+import { eventCaptainPaymentComplete } from "./event-entry-payment";
+import { canonicalPublicWebUrl } from "./public-web-url";
+import { sendTransactionalEmail } from "./resend";
+import { sendTemplateSms } from "./sent";
 
 interface MutationContext {
   readonly actor: ApiActor;
@@ -824,6 +832,7 @@ async function loadDivisionRecord(
       claimExpiresAt: teamEntries.claimExpiresAt,
       registrationId: registrations.id,
       registrationStatus: registrations.status,
+      eligibilityDecision: registrations.eligibilityDecision,
       registeredAt: registrations.createdAt,
       orderId: registrations.orderId,
       orderStatus: orders.status,
@@ -949,10 +958,11 @@ async function loadDivisionRecord(
     }
   }
   const summaries = rows.map((row): TeamOperationalSummary => {
-    const captainPaid =
-      row.orderStatus === "paid" ||
-      (row.registrationStatus === "confirmed" && !row.orderStatus) ||
-      row.registrationStatus === "checked-in";
+    const captainPaid = eventCaptainPaymentComplete({
+      eligibilityDecision: row.eligibilityDecision,
+      orderStatus: row.orderStatus,
+      registrationStatus: row.registrationStatus,
+    });
     const paidPlayers =
       row.paymentMode === "team" && captainPaid
         ? row.expectedTeamSize
@@ -3598,11 +3608,559 @@ export async function launchDivisionTournament(
 }
 
 /**
- * Desk entries are intentionally represented as ordinary registrations and
- * teams. A complimentary invitation and verified cash are not side channels:
- * they are visible in the operational field, qualify normally, and leave an
- * immutable director audit trail.
+ * Organizer-added players use the same registrations, teams, and payment
+ * reconciliation as self-service entries. Guest identities remain provisional
+ * until the private invitation is claimed, while the field hold and every
+ * complimentary or payment-due decision stay visible and auditable.
  */
+export interface EventPlayerSearchResult {
+  readonly id: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly avatarUrl?: string;
+  readonly rating?: number;
+  readonly connection: "organization" | "duna";
+}
+
+export interface EventPlayerEntryResult extends OperatorMutationResult {
+  readonly personId: string;
+  readonly displayName: string;
+  readonly paymentTreatment: "complimentary" | "to-be-paid";
+  readonly identityStatus: "connected" | "guest-invited";
+  readonly invitationUrl?: string;
+  readonly deliveryStatus?: "not-configured" | "sent" | "failed";
+}
+
+export function eventPlayerInvitationMessage(input: {
+  readonly organizationName: string;
+  readonly eventTitle: string;
+  readonly divisionName: string;
+  readonly paymentTreatment: "complimentary" | "to-be-paid";
+  readonly invitationUrl: string;
+}): string {
+  const paymentCopy =
+    input.paymentTreatment === "complimentary"
+      ? "Your entry is complimentary."
+      : "Your place is reserved and payment is due after you claim it.";
+  return `${input.organizationName} registered you for ${input.eventTitle}, ${input.divisionName}. ${paymentCopy} Claim your spot and connect it to your Duna profile: ${input.invitationUrl}`;
+}
+
+function provisionalEventHandle(input: {
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly id: string;
+}): string {
+  const base = `${input.givenName}-${input.familyName}`
+    .normalize("NFKD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/(^-|-$)/g, "")
+    .slice(0, 30);
+  return `${base || "player"}-guest-${input.id.replaceAll("-", "").slice(-8)}`.slice(
+    0,
+    48,
+  );
+}
+
+export async function searchEventPlayers(input: {
+  readonly actor: ApiActor;
+  readonly sessionId: string;
+  readonly query: string;
+}): Promise<readonly EventPlayerSearchResult[]> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  await ownedSession(organizationId, input.sessionId);
+  const query = input.query.trim().toLowerCase().replaceAll("%", "");
+  if (query.length < 2) return [];
+  const pattern = `%${query}%`;
+  const rows = await getDatabase()
+    .select({
+      id: people.id,
+      displayName: people.displayName,
+      handle: people.handle,
+      avatarUrl: people.avatarUrl,
+      rating: ratings.display,
+      participantId: organizationParticipants.id,
+      membershipId: organizationMemberships.id,
+    })
+    .from(people)
+    .leftJoin(
+      ratings,
+      and(eq(ratings.personId, people.id), eq(ratings.discipline, "beach-2s")),
+    )
+    .leftJoin(
+      organizationParticipants,
+      and(
+        eq(organizationParticipants.personId, people.id),
+        eq(organizationParticipants.organizationId, organizationId),
+        eq(organizationParticipants.status, "active"),
+      ),
+    )
+    .leftJoin(
+      organizationMemberships,
+      and(
+        eq(organizationMemberships.personId, people.id),
+        eq(organizationMemberships.organizationId, organizationId),
+        eq(organizationMemberships.active, true),
+      ),
+    )
+    .where(
+      and(
+        eq(people.status, "active"),
+        sql`(lower(${people.displayName}) LIKE ${pattern} OR lower(${people.handle}) LIKE ${pattern})`,
+        or(
+          sql`${organizationParticipants.id} IS NOT NULL`,
+          sql`${organizationMemberships.id} IS NOT NULL`,
+          and(
+            eq(people.profileClaimStatus, "claimed"),
+            eq(people.profileVisibility, "public"),
+            eq(people.isMinor, false),
+          ),
+        ),
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${registrations}
+          WHERE ${registrations.sessionId} = ${input.sessionId}::uuid
+            AND ${registrations.personId} = ${people.id}
+            AND ${registrations.status} IN ('pending', 'confirmed', 'waitlisted', 'checked-in')
+        )`,
+      ),
+    )
+    .orderBy(
+      desc(sql`${organizationParticipants.id} IS NOT NULL`),
+      desc(ratings.display),
+      asc(people.displayName),
+    )
+    .limit(20);
+  return rows.map((row) => ({
+    id: row.id,
+    displayName: row.displayName,
+    handle: row.handle,
+    avatarUrl: row.avatarUrl ?? undefined,
+    rating: row.rating ?? undefined,
+    connection: row.participantId || row.membershipId ? "organization" : "duna",
+  }));
+}
+
+export async function addEventPlayerEntry(
+  input: MutationContext & {
+    readonly sessionId: string;
+    readonly divisionId: string;
+    readonly identity:
+      | { readonly kind: "duna"; readonly personId: string }
+      | {
+          readonly kind: "guest";
+          readonly givenName: string;
+          readonly familyName: string;
+          readonly email?: string;
+          readonly phoneE164?: string;
+        };
+    readonly paymentTreatment: "complimentary" | "to-be-paid";
+    readonly reason: string;
+  },
+): Promise<EventPlayerEntryResult> {
+  requireDatabase();
+  const organizationId = requireOrganization(input.actor);
+  const record = await loadDivisionRecord(organizationId, input.divisionId);
+  if (record.session.id !== input.sessionId) {
+    throw new Error("That division does not belong to this event.");
+  }
+  if (["cancelled", "completed"].includes(record.session.status)) {
+    throw new Error(
+      "Players cannot be added to a cancelled or completed event.",
+    );
+  }
+  const fieldLimit =
+    record.division.maximumTeams ??
+    Math.floor(record.division.capacity / record.division.teamSize);
+  if (
+    record.teams.filter((team) => team.selectionStatus === "confirmed")
+      .length >= fieldLimit
+  ) {
+    throw new Error(
+      "This division is full. Expand the field before adding another entry.",
+    );
+  }
+  const database = getTransactionalDatabase();
+  const normalizedEmail =
+    input.identity.kind === "guest"
+      ? input.identity.email?.trim().toLowerCase() || undefined
+      : undefined;
+  const normalizedPhone =
+    input.identity.kind === "guest"
+      ? input.identity.phoneE164?.trim() || undefined
+      : undefined;
+  if (input.identity.kind === "guest") {
+    const duplicate = normalizedEmail
+      ? await database
+          .select({
+            displayName: people.displayName,
+            profileClaimStatus: people.profileClaimStatus,
+          })
+          .from(people)
+          .where(sql`lower(${people.email}) = ${normalizedEmail}`)
+          .limit(1)
+          .then((rows) => rows[0])
+      : normalizedPhone
+        ? await database
+            .select({
+              displayName: people.displayName,
+              profileClaimStatus: people.profileClaimStatus,
+            })
+            .from(people)
+            .where(eq(people.phoneE164, normalizedPhone))
+            .limit(1)
+            .then((rows) => rows[0])
+        : undefined;
+    if (duplicate?.profileClaimStatus === "claimed") {
+      throw new Error(
+        `${duplicate.displayName} already has a Duna profile. Add that profile from Duna search instead.`,
+      );
+    }
+  }
+
+  const guestPersonId =
+    input.identity.kind === "guest" ? crypto.randomUUID() : undefined;
+  const personId =
+    input.identity.kind === "duna" ? input.identity.personId : guestPersonId!;
+  const person =
+    input.identity.kind === "duna"
+      ? await database
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+            status: people.status,
+            isMinor: people.isMinor,
+            profileClaimStatus: people.profileClaimStatus,
+            profileVisibility: people.profileVisibility,
+            participantId: organizationParticipants.id,
+            membershipId: organizationMemberships.id,
+          })
+          .from(people)
+          .leftJoin(
+            organizationParticipants,
+            and(
+              eq(organizationParticipants.personId, people.id),
+              eq(organizationParticipants.organizationId, organizationId),
+              eq(organizationParticipants.status, "active"),
+            ),
+          )
+          .leftJoin(
+            organizationMemberships,
+            and(
+              eq(organizationMemberships.personId, people.id),
+              eq(organizationMemberships.organizationId, organizationId),
+              eq(organizationMemberships.active, true),
+            ),
+          )
+          .where(eq(people.id, personId))
+          .limit(1)
+          .then((rows) => rows[0])
+      : {
+          id: personId,
+          displayName: `${input.identity.givenName.trim()} ${input.identity.familyName.trim()}`,
+          status: "active",
+          isMinor: false,
+          profileClaimStatus: "unclaimed",
+          profileVisibility: "private",
+          participantId: null,
+          membershipId: null,
+        };
+  if (!person || person.status !== "active") {
+    throw new Error("That Duna player is not available to add.");
+  }
+  if (
+    input.identity.kind === "duna" &&
+    !person.participantId &&
+    !person.membershipId &&
+    (person.profileClaimStatus !== "claimed" ||
+      person.profileVisibility !== "public" ||
+      person.isMinor)
+  ) {
+    throw new Error(
+      "That Duna profile is private or not eligible for organizer entry.",
+    );
+  }
+  const existingRegistration = await database
+    .select({ id: registrations.id })
+    .from(registrations)
+    .where(
+      and(
+        eq(registrations.sessionId, input.sessionId),
+        eq(registrations.personId, personId),
+        inArray(registrations.status, [
+          "pending",
+          "confirmed",
+          "waitlisted",
+          "checked-in",
+        ]),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (existingRegistration) {
+    throw new Error(
+      `${person.displayName} is already registered for this event.`,
+    );
+  }
+
+  const registrationId = crypto.randomUUID();
+  const teamId = crypto.randomUUID();
+  const teamEntryId = crypto.randomUUID();
+  const claimToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll(
+    "-",
+    "",
+  );
+  const invitationId = guestPersonId ? crypto.randomUUID() : undefined;
+  const invitationToken = guestPersonId
+    ? `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "")
+    : undefined;
+  const claimExpiresAt = new Date(
+    Math.max(
+      input.now.getTime() + 30 * 24 * 60 * 60_000,
+      record.session.startsAt.getTime() + 24 * 60 * 60_000,
+    ),
+  );
+  const ready =
+    input.identity.kind === "duna" &&
+    record.division.teamSize === 1 &&
+    input.paymentTreatment === "complimentary";
+  const usedSeeds = new Set(
+    record.teams.flatMap((team) => (team.seed ? [team.seed] : [])),
+  );
+  const seed = nextAvailableSeed(usedSeeds);
+  const eligibilityDecision = {
+    source: "operator-player-entry",
+    status: "approved",
+    paymentTreatment: input.paymentTreatment,
+    identityKind: input.identity.kind,
+    recordedAt: input.now.toISOString(),
+  };
+
+  await database.transaction(async (transaction) => {
+    if (input.identity.kind === "guest") {
+      await transaction.insert(people).values({
+        id: personId,
+        givenName: input.identity.givenName.trim(),
+        familyName: input.identity.familyName.trim(),
+        displayName: person.displayName,
+        handle: provisionalEventHandle({
+          givenName: input.identity.givenName,
+          familyName: input.identity.familyName,
+          id: personId,
+        }),
+        profileClaimStatus: "unclaimed",
+        profileVisibility: "private",
+        status: "active",
+        ageBand: "adult",
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+    }
+    await transaction.insert(teams).values({
+      id: teamId,
+      divisionId: input.divisionId,
+      name: person.displayName,
+      seed,
+      status: "active",
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+    await transaction.insert(teamMembers).values({
+      teamId,
+      personId,
+      role: "player",
+      joinedAt: input.now,
+    });
+    await transaction.insert(registrations).values({
+      id: registrationId,
+      sessionId: input.sessionId,
+      divisionId: input.divisionId,
+      personId,
+      status: "confirmed",
+      eligibilityDecision,
+      overriddenByPersonId: input.actor.personId,
+      overrideReason: input.reason,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+    await transaction.insert(teamEntries).values({
+      id: teamEntryId,
+      registrationId,
+      teamId,
+      payingPersonId: personId,
+      expectedTeamSize: record.division.teamSize,
+      paymentMode: "self",
+      roster: [],
+      status: ready ? "ready" : "assembling",
+      claimToken,
+      claimExpiresAt,
+      claimedAt: ready ? input.now : undefined,
+      rosterLockedAt: ready ? input.now : undefined,
+      seed,
+      selectionStatus: "confirmed",
+      selectionLocked: true,
+      selectionReason: input.reason,
+      selectedAt: input.now,
+      updatedAt: input.now,
+    });
+    if (guestPersonId && invitationId && invitationToken) {
+      await transaction.insert(organizationInvitations).values({
+        id: invitationId,
+        organizationId,
+        invitedByPersonId: input.actor.personId,
+        inviteToken: invitationToken,
+        relationship: "player",
+        invitedName: person.displayName,
+        invitedEmail: normalizedEmail,
+        invitedPhoneE164: normalizedPhone,
+        isMinor: false,
+        deliveryChannel: normalizedPhone
+          ? "sms"
+          : normalizedEmail
+            ? "email"
+            : undefined,
+        eventSessionId: input.sessionId,
+        eventDivisionId: input.divisionId,
+        provisionalPersonId: personId,
+        eventRegistrationId: registrationId,
+        teamEntryId,
+        eventPaymentTreatment: input.paymentTreatment,
+        expiresAt: claimExpiresAt,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+    } else {
+      const playerUrl = canonicalPublicWebUrl(`/app/team/claim/${claimToken}`);
+      await transaction.insert(messages).values(
+        (["in-app", "push"] as const).map((channel) => ({
+          id: crypto.randomUUID(),
+          organizationId,
+          senderPersonId: input.actor.personId,
+          recipientPersonId: personId,
+          guardianCopyPersonIds: [],
+          channel,
+          kind: "event-registration",
+          subject: `You were added to ${record.session.title}`,
+          body:
+            input.paymentTreatment === "complimentary" && ready
+              ? `${input.actor.displayName} added you to ${record.division.name}. Your entry is complimentary.`
+              : input.paymentTreatment === "complimentary"
+                ? `${input.actor.displayName} added you to ${record.division.name}. Your entry is complimentary. Complete your team roster: ${playerUrl}`
+                : `${input.actor.displayName} reserved your place in ${record.division.name}. Claim your entry and complete payment: ${playerUrl}`,
+          status: "queued",
+          scheduledAt: input.now,
+        })),
+      );
+    }
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action:
+        input.paymentTreatment === "complimentary"
+          ? "tournament.player.complimentary_added"
+          : "tournament.player.payment_due_added",
+      entityType: "team-entry",
+      entityId: teamEntryId,
+      afterHash: stableHash({
+        registrationId,
+        personId,
+        identityKind: input.identity.kind,
+        paymentTreatment: input.paymentTreatment,
+        invitationId,
+      }),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+
+  let invitationUrl: string | undefined;
+  let deliveryStatus: "not-configured" | "sent" | "failed" | undefined;
+  if (invitationId && invitationToken) {
+    invitationUrl = canonicalPublicWebUrl(
+      `/join/organization/${encodeURIComponent(invitationToken)}`,
+    );
+    const organization = await getDatabase().query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    });
+    const message = eventPlayerInvitationMessage({
+      organizationName: organization?.name ?? "Your organizer",
+      eventTitle: record.session.title,
+      divisionName: record.division.name,
+      paymentTreatment: input.paymentTreatment,
+      invitationUrl,
+    });
+    const deliveryAttempts: {
+      readonly channel: "email" | "sms";
+      readonly configured: boolean;
+      readonly sent: boolean;
+      readonly messageId?: string;
+    }[] = [];
+    if (normalizedPhone) {
+      const smsDelivery = await sendTemplateSms({
+        to: normalizedPhone,
+        templateName:
+          process.env.SENT_DM_EVENT_PLAYER_INVITE_TEMPLATE_NAME ??
+          "duna_event_player_invitation",
+        parameters: {
+          player_name: person.displayName,
+          organization_name: organization?.name ?? "Your organizer",
+          event_title: record.session.title,
+          division_name: record.division.name,
+          invite_url: invitationUrl,
+          message,
+        },
+        idempotencyKey: `event-player-invite:${invitationId}`,
+      }).catch(() => ({ configured: true, sent: false }));
+      deliveryAttempts.push({ channel: "sms", ...smsDelivery });
+    }
+    if (!deliveryAttempts.some((attempt) => attempt.sent) && normalizedEmail) {
+      const emailDelivery = await sendTransactionalEmail({
+        to: normalizedEmail,
+        subject: `You are registered for ${record.session.title}`,
+        text: `Hi ${input.identity.kind === "guest" ? input.identity.givenName.trim() : person.displayName},\n\n${message}`,
+        idempotencyKey: `event-player-invite-email:${invitationId}`,
+      }).catch(() => ({ configured: true, sent: false }));
+      deliveryAttempts.push({ channel: "email", ...emailDelivery });
+    }
+    const successfulDelivery = deliveryAttempts.find((attempt) => attempt.sent);
+    deliveryStatus = successfulDelivery
+      ? "sent"
+      : deliveryAttempts.some((attempt) => attempt.configured)
+        ? "failed"
+        : "not-configured";
+    await getDatabase()
+      .update(organizationInvitations)
+      .set({
+        deliveryStatus,
+        deliveryChannel:
+          successfulDelivery?.channel ??
+          deliveryAttempts[0]?.channel ??
+          undefined,
+        deliveryMessageId: successfulDelivery?.messageId,
+        updatedAt: input.now,
+      })
+      .where(eq(organizationInvitations.id, invitationId));
+  } else if (!ready) {
+    invitationUrl = canonicalPublicWebUrl(`/app/team/claim/${claimToken}`);
+  }
+  return {
+    id: teamEntryId,
+    entity: "team-entry",
+    status: ready ? "confirmed" : "attention",
+    personId,
+    displayName: person.displayName,
+    paymentTreatment: input.paymentTreatment,
+    identityStatus:
+      input.identity.kind === "guest" ? "guest-invited" : "connected",
+    invitationUrl,
+    deliveryStatus,
+  };
+}
+
 export async function addManualDivisionEntry(
   input: MutationContext & {
     readonly divisionId: string;

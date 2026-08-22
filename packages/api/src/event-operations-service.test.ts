@@ -1,10 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
   collectRegistrationOrderIds,
+  eventPlayerInvitationMessage,
   planDivisionSelection,
   registrationCanReceiveEventCancellationRefund,
   registrationRefundIsComplete,
 } from "./event-operations-service";
+
+describe("event player invitations", () => {
+  const invitation = {
+    organizationName: "Duna Beach Club",
+    eventTitle: "Summer Classic",
+    divisionName: "Open KOB",
+    invitationUrl: "https://duna.coach/join/organization/claim-token",
+  } as const;
+
+  it("makes complimentary coverage explicit", () => {
+    expect(
+      eventPlayerInvitationMessage({
+        ...invitation,
+        paymentTreatment: "complimentary",
+      }),
+    ).toContain("Your entry is complimentary.");
+  });
+
+  it("makes the reserved spot and payment step explicit", () => {
+    const message = eventPlayerInvitationMessage({
+      ...invitation,
+      paymentTreatment: "to-be-paid",
+    });
+    expect(message).toContain("Your place is reserved");
+    expect(message).toContain("payment is due after you claim it");
+    expect(message).toContain(invitation.invitationUrl);
+  });
+});
 
 const paidAt = (hour: number) =>
   `2026-08-12T${String(hour).padStart(2, "0")}:00:00.000Z`;
