@@ -6,6 +6,8 @@ export const moneySchema = z.object({
   amountMinor: z.number().int(),
   currency: currencySchema,
 });
+// Individual King/Queen of the Beach entries are intentionally one-player teams.
+export const expectedTeamSizeSchema = z.number().int().min(1).max(6);
 export const personRoleSchema = z.enum([
   "player",
   "guardian",
@@ -916,7 +918,7 @@ export const bookingSummarySchema = z.object({
     .object({
       divisionId: z.string().uuid(),
       claimToken: z.string().uuid(),
-      expectedTeamSize: z.number().int().min(2).max(6),
+      expectedTeamSize: expectedTeamSizeSchema,
       paymentMode: z.enum(["self", "team"]),
       status: z.enum([
         "assembling",
@@ -4510,7 +4512,7 @@ export const operatorSessionDetailSchema = z.object({
         fullyPaid: z.boolean(),
         averageRating: z.number().min(1).max(8).optional(),
         qualificationScore: z.number().optional(),
-        expectedTeamSize: z.number().int().min(2).max(6),
+        expectedTeamSize: expectedTeamSizeSchema,
         playersAdded: z.number().int().min(1).max(6),
         claimedPlayers: z.number().int().min(1).max(6),
         paidPlayers: z.number().int().min(0).max(6),
@@ -6682,7 +6684,7 @@ export const teamClaimSummarySchema = z.object({
   divisionId: z.string().uuid(),
   divisionName: z.string(),
   captainName: z.string(),
-  expectedTeamSize: z.number().int().min(2).max(6),
+  expectedTeamSize: expectedTeamSizeSchema,
   claimedPlayers: z.number().int().min(1).max(6),
   paidPlayers: z.number().int().min(0).max(6),
   paymentMode: z.enum(["self", "team"]),
