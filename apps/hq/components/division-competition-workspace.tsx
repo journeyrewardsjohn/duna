@@ -23,10 +23,12 @@ import { useActionState, useMemo, useState } from "react";
 import {
   addManualDivisionEntryAction,
   expandDivisionFieldAction,
-  launchDivisionTournamentAction,
+  finalizeDivisionDrawAction,
+  finalizeDivisionSeedingAction,
   persistDivisionBracketAction,
   reconcileDivisionSelectionAction,
   setTeamSelectionAction,
+  swapDivisionPoolTeamsAction,
   updateDivisionMatchScheduleAction,
   type OperatorActionState,
 } from "@/app/actions";
@@ -113,9 +115,10 @@ function TeamMoveControl({
         type="number"
       />
       <input
+        aria-label="Override note"
         name="reason"
-        type="hidden"
-        value={`Manual ${nextStatus} override from division operations.`}
+        placeholder="Required override note"
+        required
       />
       <button disabled={pending} type="submit">
         {pending
@@ -126,6 +129,70 @@ function TeamMoveControl({
       </button>
       <Notice state={state} />
     </form>
+  );
+}
+
+function PoolSwapControl({
+  divisionId,
+  finalized,
+  poolName,
+  pools,
+  teamId,
+  teamNameById,
+}: {
+  readonly divisionId: string;
+  readonly finalized: boolean;
+  readonly poolName: string;
+  readonly pools: readonly [string, readonly string[]][];
+  readonly teamId: string;
+  readonly teamNameById: ReadonlyMap<string, string>;
+}) {
+  const [state, action, pending] = useActionState(
+    swapDivisionPoolTeamsAction,
+    initialState,
+  );
+  const alternatives = pools.flatMap(([candidatePool, teamIds]) =>
+    candidatePool === poolName
+      ? []
+      : teamIds.map((candidateId) => ({
+          id: candidateId,
+          label: `${teamNameById.get(candidateId) ?? "Team"} · Pool ${candidatePool}`,
+        })),
+  );
+  if (!alternatives.length || finalized) return null;
+  return (
+    <details className="division-pool-swap">
+      <summary>Swap</summary>
+      <form action={action}>
+        <input name="divisionId" type="hidden" value={divisionId} />
+        <input name="teamAId" type="hidden" value={teamId} />
+        <input name="confirmed" type="hidden" value="true" />
+        <label>
+          <span>Swap with</span>
+          <select name="teamBId" required>
+            <option value="">Choose another pool</option>
+            {alternatives.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Override note</span>
+          <textarea
+            name="reason"
+            placeholder="Why is this pool assignment changing?"
+            required
+            rows={2}
+          />
+        </label>
+        <button disabled={pending} type="submit">
+          {pending ? "Saving…" : "Save audited swap"}
+        </button>
+        <Notice state={state} />
+      </form>
+    </details>
   );
 }
 
@@ -327,53 +394,121 @@ function ManualTeamEntryControl({
   );
 }
 
-function TournamentLaunchControl({
+function DivisionLifecycleControl({
   detail,
 }: {
   readonly detail: OperatorDivisionDetail;
 }) {
-  const [state, action, pending] = useActionState(
-    launchDivisionTournamentAction,
+  const [seedState, seedAction, seedPending] = useActionState(
+    finalizeDivisionSeedingAction,
+    initialState,
+  );
+  const [drawState, drawAction, drawPending] = useActionState(
+    finalizeDivisionDrawAction,
     initialState,
   );
   const live =
     detail.session.status === "live" || Boolean(detail.bracket?.liveAt);
+  const registrationClosed = Boolean(
+    live ||
+    (detail.division.registrationClosesAt &&
+      new Date(detail.division.registrationClosesAt).getTime() <= Date.now()),
+  );
+  const seedingFinal = Boolean(detail.division.seedingFinalizedAt);
+  const bracketCurrent = Boolean(
+    detail.bracket &&
+    detail.division.seedingFinalizedAt &&
+    new Date(detail.bracket.createdAt).getTime() >=
+      new Date(detail.division.seedingFinalizedAt).getTime(),
+  );
+  const drawFinal = bracketCurrent && Boolean(detail.bracket?.drawFinalizedAt);
+  const hasPools = Boolean(
+    detail.bracket?.structure.pools &&
+    Object.keys(detail.bracket.structure.pools as Record<string, unknown>)
+      .length,
+  );
   return (
-    <section className={`tournament-launch-control${live ? " is-live" : ""}`}>
-      <span className="tournament-launch-control__mark" aria-hidden>
-        <Play size={20} />
-      </span>
-      <div>
-        <small>{live ? "Tournament live" : "Ready to operate"}</small>
-        <strong>
-          {live
-            ? "Courts are running on the official draw."
-            : "Launch the tournament when the field is final."}
-        </strong>
-        <p>
-          {live
-            ? "Score entries and schedule changes now operate against this versioned field."
-            : detail.bracket
-              ? "Duna will make this bracket version the live operational source of truth."
-              : "Build pools or a bracket first. You can still refine teams and seeds before launch."}
-        </p>
-      </div>
-      {!live && (
-        <form action={action}>
+    <section className={`division-lifecycle${live ? " is-live" : ""}`}>
+      <header>
+        <span className="division-lifecycle__mark" aria-hidden>
+          {live ? <Play size={20} /> : <ShieldCheck size={20} />}
+        </span>
+        <span>
+          <small>
+            {live ? "Official live division" : "Division readiness"}
+          </small>
+          <strong>
+            {live
+              ? "This draw is published to players and Duna Pro."
+              : "Review each decision before the event can go live."}
+          </strong>
+        </span>
+      </header>
+      <ol>
+        <li data-complete={registrationClosed}>
+          <b>{registrationClosed ? <Check size={14} /> : "1"}</b>
+          <span>Registration {registrationClosed ? "closed" : "open"}</span>
+        </li>
+        <li data-complete={seedingFinal}>
+          <b>{seedingFinal ? <Check size={14} /> : "2"}</b>
+          <span>Seeding {seedingFinal ? "final" : "needs review"}</span>
+        </li>
+        <li data-complete={drawFinal}>
+          <b>{drawFinal ? <Check size={14} /> : "3"}</b>
+          <span>
+            {hasPools ? "Pools" : "Draw"} {drawFinal ? "final" : "needs review"}
+          </span>
+        </li>
+      </ol>
+      {!live && registrationClosed && !seedingFinal ? (
+        <form action={seedAction}>
           <input name="divisionId" type="hidden" value={detail.division.id} />
-          <input
-            name="reason"
-            type="hidden"
-            value="Director launched tournament operations."
-          />
-          <input name="confirmed" type="hidden" value="true" />
-          <button disabled={!detail.bracket || pending} type="submit">
-            <Play aria-hidden size={16} />{" "}
-            {pending ? "Launching…" : "Launch tournament"}
+          <label>
+            <span>Final seeding note</span>
+            <input
+              defaultValue="Director reviewed eligibility, payments, seeds, and waitlist order."
+              name="reason"
+              required
+            />
+          </label>
+          <label>
+            <input name="confirmed" required type="checkbox" value="true" />
+            Lock the reviewed seed order
+          </label>
+          <button disabled={seedPending} type="submit">
+            {seedPending ? "Finalizing…" : "Finalize Seeding"}
           </button>
+          <Notice state={seedState} />
         </form>
-      )}
-      <Notice state={state} />
+      ) : null}
+      {!live && seedingFinal && detail.bracket && !drawFinal ? (
+        <form action={drawAction}>
+          <input name="divisionId" type="hidden" value={detail.division.id} />
+          <label>
+            <span>{hasPools ? "Pool" : "Draw"} finalization note</span>
+            <input
+              defaultValue={`Director reviewed every ${hasPools ? "pool assignment" : "matchup"}.`}
+              name="reason"
+              required
+            />
+          </label>
+          <label>
+            <input name="confirmed" required type="checkbox" value="true" />
+            Lock this version for event publication
+          </label>
+          <button disabled={!bracketCurrent || drawPending} type="submit">
+            {drawPending
+              ? "Finalizing…"
+              : hasPools
+                ? "Finalize Pools"
+                : "Finalize Draw"}
+          </button>
+          <Notice state={drawState} />
+        </form>
+      ) : null}
+      {!registrationClosed && !live ? (
+        <p>Close registration from the event page to begin final seeding.</p>
+      ) : null}
     </section>
   );
 }
@@ -439,6 +574,9 @@ export function DivisionCompetitionWorkspace({
     (bracketStructure?.teams ?? []).map((team) => [team.id, team] as const),
   );
   const poolAssignments = Object.entries(bracketStructure?.pools ?? {});
+  const poolTeamNameById = new Map(
+    [...bracketTeamById].map(([id, team]) => [id, team.name] as const),
+  );
   return (
     <main className="hq-page division-competition-page">
       <Link
@@ -466,7 +604,7 @@ export function DivisionCompetitionWorkspace({
         </span>
       </header>
 
-      <TournamentLaunchControl detail={detail} />
+      <DivisionLifecycleControl detail={detail} />
 
       <section className="division-control-grid">
         <form action={seedAction} className="hq-card division-control-card">
@@ -565,6 +703,9 @@ export function DivisionCompetitionWorkspace({
                     Rating {team.averageRating?.toFixed(2) ?? "—"} ·{" "}
                     {team.fullyPaid ? "fully paid" : "payment incomplete"}
                   </small>
+                  {team.selectionLocked && team.selectionReason ? (
+                    <small>Override note: {team.selectionReason}</small>
+                  ) : null}
                 </span>
                 <TeamMoveControl team={team} />
               </article>
@@ -595,6 +736,9 @@ export function DivisionCompetitionWorkspace({
                     Rating {team.averageRating?.toFixed(2) ?? "—"} ·{" "}
                     {team.fullyPaid ? "eligible to move up" : "not fully paid"}
                   </small>
+                  {team.selectionLocked && team.selectionReason ? (
+                    <small>Override note: {team.selectionReason}</small>
+                  ) : null}
                 </span>
                 <TeamMoveControl team={team} />
               </article>
@@ -672,7 +816,14 @@ export function DivisionCompetitionWorkspace({
               required
             />
           </label>
-          <button disabled={bracketPending} type="submit">
+          <button
+            disabled={
+              !detail.division.seedingFinalizedAt ||
+              detail.session.status === "live" ||
+              bracketPending
+            }
+            type="submit"
+          >
             <Trophy aria-hidden size={15} />{" "}
             {bracketPending
               ? "Generating…"
@@ -684,7 +835,8 @@ export function DivisionCompetitionWorkspace({
         </form>
         <p className="division-bracket-builder__safety">
           <ShieldCheck aria-hidden size={15} /> Existing bracket versions and
-          match history are preserved. Only the newest version is operational.
+          match history are preserved. Finalize seeding first; only the newest
+          reviewed version can be published.
         </p>
       </section>
 
@@ -708,6 +860,14 @@ export function DivisionCompetitionWorkspace({
                       <li key={teamId}>
                         <b>{team?.seed ?? "—"}</b>
                         <span>{team?.name ?? "Team to be assigned"}</span>
+                        <PoolSwapControl
+                          divisionId={detail.division.id}
+                          finalized={Boolean(detail.bracket?.drawFinalizedAt)}
+                          poolName={poolName}
+                          pools={poolAssignments}
+                          teamId={teamId}
+                          teamNameById={poolTeamNameById}
+                        />
                       </li>
                     );
                   })}

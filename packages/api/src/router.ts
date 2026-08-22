@@ -326,17 +326,22 @@ import {
   adjustKobHeatScore,
   advanceIndividualKobStage,
   cancelEventWithRefunds,
+  closeEventRegistration,
   completeKobHeat,
   expandDivisionField,
+  finalizeDivisionDraw,
+  finalizeDivisionSeeding,
   launchDivisionTournament,
   loadOperatorDivisionDetail,
   loadTournamentCompetitionSnapshot,
   persistDivisionBracket,
+  publishTournamentLive,
   reconcileDivisionSelection,
   reconcileRegistrationDivisionSelection,
   refundEventRegistration,
   searchEventPlayers,
   setTeamSelection,
+  swapDivisionPoolTeams,
   updateDivisionMatchSchedule,
   updateEventSession,
 } from "./event-operations-service";
@@ -9257,6 +9262,15 @@ const operatorRouter = router({
         divisionId: input.divisionId,
       }),
     ),
+  tournamentCompetition: organizationProcedure("sessions:read")
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .output(tournamentCompetitionSnapshotSchema)
+    .query(({ input }) =>
+      loadTournamentCompetitionSnapshot({
+        sessionId: input.sessionId,
+        visibility: "operator",
+      }),
+    ),
   searchEventPlayers: organizationProcedure("sessions:read")
     .use(
       rateLimitMiddleware({
@@ -9388,6 +9402,147 @@ const operatorRouter = router({
             payment: input.payment,
             cashAmountMinor: input.cashAmountMinor,
             cashReference: input.cashReference,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  closeEventRegistration: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.closeEventRegistration",
+        request: input,
+        ctx,
+        execute: () =>
+          closeEventRegistration({
+            actor: ctx.actor!,
+            sessionId: input.sessionId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  finalizeDivisionSeeding: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.finalizeDivisionSeeding",
+        request: input,
+        ctx,
+        execute: () =>
+          finalizeDivisionSeeding({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  finalizeDivisionDraw: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.finalizeDivisionDraw",
+        request: input,
+        ctx,
+        execute: () =>
+          finalizeDivisionDraw({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  swapDivisionPoolTeams: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        divisionId: z.string().uuid(),
+        teamAId: z.string().uuid(),
+        teamBId: z.string().uuid(),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.swapDivisionPoolTeams",
+        request: input,
+        ctx,
+        execute: () =>
+          swapDivisionPoolTeams({
+            actor: ctx.actor!,
+            divisionId: input.divisionId,
+            teamAId: input.teamAId,
+            teamBId: input.teamBId,
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+          }),
+      }),
+    ),
+  publishTournamentLive: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        participantMessage: z.string().trim().min(10).max(500),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.publishTournamentLive",
+        request: input,
+        ctx,
+        execute: () =>
+          publishTournamentLive({
+            actor: ctx.actor!,
+            sessionId: input.sessionId,
+            participantMessage: input.participantMessage,
             reason: input.reason,
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,

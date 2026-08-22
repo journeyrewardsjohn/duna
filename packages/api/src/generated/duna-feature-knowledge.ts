@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "0d5b4c5d21200c9af714089374e111bbf9386a7dc1e54d567d141847268da467",
+    "192e096278f0fb76ae09887ce0c4d74d4409e44133479adf152f71bb876391dd",
   modules: [
     {
       id: "M1",
@@ -172,6 +172,7 @@ export const generatedDunaFeatureKnowledge = {
     "claimOrganizationInvitation",
     "claimStaffInvitation",
     "claimTeamEntry",
+    "closeEventRegistration",
     "coach",
     "coaches",
     "coachingNotes",
@@ -244,6 +245,8 @@ export const generatedDunaFeatureKnowledge = {
     "expandDivisionField",
     "familyWallets",
     "featureFlags",
+    "finalizeDivisionDraw",
+    "finalizeDivisionSeeding",
     "finalizePaymentCollection",
     "finishLiveVideo",
     "flagMatchHistory",
@@ -330,6 +333,7 @@ export const generatedDunaFeatureKnowledge = {
     "publishSession",
     "publishSessionArrival",
     "publishSessionNote",
+    "publishTournamentLive",
     "publishVenue",
     "publishVenueLayout",
     "queues",
@@ -442,6 +446,7 @@ export const generatedDunaFeatureKnowledge = {
     "stopSessionArrival",
     "submitForm",
     "submitTrainingResponse",
+    "swapDivisionPoolTeams",
     "teamClaim",
     "teammateSearch",
     "terminalConnectionToken",
