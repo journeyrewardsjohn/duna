@@ -7030,11 +7030,20 @@ export async function refreshStripeOnboarding(input: {
     );
   }
 
+  const stripeTaxEnabled =
+    readiness.chargesEnabled &&
+    marketplaceTax.livemode &&
+    marketplaceTax.status === "active";
+  const taxRegistrationStatus =
+    readiness.chargesEnabled && marketplaceTax.livemode
+      ? marketplaceTax.status
+      : ("not-configured" as const);
+
   const changed =
     organization.stripeAccountType !== readiness.accountType ||
     organization.stripeChargesEnabled !== readiness.chargesEnabled ||
-    organization.stripeTaxEnabled !== readiness.chargesEnabled ||
-    organization.taxRegistrationStatus !== marketplaceTax.status;
+    organization.stripeTaxEnabled !== stripeTaxEnabled ||
+    organization.taxRegistrationStatus !== taxRegistrationStatus;
   if (changed) {
     const database = getDatabase();
     await database.batch([
@@ -7043,10 +7052,8 @@ export async function refreshStripeOnboarding(input: {
         .set({
           stripeAccountType: readiness.accountType,
           stripeChargesEnabled: readiness.chargesEnabled,
-          stripeTaxEnabled: readiness.chargesEnabled,
-          taxRegistrationStatus: readiness.chargesEnabled
-            ? marketplaceTax.status
-            : "not-configured",
+          stripeTaxEnabled,
+          taxRegistrationStatus,
           updatedAt: input.now,
         })
         .where(
@@ -7066,13 +7073,15 @@ export async function refreshStripeOnboarding(input: {
           accountId: organization.stripeAccountId,
           accountType: organization.stripeAccountType,
           chargesEnabled: organization.stripeChargesEnabled,
+          stripeTaxEnabled: organization.stripeTaxEnabled,
           marketplaceTaxStatus: organization.taxRegistrationStatus,
         }),
         afterHash: stableHash({
           accountId: readiness.accountId,
           accountType: readiness.accountType,
           chargesEnabled: readiness.chargesEnabled,
-          marketplaceTaxStatus: marketplaceTax.status,
+          stripeTaxEnabled,
+          marketplaceTaxStatus: taxRegistrationStatus,
         }),
         reason: readiness.chargesEnabled
           ? "Stripe confirmed that the connected account can receive Duna sandbox payments."

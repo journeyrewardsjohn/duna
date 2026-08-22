@@ -94,7 +94,12 @@ import {
   requireActiveMembershipOffer,
   requireMembershipOfferCanDeactivate,
 } from "./organization-membership-policy";
-import { getStripeClient, isStripeConfigured, refundPayment } from "./payments";
+import {
+  automaticTaxEnabledInCurrentStripeMode,
+  getStripeClient,
+  isStripeConfigured,
+  refundPayment,
+} from "./payments";
 import {
   generateBookableSessionOccurrences,
   parseSessionDeliveryConfiguration,
@@ -5564,6 +5569,12 @@ export async function updateOrganizationCommerceSettings(input: {
       "Finish payment onboarding before turning on automatic tax.",
     );
   }
+  const stripeLiveMode = automaticTaxEnabledInCurrentStripeMode(true);
+  const stripeTaxEnabled =
+    stripeLiveMode &&
+    input.stripeTaxEnabled &&
+    organization.stripeChargesEnabled &&
+    organization.taxRegistrationStatus === "active";
   const values = {
     legalName: input.legalName?.trim() || undefined,
     addressLine1: input.addressLine1.trim(),
@@ -5575,12 +5586,11 @@ export async function updateOrganizationCommerceSettings(input: {
     googlePlaceId: input.googlePlaceId?.trim() || undefined,
     latitude: input.latitude,
     longitude: input.longitude,
-    stripeTaxEnabled: organization.stripeChargesEnabled,
-    taxRegistrationStatus: organization.stripeChargesEnabled
-      ? organization.taxRegistrationStatus === "active"
-        ? ("active" as const)
-        : ("pending" as const)
-      : ("not-configured" as const),
+    stripeTaxEnabled,
+    taxRegistrationStatus:
+      stripeLiveMode && organization.stripeChargesEnabled
+        ? organization.taxRegistrationStatus
+        : ("not-configured" as const),
   };
   await database.batch([
     database
@@ -5616,7 +5626,7 @@ export async function updateOrganizationCommerceSettings(input: {
   return {
     id: organizationId,
     entity: "organization-settings",
-    status: input.stripeTaxEnabled ? "pending" : "saved",
+    status: stripeTaxEnabled ? "pending" : "saved",
   };
 }
 
