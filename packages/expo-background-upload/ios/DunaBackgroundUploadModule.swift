@@ -291,7 +291,7 @@ private final class DunaBackgroundUploadCoordinator: NSObject, URLSessionTaskDel
     // foreground reconciliation; a background launch restores only after the
     // subscriber synchronously registered its handler above.
     restoreSessions()
-    queue.sync {
+    return queue.sync {
       manifests.values
         .filter { $0.uploadId == uploadId && $0.status == "completed" && $0.etag != nil }
         .sorted { $0.partNumber < $1.partNumber }
