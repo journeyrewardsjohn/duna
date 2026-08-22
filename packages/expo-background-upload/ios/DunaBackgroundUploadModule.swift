@@ -295,7 +295,7 @@ private final class DunaBackgroundUploadCoordinator: NSObject, URLSessionTaskDel
       manifests.values
         .filter { $0.uploadId == uploadId && $0.status == "completed" && $0.etag != nil }
         .sorted { $0.partNumber < $1.partNumber }
-        .compactMap { manifest in
+        .compactMap { manifest -> [String: Any]? in
           guard let etag = manifest.etag else { return nil }
           return [
             "uploadId": manifest.uploadId,
@@ -413,11 +413,14 @@ private final class DunaBackgroundUploadCoordinator: NSObject, URLSessionTaskDel
       .volumeAvailableCapacityForImportantUsageKey,
       .volumeAvailableCapacityKey,
     ])
-    let available = Int64(
-      values.volumeAvailableCapacityForImportantUsage
-        ?? values.volumeAvailableCapacity
-        ?? 0
-    )
+    let available: Int64
+    if let importantCapacity = values.volumeAvailableCapacityForImportantUsage {
+      available = importantCapacity
+    } else if let fallbackCapacity = values.volumeAvailableCapacity {
+      available = Int64(fallbackCapacity)
+    } else {
+      available = 0
+    }
     // Leave a modest staging margin so a large multipart part cannot exhaust
     // app storage mid-copy and corrupt a resumable draft.
     let required = Int64(length) + 8 * 1_024 * 1_024
@@ -450,7 +453,7 @@ private final class DunaBackgroundUploadCoordinator: NSObject, URLSessionTaskDel
   }
 
   private func saveManifests() {
-    guard let url = manifestURL(), let data = try? JSONEncoder().encode(manifests) else { return }
+    guard var url = manifestURL(), let data = try? JSONEncoder().encode(manifests) else { return }
     try? data.write(to: url, options: .atomic)
     var resourceValues = URLResourceValues()
     resourceValues.isExcludedFromBackup = true
