@@ -38,7 +38,6 @@ import {
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import {
   fulfillPaidCatalogOrder,
-  postCatalogPaymentCapture,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
 import { reconcileTeamEntryPayment } from "./checkout";
@@ -75,6 +74,7 @@ import {
   processMessagingPushReceipts,
 } from "./messaging-notifications";
 import {
+  postReconciledPaymentJournal,
   recordPaymentFundSchedule,
   recordStripePaymentLineage,
   synchronizeMoneyDispute,
@@ -935,7 +935,19 @@ async function applyCatalogInstallmentInvoice(input: {
     lineage,
     now: input.occurredAt,
   });
-  await postCatalogPaymentCapture(order.id, paymentId, input.occurredAt);
+  if (lineage) {
+    const payment = await database.query.payments.findFirst({
+      where: eq(payments.id, paymentId),
+    });
+    if (payment) {
+      await postReconciledPaymentJournal({
+        order,
+        payment,
+        lineage,
+        now: input.occurredAt,
+      });
+    }
+  }
   await database.insert(auditLog).values({
     organizationId: order.organizationId,
     actorType: "system",
@@ -1593,6 +1605,14 @@ async function processStripeWorkflow(
         : undefined,
       now: occurredAt,
     });
+    if (capturedPayment && lineage) {
+      await postReconciledPaymentJournal({
+        order,
+        payment: capturedPayment,
+        lineage,
+        now: occurredAt,
+      });
+    }
   } else if (action === "checkout.completed") {
     const mode = optionalString(object, "mode");
     if (mode === "subscription") {
