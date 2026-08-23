@@ -28,6 +28,7 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { mobileControl, mobileGrid } from "@duna/ui/mobile";
 import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
@@ -118,8 +119,12 @@ import { OrganizationExperienceModal } from "./organization-experience";
 import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
+import { DunaIcon, type DunaIconName } from "./duna-icon";
 import {
-  LivePlayerRail,
+  playerPrimaryDestination,
+  type PlayerPrimaryDestination,
+} from "./player-navigation";
+import {
   PlayerPickerModal,
   PlayerProfileProvider,
   PlayerProfileSheet,
@@ -172,6 +177,8 @@ import {
 const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaPlayerAppIcon = require("./assets/icon.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
@@ -480,28 +487,6 @@ const MessagingNavigationContext = createContext<{
   unreadCount: 0,
 });
 
-function PaperPlaneIcon({ color }: { readonly color: string }) {
-  return (
-    <Svg accessibilityElementsHidden height={20} viewBox="0 0 24 24" width={20}>
-      <Path
-        d="M21.3 2.8 3.2 9.6c-1.2.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.7.1 1 .8 1 .5 0 .8-.2 1-.5l2.6-2.5 5.3 3.9c1 .6 1.7.3 1.9-.9l3.1-14.8c.4-1.5-.6-2.2-1.9-1.6Z"
-        fill="none"
-        stroke={color}
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-      />
-      <Path
-        d="m7.7 12.6 11-6.8-8.5 8.2"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-      />
-    </Svg>
-  );
-}
-
 function ThemeButton() {
   const { preference, theme, toggle } = useContext(ThemeContext);
   return (
@@ -606,18 +591,6 @@ type CourtBookingRequest = {
   readonly date: string;
   readonly durationMinutes: number;
 };
-
-const tabs: readonly {
-  key: Tab;
-  label: string;
-  icon: string;
-}[] = [
-  { key: "home", label: "Home", icon: "⌂" },
-  { key: "discover", label: "Discover", icon: "⌖" },
-  { key: "play", label: "Play", icon: "＋" },
-  { key: "plans", label: "Plans", icon: "◫" },
-  { key: "you", label: "You", icon: "◎" },
-];
 
 function displayError(reason: unknown): string {
   return reason instanceof Error
@@ -1033,14 +1006,6 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
       </View>
       <View style={styles.headerActions}>
         <ThemeButton />
-        <Pressable
-          accessibilityLabel="Messages"
-          onPress={() => messaging.open(false)}
-          style={styles.askButton}
-        >
-          <PaperPlaneIcon color={activePalette.aqua} />
-          {messaging.unreadCount > 0 && <View style={styles.notificationDot} />}
-        </Pressable>
         <Pressable
           accessibilityLabel="Your profile"
           onPress={messaging.openProfile}
@@ -2200,39 +2165,27 @@ function HomeScreen({
     .toUpperCase();
   const quickActions: readonly {
     readonly key: HomeQuickAction;
-    readonly icon: string;
+    readonly icon: DunaIconName;
     readonly label: string;
     readonly meta: string;
   }[] = [
     {
-      key: "upload-score",
-      icon: "↥",
-      label: "Upload a Score",
-      meta: "Report a match you played",
-    },
-    {
       key: "find-match",
-      icon: "⌖",
-      label: "Find a Match",
-      meta: "Open play nearby",
-    },
-    {
-      key: "book-court",
-      icon: "▦",
-      label: "Book a Court",
-      meta: "Live availability",
-    },
-    {
-      key: "join-event",
-      icon: "✦",
-      label: "Join an Event",
-      meta: "Tournaments + clinics",
+      icon: "search",
+      label: "Find a match",
+      meta: "See open play nearby",
     },
     {
       key: "record-video",
-      icon: "●",
-      label: "Record Video",
+      icon: "camera",
+      label: "Record a game",
       meta: "Open Duna Vision",
+    },
+    {
+      key: "find-coach",
+      icon: "user",
+      label: "Find a coach",
+      meta: "Profiles and sessions",
     },
   ];
 
@@ -2243,7 +2196,6 @@ function HomeScreen({
         showsVerticalScrollIndicator={false}
       >
         <AppHeader />
-        <LivePlayerRail palette={colors} />
         <View style={styles.homeWelcome}>
           <View style={styles.flex}>
             <Text style={styles.homeWelcomeDate}>
@@ -2444,8 +2396,9 @@ function HomeScreen({
         )}
 
         <View style={styles.homeQuickGrid}>
-          {quickActions.map((action, index) => (
+          {quickActions.map((action) => (
             <Pressable
+              accessibilityHint={action.meta}
               accessibilityRole="button"
               key={action.key}
               onPress={() => {
@@ -2454,42 +2407,13 @@ function HomeScreen({
               }}
               style={({ pressed }) => [
                 styles.homeQuickAction,
-                index === 0 && styles.homeQuickActionPrimary,
-                index === 4 && styles.homeQuickActionWarm,
                 pressed && styles.homeQuickActionPressed,
               ]}
             >
-              <View
-                style={[
-                  styles.homeQuickIcon,
-                  index === 0 && styles.homeQuickIconPrimary,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.homeQuickIconText,
-                    index === 0 && styles.homeQuickIconTextPrimary,
-                  ]}
-                >
-                  {action.icon}
-                </Text>
+              <View style={styles.homeQuickIcon}>
+                <DunaIcon color={colors.aqua} name={action.icon} size={22} />
               </View>
-              <Text
-                style={[
-                  styles.homeQuickLabel,
-                  index === 0 && styles.homeQuickLabelPrimary,
-                ]}
-              >
-                {action.label}
-              </Text>
-              <Text
-                style={[
-                  styles.homeQuickMeta,
-                  index === 0 && styles.homeQuickMetaPrimary,
-                ]}
-              >
-                {action.meta}
-              </Text>
+              <Text style={styles.homeQuickLabel}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -14511,62 +14435,238 @@ function PickupModal({
 
 function TabBar({
   active,
+  onDunaAi,
   onChange,
+  onQuickActions,
+  unreadCount,
 }: {
   readonly active: Tab;
-  readonly onChange: (tab: Tab) => void;
+  readonly onDunaAi: () => void;
+  readonly onChange: (destination: PlayerPrimaryDestination) => void;
+  readonly onQuickActions: () => void;
+  readonly unreadCount: number;
 }) {
   const insets = useSafeAreaInsets();
-  const selectedTab =
-    active === "health" ||
-    active === "wallet" ||
-    active === "predictions" ||
-    active === "performance" ||
-    active === "messages"
-      ? "you"
-      : active === "training"
-        ? "plans"
-        : active === "score" || active === "video" || active === "coaches"
-          ? "play"
-          : active;
+  const selected = playerPrimaryDestination(active);
+  const destinationButton = (
+    destination: PlayerPrimaryDestination,
+    label: string,
+    icon: DunaIconName,
+  ) => {
+    const isSelected = selected === destination;
+    return (
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isSelected }}
+        key={destination}
+        onPress={() => {
+          selectionHaptic();
+          onChange(destination);
+        }}
+        style={[styles.tabItem, isSelected && styles.tabItemActive]}
+      >
+        <View style={styles.tabIconWrap}>
+          <DunaIcon
+            color={isSelected ? colors.bone : colors.muted}
+            name={icon}
+            size={21}
+            strokeWidth={isSelected ? 2.25 : 1.75}
+          />
+          {destination === "messages" && unreadCount > 0 && (
+            <View style={styles.tabUnreadDot} />
+          )}
+        </View>
+        {isSelected && <Text style={styles.tabLabel}>{label}</Text>}
+      </Pressable>
+    );
+  };
+
   return (
-    <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
-      {tabs.map((tab) => (
+    <View
+      style={[styles.tabBarPosition, { bottom: Math.max(10, insets.bottom) }]}
+    >
+      <View pointerEvents="none" style={styles.tabBarTint} />
+      <View style={styles.tabBar}>
+        {destinationButton("home", "Home", "home")}
+        {destinationButton("calendar", "Calendar", "calendar")}
         <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedTab === tab.key }}
-          key={tab.key}
+          accessibilityHint="Opens your full-screen Duna AI copilot"
+          accessibilityLabel="Duna AI"
+          accessibilityRole="button"
           onPress={() => {
             selectionHaptic();
-            onChange(tab.key);
+            onDunaAi();
           }}
+          style={styles.tabAiButton}
+        >
+          <View style={styles.tabAiHalo}>
+            <Image source={dunaPlayerAppIcon} style={styles.tabAiImage} />
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Opens contextual Player actions"
+          accessibilityLabel="Quick actions"
+          accessibilityRole="button"
+          onPress={() => {
+            selectionHaptic();
+            onQuickActions();
+          }}
+          style={styles.tabItem}
+        >
+          <DunaIcon color={colors.muted} name="plus" size={23} />
+        </Pressable>
+        {destinationButton("messages", "Messages", "message")}
+      </View>
+    </View>
+  );
+}
+
+function QuickActionsSheet({
+  onAction,
+  onClose,
+  visible,
+}: {
+  readonly onAction: (action: HomeQuickAction) => void;
+  readonly onClose: () => void;
+  readonly visible: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const actions: readonly {
+    readonly detail: string;
+    readonly icon: DunaIconName;
+    readonly key: HomeQuickAction;
+    readonly label: string;
+  }[] = [
+    {
+      detail: "Capture with Duna Vision",
+      icon: "camera",
+      key: "record-video",
+      label: "Record a game",
+    },
+    {
+      detail: "Add a completed result",
+      icon: "score",
+      key: "upload-score",
+      label: "Upload a score",
+    },
+    {
+      detail: "See open play nearby",
+      icon: "search",
+      key: "find-match",
+      label: "Find a match",
+    },
+    {
+      detail: "Invite players and open spots",
+      icon: "plus",
+      key: "create-match",
+      label: "Create a match",
+    },
+    {
+      detail: "View live availability",
+      icon: "calendar",
+      key: "book-court",
+      label: "Book a court",
+    },
+    {
+      detail: "Profiles and training sessions",
+      icon: "user",
+      key: "find-coach",
+      label: "Find a coach",
+    },
+    {
+      detail: "Tournaments, clinics, and play",
+      icon: "sparkles",
+      key: "join-event",
+      label: "Join an event",
+    },
+    {
+      detail: "Live coverage and matches",
+      icon: "video",
+      key: "watch-pros",
+      label: "Watch the pros",
+    },
+    {
+      detail: "Search all of Duna",
+      icon: "search",
+      key: "search",
+      label: "Search",
+    },
+  ];
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <Pressable onPress={onClose} style={styles.quickSheetBackdrop}>
+        <Pressable
+          accessibilityViewIsModal
+          onPress={(event) => event.stopPropagation()}
           style={[
-            styles.tabItem,
-            tab.key === "play" && styles.tabItemCenter,
-            selectedTab === tab.key && styles.tabItemActive,
+            styles.quickSheet,
+            { paddingBottom: Math.max(mobileGrid[6], insets.bottom) },
           ]}
         >
-          <Text
-            style={[
-              styles.tabIcon,
-              selectedTab === tab.key && styles.tabActive,
-              tab.key === "play" && styles.tabCenterIcon,
-            ]}
+          <View style={styles.quickSheetHandle} />
+          <View style={styles.quickSheetHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.quickSheetEyebrow}>QUICK ACTIONS</Text>
+              <Text style={styles.quickSheetTitle}>What do you need?</Text>
+              <Text style={styles.quickSheetBody}>
+                Start the job here. Duna keeps the full workflow and review
+                steps behind each action.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close quick actions"
+              onPress={onClose}
+              style={styles.quickSheetClose}
+            >
+              <DunaIcon color={colors.bone} name="close" size={20} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.quickSheetList}
+            showsVerticalScrollIndicator={false}
           >
-            {tab.icon}
-          </Text>
-          <Text
-            style={[
-              styles.tabLabel,
-              selectedTab === tab.key && styles.tabActive,
-              tab.key === "play" && styles.tabCenterLabel,
-            ]}
-          >
-            {tab.label}
-          </Text>
+            {actions.map((action) => (
+              <Pressable
+                accessibilityHint={action.detail}
+                accessibilityRole="button"
+                key={action.key}
+                onPress={() => {
+                  selectionHaptic();
+                  onClose();
+                  setTimeout(() => onAction(action.key), 180);
+                }}
+                style={({ pressed }) => [
+                  styles.quickSheetAction,
+                  pressed && styles.homeQuickActionPressed,
+                ]}
+              >
+                <View style={styles.quickSheetActionIcon}>
+                  <DunaIcon color={colors.aqua} name={action.icon} size={22} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.quickSheetActionTitle}>
+                    {action.label}
+                  </Text>
+                  <Text style={styles.quickSheetActionDetail}>
+                    {action.detail}
+                  </Text>
+                </View>
+                <DunaIcon color={colors.muted} name="chevron-right" size={18} />
+              </Pressable>
+            ))}
+          </ScrollView>
         </Pressable>
-      ))}
-    </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -14712,6 +14812,7 @@ function DunaApp() {
   const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
@@ -15057,7 +15158,36 @@ function DunaApp() {
                   status={videoTransfer}
                 />
               )}
-              {tab !== "messages" && <TabBar active={tab} onChange={setTab} />}
+              {tab !== "messages" && (
+                <TabBar
+                  active={tab}
+                  onChange={(destination) => {
+                    if (destination === "calendar") {
+                      setTab("plans");
+                      return;
+                    }
+                    if (destination === "messages") {
+                      setMessagesConversationId(undefined);
+                      setMessagesOpenToSupport(false);
+                      setTab("messages");
+                      return;
+                    }
+                    setTab("home");
+                  }}
+                  onDunaAi={() => {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(true);
+                    setTab("messages");
+                  }}
+                  onQuickActions={() => setQuickActionsOpen(true)}
+                  unreadCount={messagingUnreadCount}
+                />
+              )}
+              <QuickActionsSheet
+                onAction={openHomeAction}
+                onClose={() => setQuickActionsOpen(false)}
+                visible={quickActionsOpen}
+              />
               <BookingModal
                 eventIndex={eventIndex}
                 onClose={() => setEventIndex(null)}
@@ -17258,7 +17388,10 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       fontWeight: "700",
     },
-    screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
+    screenContent: {
+      paddingBottom: mobileGrid[12] + mobileGrid[12] + mobileGrid[4],
+      paddingHorizontal: mobileControl.pageInset,
+    },
     toggleRow: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.03),
@@ -17271,27 +17404,31 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: 22,
-      paddingTop: 10,
+      paddingBottom: mobileGrid[3],
+      paddingTop: mobileGrid[2],
     },
-    headerActions: { flexDirection: "row", gap: 8 },
+    headerActions: { flexDirection: "row", gap: mobileGrid[2] },
     themeButton: {
       alignItems: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 18,
+      borderRadius: mobileControl.pillRadius,
       borderWidth: 1,
-      height: 36,
+      height: mobileControl.minimumTarget,
       justifyContent: "center",
-      width: 36,
+      width: mobileControl.minimumTarget,
     },
     themeButtonText: {
       color: colors.bone,
       fontSize: 17,
       lineHeight: 20,
     },
-    wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
-    wordmarkImage: { height: 35, width: 104 },
+    wordmark: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+    },
+    wordmarkImage: { height: mobileGrid[7], width: 104 },
     proPill: {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
@@ -17309,38 +17446,16 @@ function createStyles(palette: Palette) {
       letterSpacing: 1.2,
       marginTop: 5,
     },
-    askButton: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.accentRgb, 0.09),
-      borderColor: rgba(colors.accentRgb, 0.18),
-      borderRadius: 19,
-      borderWidth: 1,
-      height: 38,
-      justifyContent: "center",
-      width: 38,
-    },
-    askButtonText: { color: colors.aqua, fontSize: 17 },
     avatarButton: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
-      borderRadius: 19,
-      height: 38,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
       justifyContent: "center",
       position: "relative",
-      width: 38,
+      width: mobileControl.minimumTarget,
     },
-    avatarText: { color: colors.bone, fontSize: 12, fontWeight: "800" },
-    notificationDot: {
-      backgroundColor: colors.danger,
-      borderColor: colors.ink,
-      borderRadius: 5,
-      borderWidth: 2,
-      height: 9,
-      position: "absolute",
-      right: 0,
-      top: 0,
-      width: 9,
-    },
+    avatarText: { color: colors.bone, fontSize: 14, fontWeight: "700" },
     homeWelcome: {
       alignItems: "flex-start",
       flexDirection: "row",
@@ -17355,16 +17470,16 @@ function createStyles(palette: Palette) {
     },
     homeWelcomeTitle: {
       color: colors.bone,
-      fontSize: 32,
-      fontWeight: "800",
-      letterSpacing: -1.5,
+      fontSize: 30,
+      fontWeight: "700",
+      letterSpacing: -1,
       lineHeight: 35,
       marginTop: 5,
     },
     homeWelcomeBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 21,
       marginTop: 7,
       maxWidth: 300,
     },
@@ -17380,8 +17495,8 @@ function createStyles(palette: Palette) {
     },
     homeRatingBadgeValue: {
       color: colors.bone,
-      fontFamily: "Archivo-Table",
       fontSize: 17,
+      fontVariant: ["tabular-nums"],
       letterSpacing: -0.7,
     },
     homeRatingBadgeLabel: {
@@ -17393,54 +17508,36 @@ function createStyles(palette: Palette) {
     },
     homeQuickGrid: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 10,
-      marginBottom: 14,
+      gap: mobileGrid[2],
+      marginBottom: mobileGrid[4],
     },
     homeQuickAction: {
+      alignItems: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
-      borderRadius: 22,
+      borderRadius: mobileControl.cardRadius,
       borderWidth: 1,
-      minHeight: 132,
-      padding: 14,
-      width: "48%",
-    },
-    homeQuickActionPrimary: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.aqua,
-    },
-    homeQuickActionWarm: {
-      backgroundColor: rgba(colors.flareRgb, 0.08),
-      borderColor: rgba(colors.flareRgb, 0.16),
+      flex: 1,
+      justifyContent: "center",
+      minHeight: mobileGrid[12] + mobileGrid[7],
+      padding: mobileGrid[2],
     },
     homeQuickActionPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
     homeQuickIcon: {
       alignItems: "center",
       backgroundColor: rgba(colors.accentRgb, 0.1),
-      borderRadius: 14,
-      height: 38,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
       justifyContent: "center",
-      marginBottom: 13,
-      width: 38,
+      marginBottom: mobileGrid[2],
+      width: mobileGrid[9],
     },
-    homeQuickIconPrimary: { backgroundColor: rgba(colors.whiteRgb, 0.18) },
-    homeQuickIconText: {
-      color: colors.aqua,
-      fontSize: 20,
-      fontWeight: "800",
-      lineHeight: 23,
-    },
-    homeQuickIconTextPrimary: { color: colors.onAccent },
     homeQuickLabel: {
       color: colors.bone,
-      fontSize: 15,
-      fontWeight: "800",
-      letterSpacing: -0.4,
+      fontSize: 13,
+      fontWeight: "700",
+      textAlign: "center",
     },
-    homeQuickLabelPrimary: { color: colors.onAccent },
-    homeQuickMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
-    homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
     coachFinderBack: {
       alignSelf: "flex-start",
       marginBottom: 18,
@@ -23074,48 +23171,176 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       padding: 14,
     },
+    tabBarPosition: {
+      left: mobileControl.pageInset,
+      position: "absolute",
+      right: mobileControl.pageInset,
+      zIndex: 90,
+    },
+    tabBarTint: {
+      backgroundColor: rgba(colors.accentRgb, 0.12),
+      borderRadius: mobileControl.sheetRadius,
+      bottom: -4,
+      left: mobileGrid[2],
+      position: "absolute",
+      right: mobileGrid[2],
+      top: 4,
+    },
     tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.96),
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 28,
+      alignItems: "center",
+      backgroundColor: rgba(colors.depthRgb, 0.88),
+      borderColor: rgba(colors.whiteRgb, 0.58),
+      borderRadius: mobileControl.sheetRadius,
       borderWidth: 1,
       flexDirection: "row",
-      left: 18,
-      paddingBottom: 7,
-      paddingHorizontal: 6,
-      paddingTop: 7,
-      position: "absolute",
-      right: 18,
+      minHeight: mobileGrid[12] + mobileGrid[1],
+      paddingHorizontal: mobileGrid[1],
+      paddingVertical: mobileGrid[1],
       shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.14,
-      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.16,
+      shadowRadius: 22,
       elevation: 12,
     },
     tabItem: {
       alignItems: "center",
-      borderRadius: 18,
-      flex: 1,
-      gap: 3,
-      minHeight: 47,
+      borderRadius: mobileControl.pillRadius,
+      flex: 0.86,
+      flexDirection: "row",
+      gap: mobileGrid[1],
+      minHeight: mobileControl.minimumTarget,
       justifyContent: "center",
-      paddingVertical: 5,
+      paddingHorizontal: mobileGrid[1],
       position: "relative",
     },
-    tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
-    tabItemCenter: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.canvas,
-      borderRadius: 24,
-      borderWidth: 4,
-      marginTop: -18,
-      minHeight: 60,
+    tabItemActive: {
+      backgroundColor: rgba(colors.overlayRgb, 0.08),
+      flex: 1.28,
     },
-    tabIcon: { color: colors.muted, fontSize: 18 },
-    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-    tabActive: { color: colors.aqua },
-    tabCenterIcon: { color: colors.onAccent, fontSize: 22 },
-    tabCenterLabel: { color: colors.onAccent, fontWeight: "900" },
+    tabIconWrap: { position: "relative" },
+    tabUnreadDot: {
+      backgroundColor: colors.flare,
+      borderColor: colors.depth,
+      borderRadius: mobileGrid[1],
+      borderWidth: 2,
+      height: mobileGrid[2],
+      position: "absolute",
+      right: -5,
+      top: -5,
+      width: mobileGrid[2],
+    },
+    tabLabel: { color: colors.bone, fontSize: 12, fontWeight: "700" },
+    tabAiButton: {
+      alignItems: "center",
+      flex: 1.05,
+      justifyContent: "center",
+      marginTop: -mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[2],
+    },
+    tabAiHalo: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderColor: colors.depth,
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: 5,
+      height: mobileGrid[12],
+      justifyContent: "center",
+      overflow: "hidden",
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 7 },
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      width: mobileGrid[12],
+    },
+    tabAiImage: { height: mobileGrid[10], width: mobileGrid[10] },
+    quickSheetBackdrop: {
+      backgroundColor: rgba(colors.inkRgb, 0.42),
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    quickSheet: {
+      backgroundColor: colors.canvas,
+      borderTopLeftRadius: mobileControl.sheetRadius,
+      borderTopRightRadius: mobileControl.sheetRadius,
+      maxHeight: "82%",
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[2],
+    },
+    quickSheetHandle: {
+      alignSelf: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.18),
+      borderRadius: mobileControl.pillRadius,
+      height: 5,
+      marginBottom: mobileGrid[4],
+      width: mobileGrid[8],
+    },
+    quickSheetHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      marginBottom: mobileGrid[4],
+    },
+    quickSheetEyebrow: {
+      color: colors.sand,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    quickSheetTitle: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "700",
+      letterSpacing: -0.8,
+      lineHeight: 34,
+      marginTop: mobileGrid[1],
+    },
+    quickSheetBody: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 21,
+      marginTop: mobileGrid[1],
+    },
+    quickSheetClose: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: 1,
+      height: mobileControl.minimumTarget,
+      justifyContent: "center",
+      width: mobileControl.minimumTarget,
+    },
+    quickSheetList: { gap: mobileGrid[2], paddingBottom: mobileGrid[3] },
+    quickSheetAction: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[2],
+      padding: mobileGrid[3],
+    },
+    quickSheetActionIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[10],
+      justifyContent: "center",
+      width: mobileGrid[10],
+    },
+    quickSheetActionTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    quickSheetActionDetail: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     hostedReviewHeader: {

@@ -50,6 +50,7 @@ import {
 } from "./messaging-notifications";
 import { dunaWebUrl } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
+import { DunaIcon } from "./duna-icon";
 
 export interface MessagingPalette {
   readonly canvas: string;
@@ -73,7 +74,7 @@ interface PlayerMessagingScreenProps {
   readonly palette: MessagingPalette;
 }
 
-type InboxFilter = "all" | "unread" | "organizations" | "events" | "followers";
+type MessagingSpace = "assistant" | "messages";
 
 interface SelectedAttachment {
   readonly id: string;
@@ -797,8 +798,11 @@ export function PlayerMessagingScreen({
   const [attachments, setAttachments] = useState<readonly SelectedAttachment[]>(
     [],
   );
-  const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const [inboxSearch, setInboxSearch] = useState("");
+  const [messagingSpace, setMessagingSpace] = useState<MessagingSpace>(
+    initialSupport ? "assistant" : "messages",
+  );
+  const [assistantMenuOpen, setAssistantMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -1164,26 +1168,33 @@ export function PlayerMessagingScreen({
             ),
           ].some((value) => value?.toLowerCase().includes(query))
         : true;
-      if (!matchesQuery) return false;
-      if (inboxFilter === "all") return true;
-      if (inboxFilter === "unread") return conversation.unreadCount > 0;
-      if (inboxFilter === "organizations") {
-        return conversation.participants.some(
-          (participant) => participant.type === "organization",
-        );
-      }
-      if (inboxFilter === "events") {
-        return (
-          Boolean(conversation.context) ||
-          ["event", "division", "league"].includes(conversation.type)
-        );
-      }
-      return (
-        !conversation.context &&
-        ["dm", "group", "broadcast"].includes(conversation.type)
-      );
+      return matchesQuery && conversation.type !== "support";
     });
-  }, [inbox?.conversations, inboxFilter, inboxSearch]);
+  }, [inbox?.conversations, inboxSearch]);
+
+  const supportConversations = useMemo(
+    () =>
+      (inbox?.conversations ?? []).filter(
+        (conversation) => conversation.type === "support",
+      ),
+    [inbox?.conversations],
+  );
+
+  const selectMessagingSpace = useCallback(
+    (nextSpace: MessagingSpace) => {
+      Keyboard.dismiss();
+      setMessagingSpace(nextSpace);
+      setAttachments([]);
+      if (nextSpace === "messages") {
+        setSelectedId(undefined);
+        setDetail(undefined);
+        return;
+      }
+      const support = supportConversations[0];
+      if (support) setSelectedId(support.id);
+    },
+    [supportConversations],
+  );
 
   const addSelectedAttachments = useCallback(
     (
@@ -1389,172 +1400,175 @@ export function PlayerMessagingScreen({
     }
   }, [attachments, client, mode, selectedId]);
 
-  const send = useCallback(async () => {
-    const body = draft.trim();
-    if ((!body && attachments.length === 0) || !selectedId || sending) return;
-    setSending(true);
-    setError(undefined);
-    const clientMessageId = Crypto.randomUUID();
-    let attachmentUploadIds: string[] = [];
-    try {
-      attachmentUploadIds = await uploadSelectedAttachments();
-      const input: SendMessageInput = {
-        conversationId: selectedId,
-        clientMessageId,
-        kind: "text",
-        ...(body ? { body } : {}),
-        widgets: [],
-        attachmentUploadIds,
-      };
-      const optimistic: ConversationMessage = {
-        id: input.clientMessageId,
-        conversationId: input.conversationId,
-        clientMessageId: input.clientMessageId,
-        seq: (detail?.messages.at(-1)?.seq ?? 0) + 1,
-        sender: principal,
-        kind: "text",
-        ...(body ? { body } : {}),
-        widgets: [],
-        attachments: attachments.map((attachment) => ({
-          id: attachment.id,
-          kind: attachment.kind,
-          mediaType: attachment.mediaType,
-          fileName: attachment.fileName,
-          byteSize: attachment.byteSize,
-          safetyStatus: detail?.conversation.safety.screeningRequired
-            ? "pending"
-            : "safe",
-          downloadUrl: attachment.uri,
-        })),
-        status: detail?.conversation.safety.screeningRequired
-          ? "screening"
-          : "published",
-        moderationState: detail?.conversation.safety.screeningRequired
-          ? "screening"
-          : "not-required",
-        createdAt: new Date().toISOString(),
-      };
-      setDraft("");
-      setDetail((current) =>
-        current
-          ? { ...current, messages: [...current.messages, optimistic] }
-          : current,
-      );
-      if (mode === "preview" || !client) {
-        if (
-          detail?.conversation.type === "support" &&
-          attachments.length === 0
-        ) {
-          setTimeout(() => {
-            setDetail((current) =>
-              current
-                ? {
-                    ...current,
-                    messages: [
-                      ...current.messages,
-                      {
-                        ...optimistic,
-                        id: pairedResponseId(input.clientMessageId),
-                        clientMessageId: pairedResponseId(
-                          input.clientMessageId,
-                        ),
-                        seq: optimistic.seq + 1,
-                        sender: {
-                          type: "agent",
-                          id: "duna-ai-support",
-                          displayName: "Duna Support",
+  const send = useCallback(
+    async (bodyOverride?: string) => {
+      const body = (bodyOverride ?? draft).trim();
+      if ((!body && attachments.length === 0) || !selectedId || sending) return;
+      setSending(true);
+      setError(undefined);
+      const clientMessageId = Crypto.randomUUID();
+      let attachmentUploadIds: string[] = [];
+      try {
+        attachmentUploadIds = await uploadSelectedAttachments();
+        const input: SendMessageInput = {
+          conversationId: selectedId,
+          clientMessageId,
+          kind: "text",
+          ...(body ? { body } : {}),
+          widgets: [],
+          attachmentUploadIds,
+        };
+        const optimistic: ConversationMessage = {
+          id: input.clientMessageId,
+          conversationId: input.conversationId,
+          clientMessageId: input.clientMessageId,
+          seq: (detail?.messages.at(-1)?.seq ?? 0) + 1,
+          sender: principal,
+          kind: "text",
+          ...(body ? { body } : {}),
+          widgets: [],
+          attachments: attachments.map((attachment) => ({
+            id: attachment.id,
+            kind: attachment.kind,
+            mediaType: attachment.mediaType,
+            fileName: attachment.fileName,
+            byteSize: attachment.byteSize,
+            safetyStatus: detail?.conversation.safety.screeningRequired
+              ? "pending"
+              : "safe",
+            downloadUrl: attachment.uri,
+          })),
+          status: detail?.conversation.safety.screeningRequired
+            ? "screening"
+            : "published",
+          moderationState: detail?.conversation.safety.screeningRequired
+            ? "screening"
+            : "not-required",
+          createdAt: new Date().toISOString(),
+        };
+        setDraft("");
+        setDetail((current) =>
+          current
+            ? { ...current, messages: [...current.messages, optimistic] }
+            : current,
+        );
+        if (mode === "preview" || !client) {
+          if (
+            detail?.conversation.type === "support" &&
+            attachments.length === 0
+          ) {
+            setTimeout(() => {
+              setDetail((current) =>
+                current
+                  ? {
+                      ...current,
+                      messages: [
+                        ...current.messages,
+                        {
+                          ...optimistic,
+                          id: pairedResponseId(input.clientMessageId),
+                          clientMessageId: pairedResponseId(
+                            input.clientMessageId,
+                          ),
+                          seq: optimistic.seq + 1,
+                          sender: {
+                            type: "agent",
+                            id: "duna-ai-support",
+                            displayName: "Duna Support",
+                          },
+                          kind: "support-response",
+                          body: "I can help with that. In a signed-in build, I use your Duna events, lessons, rentals, and payments to give a grounded answer.",
+                          status: "published",
+                          moderationState: "not-required",
                         },
-                        kind: "support-response",
-                        body: "I can help with that. In a signed-in build, I use your Duna events, lessons, rentals, and payments to give a grounded answer.",
-                        status: "published",
-                        moderationState: "not-required",
-                      },
-                    ],
-                  }
-                : current,
-            );
-          }, 450);
+                      ],
+                    }
+                  : current,
+              );
+            }, 450);
+          }
+          setAttachments([]);
+          return;
         }
-        setAttachments([]);
-        return;
-      }
-      if (attachmentUploadIds.length > 0) {
-        const sentMessage = await client.messaging.send.mutate({
-          asPrincipal: "user",
-          message: input,
-        });
-        setAttachments([]);
+        if (attachmentUploadIds.length > 0) {
+          const sentMessage = await client.messaging.send.mutate({
+            asPrincipal: "user",
+            message: input,
+          });
+          setAttachments([]);
+          setDetail((current) =>
+            current
+              ? {
+                  ...current,
+                  messages: current.messages.map((message) =>
+                    message.id === optimistic.id ? sentMessage : message,
+                  ),
+                }
+              : current,
+          );
+          void Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success,
+          ).catch(() => undefined);
+          await Promise.all([loadConversation(selectedId), loadInbox()]);
+          return;
+        }
+        await outbox.enqueue(input);
+        setPending(await outbox.pending());
+        const sent = await flushOutbox(inbox);
+        if (sent > 0) {
+          void Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success,
+          ).catch(() => undefined);
+          await Promise.all([loadConversation(selectedId), loadInbox()]);
+        }
+      } catch (reason) {
+        setDraft(body);
         setDetail((current) =>
           current
             ? {
                 ...current,
-                messages: current.messages.map((message) =>
-                  message.id === optimistic.id ? sentMessage : message,
+                messages: current.messages.filter(
+                  (message) => message.clientMessageId !== clientMessageId,
                 ),
               }
             : current,
         );
-        void Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success,
-        ).catch(() => undefined);
-        await Promise.all([loadConversation(selectedId), loadInbox()]);
-        return;
-      }
-      await outbox.enqueue(input);
-      setPending(await outbox.pending());
-      const sent = await flushOutbox(inbox);
-      if (sent > 0) {
-        void Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success,
-        ).catch(() => undefined);
-        await Promise.all([loadConversation(selectedId), loadInbox()]);
-      }
-    } catch (reason) {
-      setDraft(body);
-      setDetail((current) =>
-        current
-          ? {
-              ...current,
-              messages: current.messages.filter(
-                (message) => message.clientMessageId !== clientMessageId,
-              ),
-            }
-          : current,
-      );
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Duna could not send this message.",
-      );
-      if (attachmentUploadIds.length > 0 && client) {
-        await Promise.all(
-          attachmentUploadIds.map((uploadId) =>
-            client.messaging.abortAttachmentUpload
-              .mutate({ uploadId })
-              .then(() => cancelFileBackedUpload(uploadId))
-              .catch(() => undefined),
-          ),
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Duna could not send this message.",
         );
+        if (attachmentUploadIds.length > 0 && client) {
+          await Promise.all(
+            attachmentUploadIds.map((uploadId) =>
+              client.messaging.abortAttachmentUpload
+                .mutate({ uploadId })
+                .then(() => cancelFileBackedUpload(uploadId))
+                .catch(() => undefined),
+            ),
+          );
+        }
+      } finally {
+        setSending(false);
       }
-    } finally {
-      setSending(false);
-    }
-  }, [
-    attachments,
-    client,
-    detail,
-    draft,
-    flushOutbox,
-    inbox,
-    loadConversation,
-    loadInbox,
-    mode,
-    outbox,
-    principal,
-    selectedId,
-    sending,
-    uploadSelectedAttachments,
-  ]);
+    },
+    [
+      attachments,
+      client,
+      detail,
+      draft,
+      flushOutbox,
+      inbox,
+      loadConversation,
+      loadInbox,
+      mode,
+      outbox,
+      principal,
+      selectedId,
+      sending,
+      uploadSelectedAttachments,
+    ],
+  );
 
   const createConversation = useCallback(async () => {
     const selectedCandidates =
@@ -1716,28 +1730,6 @@ export function PlayerMessagingScreen({
 
   const inboxPane = (
     <View style={[styles.inboxPane, wide && styles.inboxPaneWide]}>
-      <View style={styles.topBar}>
-        <Pressable
-          accessibilityLabel="Close Messages"
-          onPress={onClose}
-          style={styles.closeButton}
-        >
-          <Text style={styles.closeButtonText}>‹</Text>
-        </Pressable>
-        <View style={styles.inboxHeading}>
-          <Text numberOfLines={1} style={styles.inboxAccountName}>
-            {principal.displayName}
-          </Text>
-          <Text style={styles.inboxAccountMeta}>Messages</Text>
-        </View>
-        <Pressable
-          accessibilityLabel="New conversation"
-          onPress={() => setComposeOpen(true)}
-          style={styles.newButton}
-        >
-          <Text style={styles.newButtonText}>✎</Text>
-        </Pressable>
-      </View>
       {mode === "live" && client && notificationsEnabled === false && (
         <View style={styles.notificationBanner}>
           <View style={styles.flex}>
@@ -1799,101 +1791,17 @@ export function PlayerMessagingScreen({
             value={inboxSearch}
           />
         </View>
-        {(composeOptions?.candidates.length ?? 0) > 0 && (
+        <View style={styles.recentHeadingRow}>
           <View>
-            <View style={styles.sectionHeadingRow}>
-              <Text style={styles.sectionHeading}>Mutual followers</Text>
-              <Text style={styles.sectionMeta}>People you can message</Text>
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.followerRail}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
-              {composeOptions?.candidates.slice(0, 12).map((candidate) => (
-                <Pressable
-                  accessibilityLabel={`Message ${candidate.principal.displayName}`}
-                  key={candidate.principal.id}
-                  onPress={() => {
-                    const existing = inbox?.conversations.find(
-                      (conversation) =>
-                        conversation.type === "dm" &&
-                        conversation.participants.some(
-                          (participant) =>
-                            participant.type === "user" &&
-                            participant.id === candidate.principal.id,
-                        ),
-                    );
-                    if (existing) {
-                      setSelectedId(existing.id);
-                    } else {
-                      setComposeRecipients([candidate.principal.id]);
-                      setComposeFollowerBroadcast(false);
-                      setComposeOpen(true);
-                    }
-                  }}
-                  style={styles.followerItem}
-                >
-                  <View>
-                    <PrincipalAvatar
-                      palette={palette}
-                      principal={candidate.principal}
-                      size={64}
-                    />
-                    {candidate.principal.isProfessional && (
-                      <View style={styles.followerProBadge}>
-                        <ProBadge palette={palette} />
-                      </View>
-                    )}
-                  </View>
-                  <Text numberOfLines={1} style={styles.followerName}>
-                    {candidate.principal.displayName.split(" ")[0]}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <Text style={styles.recentEyebrow}>MESSAGES</Text>
+            <Text style={styles.recentTitle}>Recent chats</Text>
           </View>
-        )}
-        <ScrollView
-          contentContainerStyle={styles.filterRail}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          {(
-            [
-              ["all", "Primary"],
-              ["unread", "Unread"],
-              ["organizations", "Orgs"],
-              ["events", "Events"],
-              ["followers", "Followers"],
-            ] as const
-          ).map(([key, label]) => (
-            <Pressable
-              key={key}
-              onPress={() => setInboxFilter(key)}
-              style={[
-                styles.filterChip,
-                inboxFilter === key && styles.filterChipSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  inboxFilter === key && styles.filterChipTextSelected,
-                ]}
-              >
-                {label}
-              </Text>
-              {key === "unread" && (inbox?.totalUnread ?? 0) > 0 && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>
-                    {inbox?.totalUnread}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
-        </ScrollView>
+          {(inbox?.totalUnread ?? 0) > 0 && (
+            <View style={styles.totalUnread}>
+              <Text style={styles.totalUnreadText}>{inbox?.totalUnread}</Text>
+            </View>
+          )}
+        </View>
         {loading && !inbox ? (
           <ActivityIndicator color={palette.accent} style={styles.loading} />
         ) : filteredConversations.length ? (
@@ -1901,7 +1809,10 @@ export function PlayerMessagingScreen({
             <ConversationRow
               conversation={conversation}
               key={conversation.id}
-              onPress={() => setSelectedId(conversation.id)}
+              onPress={() => {
+                setMessagingSpace("messages");
+                setSelectedId(conversation.id);
+              }}
               palette={palette}
               principal={principal}
               selected={selectedId === conversation.id}
@@ -1910,7 +1821,7 @@ export function PlayerMessagingScreen({
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>
-              {inboxSearch || inboxFilter !== "all"
+              {inboxSearch
                 ? "No messages match this view."
                 : "Nothing to catch up on."}
             </Text>
@@ -1925,37 +1836,32 @@ export function PlayerMessagingScreen({
   );
 
   const threadPane = detail ? (
-    <View style={[styles.threadPane, { paddingBottom: threadBottomInset }]}>
-      <View style={styles.threadHeader}>
-        {!wide && (
-          <Pressable
-            accessibilityLabel="Back to conversations"
-            onPress={() => {
-              Keyboard.dismiss();
-              setAttachments([]);
-              setSelectedId(undefined);
-            }}
-            style={styles.threadBack}
-          >
-            <Text style={styles.threadBackText}>‹</Text>
-          </Pressable>
-        )}
-        <PrincipalAvatar palette={palette} principal={threadLead} size={42} />
-        <View style={styles.flex}>
-          <Text numberOfLines={1} style={styles.threadTitle}>
-            {detail.conversation.title}
-          </Text>
-          <Text numberOfLines={1} style={styles.threadMeta}>
-            {detail.conversation.context?.label ??
-              `${detail.participants.length} participant${detail.participants.length === 1 ? "" : "s"}`}
-          </Text>
+    <View
+      style={[
+        styles.threadPane,
+        detail.conversation.type === "support" && styles.threadPaneAi,
+        { paddingBottom: threadBottomInset },
+      ]}
+    >
+      {detail.conversation.type !== "support" && (
+        <View style={styles.threadHeader}>
+          <PrincipalAvatar palette={palette} principal={threadLead} size={42} />
+          <View style={styles.flex}>
+            <Text numberOfLines={1} style={styles.threadTitle}>
+              {detail.conversation.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.threadMeta}>
+              {detail.conversation.context?.label ??
+                `${detail.participants.length} participant${detail.participants.length === 1 ? "" : "s"}`}
+            </Text>
+          </View>
+          {detail.permissions.canBlock && (
+            <Pressable onPress={blockConversation} style={styles.threadMenu}>
+              <Text style={styles.threadMenuText}>•••</Text>
+            </Pressable>
+          )}
         </View>
-        {detail.permissions.canBlock && (
-          <Pressable onPress={blockConversation} style={styles.threadMenu}>
-            <Text style={styles.threadMenuText}>•••</Text>
-          </Pressable>
-        )}
-      </View>
+      )}
       {detail.conversation.safety.screeningRequired && (
         <View style={styles.safetyBanner}>
           <Text style={styles.safetyIcon}>✓</Text>
@@ -1967,11 +1873,16 @@ export function PlayerMessagingScreen({
       )}
       {detail.conversation.type === "support" && (
         <View style={styles.aiBanner}>
-          <Text style={styles.aiIcon}>✦</Text>
-          <Text style={styles.aiText}>
-            Duna Support can use your Duna events, lessons, rentals, and
-            payments to help. Ask for a person at any time.
-          </Text>
+          <View style={styles.aiMark}>
+            <Text style={styles.aiIcon}>✦</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.aiTitle}>How can Duna help?</Text>
+            <Text style={styles.aiText}>
+              Your schedule, play history, bookings, and organizations are
+              already part of the conversation.
+            </Text>
+          </View>
         </View>
       )}
       <ScrollView
@@ -1998,6 +1909,33 @@ export function PlayerMessagingScreen({
       </ScrollView>
       {detail.permissions.canPost ? (
         <View style={styles.composerShell}>
+          {detail.conversation.type === "support" && (
+            <ScrollView
+              contentContainerStyle={styles.aiPromptRail}
+              horizontal
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+            >
+              {(
+                [
+                  ["search", "Find a match for me"],
+                  ["user", "Find a coach"],
+                  ["calendar", "What's my schedule?"],
+                ] as const
+              ).map(([icon, label]) => (
+                <Pressable
+                  accessibilityLabel={label}
+                  disabled={sending}
+                  key={label}
+                  onPress={() => void send(label)}
+                  style={styles.aiPrompt}
+                >
+                  <DunaIcon color={palette.accent} name={icon} size={16} />
+                  <Text style={styles.aiPromptText}>{label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
           {attachments.length > 0 && (
             <ScrollView
               contentContainerStyle={styles.pendingAttachmentRail}
@@ -2065,7 +2003,7 @@ export function PlayerMessagingScreen({
               onSubmitEditing={() => void send()}
               placeholder={
                 detail.conversation.type === "support"
-                  ? "Message Duna Support…"
+                  ? "Ask Duna anything…"
                   : "Message…"
               }
               placeholderTextColor={palette.muted}
@@ -2113,6 +2051,75 @@ export function PlayerMessagingScreen({
 
   return (
     <View style={styles.screen}>
+      <View style={styles.modeBar}>
+        <Pressable
+          accessibilityLabel={
+            messagingSpace === "assistant"
+              ? "Open recent Duna AI chats"
+              : selectedId
+                ? "Back to conversations"
+                : "Close Messages"
+          }
+          onPress={() => {
+            if (messagingSpace === "assistant") {
+              setAssistantMenuOpen(true);
+            } else if (selectedId) {
+              Keyboard.dismiss();
+              setAttachments([]);
+              setSelectedId(undefined);
+              setDetail(undefined);
+            } else {
+              onClose();
+            }
+          }}
+          style={styles.modeAction}
+        >
+          {messagingSpace === "assistant" ? (
+            <DunaIcon color={palette.text} name="menu" size={22} />
+          ) : (
+            <Text style={styles.modeBackText}>‹</Text>
+          )}
+        </Pressable>
+        <View style={styles.modeSwitch}>
+          {(
+            [
+              ["assistant", "Duna AI"],
+              ["messages", "Messages"],
+            ] as const
+          ).map(([key, label]) => (
+            <Pressable
+              accessibilityLabel={`Show ${label}`}
+              accessibilityState={{ selected: messagingSpace === key }}
+              key={key}
+              onPress={() => selectMessagingSpace(key)}
+              style={[
+                styles.modeOption,
+                messagingSpace === key && styles.modeOptionSelected,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modeOptionText,
+                  messagingSpace === key && styles.modeOptionTextSelected,
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {messagingSpace === "messages" && !selectedId ? (
+          <Pressable
+            accessibilityLabel="New conversation"
+            onPress={() => setComposeOpen(true)}
+            style={styles.modeAction}
+          >
+            <DunaIcon color={palette.text} name="plus" size={22} />
+          </Pressable>
+        ) : (
+          <View style={styles.modeActionSpacer} />
+        )}
+      </View>
       {wide ? (
         <View style={styles.wideLayout}>
           {inboxPane}
@@ -2123,6 +2130,71 @@ export function PlayerMessagingScreen({
       ) : (
         inboxPane
       )}
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setAssistantMenuOpen(false)}
+        transparent
+        visible={assistantMenuOpen}
+      >
+        <View style={styles.aiMenuBackdrop}>
+          <View
+            style={[
+              styles.aiMenu,
+              {
+                paddingBottom: Math.max(24, insets.bottom + 12),
+                paddingTop: Math.max(24, insets.top),
+              },
+            ]}
+          >
+            <View style={styles.aiMenuHeader}>
+              <View>
+                <Text style={styles.recentEyebrow}>DUNA AI</Text>
+                <Text style={styles.aiMenuTitle}>Recent chats</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close recent Duna AI chats"
+                onPress={() => setAssistantMenuOpen(false)}
+                style={styles.modeAction}
+              >
+                <Text style={styles.aiMenuClose}>×</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.aiMenuBody}>
+              Duna uses the context you already have. Open a recent thread or
+              return to your current question.
+            </Text>
+            <View style={styles.aiMenuList}>
+              {supportConversations.map((conversation) => (
+                <Pressable
+                  key={conversation.id}
+                  onPress={() => {
+                    setSelectedId(conversation.id);
+                    setAssistantMenuOpen(false);
+                  }}
+                  style={styles.aiMenuRow}
+                >
+                  <View style={styles.aiMenuMark}>
+                    <Text style={styles.aiIcon}>✦</Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.aiMenuRowTitle}>
+                      {conversation.title.replace("Support", "AI")}
+                    </Text>
+                    <Text numberOfLines={2} style={styles.aiMenuRowBody}>
+                      {conversation.lastMessage?.body ?? "Ask Duna anything."}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <Pressable
+            accessibilityLabel="Dismiss recent Duna AI chats"
+            onPress={() => setAssistantMenuOpen(false)}
+            style={styles.aiMenuDismiss}
+          />
+        </View>
+      </Modal>
       <Modal
         animationType="slide"
         onRequestClose={() => setComposeOpen(false)}
@@ -2408,6 +2480,61 @@ function createStyles(palette: MessagingPalette) {
       flex: 0,
       width: 360,
     },
+    modeBar: {
+      alignItems: "center",
+      backgroundColor: palette.canvas,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 70,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+    },
+    modeAction: {
+      alignItems: "center",
+      backgroundColor: palette.surface,
+      borderColor: palette.border,
+      borderRadius: 25,
+      borderWidth: 1,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    modeActionSpacer: { height: 50, width: 50 },
+    modeBackText: {
+      color: palette.text,
+      fontSize: 34,
+      lineHeight: 36,
+      marginTop: -2,
+    },
+    modeSwitch: {
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 25,
+      flex: 1,
+      flexDirection: "row",
+      minHeight: 50,
+      padding: 4,
+    },
+    modeOption: {
+      alignItems: "center",
+      borderRadius: 21,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 42,
+      paddingHorizontal: 8,
+    },
+    modeOptionSelected: {
+      backgroundColor: palette.surface,
+      shadowColor: "#10273D",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+    },
+    modeOptionText: {
+      color: palette.muted,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    modeOptionTextSelected: { color: palette.text, fontWeight: "900" },
     topBar: {
       alignItems: "center",
       flexDirection: "row",
@@ -2517,6 +2644,28 @@ function createStyles(palette: MessagingPalette) {
       fontWeight: "900",
     },
     inboxList: { gap: 10, padding: 14, paddingBottom: 34 },
+    recentHeadingRow: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: 4,
+      paddingBottom: 4,
+      paddingTop: 8,
+    },
+    recentEyebrow: {
+      color: palette.accent,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    recentTitle: {
+      color: palette.text,
+      fontSize: 25,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      lineHeight: 30,
+      marginTop: 2,
+    },
     searchBar: {
       alignItems: "center",
       backgroundColor: palette.surface,
@@ -2699,6 +2848,7 @@ function createStyles(palette: MessagingPalette) {
       textAlign: "center",
     },
     threadPane: { backgroundColor: palette.surfaceAlt, flex: 1 },
+    threadPaneAi: { backgroundColor: palette.canvas },
     threadHeader: {
       alignItems: "center",
       backgroundColor: palette.surface,
@@ -2754,16 +2904,29 @@ function createStyles(palette: MessagingPalette) {
     safetyText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
     aiBanner: {
       alignItems: "center",
-      backgroundColor: palette.surface,
-      borderBottomColor: palette.border,
-      borderBottomWidth: 1,
+      backgroundColor: palette.canvas,
       flexDirection: "row",
-      gap: 9,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
+      gap: 12,
+      paddingHorizontal: 20,
+      paddingBottom: 12,
+      paddingTop: 8,
     },
-    aiIcon: { color: palette.accent, fontSize: 15, fontWeight: "900" },
-    aiText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
+    aiMark: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    aiIcon: { color: palette.accent, fontSize: 17, fontWeight: "900" },
+    aiTitle: { color: palette.text, fontSize: 18, fontWeight: "900" },
+    aiText: {
+      color: palette.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 3,
+    },
     messages: {
       flexGrow: 1,
       gap: 14,
@@ -2942,6 +3105,23 @@ function createStyles(palette: MessagingPalette) {
       borderTopColor: palette.border,
       borderTopWidth: 1,
     },
+    aiPromptRail: { gap: 8, paddingHorizontal: 10, paddingTop: 10 },
+    aiPrompt: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderColor: palette.border,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 7,
+      minHeight: 42,
+      paddingHorizontal: 12,
+    },
+    aiPromptText: {
+      color: palette.text,
+      fontSize: 12,
+      fontWeight: "800",
+    },
     pendingAttachmentRail: { gap: 8, paddingHorizontal: 10, paddingTop: 10 },
     pendingAttachment: {
       alignItems: "center",
@@ -3045,6 +3225,70 @@ function createStyles(palette: MessagingPalette) {
       padding: 30,
     },
     threadEmptyMark: { color: palette.accent, fontSize: 34, fontWeight: "900" },
+    aiMenuBackdrop: {
+      backgroundColor: "rgba(9, 19, 29, 0.34)",
+      flex: 1,
+      flexDirection: "row",
+    },
+    aiMenu: {
+      backgroundColor: palette.canvas,
+      borderBottomRightRadius: 30,
+      borderTopRightRadius: 30,
+      flex: 0.86,
+      paddingHorizontal: 20,
+      shadowColor: "#07131D",
+      shadowOffset: { width: 8, height: 0 },
+      shadowOpacity: 0.16,
+      shadowRadius: 24,
+    },
+    aiMenuDismiss: { flex: 0.14 },
+    aiMenuHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    aiMenuTitle: {
+      color: palette.text,
+      fontSize: 28,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+      lineHeight: 33,
+      marginTop: 2,
+    },
+    aiMenuClose: { color: palette.text, fontSize: 27, lineHeight: 28 },
+    aiMenuBody: {
+      color: palette.muted,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 16,
+    },
+    aiMenuList: { gap: 10, marginTop: 24 },
+    aiMenuRow: {
+      alignItems: "center",
+      backgroundColor: palette.surface,
+      borderColor: palette.border,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 84,
+      padding: 14,
+    },
+    aiMenuMark: {
+      alignItems: "center",
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    aiMenuRowTitle: { color: palette.text, fontSize: 15, fontWeight: "900" },
+    aiMenuRowBody: {
+      color: palette.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
     composeScreen: {
       backgroundColor: palette.canvas,
       flex: 1,

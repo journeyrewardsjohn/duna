@@ -10,6 +10,7 @@ import Svg, {
 
 export type DunaIconName =
   | "arrow-right"
+  | "calendar"
   | "camera"
   | "check"
   | "chevron-right"
@@ -18,12 +19,19 @@ export type DunaIconName =
   | "eye"
   | "eye-off"
   | "lock"
+  | "home"
+  | "message"
+  | "menu"
   | "microphone"
+  | "plus"
   | "remote"
   | "rotate"
+  | "score"
+  | "search"
   | "settings"
   | "sparkles"
   | "star"
+  | "user"
   | "video";
 
 function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
@@ -33,6 +41,16 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Line x1="5" x2="19" y1="12" y2="12" />
           <Polyline points="13 6 19 12 13 18" />
+        </>
+      );
+    case "calendar":
+      return (
+        <>
+          <Rect height="16" rx="2.5" width="18" x="3" y="5" />
+          <Line x1="7" x2="7" y1="3" y2="7" />
+          <Line x1="17" x2="17" y1="3" y2="7" />
+          <Line x1="3" x2="21" y1="9" y2="9" />
+          <Path d="M7 13h3M14 13h3M7 17h3" />
         </>
       );
     case "camera":
@@ -82,11 +100,37 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
           <Path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
         </>
       );
+    case "home":
+      return (
+        <>
+          <Path d="m3.5 10 8.5-7 8.5 7" />
+          <Path d="M5.5 9v11h13V9M9.5 20v-6h5v6" />
+        </>
+      );
+    case "message":
+      return (
+        <Path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5.5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+      );
+    case "menu":
+      return (
+        <>
+          <Line x1="4" x2="20" y1="7" y2="7" />
+          <Line x1="4" x2="20" y1="12" y2="12" />
+          <Line x1="4" x2="20" y1="17" y2="17" />
+        </>
+      );
     case "microphone":
       return (
         <>
           <Rect height="11" rx="4" width="7" x="8.5" y="3" />
           <Path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" />
+        </>
+      );
+    case "plus":
+      return (
+        <>
+          <Line x1="12" x2="12" y1="5" y2="19" />
+          <Line x1="5" x2="19" y1="12" y2="12" />
         </>
       );
     case "remote":
@@ -103,6 +147,21 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Path d="M19 7V3l-2 2a8 8 0 0 0-12 4" />
           <Path d="M5 17v4l2-2a8 8 0 0 0 12-4" />
+        </>
+      );
+    case "score":
+      return (
+        <>
+          <Rect height="16" rx="2.5" width="18" x="3" y="4" />
+          <Line x1="12" x2="12" y1="4" y2="20" />
+          <Path d="M6.5 9h2M15.5 9h2M6.5 15h2M15.5 15h2" />
+        </>
+      );
+    case "search":
+      return (
+        <>
+          <Circle cx="10.5" cy="10.5" r="6.5" />
+          <Line x1="15.5" x2="21" y1="15.5" y2="21" />
         </>
       );
     case "settings":
@@ -122,6 +181,13 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
     case "star":
       return (
         <Path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z" />
+      );
+    case "user":
+      return (
+        <>
+          <Circle cx="12" cy="8" r="4" />
+          <Path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+        </>
       );
     case "video":
       return (

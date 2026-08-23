@@ -6,6 +6,13 @@ navigation, typography, color-density, and recorder UI guidance in
 `duna-mobile-design-guide.md`. The privacy, data-truth, theme, zone, and
 accessibility contracts remain in force.
 
+**Player implementation:** the shared Satoshi and mobile-token foundations,
+Video Library, recording setup, camera guide, Home, glass navigation,
+quick-action sheet, and unified Duna AI / Messages entry shell are implemented
+on the current Player redesign branch. Calendar, profile, and remaining
+secondary screens migrate next without changing their routes or business
+handlers.
+
 ## Direction
 
 Duna mobile is a familiar, quiet utility product. White and black do most of
