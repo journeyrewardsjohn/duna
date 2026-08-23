@@ -14996,6 +14996,7 @@ function DunaApp() {
                   onCreateMatch={() => setCreateMatchOpen(true)}
                   onTransferStatus={setVideoTransfer}
                   runtime={runtime}
+                  theme={theme}
                 />
                 {tab === "wallet" && (
                   <WalletScreen onClose={() => setTab("you")} />

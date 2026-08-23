@@ -24,7 +24,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import {
@@ -42,7 +41,10 @@ import {
   type ProDunaAiResponse,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import {
   registerMessagingNotifications,
   unregisterMessagingNotifications,

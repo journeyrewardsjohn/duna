@@ -1,5 +1,11 @@
 import muxReactNativeVideo from "@mux/mux-data-react-native-video";
 import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
+import {
+  mobileControl,
+  mobileGrid,
+  resolveDunaMobileTokens,
+} from "@duna/ui/mobile";
+import type { DunaTheme } from "@duna/ui/tokens";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -32,7 +38,10 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import Video from "react-native-video";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import VideoCapture, {
   DunaVideoCaptureView,
   type CaptureGuidance,
@@ -98,6 +107,7 @@ import {
 } from "@duna/expo-background-upload";
 import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
 import { startDunaLiveActivity } from "./live-activities";
+import { DunaIcon, type DunaIconName } from "./duna-icon";
 import {
   acknowledgeLegacyVisionConsentRevocation,
   createVisionLearningConsentReceipt,
@@ -683,6 +693,1113 @@ function ToggleRow({
   );
 }
 
+type CaptureSetupSheet = "audio" | "court" | "more" | "orientation" | "privacy";
+
+type RecordingSetupStyles = ReturnType<typeof createRecordingSetupStyles>;
+
+function CaptureSettingTile({
+  icon,
+  label,
+  onPress,
+  styles: setupStyles,
+  value,
+}: {
+  readonly icon: DunaIconName;
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly styles: RecordingSetupStyles;
+  readonly value: string;
+}) {
+  return (
+    <Pressable
+      accessibilityHint={`Opens ${label.toLowerCase()} choices`}
+      accessibilityLabel={`${label}, ${value}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={setupStyles.settingTile}
+    >
+      <View style={setupStyles.settingTileHeader}>
+        <View style={setupStyles.settingIcon}>
+          <DunaIcon color={setupStyles.iconColor.color} name={icon} />
+        </View>
+        <DunaIcon
+          color={setupStyles.mutedIconColor.color}
+          name="chevron-right"
+          size={18}
+        />
+      </View>
+      <View style={setupStyles.settingCopy}>
+        <Text style={setupStyles.settingLabel}>{label}</Text>
+        <Text numberOfLines={1} style={setupStyles.settingValue}>
+          {value}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function RecordingChoiceSheet({
+  description,
+  onClose,
+  onSelect,
+  options,
+  styles: setupStyles,
+  title,
+  value,
+  visible,
+}: {
+  readonly description: string;
+  readonly onClose: () => void;
+  readonly onSelect: (value: string) => void;
+  readonly options: readonly {
+    readonly detail: string;
+    readonly icon: DunaIconName;
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly styles: RecordingSetupStyles;
+  readonly title: string;
+  readonly value: string;
+  readonly visible: boolean;
+}) {
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <Pressable onPress={onClose} style={setupStyles.sheetBackdrop}>
+        <Pressable
+          accessibilityViewIsModal
+          onPress={(event) => event.stopPropagation()}
+          style={setupStyles.sheet}
+        >
+          <View style={setupStyles.sheetHandle} />
+          <View style={setupStyles.sheetHeader}>
+            <View style={styles.flex}>
+              <Text style={setupStyles.sheetTitle}>{title}</Text>
+              <Text style={setupStyles.sheetDescription}>{description}</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close options"
+              hitSlop={10}
+              onPress={onClose}
+              style={setupStyles.sheetClose}
+            >
+              <DunaIcon
+                color={setupStyles.iconColor.color}
+                name="close"
+                size={20}
+              />
+            </Pressable>
+          </View>
+          <View style={setupStyles.sheetOptionList}>
+            {options.map((option) => {
+              const selected = option.value === value;
+              return (
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  key={option.value}
+                  onPress={() => {
+                    onSelect(option.value);
+                    onClose();
+                  }}
+                  style={[
+                    setupStyles.sheetOption,
+                    selected && setupStyles.sheetOptionSelected,
+                  ]}
+                >
+                  <View style={setupStyles.sheetOptionIcon}>
+                    <DunaIcon
+                      color={setupStyles.iconColor.color}
+                      name={option.icon}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={setupStyles.sheetOptionTitle}>
+                      {option.label}
+                    </Text>
+                    <Text style={setupStyles.sheetOptionDetail}>
+                      {option.detail}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      setupStyles.radio,
+                      selected && setupStyles.radioSelected,
+                    ]}
+                  >
+                    {selected && (
+                      <DunaIcon
+                        color={setupStyles.selectedIconColor.color}
+                        name="check"
+                        size={14}
+                        strokeWidth={2.25}
+                      />
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function CaptureSetupForm({
+  client,
+  form,
+  mode,
+  onCancel,
+  onChange,
+  onContinue,
+  onCreateMatch,
+  theme,
+}: {
+  readonly client?: DunaApiClient;
+  readonly form: CaptureForm;
+  readonly mode: "live" | "record";
+  readonly onCancel: () => void;
+  readonly onChange: (form: CaptureForm) => void;
+  readonly onContinue: () => void;
+  readonly onCreateMatch?: () => void;
+  readonly theme: DunaTheme;
+}) {
+  const insets = useSafeAreaInsets();
+  const [sheet, setSheet] = useState<CaptureSetupSheet>();
+  const tokens = useMemo(
+    () => resolveDunaMobileTokens(theme, "athletic"),
+    [theme],
+  );
+  const setupStyles = useMemo(
+    () => createRecordingSetupStyles(tokens),
+    [tokens],
+  );
+  const associationRequired =
+    form.category === "event" || form.category === "match";
+  const valid =
+    form.title.trim().length >= 2 &&
+    (!associationRequired || Boolean(form.association));
+  const courtValue =
+    form.courtLengthMeters === 16 && form.courtWidthMeters === 8
+      ? "Full · 16×8m"
+      : "Short · 12×6m";
+  const netValue =
+    form.netHeightMeters === 2.43
+      ? "Men · 2.43m"
+      : form.netHeightMeters === 2.24
+        ? "Women · 2.24m"
+        : "Juniors · 2.12m";
+
+  const applyAssociation = (association: VideoAssociation | undefined) => {
+    if (!association) {
+      onChange({ ...form, association: undefined });
+      return;
+    }
+    onChange({
+      ...form,
+      association,
+      title:
+        !form.title.trim() || form.title === "Match recording"
+          ? association.title
+          : form.title,
+      venue: association.venue ?? form.venue,
+      courtWidthMeters:
+        association.captureDefaults?.courtWidthMeters ?? form.courtWidthMeters,
+      courtLengthMeters:
+        association.captureDefaults?.courtLengthMeters ??
+        form.courtLengthMeters,
+      netHeightMeters:
+        association.captureDefaults?.netHeightMeters ?? form.netHeightMeters,
+      orientation: association.captureDefaults?.orientation ?? form.orientation,
+    });
+  };
+
+  const changeCategory = (category: VideoCategory) => {
+    onChange({
+      ...form,
+      category,
+      association: undefined,
+      recordingVisibility:
+        category === "practice" ? "private" : form.recordingVisibility,
+      publishedToProfile:
+        category === "practice" ? false : form.publishedToProfile,
+    });
+  };
+
+  const choiceSheet = (() => {
+    switch (sheet) {
+      case "orientation":
+        return {
+          description:
+            "Landscape captures the full court. Duna opens the camera in the selected orientation.",
+          onSelect: (value: string) =>
+            onChange({ ...form, orientation: value as CaptureOrientation }),
+          options: [
+            {
+              detail: "Best for a full court and Duna Vision",
+              icon: "rotate" as const,
+              label: "Landscape",
+              value: "landscape",
+            },
+            {
+              detail: "Best for vertical and social viewing",
+              icon: "video" as const,
+              label: "Portrait",
+              value: "portrait",
+            },
+          ],
+          title: "Orientation",
+          value: form.orientation,
+        };
+      case "court":
+        return {
+          description:
+            "Use the court dimensions being played. You can still refine the visible lines in the camera guide.",
+          onSelect: (value: string) =>
+            onChange({
+              ...form,
+              courtLengthMeters: value === "full" ? 16 : 12,
+              courtWidthMeters: value === "full" ? 8 : 6,
+            }),
+          options: [
+            {
+              detail: "Regulation beach court",
+              icon: "court" as const,
+              label: "Full · 16×8m",
+              value: "full",
+            },
+            {
+              detail: "Junior or adapted play",
+              icon: "court" as const,
+              label: "Short · 12×6m",
+              value: "short",
+            },
+          ],
+          title: "Court",
+          value: form.courtLengthMeters === 16 ? "full" : "short",
+        };
+      case "privacy":
+        return {
+          description:
+            form.category === "practice"
+              ? "Practice recordings begin private. You can publish them later from your library."
+              : "You can change this later from your video library.",
+          onSelect: (value: string) =>
+            onChange({
+              ...form,
+              recordingVisibility: value as RecordingVisibility,
+              publishedToProfile: value === "public" && form.publishedToProfile,
+            }),
+          options:
+            form.category === "practice"
+              ? [
+                  {
+                    detail: "Only you can find it",
+                    icon: "lock" as const,
+                    label: "Private",
+                    value: "private",
+                  },
+                ]
+              : [
+                  {
+                    detail: "Only you can find it",
+                    icon: "lock" as const,
+                    label: "Private",
+                    value: "private",
+                  },
+                  {
+                    detail: "Eligible for Duna pages",
+                    icon: "eye" as const,
+                    label: "Public",
+                    value: "public",
+                  },
+                ],
+          title: "Recording privacy",
+          value: form.recordingVisibility,
+        };
+      case "audio":
+        return {
+          description:
+            "Audio can help with review and match context. Turn it off for a silent recording.",
+          onSelect: (value: string) =>
+            onChange({ ...form, hasAudio: value === "on" }),
+          options: [
+            {
+              detail: "Record court sound",
+              icon: "microphone" as const,
+              label: "Audio on",
+              value: "on",
+            },
+            {
+              detail: "Record video only",
+              icon: "microphone" as const,
+              label: "Audio off",
+              value: "off",
+            },
+          ],
+          title: "Audio",
+          value: form.hasAudio ? "on" : "off",
+        };
+      default:
+        return undefined;
+    }
+  })();
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={setupStyles.safe}
+    >
+      <SafeAreaView
+        edges={["bottom", "left", "right"]}
+        style={setupStyles.safe}
+      >
+        <View
+          style={[
+            setupStyles.header,
+            {
+              minHeight: mobileGrid[12] + insets.top,
+              paddingTop: insets.top,
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={onCancel}
+            style={setupStyles.headerAction}
+          >
+            <Text style={setupStyles.headerActionText}>Cancel</Text>
+          </Pressable>
+          <Text style={setupStyles.headerTitle}>Duna Video</Text>
+          <Pressable
+            accessibilityLabel="Open recording details"
+            onPress={() => setSheet("more")}
+            style={setupStyles.headerIconButton}
+          >
+            <DunaIcon color={tokens.text1} name="settings" size={23} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={setupStyles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={setupStyles.heroCopy}>
+            <Text style={setupStyles.eyebrow}>STEP 1 OF 2 · SETUP</Text>
+            <Text style={setupStyles.displayTitle}>
+              {mode === "live"
+                ? "Set up your live stream."
+                : "Set up your recording."}
+            </Text>
+            <Text style={setupStyles.intro}>
+              Connect a game, confirm the camera essentials, then Duna will walk
+              you through court alignment.
+            </Text>
+          </View>
+
+          <View style={setupStyles.section}>
+            <Text style={setupStyles.sectionLabel}>
+              What are you capturing?
+            </Text>
+            <View style={setupStyles.segmentedControl}>
+              {(["practice", "event", "match", "social"] as const).map(
+                (category) => {
+                  const selected = form.category === category;
+                  return (
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      key={category}
+                      onPress={() => changeCategory(category)}
+                      style={[
+                        setupStyles.segment,
+                        selected && setupStyles.segmentSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          setupStyles.segmentText,
+                          selected && setupStyles.segmentTextSelected,
+                        ]}
+                      >
+                        {category[0]!.toUpperCase() + category.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              )}
+            </View>
+          </View>
+
+          <AssociationPicker
+            category={form.category}
+            client={client}
+            onCreateMatch={onCreateMatch}
+            onChange={applyAssociation}
+            value={form.association}
+          />
+
+          <View style={setupStyles.section}>
+            <Text style={setupStyles.sectionLabel}>Recording name</Text>
+            <TextInput
+              autoCapitalize="sentences"
+              maxLength={180}
+              onChangeText={(title) => onChange({ ...form, title })}
+              placeholder={
+                associationRequired
+                  ? "Choose a game or add a name"
+                  : "Morning practice · Court 2"
+              }
+              placeholderTextColor={tokens.text3}
+              style={setupStyles.nameInput}
+              value={form.title}
+            />
+          </View>
+
+          <View style={setupStyles.settingGrid}>
+            <CaptureSettingTile
+              icon="rotate"
+              label="Orientation"
+              onPress={() => setSheet("orientation")}
+              styles={setupStyles}
+              value={
+                form.orientation === "landscape" ? "Landscape" : "Portrait"
+              }
+            />
+            <CaptureSettingTile
+              icon="court"
+              label="Court"
+              onPress={() => setSheet("court")}
+              styles={setupStyles}
+              value={courtValue}
+            />
+            <CaptureSettingTile
+              icon="lock"
+              label="Visibility"
+              onPress={() => setSheet("privacy")}
+              styles={setupStyles}
+              value={
+                form.recordingVisibility === "private" ? "Private" : "Public"
+              }
+            />
+            <CaptureSettingTile
+              icon="microphone"
+              label="Audio"
+              onPress={() => setSheet("audio")}
+              styles={setupStyles}
+              value={form.hasAudio ? "On" : "Off"}
+            />
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSheet("more")}
+            style={setupStyles.detailsRow}
+          >
+            <View style={setupStyles.detailsIcon}>
+              <DunaIcon color={tokens.text1} name="settings" />
+            </View>
+            <View style={styles.flex}>
+              <Text style={setupStyles.detailsTitle}>Recording details</Text>
+              <Text style={setupStyles.detailsBody}>
+                {netValue}
+                {form.venue?.name ? ` · ${form.venue.name}` : " · Add venue"}
+              </Text>
+            </View>
+            <DunaIcon color={tokens.text3} name="chevron-right" size={19} />
+          </Pressable>
+
+          <View style={setupStyles.aiNote}>
+            <DunaIcon color={tokens.gold} name="sparkles" size={22} />
+            <Text style={setupStyles.aiNoteText}>
+              Duna guides orientation, court alignment, scoreboard, and Watch
+              scoring on the next step.
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={setupStyles.footer}>
+          {!valid && (
+            <Text style={setupStyles.validationText}>
+              {associationRequired && !form.association
+                ? `Choose the ${form.category} this recording belongs to.`
+                : "Add a recording name to continue."}
+            </Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            disabled={!valid}
+            onPress={onContinue}
+            style={[
+              setupStyles.continueButton,
+              !valid && setupStyles.continueButtonDisabled,
+            ]}
+          >
+            <Text style={setupStyles.continueText}>
+              Continue to camera guide
+            </Text>
+            <DunaIcon
+              color={tokens.buttonPrimaryForeground}
+              name="arrow-right"
+              size={24}
+              strokeWidth={2}
+            />
+          </Pressable>
+        </View>
+
+        {choiceSheet && (
+          <RecordingChoiceSheet
+            description={choiceSheet.description}
+            onClose={() => setSheet(undefined)}
+            onSelect={choiceSheet.onSelect}
+            options={choiceSheet.options}
+            styles={setupStyles}
+            title={choiceSheet.title}
+            value={choiceSheet.value}
+            visible={Boolean(sheet && sheet !== "more")}
+          />
+        )}
+
+        <Modal
+          animationType="slide"
+          onRequestClose={() => setSheet(undefined)}
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
+          transparent
+          visible={sheet === "more"}
+        >
+          <Pressable
+            onPress={() => setSheet(undefined)}
+            style={setupStyles.sheetBackdrop}
+          >
+            <Pressable
+              accessibilityViewIsModal
+              onPress={(event) => event.stopPropagation()}
+              style={setupStyles.sheetTall}
+            >
+              <View style={setupStyles.sheetHandle} />
+              <View style={setupStyles.sheetHeader}>
+                <View style={styles.flex}>
+                  <Text style={setupStyles.sheetTitle}>Recording details</Text>
+                  <Text style={setupStyles.sheetDescription}>
+                    These choices are remembered. Vision learning consent is
+                    intentionally asked for every video.
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close recording details"
+                  onPress={() => setSheet(undefined)}
+                  style={setupStyles.sheetClose}
+                >
+                  <DunaIcon color={tokens.text1} name="close" size={20} />
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={setupStyles.advancedContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={setupStyles.section}>
+                  <Text style={setupStyles.sectionLabel}>Recording name</Text>
+                  <TextInput
+                    autoCapitalize="sentences"
+                    maxLength={180}
+                    onChangeText={(title) => onChange({ ...form, title })}
+                    placeholder="AVP qualifier · Court 2"
+                    placeholderTextColor={tokens.text3}
+                    style={setupStyles.nameInput}
+                    value={form.title}
+                  />
+                </View>
+
+                <MobilePlacePicker
+                  baseUrl={dunaWebUrl}
+                  label="Venue (optional)"
+                  onChange={(venue) => onChange({ ...form, venue })}
+                  value={form.venue}
+                />
+
+                <View style={setupStyles.section}>
+                  <Text style={setupStyles.sectionLabel}>Net height</Text>
+                  <View style={setupStyles.inlineChoices}>
+                    {[
+                      { label: "Men · 2.43m", value: 2.43 },
+                      { label: "Women · 2.24m", value: 2.24 },
+                      { label: "Juniors · 2.12m", value: 2.12 },
+                    ].map((option) => {
+                      const selected = form.netHeightMeters === option.value;
+                      return (
+                        <Pressable
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          key={option.value}
+                          onPress={() =>
+                            onChange({
+                              ...form,
+                              netHeightMeters: option.value,
+                            })
+                          }
+                          style={[
+                            setupStyles.inlineChoice,
+                            selected && setupStyles.inlineChoiceSelected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              setupStyles.inlineChoiceText,
+                              selected && setupStyles.inlineChoiceTextSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={setupStyles.disclosureText}>
+                    Junior heights vary by age and division. Confirm the event
+                    setting when it differs.
+                  </Text>
+                </View>
+
+                {mode === "live" && (
+                  <View style={setupStyles.advancedToggle}>
+                    <View style={styles.flex}>
+                      <Text style={setupStyles.advancedToggleTitle}>
+                        Public live stream
+                      </Text>
+                      <Text style={setupStyles.advancedToggleBody}>
+                        Turn off to make this stream link-only.
+                      </Text>
+                    </View>
+                    <Switch
+                      onValueChange={(isPublic) =>
+                        onChange({
+                          ...form,
+                          liveVisibility: isPublic ? "public" : "link-only",
+                        })
+                      }
+                      thumbColor={tokens.surface1}
+                      trackColor={{
+                        false: tokens.hairlineStrong,
+                        true: tokens.buttonPrimaryBackground,
+                      }}
+                      value={form.liveVisibility === "public"}
+                    />
+                  </View>
+                )}
+
+                <View style={setupStyles.advancedToggle}>
+                  <View style={styles.flex}>
+                    <Text style={setupStyles.advancedToggleTitle}>
+                      Help improve Duna Vision
+                    </Text>
+                    <Text style={setupStyles.advancedToggleBody}>
+                      Share de-identified court geometry, a low-resolution setup
+                      frame, and quality signals. Your full video stays private.
+                    </Text>
+                  </View>
+                  <Switch
+                    onValueChange={(contributeCalibration) =>
+                      onChange({ ...form, contributeCalibration })
+                    }
+                    thumbColor={tokens.surface1}
+                    trackColor={{
+                      false: tokens.hairlineStrong,
+                      true: tokens.buttonPrimaryBackground,
+                    }}
+                    value={form.contributeCalibration}
+                  />
+                </View>
+              </ScrollView>
+              <View style={setupStyles.sheetFooter}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSheet(undefined)}
+                  style={setupStyles.sheetDoneButton}
+                >
+                  <Text style={setupStyles.sheetDoneText}>Done</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function createRecordingSetupStyles(
+  tokens: ReturnType<typeof resolveDunaMobileTokens>,
+) {
+  return StyleSheet.create({
+    safe: { backgroundColor: tokens.ground, flex: 1 },
+    header: {
+      alignItems: "center",
+      backgroundColor: tokens.glassStrong,
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      minHeight: mobileGrid[12],
+      paddingHorizontal: mobileControl.pageInset,
+    },
+    headerAction: {
+      alignItems: "flex-start",
+      justifyContent: "center",
+      minHeight: mobileControl.minimumTarget,
+      minWidth: mobileControl.minimumTarget,
+    },
+    headerActionText: { color: tokens.text1, fontSize: 16, fontWeight: "500" },
+    headerTitle: {
+      color: tokens.text1,
+      flex: 1,
+      fontSize: 17,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    headerIconButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: mobileGrid.hairline,
+      height: mobileControl.iconButton,
+      justifyContent: "center",
+      width: mobileControl.iconButton,
+    },
+    content: {
+      gap: mobileGrid[6],
+      paddingBottom: 145,
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[6],
+    },
+    heroCopy: { gap: mobileGrid[2] },
+    eyebrow: {
+      color: tokens.gold,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.1,
+    },
+    displayTitle: {
+      color: tokens.text1,
+      fontSize: 32,
+      fontWeight: "700",
+      letterSpacing: -0.8,
+      lineHeight: 37,
+    },
+    intro: { color: tokens.text3, fontSize: 16, lineHeight: 22 },
+    section: { gap: mobileGrid[2] },
+    sectionLabel: { color: tokens.text1, fontSize: 16, fontWeight: "700" },
+    segmentedControl: {
+      backgroundColor: tokens.inactiveFill,
+      borderRadius: mobileControl.cardRadius,
+      flexDirection: "row",
+      minHeight: mobileControl.minimumTarget,
+      padding: mobileGrid.half,
+    },
+    segment: {
+      alignItems: "center",
+      borderRadius: 17.5,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: mobileGrid[9],
+      paddingHorizontal: mobileGrid[1],
+    },
+    segmentSelected: {
+      backgroundColor: tokens.selectedFill,
+      borderColor: tokens.hairline,
+      borderWidth: mobileGrid.hairline,
+    },
+    segmentText: { color: tokens.text3, fontSize: 12, fontWeight: "500" },
+    segmentTextSelected: { color: tokens.text1, fontWeight: "700" },
+    nameInput: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairlineStrong,
+      borderRadius: mobileControl.nestedRadius,
+      borderWidth: mobileGrid.hairline,
+      color: tokens.text1,
+      fontSize: 16,
+      minHeight: mobileControl.minimumTarget,
+      paddingHorizontal: mobileGrid[3],
+    },
+    settingGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: mobileGrid[2],
+    },
+    settingTile: {
+      alignItems: "stretch",
+      backgroundColor: tokens.inactiveFill,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      flexBasis: "47%",
+      flexGrow: 1,
+      gap: mobileGrid[2],
+      minHeight: mobileGrid[12] + mobileGrid[12],
+      padding: mobileGrid[3],
+    },
+    settingTileHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    settingIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    settingCopy: { flex: 1, gap: mobileGrid[1], minWidth: 0 },
+    settingLabel: {
+      color: tokens.text3,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.7,
+      textTransform: "uppercase",
+    },
+    settingValue: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    detailsRow: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[10] + mobileGrid[5],
+      padding: mobileGrid[3],
+    },
+    detailsIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.sandUnderlay,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    detailsTitle: { color: tokens.text1, fontSize: 16, fontWeight: "700" },
+    detailsBody: {
+      color: tokens.text3,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
+    aiNote: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      paddingHorizontal: mobileGrid[2],
+    },
+    aiNoteText: { color: tokens.text3, flex: 1, fontSize: 13, lineHeight: 18 },
+    footer: {
+      backgroundColor: tokens.glassStrong,
+      borderTopColor: tokens.hairline,
+      borderTopWidth: mobileGrid.hairline,
+      bottom: 0,
+      gap: mobileGrid[2],
+      left: 0,
+      paddingBottom: mobileGrid[4],
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[3],
+      position: "absolute",
+      right: 0,
+    },
+    validationText: {
+      color: tokens.flareText,
+      fontSize: 12,
+      lineHeight: 15,
+      textAlign: "center",
+    },
+    continueButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: mobileControl.cardRadius,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: mobileControl.primaryTarget,
+      paddingHorizontal: mobileGrid[4],
+    },
+    continueButtonDisabled: { opacity: 0.38 },
+    continueText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    sheetBackdrop: {
+      backgroundColor: tokens.scrim,
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: tokens.ground,
+      borderTopLeftRadius: mobileControl.sheetRadius,
+      borderTopRightRadius: mobileControl.sheetRadius,
+      gap: mobileGrid[4],
+      paddingBottom: mobileGrid[7],
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[2],
+    },
+    sheetTall: {
+      backgroundColor: tokens.ground,
+      borderTopLeftRadius: mobileControl.sheetRadius,
+      borderTopRightRadius: mobileControl.sheetRadius,
+      maxHeight: "88%",
+      paddingTop: mobileGrid[2],
+    },
+    sheetHandle: {
+      alignSelf: "center",
+      backgroundColor: tokens.hairlineStrong,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileGrid[1],
+      width: mobileGrid[8],
+    },
+    sheetHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[3],
+    },
+    sheetTitle: { color: tokens.text1, fontSize: 24, fontWeight: "700" },
+    sheetDescription: {
+      color: tokens.text3,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: mobileGrid[1],
+    },
+    sheetClose: {
+      alignItems: "center",
+      backgroundColor: tokens.inactiveFill,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
+      justifyContent: "center",
+      width: mobileControl.minimumTarget,
+    },
+    sheetOptionList: { gap: mobileGrid[2] },
+    sheetOption: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[3],
+      padding: mobileGrid[3],
+    },
+    sheetOptionSelected: { borderColor: tokens.buttonPrimaryBackground },
+    sheetOptionIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.inactiveFill,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    sheetOptionTitle: { color: tokens.text1, fontSize: 16, fontWeight: "700" },
+    sheetOptionDetail: {
+      color: tokens.text3,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
+    radio: {
+      alignItems: "center",
+      borderColor: tokens.hairlineStrong,
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: 1.5,
+      height: mobileGrid[5],
+      justifyContent: "center",
+      width: mobileGrid[5],
+    },
+    radioSelected: {
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderColor: tokens.buttonPrimaryBackground,
+    },
+    iconColor: { color: tokens.text1 },
+    mutedIconColor: { color: tokens.text3 },
+    selectedIconColor: { color: tokens.buttonPrimaryForeground },
+    advancedContent: {
+      gap: mobileGrid[5],
+      paddingBottom: mobileGrid[4],
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[4],
+    },
+    inlineChoices: { gap: mobileGrid[2] },
+    inlineChoice: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairlineStrong,
+      borderRadius: mobileControl.nestedRadius,
+      borderWidth: mobileGrid.hairline,
+      justifyContent: "center",
+      minHeight: mobileControl.minimumTarget,
+      paddingHorizontal: mobileGrid[3],
+    },
+    inlineChoiceSelected: {
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderColor: tokens.buttonPrimaryBackground,
+    },
+    inlineChoiceText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    inlineChoiceTextSelected: {
+      color: tokens.buttonPrimaryForeground,
+      fontWeight: "700",
+    },
+    disclosureText: { color: tokens.text3, fontSize: 12, lineHeight: 17 },
+    advancedToggle: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[4],
+      padding: mobileGrid[3],
+    },
+    advancedToggleTitle: {
+      color: tokens.text1,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    advancedToggleBody: {
+      color: tokens.text3,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: mobileGrid[1],
+    },
+    sheetFooter: {
+      borderTopColor: tokens.hairline,
+      borderTopWidth: mobileGrid.hairline,
+      paddingBottom: mobileGrid[5],
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[3],
+    },
+    sheetDoneButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: mobileControl.cardRadius,
+      justifyContent: "center",
+      minHeight: mobileControl.primaryTarget,
+    },
+    sheetDoneText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+  });
+}
+
 function AssociationPicker({
   category,
   client,
@@ -1017,6 +2134,7 @@ function VideoDetailsForm({
   onImportedVisionChange,
   preparedVideo,
   foregroundOnlyUpload,
+  theme,
 }: {
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
@@ -1032,14 +2150,28 @@ function VideoDetailsForm({
   readonly onIdentifyImportedPlayers: () => void;
   readonly onImportedVisionChange: (setup: ImportedVisionSetup) => void;
   readonly foregroundOnlyUpload: boolean;
+  readonly theme: DunaTheme;
 }) {
+  if (mode === "live" || mode === "record") {
+    return (
+      <CaptureSetupForm
+        client={client}
+        form={form}
+        mode={mode}
+        onCancel={onCancel}
+        onChange={onChange}
+        onContinue={onContinue}
+        onCreateMatch={onCreateMatch}
+        theme={theme}
+      />
+    );
+  }
+
   const associationRequired =
     form.category === "event" || form.category === "match";
   const valid =
     form.title.trim().length >= 2 &&
     (!associationRequired || Boolean(form.association));
-  const captureSetup = mode !== "upload";
-  const courtSetup = captureSetup || mode === "upload";
   const applyAssociation = (association: VideoAssociation | undefined) => {
     if (!association) {
       onChange({ ...form, association: undefined });
@@ -1079,20 +2211,11 @@ function VideoDetailsForm({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.formHero}>
-            <Text style={styles.formStep}>
-              {captureSetup ? "STEP 1 OF 2 · SETUP" : "VIDEO DETAILS"}
-            </Text>
-            <Text style={styles.formTitle}>
-              {mode === "live"
-                ? "Set up your live stream."
-                : mode === "record"
-                  ? "Set up your recording."
-                  : "Give this video a home."}
-            </Text>
+            <Text style={styles.formStep}>VIDEO DETAILS</Text>
+            <Text style={styles.formTitle}>Give this video a home.</Text>
             <Text style={styles.formIntro}>
-              {captureSetup
-                ? "Duna remembers your last camera choices and can inherit court settings from the match you select."
-                : "Confirm the essentials once; Duna will keep uploading and processing while you use the rest of the app."}
+              Confirm the essentials once; Duna will keep uploading and
+              processing while you use the rest of the app.
             </Text>
           </View>
 
@@ -1200,29 +2323,6 @@ function VideoDetailsForm({
             value={form.venue}
           />
 
-          {mode === "live" && (
-            <ChoiceRow
-              body="Public streams appear across Duna. Link-only streams open only for people with your share link."
-              label="Who can watch live?"
-              onChange={(liveVisibility) =>
-                onChange({ ...form, liveVisibility })
-              }
-              options={[
-                {
-                  label: "Public",
-                  value: "public",
-                  body: "Discoverable on Duna",
-                },
-                {
-                  label: "Link only",
-                  value: "link-only",
-                  body: "Anyone with your link",
-                },
-              ]}
-              value={form.liveVisibility}
-            />
-          )}
-
           {form.category === "practice" ? (
             <View style={styles.privatePracticeCard}>
               <View style={styles.privateIcon}>
@@ -1238,7 +2338,7 @@ function VideoDetailsForm({
           ) : (
             <ChoiceRow
               body="You can change this later from your archive."
-              label={mode === "live" ? "After the stream" : "Recording privacy"}
+              label="Recording privacy"
               onChange={(recordingVisibility) =>
                 onChange({
                   ...form,
@@ -1290,80 +2390,78 @@ function VideoDetailsForm({
             value={form.contributeCalibration}
           />
 
-          {courtSetup && (
-            <>
-              <ChoiceRow
-                body={
-                  mode === "upload"
-                    ? "Tell Duna how this video was framed. Landscape usually gives Vision more court context."
-                    : "We guide you if the iPhone is held the wrong way. Landscape captures more of a full court."
-                }
-                label={
-                  mode === "upload"
-                    ? "How was this video framed?"
-                    : "How will you hold the phone?"
-                }
-                onChange={(orientation) => onChange({ ...form, orientation })}
-                options={[
-                  {
-                    label: "Landscape",
-                    value: "landscape",
-                    body: "Best for full-court video",
-                    recommended: true,
-                  },
-                  {
-                    label: "Portrait",
-                    value: "portrait",
-                    body: "Best for social viewing",
-                  },
-                ]}
-                value={form.orientation}
-              />
-              <ChoiceRow
-                body="Official beach is 16 × 8 meters. Short court is useful for junior or adapted play."
-                label="Court"
-                onChange={(court) =>
-                  onChange({
-                    ...form,
-                    courtLengthMeters: court === "full" ? 16 : 12,
-                    courtWidthMeters: court === "full" ? 8 : 6,
-                  })
-                }
-                options={[
-                  { label: "Full · 16×8m", value: "full" },
-                  { label: "Short · 12×6m", value: "short" },
-                ]}
-                value={form.courtLengthMeters === 16 ? "full" : "short"}
-              />
-              <ChoiceRow
-                body="Match settings are applied automatically when Duna has them."
-                label="Net height"
-                onChange={(net) =>
-                  onChange({
-                    ...form,
-                    netHeightMeters:
-                      net === "men" ? 2.43 : net === "women" ? 2.24 : 2.12,
-                  })
-                }
-                options={[
-                  { label: "Men · 2.43m", value: "men" },
-                  { label: "Women · 2.24m", value: "women" },
-                  { label: "Juniors · 2.12m", value: "juniors" },
-                ]}
-                value={
-                  form.netHeightMeters === 2.43
-                    ? "men"
-                    : form.netHeightMeters === 2.24
-                      ? "women"
-                      : "juniors"
-                }
-              />
-              <Text style={styles.disclosure}>
-                Junior net heights vary by age and division. Confirm the event’s
-                setting when it differs from this default.
-              </Text>
-            </>
-          )}
+          <>
+            <ChoiceRow
+              body={
+                mode === "upload"
+                  ? "Tell Duna how this video was framed. Landscape usually gives Vision more court context."
+                  : "We guide you if the iPhone is held the wrong way. Landscape captures more of a full court."
+              }
+              label={
+                mode === "upload"
+                  ? "How was this video framed?"
+                  : "How will you hold the phone?"
+              }
+              onChange={(orientation) => onChange({ ...form, orientation })}
+              options={[
+                {
+                  label: "Landscape",
+                  value: "landscape",
+                  body: "Best for full-court video",
+                  recommended: true,
+                },
+                {
+                  label: "Portrait",
+                  value: "portrait",
+                  body: "Best for social viewing",
+                },
+              ]}
+              value={form.orientation}
+            />
+            <ChoiceRow
+              body="Official beach is 16 × 8 meters. Short court is useful for junior or adapted play."
+              label="Court"
+              onChange={(court) =>
+                onChange({
+                  ...form,
+                  courtLengthMeters: court === "full" ? 16 : 12,
+                  courtWidthMeters: court === "full" ? 8 : 6,
+                })
+              }
+              options={[
+                { label: "Full · 16×8m", value: "full" },
+                { label: "Short · 12×6m", value: "short" },
+              ]}
+              value={form.courtLengthMeters === 16 ? "full" : "short"}
+            />
+            <ChoiceRow
+              body="Match settings are applied automatically when Duna has them."
+              label="Net height"
+              onChange={(net) =>
+                onChange({
+                  ...form,
+                  netHeightMeters:
+                    net === "men" ? 2.43 : net === "women" ? 2.24 : 2.12,
+                })
+              }
+              options={[
+                { label: "Men · 2.43m", value: "men" },
+                { label: "Women · 2.24m", value: "women" },
+                { label: "Juniors · 2.12m", value: "juniors" },
+              ]}
+              value={
+                form.netHeightMeters === 2.43
+                  ? "men"
+                  : form.netHeightMeters === 2.24
+                    ? "women"
+                    : "juniors"
+              }
+            />
+            <Text style={styles.disclosure}>
+              Junior net heights vary by age and division. Confirm the event’s
+              setting when it differs from this default.
+            </Text>
+          </>
         </ScrollView>
         <View style={styles.modalFooter}>
           <Pressable
@@ -1922,6 +3020,7 @@ function CaptureExperience({
   const [visionScore, setVisionScore] = useState<VisionScore>(initialScore);
   const [matchScoring, setMatchScoring] = useState<MatchScoringState>();
   const [showRemote, setShowRemote] = useState(false);
+  const [previewHidden, setPreviewHidden] = useState(false);
   const activeRef = useRef(false);
   const busyRef = useRef(false);
   const permissionRef = useRef(false);
@@ -2766,6 +3865,25 @@ function CaptureExperience({
           teamB={visionSettings.teamB}
         />
       )}
+      {isActive && previewHidden && (
+        <View pointerEvents="none" style={styles.lowPowerOverlay}>
+          <View style={styles.lowPowerMark}>
+            <DunaIcon color="#ffffff" name="eye-off" size={28} />
+          </View>
+          <Text style={styles.lowPowerTimer}>
+            {formatClock(elapsedSeconds)}
+          </Text>
+          <Text style={styles.lowPowerTitle}>
+            {mode === "live"
+              ? "Live stream in progress"
+              : "Recording in progress"}
+          </Text>
+          <Text style={styles.lowPowerBody}>
+            Preview is hidden to reduce screen use. Camera, Watch scoring, and
+            remote control stay active.
+          </Text>
+        </View>
+      )}
       <SafeAreaView
         pointerEvents="box-none"
         style={[
@@ -2780,32 +3898,41 @@ function CaptureExperience({
           ]}
         >
           <Pressable
+            accessibilityLabel="Close camera guide"
             disabled={isActive}
             onPress={() => void closeCapture()}
             style={styles.captureClose}
           >
-            <Text style={styles.captureCloseText}>×</Text>
+            <DunaIcon color="#ffffff" name="close" size={21} />
           </Pressable>
           <View style={styles.captureStatus}>
             {isActive && <View style={styles.liveDot} />}
-            <Text style={styles.captureStatusText}>
-              {recording
-                ? `RECORDING · ${formatDuration(elapsedSeconds)}`
-                : streamState === "live"
-                  ? `LIVE · ${formatDuration(elapsedSeconds)}`
-                  : streamState === "connecting"
-                    ? "CONNECTING"
-                    : mode === "live"
-                      ? "LIVE SETUP"
-                      : "DUNA RECORD SETUP"}
-            </Text>
+            <View style={styles.captureStatusCopy}>
+              <Text style={styles.captureStatusText}>
+                {recording
+                  ? "RECORDING"
+                  : streamState === "live"
+                    ? "LIVE"
+                    : streamState === "connecting"
+                      ? "CONNECTING"
+                      : mode === "live"
+                        ? "LIVE SETUP"
+                        : "CAMERA GUIDE"}
+              </Text>
+              {isActive && (
+                <Text style={styles.captureStatusTimer}>
+                  {formatClock(elapsedSeconds)}
+                </Text>
+              )}
+            </View>
           </View>
           <Pressable
+            accessibilityLabel="Connect a remote device"
             disabled={!visionAccess}
             onPress={() => setShowRemote(true)}
             style={styles.remoteButton}
           >
-            <Text style={styles.remoteButtonIcon}>⌁</Text>
+            <DunaIcon color="#ffffff" name="remote" size={19} />
             <Text style={styles.remoteButtonText}>REMOTE</Text>
           </Pressable>
         </View>
@@ -2965,13 +4092,35 @@ function CaptureExperience({
           {isActive && visionSession && (
             <View style={styles.captureMomentActions}>
               <Pressable
+                accessibilityLabel="Save favorite moment"
                 onPress={() => void favoriteMoment()}
                 style={styles.favoriteMomentButton}
               >
-                <Text style={styles.favoriteMomentStar}>★</Text>
-                <Text style={styles.favoriteMomentText}>Favorite moment</Text>
+                <DunaIcon color={palette.sand} name="star" size={21} />
+                <Text style={styles.favoriteMomentText}>Moment</Text>
               </Pressable>
               <Pressable
+                accessibilityLabel={
+                  previewHidden ? "Show camera preview" : "Hide camera preview"
+                }
+                onPress={() => setPreviewHidden((current) => !current)}
+                style={styles.favoriteMomentButton}
+              >
+                <DunaIcon
+                  color="#ffffff"
+                  name={previewHidden ? "eye" : "eye-off"}
+                  size={21}
+                />
+                <Text style={styles.favoriteMomentText}>
+                  {previewHidden ? "Show" : "Hide"}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel={
+                  visionSession.remoteConnected
+                    ? "Remote device connected"
+                    : "Connect a remote device"
+                }
                 onPress={() => setShowRemote(true)}
                 style={styles.remoteStatusPill}
               >
@@ -2982,9 +4131,7 @@ function CaptureExperience({
                   ]}
                 />
                 <Text style={styles.remoteStatusText}>
-                  {visionSession.remoteConnected
-                    ? "Remote connected"
-                    : "Connect remote"}
+                  {visionSession.remoteConnected ? "Remote" : "Connect"}
                 </Text>
               </Pressable>
             </View>
@@ -3927,12 +5074,14 @@ export function VideoStudioScreen({
   onCreateMatch,
   onTransferStatus,
   runtime,
+  theme = "light",
 }: {
   /** Keep the offline-sync worker mounted while another Duna tab is open. */
   readonly active?: boolean;
   readonly onCreateMatch?: () => void;
   readonly onTransferStatus?: (status: VideoTransferStatus | undefined) => void;
   readonly runtime: PlayerRuntime;
+  readonly theme?: DunaTheme;
 }) {
   const client = runtime.client;
   const [studio, setStudio] = useState<VideoStudioData>();
@@ -4220,7 +5369,7 @@ export function VideoStudioScreen({
     setImportedVision(undefined);
     setForm(
       captureFormFromDefaults(savedCaptureDefaults, {
-        title: "Match recording",
+        title: "",
         category: "match",
       }),
     );
@@ -5225,6 +6374,7 @@ export function VideoStudioScreen({
               onImportedVisionChange={setImportedVision}
               preparedVideo={preparedVideo}
               foregroundOnlyUpload={!isIos}
+              theme={theme}
             />
           )}
       </Modal>
@@ -6277,6 +7427,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 22,
     paddingHorizontal: 16,
+    zIndex: 5,
   },
   captureChromeLandscape: { paddingBottom: 12, paddingHorizontal: 22 },
   captureTop: {
@@ -6288,24 +7439,25 @@ const styles = StyleSheet.create({
   captureTopLandscape: { paddingTop: 2 },
   captureClose: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    borderRadius: 20,
-    height: 40,
+    backgroundColor: "rgba(0,0,0,0.56)",
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 25,
+    borderWidth: 1,
+    height: 50,
     justifyContent: "center",
-    width: 40,
+    width: 50,
   },
-  captureCloseText: { color: "#ffffff", fontSize: 28, lineHeight: 30 },
   remoteButton: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.56)",
     borderColor: "rgba(255,255,255,0.28)",
-    borderRadius: 20,
+    borderRadius: 25,
     borderWidth: 1,
-    height: 40,
+    gap: 2,
+    height: 50,
     justifyContent: "center",
-    width: 58,
+    width: 65,
   },
-  remoteButtonIcon: { color: palette.sand, fontSize: 15, fontWeight: "900" },
   remoteButtonText: {
     color: "#ffffff",
     fontSize: 12,
@@ -6314,24 +7466,79 @@ const styles = StyleSheet.create({
   },
   captureStatus: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.46)",
-    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 20,
+    borderWidth: 1,
     flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    gap: 8,
+    minHeight: 50,
+    paddingHorizontal: 15,
+    paddingVertical: 7,
   },
+  captureStatusCopy: { alignItems: "center", gap: 1 },
   captureStatusText: {
     color: "#ffffff",
     fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontWeight: "700",
+    letterSpacing: 0.9,
+  },
+  captureStatusTimer: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 13,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "500",
+    letterSpacing: 0.4,
   },
   liveDot: {
     backgroundColor: "#e8683a",
     borderRadius: 4,
     height: 8,
     width: 8,
+  },
+  lowPowerOverlay: {
+    alignItems: "center",
+    backgroundColor: "#111315",
+    bottom: 0,
+    gap: 10,
+    justifyContent: "center",
+    left: 0,
+    paddingHorizontal: 30,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 4,
+  },
+  lowPowerMark: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.14)",
+    borderRadius: 30,
+    borderWidth: 1,
+    height: 60,
+    justifyContent: "center",
+    marginBottom: 5,
+    width: 60,
+  },
+  lowPowerTimer: {
+    color: "#ffffff",
+    fontSize: 32,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "700",
+    letterSpacing: -0.8,
+  },
+  lowPowerTitle: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  lowPowerBody: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 390,
+    textAlign: "center",
   },
   captureBottom: { alignItems: "center", gap: 12 },
   captureBottomLandscape: {
@@ -6540,25 +7747,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(4,10,13,0.82)",
     borderColor: "rgba(255,255,255,0.28)",
-    borderRadius: 22,
+    borderRadius: 25,
     borderWidth: 1,
     flexDirection: "row",
     gap: 7,
-    minHeight: 42,
-    paddingHorizontal: 14,
+    minHeight: 50,
+    paddingHorizontal: 15,
   },
-  favoriteMomentStar: { color: palette.sand, fontSize: 19 },
   favoriteMomentText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
   remoteStatusPill: {
     alignItems: "center",
     backgroundColor: "rgba(4,10,13,0.82)",
     borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 22,
+    borderRadius: 25,
     borderWidth: 1,
     flexDirection: "row",
     gap: 7,
-    minHeight: 42,
-    paddingHorizontal: 12,
+    minHeight: 50,
+    paddingHorizontal: 15,
   },
   remoteStatusDot: {
     backgroundColor: "#98a2b3",

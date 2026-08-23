@@ -10,22 +10,25 @@ Read the relevant reference before changing any user-facing surface:
 1. [`docs/design/duna-font-usage-guide.md`](docs/design/duna-font-usage-guide.md)
    is the authoritative typography contract for every surface. It supersedes
    all font guidance in the design-system, mobile, theming, and audit files.
-2. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
+2. [`docs/design/duna-mobile-interface-v4.md`](docs/design/duna-mobile-interface-v4.md)
+   is the current direction for native navigation, chat, video, recording,
+   Satoshi translation, icons, sheets, and the five-point mobile grid.
+3. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
    is the current source of truth for ground inversion, athletic composition,
    typography, club color, player identity, and page-level direction. It
    supersedes only the zoning rule in v2; its typography guidance applies only
    where the font usage guide does not amend it.
-3. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
+4. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
    is the verified correction ledger. Treat an item as closed only when source,
    computed styles, responsive layout, and live behavior agree.
-4. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
+5. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
    remains the source for brand, imagery, motion, voice, and co-branding where
    v3 does not amend it.
-5. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
+6. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
    extends the system for Duna Players and Duna Pro. It owns mobile navigation,
    adaptive contrast, sunlight behavior, touch targets, offline states, the
    Strand, and the Watch.
-6. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
+7. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
    owns theme architecture. Theme is a preference, zone is meaning, and
    contrast is an environmental condition.
 
@@ -54,12 +57,12 @@ When the documents appear to conflict, preserve these invariants:
   shared token resolver. Never use the retired `performance` zone.
 - Every theme supports Light, Dark, and Match device. Never hardcode a fog
   dissolve: it must resolve to the active zone ground.
-- Duna ships exactly two brand typefaces. Use Fellix for every word, including
-  editorial, athletic, operator, and app display; use Archivo for every
-  meaningful numeral and the Duna wordmark. No serif, optional monument face,
-  or third brand family may enter a product bundle. Generic `sans-serif` is a
-  failure fallback only. Club-configured theme fonts remain contained tenant
-  content and never replace Duna chrome.
+- Duna ships Satoshi as its one product typeface. Use it for every word and
+  number across web, HQ, Player, and Pro; use tabular figures for updating or
+  aligned data. No serif, optional monument face, or second brand family may
+  enter a product bundle. Generic `sans-serif` is a failure fallback only.
+  Club-configured theme fonts remain contained tenant content and never replace
+  Duna chrome.
 - Never synthesize a font weight. Tracking follows the v3 size curve and is
   never tighter than `-0.030em`; display word spacing compensates negative
   tracking.
@@ -69,10 +72,10 @@ When the documents appear to conflict, preserve these invariants:
 - Players control expressive identity but never verified data. Curated accents,
   photos, biographies, highlights, and sponsor marks obey verification and
   moderation gates.
-- Meaningful numbers use the six Archivo tiers from the font guide. Score,
+- Meaningful numbers use the six Satoshi tiers from the font guide. Score,
   Hero, Block, Table, and Chip use tabular figures; Monument is deliberately
-  proportional. Use `font-variation-settings`, never `font-stretch`. Fellix is
-  the only family for words across web, HQ, Super Admin, and both native apps.
+  proportional. Never synthesize a font weight. Satoshi is the only product
+  family across web, HQ, Super Admin, and both native apps.
 - Use the four chip classes from the design system. Do not render status,
   taxonomy, identity, and metrics as undifferentiated badges.
 - Do not render misleading empty data such as `0/0`, `0–0`, undifferentiated

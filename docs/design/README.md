@@ -12,11 +12,14 @@ The current references are intentionally separate:
   athletic composition, typography, club color, and player identity.
 - `duna-hq-component-system.md` is the operational component, content, and
   responsive usage contract for Duna HQ.
+- `duna-mobile-interface-v4.md` is the current mobile chrome, navigation,
+  messaging, video, recorder, five-point grid, and migration contract. It
+  supersedes conflicting mobile UI direction in the older guide.
 - `duna-implementation-audit.md` records the verified production failures and
   their acceptance criteria.
 - `duna-design-system.md` defines the core brand and web system.
-- `duna-mobile-design-guide.md` defines how that system behaves on phones and
-  across the distinct Player and Pro jobs.
+- `duna-mobile-design-guide.md` retains the product jobs, sunlight behavior,
+  offline expectations, and Player/Pro separation not amended by v4.
 - `duna-theming-light-dark.md` defines the composable theme, semantic zone, and
   environmental contrast model.
 

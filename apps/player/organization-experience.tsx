@@ -22,13 +22,16 @@ import {
   Share,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useMapboxToken } from "./discovery-map";
-import { DunaNumericText, SatoshiText as Text } from "./satoshi-text";
+import {
+  DunaNumericText,
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { dunaWebUrl } from "./mobile-api";
 import { NativeMarkdownContent } from "./markdown-content";

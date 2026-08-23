@@ -15,6 +15,23 @@ const violations: string[] = [];
 const minimumFontSizePx = 12;
 const minimumFontSizeRem = 0.75;
 
+function nativeTextImports(source: string) {
+  return [
+    ...source.matchAll(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']react-native["']/g,
+    ),
+  ]
+    .flatMap((match) => match[1].split(","))
+    .map(
+      (binding) =>
+        binding
+          .trim()
+          .replace(/^type\s+/, "")
+          .split(/\s+as\s+/)[0],
+    )
+    .filter((binding) => binding === "Text" || binding === "TextInput");
+}
+
 function sourceFiles(directory: string): string[] {
   if (!existsSync(directory)) return [];
 
@@ -37,7 +54,21 @@ for (const file of sourceRoots.flatMap((root) => sourceFiles(root))) {
   const extension = extname(file);
   if (![".css", ".ts", ".tsx"].includes(extension)) continue;
 
-  const lines = readFileSync(file, "utf8").split("\n");
+  const source = readFileSync(file, "utf8");
+  const lines = source.split("\n");
+
+  if (
+    extension === ".tsx" &&
+    ["player", "pro"].some((app) => file.includes(join("apps", app))) &&
+    !file.endsWith("satoshi-text.tsx")
+  ) {
+    const nativeBindings = nativeTextImports(source);
+    if (nativeBindings.length > 0) {
+      violations.push(
+        `${relative(repositoryRoot, file)} imports native ${nativeBindings.join(", ")} instead of the Satoshi translation layer`,
+      );
+    }
+  }
   lines.forEach((line, index) => {
     if (extension === ".css") {
       for (const declaration of line.matchAll(

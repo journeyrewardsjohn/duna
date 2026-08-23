@@ -8,13 +8,15 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Rect } from "react-native-svg";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { usePlayerRuntime, type PlayerTrainingWorkspace } from "./runtime";
 
 type TrainingEvent = PlayerTrainingWorkspace["upcomingEvents"][number];

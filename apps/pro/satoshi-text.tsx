@@ -48,7 +48,9 @@ function satoshiFamily(style: TextProps["style"] | TextInputProps["style"]) {
         : Number.parseInt(weight ?? "400", 10);
 
   if (numericWeight >= 800) return "Satoshi-Black";
-  if (numericWeight >= 700) return "Satoshi-Bold";
+  // Satoshi has no shipped semibold face. Map 600 to Bold instead of
+  // synthesizing an in-between weight that renders differently by platform.
+  if (numericWeight >= 600) return "Satoshi-Bold";
   if (numericWeight >= 500) return "Satoshi-Medium";
   if (numericWeight <= 350) return "Satoshi-Light";
   return "Satoshi";

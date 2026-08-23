@@ -1,5 +1,11 @@
 # Duna Mobile — Design Guide for Duna Players and Duna Pro
 
+> Navigation, application chrome, Satoshi typography, the five-point grid,
+> chat, Video Library, and Record a Game are superseded by
+> `duna-mobile-interface-v4.md`. This guide remains authoritative for Player and
+> Pro jobs, sunlight behavior, offline expectations, privacy separation, and
+> native capability direction not amended there.
+
 **Companion to:** `duna-design-system.md` (v2, "Golden Hour Performance"). Everything there applies. This document covers what changes when the system moves onto a phone, and how two apps stay unmistakably one product while doing opposite jobs.
 
 **Stack assumption:** Expo / React Native, shared token package, shared primitive components, separate app shells.
