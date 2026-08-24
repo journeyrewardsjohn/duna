@@ -181,7 +181,7 @@ const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerAppIcon = require("./assets/icon.png");
+const dunaPlayerBrandIcon = require("../web/public/brand/duna-icon.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type MobilePredictionDiscoveryItem = NonNullable<
@@ -645,22 +645,12 @@ function DunaWordmark({
 
 function DunaMark({ size }: { readonly size: number }) {
   return (
-    <View
-      style={{
-        alignItems: "center",
-        borderRadius: size * 0.24,
-        height: size,
-        justifyContent: "center",
-        overflow: "hidden",
-        width: size,
-      }}
-    >
-      <Image
-        resizeMode="cover"
-        source={dunaPlayerAppIcon}
-        style={{ height: size * 1.42, width: size * 1.42 }}
-      />
-    </View>
+    <Image
+      accessibilityIgnoresInvertColors
+      resizeMode="contain"
+      source={dunaPlayerBrandIcon}
+      style={{ height: size, width: size }}
+    />
   );
 }
 
@@ -13753,7 +13743,7 @@ function TabBar({
             color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
             name={icon}
             size={24}
-            strokeWidth={isSelected ? 2.25 : 1.75}
+            strokeWidth={isSelected ? 1.75 : 1.45}
           />
           {destination === "messages" && unreadCount > 0 && (
             <View style={styles.tabUnreadBadge}>
@@ -13774,8 +13764,6 @@ function TabBar({
         { bottom: Math.max(mobileGrid[2], insets.bottom - mobileGrid[5]) },
       ]}
     >
-      <View pointerEvents="none" style={styles.tabBarSandGlow} />
-      <View pointerEvents="none" style={styles.tabBarBlueGlow} />
       <View style={styles.tabBar}>
         <LiquidGlassSurface
           borderColor={rgba(colors.whiteRgb, 0.82)}
@@ -13796,13 +13784,7 @@ function TabBar({
           style={styles.tabAiButton}
         >
           <View style={styles.tabAiHalo}>
-            <LiquidGlassSurface
-              borderColor={rgba(colors.whiteRgb, 0.9)}
-              cornerRadius={mobileGrid[6]}
-              fallbackColor={rgba(colors.whiteRgb, 0.88)}
-              tint="#f7eee0"
-            />
-            <DunaMark size={mobileGrid[8]} />
+            <DunaMark size={mobileGrid[7]} />
           </View>
         </Pressable>
         <Pressable
@@ -13815,7 +13797,12 @@ function TabBar({
           }}
           style={styles.tabItem}
         >
-          <DunaIcon color={colors.aqua} name="plus" size={25} />
+          <DunaIcon
+            color={rgba(colors.accentRgb, 0.78)}
+            name="plus"
+            size={25}
+            strokeWidth={1.55}
+          />
         </Pressable>
         {destinationButton("messages", "Messages", "message")}
       </View>
@@ -22712,30 +22699,6 @@ function createStyles() {
       right: mobileControl.pageInset,
       zIndex: 90,
     },
-    tabBarSandGlow: {
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderRadius: 60,
-      bottom: mobileGrid[1],
-      height: mobileGrid[9],
-      left: "16%",
-      position: "absolute",
-      shadowColor: colors.sand,
-      shadowOpacity: 0.2,
-      shadowRadius: 18,
-      width: "38%",
-    },
-    tabBarBlueGlow: {
-      backgroundColor: rgba(colors.accentRgb, 0.08),
-      borderRadius: 60,
-      bottom: 0,
-      height: mobileGrid[10],
-      position: "absolute",
-      right: mobileGrid[2],
-      shadowColor: colors.aqua,
-      shadowOpacity: 0.16,
-      shadowRadius: 20,
-      width: "38%",
-    },
     tabBar: {
       alignItems: "center",
       backgroundColor: "transparent",
@@ -22797,20 +22760,17 @@ function createStyles() {
     },
     tabAiHalo: {
       alignItems: "center",
-      backgroundColor: "transparent",
+      backgroundColor: rgba(colors.whiteRgb, 0.76),
+      borderColor: rgba(colors.whiteRgb, 0.92),
       borderRadius: mobileControl.pillRadius,
+      borderWidth: 1,
       height: mobileGrid[12],
       justifyContent: "center",
-      overflow: "hidden",
       shadowColor: colors.aquaDeep,
       shadowOffset: { width: 0, height: 7 },
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.08,
       shadowRadius: 12,
       width: mobileGrid[12],
-    },
-    tabAiImage: {
-      height: mobileGrid[12] + mobileGrid[6],
-      width: mobileGrid[12] + mobileGrid[6],
     },
     quickSheetBackdrop: {
       backgroundColor: rgba(colors.inkRgb, 0.42),

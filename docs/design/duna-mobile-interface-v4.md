@@ -84,26 +84,28 @@ from it; it is not a second skin for Home, Calendar, discovery, or messaging.
 
 ### Icons
 
-Use the Duna 24×24 line set: 1.75pt stroke, round caps and joins, no decorative
-fills. Active state may use 2.25pt stroke and one low-opacity fill. Icons and
+Use the Duna 24×24 line set: 1.5pt stroke, round caps and joins, no decorative
+fills. Active state may use 1.75pt stroke and one low-opacity fill. Icons and
 their labels share one baseline; do not use emoji or text glyphs as interface
 icons. An icon-only control always has a 50pt target and an accessibility
 label.
 
 ## Navigation and sheets
 
-The bottom bar is a translucent glass dock with a light blue or sand underlay,
-not a black slab. It is icon-only in every state. The selected destination gets
-a quiet translucent plate and a stronger Duna-navy icon; it does not add a
-label or change the dock's geometry. Calendar replaces search. Messages opens
-the unified chat shell. The center Duna mark is intentionally smaller than the
-surrounding target and opens the full-screen Duna AI copilot. The plus button
-opens contextual quick actions in a sheet.
+The bottom bar is one translucent glass dock with a restrained light-blue tint,
+not a black slab or a stack of decorative color blobs. It is icon-only in every
+state. The selected destination gets a quiet translucent plate and a stronger
+Duna-navy icon; it does not add a label or change the dock's geometry. Calendar
+replaces search. Messages opens the unified chat shell. The center Duna mark is
+intentionally smaller than the surrounding target and opens the full-screen
+Duna AI copilot. The plus button opens contextual quick actions in a sheet.
 
-On iOS 26+, use Expo UI's native SwiftUI Liquid Glass modifier for the dock and
-center action. Other iOS versions and Android use the same React Native layout
-with a translucent, bordered fallback. Glass is atmosphere, never the only
-source of contrast or selection state.
+On iOS 26+, use Expo UI's native SwiftUI Liquid Glass modifier for the dock.
+Keep the center Duna action as a stable React Native layer above that glass so
+the brand mark does not depend on nested native compositing. Other iOS versions
+and Android use the same React Native layout with a translucent, bordered
+fallback. Glass is atmosphere, never the only source of contrast or selection
+state.
 
 Sheets own short choices, filters, quick actions, and secondary configuration.
 They use a visible handle, one clear title, 50pt option rows, a checked selected

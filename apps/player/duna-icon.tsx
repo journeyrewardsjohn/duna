@@ -220,7 +220,7 @@ export function DunaIcon({
   color = "currentColor",
   name,
   size = 22,
-  strokeWidth = 1.75,
+  strokeWidth = 1.5,
   ...props
 }: SvgProps & {
   readonly color?: string;
