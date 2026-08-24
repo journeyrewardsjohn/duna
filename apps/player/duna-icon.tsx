@@ -21,6 +21,7 @@ export type DunaIconName =
   | "eye-off"
   | "lock"
   | "home"
+  | "heart"
   | "message"
   | "menu"
   | "microphone"
@@ -32,8 +33,10 @@ export type DunaIconName =
   | "settings"
   | "sparkles"
   | "star"
+  | "trend-up"
   | "user"
   | "video"
+  | "wallet"
   | "waves";
 
 function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
@@ -116,6 +119,10 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
           <Path d="M5.5 9v11h13V9M9.5 20v-6h5v6" />
         </>
       );
+    case "heart":
+      return (
+        <Path d="M20.8 5.9a5.1 5.1 0 0 0-7.2 0L12 7.5l-1.6-1.6a5.1 5.1 0 0 0-7.2 7.2L12 21l8.8-7.9a5.1 5.1 0 0 0 0-7.2Z" />
+      );
     case "message":
       return (
         <Path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5.5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
@@ -191,6 +198,13 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
       return (
         <Path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z" />
       );
+    case "trend-up":
+      return (
+        <>
+          <Path d="m4 17 5.2-5.2 3.6 3.6L20 8.2" />
+          <Polyline points="14.5 8.2 20 8.2 20 13.7" />
+        </>
+      );
     case "user":
       return (
         <>
@@ -203,6 +217,14 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Rect height="14" rx="2.5" width="14" x="3" y="5" />
           <Path d="m17 10 4-2v8l-4-2Z" />
+        </>
+      );
+    case "wallet":
+      return (
+        <>
+          <Path d="M4 6.5h14a2 2 0 0 1 2 2V19H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h11" />
+          <Path d="M15 11h6v4h-6a2 2 0 0 1 0-4Z" />
+          <Circle cx="16" cy="13" r=".55" fill="currentColor" stroke="none" />
         </>
       );
     case "waves":

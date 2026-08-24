@@ -158,6 +158,19 @@ a sheet.
 Empty state explains what happens next: practice starts private, uploads remain
 available after leaving the screen, and the user decides what becomes public.
 
+## Player Profile
+
+Profile uses the same true-white shell as Home. Lead with a compact player
+identity card and a six-tile, two-column destination grid: Profile, Wallet,
+Predictions, Health, Performance, and Videos. Tiles are equal in size and use
+the lightweight Duna line-icon set. Blue and sand appear only as quiet tile
+tints; do not promote one destination into a large dark feature card.
+
+Videos is a first-class destination that opens the existing Video Library. Keep
+network behavior under Settings as `Data use`, with Wi-Fi and cellular language,
+so it is not confused with the library itself. Organizations and settings
+follow the destination grid as compact lists with 50pt-or-larger targets.
+
 ## Record a game
 
 ### Step 1: setup

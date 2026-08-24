@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { demoPlayer } from "@duna/core/demo";
+import { mobileControl, mobileGrid } from "@duna/ui/mobile";
+import { DunaIcon, type DunaIconName } from "./duna-icon";
 import { SatoshiText as Text } from "./satoshi-text";
 import { dunaWebUrl } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
@@ -25,7 +27,7 @@ import {
 } from "./video-offline";
 
 type HubDestination =
-  "profile" | "wallet" | "predictions" | "health" | "performance";
+  "profile" | "wallet" | "predictions" | "health" | "performance" | "video";
 
 const notificationOptions = [
   {
@@ -120,7 +122,7 @@ function NotificationPreferencesModal({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <DunaIcon color="#1B1B19" name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.subscriptionContent}>
@@ -195,7 +197,7 @@ function VideoDataPreferencesModal({
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
         <View style={styles.modalHeader}>
           <View style={styles.flex}>
-            <Text style={styles.eyebrow}>VIDEO + DATA</Text>
+            <Text style={styles.eyebrow}>DATA USE</Text>
             <Text style={styles.modalTitle}>Offline first.</Text>
           </View>
           <Pressable
@@ -203,7 +205,7 @@ function VideoDataPreferencesModal({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <DunaIcon color="#1B1B19" name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.subscriptionContent}>
@@ -295,7 +297,7 @@ function ProfileDetailsModal({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <DunaIcon color="#1B1B19" name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.modalContent}>
@@ -480,7 +482,7 @@ function SubscriptionManagementModal({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <DunaIcon color="#1B1B19" name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView
@@ -774,14 +776,14 @@ export function ProfileHubScreen({
   const [videoDataOpen, setVideoDataOpen] = useState(false);
   const actions: readonly {
     readonly key: HubDestination;
-    readonly icon: string;
+    readonly icon: DunaIconName;
     readonly title: string;
     readonly body: string;
-    readonly featured?: boolean;
+    readonly tone?: "blue" | "sand";
   }[] = [
     {
       key: "profile",
-      icon: "◎",
+      icon: "user",
       title: "Profile",
       body:
         settings?.profile.onboardingStatus === "complete"
@@ -790,13 +792,13 @@ export function ProfileHubScreen({
     },
     {
       key: "wallet",
-      icon: "◇",
+      icon: "wallet",
       title: "Wallet",
       body: money(wallet?.availableMinor ?? 0) + " available",
     },
     {
       key: "predictions",
-      icon: "✦",
+      icon: "sparkles",
       title: "Predictions",
       body:
         Math.floor(predictionWallet?.availableCredits ?? 0).toLocaleString(
@@ -805,16 +807,23 @@ export function ProfileHubScreen({
     },
     {
       key: "health",
-      icon: "♥",
+      icon: "heart",
       title: "Health",
       body: "Private recovery",
     },
     {
       key: "performance",
-      icon: "↗",
+      icon: "trend-up",
       title: "Performance",
       body: player.rating.display.toFixed(2) + " Sand Rating",
-      featured: true,
+      tone: "sand",
+    },
+    {
+      key: "video",
+      icon: "video",
+      title: "Videos",
+      body: "Library + recordings",
+      tone: "blue",
     },
   ];
 
@@ -832,9 +841,23 @@ export function ProfileHubScreen({
         contentContainerStyle={styles.screen}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.topEyebrow}>YOU + YOUR DUNA</Text>
-        <Text style={styles.topTitle}>Everything about your game.</Text>
-        <View style={styles.identity}>
+        <View style={styles.topHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.topEyebrow}>YOUR DUNA</Text>
+            <Text style={styles.topTitle}>Profile.</Text>
+            <Text style={styles.topBody}>
+              Your game, identity, and connections in one place.
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityHint="Opens your profile details and artwork"
+          accessibilityLabel={`Open ${player.displayName}'s profile`}
+          accessibilityRole="button"
+          onPress={() => setProfileOpen(true)}
+          style={({ pressed }) => [styles.identity, pressed && styles.pressed]}
+        >
           {player.avatarUrl ? (
             <Image
               source={{ uri: player.avatarUrl }}
@@ -847,14 +870,18 @@ export function ProfileHubScreen({
           )}
           <View style={styles.flex}>
             <Text style={styles.identityName}>{player.displayName}</Text>
-            <Text style={styles.identityMeta}>
+            <Text numberOfLines={1} style={styles.identityMeta}>
               @{player.handle} · {player.homeMarket}
             </Text>
           </View>
-          <Text style={styles.identityRating}>
-            {player.rating.display.toFixed(2)}
-          </Text>
-        </View>
+          <View style={styles.identityRatingBlock}>
+            <Text style={styles.identityRating}>
+              {player.rating.display.toFixed(2)}
+            </Text>
+            <Text style={styles.identityRatingLabel}>SAND RATING</Text>
+          </View>
+          <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+        </Pressable>
 
         <View style={styles.quickGrid}>
           {actions.map((action) => (
@@ -864,61 +891,44 @@ export function ProfileHubScreen({
               onPress={() => open(action.key)}
               style={({ pressed }) => [
                 styles.quickCard,
-                action.featured && styles.quickCardFeatured,
+                action.tone === "blue" && styles.quickCardBlue,
+                action.tone === "sand" && styles.quickCardSand,
                 pressed && styles.pressed,
               ]}
             >
-              <View
-                style={[
-                  styles.quickIcon,
-                  action.featured && styles.quickIconFeatured,
-                ]}
-              >
-                <Text
+              <View style={styles.quickCardTop}>
+                <View
                   style={[
-                    styles.quickIconText,
-                    action.featured && styles.quickTextFeatured,
+                    styles.quickIcon,
+                    action.tone === "blue" && styles.quickIconBlue,
+                    action.tone === "sand" && styles.quickIconSand,
                   ]}
                 >
-                  {action.icon}
+                  <DunaIcon color="#153F70" name={action.icon} size={21} />
+                </View>
+                <DunaIcon
+                  color="rgba(27,27,25,0.42)"
+                  name="chevron-right"
+                  size={17}
+                />
+              </View>
+              <View>
+                <Text style={styles.quickTitle}>{action.title}</Text>
+                <Text numberOfLines={2} style={styles.quickBody}>
+                  {action.body}
                 </Text>
               </View>
-              <Text
-                style={[
-                  styles.quickTitle,
-                  action.featured && styles.quickTextFeatured,
-                ]}
-              >
-                {action.title}
-              </Text>
-              <Text
-                style={[
-                  styles.quickBody,
-                  action.featured && styles.quickBodyFeatured,
-                ]}
-              >
-                {action.body}
-              </Text>
-              <Text
-                style={[
-                  styles.quickArrow,
-                  action.featured && styles.quickTextFeatured,
-                ]}
-              >
-                →
-              </Text>
             </Pressable>
           ))}
         </View>
 
         <View style={styles.sectionHeading}>
-          <View>
-            <Text style={styles.eyebrow}>CLUBS + COACHES</Text>
-            <Text style={styles.sectionTitle}>Your organizations.</Text>
+          <Text style={styles.sectionTitle}>Organizations</Text>
+          <View style={styles.sectionCountPill}>
+            <Text style={styles.sectionCount}>
+              {organizationWallets?.length ?? 0}
+            </Text>
           </View>
-          <Text style={styles.sectionCount}>
-            {organizationWallets?.length ?? 0}
-          </Text>
         </View>
         <View style={styles.organizations}>
           {(organizationWallets ?? []).map((organization) => (
@@ -944,7 +954,7 @@ export function ProfileHubScreen({
                   {organization.credits.toLocaleString("en-US")} credits
                 </Text>
               </View>
-              <Text style={styles.organizationArrow}>›</Text>
+              <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
             </Pressable>
           ))}
           {!organizationWallets?.length && (
@@ -958,50 +968,78 @@ export function ProfileHubScreen({
         </View>
 
         <View style={styles.sectionHeading}>
-          <View>
-            <Text style={styles.eyebrow}>SETTINGS</Text>
-            <Text style={styles.sectionTitle}>The simple stuff.</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Settings</Text>
         </View>
         <View style={styles.settings}>
           <Pressable
             disabled={mode === "preview"}
             onPress={() => setSubscriptionsOpen(true)}
-            style={styles.setting}
+            style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
+            <View style={styles.settingIcon}>
+              <DunaIcon color="#153F70" name="wallet" size={20} />
+            </View>
             <View style={styles.flex}>
               <Text style={styles.settingText}>Subscriptions + billing</Text>
               <Text style={styles.settingMeta}>
                 Duna, clubs, organizations, and coaches
               </Text>
             </View>
-            <Text style={styles.settingArrow}>›</Text>
+            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
           </Pressable>
           <Pressable
             disabled={mode === "preview"}
             onPress={() => setNotificationsOpen(true)}
-            style={styles.setting}
+            style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
-            <Text style={styles.settingText}>Notifications</Text>
-            <Text style={styles.settingArrow}>›</Text>
+            <View style={styles.settingIcon}>
+              <DunaIcon color="#153F70" name="bell" size={20} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.settingText}>Notifications</Text>
+              <Text style={styles.settingMeta}>
+                Account and optional updates
+              </Text>
+            </View>
+            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
           </Pressable>
           <Pressable
             onPress={() => setVideoDataOpen(true)}
-            style={styles.setting}
+            style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
+            <View style={styles.settingIcon}>
+              <DunaIcon color="#153F70" name="waves" size={20} />
+            </View>
             <View style={styles.flex}>
-              <Text style={styles.settingText}>Video + data</Text>
+              <Text style={styles.settingText}>Data use</Text>
               <Text style={styles.settingMeta}>
-                Offline recording and Wi‑Fi controls
+                Wi‑Fi, cellular uploads, and live video
               </Text>
             </View>
-            <Text style={styles.settingArrow}>›</Text>
+            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
           </Pressable>
-          {[
-            ["Privacy + safety", "#privacy"],
-            ["Language + units", "#profile"],
-            ["Account + security", "#account"],
-          ].map(([title, anchor]) => (
+          {(
+            [
+              {
+                anchor: "#privacy",
+                body: "Permissions and visibility",
+                icon: "lock" as const,
+                title: "Privacy + safety",
+              },
+              {
+                anchor: "#profile",
+                body: "Language and measurement system",
+                icon: "settings" as const,
+                title: "Language + units",
+              },
+              {
+                anchor: "#account",
+                body: "Sign-in and account access",
+                icon: "user" as const,
+                title: "Account + security",
+              },
+            ] as const
+          ).map(({ anchor, body, icon, title }) => (
             <Pressable
               disabled={mode === "preview"}
               key={title}
@@ -1010,14 +1048,29 @@ export function ProfileHubScreen({
                   dunaWebUrl + "/app/settings" + anchor,
                 )
               }
-              style={styles.setting}
+              style={({ pressed }) => [
+                styles.setting,
+                pressed && styles.pressed,
+              ]}
             >
-              <Text style={styles.settingText}>{title}</Text>
-              <Text style={styles.settingArrow}>›</Text>
+              <View style={styles.settingIcon}>
+                <DunaIcon color="#153F70" name={icon} size={20} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.settingText}>{title}</Text>
+                <Text style={styles.settingMeta}>{body}</Text>
+              </View>
+              <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
             </Pressable>
           ))}
           {signOut && (
-            <Pressable onPress={() => void signOut()} style={styles.setting}>
+            <Pressable
+              onPress={() => void signOut()}
+              style={({ pressed }) => [
+                styles.signOutRow,
+                pressed && styles.pressed,
+              ]}
+            >
               <Text style={styles.signOut}>Sign out</Text>
             </Pressable>
           )}
@@ -1072,12 +1125,13 @@ const styles = StyleSheet.create({
   close: {
     alignItems: "center",
     backgroundColor: "#ffffff",
+    borderColor: "rgba(27,27,25,0.10)",
     borderRadius: 24,
+    borderWidth: 1,
     height: 48,
     justifyContent: "center",
     width: 48,
   },
-  closeText: { color: "#111719", fontSize: 30, lineHeight: 34 },
   billingButton: {
     alignItems: "center",
     backgroundColor: "#203740",
@@ -1128,29 +1182,50 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   identity: {
     alignItems: "center",
-    borderBottomColor: "#dfddd7",
-    borderBottomWidth: 1,
+    backgroundColor: "#F4F4F2",
+    borderRadius: mobileControl.cardRadius,
     flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
-    paddingBottom: 18,
+    gap: mobileGrid[2],
+    marginTop: mobileGrid[5],
+    minHeight: 100,
+    padding: mobileGrid[3],
   },
-  identityMeta: { color: "#777166", fontSize: 14, marginTop: 3 },
-  identityName: { color: "#111719", fontSize: 20, fontWeight: "800" },
-  identityPhoto: { borderRadius: 28, height: 56, width: 56 },
+  identityMeta: {
+    color: "#77756F",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  identityName: {
+    color: "#1B1B19",
+    fontSize: 19,
+    fontWeight: "700",
+    lineHeight: 24,
+  },
+  identityPhoto: { borderRadius: 30, height: 60, width: 60 },
   identityPhotoFallback: {
     alignItems: "center",
-    backgroundColor: "#e7e8e5",
-    borderRadius: 28,
-    height: 56,
+    backgroundColor: "#E5EDF2",
+    borderRadius: 30,
+    height: 60,
     justifyContent: "center",
-    width: 56,
+    width: 60,
   },
-  identityPhotoText: { color: "#203740", fontSize: 16, fontWeight: "800" },
+  identityPhotoText: { color: "#153F70", fontSize: 17, fontWeight: "700" },
   identityRating: {
-    color: "#203740",
-    fontSize: 24,
-    fontWeight: "800",
+    color: "#153F70",
+    fontSize: 21,
+    fontWeight: "700",
+    lineHeight: 24,
+    textAlign: "right",
+  },
+  identityRatingBlock: { alignItems: "flex-end" },
+  identityRatingLabel: {
+    color: "#77756F",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 15,
   },
   modalContent: { padding: 20, paddingBottom: 48 },
   modalHeader: {
@@ -1162,7 +1237,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  modalSafe: { backgroundColor: "#f7f5ef", flex: 1 },
+  modalSafe: { backgroundColor: "#FFFFFF", flex: 1 },
   modalTitle: {
     color: "#111719",
     fontSize: 25,
@@ -1315,26 +1390,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: "row",
     gap: 11,
-    minHeight: 76,
-    paddingHorizontal: 14,
+    minHeight: 74,
+    paddingHorizontal: 15,
   },
-  organizationArrow: { color: "#777166", fontSize: 25 },
   organizationEmpty: { padding: 18 },
   organizationMark: {
     alignItems: "center",
-    backgroundColor: "#e8e9e6",
+    backgroundColor: "#E5EDF2",
     borderRadius: 19,
     height: 38,
     justifyContent: "center",
     width: 38,
   },
-  organizationMarkText: { color: "#203740", fontSize: 14, fontWeight: "900" },
-  organizationMeta: { color: "#777166", fontSize: 13, marginTop: 3 },
-  organizationName: { color: "#111719", fontSize: 16, fontWeight: "800" },
+  organizationMarkText: { color: "#153F70", fontSize: 14, fontWeight: "700" },
+  organizationMeta: { color: "#77756F", fontSize: 13, marginTop: 3 },
+  organizationName: { color: "#1B1B19", fontSize: 16, fontWeight: "700" },
   organizations: {
     backgroundColor: "#ffffff",
-    borderColor: "#e1e2df",
-    borderRadius: 20,
+    borderColor: "rgba(27,27,25,0.10)",
+    borderRadius: mobileControl.cardRadius,
     borderWidth: 1,
     marginTop: 12,
     overflow: "hidden",
@@ -1368,46 +1442,57 @@ const styles = StyleSheet.create({
     width: 108,
   },
   profilePhotoText: { color: "#203740", fontSize: 28, fontWeight: "900" },
-  quickArrow: { color: "#203740", fontSize: 21, marginTop: 16 },
-  quickBody: { color: "#777166", fontSize: 13, marginTop: 4 },
-  quickBodyFeatured: { color: "rgba(255,255,255,0.7)" },
-  quickCard: {
-    backgroundColor: "#ffffff",
-    borderColor: "#e1e2df",
-    borderRadius: 20,
-    borderWidth: 1,
-    minHeight: 166,
-    padding: 15,
-    width: "48.5%",
+  quickBody: {
+    color: "#77756F",
+    fontSize: 13,
+    lineHeight: 17,
+    marginTop: 3,
   },
-  quickCardFeatured: { backgroundColor: "#203740", borderColor: "#203740" },
+  quickCard: {
+    backgroundColor: "#F4F4F2",
+    borderRadius: mobileControl.cardRadius,
+    flexBasis: "47%",
+    flexGrow: 1,
+    justifyContent: "space-between",
+    maxWidth: "48.5%",
+    minHeight: 140,
+    padding: mobileGrid[3],
+  },
+  quickCardBlue: { backgroundColor: "#EEF4F8" },
+  quickCardSand: { backgroundColor: "#F8F2E8" },
+  quickCardTop: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   quickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginTop: 18,
+    gap: mobileGrid[2],
+    marginTop: mobileGrid[3],
   },
   quickIcon: {
     alignItems: "center",
-    backgroundColor: "#eceeea",
-    borderRadius: 18,
-    height: 38,
+    backgroundColor: "#FFFFFF",
+    borderRadius: mobileGrid[2],
+    height: mobileGrid[8],
     justifyContent: "center",
-    width: 38,
+    width: mobileGrid[8],
   },
-  quickIconFeatured: { backgroundColor: "rgba(255,255,255,0.14)" },
-  quickIconText: { color: "#203740", fontSize: 17 },
-  quickTextFeatured: { color: "#ffffff" },
+  quickIconBlue: { backgroundColor: "rgba(255,255,255,0.82)" },
+  quickIconSand: { backgroundColor: "rgba(255,255,255,0.82)" },
   quickTitle: {
-    color: "#111719",
-    fontSize: 19,
-    fontWeight: "800",
-    marginTop: 14,
+    color: "#1B1B19",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 22,
   },
   screen: {
-    backgroundColor: "#f7f5ef",
-    padding: 20,
-    paddingBottom: 150,
+    backgroundColor: "#FFFFFF",
+    flexGrow: 1,
+    paddingHorizontal: mobileControl.pageInset,
+    paddingTop: mobileGrid[4],
+    paddingBottom: 155,
   },
   secondary: {
     alignItems: "center",
@@ -1419,53 +1504,87 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   secondaryText: { color: "#203740", fontSize: 14, fontWeight: "800" },
-  sectionCount: { color: "#777166", fontSize: 15, fontWeight: "800" },
+  sectionCount: { color: "#153F70", fontSize: 12, fontWeight: "700" },
+  sectionCountPill: {
+    alignItems: "center",
+    backgroundColor: "#EEF4F8",
+    borderRadius: mobileControl.pillRadius,
+    height: mobileGrid[6],
+    justifyContent: "center",
+    minWidth: mobileGrid[6],
+    paddingHorizontal: mobileGrid[2],
+  },
   sectionHeading: {
-    alignItems: "flex-end",
+    alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 34,
+    marginTop: mobileGrid[7],
   },
   sectionTitle: {
-    color: "#111719",
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    marginTop: 4,
+    color: "#1B1B19",
+    fontSize: 21,
+    fontWeight: "700",
+    letterSpacing: -0.25,
+    lineHeight: 26,
   },
   setting: {
     alignItems: "center",
     borderBottomColor: "#ebe9e4",
     borderBottomWidth: 1,
     flexDirection: "row",
-    minHeight: 58,
-    paddingHorizontal: 15,
+    gap: mobileGrid[2],
+    minHeight: 72,
+    paddingHorizontal: mobileGrid[3],
   },
-  settingArrow: { color: "#777166", fontSize: 23 },
-  settingMeta: { color: "#777166", fontSize: 12, marginTop: 3 },
-  settingText: { color: "#111719", flex: 1, fontSize: 15, fontWeight: "700" },
+  settingIcon: {
+    alignItems: "center",
+    backgroundColor: "#F4F4F2",
+    borderRadius: mobileGrid[2],
+    height: mobileGrid[8],
+    justifyContent: "center",
+    width: mobileGrid[8],
+  },
+  settingMeta: {
+    color: "#77756F",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  settingText: { color: "#1B1B19", fontSize: 15, fontWeight: "700" },
   settings: {
     backgroundColor: "#ffffff",
-    borderColor: "#e1e2df",
-    borderRadius: 20,
+    borderColor: "rgba(27,27,25,0.10)",
+    borderRadius: mobileControl.cardRadius,
     borderWidth: 1,
     marginTop: 12,
     overflow: "hidden",
   },
-  signOut: { color: "#a54032", fontSize: 15, fontWeight: "800" },
-  topEyebrow: {
-    color: "#203740",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.4,
+  signOut: { color: "#9A4A2E", fontSize: 15, fontWeight: "700" },
+  signOutRow: {
+    justifyContent: "center",
+    minHeight: 62,
+    paddingHorizontal: mobileGrid[3],
   },
+  topBody: {
+    color: "#77756F",
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: mobileGrid[1],
+  },
+  topEyebrow: {
+    color: "#153F70",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+  },
+  topHeader: { flexDirection: "row" },
   topTitle: {
-    color: "#111719",
-    fontSize: 34,
-    fontWeight: "800",
-    letterSpacing: -1.2,
-    lineHeight: 38,
-    marginTop: 7,
+    color: "#1B1B19",
+    fontSize: 38,
+    fontWeight: "500",
+    letterSpacing: -1.15,
+    lineHeight: 42,
+    marginTop: mobileGrid[1],
   },
   videoOfflineNote: {
     backgroundColor: "#edf2ef",
