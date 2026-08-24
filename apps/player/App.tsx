@@ -188,7 +188,7 @@ const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerBrandIcon = require("../web/public/brand/duna-icon.png");
+const dunaPlayerBrandIcon = require("./assets/duna-mark.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type MobilePredictionDiscoveryItem = NonNullable<
