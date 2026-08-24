@@ -21,11 +21,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Network from "expo-network";
 import { StatusBar } from "expo-status-bar";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { demoOrganization } from "@duna/core/demo";
 import {
   ActivityIndicator,
+  AccessibilityInfo,
   Image,
-  ImageBackground,
   Pressable,
   StyleSheet,
   View,
@@ -200,9 +201,11 @@ const authBaseUrl = (
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaHeroPoster = require("./assets/duna-hero-poster.jpg");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaMark = require("./assets/duna-mark.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaWelcomeFilm = require("../../packages/ui/assets/duna-welcome-background-v1.mp4");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaWelcomePoster = require("../../packages/ui/assets/duna-welcome-background-poster-v1.png");
 
 function RuntimeLoadingState() {
   return (
@@ -293,6 +296,61 @@ function WelcomeWash() {
   );
 }
 
+function WelcomeBackground() {
+  const [hasFirstFrame, setHasFirstFrame] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState<boolean>();
+  const player = useVideoPlayer(dunaWelcomeFilm, (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = true;
+  });
+
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion === false) player.play();
+    else player.pause();
+  }, [player, reduceMotion]);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Image
+        resizeMode="cover"
+        source={dunaWelcomePoster}
+        style={StyleSheet.absoluteFill}
+      />
+      {reduceMotion === false && (
+        <VideoView
+          allowsVideoFrameAnalysis={false}
+          contentFit="cover"
+          nativeControls={false}
+          onFirstFrameRender={() => setHasFirstFrame(true)}
+          player={player}
+          playsInline
+          style={[
+            StyleSheet.absoluteFill,
+            runtimeStyles.entryVideo,
+            { opacity: hasFirstFrame ? 1 : 0 },
+          ]}
+          surfaceType="textureView"
+        />
+      )}
+    </View>
+  );
+}
+
 function AccountContours() {
   return (
     <Svg
@@ -329,12 +387,9 @@ function SignedOutState({
   readonly onSignUp: () => void;
 }) {
   return (
-    <ImageBackground
-      resizeMode="cover"
-      source={dunaHeroPoster}
-      style={runtimeStyles.entry}
-    >
+    <View style={runtimeStyles.entry}>
       <StatusBar style="light" />
+      <WelcomeBackground />
       <WelcomeWash />
       <View style={runtimeStyles.entryBrand}>
         <Image
@@ -377,7 +432,7 @@ function SignedOutState({
           in.
         </Text>
       </View>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -910,7 +965,7 @@ const runtimeStyles = StyleSheet.create({
     color: "rgba(255,255,255,0.92)",
     fontSize: 15,
     lineHeight: 21,
-    marginBottom: 60,
+    marginBottom: 145,
     maxWidth: 310,
     textAlign: "center",
   },
@@ -919,11 +974,11 @@ const runtimeStyles = StyleSheet.create({
     left: 20,
     position: "absolute",
     right: 20,
-    top: "18%",
+    top: "15.5%",
     zIndex: 2,
   },
   entryContent: {
-    bottom: 30,
+    bottom: 65,
     left: 25,
     position: "absolute",
     right: 25,
@@ -966,6 +1021,10 @@ const runtimeStyles = StyleSheet.create({
     minHeight: 50,
   },
   entrySecondaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "500" },
+  entryVideo: {
+    filter: [{ blur: 2 }],
+    transform: [{ scale: 1.025 }],
+  },
   entryWordmark: {
     color: "#FFFFFF",
     fontSize: 24,

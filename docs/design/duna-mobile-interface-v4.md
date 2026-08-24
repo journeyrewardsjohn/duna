@@ -122,9 +122,12 @@ active recording, score, or session is never covered by the launch film.
 Reduced-motion users see the film's static opening composition for the same
 deterministic handoff interval.
 
-After the film, signed-out Player uses the image-led Duna welcome with `Create
-your free account` and `Log in to Duna`. Pro uses the corresponding business
-welcome with `Launch Your Volleyball Business` and `Log in to Duna Pro`.
+After the film, signed-out Player uses the approved muted, looping background
+film with a subtle blur and contrast wash behind `Create your free account`
+and `Log in to Duna`. Its bundled first frame is the fallback for reduced
+motion or constrained playback; no account action depends on the film. Pro
+uses the corresponding business welcome with `Launch Your Volleyball Business`
+and `Log in to Duna Pro`.
 Signed-in users do not enter the product automatically: show their WorkOS
 profile photo and name, or a two-letter initial fallback, then `Continue` and
 `Use a Different Account`. The latter clears the secure session and returns to
