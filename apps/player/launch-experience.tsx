@@ -86,7 +86,10 @@ export function PlayerLaunchExperience({
 const styles = StyleSheet.create({
   media: {
     bottom: 0,
-    left: 0,
+    // The Figma composition uses a left-biased focal point. Extending the
+    // media past the left edge shifts its visual center without uncovering an
+    // edge on taller iPhone screens.
+    left: "-17%",
     position: "absolute",
     right: 0,
     top: 0,
