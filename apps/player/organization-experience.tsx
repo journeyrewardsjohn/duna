@@ -361,6 +361,7 @@ function OrganizationMap({
 
 export function OrganizationExperienceModal({
   onClose,
+  onDismiss,
   onOpenCoach,
   onOpenEvent,
   onOpenVenue,
@@ -368,8 +369,9 @@ export function OrganizationExperienceModal({
   theme,
 }: {
   readonly onClose: () => void;
+  readonly onDismiss?: () => void;
   readonly onOpenCoach: (coach: Coach) => void;
-  readonly onOpenEvent: (eventId: string) => void;
+  readonly onOpenEvent: (eventId: string, eventSlug: string) => void;
   readonly onOpenVenue: (venueId: string) => void;
   readonly slug?: string;
   readonly theme: DunaTheme;
@@ -948,6 +950,7 @@ export function OrganizationExperienceModal({
   return (
     <Modal
       animationType="slide"
+      onDismiss={onDismiss}
       onRequestClose={closeOrBack}
       presentationStyle="pageSheet"
       statusBarTranslucent={false}
@@ -1662,7 +1665,7 @@ export function OrganizationExperienceModal({
               ) : null}
               {events[0] ? (
                 <Pressable
-                  onPress={() => onOpenEvent(events[0]!.id)}
+                  onPress={() => onOpenEvent(events[0]!.id, events[0]!.slug)}
                   style={[styles.shortcut, { borderColor: primary }]}
                 >
                   <Text style={[styles.shortcutText, { color: primary }]}>
@@ -1701,7 +1704,7 @@ export function OrganizationExperienceModal({
                       return (
                         <Pressable
                           key={event.id}
-                          onPress={() => onOpenEvent(event.id)}
+                          onPress={() => onOpenEvent(event.id, event.slug)}
                           style={styles.eventCard}
                         >
                           {(imageUrl ?? event.imageUrl) ? (

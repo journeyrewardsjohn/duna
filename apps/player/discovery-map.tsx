@@ -28,6 +28,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SatoshiText as Text } from "./satoshi-text";
+import { createDeferredModalTransition } from "./deferred-modal-transition";
 import { resolveDiscoveryMediaUrl } from "./discovery-media";
 import { dunaWebUrl } from "./mobile-api";
 import { type DiscoveryCoordinates } from "./discovery-search";
@@ -753,6 +754,7 @@ export function DiscoveryMapModal({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const cameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
+  const onSelectRef = useRef(onSelect);
   const firstIdle = useRef(true);
   const listScrollY = useRef(0);
   const [filter, setFilter] = useState<DiscoveryMapFilter>(initialFilter);
@@ -778,6 +780,28 @@ export function DiscoveryMapModal({
   const sheetY = useRef(new Animated.Value(positions.split)).current;
   const sheetValue = useRef(positions.split);
   const gestureStart = useRef(positions.split);
+  const resultTransitionRef = useRef<
+    | ReturnType<typeof createDeferredModalTransition<DiscoveryMapItem>>
+    | undefined
+  >(undefined);
+  if (!resultTransitionRef.current) {
+    resultTransitionRef.current =
+      createDeferredModalTransition<DiscoveryMapItem>({
+        onComplete: (item) => onSelectRef.current(item),
+      });
+  }
+  const resultTransition = resultTransitionRef.current;
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  useEffect(
+    () => () => {
+      resultTransition.cancel();
+    },
+    [resultTransition],
+  );
 
   const filtered = useMemo(
     () => items.filter((item) => discoveryItemMatchesFilter(item, filter)),
@@ -1012,8 +1036,19 @@ export function DiscoveryMapModal({
     else snapTo("map");
   };
 
+  const openResult = (item: DiscoveryMapItem) => {
+    setPlayingVideoId(undefined);
+    resultTransition.schedule(item);
+    onClose();
+  };
+
   return (
-    <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
+    <Modal
+      animationType="slide"
+      onDismiss={resultTransition.complete}
+      onRequestClose={onClose}
+      visible={visible}
+    >
       <View style={styles.fullMap}>
         {mapToken ? (
           <Mapbox.MapView
@@ -1170,7 +1205,7 @@ export function DiscoveryMapModal({
                 item={item}
                 key={item.id}
                 measurementSystem={measurementSystem}
-                onPress={onSelect}
+                onPress={openResult}
                 onVideoToggle={(itemId, playing) =>
                   setPlayingVideoId(playing ? itemId : undefined)
                 }

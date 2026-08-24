@@ -13,6 +13,7 @@ import {
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
+  type EventSummary,
   type PersonSummary,
   googleMapsSearchUrl,
   nativeMapUrl,
@@ -117,6 +118,7 @@ import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
 import { NativeEventDetails } from "./event-details";
+import { createDeferredModalTransition } from "./deferred-modal-transition";
 import { OrganizationExperienceModal } from "./organization-experience";
 import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
@@ -1088,15 +1090,46 @@ function CoachCard({
 function CoachProfileModal({
   coach,
   onClose,
+  onOpenSession,
 }: {
   readonly coach?: MobileCoach;
   readonly onClose: () => void;
+  readonly onOpenSession: (
+    session: MobileCoach["upcomingSessions"][number],
+  ) => void;
 }) {
+  const onOpenSessionRef = useRef(onOpenSession);
+  onOpenSessionRef.current = onOpenSession;
+  const sessionTransitionRef = useRef<
+    | ReturnType<
+        typeof createDeferredModalTransition<
+          MobileCoach["upcomingSessions"][number]
+        >
+      >
+    | undefined
+  >(undefined);
+  if (!sessionTransitionRef.current) {
+    sessionTransitionRef.current = createDeferredModalTransition<
+      MobileCoach["upcomingSessions"][number]
+    >({
+      onComplete: (session) => onOpenSessionRef.current(session),
+    });
+  }
+  const sessionTransition = sessionTransitionRef.current;
+
+  useEffect(
+    () => () => {
+      sessionTransition.cancel();
+    },
+    [sessionTransition],
+  );
+
   if (!coach) return null;
 
   return (
     <Modal
       animationType="slide"
+      onDismiss={sessionTransition.complete}
       onRequestClose={onClose}
       presentationStyle="pageSheet"
       visible
@@ -1224,9 +1257,8 @@ function CoachProfileModal({
                     key={session.id}
                     onPress={() => {
                       selectionHaptic();
-                      void WebBrowser.openBrowserAsync(
-                        `${dunaWebUrl}/events/${session.slug}`,
-                      );
+                      sessionTransition.schedule(session);
+                      onClose();
                     }}
                     style={styles.coachSessionRow}
                   >
@@ -1977,7 +2009,8 @@ function EventCard({
   readonly onPress: (eventIndex: number) => void;
 }) {
   const { dashboard } = usePlayerRuntime();
-  const event = (dashboard?.events ?? demoEvents)[eventIndex]!;
+  const event = (dashboard?.events ?? demoEvents)[eventIndex];
+  if (!event) return null;
   const weather = closestWeather(event.weather?.hourly, event.startsAt);
   const imageUrl =
     event.imageUrl ??
@@ -6882,6 +6915,8 @@ function DiscoverScreen({
   intent,
   onBook,
   onCreateMatch,
+  onOpenExternalEvent,
+  onOpenEvent,
   onOrganization,
 }: {
   readonly intent?: {
@@ -6890,6 +6925,8 @@ function DiscoverScreen({
   };
   readonly onBook: (eventIndex: number) => void;
   readonly onCreateMatch: () => void;
+  readonly onOpenExternalEvent: (event: EventSummary) => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
   readonly onOrganization: (slug: string) => void;
 }) {
   const theme: ThemeName = "light";
@@ -6915,6 +6952,7 @@ function DiscoverScreen({
     organizationWallets,
     people,
     proCoverage,
+    publicClient,
     settings,
     venues,
   } = usePlayerRuntime();
@@ -7276,7 +7314,6 @@ function DiscoverScreen({
 
   const openDiscoveryItem = (item: DiscoveryMapItem) => {
     selectionHaptic();
-    setShowDiscoveryMap(false);
     setShowDiscoverySearch(false);
     if (item.entityType === "venue") {
       setBookingVenueId(item.id.replace(/^venue:/, ""));
@@ -7319,7 +7356,20 @@ function DiscoverScreen({
       const eventId = item.id.replace(/^event:/, "");
       const eventIndex = events.findIndex((event) => event.id === eventId);
       if (eventIndex >= 0) {
-        onBook(eventIndex);
+        onOpenEvent(eventIndex);
+        return;
+      }
+      const slug = item.href.match(/^\/events\/([^/?#]+)/)?.[1];
+      if (slug && publicClient) {
+        const decodedSlug = decodeURIComponent(slug);
+        void publicClient.public.eventBySlug
+          .query({ slug: decodedSlug })
+          .then(onOpenExternalEvent)
+          .catch(() =>
+            WebBrowser.openBrowserAsync(
+              `${dunaWebUrl}/events/${encodeURIComponent(decodedSlug)}`,
+            ),
+          );
         return;
       }
     }
@@ -7491,7 +7541,7 @@ function DiscoverScreen({
                     (candidate) => candidate.id === event.id,
                   )}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               ))}
             </ScrollView>
@@ -7553,7 +7603,7 @@ function DiscoverScreen({
                     (candidate) => candidate.id === event.id,
                   )}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               ))}
             </ScrollView>
@@ -7592,7 +7642,7 @@ function DiscoverScreen({
                 <EventCard
                   eventIndex={eventIndex}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               );
             })}
@@ -7725,13 +7775,29 @@ function DiscoverScreen({
       <CoachProfileModal
         coach={selectedCoach}
         onClose={() => setSelectedCoach(undefined)}
+        onOpenSession={(session) => {
+          const index = events.findIndex((event) => event.id === session.id);
+          if (index >= 0) {
+            onOpenEvent(index);
+            return;
+          }
+          void WebBrowser.openBrowserAsync(
+            `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+          );
+        }}
       />
     </>
   );
 }
 
-function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
-  const { coaches = [], venues = [] } = usePlayerRuntime();
+function FindCoachScreen({
+  onBack,
+  onOpenEvent,
+}: {
+  readonly onBack: () => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
+}) {
+  const { coaches = [], dashboard, venues = [] } = usePlayerRuntime();
   const [mode, setMode] = useState<"near" | "virtual">("near");
   const [query, setQuery] = useState("");
   const [gender, setGender] = useState("all");
@@ -8081,6 +8147,17 @@ function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
       <CoachProfileModal
         coach={selectedCoach}
         onClose={() => setSelectedCoach(undefined)}
+        onOpenSession={(session) => {
+          const events = dashboard?.events ?? demoEvents;
+          const index = events.findIndex((event) => event.id === session.id);
+          if (index >= 0) {
+            onOpenEvent(index);
+            return;
+          }
+          void WebBrowser.openBrowserAsync(
+            `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+          );
+        }}
       />
     </>
   );
@@ -8194,14 +8271,14 @@ function PlayLauncherScreen({
 }
 
 function PlansScreen({
-  onBook,
   onOpenBooking,
+  onOpenEvent,
   onReserveCourtVenue,
   onTraining,
   onSeeAllMatches,
 }: {
-  readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
   readonly onReserveCourtVenue: (request: CourtBookingRequest) => void;
   readonly onTraining: () => void;
   readonly onSeeAllMatches: () => void;
@@ -8385,7 +8462,7 @@ function PlansScreen({
             .map((event) => (
               <Pressable
                 key={event.id}
-                onPress={() => onBook(events.indexOf(event))}
+                onPress={() => onOpenEvent(events.indexOf(event))}
                 style={styles.pickupRow}
               >
                 <View style={styles.pickupDate}>
@@ -10707,9 +10784,11 @@ function PerformanceScreen({
 
 function BookingModal({
   eventIndex,
+  eventOverride,
   onClose,
 }: {
   readonly eventIndex: number | null;
+  readonly eventOverride?: EventSummary;
   readonly onClose: () => void;
 }) {
   const { client, dashboard, mode, people, refresh, settings } =
@@ -10758,7 +10837,8 @@ function BookingModal({
   >(undefined);
   const events = dashboard?.events ?? demoEvents;
   const player = dashboard?.player ?? demoPlayer;
-  const event = eventIndex === null ? null : events[eventIndex];
+  const event =
+    eventOverride ?? (eventIndex === null ? undefined : events[eventIndex]);
   const eventId = event?.id;
   const defaultDivisionId = event?.divisions?.[0]?.id;
   const defaultTicketTypeId = event?.tickets?.[0]?.id;
@@ -11227,7 +11307,7 @@ function BookingModal({
         animationType="slide"
         onRequestClose={close}
         presentationStyle="pageSheet"
-        visible={eventIndex !== null}
+        visible={Boolean(event)}
       >
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
           <ScrollView contentContainerStyle={styles.modalContent}>
@@ -11280,7 +11360,7 @@ function BookingModal({
           animationType="slide"
           onRequestClose={close}
           presentationStyle="pageSheet"
-          visible={eventIndex !== null}
+          visible={Boolean(event)}
         >
           {showPickupPartnerPicker ? (
             <PlayerPickerModal
@@ -11541,7 +11621,7 @@ function BookingModal({
       animationType="slide"
       onRequestClose={close}
       presentationStyle="pageSheet"
-      visible={eventIndex !== null}
+      visible={Boolean(event)}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
         {complete ? (
@@ -14099,6 +14179,12 @@ function WatchScoreInbox({
   );
 }
 
+type OrganizationModalDestination =
+  | { readonly kind: "coach"; readonly coach: MobileCoach }
+  | { readonly kind: "event"; readonly eventIndex: number }
+  | { readonly kind: "external-event"; readonly slug: string }
+  | { readonly kind: "venue"; readonly venueId: string };
+
 function DunaApp() {
   const runtime = usePlayerRuntime();
   const theme: ThemeName = "light";
@@ -14110,7 +14196,11 @@ function DunaApp() {
     useState<string>();
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [registrationEventOverride, setRegistrationEventOverride] =
+    useState<EventSummary>();
   const [eventDetailIndex, setEventDetailIndex] = useState<number | null>(null);
+  const [externalEventDetail, setExternalEventDetail] =
+    useState<EventSummary>();
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
   const [courtBookingRequest, setCourtBookingRequest] =
@@ -14121,6 +14211,35 @@ function DunaApp() {
     useState<HostedMatchSeed>();
   const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
+  const organizationTransitionRef = useRef<
+    | ReturnType<
+        typeof createDeferredModalTransition<OrganizationModalDestination>
+      >
+    | undefined
+  >(undefined);
+  if (!organizationTransitionRef.current) {
+    organizationTransitionRef.current =
+      createDeferredModalTransition<OrganizationModalDestination>({
+        onComplete: (destination) => {
+          if (destination.kind === "coach") {
+            setOrganizationCoach(destination.coach);
+          }
+          if (destination.kind === "event") {
+            setExternalEventDetail(undefined);
+            setEventDetailIndex(destination.eventIndex);
+          }
+          if (destination.kind === "external-event") {
+            void WebBrowser.openBrowserAsync(
+              `${dunaWebUrl}/events/${encodeURIComponent(destination.slug)}`,
+            );
+          }
+          if (destination.kind === "venue") {
+            setOrganizationVenueId(destination.venueId);
+          }
+        },
+      });
+  }
+  const organizationTransition = organizationTransitionRef.current;
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
   const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
@@ -14145,6 +14264,13 @@ function DunaApp() {
     );
     return () => clearTimeout(timeout);
   }, [videoTransfer]);
+
+  useEffect(
+    () => () => {
+      organizationTransition.cancel();
+    },
+    [organizationTransition],
+  );
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
@@ -14273,6 +14399,33 @@ function DunaApp() {
   const selectedBooking = runtime.dashboard?.bookings.find(
     (booking) => booking.id === bookingId,
   );
+  const selectedEventDetail =
+    externalEventDetail ??
+    (eventDetailIndex === null
+      ? undefined
+      : (runtime.dashboard?.events ?? demoEvents)[eventDetailIndex]);
+  const selectedEventBooking = selectedEventDetail
+    ? (runtime.dashboard?.bookings ?? demoBookings).find(
+        (booking) =>
+          booking.sessionId === selectedEventDetail.id ||
+          (booking.title === selectedEventDetail.title &&
+            Math.abs(
+              Date.parse(booking.startsAt) -
+                Date.parse(selectedEventDetail.startsAt),
+            ) <
+              15 * 60_000),
+      )
+    : undefined;
+  const openEventDetailAtIndex = (index: number) => {
+    const event = (runtime.dashboard?.events ?? demoEvents)[index];
+    if (!event) return;
+    setExternalEventDetail(undefined);
+    setEventDetailIndex(index);
+  };
+  const openExternalEventDetail = (event: EventSummary) => {
+    setEventDetailIndex(null);
+    setExternalEventDetail(event);
+  };
 
   return (
     <MessagingNavigationContext.Provider
@@ -14324,6 +14477,8 @@ function DunaApp() {
                   intent={discoverIntent}
                   onBook={setEventIndex}
                   onCreateMatch={() => setCreateMatchOpen(true)}
+                  onOpenEvent={openEventDetailAtIndex}
+                  onOpenExternalEvent={openExternalEventDetail}
                   onOrganization={setOrganizationSlug}
                 />
               )}
@@ -14340,12 +14495,15 @@ function DunaApp() {
                 <PlayLauncherScreen onAction={openHomeAction} />
               )}
               {tab === "coaches" && (
-                <FindCoachScreen onBack={() => setTab("play")} />
+                <FindCoachScreen
+                  onBack={() => setTab("play")}
+                  onOpenEvent={openEventDetailAtIndex}
+                />
               )}
               {tab === "plans" && (
                 <PlansScreen
-                  onBook={setEventIndex}
                   onOpenBooking={setBookingId}
+                  onOpenEvent={openEventDetailAtIndex}
                   onReserveCourtVenue={setCourtBookingRequest}
                   onTraining={() => setTab("training")}
                   onSeeAllMatches={() => {
@@ -14458,29 +14616,38 @@ function DunaApp() {
             />
             <BookingModal
               eventIndex={eventIndex}
-              onClose={() => setEventIndex(null)}
+              eventOverride={registrationEventOverride}
+              onClose={() => {
+                setEventIndex(null);
+                setRegistrationEventOverride(undefined);
+              }}
             />
             <NativeEventDetails
+              bookingId={selectedEventBooking?.id}
               client={runtime.client}
-              event={
-                eventDetailIndex === null
-                  ? undefined
-                  : (runtime.dashboard?.events ?? demoEvents)[eventDetailIndex]
-              }
-              onClose={() => setEventDetailIndex(null)}
-              onRegister={() => {
-                setEventIndex(eventDetailIndex);
+              event={selectedEventDetail}
+              onClose={() => {
                 setEventDetailIndex(null);
+                setExternalEventDetail(undefined);
+              }}
+              onOpenBooking={setBookingId}
+              onRegister={(registrationEvent) => {
+                const index = (
+                  runtime.dashboard?.events ?? demoEvents
+                ).findIndex((event) => event.id === registrationEvent.id);
+                if (index >= 0) {
+                  setEventIndex(index);
+                  return;
+                }
+                setRegistrationEventOverride(registrationEvent);
               }}
               onScore={() => {
-                setEventDetailIndex(null);
                 setTab("score");
               }}
               onVideo={() => {
-                setEventDetailIndex(null);
                 setTab("video");
               }}
-              visible={eventDetailIndex !== null}
+              visible={Boolean(selectedEventDetail)}
             />
             <ProfileEditorModal
               onClose={() => setProfileEditorOpen(false)}
@@ -14534,20 +14701,31 @@ function DunaApp() {
             />
             <OrganizationExperienceModal
               onClose={() => setOrganizationSlug(undefined)}
+              onDismiss={organizationTransition.complete}
               onOpenCoach={(coach) => {
-                setOrganizationCoach(coach);
+                organizationTransition.schedule({ kind: "coach", coach });
                 setOrganizationSlug(undefined);
               }}
-              onOpenEvent={(eventId) => {
+              onOpenEvent={(eventId, eventSlug) => {
                 const index = (runtime.dashboard?.events ?? []).findIndex(
                   (event) => event.id === eventId,
                 );
+                if (index >= 0) {
+                  organizationTransition.schedule({
+                    kind: "event",
+                    eventIndex: index,
+                  });
+                } else {
+                  organizationTransition.schedule({
+                    kind: "external-event",
+                    slug: eventSlug,
+                  });
+                }
                 setOrganizationSlug(undefined);
-                if (index >= 0) setEventIndex(index);
               }}
               onOpenVenue={(venueId) => {
+                organizationTransition.schedule({ kind: "venue", venueId });
                 setOrganizationSlug(undefined);
-                setOrganizationVenueId(venueId);
               }}
               slug={organizationSlug}
               theme={theme}
@@ -14591,6 +14769,19 @@ function DunaApp() {
             <CoachProfileModal
               coach={organizationCoach}
               onClose={() => setOrganizationCoach(undefined)}
+              onOpenSession={(session) => {
+                const events = runtime.dashboard?.events ?? demoEvents;
+                const index = events.findIndex(
+                  (event) => event.id === session.id,
+                );
+                if (index >= 0) {
+                  openEventDetailAtIndex(index);
+                  return;
+                }
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+                );
+              }}
             />
             <WatchScoreInbox
               onReview={(draft) => {
