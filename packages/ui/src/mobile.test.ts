@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mobileControl, mobileGrid, resolveDunaMobileTokens } from "./mobile";
+import {
+  dunaLaunchFilmMinimumMs,
+  mobileControl,
+  mobileGrid,
+  resolveDunaMobileTokens,
+} from "./mobile";
 
 describe("Duna mobile design tokens", () => {
   it("keeps layout rhythm on the five-point grid", () => {
@@ -9,6 +14,10 @@ describe("Duna mobile design tokens", () => {
     }
     expect(mobileControl.minimumTarget).toBeGreaterThanOrEqual(48);
     expect(mobileControl.primaryTarget).toBeGreaterThanOrEqual(56);
+  });
+
+  it("keeps the full bundled launch film on screen", () => {
+    expect(dunaLaunchFilmMinimumMs).toBeGreaterThanOrEqual(10_042);
   });
 
   it("translates theme and zone semantics for native surfaces", () => {

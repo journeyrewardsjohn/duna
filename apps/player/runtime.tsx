@@ -2,7 +2,12 @@ import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
   type WorkOSMobileOrganization,
+  type WorkOSMobileUser,
 } from "@duna/mobile-auth";
+import {
+  mobileUserDisplayName,
+  mobileUserInitials,
+} from "@duna/mobile-auth/identity";
 import {
   createContext,
   useCallback,
@@ -13,20 +18,26 @@ import {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Haptics from "expo-haptics";
 import * as Crypto from "expo-crypto";
 import * as Network from "expo-network";
-import { VideoView, useVideoPlayer } from "expo-video";
+import { StatusBar } from "expo-status-bar";
 import { demoOrganization } from "@duna/core/demo";
 import {
-  AccessibilityInfo,
   ActivityIndicator,
+  Image,
   ImageBackground,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
-import Svg, { Line, Path } from "react-native-svg";
+import Svg, {
+  Defs,
+  Line,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from "react-native-svg";
 import {
   createDunaApiClient,
   createPlayerMessagingDeliveryEngine,
@@ -188,42 +199,20 @@ const authBaseUrl = (
   "https://duna.coach"
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
-// Metro requires static module references so both hero assets ship in the native bundle.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaHeroVideo = require("./assets/duna-hero.mp4");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaHeroPoster = require("./assets/duna-hero-poster.jpg");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaLaunchVideo = require("./assets/duna-launch.mp4");
+const dunaMark = require("./assets/duna-mark.png");
 
 function RuntimeLoadingState() {
-  const player = useVideoPlayer(dunaLaunchVideo, (nextPlayer) => {
-    nextPlayer.loop = true;
-    // First open is handled by PlayerLaunchExperience, where the film plays
-    // with sound and haptics. Runtime retries stay quiet so a network refresh
-    // never starts speaking over the player unexpectedly.
-    nextPlayer.muted = true;
-    nextPlayer.play();
-  });
-
   return (
     <View
       accessibilityLabel="Loading Duna"
       accessibilityRole="progressbar"
       style={runtimeStyles.loadingScreen}
     >
-      <VideoView
-        contentFit="cover"
-        nativeControls={false}
-        player={player}
-        style={StyleSheet.absoluteFill}
-      />
-      <View pointerEvents="none" style={runtimeStyles.loadingCopy}>
-        <Text style={runtimeStyles.loadingTitle}>Loading Your World</Text>
-        <Text style={runtimeStyles.loadingBody}>
-          Syncing your bookings, matches, wallet, and profile.
-        </Text>
-      </View>
+      <StatusBar style="dark" />
+      <ActivityIndicator color="#1B1B19" size="small" />
     </View>
   );
 }
@@ -288,109 +277,179 @@ function CenteredState({
   );
 }
 
+function WelcomeWash() {
+  return (
+    <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Defs>
+        <SvgLinearGradient id="welcome-wash" x1="0" x2="0" y1="0" y2="1">
+          <Stop offset="0" stopColor="#071625" stopOpacity="0.04" />
+          <Stop offset="0.42" stopColor="#071625" stopOpacity="0.12" />
+          <Stop offset="0.7" stopColor="#071625" stopOpacity="0.74" />
+          <Stop offset="1" stopColor="#071625" stopOpacity="0.98" />
+        </SvgLinearGradient>
+      </Defs>
+      <Rect fill="url(#welcome-wash)" height="100%" width="100%" />
+    </Svg>
+  );
+}
+
+function AccountContours() {
+  return (
+    <Svg
+      pointerEvents="none"
+      style={runtimeStyles.accountContours}
+      viewBox="0 0 402 300"
+    >
+      {[
+        "M-20 96C72 52 132 72 202 122C278 176 340 168 430 112",
+        "M-24 136C65 94 132 106 196 154C272 212 350 202 430 148",
+        "M-18 178C58 142 120 144 190 194C266 250 344 246 430 190",
+        "M-16 224C60 190 132 188 202 234C278 282 346 280 430 232",
+      ].map((path) => (
+        <Path
+          d={path}
+          fill="none"
+          key={path}
+          opacity={0.5}
+          stroke="#E6D6BA"
+          strokeWidth={1}
+        />
+      ))}
+    </Svg>
+  );
+}
+
 function SignedOutState({
   error,
   onSignIn,
+  onSignUp,
 }: {
   readonly error?: string;
   readonly onSignIn: () => void;
+  readonly onSignUp: () => void;
 }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const player = useVideoPlayer(dunaHeroVideo, (nextPlayer) => {
-    nextPlayer.loop = true;
-    nextPlayer.muted = true;
-    nextPlayer.play();
-  });
-
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduceMotion,
-    );
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    if (reduceMotion) player.pause();
-    else player.play();
-  }, [player, reduceMotion]);
-
-  const start = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
-      () => undefined,
-    );
-    onSignIn();
-  }, [onSignIn]);
-
   return (
     <ImageBackground
       resizeMode="cover"
       source={dunaHeroPoster}
       style={runtimeStyles.entry}
     >
-      {!reduceMotion && (
-        <VideoView
-          contentFit="cover"
-          nativeControls={false}
-          player={player}
-          style={runtimeStyles.entryVideo}
+      <StatusBar style="light" />
+      <WelcomeWash />
+      <View style={runtimeStyles.entryBrand}>
+        <Image
+          resizeMode="contain"
+          source={dunaMark}
+          style={runtimeStyles.entryMark}
         />
-      )}
-      <View pointerEvents="none" style={runtimeStyles.entryWash} />
-      <View pointerEvents="none" style={runtimeStyles.entryGrain} />
-
-      <View style={runtimeStyles.entryTop}>
-        <View style={runtimeStyles.entryBrand}>
-          <RuntimeMark color="#ffffff" size={36} />
-          <Text style={runtimeStyles.entryWordmark}>DUNA</Text>
-        </View>
-        <Text style={runtimeStyles.entryEyebrow}>THE HOME OF YOUR GAME</Text>
+        <Text style={runtimeStyles.entryWordmark}>DUNA</Text>
       </View>
-
-      <View style={runtimeStyles.entryBottom}>
-        <Text style={runtimeStyles.entryTitle}>
-          Find your people.{"\n"}Know your game.
-        </Text>
+      <View style={runtimeStyles.entryContent}>
         <Text style={runtimeStyles.entryBody}>
-          Book the court, join what is next, and carry every verified result
-          with you.
+          Join Duna free. Find games worldwide. Track your rating, study your
+          film, train with the best.
         </Text>
-
-        <View style={runtimeStyles.entryBenefits}>
-          <View style={runtimeStyles.entryBenefit}>
-            <Text style={runtimeStyles.entryBenefitLabel}>PLAY</Text>
-            <Text style={runtimeStyles.entryBenefitValue}>Courts + people</Text>
-          </View>
-          <View style={runtimeStyles.entryBenefit}>
-            <Text style={runtimeStyles.entryBenefitLabel}>TRACK</Text>
-            <Text style={runtimeStyles.entryBenefitValue}>
-              Verified results
-            </Text>
-          </View>
-          <View style={runtimeStyles.entryBenefit}>
-            <Text style={runtimeStyles.entryBenefitLabel}>BELONG</Text>
-            <Text style={runtimeStyles.entryBenefitValue}>One identity</Text>
-          </View>
-        </View>
-
         {error && <Text style={runtimeStyles.entryError}>{error}</Text>}
         <Pressable
           accessibilityRole="button"
-          onPress={start}
+          onPress={onSignUp}
           style={({ pressed }) => [
-            runtimeStyles.entryButton,
-            pressed && runtimeStyles.entryButtonPressed,
+            runtimeStyles.entryPrimaryButton,
+            pressed && runtimeStyles.buttonPressed,
           ]}
         >
-          <Text style={runtimeStyles.entryButtonText}>Start with Duna</Text>
-          <Text style={runtimeStyles.entryButtonArrow}>→</Text>
+          <Text style={runtimeStyles.entryPrimaryText}>
+            Create your free account
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onSignIn}
+          style={({ pressed }) => [
+            runtimeStyles.entrySecondaryButton,
+            pressed && runtimeStyles.buttonPressed,
+          ]}
+        >
+          <Text style={runtimeStyles.entrySecondaryText}>Log in to Duna</Text>
         </Pressable>
         <Text style={runtimeStyles.entryFootnote}>
-          Secure sign-in · One account for web + mobile
+          Already a Duna Member?{"\n"}Use the same email or phone number to log
+          in.
         </Text>
       </View>
     </ImageBackground>
+  );
+}
+
+function ReturningAccountState({
+  busy,
+  error,
+  fallbackName,
+  onContinue,
+  onUseDifferentAccount,
+  photoUrl,
+  user,
+}: {
+  readonly busy: boolean;
+  readonly error?: string;
+  readonly fallbackName?: string;
+  readonly onContinue: () => void;
+  readonly onUseDifferentAccount: () => void;
+  readonly photoUrl?: string;
+  readonly user?: WorkOSMobileUser;
+}) {
+  const name = mobileUserDisplayName(user, fallbackName);
+  return (
+    <View style={runtimeStyles.accountScreen}>
+      <StatusBar style="dark" />
+      <AccountContours />
+      <View style={runtimeStyles.accountIdentity}>
+        <Text style={runtimeStyles.accountKicker}>LOG IN AS</Text>
+        {photoUrl ? (
+          <Image
+            source={{ uri: photoUrl }}
+            style={runtimeStyles.accountPhoto}
+          />
+        ) : (
+          <View style={runtimeStyles.accountInitials}>
+            <Text style={runtimeStyles.accountInitialsText}>
+              {mobileUserInitials(user)}
+            </Text>
+          </View>
+        )}
+        <Text numberOfLines={2} style={runtimeStyles.accountName}>
+          {name}
+        </Text>
+      </View>
+      <View style={runtimeStyles.accountActions}>
+        {error && <Text style={runtimeStyles.accountError}>{error}</Text>}
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onContinue}
+          style={({ pressed }) => [
+            runtimeStyles.accountContinue,
+            pressed && runtimeStyles.buttonPressed,
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={runtimeStyles.accountContinueText}>Continue</Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onUseDifferentAccount}
+          style={runtimeStyles.accountDifferent}
+        >
+          <Text style={runtimeStyles.accountDifferentText}>
+            USE A DIFFERENT ACCOUNT
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -405,7 +464,9 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     organizations,
     selectOrganization,
     signIn,
+    signUp,
     signOut,
+    user,
   } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
   const messagingDelivery = useMemo(
@@ -413,10 +474,12 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     [getToken],
   );
   const safeSignOut = useCallback(async () => {
+    setContinueRequested(false);
     await unregisterMessagingNotifications(client).catch(() => undefined);
     await AsyncStorage.removeItem(runtimeCacheKey).catch(() => undefined);
     await signOut();
   }, [client, signOut]);
+  const [continueRequested, setContinueRequested] = useState(false);
   const [dashboard, setDashboard] = useState<PlayerDashboard>();
   const [wallet, setWallet] = useState<PlayerWallet>();
   const [memberCard, setMemberCard] = useState<PlayerMemberCard>();
@@ -606,15 +669,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     void registerMessagingNotifications(client, false).catch(() => undefined);
   }, [client, isLoaded, isSignedIn]);
 
-  if (!isLoaded) {
-    return <RuntimeLoadingState />;
-  }
-  if (!isSignedIn) {
-    return <SignedOutState error={authError} onSignIn={() => void signIn()} />;
-  }
-  if (!cacheHydrated || (loading && !dashboard)) {
-    return <RuntimeLoadingState />;
-  }
+  useEffect(() => {
+    if (!isSignedIn) setContinueRequested(false);
+  }, [isSignedIn]);
+
   const hasUsableSnapshot = Boolean(
     dashboard &&
     wallet &&
@@ -628,6 +686,36 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     organizationWallets &&
     paymentSchedules,
   );
+
+  if (!isLoaded) {
+    return <RuntimeLoadingState />;
+  }
+  if (!isSignedIn) {
+    return (
+      <SignedOutState
+        error={authError}
+        onSignIn={() => void signIn()}
+        onSignUp={() => void signUp()}
+      />
+    );
+  }
+  const preparingAccount = !cacheHydrated || (loading && !dashboard);
+  if (!continueRequested || preparingAccount) {
+    return (
+      <ReturningAccountState
+        busy={continueRequested && preparingAccount}
+        error={!loading && !hasUsableSnapshot ? error : undefined}
+        fallbackName={dashboard?.player.displayName}
+        onContinue={() => {
+          if (error && !loading) void refresh();
+          setContinueRequested(true);
+        }}
+        onUseDifferentAccount={() => void safeSignOut()}
+        photoUrl={dashboard?.player.avatarUrl ?? user?.profilePictureUrl}
+        user={user}
+      />
+    );
+  }
   if (!hasUsableSnapshot) {
     return (
       <CenteredState
@@ -807,174 +895,166 @@ const runtimeStyles = StyleSheet.create({
   },
   buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   entry: {
-    backgroundColor: "#0d1114",
+    backgroundColor: "#071625",
     flex: 1,
-    justifyContent: "space-between",
     overflow: "hidden",
-  },
-  loadingBody: {
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 320,
-    textAlign: "center",
-  },
-  loadingCopy: {
-    alignItems: "center",
-    bottom: "10%",
-    left: 24,
-    position: "absolute",
-    right: 24,
   },
   loadingScreen: {
-    backgroundColor: "#06233D",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     flex: 1,
-    overflow: "hidden",
-  },
-  loadingTitle: {
-    color: "#ffffff",
-    fontSize: 23,
-    fontWeight: "800",
-    letterSpacing: -0.45,
-    marginBottom: 8,
-  },
-  entryBenefit: {
-    borderColor: "rgba(255,255,255,0.24)",
-    borderLeftWidth: 1,
-    flex: 1,
-    gap: 5,
-    paddingLeft: 12,
-  },
-  entryBenefitLabel: {
-    color: "#dfe5e4",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  entryBenefitValue: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-  },
-  entryBenefits: {
-    flexDirection: "row",
-    gap: 4,
-    marginBottom: 22,
-    marginTop: 24,
+    justifyContent: "center",
   },
   entryBody: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 16,
-    lineHeight: 24,
-    marginTop: 16,
-    maxWidth: 360,
-  },
-  entryBottom: {
-    paddingBottom: 30,
-    paddingHorizontal: 24,
-    zIndex: 4,
+    alignSelf: "center",
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 60,
+    maxWidth: 310,
+    textAlign: "center",
   },
   entryBrand: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
+    left: 20,
+    position: "absolute",
+    right: 20,
+    top: "18%",
+    zIndex: 2,
   },
-  entryButton: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 58,
-    paddingHorizontal: 21,
+  entryContent: {
+    bottom: 30,
+    left: 25,
+    position: "absolute",
+    right: 25,
+    zIndex: 2,
   },
-  entryButtonArrow: {
-    color: "#101a20",
-    fontSize: 22,
-    fontWeight: "500",
-  },
-  entryButtonPressed: {
+  buttonPressed: {
     opacity: 0.82,
-    transform: [{ scale: 0.985 }],
-  },
-  entryButtonText: {
-    color: "#101a20",
-    fontSize: 16,
-    fontWeight: "900",
   },
   entryError: {
     color: "#ffd9cc",
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 10,
-  },
-  entryEyebrow: {
-    borderColor: "rgba(255,255,255,0.35)",
-    borderRadius: 999,
-    borderWidth: 1,
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.3,
-    overflow: "hidden",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  entryFootnote: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 12,
+    marginBottom: 15,
     textAlign: "center",
   },
-  entryGrain: {
-    backgroundColor: "rgba(255,255,255,0.025)",
-    bottom: 0,
-    left: 0,
-    opacity: 0.9,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 2,
+  entryFootnote: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 15,
+    textAlign: "center",
   },
-  entryTitle: {
-    color: "#ffffff",
-    fontSize: 42,
-    fontWeight: "900",
-    letterSpacing: -1.7,
-    lineHeight: 44,
-    maxWidth: 390,
-  },
-  entryTop: {
+  entryMark: { height: 135, width: 125 },
+  entryPrimaryButton: {
     alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingTop: 58,
-    zIndex: 4,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 25,
+    justifyContent: "center",
+    minHeight: 50,
   },
-  entryVideo: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
+  entryPrimaryText: { color: "#1B1B19", fontSize: 14, fontWeight: "500" },
+  entrySecondaryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 25,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 10,
+    minHeight: 50,
   },
-  entryWash: {
-    backgroundColor: "rgba(4,16,28,0.48)",
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 1,
-  },
+  entrySecondaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "500" },
   entryWordmark: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 3.6,
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "500",
+    letterSpacing: 9,
+    marginLeft: 9,
+    marginTop: 8,
+  },
+  accountActions: {
+    bottom: 35,
+    left: 30,
+    position: "absolute",
+    right: 30,
+  },
+  accountContinue: {
+    alignItems: "center",
+    backgroundColor: "#080808",
+    borderRadius: 30,
+    justifyContent: "center",
+    minHeight: 60,
+  },
+  accountContinueText: { color: "#FFFFFF", fontSize: 16, fontWeight: "500" },
+  accountContours: {
+    bottom: 0,
+    height: 300,
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  accountDifferent: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50,
+  },
+  accountDifferentText: {
+    color: "#8B8984",
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 0.8,
+  },
+  accountError: {
+    color: "#A54332",
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  accountIdentity: {
+    alignItems: "center",
+    left: 20,
+    position: "absolute",
+    right: 20,
+    top: "31%",
+  },
+  accountInitials: {
+    alignItems: "center",
+    backgroundColor: "#F0E9DD",
+    borderRadius: 46,
+    height: 92,
+    justifyContent: "center",
+    marginBottom: 20,
+    width: 92,
+  },
+  accountInitialsText: { color: "#A48C67", fontSize: 28, fontWeight: "500" },
+  accountKicker: {
+    color: "#9A9791",
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 3.5,
+    marginBottom: 25,
+  },
+  accountName: {
+    color: "#5F5969",
+    fontSize: 36,
+    fontWeight: "300",
+    letterSpacing: -0.7,
+    lineHeight: 42,
+    textAlign: "center",
+  },
+  accountPhoto: {
+    borderRadius: 46,
+    height: 92,
+    marginBottom: 20,
+    width: 92,
+  },
+  accountScreen: {
+    backgroundColor: "#FFFFFF",
+    flex: 1,
+    overflow: "hidden",
   },
   state: {
     alignItems: "center",

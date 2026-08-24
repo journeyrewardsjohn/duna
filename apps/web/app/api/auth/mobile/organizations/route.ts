@@ -17,19 +17,31 @@ export async function GET(request: Request) {
     const claims = await verifyWorkOSAccessToken(
       authorization.slice("Bearer ".length),
     );
-    const memberships =
-      await getWorkOS().userManagement.listOrganizationMemberships({
+    const workos = getWorkOS();
+    const [memberships, user] = await Promise.all([
+      workos.userManagement.listOrganizationMemberships({
         limit: 100,
         statuses: ["active"],
         userId: claims.sub!,
-      });
+      }),
+      workos.userManagement.getUser(claims.sub!),
+    ]);
     const organizations = memberships.data.map((membership) => ({
       id: membership.organizationId,
       name: membership.organizationName,
       role: membership.role.slug,
     }));
     return NextResponse.json(
-      { organizations },
+      {
+        organizations,
+        user: {
+          email: user.email,
+          firstName: user.firstName,
+          id: user.id,
+          lastName: user.lastName,
+          profilePictureUrl: user.profilePictureUrl,
+        },
+      },
       { headers: { "cache-control": "no-store" } },
     );
   } catch {

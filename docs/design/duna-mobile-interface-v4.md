@@ -112,6 +112,26 @@ They use a visible handle, one clear title, 50pt option rows, a checked selected
 state, and a 60pt primary action when confirmation is needed. Do not put an
 entire multi-step workflow into one sheet.
 
+## Launch and account entry
+
+Player and Pro embed the same approved 10.042-second Duna launch film in the
+native install. Every cold open plays the whole film edge to edge; there is no
+shortened repeat-open variant, loading caption, progress copy, or network-bound
+extension. Returning from the background keeps the current screen, so an
+active recording, score, or session is never covered by the launch film.
+Reduced-motion users see the film's static opening composition for the same
+deterministic handoff interval.
+
+After the film, signed-out Player uses the image-led Duna welcome with `Create
+your free account` and `Log in to Duna`. Pro uses the corresponding business
+welcome with `Launch Your Volleyball Business` and `Log in to Duna Pro`.
+Signed-in users do not enter the product automatically: show their WorkOS
+profile photo and name, or a two-letter initial fallback, then `Continue` and
+`Use a Different Account`. The latter clears the secure session and returns to
+the signed-out welcome. WorkOS remains authoritative for identity and
+organization membership; this presentation layer must not invent a parallel
+account or club picker.
+
 ## Player Home
 
 Home uses a true white canvas. Warm tan is an accent under glass or inside a

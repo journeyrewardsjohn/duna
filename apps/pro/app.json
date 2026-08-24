@@ -118,13 +118,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-light.png",
-          "imageWidth": 220,
-          "resizeMode": "contain",
-          "backgroundColor": "#F6F5F1",
+          "image": "./assets/duna-launch-poster-v3.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#071625",
           "dark": {
-            "image": "./assets/splash.png",
-            "backgroundColor": "#0D1114"
+            "image": "./assets/duna-launch-poster-v3.png",
+            "backgroundColor": "#071625"
           }
         }
       ],
