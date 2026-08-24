@@ -53,15 +53,20 @@ export function resolveDunaMobileTokens(
 ) {
   const semantic = resolveDunaTokens(theme, zone, contrast);
   const dark = theme === "dark" || zone === "live";
+  const whiteCanvas = !dark && contrast === "ambient";
 
   return {
     ...semantic,
+    ground: whiteCanvas ? "#FFFFFF" : semantic.ground,
+    groundWarm: whiteCanvas ? "#F8F4EC" : semantic.groundWarm,
+    groundCool: whiteCanvas ? "#F1F6F9" : semantic.groundCool,
+    surface2: whiteCanvas ? "#F4F4F2" : semantic.surface2,
     glass: dark ? "rgba(20,26,30,0.82)" : "rgba(255,255,255,0.82)",
     glassStrong: dark ? "rgba(20,26,30,0.94)" : "rgba(255,255,255,0.94)",
     glassEdge: dark ? "rgba(181,204,211,0.18)" : "rgba(255,255,255,0.72)",
     blueUnderlay: dark ? "rgba(34,52,59,0.78)" : "rgba(181,204,211,0.30)",
     sandUnderlay: dark ? "rgba(201,169,106,0.18)" : "rgba(239,230,211,0.58)",
-    selectedFill: dark ? semantic.surface3 : semantic.surface1,
-    inactiveFill: dark ? semantic.surface1 : semantic.surface2,
+    selectedFill: dark ? semantic.surface3 : "rgba(255,255,255,0.76)",
+    inactiveFill: dark ? semantic.surface1 : "#F4F4F2",
   } as const;
 }

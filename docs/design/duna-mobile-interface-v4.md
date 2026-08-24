@@ -88,10 +88,11 @@ label.
 ## Navigation and sheets
 
 The bottom bar is a translucent glass dock with a light blue or sand underlay,
-not a black slab. Icons remain visible; only the selected destination shows its
-label and stronger black treatment. Calendar replaces search. Messages opens
-the unified chat shell. The center Duna mark opens the full-screen Duna AI
-copilot. The plus button opens contextual quick actions in a sheet.
+not a black slab. It is icon-only in every state. The selected destination gets
+a white glass halo and a stronger Duna-navy icon; it does not add a label or
+change the dock's geometry. Calendar replaces search. Messages opens the
+unified chat shell. The center Duna mark opens the full-screen Duna AI copilot.
+The plus button opens contextual quick actions in a sheet.
 
 Use a native or React Native glass effect when supported, with a solid 92%
 surface fallback. Blur is atmosphere, never the only source of contrast.
@@ -100,6 +101,25 @@ Sheets own short choices, filters, quick actions, and secondary configuration.
 They use a visible handle, one clear title, 50pt option rows, a checked selected
 state, and a 60pt primary action when confirmation is needed. Do not put an
 entire multi-step workflow into one sheet.
+
+## Player Home
+
+Home uses a true white canvas. Warm tan is an accent under glass or inside a
+small identity mark; it is not the page background. The first viewport follows
+this hierarchy:
+
+1. Duna wordmark, notification bell, and high-contrast profile avatar.
+2. Day and place context, a personal greeting, and one quiet supporting line.
+3. One black primary discovery action: `Find your next game`.
+4. Three equal quick actions: `Record game`, `Book court`, and `Messages`.
+5. One real `Next up` booking drawn from the existing schedule data.
+6. A compact `Your game` row for rating and home organization.
+7. One contextual Duna Insight that opens Duna AI.
+
+Do not restore dense charts, prediction rails, repeated event stacks, or tan
+feature panels to this first viewport. Those capabilities remain reachable
+through their existing destinations and handlers. The Home components are a
+presentation layer over current runtime data, not a parallel demo model.
 
 ## Duna AI and Messages
 

@@ -10,6 +10,7 @@ import Svg, {
 
 export type DunaIconName =
   | "arrow-right"
+  | "bell"
   | "calendar"
   | "camera"
   | "check"
@@ -32,7 +33,8 @@ export type DunaIconName =
   | "sparkles"
   | "star"
   | "user"
-  | "video";
+  | "video"
+  | "waves";
 
 function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
   switch (name) {
@@ -41,6 +43,13 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Line x1="5" x2="19" y1="12" y2="12" />
           <Polyline points="13 6 19 12 13 18" />
+        </>
+      );
+    case "bell":
+      return (
+        <>
+          <Path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 8h18c0-1-3-1-3-8Z" />
+          <Path d="M10 21h4" />
         </>
       );
     case "calendar":
@@ -194,6 +203,14 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Rect height="14" rx="2.5" width="14" x="3" y="5" />
           <Path d="m17 10 4-2v8l-4-2Z" />
+        </>
+      );
+    case "waves":
+      return (
+        <>
+          <Path d="M3 7c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+          <Path d="M3 12c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+          <Path d="M3 17c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
         </>
       );
   }

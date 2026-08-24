@@ -13,7 +13,6 @@ import {
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
-  type MatchSummary,
   type PersonSummary,
   googleMapsSearchUrl,
   nativeMapUrl,
@@ -28,7 +27,12 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { mobileControl, mobileGrid } from "@duna/ui/mobile";
+import {
+  mobileControl,
+  mobileGrid,
+  mobileType,
+  resolveDunaMobileTokens,
+} from "@duna/ui/mobile";
 import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
@@ -93,7 +97,6 @@ import {
 import { VideoStudioScreen, type VideoTransferStatus } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
-import { LiveActivitiesPrompt } from "./live-activities-prompt";
 import { PlayerCalendarSettings } from "./calendar-settings";
 import {
   TournamentPasses,
@@ -181,10 +184,6 @@ const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
 const dunaPlayerAppIcon = require("./assets/icon.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
-type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
-type PlayerVirtualSession = NonNullable<
-  PlayerRuntime["virtualSessions"]
->[number];
 type MobilePredictionDiscoveryItem = NonNullable<
   PlayerRuntime["predictionDiscovery"]
 >["items"][number];
@@ -351,17 +350,19 @@ const demoSandRatingByPersonId = new Map(
   demoPeople.map((person) => [person.id, person.rating.display] as const),
 );
 
+const lightMobileTokens = resolveDunaMobileTokens("light", "editorial");
+
 const lightColors = {
-  canvas: "#f6f5f1",
-  ink: "#1b1b19",
-  depth: "#ffffff",
-  navy: "#efe6d3",
-  navyLift: "#edece6",
-  bone: "#1b1b19",
-  muted: "#766f61",
-  aqua: "#22343b",
-  aquaDeep: "#3a3a36",
-  sand: "#c9a96a",
+  canvas: lightMobileTokens.ground,
+  ink: "#090909",
+  depth: lightMobileTokens.surface1,
+  navy: lightMobileTokens.inactiveFill,
+  navyLift: lightMobileTokens.surface2,
+  bone: "#090909",
+  muted: "#767773",
+  aqua: "#103a63",
+  aquaDeep: "#092b4d",
+  sand: "#d8b47a",
   flare: "#e8683a",
   resultWin: "#efe5ce",
   resultWinBorder: "#d7bd84",
@@ -374,16 +375,16 @@ const lightColors = {
   danger: "#9a4a2e",
   onAccent: "#ffffff",
   white: "#ffffff",
-  overlayRgb: "27,27,25",
-  accentRgb: "34,52,59",
+  overlayRgb: "9,9,9",
+  accentRgb: "16,58,99",
   warningRgb: "138,106,47",
   positiveRgb: "47,107,58",
   dangerRgb: "154,74,46",
   flareRgb: "232,104,58",
-  inkRgb: "27,27,25",
+  inkRgb: "9,9,9",
   depthRgb: "255,255,255",
-  navyRgb: "239,230,211",
-  boneRgb: "27,27,25",
+  navyRgb: "244,244,242",
+  boneRgb: "9,9,9",
   whiteRgb: "255,255,255",
 } as const;
 
@@ -429,7 +430,6 @@ const darkColors: Palette = {
 
 type ThemeName = "light" | "dark";
 type ThemePreference = ThemeName | "system";
-const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
 
 let activePalette: Palette = lightColors;
 const colors = new Proxy(lightColors, {
@@ -656,13 +656,14 @@ function closestWeather<
     )[0];
 }
 
-function PreviewBanner() {
+function PreviewBanner({ hidden = false }: { readonly hidden?: boolean }) {
   const { isOffline, lastSuccessfulSyncAt, mode } = usePlayerRuntime();
+  if (hidden) return null;
   if (mode === "preview") {
     return (
       <View style={styles.previewBanner}>
         <Text style={styles.previewBannerText}>
-          PREVIEW DATA · SIGN-IN, BOOKINGS, AND PAYMENTS ARE DISABLED
+          PREVIEW · SIGN-IN AND PAYMENTS ARE DISABLED
         </Text>
       </View>
     );
@@ -708,6 +709,27 @@ function DunaWordmark({
         style={styles.wordmarkImage}
       />
       {pro && <Text style={styles.proPill}>PRO</Text>}
+    </View>
+  );
+}
+
+function DunaMark({ size }: { readonly size: number }) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        borderRadius: size * 0.24,
+        height: size,
+        justifyContent: "center",
+        overflow: "hidden",
+        width: size,
+      }}
+    >
+      <Image
+        resizeMode="cover"
+        source={dunaPlayerAppIcon}
+        style={{ height: size * 1.42, width: size * 1.42 }}
+      />
     </View>
   );
 }
@@ -1005,7 +1027,16 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
         {eyebrow && <Text style={styles.headerEyebrow}>{eyebrow}</Text>}
       </View>
       <View style={styles.headerActions}>
-        <ThemeButton />
+        <Pressable
+          accessibilityLabel="Notifications and messages"
+          onPress={() => messaging.open(false)}
+          style={styles.headerNotification}
+        >
+          <DunaIcon color={colors.bone} name="bell" size={22} />
+          {messaging.unreadCount > 0 && (
+            <View style={styles.headerNotificationDot} />
+          )}
+        </Pressable>
         <Pressable
           accessibilityLabel="Your profile"
           onPress={messaging.openProfile}
@@ -1320,7 +1351,11 @@ function organizationRoleLabel(role: string): string {
   return `${role[0]?.toUpperCase() ?? ""}${role.slice(1)}`;
 }
 
-function MemberOrganizationCard() {
+function MemberOrganizationCard({
+  compact = false,
+}: {
+  readonly compact?: boolean;
+}) {
   const {
     activeAuthOrganizationId,
     authOrganizations = [],
@@ -1408,25 +1443,41 @@ function MemberOrganizationCard() {
         }}
         style={({ pressed }) => [
           styles.memberOrganizationCard,
+          compact && styles.memberOrganizationCardCompact,
           pressed && styles.homeQuickActionPressed,
         ]}
       >
-        <View style={styles.memberOrganizationMark}>
-          <Text style={styles.memberOrganizationMarkText}>
-            {organizationName.slice(0, 1).toUpperCase()}
-          </Text>
+        <View
+          style={[
+            styles.memberOrganizationMark,
+            compact && styles.memberOrganizationMarkCompact,
+          ]}
+        >
+          {compact ? (
+            <DunaIcon color={colors.aqua} name="waves" size={22} />
+          ) : (
+            <Text style={styles.memberOrganizationMarkText}>
+              {organizationName.slice(0, 1).toUpperCase()}
+            </Text>
+          )}
         </View>
         <View style={styles.flex}>
-          <Text style={styles.memberOrganizationEyebrow}>YOUR DUNA</Text>
+          <Text style={styles.memberOrganizationEyebrow}>
+            {compact ? "HOME CLUB" : "YOUR DUNA"}
+          </Text>
           <Text numberOfLines={1} style={styles.memberOrganizationName}>
             {organizationName}
           </Text>
-          <Text style={styles.memberOrganizationMeta}>
-            {identity}
-            {fallback ? ` · ${fallback.credits.toLocaleString()} credits` : ""}
-          </Text>
+          {!compact && (
+            <Text style={styles.memberOrganizationMeta}>
+              {identity}
+              {fallback
+                ? ` · ${fallback.credits.toLocaleString()} credits`
+                : ""}
+            </Text>
+          )}
         </View>
-        {organizationCount > 1 && (
+        {!compact && organizationCount > 1 && (
           <Text style={styles.memberOrganizationCount}>
             {organizationCount}
           </Text>
@@ -1616,91 +1667,6 @@ function MemberOrganizationCard() {
   );
 }
 
-function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
-  return (
-    <View style={styles.coachingNoteCard}>
-      <View style={styles.coachingNoteAccent} />
-      <View style={styles.coachingNoteTop}>
-        <View style={styles.coachingNoteMark}>
-          <Text style={styles.coachingNoteMarkText}>✦</Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.coachingNoteEyebrow}>FROM YOUR COACH</Text>
-          <Text style={styles.coachingNoteTitle}>
-            {note.subject ?? note.sessionTitle}
-          </Text>
-          <Text style={styles.coachingNoteMeta}>
-            {note.coachName} · {note.organizationName} ·{" "}
-            {new Date(note.publishedAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.coachingNoteSummary}>{note.summary}</Text>
-      <Text style={styles.coachingNoteSession}>{note.sessionTitle}</Text>
-    </View>
-  );
-}
-
-function VirtualSessionCard({
-  session,
-}: {
-  readonly session: PlayerVirtualSession;
-}) {
-  const primaryUrl = session.joinUrl ?? session.recording?.url;
-  const upcoming = Boolean(session.joinUrl);
-  return (
-    <View style={styles.coachingNoteCard}>
-      <View style={styles.coachingNoteAccent} />
-      <View style={styles.coachingNoteTop}>
-        <View style={styles.coachingNoteMark}>
-          <Text style={styles.coachingNoteMarkText}>
-            {upcoming ? "▶" : "✦"}
-          </Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.coachingNoteEyebrow}>
-            {upcoming ? "GOOGLE MEET READY" : "SESSION RECORD"}
-          </Text>
-          <Text style={styles.coachingNoteTitle}>{session.title}</Text>
-          <Text style={styles.coachingNoteMeta}>
-            {new Date(session.startsAt).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-      </View>
-      {session.summary && (
-        <Text style={styles.coachingNoteSummary}>{session.summary}</Text>
-      )}
-      {session.actionItems.slice(0, 3).map((item, index) => (
-        <Text
-          key={`${item.ownerRole}-${index}`}
-          style={styles.coachingNoteSession}
-        >
-          • {item.text}
-        </Text>
-      ))}
-      {primaryUrl && (
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => void Linking.openURL(primaryUrl)}
-          style={styles.virtualSessionAction}
-        >
-          <Text style={styles.virtualSessionActionText}>
-            {upcoming ? "Join Google Meet" : "Watch recording"}
-          </Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
 type HomeQuickAction =
   | "upload-score"
   | "find-match"
@@ -1710,261 +1676,32 @@ type HomeQuickAction =
   | "find-coach"
   | "record-video"
   | "watch-pros"
+  | "messages"
   | "search";
 
 type DiscoverIntentKind = Exclude<
   HomeQuickAction,
-  "record-video" | "upload-score" | "create-match" | "find-coach"
+  "record-video" | "upload-score" | "create-match" | "find-coach" | "messages"
 >;
-
-function HomeResultStoryCard({
-  match,
-  playerId,
-}: {
-  readonly match: MatchSummary;
-  readonly playerId: string;
-}) {
-  const { openPlayerProfile } = usePlayerProfileNavigation();
-  const reducedMotion = useReducedMotion();
-  const reveal = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
-  useEffect(() => {
-    if (reducedMotion) {
-      reveal.setValue(1);
-      return;
-    }
-    Animated.timing(reveal, {
-      toValue: 1,
-      duration: 540,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [reducedMotion, reveal]);
-  const playerSide = match.teamB.some((player) => player.id === playerId)
-    ? "B"
-    : "A";
-  const won = match.winner === playerSide;
-  const playerTeam = playerSide === "A" ? match.teamA : match.teamB;
-  const opponentTeam = playerSide === "A" ? match.teamB : match.teamA;
-  const score = match.score.map((set) =>
-    playerSide === "A" ? set : ([set[1], set[0]] as const),
-  );
-  const subtitle = won
-    ? match.ratingDelta >= 0.08
-      ? "Beat the pre-match signal and earned every point of the rise."
-      : score.length >= 3
-        ? "Stayed composed through the decider and carried it home."
-        : "Set the pace early and kept the result moving your way."
-    : score.length >= 3
-      ? "Took it to the decider—small margins, strong evidence for next time."
-      : "Clear evidence, clean reset, and the next serve already ahead.";
-  const renderTeam = (
-    team: readonly PersonSummary[],
-    side: "player" | "opponent",
-  ) => {
-    const density = resultRosterDensity(team.length);
-    const rosterWidth = resultRosterWidth(team.length);
-    return (
-      <View
-        style={[
-          styles.resultStoryTeam,
-          density === "compact" && styles.resultStoryTeamCompact,
-          density === "dense" && styles.resultStoryTeamDense,
-          team.length > 6 && styles.resultStoryTeamWrapped,
-        ]}
-      >
-        <View style={styles.resultStoryPlayers}>
-          {team.map((person) => (
-            <Pressable
-              accessibilityLabel={"Open " + person.displayName + "'s profile"}
-              key={person.id}
-              onPress={() => openPlayerProfile(person)}
-              style={[
-                styles.resultStoryPlayer,
-                density === "compact" && styles.resultStoryPlayerCompact,
-                density === "dense" && styles.resultStoryPlayerDense,
-                { width: rosterWidth },
-              ]}
-            >
-              {person.avatarUrl ? (
-                <Image
-                  accessibilityIgnoresInvertColors
-                  source={{ uri: person.avatarUrl }}
-                  style={[
-                    styles.resultStoryAvatar,
-                    density === "compact" && styles.resultStoryAvatarCompact,
-                    density === "dense" && styles.resultStoryAvatarDense,
-                  ]}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.resultStoryAvatarFallback,
-                    density === "compact" &&
-                      styles.resultStoryAvatarFallbackCompact,
-                    density === "dense" &&
-                      styles.resultStoryAvatarFallbackDense,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.resultStoryAvatarText,
-                      density === "dense" && styles.resultStoryAvatarTextDense,
-                    ]}
-                  >
-                    {person.initials}
-                  </Text>
-                </View>
-              )}
-              <Text
-                accessibilityLabel={person.displayName}
-                numberOfLines={1}
-                style={[
-                  styles.resultStoryPlayerName,
-                  density === "compact" && styles.resultStoryPlayerNameCompact,
-                  density === "dense" && styles.resultStoryPlayerNameDense,
-                ]}
-              >
-                {resultRosterName(person.displayName)}
-              </Text>
-              <View
-                style={[
-                  styles.resultStoryPlayerRatingPill,
-                  density === "dense" &&
-                    styles.resultStoryPlayerRatingPillDense,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.resultStoryPlayerRating,
-                    density === "dense" && styles.resultStoryPlayerRatingDense,
-                  ]}
-                >
-                  {person.rating.display.toFixed(2)}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.resultStoryScores}>
-          {score.map((set, index) => (
-            <Text
-              key={index}
-              style={[
-                styles.resultStoryScore,
-                set[side === "player" ? 0 : 1] >
-                  set[side === "player" ? 1 : 0] && styles.resultStoryScoreWon,
-              ]}
-            >
-              {set[side === "player" ? 0 : 1]}
-            </Text>
-          ))}
-        </View>
-      </View>
-    );
-  };
-  return (
-    <View
-      style={[
-        styles.resultStoryCard,
-        won ? styles.resultStoryCardWon : styles.resultStoryCardLost,
-      ]}
-    >
-      <View style={styles.resultStoryHeader}>
-        <Animated.View
-          style={[
-            styles.resultStoryHeaderCopy,
-            {
-              opacity: reveal,
-              transform: [
-                {
-                  translateY: reveal.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [8, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Text style={styles.resultStoryEyebrow}>
-            {won ? "Match won" : "Match lost"}
-          </Text>
-          <Text style={styles.resultStorySubtitle}>{subtitle}</Text>
-          <Text style={styles.resultStoryRecapLabel}>DUNA RESULT RECAP</Text>
-        </Animated.View>
-        <Text style={styles.resultStoryDate}>
-          {new Date(match.playedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })}
-        </Text>
-        <View pointerEvents="none" style={styles.resultStoryPlayIcon}>
-          <ResultPlayIcon
-            outcome={won ? "won" : "lost"}
-            playersPerSide={Math.max(playerTeam.length, opponentTeam.length)}
-            size={138}
-          />
-        </View>
-      </View>
-      <View style={styles.resultStoryScorecard}>
-        {renderTeam(playerTeam, "player")}
-        <View style={styles.resultStoryDivider} />
-        {renderTeam(opponentTeam, "opponent")}
-      </View>
-      <View style={styles.resultStoryFooter}>
-        <Text style={styles.resultStoryVenue} numberOfLines={1}>
-          {match.eventName ?? match.venueName}
-        </Text>
-        <Text
-          style={[
-            styles.resultStoryDelta,
-            match.ratingDelta < 0 && styles.resultStoryDeltaNegative,
-          ]}
-        >
-          {match.ratingDelta >= 0 ? "+" : ""}
-          {match.ratingDelta.toFixed(2)}
-        </Text>
-      </View>
-    </View>
-  );
-}
 
 function HomeScreen({
   onAction,
-  onBook,
   onOpenBooking,
-  onPredictions,
+  onOpenProfile,
+  onOpenSchedule,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
-  readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
-  readonly onPredictions: () => void;
+  readonly onOpenProfile: () => void;
+  readonly onOpenSchedule: () => void;
 }) {
-  const reduceMotion = useReducedMotion();
-  const { openPlayerProfile } = usePlayerProfileNavigation();
-  const chartDraw = useRef(new Animated.Value(0)).current;
-  const {
-    client,
-    coaches,
-    coachingNotes,
-    dashboard,
-    mode,
-    organizationWallets,
-    people,
-    predictionDiscovery,
-    virtualSessions,
-  } = usePlayerRuntime();
+  const messaging = useContext(MessagingNavigationContext);
+  const { dashboard, mode, organizationWallets } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const highlightedVirtualSession =
-    virtualSessions?.find(
-      (session) =>
-        Boolean(session.joinUrl) && new Date(session.endsAt) > new Date(),
-    ) ??
-    [...(virtualSessions ?? [])].reverse().find((session) => session.summary);
   const previewNextActivity = useMemo(() => {
     const startsAt = new Date();
     startsAt.setDate(startsAt.getDate() + 1);
-    startsAt.setHours(10, 0, 0, 0);
+    startsAt.setHours(18, 0, 0, 0);
     const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
     return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
   }, []);
@@ -1988,24 +1725,37 @@ function HomeScreen({
             : event,
         )
       : (dashboard?.events ?? demoEvents);
-  const matches = dashboard?.recentMatches ?? demoMatches;
-  const [performance, setPerformance] = useState<MobilePlayerPerformance>();
-  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
-
-  useEffect(() => {
-    if (!client || mode === "preview") return;
-    let active = true;
-    void client.public.playerPerformance
-      .query({ handle: player.handle })
-      .then((nextPerformance) => {
-        if (active) setPerformance(nextPerformance);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [client, mode, player.handle]);
-
+  const now = Date.now();
+  const nextBooking = [...bookings]
+    .filter((booking) => new Date(booking.endsAt).getTime() > now)
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )[0];
+  const nextEvent = nextBooking?.sessionId
+    ? events.find((event) => event.id === nextBooking.sessionId)
+    : undefined;
+  const nextPlayers =
+    nextEvent?.attendees?.slice(0, 3).map((attendee) => ({
+      id: attendee.id,
+      initials: attendee.initials,
+    })) ??
+    nextBooking?.participantNames?.slice(0, 3).map((name) => ({
+      id: name,
+      initials: name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase(),
+    })) ??
+    [];
+  const confirmedPlayers = nextEvent
+    ? Math.max(
+        nextEvent.attendees?.length ?? 0,
+        nextEvent.capacity - nextEvent.spotsRemaining,
+      )
+    : (nextBooking?.participantNames?.length ?? 0);
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -2016,661 +1766,263 @@ function HomeScreen({
       (organization) => organization.status === "active",
     ) ??
     organizationWallets?.[0];
-  const isHomeOrganizationEvent = (event: (typeof events)[number]) =>
-    Boolean(
-      homeOrganization &&
-      (event.organizationId === homeOrganization.organizationId ||
-        event.organizationSlug === homeOrganization.organizationSlug),
-    );
-  const homeEvents = events.filter(isHomeOrganizationEvent);
-  const exploreEvents = homeOrganization
-    ? events.filter((event) => !isHomeOrganizationEvent(event))
-    : events;
-  const homeCoaches =
-    coaches?.filter(
-      (coach) => coach.organizationId === homeOrganization?.organizationId,
-    ) ?? [];
-  const homeNow = Date.now();
-  const liveBooking = [...bookings]
-    .filter((booking) => {
-      const startsAt = new Date(booking.startsAt).getTime();
-      const endsAt = new Date(booking.endsAt).getTime();
-      return startsAt <= homeNow && endsAt > homeNow;
-    })
-    .sort(
-      (left, right) =>
-        new Date(left.endsAt).getTime() - new Date(right.endsAt).getTime(),
-    )[0];
-  const nextBooking =
-    liveBooking ??
-    [...bookings]
-      .filter((booking) => new Date(booking.startsAt).getTime() >= homeNow)
-      .sort(
-        (left, right) =>
-          new Date(left.startsAt).getTime() -
-          new Date(right.startsAt).getTime(),
-      )[0];
-  const nextBookingEventIndex = nextBooking?.sessionId
-    ? events.findIndex((event) => event.id === nextBooking.sessionId)
-    : -1;
-  const nextBookingEvent =
-    nextBookingEventIndex >= 0 ? events[nextBookingEventIndex] : undefined;
-  const nextBookingAttendees = nextBookingEvent?.attendees?.slice(0, 3) ?? [];
-  const nextBookingOpenSpots = nextBookingEvent?.spotsRemaining ?? 0;
-  const isLiveBooking = Boolean(
-    liveBooking && nextBooking?.id === liveBooking.id,
-  );
-  const insight = dashboard?.feed[0];
-  const performanceHistory = performance?.history ?? [];
-  const verifiedWindow = [...performanceHistory].reverse().slice(-14);
-  const verifiedTrend = verifiedWindow.map((match) => ({
-    id: match.id,
-    rating: match.afterDisplay,
-    won: match.actualResult >= 0.5,
-  }));
-  const ratedFallbackMatches = [...matches]
-    .reverse()
-    .filter((match) => typeof match.ratingDelta === "number")
-    .slice(-14);
-  const fallbackStartRating =
-    player.rating.display -
-    ratedFallbackMatches.reduce(
-      (total, match) => total + (match.ratingDelta ?? 0),
-      0,
-    );
-  let fallbackRating = fallbackStartRating;
-  const fallbackTrend = ratedFallbackMatches.map((match) => {
-    fallbackRating += match.ratingDelta ?? 0;
-    return {
-      id: match.id,
-      rating: fallbackRating,
-      won: match.winner === "A",
-    };
-  });
-  const trend = verifiedTrend.length ? verifiedTrend : fallbackTrend;
-  const trendRatings = trend.map((point) => point.rating);
-  const minimumRating = trendRatings.length
-    ? Math.min(...trendRatings)
-    : player.rating.display - 0.1;
-  const maximumRating = trendRatings.length
-    ? Math.max(...trendRatings)
-    : player.rating.display + 0.1;
-  const chartRange = Math.max(0.08, maximumRating - minimumRating);
-  const chartPoints = trend.map((point, index) => ({
-    ...point,
-    x: 14 + (index / Math.max(1, trend.length - 1)) * 292,
-    y: 108 - ((point.rating - minimumRating) / chartRange) * 88,
-  }));
-  const chartPath = chartPoints
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
-    )
-    .join(" ");
-  const chartPathLength = Math.max(
-    1,
-    chartPoints.slice(1).reduce((total, point, index) => {
-      const previous = chartPoints[index];
-      return previous
-        ? total + Math.hypot(point.x - previous.x, point.y - previous.y)
-        : total;
-    }, 0),
-  );
-  const chartArea = chartPoints.length
-    ? `${chartPath} L ${chartPoints.at(-1)!.x.toFixed(1)} 116 L ${chartPoints[0]!.x.toFixed(1)} 116 Z`
-    : "";
-  useEffect(() => {
-    chartDraw.stopAnimation();
-    if (reduceMotion || !chartPath) {
-      chartDraw.setValue(1);
-      return;
-    }
-    chartDraw.setValue(0);
-    Animated.timing(chartDraw, {
-      duration: 760,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: false,
-    }).start();
-  }, [chartDraw, chartPath, reduceMotion]);
-  const chartStrokeOffset = chartDraw.interpolate({
-    inputRange: [0, 1],
-    outputRange: [chartPathLength, 0],
-  });
-  const currentRating =
-    trend.at(-1)?.rating ??
-    performanceHistory[0]?.afterDisplay ??
-    player.rating.display;
-  const trendStartRating = verifiedTrend.length
-    ? verifiedWindow[0]!.beforeDisplay
-    : fallbackTrend.length
-      ? fallbackStartRating
-      : undefined;
-  const ratingMovement =
-    trendStartRating !== undefined
-      ? currentRating - trendStartRating
-      : (player.rating.delta ?? 0);
-  const recentPerformance = performanceHistory.slice(0, 10);
-  const recentWins = recentPerformance.length
-    ? recentPerformance.filter((match) => match.actualResult >= 0.5).length
-    : matches.slice(0, 10).filter((match) => match.winner === "A").length;
-  const recentCount = recentPerformance.length || Math.min(10, matches.length);
+  const region =
+    homeOrganization?.organizationName
+      .replace(/\s+(beach volleyball|volleyball club|club)$/i, "")
+      .trim() ||
+    nextBooking?.venueName.split(/[—·]/)[0]?.trim() ||
+    "Duna";
   const firstName = player.displayName.split(" ")[0] ?? player.displayName;
-  const today = new Intl.DateTimeFormat("en-US", {
+  const weekday = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
-    .format(new Date())
-    .toUpperCase();
-  const quickActions: readonly {
-    readonly key: HomeQuickAction;
-    readonly icon: DunaIconName;
-    readonly label: string;
-    readonly meta: string;
-  }[] = [
+  }).format(new Date());
+  const rating = player.rating.display;
+  const ratingDelta = player.rating.delta ?? 0;
+  const insight = dashboard?.feed[0];
+  const shortcuts = [
     {
-      key: "find-match",
-      icon: "search",
-      label: "Find a match",
-      meta: "See open play nearby",
+      action: "record-video" as const,
+      icon: "video" as const,
+      label: "Record game",
     },
     {
-      key: "record-video",
-      icon: "camera",
-      label: "Record a game",
-      meta: "Open Duna Vision",
+      action: "book-court" as const,
+      icon: "calendar" as const,
+      label: "Book court",
     },
     {
-      key: "find-coach",
-      icon: "user",
-      label: "Find a coach",
-      meta: "Profiles and sessions",
+      action: "messages" as const,
+      icon: "message" as const,
+      label: "Messages",
     },
   ];
 
   return (
-    <>
-      <ScrollView
-        contentContainerStyle={styles.screenContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <AppHeader />
-        <View style={styles.homeWelcome}>
-          <View style={styles.flex}>
-            <Text style={styles.homeWelcomeDate}>
-              {today.replace(", ", " · ")}
-            </Text>
-            <Text style={styles.homeWelcomeTitle}>
-              Ready to play, {firstName}?
-            </Text>
-            <Text style={styles.homeWelcomeBody}>
-              Your next game, nearby courts, events, and performance in one
-              place.
-            </Text>
-          </View>
-          <View style={styles.homeRatingBadge}>
-            <Text style={styles.homeRatingBadgeValue}>
-              {currentRating.toFixed(2)}
-            </Text>
-            <Text style={styles.homeRatingBadgeLabel}>SAND</Text>
-          </View>
-        </View>
+    <ScrollView
+      contentContainerStyle={styles.homeV4Content}
+      showsVerticalScrollIndicator={false}
+    >
+      <AppHeader />
+      <View style={styles.homeV4Welcome}>
+        <Text style={styles.homeV4Context}>
+          {weekday} · {region}
+        </Text>
+        <Text style={styles.homeV4Title}>Good morning, {firstName}.</Text>
+        <Text style={styles.homeV4Subtitle}>Play more. Know your game.</Text>
+      </View>
 
-        {nextBooking ? (
-          <>
-            <Pressable
-              accessibilityHint={
-                nextBookingEventIndex >= 0
-                  ? "Opens your event registration"
-                  : "Opens your booking details"
-              }
-              accessibilityRole="button"
-              onPress={() => {
-                selectionHaptic();
-                onOpenBooking(nextBooking.id);
-              }}
-              style={({ pressed }) => [
-                styles.homeNextActivity,
-                pressed && styles.homeQuickActionPressed,
-              ]}
-            >
-              <View style={styles.homeNextRoster}>
-                {nextBookingAttendees.map((attendee) => {
-                  const fullPlayer = people?.find(
-                    (candidate) => candidate.id === attendee.id,
-                  );
-                  return (
-                    <Pressable
-                      accessibilityLabel={
-                        "Open " + attendee.displayName + "'s profile"
-                      }
-                      disabled={!fullPlayer}
-                      key={attendee.id}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        if (fullPlayer) openPlayerProfile(fullPlayer);
-                      }}
-                      style={styles.homeNextPlayer}
+      <Pressable
+        accessibilityHint="Search courts, players, training, and events"
+        accessibilityLabel="Find your next game"
+        accessibilityRole="button"
+        onPress={() => {
+          selectionHaptic();
+          onAction("find-match");
+        }}
+        style={({ pressed }) => [
+          styles.homeV4Primary,
+          pressed && styles.homeQuickActionPressed,
+        ]}
+      >
+        <View style={styles.homeV4PrimaryIcon}>
+          <DunaIcon color={colors.ink} name="search" size={25} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.homeV4PrimaryTitle}>Find your next game</Text>
+          <Text style={styles.homeV4PrimaryBody}>
+            Courts, people, training and events
+          </Text>
+        </View>
+        <DunaIcon color={colors.white} name="arrow-right" size={25} />
+      </Pressable>
+
+      <View style={styles.homeV4ShortcutRow}>
+        {shortcuts.map((shortcut) => (
+          <Pressable
+            accessibilityLabel={shortcut.label}
+            accessibilityRole="button"
+            key={shortcut.action}
+            onPress={() => {
+              selectionHaptic();
+              onAction(shortcut.action);
+            }}
+            style={({ pressed }) => [
+              styles.homeV4Shortcut,
+              pressed && styles.homeQuickActionPressed,
+            ]}
+          >
+            <View style={styles.homeV4ShortcutIcon}>
+              <DunaIcon color={colors.ink} name={shortcut.icon} size={22} />
+            </View>
+            <Text style={styles.homeV4ShortcutLabel}>{shortcut.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.homeV4SectionHeader}>
+        <Text style={styles.homeV4SectionTitle}>Next up</Text>
+        <Pressable onPress={onOpenSchedule}>
+          <Text style={styles.homeV4SectionAction}>See schedule</Text>
+        </Pressable>
+      </View>
+
+      {nextBooking ? (
+        <Pressable
+          accessibilityLabel={`Open ${nextBooking.title}`}
+          accessibilityRole="button"
+          onPress={() => onOpenBooking(nextBooking.id)}
+          style={({ pressed }) => [
+            styles.homeV4NextCard,
+            pressed && styles.homeQuickActionPressed,
+          ]}
+        >
+          <View style={styles.homeV4NextAccent} />
+          <View style={styles.homeV4NextTime}>
+            <Text style={styles.homeV4NextEyebrow}>
+              {new Date(nextBooking.startsAt).getHours() >= 17
+                ? "TONIGHT"
+                : "UPCOMING"}
+            </Text>
+            <Text style={styles.homeV4NextClock}>
+              {new Date(nextBooking.startsAt)
+                .toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  hour12: true,
+                })
+                .replace(/\s?(AM|PM)$/i, "")}
+            </Text>
+            <Text style={styles.homeV4NextMeridiem}>
+              {new Date(nextBooking.startsAt)
+                .toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  hour12: true,
+                })
+                .match(/AM|PM/i)?.[0] ?? ""}
+            </Text>
+          </View>
+          <View style={styles.homeV4NextInfo}>
+            <Text numberOfLines={1} style={styles.homeV4NextTitle}>
+              {nextBooking.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.homeV4NextVenue}>
+              {nextBooking.venueName.replace("—", "•")}
+            </Text>
+            <View style={styles.homeV4Players}>
+              <View style={styles.homeV4AvatarStack}>
+                {nextPlayers.map((person, index) => (
+                  <View
+                    key={person.id}
+                    style={[
+                      styles.homeV4Avatar,
+                      index === 1 && styles.homeV4AvatarBlue,
+                      index === 2 && styles.homeV4AvatarSand,
+                      { marginLeft: index === 0 ? 0 : -7 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.homeV4AvatarText,
+                        index === 2 && styles.homeV4AvatarTextDark,
+                      ]}
                     >
-                      {attendee.avatarUrl ? (
-                        <Image
-                          accessibilityIgnoresInvertColors
-                          source={{ uri: attendee.avatarUrl }}
-                          style={styles.homeNextAvatar}
-                        />
-                      ) : (
-                        <View style={styles.homeNextAvatarFallback}>
-                          <Text style={styles.homeNextAvatarText}>
-                            {attendee.initials}
-                          </Text>
-                        </View>
-                      )}
-                      <Text numberOfLines={1} style={styles.homeNextPlayerName}>
-                        {attendee.displayName.split(" ")[0]}
-                      </Text>
-                      {attendee.ratingDisplay !== undefined && (
-                        <Text style={styles.homeNextRating}>
-                          {attendee.ratingDisplay.toFixed(1)}
-                        </Text>
-                      )}
-                    </Pressable>
-                  );
-                })}
-                {nextBookingOpenSpots > 0 && (
-                  <View style={styles.homeNextPlayer}>
-                    <View style={styles.homeNextAvailableAvatar}>
-                      <Text style={styles.homeNextAvailablePlus}>＋</Text>
-                    </View>
-                    <Text style={styles.homeNextAvailableText}>Available</Text>
-                    <Text style={styles.homeNextAvailableCount}>
-                      {nextBookingOpenSpots}{" "}
-                      {nextBookingOpenSpots === 1 ? "spot" : "spots"}
+                      {person.initials}
+                    </Text>
+                  </View>
+                ))}
+                {confirmedPlayers > nextPlayers.length && (
+                  <View
+                    style={[
+                      styles.homeV4Avatar,
+                      styles.homeV4AvatarSand,
+                      { marginLeft: -7 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.homeV4AvatarText,
+                        styles.homeV4AvatarTextDark,
+                      ]}
+                    >
+                      +{confirmedPlayers - nextPlayers.length}
                     </Text>
                   </View>
                 )}
-                {!nextBookingAttendees.length && !nextBookingOpenSpots && (
-                  <View style={styles.homeNextPlayer}>
-                    <View style={styles.homeNextAvatarFallback}>
-                      <Text style={styles.homeNextAvatarText}>
-                        {nextBooking.participantNames?.[0]
-                          ?.split(/\s+/)
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join("") ?? "YOU"}
-                      </Text>
-                    </View>
-                    <Text style={styles.homeNextPlayerName}>You</Text>
-                  </View>
-                )}
               </View>
-              <View style={styles.homeNextActivityInfo}>
-                <Text style={styles.homeNextEyebrow}>
-                  {isLiveBooking
-                    ? "LIVE NOW · YOUR ACTIVITY"
-                    : "NEXT UP · YOUR ACTIVITY"}
-                </Text>
-                <Text style={styles.homeNextActivityWhen}>
-                  {new Date(nextBooking.startsAt).toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}{" "}
-                  ·{" "}
-                  {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </Text>
-                <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
-                <Text style={styles.homeNextMeta}>{nextBooking.venueName}</Text>
-                <View style={styles.homeNextStatusRow}>
-                  <Pill
-                    tone={
-                      isLiveBooking
-                        ? "live"
-                        : nextBookingOpenSpots > 0
-                          ? "warning"
-                          : "positive"
-                    }
-                  >
-                    {isLiveBooking
-                      ? "live now"
-                      : nextBookingOpenSpots > 0
-                        ? nextBookingOpenSpots + " available"
-                        : nextBooking.status.replace("-", " ")}
-                  </Pill>
-                  <Text style={styles.homeNextDetails}>Details →</Text>
-                </View>
-              </View>
-            </Pressable>
-            {isLiveBooking && (
-              <View style={styles.homeLiveActions}>
-                <Pressable
-                  accessibilityLabel="Keep live score"
-                  onPress={() => onAction("upload-score")}
-                  style={({ pressed }) => [
-                    styles.homeLiveAction,
-                    pressed && styles.homeQuickActionPressed,
-                  ]}
-                >
-                  <Text style={styles.homeLiveActionIcon}>⌁</Text>
-                  <Text style={styles.homeLiveActionLabel}>Keep score</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Record event video"
-                  onPress={() => onAction("record-video")}
-                  style={({ pressed }) => [
-                    styles.homeLiveAction,
-                    pressed && styles.homeQuickActionPressed,
-                  ]}
-                >
-                  <Text style={styles.homeLiveActionIcon}>●</Text>
-                  <Text style={styles.homeLiveActionLabel}>Record video</Text>
-                </Pressable>
-              </View>
-            )}
-            {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-              <LiveActivitiesPrompt booking={nextBooking} client={client} />
-            )}
-          </>
-        ) : (
-          <Pressable
-            onPress={() => onAction("find-match")}
-            style={styles.homeNextSession}
-          >
-            <View style={styles.homeNextOpenMark}>
-              <Text style={styles.homeNextOpenMarkText}>＋</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.homeNextEyebrow}>YOUR CALENDAR IS OPEN</Text>
-              <Text style={styles.homeNextTitle}>
-                Find something worth playing.
-              </Text>
-              <Text style={styles.homeNextMeta}>
-                Matches, courts, and events are ready nearby.
+              <Text style={styles.homeV4PlayerCount}>
+                {confirmedPlayers} players confirmed
               </Text>
             </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        )}
+          </View>
+          <DunaIcon color={colors.ink} name="chevron-right" size={23} />
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={() => onAction("find-match")}
+          style={styles.homeV4EmptyNext}
+        >
+          <Text style={styles.homeV4NextTitle}>Your calendar is open.</Text>
+          <Text style={styles.homeV4NextVenue}>
+            Find a match, court, or event nearby.
+          </Text>
+          <DunaIcon color={colors.ink} name="arrow-right" size={22} />
+        </Pressable>
+      )}
 
-        <View style={styles.homeQuickGrid}>
-          {quickActions.map((action) => (
-            <Pressable
-              accessibilityHint={action.meta}
-              accessibilityRole="button"
-              key={action.key}
-              onPress={() => {
-                selectionHaptic();
-                onAction(action.key);
-              }}
-              style={({ pressed }) => [
-                styles.homeQuickAction,
-                pressed && styles.homeQuickActionPressed,
+      <View style={styles.homeV4SectionHeader}>
+        <Text style={styles.homeV4SectionTitle}>Your game</Text>
+        <Pressable onPress={onOpenProfile}>
+          <Text style={styles.homeV4SectionAction}>View profile</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.homeV4GameGrid}>
+        <Pressable
+          accessibilityLabel={`Sand Rating ${rating.toFixed(2)}`}
+          onPress={onOpenProfile}
+          style={styles.homeV4RatingCard}
+        >
+          <Text style={styles.homeV4CardEyebrow}>SAND RATING</Text>
+          <View style={styles.homeV4RatingRow}>
+            <Text style={styles.homeV4RatingValue}>{rating.toFixed(2)}</Text>
+            <Text
+              style={[
+                styles.homeV4RatingDelta,
+                ratingDelta < 0 && styles.homeV4RatingDeltaNegative,
               ]}
             >
-              <View style={styles.homeQuickIcon}>
-                <DunaIcon color={colors.aqua} name={action.icon} size={22} />
-              </View>
-              <Text style={styles.homeQuickLabel}>{action.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.homePerformanceCard}>
-          <View style={styles.cardTitleRow}>
-            <View>
-              <Text style={styles.eyebrow}>YOUR PERFORMANCE</Text>
-              <Text style={styles.homePerformanceTitle}>Form over time.</Text>
-            </View>
-            <Pill tone={ratingMovement >= 0 ? "positive" : "warning"}>
-              {`${ratingMovement >= 0 ? "+" : ""}${ratingMovement.toFixed(2)}`}
-            </Pill>
-          </View>
-          <View style={styles.homePerformanceSummary}>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {currentRating.toFixed(2)}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Sand Rating</Text>
-            </View>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {recentCount
-                  ? `${recentWins}–${recentCount - recentWins}`
-                  : "—"}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Recent form</Text>
-            </View>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {player.rating.percentile
-                  ? `${player.rating.percentile}%`
-                  : "—"}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Percentile</Text>
-            </View>
-          </View>
-          {chartPoints.length ? (
-            <View
-              accessibilityLabel={`Rating trend across ${chartPoints.length} verified matches`}
-              style={styles.homePerformanceChart}
-            >
-              <Svg height={132} viewBox="0 0 320 124" width="100%">
-                {[28, 68, 108].map((y) => (
-                  <Line
-                    key={y}
-                    stroke={rgba(colors.overlayRgb, 0.08)}
-                    strokeWidth="1"
-                    x1="12"
-                    x2="308"
-                    y1={y}
-                    y2={y}
-                  />
-                ))}
-                <AnimatedSvgPath
-                  d={chartArea}
-                  fill={rgba(colors.accentRgb, 0.09)}
-                  opacity={chartDraw}
-                />
-                <AnimatedSvgPath
-                  d={chartPath}
-                  fill="none"
-                  stroke={colors.aqua}
-                  strokeDasharray={`${chartPathLength} ${chartPathLength}`}
-                  strokeDashoffset={chartStrokeOffset}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="4"
-                />
-                {chartPoints.map((point) => (
-                  <Circle
-                    cx={point.x}
-                    cy={point.y}
-                    fill={point.won ? colors.aqua : colors.danger}
-                    key={point.id}
-                    r="4.5"
-                    stroke={colors.depth}
-                    strokeWidth="2"
-                  />
-                ))}
-              </Svg>
-            </View>
-          ) : (
-            <View style={styles.homePerformanceEmpty}>
-              <Text style={styles.homePerformanceEmptyMark}>↗</Text>
-              <View style={styles.flex}>
-                <Text style={styles.homePerformanceEmptyTitle}>
-                  Your chart starts with a verified result.
-                </Text>
-                <Text style={styles.homePerformanceEmptyBody}>
-                  Connect a match source or record a result to build your real
-                  rating history.
-                </Text>
-              </View>
-            </View>
-          )}
-          <View style={styles.homePerformanceLegend}>
-            <Text style={styles.homePerformanceLegendWin}>● Win</Text>
-            <Text style={styles.homePerformanceLegendLoss}>● Loss</Text>
-            <Text style={styles.homePerformanceLegendMeta}>
-              {chartPoints.length} rated results
+              {ratingDelta >= 0 ? "+" : ""}
+              {ratingDelta.toFixed(2)}
             </Text>
           </View>
-        </View>
+        </Pressable>
+        <MemberOrganizationCard compact />
+      </View>
 
-        <MemberOrganizationCard />
-        <MobilePredictionDiscoveryRail
-          items={predictionDiscovery?.items ?? []}
-          onOpenPortfolio={onPredictions}
-        />
-        {homeEvents.length > 0 && (
-          <>
-            <SectionHeader
-              action="Browse events"
-              eyebrow="FROM YOUR CLUB"
-              onAction={() => onAction("join-event")}
-              title="Made for your membership."
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalBleed}
-            >
-              {homeEvents.slice(0, 6).map((event) => (
-                <EventCard
-                  eventIndex={events.findIndex(
-                    (candidate) => candidate.id === event.id,
-                  )}
-                  key={event.id}
-                  onPress={onBook}
-                />
-              ))}
-            </ScrollView>
-          </>
-        )}
-        {coachingNotes?.[0] && (
-          <>
-            <SectionHeader
-              action={
-                coachingNotes.length > 1
-                  ? `${coachingNotes.length} notes`
-                  : undefined
-              }
-              eyebrow="COACHING"
-              title="Carry the session forward."
-            />
-            <CoachingNoteCard note={coachingNotes[0]} />
-          </>
-        )}
-        {highlightedVirtualSession && (
-          <>
-            <SectionHeader
-              eyebrow="VIRTUAL COACHING"
-              title={
-                highlightedVirtualSession.joinUrl
-                  ? "Your next session is ready."
-                  : "Your session record."
-              }
-            />
-            <VirtualSessionCard session={highlightedVirtualSession} />
-          </>
-        )}
-        {homeCoaches.length > 0 && (
-          <>
-            <SectionHeader
-              action={`${homeCoaches.length} coaches`}
-              eyebrow="YOUR COACHES"
-              title="Train with people you know."
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalBleed}
-            >
-              <View style={styles.coachCardRow}>
-                {homeCoaches.map((coach) => (
-                  <CoachCard
-                    coach={coach}
-                    key={coach.personId}
-                    onPress={setSelectedCoach}
-                    preferred
-                  />
-                ))}
-              </View>
-            </ScrollView>
-          </>
-        )}
-        <SectionHeader
-          action="See all"
-          eyebrow={homeOrganization ? "EXPLORE NEARBY" : "MADE FOR YOUR LEVEL"}
-          onAction={() => onAction("join-event")}
-          title={homeOrganization ? "More ways to play." : "Play next."}
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontalBleed}
-        >
-          {(exploreEvents.length > 0 ? exploreEvents : events)
-            .slice(0, 4)
-            .map((event) => (
-              <EventCard
-                eventIndex={events.findIndex(
-                  (candidate) => candidate.id === event.id,
-                )}
-                key={event.id}
-                onPress={onBook}
-              />
-            ))}
-        </ScrollView>
-        {matches.length > 0 && (
-          <>
-            <SectionHeader
-              action="Matches"
-              eyebrow="RECENT FORM"
-              title="Every result tells a story."
-            />
-            <View style={styles.resultStoryStack}>
-              {matches.slice(0, 2).map((match) => (
-                <HomeResultStoryCard
-                  key={match.id}
-                  match={match}
-                  playerId={player.id}
-                />
-              ))}
-            </View>
-          </>
-        )}
-        {(insight || !dashboard) && (
-          <View style={styles.aiInsight}>
-            <View style={styles.aiIcon}>
-              <Text style={styles.aiIconText}>✦</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.eyebrow}>
-                {insight?.eyebrow ?? "DUNA INSIGHT"}
-              </Text>
-              <Text style={styles.aiTitle}>
-                {insight?.title ?? "Your sideout game is becoming an edge."}
-              </Text>
-              <Text style={styles.aiBody}>
-                {insight?.body ??
-                  "You are winning 8.4% more often than expected in sideout-scored matches. Preview insight only."}
-              </Text>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-      <CoachProfileModal
-        coach={selectedCoach}
-        onClose={() => setSelectedCoach(undefined)}
-      />
-    </>
+      <Pressable
+        accessibilityHint="Opens Duna AI with your current Player context"
+        accessibilityLabel="Open Duna insight in Duna AI"
+        onPress={() => messaging.open(true)}
+        style={({ pressed }) => [
+          styles.homeV4Insight,
+          pressed && styles.homeQuickActionPressed,
+        ]}
+      >
+        <View style={styles.homeV4InsightMark}>
+          <DunaMark size={mobileGrid[8]} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.homeV4CardEyebrow}>
+            {insight?.eyebrow ?? "DUNA INSIGHT"}
+          </Text>
+          <Text numberOfLines={2} style={styles.homeV4InsightTitle}>
+            {insight?.title ?? "Your sideout game is becoming an edge."}
+          </Text>
+        </View>
+        <DunaIcon color={colors.aqua} name="arrow-right" size={22} />
+      </Pressable>
+    </ScrollView>
   );
 }
-
 function SectionHeader({
   eyebrow,
   title,
@@ -14468,25 +13820,32 @@ function TabBar({
       >
         <View style={styles.tabIconWrap}>
           <DunaIcon
-            color={isSelected ? colors.bone : colors.muted}
+            color={isSelected ? colors.aquaDeep : colors.aqua}
             name={icon}
-            size={21}
+            size={24}
             strokeWidth={isSelected ? 2.25 : 1.75}
           />
           {destination === "messages" && unreadCount > 0 && (
-            <View style={styles.tabUnreadDot} />
+            <View style={styles.tabUnreadBadge}>
+              <Text style={styles.tabUnreadText}>
+                {Math.min(unreadCount, 9)}
+              </Text>
+            </View>
           )}
         </View>
-        {isSelected && <Text style={styles.tabLabel}>{label}</Text>}
       </Pressable>
     );
   };
 
   return (
     <View
-      style={[styles.tabBarPosition, { bottom: Math.max(10, insets.bottom) }]}
+      style={[
+        styles.tabBarPosition,
+        { bottom: Math.max(mobileGrid[2], insets.bottom - mobileGrid[5]) },
+      ]}
     >
-      <View pointerEvents="none" style={styles.tabBarTint} />
+      <View pointerEvents="none" style={styles.tabBarSandGlow} />
+      <View pointerEvents="none" style={styles.tabBarBlueGlow} />
       <View style={styles.tabBar}>
         {destinationButton("home", "Home", "home")}
         {destinationButton("calendar", "Calendar", "calendar")}
@@ -14501,7 +13860,7 @@ function TabBar({
           style={styles.tabAiButton}
         >
           <View style={styles.tabAiHalo}>
-            <Image source={dunaPlayerAppIcon} style={styles.tabAiImage} />
+            <DunaMark size={mobileGrid[11]} />
           </View>
         </Pressable>
         <Pressable
@@ -14514,7 +13873,7 @@ function TabBar({
           }}
           style={styles.tabItem}
         >
-          <DunaIcon color={colors.muted} name="plus" size={23} />
+          <DunaIcon color={colors.aqua} name="plus" size={25} />
         </Pressable>
         {destinationButton("messages", "Messages", "message")}
       </View>
@@ -14966,6 +14325,12 @@ function DunaApp() {
   activeStyles = theme === "dark" ? darkStyles : lightStyles;
 
   const openHomeAction = (action: HomeQuickAction) => {
+    if (action === "messages") {
+      setMessagesConversationId(undefined);
+      setMessagesOpenToSupport(false);
+      setTab("messages");
+      return;
+    }
     if (action === "upload-score") {
       setWatchScoreDraft(undefined);
       setTab("score");
@@ -15026,7 +14391,7 @@ function DunaApp() {
           <SafeAreaView edges={["top"]} style={styles.safe}>
             <StatusBar style={theme === "dark" ? "light" : "dark"} />
             <View style={styles.app}>
-              <PreviewBanner />
+              <PreviewBanner hidden={tab === "home"} />
               <Animated.View
                 style={[
                   styles.animatedScreen,
@@ -15046,9 +14411,9 @@ function DunaApp() {
                 {tab === "home" && (
                   <HomeScreen
                     onAction={openHomeAction}
-                    onBook={setEventDetailIndex}
                     onOpenBooking={setBookingId}
-                    onPredictions={() => setTab("predictions")}
+                    onOpenProfile={() => setTab("you")}
+                    onOpenSchedule={() => setTab("plans")}
                   />
                 )}
                 {tab === "discover" && (
@@ -17354,14 +16719,14 @@ function createStyles(palette: Palette) {
     },
     previewBanner: {
       alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderBottomColor: rgba(colors.warningRgb, 0.24),
+      backgroundColor: rgba(colors.accentRgb, 0.055),
+      borderBottomColor: rgba(colors.accentRgb, 0.1),
       borderBottomWidth: 1,
       paddingHorizontal: 12,
-      paddingVertical: 7,
+      paddingVertical: mobileGrid[1],
     },
     previewBannerText: {
-      color: colors.warning,
+      color: colors.aqua,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
@@ -17404,10 +16769,30 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: mobileGrid[3],
+      paddingBottom: mobileGrid[2],
       paddingTop: mobileGrid[2],
     },
     headerActions: { flexDirection: "row", gap: mobileGrid[2] },
+    headerNotification: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
+      justifyContent: "center",
+      position: "relative",
+      width: mobileControl.minimumTarget,
+    },
+    headerNotificationDot: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.white,
+      borderRadius: 5,
+      borderWidth: 2,
+      height: 10,
+      position: "absolute",
+      right: 7,
+      top: 6,
+      width: 10,
+    },
     themeButton: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -17428,7 +16813,7 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       gap: mobileGrid[2],
     },
-    wordmarkImage: { height: mobileGrid[7], width: 104 },
+    wordmarkImage: { height: mobileGrid[9], width: 142 },
     proPill: {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
@@ -17448,14 +16833,256 @@ function createStyles(palette: Palette) {
     },
     avatarButton: {
       alignItems: "center",
-      backgroundColor: colors.navyLift,
+      backgroundColor: colors.ink,
       borderRadius: mobileControl.pillRadius,
       height: mobileControl.minimumTarget,
       justifyContent: "center",
       position: "relative",
       width: mobileControl.minimumTarget,
     },
-    avatarText: { color: colors.bone, fontSize: 14, fontWeight: "700" },
+    avatarText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+    homeV4Content: {
+      backgroundColor: colors.canvas,
+      paddingBottom: mobileGrid[12] + mobileGrid[12] + mobileGrid[4],
+      paddingHorizontal: mobileControl.pageInset,
+    },
+    homeV4Welcome: { marginBottom: mobileGrid[2] },
+    homeV4Context: {
+      color: colors.muted,
+      fontSize: mobileType.body.fontSize,
+      lineHeight: mobileType.body.lineHeight,
+    },
+    homeV4Title: {
+      color: colors.ink,
+      fontSize: 32,
+      fontWeight: "500",
+      letterSpacing: -1.35,
+      lineHeight: 37,
+      marginTop: mobileGrid[1],
+    },
+    homeV4Subtitle: {
+      color: colors.muted,
+      fontSize: mobileType.body.fontSize,
+      lineHeight: mobileType.body.lineHeight,
+      marginTop: mobileGrid[1],
+    },
+    homeV4Primary: {
+      alignItems: "center",
+      backgroundColor: colors.ink,
+      borderRadius: mobileGrid[5],
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[2],
+      paddingHorizontal: mobileGrid[3],
+    },
+    homeV4PrimaryIcon: {
+      alignItems: "center",
+      backgroundColor: colors.white,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    homeV4PrimaryTitle: {
+      color: colors.white,
+      fontSize: 20,
+      fontWeight: "500",
+      letterSpacing: -0.4,
+    },
+    homeV4PrimaryBody: {
+      color: rgba(colors.whiteRgb, 0.68),
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
+    homeV4ShortcutRow: {
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[2],
+    },
+    homeV4Shortcut: {
+      backgroundColor: colors.navy,
+      borderRadius: mobileControl.cardRadius,
+      flex: 1,
+      minHeight: mobileGrid[12] + mobileGrid[4],
+      padding: mobileGrid[2],
+    },
+    homeV4ShortcutIcon: {
+      alignItems: "center",
+      backgroundColor: colors.white,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    homeV4ShortcutLabel: {
+      color: colors.ink,
+      fontSize: 15,
+      fontWeight: "500",
+      marginTop: mobileGrid[2],
+    },
+    homeV4SectionHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: mobileGrid[1],
+      marginTop: mobileGrid[1],
+    },
+    homeV4SectionTitle: {
+      color: colors.ink,
+      fontSize: 24,
+      fontWeight: "500",
+      letterSpacing: -0.8,
+      lineHeight: 29,
+    },
+    homeV4SectionAction: { color: colors.muted, fontSize: 15 },
+    homeV4NextCard: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.12),
+      borderRadius: mobileGrid[5],
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: mobileGrid[12] + mobileGrid[7],
+      overflow: "hidden",
+      paddingRight: mobileGrid[3],
+    },
+    homeV4NextAccent: {
+      alignSelf: "stretch",
+      backgroundColor: colors.aqua,
+      width: mobileGrid[1],
+    },
+    homeV4NextTime: {
+      justifyContent: "center",
+      paddingHorizontal: mobileGrid[4],
+      width: 105,
+    },
+    homeV4NextEyebrow: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.8,
+    },
+    homeV4NextClock: {
+      color: colors.ink,
+      fontSize: 28,
+      fontVariant: ["tabular-nums"],
+      letterSpacing: -0.8,
+      lineHeight: 34,
+      marginTop: mobileGrid[1],
+    },
+    homeV4NextMeridiem: { color: colors.muted, fontSize: 12 },
+    homeV4NextInfo: { flex: 1, minWidth: 0, paddingVertical: mobileGrid[3] },
+    homeV4NextTitle: {
+      color: colors.ink,
+      fontSize: 18,
+      fontWeight: "500",
+      letterSpacing: -0.25,
+    },
+    homeV4NextVenue: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[2],
+    },
+    homeV4Players: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[2],
+    },
+    homeV4AvatarStack: { flexDirection: "row" },
+    homeV4Avatar: {
+      alignItems: "center",
+      backgroundColor: colors.ink,
+      borderColor: colors.white,
+      borderRadius: mobileGrid[4],
+      borderWidth: 2,
+      height: mobileGrid[8],
+      justifyContent: "center",
+      width: mobileGrid[8],
+    },
+    homeV4AvatarBlue: { backgroundColor: colors.aqua },
+    homeV4AvatarSand: { backgroundColor: colors.sand },
+    homeV4AvatarText: {
+      color: colors.white,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    homeV4AvatarTextDark: { color: colors.ink },
+    homeV4PlayerCount: { color: colors.muted, flex: 1, fontSize: 12 },
+    homeV4EmptyNext: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: mobileGrid[5],
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      minHeight: 90,
+      padding: mobileGrid[4],
+    },
+    homeV4GameGrid: { flexDirection: "row", gap: mobileGrid[2] },
+    homeV4RatingCard: {
+      backgroundColor: colors.navy,
+      borderRadius: mobileControl.cardRadius,
+      flex: 0.78,
+      justifyContent: "center",
+      minHeight: mobileGrid[12] + mobileGrid[4],
+      padding: mobileGrid[3],
+    },
+    homeV4CardEyebrow: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    homeV4RatingRow: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: mobileGrid[1],
+    },
+    homeV4RatingValue: {
+      color: colors.aquaDeep,
+      fontSize: 31,
+      fontVariant: ["tabular-nums"],
+      letterSpacing: -1,
+    },
+    homeV4RatingDelta: {
+      color: colors.positive,
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "700",
+      marginBottom: mobileGrid[1],
+    },
+    homeV4RatingDeltaNegative: { color: colors.danger },
+    homeV4Insight: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.055),
+      borderColor: rgba(colors.accentRgb, 0.14),
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      marginTop: mobileGrid[1],
+      minHeight: mobileGrid[12] + mobileGrid[1],
+      padding: mobileGrid[3],
+    },
+    homeV4InsightMark: {
+      alignItems: "center",
+      backgroundColor: colors.white,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      overflow: "hidden",
+      width: mobileGrid[9],
+    },
+    homeV4InsightImage: { height: mobileGrid[8], width: mobileGrid[8] },
+    homeV4InsightTitle: {
+      color: colors.ink,
+      fontSize: 15,
+      lineHeight: 20,
+      marginTop: mobileGrid[2],
+    },
     homeWelcome: {
       alignItems: "flex-start",
       flexDirection: "row",
@@ -18095,6 +17722,15 @@ function createStyles(palette: Palette) {
       marginBottom: 4,
       padding: 14,
     },
+    memberOrganizationCardCompact: {
+      backgroundColor: colors.navy,
+      borderColor: "transparent",
+      borderRadius: mobileControl.cardRadius,
+      flex: 1.35,
+      marginBottom: 0,
+      minHeight: mobileGrid[12] + mobileGrid[4],
+      padding: mobileGrid[3],
+    },
     memberOrganizationMark: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -18103,21 +17739,27 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 48,
     },
+    memberOrganizationMarkCompact: {
+      backgroundColor: rgba(colors.warningRgb, 0.14),
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      width: mobileGrid[9],
+    },
     memberOrganizationMarkText: {
       color: colors.onAccent,
       fontSize: 18,
       fontWeight: "900",
     },
     memberOrganizationEyebrow: {
-      color: colors.aqua,
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
     memberOrganizationName: {
       color: colors.bone,
-      fontSize: 16,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       marginTop: 3,
     },
     memberOrganizationMeta: {
@@ -23177,82 +22819,110 @@ function createStyles(palette: Palette) {
       right: mobileControl.pageInset,
       zIndex: 90,
     },
-    tabBarTint: {
-      backgroundColor: rgba(colors.accentRgb, 0.12),
-      borderRadius: mobileControl.sheetRadius,
-      bottom: -4,
-      left: mobileGrid[2],
+    tabBarSandGlow: {
+      backgroundColor: rgba(colors.warningRgb, 0.16),
+      borderRadius: 60,
+      bottom: mobileGrid[1],
+      height: mobileGrid[11],
+      left: "18%",
+      position: "absolute",
+      shadowColor: colors.sand,
+      shadowOpacity: 0.28,
+      shadowRadius: 22,
+      width: "42%",
+    },
+    tabBarBlueGlow: {
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: 60,
+      bottom: 0,
+      height: mobileGrid[12],
       position: "absolute",
       right: mobileGrid[2],
-      top: 4,
+      shadowColor: colors.aqua,
+      shadowOpacity: 0.2,
+      shadowRadius: 24,
+      width: "42%",
     },
     tabBar: {
       alignItems: "center",
-      backgroundColor: rgba(colors.depthRgb, 0.88),
-      borderColor: rgba(colors.whiteRgb, 0.58),
+      backgroundColor: rgba(colors.whiteRgb, 0.82),
+      borderColor: rgba(colors.whiteRgb, 0.94),
       borderRadius: mobileControl.sheetRadius,
       borderWidth: 1,
       flexDirection: "row",
-      minHeight: mobileGrid[12] + mobileGrid[1],
+      minHeight: mobileGrid[12] + mobileGrid[2],
       paddingHorizontal: mobileGrid[1],
       paddingVertical: mobileGrid[1],
-      shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.16,
-      shadowRadius: 22,
+      shadowColor: colors.aquaDeep,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.12,
+      shadowRadius: 26,
       elevation: 12,
+      overflow: "visible",
     },
     tabItem: {
       alignItems: "center",
       borderRadius: mobileControl.pillRadius,
-      flex: 0.86,
-      flexDirection: "row",
-      gap: mobileGrid[1],
-      minHeight: mobileControl.minimumTarget,
+      flex: 1,
+      height: mobileGrid[11],
       justifyContent: "center",
-      paddingHorizontal: mobileGrid[1],
       position: "relative",
     },
     tabItemActive: {
-      backgroundColor: rgba(colors.overlayRgb, 0.08),
-      flex: 1.28,
+      backgroundColor: rgba(colors.whiteRgb, 0.92),
+      borderColor: rgba(colors.accentRgb, 0.12),
+      borderWidth: 1,
+      shadowColor: colors.aqua,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.1,
+      shadowRadius: 14,
     },
     tabIconWrap: { position: "relative" },
-    tabUnreadDot: {
-      backgroundColor: colors.flare,
-      borderColor: colors.depth,
-      borderRadius: mobileGrid[1],
+    tabUnreadBadge: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderColor: colors.white,
+      borderRadius: mobileGrid[2],
       borderWidth: 2,
-      height: mobileGrid[2],
+      height: mobileGrid[4],
+      justifyContent: "center",
+      minWidth: mobileGrid[4],
       position: "absolute",
-      right: -5,
-      top: -5,
-      width: mobileGrid[2],
+      right: -11,
+      top: -10,
     },
-    tabLabel: { color: colors.bone, fontSize: 12, fontWeight: "700" },
+    tabUnreadText: {
+      color: colors.white,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 14,
+    },
     tabAiButton: {
       alignItems: "center",
-      flex: 1.05,
+      flex: 1,
       justifyContent: "center",
-      marginTop: -mobileGrid[3],
+      marginTop: -mobileGrid[2],
       minHeight: mobileGrid[12] + mobileGrid[2],
     },
     tabAiHalo: {
       alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderColor: colors.depth,
+      backgroundColor: colors.white,
+      borderColor: rgba(colors.whiteRgb, 0.96),
       borderRadius: mobileControl.pillRadius,
-      borderWidth: 5,
-      height: mobileGrid[12],
+      borderWidth: 3,
+      height: mobileGrid[12] + mobileGrid[2],
       justifyContent: "center",
       overflow: "hidden",
-      shadowColor: "#000000",
+      shadowColor: colors.aquaDeep,
       shadowOffset: { width: 0, height: 7 },
-      shadowOpacity: 0.18,
-      shadowRadius: 12,
-      width: mobileGrid[12],
+      shadowOpacity: 0.16,
+      shadowRadius: 16,
+      width: mobileGrid[12] + mobileGrid[2],
     },
-    tabAiImage: { height: mobileGrid[10], width: mobileGrid[10] },
+    tabAiImage: {
+      height: mobileGrid[12] + mobileGrid[6],
+      width: mobileGrid[12] + mobileGrid[6],
+    },
     quickSheetBackdrop: {
       backgroundColor: rgba(colors.inkRgb, 0.42),
       flex: 1,

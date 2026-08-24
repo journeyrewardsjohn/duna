@@ -20,6 +20,7 @@ const requiredFiles = [
   "docs/design/duna-hq-component-system.md",
   "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
+  "docs/design/duna-mobile-interface-v4.md",
   "docs/design/duna-theming-light-dark.md",
   "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
@@ -168,25 +169,55 @@ const playerNativeSource = readFileSync(
   join(root, "apps/player/App.tsx"),
   "utf8",
 );
-if (
-  !playerNativeSource.includes("nextBookingEventIndex") ||
-  !playerNativeSource.includes("booking.startsAt")
-) {
+for (const contract of [
+  "const nextBooking = [...bookings]",
+  "new Date(booking.endsAt).getTime() > now",
+  "styles.homeV4NextCard",
+] as const) {
+  if (playerNativeSource.includes(contract)) continue;
   violations.push(
-    "apps/player/App.tsx must derive Next Up from a future personal booking",
+    `apps/player/App.tsx must preserve the booking-derived Home contract: ${contract}`,
   );
 }
-const nativeNextUpIndex = playerNativeSource.indexOf("NEXT UP ·");
-const nativeQuickActionsIndex = playerNativeSource.indexOf(
-  "styles.homeQuickGrid",
+const nativePrimaryActionIndex = playerNativeSource.indexOf(
+  'accessibilityLabel="Find your next game"',
 );
+const nativeQuickActionsIndex = playerNativeSource.indexOf(
+  "styles.homeV4ShortcutRow",
+);
+const nativeNextUpIndex = playerNativeSource.indexOf(">Next up</");
 if (
-  nativeNextUpIndex < 0 ||
+  nativePrimaryActionIndex < 0 ||
   nativeQuickActionsIndex < 0 ||
-  nativeNextUpIndex > nativeQuickActionsIndex
+  nativeNextUpIndex < 0 ||
+  nativePrimaryActionIndex > nativeQuickActionsIndex ||
+  nativeQuickActionsIndex > nativeNextUpIndex
 ) {
   violations.push(
-    "apps/player/App.tsx must render personal Next Up before discovery actions",
+    "apps/player/App.tsx must preserve the primary action, three shortcuts, then personal Next up hierarchy",
+  );
+}
+for (const contract of [
+  'destinationButton("home", "Home", "home")',
+  'destinationButton("calendar", "Calendar", "calendar")',
+  'accessibilityLabel="Duna AI"',
+  'accessibilityLabel="Quick actions"',
+  'destinationButton("messages", "Messages", "message")',
+] as const) {
+  if (!playerNativeSource.includes(contract)) {
+    violations.push(
+      `apps/player/App.tsx must preserve the icon-only glass dock contract: ${contract}`,
+    );
+  }
+}
+
+const mobileTokenSource = readFileSync(
+  join(root, "packages/ui/src/mobile.ts"),
+  "utf8",
+);
+if (!mobileTokenSource.includes('ground: whiteCanvas ? "#FFFFFF"')) {
+  violations.push(
+    "packages/ui/src/mobile.ts must preserve the true-white light mobile ground",
   );
 }
 

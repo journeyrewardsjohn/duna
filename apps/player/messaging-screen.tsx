@@ -849,9 +849,15 @@ export function PlayerMessagingScreen({
     }
     setInbox(nextInbox);
     setSelectedId((current) => {
+      const currentConversation = nextInbox.conversations.find(
+        (item) => item.id === current,
+      );
       if (
-        current &&
-        nextInbox.conversations.some((item) => item.id === current)
+        currentConversation &&
+        ((messagingSpace === "assistant" &&
+          currentConversation.type === "support") ||
+          (messagingSpace === "messages" &&
+            currentConversation.type !== "support"))
       ) {
         return current;
       }
@@ -866,10 +872,19 @@ export function PlayerMessagingScreen({
       ) {
         return initialConversationId;
       }
-      return initialSupport ? support?.id : undefined;
+      return initialSupport && messagingSpace === "assistant"
+        ? support?.id
+        : undefined;
     });
     return nextInbox;
-  }, [client, initialConversationId, initialSupport, mode, principal]);
+  }, [
+    client,
+    initialConversationId,
+    initialSupport,
+    messagingSpace,
+    mode,
+    principal,
+  ]);
 
   const loadConversation = useCallback(
     async (conversationId: string) => {
