@@ -8676,16 +8676,20 @@ function WalletScreen({ onClose }: { readonly onClose: () => void }) {
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.walletCloseRow}>
+      <View style={styles.walletBackRow}>
         <Pressable
-          accessibilityLabel="Close wallet and return to profile"
+          accessibilityLabel="Back to profile"
+          accessibilityRole="button"
           onPress={onClose}
-          style={styles.walletCloseButton}
+          style={styles.walletBackButton}
         >
-          <Text style={styles.walletCloseText}>×</Text>
+          <DunaIcon color={colors.aqua} name="arrow-left" size={20} />
+          <Text style={styles.walletBackText}>Back</Text>
         </Pressable>
       </View>
-      <AppHeader eyebrow="MEMBERSHIP + STRIPE-MANAGED BALANCE" />
+      <Text style={styles.walletEyebrow}>
+        MEMBERSHIP + STRIPE-MANAGED BALANCE
+      </Text>
       <Text style={styles.displayTitle}>Wallet.</Text>
       {memberCard && (
         <View style={styles.memberCard}>
@@ -20961,26 +20965,31 @@ function createStyles() {
       transform: [{ rotate: "-34deg" }],
       width: 330,
     },
-    walletCloseRow: {
-      alignItems: "flex-end",
-      marginBottom: -42,
-      position: "relative",
-      zIndex: 4,
+    walletBackRow: {
+      alignItems: "flex-start",
+      marginBottom: mobileGrid[3],
+      paddingTop: mobileGrid[2],
     },
-    walletCloseButton: {
+    walletBackButton: {
       alignItems: "center",
-      backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 24,
-      borderWidth: 1,
-      height: 48,
+      flexDirection: "row",
+      gap: mobileGrid[1],
+      minHeight: mobileControl.minimumTarget,
       justifyContent: "center",
-      width: 48,
+      marginLeft: -mobileGrid[1],
+      paddingHorizontal: mobileGrid[1],
     },
-    walletCloseText: {
-      color: colors.bone,
-      fontSize: 29,
-      lineHeight: 32,
+    walletBackText: {
+      color: colors.aqua,
+      fontSize: 16,
+      fontWeight: "700",
+      lineHeight: 22,
+    },
+    walletEyebrow: {
+      color: colors.muted,
+      fontSize: 12,
+      letterSpacing: 1.2,
+      marginBottom: mobileGrid[1],
     },
     walletTop: {
       alignItems: "center",

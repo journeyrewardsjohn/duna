@@ -9,6 +9,7 @@ import Svg, {
 } from "react-native-svg";
 
 export type DunaIconName =
+  | "arrow-left"
   | "arrow-right"
   | "bell"
   | "calendar"
@@ -41,6 +42,13 @@ export type DunaIconName =
 
 function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
   switch (name) {
+    case "arrow-left":
+      return (
+        <>
+          <Line x1="5" x2="19" y1="12" y2="12" />
+          <Polyline points="11 6 5 12 11 18" />
+        </>
+      );
     case "arrow-right":
       return (
         <>
