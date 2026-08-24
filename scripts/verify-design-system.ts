@@ -44,6 +44,8 @@ const requiredFiles = [
   "apps/player/assets/icon-dark.png",
   "apps/player/assets/icon-tinted.png",
   "apps/player/assets/monochrome-icon.png",
+  "apps/player/liquid-glass-surface.tsx",
+  "apps/player/liquid-glass-surface.ios.tsx",
   "apps/pro/assets/icon-light.png",
   "apps/pro/assets/icon-tinted.png",
   "apps/pro/assets/monochrome-icon.png",
@@ -203,10 +205,39 @@ for (const contract of [
   'accessibilityLabel="Duna AI"',
   'accessibilityLabel="Quick actions"',
   'destinationButton("messages", "Messages", "message")',
+  "<LiquidGlassSurface",
+  "<DunaMark size={mobileGrid[8]} />",
 ] as const) {
   if (!playerNativeSource.includes(contract)) {
     violations.push(
       `apps/player/App.tsx must preserve the icon-only glass dock contract: ${contract}`,
+    );
+  }
+}
+for (const retiredThemeContract of [
+  "ThemeButton",
+  'AsyncStorage.getItem("duna-theme")',
+  "useColorScheme",
+] as const) {
+  if (playerNativeSource.includes(retiredThemeContract)) {
+    violations.push(
+      `apps/player/App.tsx must not restore the retired global appearance control: ${retiredThemeContract}`,
+    );
+  }
+}
+
+const playerMessagingSource = readFileSync(
+  join(root, "apps/player/messaging-screen.tsx"),
+  "utf8",
+);
+for (const contract of [
+  'accessibilityLabel="Close Duna AI and Messages"',
+  'accessibilityHint="Returns to the Player home screen"',
+  'accessibilityLabel="Open recent Duna AI chats"',
+] as const) {
+  if (!playerMessagingSource.includes(contract)) {
+    violations.push(
+      `apps/player/messaging-screen.tsx must preserve the full-screen chat exit contract: ${contract}`,
     );
   }
 }

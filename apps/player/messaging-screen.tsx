@@ -1811,11 +1811,20 @@ export function PlayerMessagingScreen({
             <Text style={styles.recentEyebrow}>MESSAGES</Text>
             <Text style={styles.recentTitle}>Recent chats</Text>
           </View>
-          {(inbox?.totalUnread ?? 0) > 0 && (
-            <View style={styles.totalUnread}>
-              <Text style={styles.totalUnreadText}>{inbox?.totalUnread}</Text>
-            </View>
-          )}
+          <View style={styles.recentHeadingActions}>
+            {(inbox?.totalUnread ?? 0) > 0 && (
+              <View style={styles.totalUnread}>
+                <Text style={styles.totalUnreadText}>{inbox?.totalUnread}</Text>
+              </View>
+            )}
+            <Pressable
+              accessibilityLabel="New conversation"
+              onPress={() => setComposeOpen(true)}
+              style={styles.recentComposeButton}
+            >
+              <DunaIcon color={palette.text} name="plus" size={20} />
+            </Pressable>
+          </View>
         </View>
         {loading && !inbox ? (
           <ActivityIndicator color={palette.accent} style={styles.loading} />
@@ -2067,34 +2076,30 @@ export function PlayerMessagingScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.modeBar}>
-        <Pressable
-          accessibilityLabel={
-            messagingSpace === "assistant"
-              ? "Open recent Duna AI chats"
-              : selectedId
-                ? "Back to conversations"
-                : "Close Messages"
-          }
-          onPress={() => {
-            if (messagingSpace === "assistant") {
-              setAssistantMenuOpen(true);
-            } else if (selectedId) {
+        {messagingSpace === "assistant" ? (
+          <Pressable
+            accessibilityLabel="Open recent Duna AI chats"
+            onPress={() => setAssistantMenuOpen(true)}
+            style={styles.modeAction}
+          >
+            <DunaIcon color={palette.text} name="menu" size={22} />
+          </Pressable>
+        ) : selectedId ? (
+          <Pressable
+            accessibilityLabel="Back to conversations"
+            onPress={() => {
               Keyboard.dismiss();
               setAttachments([]);
               setSelectedId(undefined);
               setDetail(undefined);
-            } else {
-              onClose();
-            }
-          }}
-          style={styles.modeAction}
-        >
-          {messagingSpace === "assistant" ? (
-            <DunaIcon color={palette.text} name="menu" size={22} />
-          ) : (
+            }}
+            style={styles.modeAction}
+          >
             <Text style={styles.modeBackText}>‹</Text>
-          )}
-        </Pressable>
+          </Pressable>
+        ) : (
+          <View style={styles.modeActionSpacer} />
+        )}
         <View style={styles.modeSwitch}>
           {(
             [
@@ -2123,17 +2128,18 @@ export function PlayerMessagingScreen({
             </Pressable>
           ))}
         </View>
-        {messagingSpace === "messages" && !selectedId ? (
-          <Pressable
-            accessibilityLabel="New conversation"
-            onPress={() => setComposeOpen(true)}
-            style={styles.modeAction}
-          >
-            <DunaIcon color={palette.text} name="plus" size={22} />
-          </Pressable>
-        ) : (
-          <View style={styles.modeActionSpacer} />
-        )}
+        <Pressable
+          accessibilityHint="Returns to the Player home screen"
+          accessibilityLabel="Close Duna AI and Messages"
+          onPress={() => {
+            Keyboard.dismiss();
+            setAttachments([]);
+            onClose();
+          }}
+          style={styles.modeAction}
+        >
+          <DunaIcon color={palette.text} name="close" size={21} />
+        </Pressable>
       </View>
       {wide ? (
         <View style={styles.wideLayout}>
@@ -2603,17 +2609,21 @@ function createStyles(palette: MessagingPalette) {
       fontSize: 12,
       fontWeight: "900",
     },
-    newButton: {
+    recentHeadingActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    recentComposeButton: {
       alignItems: "center",
       backgroundColor: palette.surface,
       borderColor: palette.border,
       borderWidth: 1,
       borderRadius: 18,
-      height: 48,
+      height: 36,
       justifyContent: "center",
-      width: 48,
+      width: 36,
     },
-    newButtonText: { color: palette.text, fontSize: 23, fontWeight: "900" },
     inboxLead: {
       color: palette.muted,
       fontSize: 13,

@@ -77,6 +77,11 @@ Use semantic tokens, never screen-local hex values.
 One screen gets one Duna color family at a time. A setting screen does not need
 blue buttons, sand cards, coral icons, and green toggles together.
 
+Player has one calm light interface shell. There is no global light/dark mode
+preference or appearance toggle. Dark remains a task-specific environment for
+camera capture, live scoring, and other situations where the activity benefits
+from it; it is not a second skin for Home, Calendar, discovery, or messaging.
+
 ### Icons
 
 Use the Duna 24×24 line set: 1.75pt stroke, round caps and joins, no decorative
@@ -89,13 +94,16 @@ label.
 
 The bottom bar is a translucent glass dock with a light blue or sand underlay,
 not a black slab. It is icon-only in every state. The selected destination gets
-a white glass halo and a stronger Duna-navy icon; it does not add a label or
-change the dock's geometry. Calendar replaces search. Messages opens the
-unified chat shell. The center Duna mark opens the full-screen Duna AI copilot.
-The plus button opens contextual quick actions in a sheet.
+a quiet translucent plate and a stronger Duna-navy icon; it does not add a
+label or change the dock's geometry. Calendar replaces search. Messages opens
+the unified chat shell. The center Duna mark is intentionally smaller than the
+surrounding target and opens the full-screen Duna AI copilot. The plus button
+opens contextual quick actions in a sheet.
 
-Use a native or React Native glass effect when supported, with a solid 92%
-surface fallback. Blur is atmosphere, never the only source of contrast.
+On iOS 26+, use Expo UI's native SwiftUI Liquid Glass modifier for the dock and
+center action. Other iOS versions and Android use the same React Native layout
+with a translucent, bordered fallback. Glass is atmosphere, never the only
+source of contrast or selection state.
 
 Sheets own short choices, filters, quick actions, and secondary configuration.
 They use a visible handle, one clear title, 50pt option rows, a checked selected
@@ -127,6 +135,11 @@ Duna AI and Messages share a simple chat shell inspired by ordinary messaging
 products. A top toggle switches between `Duna AI` and `Messages`. The composer
 stays at the bottom. A hamburger opens only the chat-history drawer for the
 current AI or message mode; it is not a second app-navigation menu.
+
+Because this shell replaces the bottom dock, a 50pt close control is always
+visible at the top right and returns to Player Home. Duna AI keeps its hamburger
+at top left. Messages uses that position only for a thread-level Back action;
+the inbox puts `New conversation` beside its `Recent chats` heading.
 
 Duna context is always used within the user's permissions. Do not expose a
 `Use my Duna context` toggle. Suggested prompts use small line icons and direct

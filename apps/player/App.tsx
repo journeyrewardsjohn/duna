@@ -64,7 +64,6 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  useColorScheme,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -123,6 +122,7 @@ import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
+import { LiquidGlassSurface } from "./liquid-glass-surface";
 import {
   playerPrimaryDestination,
   type PlayerPrimaryDestination,
@@ -392,51 +392,8 @@ type Palette = {
   readonly [Key in keyof typeof lightColors]: string;
 };
 
-const darkColors: Palette = {
-  canvas: "#141310",
-  ink: "#0d1114",
-  depth: "#1c1a16",
-  navy: "#16232a",
-  navyLift: "#24211c",
-  bone: "#f2f0ea",
-  muted: "#b8b4a8",
-  aqua: "#b5ccd3",
-  aquaDeep: "#8fb0bc",
-  sand: "#d4b77c",
-  flare: "#f4794c",
-  resultWin: "#4a402b",
-  resultWinBorder: "#8d7748",
-  resultLoss: "#294651",
-  resultLossBorder: "#527782",
-  signal: "#b9dc52",
-  signalInk: "#17200d",
-  positive: "#6bae78",
-  warning: "#d4b77c",
-  danger: "#c4785c",
-  onAccent: "#0d1114",
-  white: "#ffffff",
-  overlayRgb: "242,240,234",
-  accentRgb: "181,204,211",
-  warningRgb: "212,183,124",
-  positiveRgb: "107,174,120",
-  dangerRgb: "196,120,92",
-  flareRgb: "244,121,76",
-  inkRgb: "13,17,20",
-  depthRgb: "28,26,22",
-  navyRgb: "22,35,42",
-  boneRgb: "242,240,234",
-  whiteRgb: "255,255,255",
-};
-
 type ThemeName = "light" | "dark";
-type ThemePreference = ThemeName | "system";
-
-let activePalette: Palette = lightColors;
-const colors = new Proxy(lightColors, {
-  get(_target, property: keyof Palette) {
-    return activePalette[property];
-  },
-}) as Palette;
+const colors: Palette = lightColors;
 
 function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
@@ -471,12 +428,6 @@ function resultRosterName(name: string) {
   return name.trim().split(/\s+/)[0] || name;
 }
 
-const ThemeContext = createContext<{
-  readonly theme: ThemeName;
-  readonly preference: ThemePreference;
-  readonly toggle: () => void;
-}>({ theme: "light", preference: "light", toggle: () => undefined });
-
 const MessagingNavigationContext = createContext<{
   readonly open: (support: boolean) => void;
   readonly openProfile: () => void;
@@ -486,24 +437,6 @@ const MessagingNavigationContext = createContext<{
   openProfile: () => undefined,
   unreadCount: 0,
 });
-
-function ThemeButton() {
-  const { preference, theme, toggle } = useContext(ThemeContext);
-  return (
-    <Pressable
-      accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
-      onPress={() => {
-        selectionHaptic();
-        toggle();
-      }}
-      style={styles.themeButton}
-    >
-      <Text style={styles.themeButtonText}>
-        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
-      </Text>
-    </Pressable>
-  );
-}
 
 type Tab =
   | "home"
@@ -695,16 +628,13 @@ function DunaWordmark({
   readonly pro?: boolean;
   readonly tone?: "default" | "light";
 }) {
-  const { theme } = useContext(ThemeContext);
   return (
     <View style={styles.wordmark}>
       <Image
         accessibilityLabel="Duna"
         resizeMode="contain"
         source={
-          tone === "light" || theme === "dark"
-            ? dunaPlayerWordmarkWhite
-            : dunaPlayerWordmarkBlue
+          tone === "light" ? dunaPlayerWordmarkWhite : dunaPlayerWordmarkBlue
         }
         style={styles.wordmarkImage}
       />
@@ -3543,7 +3473,7 @@ function VenueBookingModal({
                       : "Review"
                     : "Find a game"}
                 </Text>
-                <ThemeButton />
+                <View style={styles.modalHeaderSpacer} />
               </View>
               {inventory && (
                 <>
@@ -6972,7 +6902,7 @@ function DiscoverScreen({
   readonly onCreateMatch: () => void;
   readonly onOrganization: (slug: string) => void;
 }) {
-  const { theme } = useContext(ThemeContext);
+  const theme: ThemeName = "light";
   const [filter, setFilter] = useState("For you");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
   const [hostSeed, setHostSeed] = useState<HostedMatchSeed>();
@@ -13820,7 +13750,7 @@ function TabBar({
       >
         <View style={styles.tabIconWrap}>
           <DunaIcon
-            color={isSelected ? colors.aquaDeep : colors.aqua}
+            color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
             name={icon}
             size={24}
             strokeWidth={isSelected ? 2.25 : 1.75}
@@ -13847,6 +13777,12 @@ function TabBar({
       <View pointerEvents="none" style={styles.tabBarSandGlow} />
       <View pointerEvents="none" style={styles.tabBarBlueGlow} />
       <View style={styles.tabBar}>
+        <LiquidGlassSurface
+          borderColor={rgba(colors.whiteRgb, 0.82)}
+          cornerRadius={mobileGrid[7]}
+          fallbackColor={rgba(colors.whiteRgb, 0.82)}
+          tint="#edf4f8"
+        />
         {destinationButton("home", "Home", "home")}
         {destinationButton("calendar", "Calendar", "calendar")}
         <Pressable
@@ -13860,7 +13796,13 @@ function TabBar({
           style={styles.tabAiButton}
         >
           <View style={styles.tabAiHalo}>
-            <DunaMark size={mobileGrid[11]} />
+            <LiquidGlassSurface
+              borderColor={rgba(colors.whiteRgb, 0.9)}
+              cornerRadius={mobileGrid[6]}
+              fallbackColor={rgba(colors.whiteRgb, 0.88)}
+              tint="#f7eee0"
+            />
+            <DunaMark size={mobileGrid[8]} />
           </View>
         </Pressable>
         <Pressable
@@ -14168,7 +14110,7 @@ function WatchScoreInbox({
 
 function DunaApp() {
   const runtime = usePlayerRuntime();
-  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
+  const theme: ThemeName = "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
@@ -14196,18 +14138,7 @@ function DunaApp() {
     readonly key: number;
     readonly kind: DiscoverIntentKind;
   }>();
-  const [themePreference, setThemePreference] =
-    useState<ThemePreference>("light");
-  const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark" || stored === "light" || stored === "system") {
-        setThemePreference(stored);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     if (!videoTransfer) return;
@@ -14321,9 +14252,6 @@ function DunaApp() {
     if (tab !== "score" && watchScoreDraft) setWatchScoreDraft(undefined);
   }, [tab, watchScoreDraft]);
 
-  activePalette = theme === "dark" ? darkColors : lightColors;
-  activeStyles = theme === "dark" ? darkStyles : lightStyles;
-
   const openHomeAction = (action: HomeQuickAction) => {
     if (action === "messages") {
       setMessagesConversationId(undefined);
@@ -14356,352 +14284,333 @@ function DunaApp() {
   );
 
   return (
-    <ThemeContext.Provider
+    <MessagingNavigationContext.Provider
       value={{
-        theme,
-        preference: themePreference,
-        toggle: () => {
-          const next: ThemePreference =
-            themePreference === "system"
-              ? "light"
-              : themePreference === "light"
-                ? "dark"
-                : "system";
-          setThemePreference(next);
-          void AsyncStorage.setItem("duna-theme", next);
+        open: (support) => {
+          setMessagesConversationId(undefined);
+          setMessagesOpenToSupport(support);
+          setTab("messages");
         },
+        openProfile: () => setTab("you"),
+        unreadCount: messagingUnreadCount,
       }}
     >
-      <MessagingNavigationContext.Provider
-        value={{
-          open: (support) => {
-            setMessagesConversationId(undefined);
-            setMessagesOpenToSupport(support);
-            setTab("messages");
-          },
-          openProfile: () => setTab("you"),
-          unreadCount: messagingUnreadCount,
-        }}
-      >
-        <PlayerProfileProvider palette={colors}>
-          <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
-          {runtime.dashboard ? (
-            <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
-          ) : null}
-          <SafeAreaView edges={["top"]} style={styles.safe}>
-            <StatusBar style={theme === "dark" ? "light" : "dark"} />
-            <View style={styles.app}>
-              <PreviewBanner hidden={tab === "home"} />
-              <Animated.View
-                style={[
-                  styles.animatedScreen,
-                  {
-                    opacity: screenTransition,
-                    transform: [
-                      {
-                        translateY: screenTransition.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [8, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {tab === "home" && (
-                  <HomeScreen
-                    onAction={openHomeAction}
-                    onOpenBooking={setBookingId}
-                    onOpenProfile={() => setTab("you")}
-                    onOpenSchedule={() => setTab("plans")}
-                  />
-                )}
-                {tab === "discover" && (
-                  <DiscoverScreen
-                    intent={discoverIntent}
-                    onBook={setEventIndex}
-                    onCreateMatch={() => setCreateMatchOpen(true)}
-                    onOrganization={setOrganizationSlug}
-                  />
-                )}
-                {tab === "score" && (
-                  <ScoreUploadScreen
-                    initialPlayedAt={watchScoreDraft?.capturedAt}
-                    initialSets={watchScoreDraft?.sets}
-                    key={watchScoreDraft?.draftId ?? "score-upload"}
-                    onComplete={() => setTab("performance")}
-                    palette={colors}
-                  />
-                )}
-                {tab === "play" && (
-                  <PlayLauncherScreen onAction={openHomeAction} />
-                )}
-                {tab === "coaches" && (
-                  <FindCoachScreen onBack={() => setTab("play")} />
-                )}
-                {tab === "plans" && (
-                  <PlansScreen
-                    onBook={setEventIndex}
-                    onOpenBooking={setBookingId}
-                    onReserveCourtVenue={setCourtBookingRequest}
-                    onTraining={() => setTab("training")}
-                    onSeeAllMatches={() => {
-                      setDiscoverIntent({
-                        key: Date.now(),
-                        kind: "find-match",
-                      });
-                      setTab("discover");
-                    }}
-                  />
-                )}
-                {tab === "training" && (
-                  <PlayerTrainingScreen onBack={() => setTab("plans")} />
-                )}
-                <VideoStudioScreen
-                  active={tab === "video"}
+      <PlayerProfileProvider palette={colors}>
+        <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
+        {runtime.dashboard ? (
+          <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
+        ) : null}
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <StatusBar style="dark" />
+          <View style={styles.app}>
+            <PreviewBanner hidden={tab === "home" || tab === "messages"} />
+            <Animated.View
+              style={[
+                styles.animatedScreen,
+                {
+                  opacity: screenTransition,
+                  transform: [
+                    {
+                      translateY: screenTransition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [8, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {tab === "home" && (
+                <HomeScreen
+                  onAction={openHomeAction}
+                  onOpenBooking={setBookingId}
+                  onOpenProfile={() => setTab("you")}
+                  onOpenSchedule={() => setTab("plans")}
+                />
+              )}
+              {tab === "discover" && (
+                <DiscoverScreen
+                  intent={discoverIntent}
+                  onBook={setEventIndex}
                   onCreateMatch={() => setCreateMatchOpen(true)}
-                  onTransferStatus={setVideoTransfer}
-                  runtime={runtime}
-                  theme={theme}
-                />
-                {tab === "wallet" && (
-                  <WalletScreen onClose={() => setTab("you")} />
-                )}
-                {tab === "predictions" && (
-                  <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
-                )}
-                {tab === "you" && (
-                  <ProfileHubScreen
-                    onArtwork={() => setArtworkStudioOpen(true)}
-                    onDestination={(destination) => setTab(destination)}
-                    onEditProfile={() => setProfileEditorOpen(true)}
-                    onOrganization={setOrganizationSlug}
-                  />
-                )}
-                {tab === "health" && (
-                  <HealthScreen onBack={() => setTab("you")} theme={theme} />
-                )}
-                {tab === "performance" && (
-                  <PerformanceScreen
-                    onArtwork={() => setArtworkStudioOpen(true)}
-                    onBack={() => setTab("you")}
-                    onEditProfile={() => setProfileEditorOpen(true)}
-                    onHealth={() => setTab("health")}
-                    onPredictions={() => setTab("predictions")}
-                    onWallet={() => setTab("wallet")}
-                  />
-                )}
-                {tab === "messages" && (
-                  <PlayerMessagingScreen
-                    initialConversationId={messagesConversationId}
-                    initialSupport={messagesOpenToSupport}
-                    onUnreadCountChange={setMessagingUnreadCount}
-                    onClose={() => {
-                      setMessagesConversationId(undefined);
-                      setMessagesOpenToSupport(false);
-                      setTab("home");
-                    }}
-                    palette={{
-                      canvas: colors.canvas,
-                      surface: colors.depth,
-                      surfaceAlt: colors.navyLift,
-                      border: rgba(colors.overlayRgb, 0.12),
-                      text: colors.bone,
-                      muted: colors.muted,
-                      accent: colors.aqua,
-                      onAccent: colors.onAccent,
-                      positive: colors.positive,
-                      warning: colors.warning,
-                      danger: colors.danger,
-                    }}
-                  />
-                )}
-              </Animated.View>
-              {videoTransfer && (
-                <VideoTransferBanner
-                  onPress={() => setTab("video")}
-                  status={videoTransfer}
+                  onOrganization={setOrganizationSlug}
                 />
               )}
-              {tab !== "messages" && (
-                <TabBar
-                  active={tab}
-                  onChange={(destination) => {
-                    if (destination === "calendar") {
-                      setTab("plans");
-                      return;
-                    }
-                    if (destination === "messages") {
-                      setMessagesConversationId(undefined);
-                      setMessagesOpenToSupport(false);
-                      setTab("messages");
-                      return;
-                    }
-                    setTab("home");
-                  }}
-                  onDunaAi={() => {
-                    setMessagesConversationId(undefined);
-                    setMessagesOpenToSupport(true);
-                    setTab("messages");
-                  }}
-                  onQuickActions={() => setQuickActionsOpen(true)}
-                  unreadCount={messagingUnreadCount}
+              {tab === "score" && (
+                <ScoreUploadScreen
+                  initialPlayedAt={watchScoreDraft?.capturedAt}
+                  initialSets={watchScoreDraft?.sets}
+                  key={watchScoreDraft?.draftId ?? "score-upload"}
+                  onComplete={() => setTab("performance")}
+                  palette={colors}
                 />
               )}
-              <QuickActionsSheet
-                onAction={openHomeAction}
-                onClose={() => setQuickActionsOpen(false)}
-                visible={quickActionsOpen}
-              />
-              <BookingModal
-                eventIndex={eventIndex}
-                onClose={() => setEventIndex(null)}
-              />
-              <NativeEventDetails
-                client={runtime.client}
-                event={
-                  eventDetailIndex === null
-                    ? undefined
-                    : (runtime.dashboard?.events ?? demoEvents)[
-                        eventDetailIndex
-                      ]
-                }
-                onClose={() => setEventDetailIndex(null)}
-                onRegister={() => {
-                  setEventIndex(eventDetailIndex);
-                  setEventDetailIndex(null);
-                }}
-                onScore={() => {
-                  setEventDetailIndex(null);
-                  setTab("score");
-                }}
-                onVideo={() => {
-                  setEventDetailIndex(null);
-                  setTab("video");
-                }}
-                visible={eventDetailIndex !== null}
-              />
-              <ProfileEditorModal
-                onClose={() => setProfileEditorOpen(false)}
-                visible={profileEditorOpen}
-              />
-              <PlayerArtworkModal
-                onClose={() => setArtworkStudioOpen(false)}
-                visible={artworkStudioOpen}
-              />
-              <BookingManagementModal
-                booking={selectedBooking as ManagedBooking | undefined}
-                client={runtime.client}
-                onClose={() => setBookingId(undefined)}
-                onUpdated={runtime.refresh}
-                palette={colors}
-                visible={Boolean(selectedBooking)}
-              />
-              <VenueFinderModal
-                onClose={() => setCourtFinderOpen(false)}
-                onSelect={(request) => {
-                  setCourtFinderOpen(false);
-                  setCourtBookingRequest(request);
-                }}
-                visible={courtFinderOpen}
-              />
-              <VenueBookingModal
-                initialDate={courtBookingRequest?.date}
-                initialDurationMinutes={courtBookingRequest?.durationMinutes}
-                onClose={() => setCourtBookingRequest(undefined)}
-                onHostReady={(seed) => {
-                  setCourtBookingRequest(undefined);
-                  setTimeout(() => setOrganizationHostSeed(seed), 280);
-                }}
-                onOpenMatch={(matchId, matchSlug) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === matchId,
-                  );
-                  setCourtBookingRequest(undefined);
-                  setTimeout(() => {
-                    if (index >= 0) {
-                      setEventIndex(index);
-                      return;
-                    }
-                    void WebBrowser.openBrowserAsync(
-                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
-                    );
-                  }, 280);
-                }}
-                venueId={courtBookingRequest?.venueId}
-                visible={Boolean(courtBookingRequest)}
-              />
-              <OrganizationExperienceModal
-                onClose={() => setOrganizationSlug(undefined)}
-                onOpenCoach={(coach) => {
-                  setOrganizationCoach(coach);
-                  setOrganizationSlug(undefined);
-                }}
-                onOpenEvent={(eventId) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === eventId,
-                  );
-                  setOrganizationSlug(undefined);
-                  if (index >= 0) setEventIndex(index);
-                }}
-                onOpenVenue={(venueId) => {
-                  setOrganizationSlug(undefined);
-                  setOrganizationVenueId(venueId);
-                }}
-                slug={organizationSlug}
+              {tab === "play" && (
+                <PlayLauncherScreen onAction={openHomeAction} />
+              )}
+              {tab === "coaches" && (
+                <FindCoachScreen onBack={() => setTab("play")} />
+              )}
+              {tab === "plans" && (
+                <PlansScreen
+                  onBook={setEventIndex}
+                  onOpenBooking={setBookingId}
+                  onReserveCourtVenue={setCourtBookingRequest}
+                  onTraining={() => setTab("training")}
+                  onSeeAllMatches={() => {
+                    setDiscoverIntent({
+                      key: Date.now(),
+                      kind: "find-match",
+                    });
+                    setTab("discover");
+                  }}
+                />
+              )}
+              {tab === "training" && (
+                <PlayerTrainingScreen onBack={() => setTab("plans")} />
+              )}
+              <VideoStudioScreen
+                active={tab === "video"}
+                onCreateMatch={() => setCreateMatchOpen(true)}
+                onTransferStatus={setVideoTransfer}
+                runtime={runtime}
                 theme={theme}
               />
-              <VenueBookingModal
-                onClose={() => setOrganizationVenueId(undefined)}
-                onHostReady={(seed) => {
-                  setOrganizationVenueId(undefined);
-                  setTimeout(() => setOrganizationHostSeed(seed), 280);
+              {tab === "wallet" && (
+                <WalletScreen onClose={() => setTab("you")} />
+              )}
+              {tab === "predictions" && (
+                <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
+              )}
+              {tab === "you" && (
+                <ProfileHubScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onDestination={(destination) => setTab(destination)}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "health" && (
+                <HealthScreen onBack={() => setTab("you")} theme={theme} />
+              )}
+              {tab === "performance" && (
+                <PerformanceScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onBack={() => setTab("you")}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onHealth={() => setTab("health")}
+                  onPredictions={() => setTab("predictions")}
+                  onWallet={() => setTab("wallet")}
+                />
+              )}
+              {tab === "messages" && (
+                <PlayerMessagingScreen
+                  initialConversationId={messagesConversationId}
+                  initialSupport={messagesOpenToSupport}
+                  onUnreadCountChange={setMessagingUnreadCount}
+                  onClose={() => {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(false);
+                    setTab("home");
+                  }}
+                  palette={{
+                    canvas: colors.canvas,
+                    surface: colors.depth,
+                    surfaceAlt: colors.navyLift,
+                    border: rgba(colors.overlayRgb, 0.12),
+                    text: colors.bone,
+                    muted: colors.muted,
+                    accent: colors.aqua,
+                    onAccent: colors.onAccent,
+                    positive: colors.positive,
+                    warning: colors.warning,
+                    danger: colors.danger,
+                  }}
+                />
+              )}
+            </Animated.View>
+            {videoTransfer && (
+              <VideoTransferBanner
+                onPress={() => setTab("video")}
+                status={videoTransfer}
+              />
+            )}
+            {tab !== "messages" && (
+              <TabBar
+                active={tab}
+                onChange={(destination) => {
+                  if (destination === "calendar") {
+                    setTab("plans");
+                    return;
+                  }
+                  if (destination === "messages") {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(false);
+                    setTab("messages");
+                    return;
+                  }
+                  setTab("home");
                 }}
-                onOpenMatch={(matchId, matchSlug) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === matchId,
+                onDunaAi={() => {
+                  setMessagesConversationId(undefined);
+                  setMessagesOpenToSupport(true);
+                  setTab("messages");
+                }}
+                onQuickActions={() => setQuickActionsOpen(true)}
+                unreadCount={messagingUnreadCount}
+              />
+            )}
+            <QuickActionsSheet
+              onAction={openHomeAction}
+              onClose={() => setQuickActionsOpen(false)}
+              visible={quickActionsOpen}
+            />
+            <BookingModal
+              eventIndex={eventIndex}
+              onClose={() => setEventIndex(null)}
+            />
+            <NativeEventDetails
+              client={runtime.client}
+              event={
+                eventDetailIndex === null
+                  ? undefined
+                  : (runtime.dashboard?.events ?? demoEvents)[eventDetailIndex]
+              }
+              onClose={() => setEventDetailIndex(null)}
+              onRegister={() => {
+                setEventIndex(eventDetailIndex);
+                setEventDetailIndex(null);
+              }}
+              onScore={() => {
+                setEventDetailIndex(null);
+                setTab("score");
+              }}
+              onVideo={() => {
+                setEventDetailIndex(null);
+                setTab("video");
+              }}
+              visible={eventDetailIndex !== null}
+            />
+            <ProfileEditorModal
+              onClose={() => setProfileEditorOpen(false)}
+              visible={profileEditorOpen}
+            />
+            <PlayerArtworkModal
+              onClose={() => setArtworkStudioOpen(false)}
+              visible={artworkStudioOpen}
+            />
+            <BookingManagementModal
+              booking={selectedBooking as ManagedBooking | undefined}
+              client={runtime.client}
+              onClose={() => setBookingId(undefined)}
+              onUpdated={runtime.refresh}
+              palette={colors}
+              visible={Boolean(selectedBooking)}
+            />
+            <VenueFinderModal
+              onClose={() => setCourtFinderOpen(false)}
+              onSelect={(request) => {
+                setCourtFinderOpen(false);
+                setCourtBookingRequest(request);
+              }}
+              visible={courtFinderOpen}
+            />
+            <VenueBookingModal
+              initialDate={courtBookingRequest?.date}
+              initialDurationMinutes={courtBookingRequest?.durationMinutes}
+              onClose={() => setCourtBookingRequest(undefined)}
+              onHostReady={(seed) => {
+                setCourtBookingRequest(undefined);
+                setTimeout(() => setOrganizationHostSeed(seed), 280);
+              }}
+              onOpenMatch={(matchId, matchSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === matchId,
+                );
+                setCourtBookingRequest(undefined);
+                setTimeout(() => {
+                  if (index >= 0) {
+                    setEventIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
                   );
-                  setOrganizationVenueId(undefined);
-                  setTimeout(() => {
-                    if (index >= 0) {
-                      setEventIndex(index);
-                      return;
-                    }
-                    void WebBrowser.openBrowserAsync(
-                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
-                    );
-                  }, 280);
-                }}
-                venueId={organizationVenueId}
-                visible={Boolean(organizationVenueId)}
-              />
-              <PickupModal
-                initialCourtBooking={organizationHostSeed}
-                onClose={() => {
-                  setCreateMatchOpen(false);
-                  setOrganizationHostSeed(undefined);
-                }}
-                onReserveCourtVenue={(request) => {
-                  setCreateMatchOpen(false);
-                  setCourtBookingRequest(request);
-                }}
-                visible={Boolean(organizationHostSeed) || createMatchOpen}
-              />
-              <CoachProfileModal
-                coach={organizationCoach}
-                onClose={() => setOrganizationCoach(undefined)}
-              />
-              <WatchScoreInbox
-                onReview={(draft) => {
-                  setWatchScoreDraft(draft);
-                  setTab("score");
-                }}
-              />
-            </View>
-          </SafeAreaView>
-        </PlayerProfileProvider>
-      </MessagingNavigationContext.Provider>
-    </ThemeContext.Provider>
+                }, 280);
+              }}
+              venueId={courtBookingRequest?.venueId}
+              visible={Boolean(courtBookingRequest)}
+            />
+            <OrganizationExperienceModal
+              onClose={() => setOrganizationSlug(undefined)}
+              onOpenCoach={(coach) => {
+                setOrganizationCoach(coach);
+                setOrganizationSlug(undefined);
+              }}
+              onOpenEvent={(eventId) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === eventId,
+                );
+                setOrganizationSlug(undefined);
+                if (index >= 0) setEventIndex(index);
+              }}
+              onOpenVenue={(venueId) => {
+                setOrganizationSlug(undefined);
+                setOrganizationVenueId(venueId);
+              }}
+              slug={organizationSlug}
+              theme={theme}
+            />
+            <VenueBookingModal
+              onClose={() => setOrganizationVenueId(undefined)}
+              onHostReady={(seed) => {
+                setOrganizationVenueId(undefined);
+                setTimeout(() => setOrganizationHostSeed(seed), 280);
+              }}
+              onOpenMatch={(matchId, matchSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === matchId,
+                );
+                setOrganizationVenueId(undefined);
+                setTimeout(() => {
+                  if (index >= 0) {
+                    setEventIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                  );
+                }, 280);
+              }}
+              venueId={organizationVenueId}
+              visible={Boolean(organizationVenueId)}
+            />
+            <PickupModal
+              initialCourtBooking={organizationHostSeed}
+              onClose={() => {
+                setCreateMatchOpen(false);
+                setOrganizationHostSeed(undefined);
+              }}
+              onReserveCourtVenue={(request) => {
+                setCreateMatchOpen(false);
+                setCourtBookingRequest(request);
+              }}
+              visible={Boolean(organizationHostSeed) || createMatchOpen}
+            />
+            <CoachProfileModal
+              coach={organizationCoach}
+              onClose={() => setOrganizationCoach(undefined)}
+            />
+            <WatchScoreInbox
+              onReview={(draft) => {
+                setWatchScoreDraft(draft);
+                setTab("score");
+              }}
+            />
+          </View>
+        </SafeAreaView>
+      </PlayerProfileProvider>
+    </MessagingNavigationContext.Provider>
   );
 }
 
@@ -14728,8 +14637,7 @@ export default function App() {
   );
 }
 
-function createStyles(palette: Palette) {
-  activePalette = palette;
+function createStyles() {
   return StyleSheet.create({
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
@@ -16792,21 +16700,6 @@ function createStyles(palette: Palette) {
       right: 7,
       top: 6,
       width: 10,
-    },
-    themeButton: {
-      alignItems: "center",
-      backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: mobileControl.pillRadius,
-      borderWidth: 1,
-      height: mobileControl.minimumTarget,
-      justifyContent: "center",
-      width: mobileControl.minimumTarget,
-    },
-    themeButtonText: {
-      color: colors.bone,
-      fontSize: 17,
-      lineHeight: 20,
     },
     wordmark: {
       alignItems: "center",
@@ -22820,43 +22713,41 @@ function createStyles(palette: Palette) {
       zIndex: 90,
     },
     tabBarSandGlow: {
-      backgroundColor: rgba(colors.warningRgb, 0.16),
+      backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 60,
       bottom: mobileGrid[1],
-      height: mobileGrid[11],
-      left: "18%",
+      height: mobileGrid[9],
+      left: "16%",
       position: "absolute",
       shadowColor: colors.sand,
-      shadowOpacity: 0.28,
-      shadowRadius: 22,
-      width: "42%",
+      shadowOpacity: 0.2,
+      shadowRadius: 18,
+      width: "38%",
     },
     tabBarBlueGlow: {
-      backgroundColor: rgba(colors.accentRgb, 0.1),
+      backgroundColor: rgba(colors.accentRgb, 0.08),
       borderRadius: 60,
       bottom: 0,
-      height: mobileGrid[12],
+      height: mobileGrid[10],
       position: "absolute",
       right: mobileGrid[2],
       shadowColor: colors.aqua,
-      shadowOpacity: 0.2,
-      shadowRadius: 24,
-      width: "42%",
+      shadowOpacity: 0.16,
+      shadowRadius: 20,
+      width: "38%",
     },
     tabBar: {
       alignItems: "center",
-      backgroundColor: rgba(colors.whiteRgb, 0.82),
-      borderColor: rgba(colors.whiteRgb, 0.94),
-      borderRadius: mobileControl.sheetRadius,
-      borderWidth: 1,
+      backgroundColor: "transparent",
+      borderRadius: mobileGrid[7],
       flexDirection: "row",
       minHeight: mobileGrid[12] + mobileGrid[2],
       paddingHorizontal: mobileGrid[1],
       paddingVertical: mobileGrid[1],
       shadowColor: colors.aquaDeep,
       shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.12,
-      shadowRadius: 26,
+      shadowOpacity: 0.1,
+      shadowRadius: 22,
       elevation: 12,
       overflow: "visible",
     },
@@ -22864,18 +22755,18 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       borderRadius: mobileControl.pillRadius,
       flex: 1,
-      height: mobileGrid[11],
+      height: mobileGrid[10],
       justifyContent: "center",
       position: "relative",
     },
     tabItemActive: {
-      backgroundColor: rgba(colors.whiteRgb, 0.92),
-      borderColor: rgba(colors.accentRgb, 0.12),
+      backgroundColor: rgba(colors.whiteRgb, 0.58),
+      borderColor: rgba(colors.whiteRgb, 0.76),
       borderWidth: 1,
-      shadowColor: colors.aqua,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.1,
-      shadowRadius: 14,
+      shadowColor: colors.aquaDeep,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
     },
     tabIconWrap: { position: "relative" },
     tabUnreadBadge: {
@@ -22901,23 +22792,21 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flex: 1,
       justifyContent: "center",
-      marginTop: -mobileGrid[2],
+      marginTop: -mobileGrid[1],
       minHeight: mobileGrid[12] + mobileGrid[2],
     },
     tabAiHalo: {
       alignItems: "center",
-      backgroundColor: colors.white,
-      borderColor: rgba(colors.whiteRgb, 0.96),
+      backgroundColor: "transparent",
       borderRadius: mobileControl.pillRadius,
-      borderWidth: 3,
-      height: mobileGrid[12] + mobileGrid[2],
+      height: mobileGrid[12],
       justifyContent: "center",
       overflow: "hidden",
       shadowColor: colors.aquaDeep,
       shadowOffset: { width: 0, height: 7 },
-      shadowOpacity: 0.16,
-      shadowRadius: 16,
-      width: mobileGrid[12] + mobileGrid[2],
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      width: mobileGrid[12],
     },
     tabAiImage: {
       height: mobileGrid[12] + mobileGrid[6],
@@ -23373,6 +23262,7 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       marginBottom: 15,
     },
+    modalHeaderSpacer: { height: mobileControl.minimumTarget, width: 50 },
     modalHeaderTitle: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     checkoutArt: {
       backgroundColor: colors.aquaDeep,
@@ -24296,12 +24186,4 @@ function createStyles(palette: Palette) {
   });
 }
 
-const lightStyles = createStyles(lightColors);
-const darkStyles = createStyles(darkColors);
-activePalette = lightColors;
-let activeStyles = lightStyles;
-const styles = new Proxy(lightStyles, {
-  get(_target, property: keyof typeof lightStyles) {
-    return activeStyles[property];
-  },
-}) as typeof lightStyles;
+const styles = createStyles();
