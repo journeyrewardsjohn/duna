@@ -2,13 +2,19 @@ import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
   type WorkOSMobileOrganization,
+  type WorkOSMobileUser,
 } from "@duna/mobile-auth";
+import {
+  mobileUserDisplayName,
+  mobileUserInitials,
+} from "@duna/mobile-auth/identity";
 import {
   ORGANIZATION_PLAN_IDS,
   ORGANIZATION_PLANS,
   type OrganizationPlanId,
 } from "@duna/core";
 import * as WebBrowser from "expo-web-browser";
+import { StatusBar } from "expo-status-bar";
 import {
   createContext,
   useCallback,
@@ -21,12 +27,19 @@ import {
 import {
   ActivityIndicator,
   Image,
+  ImageBackground,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
+import Svg, {
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from "react-native-svg";
 import {
   askDunaAi,
   confirmProDunaAiAction,
@@ -42,7 +55,10 @@ import {
   type ProDunaAiResponse,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import {
   registerMessagingNotifications,
   unregisterMessagingNotifications,
@@ -121,6 +137,10 @@ const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const runtimeDunaWordmark = require("./assets/duna-horizontal-blue.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const runtimeDunaMark = require("./assets/duna-mark.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const welcomePoster = require("./assets/duna-welcome-poster.jpg");
 
 function RuntimeMark() {
   return (
@@ -132,6 +152,19 @@ function RuntimeMark() {
         style={runtimeStyles.wordmarkImage}
       />
       <Text style={runtimeStyles.pro}>PRO</Text>
+    </View>
+  );
+}
+
+function RuntimeLoadingState() {
+  return (
+    <View
+      accessibilityLabel="Loading Duna Pro"
+      accessibilityRole="progressbar"
+      style={runtimeStyles.loadingScreen}
+    >
+      <StatusBar style="dark" />
+      <ActivityIndicator color="#1B1B19" size="small" />
     </View>
   );
 }
@@ -164,6 +197,48 @@ function CenteredState({
   );
 }
 
+function WelcomeWash() {
+  return (
+    <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Defs>
+        <SvgLinearGradient id="pro-welcome-wash" x1="0" x2="0" y1="0" y2="1">
+          <Stop offset="0" stopColor="#071625" stopOpacity="0.04" />
+          <Stop offset="0.42" stopColor="#071625" stopOpacity="0.12" />
+          <Stop offset="0.7" stopColor="#071625" stopOpacity="0.74" />
+          <Stop offset="1" stopColor="#071625" stopOpacity="0.98" />
+        </SvgLinearGradient>
+      </Defs>
+      <Rect fill="url(#pro-welcome-wash)" height="100%" width="100%" />
+    </Svg>
+  );
+}
+
+function AccountContours() {
+  return (
+    <Svg
+      pointerEvents="none"
+      style={runtimeStyles.accountContours}
+      viewBox="0 0 402 300"
+    >
+      {[
+        "M-20 96C72 52 132 72 202 122C278 176 340 168 430 112",
+        "M-24 136C65 94 132 106 196 154C272 212 350 202 430 148",
+        "M-18 178C58 142 120 144 190 194C266 250 344 246 430 190",
+        "M-16 224C60 190 132 188 202 234C278 282 346 280 430 232",
+      ].map((path) => (
+        <Path
+          d={path}
+          fill="none"
+          key={path}
+          opacity={0.5}
+          stroke="#E6D6BA"
+          strokeWidth={1}
+        />
+      ))}
+    </Svg>
+  );
+}
+
 function WelcomeState({
   error,
   signIn,
@@ -174,61 +249,124 @@ function WelcomeState({
   readonly signUp: () => Promise<void>;
 }) {
   return (
-    <ScrollView
-      contentContainerStyle={runtimeStyles.welcome}
-      style={runtimeStyles.auth}
+    <ImageBackground
+      resizeMode="cover"
+      source={welcomePoster}
+      style={runtimeStyles.entry}
     >
-      <RuntimeMark />
-      <Text style={runtimeStyles.kicker}>YOUR CLUB. ONE OPERATING SYSTEM.</Text>
-      <Text style={runtimeStyles.welcomeTitle}>
-        Run indoor and beach volleyball from anywhere.
-      </Text>
-      <Text style={runtimeStyles.welcomeBody}>
-        Schedule, sell, message, staff, stream, and understand the whole club.
-        Every Duna feature starts at $0 per month.
-      </Text>
-      <View style={runtimeStyles.featureGrid}>
-        {[
-          "Unlimited players and staff",
-          "Programs, memberships, and payments",
-          "Courts, schedules, video, and insights",
-          "10 upload + 2 live hours included",
-        ].map((feature) => (
-          <View key={feature} style={runtimeStyles.featureCard}>
-            <Text style={runtimeStyles.featureCheck}>✓</Text>
-            <Text style={runtimeStyles.featureText}>{feature}</Text>
+      <StatusBar style="light" />
+      <WelcomeWash />
+      <View style={runtimeStyles.entryBrand}>
+        <Image
+          resizeMode="contain"
+          source={runtimeDunaMark}
+          style={runtimeStyles.entryMark}
+        />
+        <Text style={runtimeStyles.entryWordmark}>PRO</Text>
+      </View>
+      <View style={runtimeStyles.entryContent}>
+        <Text style={runtimeStyles.entryBody}>
+          Welcome to Duna Pro. The one place for everything your business needs
+          to win on and off the court.
+        </Text>
+        {error && <Text style={runtimeStyles.entryError}>{error}</Text>}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void signUp()}
+          style={({ pressed }) => [
+            runtimeStyles.entryPrimaryButton,
+            pressed && runtimeStyles.buttonPressed,
+          ]}
+        >
+          <Text style={runtimeStyles.entryPrimaryText}>
+            Launch Your Volleyball Business
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void signIn()}
+          style={({ pressed }) => [
+            runtimeStyles.entrySecondaryButton,
+            pressed && runtimeStyles.buttonPressed,
+          ]}
+        >
+          <Text style={runtimeStyles.entrySecondaryText}>
+            Log in to Duna Pro
+          </Text>
+        </Pressable>
+        <Text style={runtimeStyles.entryFootnote}>
+          Already a Duna Member?{"\n"}Use the same email or phone number to log
+          in.
+        </Text>
+      </View>
+    </ImageBackground>
+  );
+}
+
+function ReturningAccountState({
+  busy,
+  error,
+  onContinue,
+  onUseDifferentAccount,
+  user,
+}: {
+  readonly busy: boolean;
+  readonly error?: string;
+  readonly onContinue: () => void;
+  readonly onUseDifferentAccount: () => void;
+  readonly user?: WorkOSMobileUser;
+}) {
+  return (
+    <View style={runtimeStyles.accountScreen}>
+      <StatusBar style="dark" />
+      <AccountContours />
+      <View style={runtimeStyles.accountIdentity}>
+        <Text style={runtimeStyles.accountKicker}>LOG IN AS</Text>
+        {user?.profilePictureUrl ? (
+          <Image
+            source={{ uri: user.profilePictureUrl }}
+            style={runtimeStyles.accountPhoto}
+          />
+        ) : (
+          <View style={runtimeStyles.accountInitials}>
+            <Text style={runtimeStyles.accountInitialsText}>
+              {mobileUserInitials(user)}
+            </Text>
           </View>
-        ))}
-      </View>
-      <View style={runtimeStyles.freePlanCallout}>
-        <Text style={runtimeStyles.freePlanPrice}>$0</Text>
-        <View style={runtimeStyles.freePlanCopy}>
-          <Text style={runtimeStyles.freePlanTitle}>
-            Start with every feature
-          </Text>
-          <Text style={runtimeStyles.freePlanBody}>
-            Stripe processing plus a 5% organization transaction fee.
-          </Text>
-        </View>
-      </View>
-      {error && <Text style={runtimeStyles.errorText}>{error}</Text>}
-      <Pressable
-        onPress={() => void signUp()}
-        style={runtimeStyles.primaryButton}
-      >
-        <Text style={runtimeStyles.primaryButtonText}>
-          Get Started for Free
+        )}
+        <Text numberOfLines={2} style={runtimeStyles.accountName}>
+          {mobileUserDisplayName(user)}
         </Text>
-      </Pressable>
-      <Pressable
-        onPress={() => void signIn()}
-        style={runtimeStyles.secondaryButton}
-      >
-        <Text style={runtimeStyles.secondaryButtonText}>
-          I already use Duna
-        </Text>
-      </Pressable>
-    </ScrollView>
+      </View>
+      <View style={runtimeStyles.accountActions}>
+        {error && <Text style={runtimeStyles.accountError}>{error}</Text>}
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onContinue}
+          style={({ pressed }) => [
+            runtimeStyles.accountContinue,
+            pressed && runtimeStyles.buttonPressed,
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={runtimeStyles.accountContinueText}>Continue</Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onUseDifferentAccount}
+          style={runtimeStyles.accountDifferent}
+        >
+          <Text style={runtimeStyles.accountDifferentText}>
+            USE A DIFFERENT ACCOUNT
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -404,6 +542,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     signIn,
     signUp,
     signOut,
+    user,
   } = useWorkOSMobileAuth();
   const client = useMemo(() => createDunaApiClient(getToken), [getToken]);
   const messagingDelivery = useMemo(
@@ -411,9 +550,11 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     [getToken],
   );
   const safeSignOut = useCallback(async () => {
+    setContinueRequested(false);
     await unregisterMessagingNotifications(client).catch(() => undefined);
     await signOut();
   }, [client, signOut]);
+  const [continueRequested, setContinueRequested] = useState(false);
   const [dashboard, setDashboard] = useState<OperatorDashboard>();
   const [workspace, setWorkspace] = useState<OperatorWorkspace>();
   const [money, setMoney] = useState<OperatorMoney>();
@@ -474,17 +615,34 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     void registerMessagingNotifications(client, false).catch(() => undefined);
   }, [client, isLoaded, isSignedIn]);
 
+  useEffect(() => {
+    if (!isSignedIn) setContinueRequested(false);
+  }, [isSignedIn]);
+
+  const hasWorkspace = Boolean(
+    dashboard && workspace && money && members && events && matches,
+  );
+
   if (!isLoaded) {
-    return (
-      <CenteredState
-        body="Restoring your encrypted operator session."
-        busy
-        title="Opening Duna Pro"
-      />
-    );
+    return <RuntimeLoadingState />;
   }
   if (!isSignedIn) {
     return <WelcomeState error={authError} signIn={signIn} signUp={signUp} />;
+  }
+  const preparingAccount = Boolean(organizationId && loading && !dashboard);
+  if (!continueRequested || preparingAccount) {
+    return (
+      <ReturningAccountState
+        busy={continueRequested && preparingAccount}
+        error={!loading && organizationId && !hasWorkspace ? error : undefined}
+        onContinue={() => {
+          if (error && organizationId && !loading) void refresh();
+          setContinueRequested(true);
+        }}
+        onUseDifferentAccount={() => void safeSignOut()}
+        user={user}
+      />
+    );
   }
   if (!organizationId) {
     return (
@@ -496,13 +654,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     );
   }
   if (loading && !dashboard) {
-    return (
-      <CenteredState
-        body="Selecting your club and syncing today’s operation."
-        busy
-        title="Loading your workspace"
-      />
-    );
+    return <RuntimeLoadingState />;
   }
   if (
     error ||
@@ -633,6 +785,89 @@ const runtimeStyles = StyleSheet.create({
     paddingVertical: 14,
   },
   buttonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  accountActions: {
+    bottom: 35,
+    left: 30,
+    position: "absolute",
+    right: 30,
+  },
+  accountContinue: {
+    alignItems: "center",
+    backgroundColor: "#080808",
+    borderRadius: 30,
+    justifyContent: "center",
+    minHeight: 60,
+  },
+  accountContinueText: { color: "#FFFFFF", fontSize: 16, fontWeight: "500" },
+  accountContours: {
+    bottom: 0,
+    height: 300,
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  accountDifferent: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50,
+  },
+  accountDifferentText: {
+    color: "#8B8984",
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 0.8,
+  },
+  accountError: {
+    color: "#A54332",
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  accountIdentity: {
+    alignItems: "center",
+    left: 20,
+    position: "absolute",
+    right: 20,
+    top: "31%",
+  },
+  accountInitials: {
+    alignItems: "center",
+    backgroundColor: "#F0E9DD",
+    borderRadius: 46,
+    height: 92,
+    justifyContent: "center",
+    marginBottom: 20,
+    width: 92,
+  },
+  accountInitialsText: { color: "#A48C67", fontSize: 28, fontWeight: "500" },
+  accountKicker: {
+    color: "#9A9791",
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 3.5,
+    marginBottom: 25,
+  },
+  accountName: {
+    color: "#5F5969",
+    fontSize: 36,
+    fontWeight: "300",
+    letterSpacing: -0.7,
+    lineHeight: 42,
+    textAlign: "center",
+  },
+  accountPhoto: {
+    borderRadius: 46,
+    height: 92,
+    marginBottom: 20,
+    width: 92,
+  },
+  accountScreen: {
+    backgroundColor: "#FFFFFF",
+    flex: 1,
+    overflow: "hidden",
+  },
+  buttonPressed: { opacity: 0.82 },
   checkbox: {
     alignItems: "center",
     backgroundColor: "#ffffff",
@@ -665,6 +900,77 @@ const runtimeStyles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
+  },
+  entry: {
+    backgroundColor: "#071625",
+    flex: 1,
+    overflow: "hidden",
+  },
+  entryBody: {
+    alignSelf: "center",
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 60,
+    maxWidth: 310,
+    textAlign: "center",
+  },
+  entryBrand: {
+    alignItems: "center",
+    left: 20,
+    position: "absolute",
+    right: 20,
+    top: "18%",
+    zIndex: 2,
+  },
+  entryContent: {
+    bottom: 30,
+    left: 25,
+    position: "absolute",
+    right: 25,
+    zIndex: 2,
+  },
+  entryError: {
+    color: "#FFD9CC",
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  entryFootnote: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 15,
+    textAlign: "center",
+  },
+  entryMark: { height: 135, width: 125 },
+  entryPrimaryButton: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 25,
+    justifyContent: "center",
+    minHeight: 50,
+  },
+  entryPrimaryText: { color: "#1B1B19", fontSize: 14, fontWeight: "500" },
+  entrySecondaryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 25,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 10,
+    minHeight: 50,
+  },
+  entrySecondaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "500" },
+  entryWordmark: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "500",
+    letterSpacing: 9,
+    marginLeft: 9,
+    marginTop: 8,
   },
   featureCard: {
     alignItems: "flex-start",
@@ -706,6 +1012,12 @@ const runtimeStyles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1.7,
     marginTop: 14,
+  },
+  loadingScreen: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    flex: 1,
+    justifyContent: "center",
   },
   nativePlan: {
     backgroundColor: "#ffffff",

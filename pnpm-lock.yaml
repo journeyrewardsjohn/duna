@@ -299,6 +299,9 @@ importers:
       '@duna/scheduling':
         specifier: workspace:*
         version: link:../../packages/scheduling
+      '@duna/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@expo/ui':
         specifier: ~57.0.9
         version: 57.0.9(@babel/core@7.29.7(supports-color@8.1.1))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(expo@57.0.10)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)

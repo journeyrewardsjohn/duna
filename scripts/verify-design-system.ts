@@ -21,6 +21,7 @@ const requiredFiles = [
   "docs/design/duna-hq-component-system.md",
   "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
+  "docs/design/duna-mobile-interface-v4.md",
   "docs/design/duna-theming-light-dark.md",
   "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
@@ -45,6 +46,8 @@ const requiredFiles = [
   "apps/player/assets/icon-dark.png",
   "apps/player/assets/icon-tinted.png",
   "apps/player/assets/monochrome-icon.png",
+  "apps/player/liquid-glass-surface.tsx",
+  "apps/player/liquid-glass-surface.ios.tsx",
   "apps/pro/assets/icon-light.png",
   "apps/pro/assets/icon-tinted.png",
   "apps/pro/assets/monochrome-icon.png",
@@ -173,25 +176,90 @@ const playerNativeSource = readFileSync(
   join(root, "apps/player/App.tsx"),
   "utf8",
 );
-if (
-  !playerNativeSource.includes("nextBookingEventIndex") ||
-  !playerNativeSource.includes("booking.startsAt")
-) {
+const playerHomeV3Source = readFileSync(
+  join(root, "apps/player/home-v3.tsx"),
+  "utf8",
+);
+const playerHomeSources = `${playerNativeSource}\n${playerHomeV3Source}`;
+for (const contract of [
+  "const bookingItems = bookings",
+  "new Date(booking.endsAt).getTime() > now",
+  'title="Next up"',
+] as const) {
+  if (playerHomeSources.includes(contract)) continue;
   violations.push(
-    "apps/player/App.tsx must derive Next Up from a future personal booking",
+    `Player Home must preserve the booking-derived schedule contract: ${contract}`,
   );
 }
-const nativeNextUpIndex = playerNativeSource.indexOf("NEXT UP ·");
-const nativeQuickActionsIndex = playerNativeSource.indexOf(
-  "styles.homeQuickGrid",
+const nativeHeaderIndex = playerHomeV3Source.indexOf("styles.header");
+const nativeQuickActionsIndex = playerHomeV3Source.indexOf(
+  "contentContainerStyle={styles.quickActions}",
 );
+const nativeTabsIndex = playerHomeV3Source.indexOf("styles.tabs");
+const nativeNextUpIndex = playerHomeV3Source.indexOf('title="Next up"');
 if (
-  nativeNextUpIndex < 0 ||
+  nativeHeaderIndex < 0 ||
   nativeQuickActionsIndex < 0 ||
-  nativeNextUpIndex > nativeQuickActionsIndex
+  nativeTabsIndex < 0 ||
+  nativeNextUpIndex < 0 ||
+  nativeHeaderIndex > nativeQuickActionsIndex ||
+  nativeQuickActionsIndex > nativeTabsIndex ||
+  nativeTabsIndex > nativeNextUpIndex
 ) {
   violations.push(
-    "apps/player/App.tsx must render personal Next Up before discovery actions",
+    "Player Home must preserve the greeting, animated quick actions, filters, then personal Next up hierarchy",
+  );
+}
+for (const contract of [
+  'destinationButton("home", "Home", "home")',
+  'destinationButton("calendar", "Calendar", "calendar")',
+  'accessibilityLabel="Duna AI"',
+  'accessibilityLabel="Quick actions"',
+  'destinationButton("messages", "Messages", "message")',
+  "<LiquidGlassSurface",
+  "<DunaMark size={mobileGrid[7]} />",
+] as const) {
+  if (!playerNativeSource.includes(contract)) {
+    violations.push(
+      `apps/player/App.tsx must preserve the icon-only glass dock contract: ${contract}`,
+    );
+  }
+}
+for (const retiredThemeContract of [
+  "ThemeButton",
+  'AsyncStorage.getItem("duna-theme")',
+  "useColorScheme",
+] as const) {
+  if (playerNativeSource.includes(retiredThemeContract)) {
+    violations.push(
+      `apps/player/App.tsx must not restore the retired global appearance control: ${retiredThemeContract}`,
+    );
+  }
+}
+
+const playerMessagingSource = readFileSync(
+  join(root, "apps/player/messaging-screen.tsx"),
+  "utf8",
+);
+for (const contract of [
+  'accessibilityLabel="Close Duna AI and Messages"',
+  'accessibilityHint="Returns to the Player home screen"',
+  'accessibilityLabel="Open recent Duna AI chats"',
+] as const) {
+  if (!playerMessagingSource.includes(contract)) {
+    violations.push(
+      `apps/player/messaging-screen.tsx must preserve the full-screen chat exit contract: ${contract}`,
+    );
+  }
+}
+
+const mobileTokenSource = readFileSync(
+  join(root, "packages/ui/src/mobile.ts"),
+  "utf8",
+);
+if (!mobileTokenSource.includes('ground: whiteCanvas ? "#FFFFFF"')) {
+  violations.push(
+    "packages/ui/src/mobile.ts must preserve the true-white light mobile ground",
   );
 }
 

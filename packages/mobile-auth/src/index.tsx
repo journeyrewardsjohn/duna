@@ -11,6 +11,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { WorkOSMobileUser } from "./identity";
+
+export type { WorkOSMobileUser } from "./identity";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -18,6 +21,7 @@ const ACCESS_TOKEN_KEY = "duna.workos.access-token";
 const EXPIRES_AT_KEY = "duna.workos.expires-at";
 const REFRESH_TOKEN_KEY = "duna.workos.refresh-token";
 const ORGANIZATION_KEY = "duna.workos.organization-id";
+const USER_KEY = "duna.workos.user";
 const MOBILE_AUTH_REQUEST_TIMEOUT_MS = 12_000;
 const discovery: AuthSession.DiscoveryDocument = {
   authorizationEndpoint: "https://api.workos.com/user_management/authorize",
@@ -28,6 +32,7 @@ interface MobileSession {
   readonly expiresAt: number;
   readonly refreshToken: string;
   readonly organizationId?: string;
+  readonly user?: WorkOSMobileUser;
 }
 
 export interface WorkOSMobileOrganization {
@@ -63,6 +68,7 @@ interface WorkOSMobileAuth {
   readonly signIn: () => Promise<void>;
   readonly signUp: () => Promise<void>;
   readonly signOut: () => Promise<void>;
+  readonly user?: WorkOSMobileUser;
 }
 
 class MobileAuthResponseError extends Error {
@@ -89,6 +95,9 @@ async function storeSession(session: MobileSession): Promise<void> {
     session.organizationId
       ? SecureStore.setItemAsync(ORGANIZATION_KEY, session.organizationId)
       : SecureStore.deleteItemAsync(ORGANIZATION_KEY),
+    session.user
+      ? SecureStore.setItemAsync(USER_KEY, JSON.stringify(session.user))
+      : SecureStore.deleteItemAsync(USER_KEY),
   ]);
 }
 
@@ -98,7 +107,32 @@ async function clearSession(): Promise<void> {
     SecureStore.deleteItemAsync(EXPIRES_AT_KEY),
     SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.deleteItemAsync(ORGANIZATION_KEY),
+    SecureStore.deleteItemAsync(USER_KEY),
   ]);
+}
+
+function parseStoredUser(value: string | null): WorkOSMobileUser | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as Partial<WorkOSMobileUser>;
+    if (typeof parsed.id !== "string" || typeof parsed.email !== "string") {
+      return undefined;
+    }
+    return {
+      id: parsed.id,
+      email: parsed.email,
+      firstName:
+        typeof parsed.firstName === "string" ? parsed.firstName : undefined,
+      lastName:
+        typeof parsed.lastName === "string" ? parsed.lastName : undefined,
+      profilePictureUrl:
+        typeof parsed.profilePictureUrl === "string"
+          ? parsed.profilePictureUrl
+          : undefined,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 let backgroundRefresh: Promise<string | null> | undefined;
@@ -238,9 +272,13 @@ export function WorkOSMobileAuthProvider({
   const [error, setError] = useState<string>();
 
   const commitSession = useCallback(async (next: MobileSession) => {
-    await storeSession(next);
-    sessionRef.current = next;
-    setSession(next);
+    const merged = {
+      ...next,
+      user: next.user ?? sessionRef.current?.user,
+    };
+    await storeSession(merged);
+    sessionRef.current = merged;
+    setSession(merged);
   }, []);
 
   const loadOrganizations = useCallback(
@@ -251,11 +289,16 @@ export function WorkOSMobileAuthProvider({
       );
       const organizationBody = await responseJson<{
         readonly organizations: readonly WorkOSMobileOrganization[];
+        readonly user?: WorkOSMobileUser;
       }>(organizationResponse);
+      const current = sessionRef.current;
+      if (organizationBody.user && current && !current.user) {
+        await commitSession({ ...current, user: organizationBody.user });
+      }
       setOrganizations(organizationBody.organizations);
       return organizationBody.organizations;
     },
-    [baseUrl],
+    [baseUrl, commitSession],
   );
 
   const addDefaultOrganization = useCallback(
@@ -310,36 +353,46 @@ export function WorkOSMobileAuthProvider({
       SecureStore.getItemAsync(EXPIRES_AT_KEY),
       SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
       SecureStore.getItemAsync(ORGANIZATION_KEY),
-    ]).then(async ([accessToken, expiresAt, refreshToken, organizationId]) => {
-      if (!active) return;
-      if (accessToken && refreshToken) {
-        const cached: MobileSession = {
-          accessToken,
-          expiresAt: Number(expiresAt) || 0,
-          refreshToken,
-          organizationId: organizationId ?? undefined,
-        };
-        try {
-          const fresh =
-            cached.expiresAt <= Date.now() + 60_000
-              ? await refreshSession(cached)
-              : cached;
-          const restored = await addDefaultOrganization(fresh);
-          if (active) await commitSession(restored);
-        } catch (reason) {
-          if (isTerminalSessionError(reason)) {
-            await clearSession();
-          } else if (active) {
-            sessionRef.current = cached;
-            setSession(cached);
-            setError(
-              "Duna could not refresh your secure session. Check your connection and try again.",
-            );
+      SecureStore.getItemAsync(USER_KEY),
+    ]).then(
+      async ([
+        accessToken,
+        expiresAt,
+        refreshToken,
+        organizationId,
+        storedUser,
+      ]) => {
+        if (!active) return;
+        if (accessToken && refreshToken) {
+          const cached: MobileSession = {
+            accessToken,
+            expiresAt: Number(expiresAt) || 0,
+            refreshToken,
+            organizationId: organizationId ?? undefined,
+            user: parseStoredUser(storedUser),
+          };
+          try {
+            const fresh =
+              cached.expiresAt <= Date.now() + 60_000
+                ? await refreshSession(cached)
+                : cached;
+            const restored = await addDefaultOrganization(fresh);
+            if (active) await commitSession(restored);
+          } catch (reason) {
+            if (isTerminalSessionError(reason)) {
+              await clearSession();
+            } else if (active) {
+              sessionRef.current = cached;
+              setSession(cached);
+              setError(
+                "Duna could not refresh your secure session. Check your connection and try again.",
+              );
+            }
           }
         }
-      }
-      if (active) setIsLoaded(true);
-    });
+        if (active) setIsLoaded(true);
+      },
+    );
     return () => {
       active = false;
     };
@@ -536,6 +589,7 @@ export function WorkOSMobileAuthProvider({
       signIn,
       signUp,
       signOut,
+      user: session?.user,
     }),
     [
       error,
@@ -549,6 +603,7 @@ export function WorkOSMobileAuthProvider({
       signIn,
       signUp,
       signOut,
+      session?.user,
     ],
   );
 

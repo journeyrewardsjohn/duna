@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
+    "./mobile": "./src/mobile.ts",
     "./theme": "./src/theme.ts",
     "./theme-toggle": "./src/theme-toggle.tsx",
     "./tokens": "./src/tokens.ts"

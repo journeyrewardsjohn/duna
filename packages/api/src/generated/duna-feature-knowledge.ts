@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "21491f8ff7373ce7952ca75a15099d309f9c595db790f3d175e16c24f7a220a2",
+    "3da7fd9d9ea9e67e39f447261597755e65c13f4d92e6745fef899bb50caeb0c1",
   modules: [
     {
       id: "M1",
@@ -572,6 +572,32 @@ export const generatedDunaFeatureKnowledge = {
         "Local development",
         "EAS profiles and updates",
         "Validation",
+      ],
+    },
+    {
+      surface: "PLAYER_SCREEN_INVENTORY",
+      summary:
+        "This is the source-backed product map for redesigning the Duna Player app and its companion Watch experience. It describes what a player can reach today, what each surface is trying to solve, the states the current implementation supports, and the handoffs between native Player, Duna Web, Apple system UI, and Watch.",
+      capabilities: [
+        "How to use this document",
+        "Current navigation model",
+        "Global entry, identity, and runtime states",
+        "Home and global utility",
+        "Discovery, search, map, list, and people",
+        "Organizations, catalog, goods, services, sessions, and memberships",
+        "Venues, court rental, and hosted matches",
+        "Events, sessions, registration, and booking lifecycle",
+        "Plans and training",
+        "Tournament and league journeys",
+        "Score, performance, rating, and predictions",
+        "Profile, wallet, health, and settings",
+        "Video, recording, library, and Duna Vision",
+        "Duna AI and Messages",
+        "Professional volleyball and Watch",
+        "Cross-object commerce map",
+        "State checklist for every redesigned screen",
+        "Current navigation and coverage gaps to preserve or resolve explicitly",
+        "Source ownership index",
       ],
     },
     {

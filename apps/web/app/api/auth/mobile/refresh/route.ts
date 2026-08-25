@@ -34,6 +34,13 @@ export async function POST(request: Request) {
         expiresAt: workOSAccessTokenExpiresAt(session.accessToken),
         refreshToken: session.refreshToken,
         organizationId: session.organizationId,
+        user: {
+          email: session.user.email,
+          firstName: session.user.firstName,
+          id: session.user.id,
+          lastName: session.user.lastName,
+          profilePictureUrl: session.user.profilePictureUrl,
+        },
       },
       { headers: { "cache-control": "no-store" } },
     );
