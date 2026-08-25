@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { dunaAppColors, dunaAppShape, mobileGrid } from "@duna/ui/mobile";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
   Image,
   Pressable,
   ScrollView,
@@ -185,7 +188,79 @@ function AvatarStack({
   );
 }
 
-function QuickAction({ action }: { readonly action: HomeV3QuickAction }) {
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduced,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
+function QuickAction({
+  action,
+  reduceMotion,
+}: {
+  readonly action: HomeV3QuickAction;
+  readonly reduceMotion: boolean;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    progress.stopAnimation();
+    progress.setValue(0);
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        duration: 2_400,
+        easing: Easing.linear,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [progress, reduceMotion]);
+
+  const iconMotion =
+    action.key === "find-match"
+      ? {
+          transform: [
+            {
+              translateY: progress.interpolate({
+                inputRange: [0, 0.25, 0.5, 0.75, 1],
+                outputRange: [0, -1, -3.5, -1, 0],
+              }),
+            },
+          ],
+        }
+      : action.key === "find-coach"
+        ? {
+            transform: [
+              {
+                rotate: progress.interpolate({
+                  inputRange: [0, 0.25, 0.5, 0.75, 1],
+                  outputRange: ["0deg", "-5deg", "0deg", "5deg", "0deg"],
+                }),
+              },
+            ],
+          }
+        : action.key === "create-match"
+          ? {
+              transform: [
+                {
+                  scale: progress.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [1, 1.12, 1],
+                  }),
+                },
+              ],
+            }
+          : undefined;
+
   return (
     <Pressable
       accessibilityLabel={action.label}
@@ -197,13 +272,77 @@ function QuickAction({ action }: { readonly action: HomeV3QuickAction }) {
       ]}
     >
       <View style={styles.quickActionTile}>
-        <DunaIcon
-          color={action.color}
-          name={action.icon}
-          size={action.icon === "ball" ? 27 : 26}
-          strokeWidth={action.icon === "ball" ? 1.35 : 1.55}
-        />
-        {action.recording ? <View style={styles.recordingDot} /> : null}
+        <Animated.View style={iconMotion}>
+          <DunaIcon
+            color={action.color}
+            name={action.icon}
+            size={action.icon === "ball" ? 27 : 26}
+            strokeWidth={action.icon === "ball" ? 1.35 : 1.55}
+          />
+        </Animated.View>
+        {action.key === "book-court" ? (
+          <Animated.View
+            style={[
+              styles.courtBall,
+              {
+                transform: [
+                  {
+                    translateX: progress.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [-8, 0, 8],
+                    }),
+                  },
+                  {
+                    translateY: progress.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [2, -7, 2],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
+        {action.key === "upload-score" ? (
+          <Animated.View
+            style={[
+              styles.scoreDigit,
+              {
+                transform: [
+                  {
+                    scaleY: progress.interpolate({
+                      inputRange: [0, 0.42, 0.5, 0.58, 1],
+                      outputRange: [1, 1, 0.08, 1, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.scoreDigitText}>2</Text>
+          </Animated.View>
+        ) : null}
+        {action.recording ? (
+          <Animated.View
+            style={[
+              styles.recordingDot,
+              {
+                opacity: progress.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0.55, 1, 0.55],
+                }),
+                transform: [
+                  {
+                    scale: progress.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0.85, 1.2, 0.85],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
       </View>
       <Text numberOfLines={2} style={styles.quickActionLabel}>
         {action.label}
@@ -441,6 +580,7 @@ function RatingSparkline({ data }: { readonly data: readonly number[] }) {
 
 export function HomeV3Screen(props: HomeV3Props) {
   const [activeTab, setActiveTab] = useState<HomeV3Tab>("all");
+  const reduceMotion = useReducedMotion();
   const tabs: readonly { key: HomeV3Tab; label: string }[] = [
     { key: "all", label: "All" },
     { key: "open", label: "Open games" },
@@ -494,7 +634,11 @@ export function HomeV3Screen(props: HomeV3Props) {
         showsHorizontalScrollIndicator={false}
       >
         {props.quickActions.map((action) => (
-          <QuickAction action={action} key={action.key} />
+          <QuickAction
+            action={action}
+            key={action.key}
+            reduceMotion={reduceMotion}
+          />
         ))}
       </ScrollView>
 
@@ -727,6 +871,31 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: 7,
     textAlign: "center",
+  },
+  courtBall: {
+    backgroundColor: c.gold,
+    borderRadius: 3,
+    height: 5,
+    left: 39,
+    position: "absolute",
+    top: 28,
+    width: 5,
+  },
+  scoreDigit: {
+    alignItems: "center",
+    backgroundColor: c.subtle,
+    height: 12,
+    justifyContent: "center",
+    left: 29,
+    position: "absolute",
+    top: 26,
+    width: 10,
+  },
+  scoreDigitText: {
+    color: c.navy,
+    fontSize: 9,
+    fontWeight: "600",
+    lineHeight: 10,
   },
   recordingDot: {
     backgroundColor: c.danger,

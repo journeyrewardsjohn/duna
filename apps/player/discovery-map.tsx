@@ -1053,7 +1053,7 @@ export function DiscoveryMapModal({
         {mapToken ? (
           <Mapbox.MapView
             attributionEnabled
-            compassEnabled
+            compassEnabled={false}
             logoEnabled
             onMapIdle={onMapIdle}
             projection="globe"

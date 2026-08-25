@@ -114,7 +114,6 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Rect height="14" rx="3" width="19" x="2.5" y="5" />
           <Line x1="12" x2="12" y1="6.5" y2="17.5" />
-          <Circle cx="7.5" cy="12" fill="currentColor" r="1.6" stroke="none" />
         </>
       );
     case "eye":

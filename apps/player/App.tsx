@@ -174,6 +174,7 @@ import {
   type HomeV3OpenGame,
   type HomeV3UpcomingItem,
 } from "./home-v3";
+import { linkedHomeEvent } from "./home-v3-data";
 import {
   MobilePlacePicker,
   type MobilePlaceSelection,
@@ -1874,15 +1875,7 @@ function HomeScreenV3({
   const bookingItems = bookings
     .filter((booking) => new Date(booking.endsAt).getTime() > now)
     .map((booking) => {
-      const linkedEvent = events.find(
-        (event) =>
-          event.id === booking.sessionId ||
-          (event.title === booking.title &&
-            Math.abs(
-              new Date(event.startsAt).getTime() -
-                new Date(booking.startsAt).getTime(),
-            ) < 60_000),
-      );
+      const linkedEvent = linkedHomeEvent(booking, events);
       const date = dateBlock(
         booking.startsAt,
         linkedEvent?.timezone ?? booking.venueTimezone,
@@ -1899,11 +1892,17 @@ function HomeScreenV3({
           .join(" · "),
         recurrence: linkedEvent ? eventRecurrence(linkedEvent) : undefined,
         status: "going" as const,
-        onPress: () => onOpenBooking(booking.id),
+        onPress: () =>
+          linkedEvent ? onOpenEvent(linkedEvent) : onOpenBooking(booking.id),
       };
     });
   const bookedEventIds = new Set(
-    bookings.map((booking) => booking.sessionId).filter(Boolean),
+    bookings.flatMap((booking) => {
+      const linkedEvent = linkedHomeEvent(booking, events);
+      return [booking.sessionId, linkedEvent?.id].filter(
+        (id): id is string => Boolean(id),
+      );
+    }),
   );
   const bookedTitles = new Set(bookings.map((booking) => booking.title));
   const unbookedEventItems = events
@@ -2145,6 +2144,20 @@ function HomeScreenV3({
           color: "#18181B",
           recording: true,
           onPress: () => onAction("record-video"),
+        },
+        {
+          key: "create-match",
+          label: "Create a match",
+          icon: "plus",
+          color: "#FECFC0",
+          onPress: () => onAction("create-match"),
+        },
+        {
+          key: "upload-score",
+          label: "Report a score",
+          icon: "score",
+          color: "#142335",
+          onPress: () => onAction("upload-score"),
         },
       ]}
       rating={rating.toFixed(2)}
@@ -3393,7 +3406,22 @@ function VenueBookingModal({
   }
 
   async function toggleLookingToPlay() {
-    if (!client || !venueId || mode === "preview") return;
+    if (!venueId || !selectedPlayWindow) {
+      setError("Choose a time before saying you are looking to play.");
+      return;
+    }
+    if (mode === "preview") {
+      selectionHaptic();
+      const active = Boolean(lookingPostId);
+      setLookingPostId(active ? undefined : "preview-looking-to-play");
+      setNotice(
+        active
+          ? "You are no longer shown as looking to play at this time."
+          : "You’re now visible to match creators for this time. Invitations still require your acceptance—this does not reserve or charge for a court.",
+      );
+      return;
+    }
+    if (!client) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -3404,10 +3432,6 @@ function VenueBookingModal({
         });
         setLookingPostId(undefined);
         setNotice("You are no longer shown as looking to play at this time.");
-        return;
-      }
-      if (!selectedPlayWindow) {
-        setError("Choose a time before saying you are looking to play.");
         return;
       }
       const post = await client.player.createMatchAvailability.mutate({
@@ -4250,7 +4274,13 @@ function VenueBookingModal({
                   )}
                   {selectedPlayWindow && (
                     <Pressable
-                      disabled={busy || mode === "preview"}
+                      accessibilityHint="Makes you visible to match creators for this time without reserving or charging for a court."
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        disabled: busy,
+                        selected: Boolean(lookingPostId),
+                      }}
+                      disabled={busy}
                       onPress={() => void toggleLookingToPlay()}
                       style={[
                         styles.bookingLookingButton,
@@ -8108,7 +8138,9 @@ function FindCoachScreen({
         >
           <Text style={styles.coachFinderBackText}>‹ Play</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>COACHES ON DUNA</Text>
+        <Text style={[styles.eyebrow, styles.coachFinderEyebrow]}>
+          COACHES ON DUNA
+        </Text>
         <Text style={styles.displayTitle}>Find your next level.</Text>
         <Text style={styles.coachFinderIntro}>
           Compare real profiles, experience, programs, availability, and price
@@ -17205,6 +17237,10 @@ function createStyles() {
       color: colors.aqua,
       fontSize: 14,
       fontWeight: "900",
+    },
+    coachFinderEyebrow: {
+      lineHeight: 17,
+      marginBottom: mobileGrid[1],
     },
     coachFinderIntro: {
       color: colors.muted,
