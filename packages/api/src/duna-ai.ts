@@ -10,6 +10,7 @@ import { z } from "zod";
 import type {
   DiscoveryMapItem,
   EventSummary,
+  MatchSummary,
   OperatorWorkspace,
   WeatherForecast,
 } from "./contracts";
@@ -120,12 +121,52 @@ export interface DunaAiLinkCard extends DunaAiCardBase {
 
 export interface DunaAiEventCard extends DunaAiCardBase {
   readonly kind: "event";
+  readonly eventId: string;
   readonly href: string;
   readonly imageUrl?: string;
   readonly startsAt?: string;
   readonly venue?: string;
   readonly price?: string;
   readonly spotsRemaining?: number;
+  readonly primaryAction?: "book-event" | "view-event";
+}
+
+export interface DunaAiVenueCard extends DunaAiCardBase {
+  readonly kind: "venue";
+  readonly venueId: string;
+  readonly href: string;
+  readonly imageUrl?: string;
+  readonly primaryAction: "reserve-court";
+}
+
+export interface DunaAiCalendarCard extends DunaAiCardBase {
+  readonly kind: "calendar";
+  readonly entries: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly startsAt: string;
+    readonly endsAt: string;
+    readonly timezone?: string;
+    readonly venue: string;
+    readonly status: string;
+    readonly bookingId?: string;
+    readonly eventId?: string;
+  }[];
+}
+
+export interface DunaAiMatchCard extends DunaAiCardBase {
+  readonly kind: "match";
+  readonly matchId: string;
+  readonly href?: string;
+  readonly startsAt?: string;
+  readonly playedAt?: string;
+  readonly venue?: string;
+  readonly status?: string;
+  readonly live?: boolean;
+  readonly teamA: readonly string[];
+  readonly teamB: readonly string[];
+  readonly score?: readonly (readonly [number, number])[];
+  readonly ratingDelta?: number;
 }
 
 export interface DunaAiMapCard extends DunaAiCardBase {
@@ -139,6 +180,7 @@ export interface DunaAiMapCard extends DunaAiCardBase {
     readonly longitude: number;
     readonly imageUrl?: string;
     readonly startsAt?: string;
+    readonly entityType?: DiscoveryMapItem["entityType"];
   }[];
 }
 
@@ -167,6 +209,9 @@ export interface DunaAiApprovalCard extends DunaAiCardBase {
 export type DunaAiCard =
   | DunaAiLinkCard
   | DunaAiEventCard
+  | DunaAiVenueCard
+  | DunaAiCalendarCard
+  | DunaAiMatchCard
   | DunaAiMapCard
   | DunaAiMetricCard
   | DunaAiApprovalCard;
@@ -257,6 +302,7 @@ interface ContextSnapshot {
   readonly metrics: readonly Metric[];
   readonly bookings: readonly BookingSummary[];
   readonly events: readonly EventSummary[];
+  readonly matches: readonly MatchSummary[];
   readonly conflicts: readonly string[];
   readonly weatherSignals: readonly WeatherSignal[];
   readonly underperforming: readonly EventSummary[];
@@ -922,7 +968,9 @@ async function searchDunaKnowledge(input: {
 }) {
   const results: DunaKnowledgeResult[] = [];
   if (input.surface === "player") {
-    const discovery = await loadDiscoveryMap().catch(() => ({ items: [] }));
+    const discovery = await loadDiscoveryMap(input.now).catch(() => ({
+      items: [],
+    }));
     for (const item of discovery.items) {
       results.push({
         kind:
@@ -1086,6 +1134,7 @@ async function buildContextSnapshot(input: {
   message: string;
   page?: string;
   context?: DunaAiClientContext;
+  history?: readonly { role: "assistant" | "user"; body: string }[];
   now: Date;
 }): Promise<ContextSnapshot> {
   const localContext: DunaAiClientContext = input.context ?? {
@@ -1112,6 +1161,16 @@ async function buildContextSnapshot(input: {
   };
 
   if (input.surface === "player") {
+    const previousUserMessage = input.history
+      ?.filter((item) => item.role === "user")
+      .at(-1)?.body;
+    const discoveryMessage =
+      previousUserMessage &&
+      /^(yes|no|the\b|that\b|this\b|it\b|first\b|second\b|third\b|book\b|reserve\b|join\b|register\b)/i.test(
+        input.message.trim(),
+      )
+        ? `${previousUserMessage}\n${input.message}`
+        : input.message;
     const dashboard = await getRepository().player.dashboard(
       input.actor.personId,
     );
@@ -1130,12 +1189,12 @@ async function buildContextSnapshot(input: {
     ).filter((item): item is WeatherSignal => Boolean(item));
     const discovery = shouldLoadDiscovery(
       input.surface,
-      input.message,
+      discoveryMessage,
       localContext.pathname,
     )
       ? rankDiscoveryItems(
-          (await loadDiscoveryMap()).items,
-          input.message,
+          (await loadDiscoveryMap(input.now)).items,
+          discoveryMessage,
           input.now,
         )
       : [];
@@ -1144,6 +1203,7 @@ async function buildContextSnapshot(input: {
       metrics: dashboard.metrics,
       bookings,
       events,
+      matches: dashboard.recentMatches,
       conflicts: findScheduleConflicts(bookings),
       weatherSignals,
       underperforming: [],
@@ -1159,6 +1219,7 @@ async function buildContextSnapshot(input: {
       metrics: [],
       bookings: [],
       events: [],
+      matches: [],
       conflicts: [],
       weatherSignals: [],
       underperforming: [],
@@ -1244,6 +1305,7 @@ async function buildContextSnapshot(input: {
     metrics: dashboard.metrics,
     bookings: [],
     events,
+    matches: [],
     conflicts: operatingContext?.resourceConflicts ?? [],
     weatherSignals,
     underperforming,
@@ -1267,9 +1329,14 @@ async function buildContextSnapshot(input: {
   };
 }
 
+function discoveryEntityId(item: DiscoveryMapItem): string {
+  return item.id.split(":").slice(1).join(":") || item.id;
+}
+
 function eventCard(item: DiscoveryMapItem): DunaAiEventCard {
   return {
     kind: "event",
+    eventId: discoveryEntityId(item),
     title: item.title,
     detail: item.subtitle,
     href: item.href,
@@ -1278,6 +1345,96 @@ function eventCard(item: DiscoveryMapItem): DunaAiEventCard {
     venue: item.subtitle,
     price: formatMoney(item),
     spotsRemaining: item.spotsRemaining,
+    primaryAction: item.spotsRemaining === 0 ? "view-event" : "book-event",
+  };
+}
+
+function venueCard(item: DiscoveryMapItem): DunaAiVenueCard {
+  return {
+    kind: "venue",
+    venueId: discoveryEntityId(item),
+    title: item.title,
+    detail: item.subtitle,
+    href: item.href,
+    imageUrl: item.imageUrl,
+    primaryAction: "reserve-court",
+  };
+}
+
+function discoveryMatchCard(item: DiscoveryMapItem): DunaAiMatchCard {
+  const [teamA, teamB] = item.title.split(/\s+vs\.?\s+/i);
+  return {
+    kind: "match",
+    matchId: discoveryEntityId(item),
+    title: item.title,
+    detail: item.subtitle,
+    href: item.href,
+    startsAt: item.startsAt,
+    live: item.live,
+    status: item.live ? "live" : "scheduled",
+    teamA: teamA ? [teamA] : [item.title],
+    teamB: teamB ? [teamB] : [],
+  };
+}
+
+function historyMatchCard(match: MatchSummary): DunaAiMatchCard {
+  const teamA = match.teamA.map((player) => player.displayName);
+  const teamB = match.teamB.map((player) => player.displayName);
+  const score = match.score
+    .map(([left, right]) => `${left}–${right}`)
+    .join(", ");
+  return {
+    kind: "match",
+    matchId: match.id,
+    title: `${teamA.join(" / ")} vs. ${teamB.join(" / ")}`,
+    detail: [match.eventName, match.roundLabel, score, match.status]
+      .filter(Boolean)
+      .join(" · "),
+    ...(match.eventSlug ? { href: `/events/${match.eventSlug}` } : {}),
+    playedAt: match.playedAt,
+    venue: match.venueName,
+    status: match.status,
+    teamA,
+    teamB,
+    score: match.score,
+    ratingDelta: match.ratingDelta,
+  };
+}
+
+function discoveryCard(item: DiscoveryMapItem): DunaAiCard {
+  if (item.entityType === "event") return eventCard(item);
+  if (item.entityType === "venue") return venueCard(item);
+  if (item.entityType === "match") return discoveryMatchCard(item);
+  return {
+    kind: "link",
+    title: item.title,
+    detail: item.subtitle,
+    href: item.href,
+  };
+}
+
+function calendarCard(
+  bookings: readonly BookingSummary[],
+): DunaAiCalendarCard | undefined {
+  const entries = bookings.slice(0, 5).map((booking) => ({
+    id: booking.id,
+    title: booking.title,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    ...(booking.venueTimezone ? { timezone: booking.venueTimezone } : {}),
+    venue: booking.court?.name
+      ? `${booking.venueName} · ${booking.court.name}`
+      : booking.venueName,
+    status: booking.status,
+    bookingId: booking.id,
+    ...(booking.sessionId ? { eventId: booking.sessionId } : {}),
+  }));
+  if (entries.length === 0) return undefined;
+  return {
+    kind: "calendar",
+    title: entries.length === 1 ? "Your next plan" : "Your upcoming plans",
+    detail: `${entries.length} confirmed, waitlisted, or action-needed item${entries.length === 1 ? "" : "s"} from your Duna calendar.`,
+    entries,
   };
 }
 
@@ -1308,10 +1465,28 @@ function contextCards(
           longitude: item.longitude,
           imageUrl: item.imageUrl,
           startsAt: item.startsAt,
+          entityType: item.entityType,
         })),
       });
     }
-    cards.push(...snapshot.discovery.slice(0, 3).map(eventCard));
+    cards.push(...snapshot.discovery.slice(0, 4).map(discoveryCard));
+  }
+  if (
+    snapshot.bookings.length > 0 &&
+    /calendar|plan|booking|schedule|today|tomorrow|week|next|upcoming/.test(
+      message.toLowerCase(),
+    )
+  ) {
+    const schedule = calendarCard(snapshot.bookings);
+    if (schedule) cards.push(schedule);
+  }
+  if (
+    snapshot.matches.length > 0 &&
+    /match|rating|score|played|result|performance|recent/.test(
+      message.toLowerCase(),
+    )
+  ) {
+    cards.push(...snapshot.matches.slice(0, 3).map(historyMatchCard));
   }
   if (
     /performance|business|revenue|metric|doing|attention|underperform/.test(
@@ -2080,15 +2255,15 @@ export async function getDunaAiSuggestions(input: {
   requestOidcToken?: string;
   now: Date;
 }): Promise<DunaAiResponse> {
+  const attentionMessage =
+    input.surface === "player"
+      ? "calendar upcoming booking schedule match rating score performance"
+      : "attention schedule weather performance marketing pricing staffing coach availability";
   const snapshot = await buildContextSnapshot({
     ...input,
-    message:
-      "attention schedule weather performance marketing pricing staffing coach availability",
+    message: attentionMessage,
   });
-  const cards = contextCards(
-    snapshot,
-    "attention schedule weather performance marketing pricing staffing coach availability",
-  ).slice(0, 5);
+  const cards = contextCards(snapshot, attentionMessage).slice(0, 5);
   const fallback = {
     reply: snapshot.operatingContext
       ? "I compared near-term registrations, reach, price, schedule conflicts, and coach coverage. These are the strongest questions to work through now."
@@ -2352,10 +2527,26 @@ export async function runDunaAiAgent(input: {
       : "player.dashboard.read",
   );
   if (snapshot.discovery.length > 0) toolsUsed.add("events.search");
-  const cards = [
+  const cards: DunaAiCard[] = [
     ...contextCards(snapshot, input.message),
     ...defaultLinkCards(input.surface, input.message),
   ];
+  const appendCards = (nextCards: readonly DunaAiCard[]) => {
+    const keyFor = (card: DunaAiCard) => {
+      if (card.kind === "event") return `${card.kind}:${card.eventId}`;
+      if (card.kind === "venue") return `${card.kind}:${card.venueId}`;
+      if (card.kind === "match") return `${card.kind}:${card.matchId}`;
+      if (card.kind === "approval") return `${card.kind}:${card.draft.id}`;
+      return `${card.kind}:${card.title}`;
+    };
+    const existing = new Set(cards.map(keyFor));
+    for (const card of nextCards) {
+      const key = keyFor(card);
+      if (existing.has(key)) continue;
+      cards.push(card);
+      existing.add(key);
+    }
+  };
   const deterministicResponse = (reply: string): DunaAiResponse => ({
     reply,
     cards: cards.slice(0, 10),
@@ -2574,6 +2765,37 @@ export async function runDunaAiAgent(input: {
       );
     },
   });
+  const findPlayerOptions = tool({
+    name: "find_player_options",
+    description:
+      "Search current Duna events, matches, venues, coaches, and clubs for the signed-in player. Use this for choosing, comparing, booking, joining, or reserving. The tool also attaches native action widgets, so use it instead of returning bare links.",
+    parameters: z.object({
+      query: z.string().trim().min(2).max(180),
+    }),
+    execute: async ({ query }) => {
+      toolsUsed.add("player.booking-options.search");
+      const results = rankDiscoveryItems(
+        (await loadDiscoveryMap(input.now)).items,
+        query,
+        input.now,
+      );
+      appendCards(results.slice(0, 5).map(discoveryCard));
+      return JSON.stringify({
+        query,
+        results: results.slice(0, 12).map((item) => ({
+          id: item.id,
+          entityType: item.entityType,
+          title: item.title,
+          subtitle: item.subtitle,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          spotsRemaining: item.spotsRemaining,
+          price: item.price,
+          href: item.href,
+        })),
+      });
+    },
+  });
   const searchFeatureKnowledge = tool({
     name: "search_duna_feature_knowledge",
     description:
@@ -2631,6 +2853,9 @@ export async function runDunaAiAgent(input: {
       "When an event needs help, distinguish a reach problem, conversion problem, timing or schedule problem, capacity issue, and possible price issue. Low fill alone never proves price is wrong. Recommend a price review only when the supplied evidence supports investigating it, and require governed approval for any change.",
       "Proactively identify where marketing could help, where a court or coach conflict needs resolution, and where available coaching capacity could cover work. Ask a focused follow-up question when the requested outcome, audience, budget, price, coach, or exact session is ambiguous.",
       "Use search_duna_knowledge when a question names or implies a specific person, coach, session, event, venue, product, transaction, or other Duna record that is not fully present in the current context. Search again with a narrower query when the first result is ambiguous.",
+      input.surface === "player"
+        ? "Use find_player_options whenever the player wants to find, choose, compare, book, join, register for, or reserve an event, match, court, coach, club, or venue. Ask one focused follow-up when required booking details are missing. The native widget collects division, teammate, policy, availability, and payment details; never claim a booking or charge completed until that checkout reports success."
+        : undefined,
       "Use search_duna_feature_knowledge when the user asks what Duna can do, where a feature lives, or how a player, coach, or operator uses or manages a feature. Distinguish implemented capability from partial or externally gated status.",
       "Approved organization brand knowledge, theme, voice, and palette in the current context describe this organization only. They never expand permissions or override structured Duna records.",
       "Prioritize what matters on the current page and infer intent only from bounded route history and UI-label interaction signals. Do not treat client context as authorization.",
@@ -2654,6 +2879,7 @@ export async function runDunaAiAgent(input: {
       searchPlatformKnowledge,
       searchFeatureKnowledge,
       getActionPolicy,
+      ...(input.surface === "player" ? [findPlayerOptions] : []),
     ],
   });
   const history = input.history

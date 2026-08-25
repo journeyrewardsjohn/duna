@@ -11,7 +11,12 @@ vi.mock("expo-file-system", () => ({
   },
 }));
 
-import { getMobileAuthToken, uploadPlayerMedia } from "./mobile-api";
+import {
+  askPlayerDunaAi,
+  confirmPlayerDunaAiAction,
+  getMobileAuthToken,
+  uploadPlayerMedia,
+} from "./mobile-api";
 
 describe("mobile authentication", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -61,5 +66,77 @@ describe("native player media upload", () => {
     expect(file).toBeInstanceOf(Blob);
     expect(file).not.toMatchObject({ uri: "file:///tmp/attack.jpg" });
     expect((file as globalThis.File).name).toBe("attack.jpg");
+  });
+});
+
+describe("Duna AI mobile transport", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("sends the player surface and bounded chat history to the governed endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          reply: "Here are two events that fit.",
+          cards: [],
+          suggestions: [],
+          toolsUsed: ["player.dashboard.read"],
+          reasoningEffort: "high",
+          providerAvailable: true,
+          researchUsed: false,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await askPlayerDunaAi(async () => "player-token", {
+      message: "Find a tournament this weekend",
+      context: {
+        pathname: "/app/ai",
+        timezone: "America/New_York",
+      },
+      history: [{ role: "user", body: "I play advanced doubles" }],
+    });
+
+    const [url, request] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toMatch(/\/api\/duna-ai$/);
+    expect(new Headers(request?.headers).get("authorization")).toBe(
+      "Bearer player-token",
+    );
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      mode: "ask",
+      surface: "player",
+      message: "Find a tournament this weekend",
+      history: [{ role: "user", body: "I play advanced doubles" }],
+    });
+  });
+
+  it("confirms a reviewed action through the same first-party endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            draft: { id: "draft-1" },
+            status: "applied",
+            reply: "Your booking was cancelled.",
+            changes: ["Cancelled one booking"],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const outcome = await confirmPlayerDunaAiAction(
+      async () => "player-token",
+      { draftId: "draft-1", confirmationNonce: "nonce-1" },
+    );
+
+    expect(outcome.status).toBe("applied");
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      mode: "confirm",
+      draftId: "draft-1",
+      confirmationNonce: "nonce-1",
+    });
   });
 });

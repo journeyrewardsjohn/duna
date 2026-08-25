@@ -359,7 +359,9 @@ export function buildDiscoveryMap(input: {
   };
 }
 
-export async function loadDiscoveryMap(): Promise<DiscoveryMap> {
+export async function loadDiscoveryMap(
+  now = new Date(),
+): Promise<DiscoveryMap> {
   const repository = getRepository();
   const [events, venues, coaches, proCoverage] = await Promise.all([
     repository.public.events(),
@@ -373,5 +375,6 @@ export async function loadDiscoveryMap(): Promise<DiscoveryMap> {
     coaches,
     proEvents: proCoverage?.events,
     proMatches: proCoverage?.matches,
+    now,
   });
 }

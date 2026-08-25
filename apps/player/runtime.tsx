@@ -28,10 +28,15 @@ import {
 } from "react-native";
 import Svg, { Line, Path } from "react-native-svg";
 import {
+  askPlayerDunaAi,
+  confirmPlayerDunaAiAction,
   createDunaApiClient,
   createPlayerMessagingDeliveryEngine,
+  getPlayerDunaAiSuggestions,
   uploadPlayerMedia,
   type DunaApiClient,
+  type PlayerDunaAiActionOutcome,
+  type PlayerDunaAiResponse,
   type UploadedPlayerMedia,
 } from "./mobile-api";
 import type { DeliveryEngine } from "@duna/messaging-client";
@@ -177,6 +182,23 @@ export interface PlayerRuntime {
     readonly width: number;
     readonly height: number;
   }) => Promise<UploadedPlayerMedia>;
+  readonly askDunaAi?: (input: {
+    readonly message: string;
+    readonly pathname: string;
+    readonly pageTitle?: string;
+    readonly history?: readonly {
+      role: "assistant" | "user";
+      body: string;
+    }[];
+  }) => Promise<PlayerDunaAiResponse>;
+  readonly getDunaAiSuggestions?: (input: {
+    readonly pathname: string;
+    readonly pageTitle?: string;
+  }) => Promise<PlayerDunaAiResponse>;
+  readonly confirmDunaAiAction?: (input: {
+    readonly draftId: string;
+    readonly confirmationNonce?: string;
+  }) => Promise<PlayerDunaAiActionOutcome>;
   readonly signOut?: () => Promise<void>;
 }
 
@@ -671,6 +693,34 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         refresh,
         switchOrganization,
         selfEnrollOrganizationStaff,
+        askDunaAi: (input) =>
+          askPlayerDunaAi(getToken, {
+            message: input.message,
+            history: input.history,
+            context: {
+              pathname: input.pathname,
+              pageTitle: input.pageTitle,
+              timezone:
+                dashboard?.bookings.find((booking) => booking.venueTimezone)
+                  ?.venueTimezone ??
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+              locale: Intl.DateTimeFormat().resolvedOptions().locale,
+              localTime: new Date().toISOString(),
+            },
+          }),
+        getDunaAiSuggestions: (input) =>
+          getPlayerDunaAiSuggestions(getToken, {
+            pathname: input.pathname,
+            pageTitle: input.pageTitle,
+            timezone:
+              dashboard?.bookings.find((booking) => booking.venueTimezone)
+                ?.venueTimezone ??
+              Intl.DateTimeFormat().resolvedOptions().timeZone,
+            locale: Intl.DateTimeFormat().resolvedOptions().locale,
+            localTime: new Date().toISOString(),
+          }),
+        confirmDunaAiAction: (input) =>
+          confirmPlayerDunaAiAction(getToken, input),
         uploadPlayerMedia: (input) => uploadPlayerMedia(getToken, input),
         signOut: safeSignOut,
       }}
