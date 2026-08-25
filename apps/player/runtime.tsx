@@ -22,7 +22,7 @@ import * as Crypto from "expo-crypto";
 import * as Network from "expo-network";
 import { StatusBar } from "expo-status-bar";
 import { VideoView, useVideoPlayer } from "expo-video";
-import { demoOrganization } from "@duna/core/demo";
+import { demoOrganization, demoVenues } from "@duna/core/demo";
 import {
   ActivityIndicator,
   AccessibilityInfo,
@@ -860,6 +860,7 @@ function PreviewRuntime({ children }: { readonly children: ReactNode }) {
       proCoverage,
       discoveryMap,
       predictionDiscovery,
+      venues: demoVenues,
       activeAuthOrganizationId: "org_demo_south_bay",
       authOrganizations: [
         {

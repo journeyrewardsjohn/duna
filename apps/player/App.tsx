@@ -537,6 +537,7 @@ type CourtBookingRequest = {
   readonly venueId: string;
   readonly date: string;
   readonly durationMinutes: number;
+  readonly intent?: "private" | "host";
 };
 
 function displayError(reason: unknown): string {
@@ -2926,6 +2927,7 @@ function VenueFinderModal({
 function VenueBookingModal({
   initialDate,
   initialDurationMinutes,
+  initialIntent = "private",
   venueId,
   visible,
   onClose,
@@ -2934,6 +2936,7 @@ function VenueBookingModal({
 }: {
   readonly initialDate?: string;
   readonly initialDurationMinutes?: number;
+  readonly initialIntent?: "private" | "host";
   readonly venueId?: string;
   readonly visible: boolean;
   readonly onClose: () => void;
@@ -2956,7 +2959,7 @@ function VenueBookingModal({
   const [selectedSlot, setSelectedSlot] =
     useState<CourtAvailability["slots"][number]>();
   const [bookingIntent, setBookingIntent] = useState<"private" | "host">(
-    "private",
+    initialIntent,
   );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
@@ -3152,7 +3155,8 @@ function VenueBookingModal({
     if (!visible) return;
     if (initialDate && initialDate >= todayValue) setSelectedDate(initialDate);
     if (initialDurationMinutes) setDurationMinutes(initialDurationMinutes);
-  }, [initialDate, initialDurationMinutes, todayValue, visible]);
+    setBookingIntent(initialIntent);
+  }, [initialDate, initialDurationMinutes, initialIntent, todayValue, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -3699,7 +3703,9 @@ function VenueBookingModal({
                     ? bookingIntent === "host"
                       ? "Create a match"
                       : "Review"
-                    : "Find a game"}
+                    : initialIntent === "host"
+                      ? "Reserve to host"
+                      : "Find a game"}
                 </Text>
                 <View style={styles.modalHeaderSpacer} />
               </View>
@@ -4235,17 +4241,23 @@ function VenueBookingModal({
                                   style={styles.bookingHostButton}
                                 >
                                   <Text style={styles.bookingHostButtonText}>
-                                    Create a Match
+                                    {initialIntent === "host"
+                                      ? "Reserve to host"
+                                      : "Create a Match"}
                                   </Text>
                                 </Pressable>
-                                <Pressable
-                                  onPress={() => reviewSlot(slot, "private")}
-                                  style={styles.bookingPrivateButton}
-                                >
-                                  <Text style={styles.bookingPrivateButtonText}>
-                                    Reserve private
-                                  </Text>
-                                </Pressable>
+                                {initialIntent !== "host" && (
+                                  <Pressable
+                                    onPress={() => reviewSlot(slot, "private")}
+                                    style={styles.bookingPrivateButton}
+                                  >
+                                    <Text
+                                      style={styles.bookingPrivateButtonText}
+                                    >
+                                      Reserve private
+                                    </Text>
+                                  </Pressable>
+                                )}
                               </View>
                             </View>
                           ))}
@@ -12901,6 +12913,7 @@ function PickupModal({
         venueId: value.venueId,
         date: startsAt.slice(0, 10),
         durationMinutes,
+        intent: "host",
       });
     }
   }
@@ -13326,38 +13339,12 @@ function PickupModal({
                         description="Search Duna venues first, or choose any beach, club, or address with Google Places."
                         dunaVenues={venues}
                         label="Venue, beach, or court"
-                        lockedLabel={
-                          placeSelection?.venueId
-                            ? "DUNA VENUE · RESERVATION REQUIRED"
-                            : "LOCATION LOCKED · GOOGLE"
-                        }
+                        lockedLabel="LOCATION LOCKED · GOOGLE"
                         onChange={choosePlace}
                         palette={colors}
+                        selectedPresentation="map"
                         value={placeSelection}
                       />
-                      {placeSelection?.latitude !== undefined &&
-                        placeSelection.longitude !== undefined && (
-                          <View style={styles.hostFlowPlaceMapPreview}>
-                            <Image
-                              source={{
-                                uri: `${dunaWebUrl}/api/places/map?latitude=${encodeURIComponent(String(placeSelection.latitude))}&longitude=${encodeURIComponent(String(placeSelection.longitude))}`,
-                              }}
-                              style={StyleSheet.absoluteFill}
-                            />
-                            <View style={styles.hostFlowPlaceMapGrid} />
-                            <View style={styles.hostFlowPlaceMapPin}>
-                              <Text style={styles.hostFlowPlaceMapPinText}>
-                                ⌖
-                              </Text>
-                            </View>
-                            <View style={styles.hostFlowPlaceMapLabel}>
-                              <Text style={styles.hostFlowPlaceMapLabelText}>
-                                MAP READY ·{" "}
-                                {placeSelection.address ?? placeSelection.name}
-                              </Text>
-                            </View>
-                          </View>
-                        )}
                       {placeSelection && !placeSelection.venueId && (
                         <View style={styles.hostFlowLocationNotice}>
                           <Text style={styles.hostFlowLocationNoticeMark}>
@@ -13373,35 +13360,6 @@ function PickupModal({
                             </Text>
                           </View>
                         </View>
-                      )}
-                      {venueId && (
-                        <Pressable
-                          accessibilityLabel={`Reserve a court at ${venueName}`}
-                          onPress={() => {
-                            if (!onReserveCourtVenue) return;
-                            close();
-                            onReserveCourtVenue({
-                              venueId,
-                              date: startsAt.slice(0, 10),
-                              durationMinutes,
-                            });
-                          }}
-                          style={styles.hostFlowReserveVenue}
-                        >
-                          <View style={styles.flex}>
-                            <Text style={styles.hostFlowReserveVenueTitle}>
-                              Reserve a court at {venueName}
-                            </Text>
-                            <Text style={styles.hostFlowReserveVenueBody}>
-                              Duna venues use live availability, court
-                              selection, and secure payment before the match is
-                              published.
-                            </Text>
-                          </View>
-                          <Text style={styles.hostFlowReserveVenueArrow}>
-                            ›
-                          </Text>
-                        </Pressable>
                       )}
                     </>
                   )}
@@ -14904,6 +14862,7 @@ function DunaApp() {
             <VenueBookingModal
               initialDate={courtBookingRequest?.date}
               initialDurationMinutes={courtBookingRequest?.durationMinutes}
+              initialIntent={courtBookingRequest?.intent}
               onClose={() => setCourtBookingRequest(undefined)}
               onHostReady={(seed) => {
                 setCourtBookingRequest(undefined);
@@ -16456,60 +16415,6 @@ function createStyles() {
       fontSize: 12,
       marginTop: 4,
     },
-    hostFlowPlaceMapPreview: {
-      backgroundColor: colors.navyLift,
-      borderColor: rgba(colors.accentRgb, 0.16),
-      borderRadius: 17,
-      borderWidth: 1,
-      height: 120,
-      marginTop: 10,
-      overflow: "hidden",
-      position: "relative",
-    },
-    hostFlowPlaceMapGrid: {
-      backgroundColor: rgba(colors.accentRgb, 0.06),
-      borderColor: rgba(colors.accentRgb, 0.16),
-      borderWidth: 1,
-      height: 188,
-      left: -28,
-      position: "absolute",
-      top: -35,
-      transform: [{ rotate: "-21deg" }],
-      width: 260,
-    },
-    hostFlowPlaceMapPin: {
-      alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderColor: "#ffffff",
-      borderRadius: 22,
-      borderWidth: 3,
-      height: 44,
-      justifyContent: "center",
-      left: "47%",
-      position: "absolute",
-      top: 27,
-      width: 44,
-    },
-    hostFlowPlaceMapPinText: {
-      color: colors.onAccent,
-      fontSize: 22,
-      fontWeight: "900",
-    },
-    hostFlowPlaceMapLabel: {
-      backgroundColor: rgba(colors.inkRgb, 0.8),
-      bottom: 10,
-      left: 10,
-      maxWidth: "90%",
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-      position: "absolute",
-    },
-    hostFlowPlaceMapLabelText: {
-      color: "#ffffff",
-      fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 0.55,
-    },
     hostFlowLocationNotice: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.positiveRgb, 0.08),
@@ -16538,30 +16443,6 @@ function createStyles() {
       lineHeight: 17,
       marginTop: 4,
     },
-    hostFlowReserveVenue: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.accentRgb, 0.09),
-      borderColor: colors.aqua,
-      borderRadius: 17,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 11,
-      marginTop: 10,
-      minHeight: 80,
-      padding: 14,
-    },
-    hostFlowReserveVenueTitle: {
-      color: colors.bone,
-      fontSize: 14,
-      fontWeight: "900",
-    },
-    hostFlowReserveVenueBody: {
-      color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
-      marginTop: 4,
-    },
-    hostFlowReserveVenueArrow: { color: colors.aqua, fontSize: 25 },
     hostFlowDatePickerCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
