@@ -14,10 +14,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { useProRuntime } from "./runtime";
 
 type ScannerMode = "player-check-in" | "fan-ticket";

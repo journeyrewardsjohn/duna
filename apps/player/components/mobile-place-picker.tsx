@@ -1,5 +1,14 @@
+import Mapbox from "@rnmapbox/maps";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+} from "react-native";
+import { useMapboxToken } from "../discovery-map";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
@@ -22,6 +31,9 @@ interface DunaVenueSuggestion {
   readonly longitude: number;
   readonly courtCount: number;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaMark = require("../assets/duna-mark.png") as ImageSourcePropType;
 
 export interface MobilePlaceSelection {
   readonly venueId?: string;
@@ -68,6 +80,83 @@ function MapPinGlyph({
   );
 }
 
+function SelectedPlaceMap({
+  palette,
+  value,
+}: {
+  readonly palette?: MobileSocialPalette;
+  readonly value: MobilePlaceSelection;
+}) {
+  const canMap = value.latitude !== undefined && value.longitude !== undefined;
+  const token = useMapboxToken(canMap);
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        styles.selectedMap,
+        palette && { backgroundColor: palette.navyLift },
+      ]}
+    >
+      {token && canMap ? (
+        <Mapbox.MapView
+          attributionEnabled={false}
+          compassEnabled={false}
+          logoEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+          scaleBarEnabled={false}
+          scrollEnabled={false}
+          style={StyleSheet.absoluteFill}
+          styleURL="mapbox://styles/mapbox/standard"
+          zoomEnabled={false}
+        >
+          <Mapbox.Camera
+            defaultSettings={{
+              centerCoordinate: [value.longitude!, value.latitude!],
+              zoomLevel: 13.25,
+            }}
+          />
+          <Mapbox.PointAnnotation
+            coordinate={[value.longitude!, value.latitude!]}
+            id={`selected-place-${value.googlePlaceId ?? value.venueId ?? "location"}`}
+          >
+            <View
+              style={[
+                styles.selectedMapPin,
+                palette && {
+                  backgroundColor: palette.aqua,
+                  borderColor: palette.white,
+                },
+              ]}
+            />
+          </Mapbox.PointAnnotation>
+        </Mapbox.MapView>
+      ) : (
+        <View style={styles.selectedMapFallback}>
+          <MapPinGlyph confirmed palette={palette} />
+        </View>
+      )}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.selectedMapBadge,
+          palette && { backgroundColor: palette.aqua },
+        ]}
+      >
+        <Text
+          style={[
+            styles.selectedMapBadgeText,
+            palette && { color: palette.onAccent },
+          ]}
+        >
+          Map
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function MobilePlacePicker({
   baseUrl,
   description = "Search once, then Duna locks the map-ready place to this video.",
@@ -76,6 +165,7 @@ export function MobilePlacePicker({
   lockedLabel = "LOCATION LOCKED · GOOGLE",
   onChange,
   palette,
+  selectedPresentation = "compact",
   value,
 }: {
   readonly baseUrl: string;
@@ -85,6 +175,7 @@ export function MobilePlacePicker({
   readonly lockedLabel?: string;
   readonly value?: MobilePlaceSelection;
   readonly palette?: MobileSocialPalette;
+  readonly selectedPresentation?: "compact" | "map";
   readonly onChange: (value: MobilePlaceSelection | undefined) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -223,14 +314,27 @@ export function MobilePlacePicker({
         <View
           style={[
             styles.lockedCard,
+            selectedPresentation === "map" && styles.lockedCardWithMap,
             palette && {
               backgroundColor: palette.depth,
-              borderColor: palette.positive,
+              borderColor: `rgba(${palette.overlayRgb},0.12)`,
             },
           ]}
         >
-          <MapPinGlyph confirmed palette={palette} />
-          <View style={styles.flex}>
+          {selectedPresentation === "map" ? (
+            <SelectedPlaceMap palette={palette} value={value} />
+          ) : (
+            <MapPinGlyph confirmed palette={palette} />
+          )}
+          <View style={[styles.flex, styles.selectedPlaceDetails]}>
+            <Text
+              style={[
+                styles.lockedLabel,
+                palette && { color: palette.positive },
+              ]}
+            >
+              ✓ {lockedLabel}
+            </Text>
             <Text
               numberOfLines={2}
               style={[styles.placeName, palette && { color: palette.bone }]}
@@ -248,14 +352,6 @@ export function MobilePlacePicker({
                 {value.address}
               </Text>
             )}
-            <Text
-              style={[
-                styles.lockedLabel,
-                palette && { color: palette.positive },
-              ]}
-            >
-              {lockedLabel}
-            </Text>
           </View>
           <Pressable
             accessibilityLabel="Change venue"
@@ -267,7 +363,7 @@ export function MobilePlacePicker({
             <Text
               style={[styles.changeText, palette && { color: palette.aqua }]}
             >
-              Change
+              ✎ Edit
             </Text>
           </Pressable>
         </View>
@@ -300,7 +396,7 @@ export function MobilePlacePicker({
               />
             )}
           </View>
-          {dunaOptions.length > 0 && (
+          {(dunaOptions.length > 0 || options.length > 0) && (
             <View
               style={[
                 styles.results,
@@ -310,14 +406,16 @@ export function MobilePlacePicker({
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.dunaResultHeading,
-                  palette && { color: palette.aqua },
-                ]}
-              >
-                DUNA VENUES · LIVE COURTS + AVAILABILITY
-              </Text>
+              {dunaOptions.length > 0 && (
+                <Text
+                  style={[
+                    styles.dunaResultHeading,
+                    palette && { color: palette.aqua },
+                  ]}
+                >
+                  DUNA VENUES · LIVE COURTS FIRST
+                </Text>
+              )}
               {dunaOptions.map((venue) => (
                 <Pressable
                   accessibilityLabel={`Choose Duna venue ${venue.name}`}
@@ -332,17 +430,10 @@ export function MobilePlacePicker({
                   <View
                     style={[
                       styles.dunaVenueMark,
-                      palette && { backgroundColor: palette.aqua },
+                      palette && { backgroundColor: palette.white },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.dunaVenueMarkText,
-                        palette && { color: palette.onAccent },
-                      ]}
-                    >
-                      D
-                    </Text>
+                    <Image source={dunaMark} style={styles.dunaVenueLogo} />
                   </View>
                   <View style={styles.flex}>
                     <Text
@@ -374,18 +465,16 @@ export function MobilePlacePicker({
                   </Text>
                 </Pressable>
               ))}
-            </View>
-          )}
-          {options.length > 0 && (
-            <View
-              style={[
-                styles.results,
-                palette && {
-                  backgroundColor: palette.depth,
-                  borderColor: `rgba(${palette.overlayRgb},0.12)`,
-                },
-              ]}
-            >
+              {options.length > 0 && (
+                <Text
+                  style={[
+                    styles.googleResultHeading,
+                    palette && { color: palette.muted },
+                  ]}
+                >
+                  PLACES FROM GOOGLE
+                </Text>
+              )}
               {options.map((option) => (
                 <Pressable
                   accessibilityRole="button"
@@ -422,7 +511,7 @@ export function MobilePlacePicker({
               <Text
                 style={[styles.powered, palette && { color: palette.muted }]}
               >
-                Powered by Google
+                Google Places
               </Text>
             </View>
           )}
@@ -468,13 +557,58 @@ const styles = StyleSheet.create({
   lockedCard: {
     alignItems: "center",
     backgroundColor: "#ffffff",
-    borderColor: "#9acbb6",
+    borderColor: "#d9dee6",
     borderRadius: 18,
     borderWidth: 1.5,
     flexDirection: "row",
     gap: 12,
     minHeight: 84,
     padding: 14,
+  },
+  lockedCardWithMap: {
+    alignItems: "stretch",
+    minHeight: 138,
+    overflow: "hidden",
+    padding: 0,
+  },
+  selectedMap: {
+    backgroundColor: "#edf1f4",
+    minHeight: 136,
+    overflow: "hidden",
+    position: "relative",
+    width: 116,
+  },
+  selectedMapFallback: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  selectedMapPin: {
+    backgroundColor: "#103a63",
+    borderColor: "#ffffff",
+    borderRadius: 10,
+    borderWidth: 3,
+    height: 20,
+    width: 20,
+  },
+  selectedMapBadge: {
+    backgroundColor: "#103a63",
+    borderRadius: 999,
+    bottom: 9,
+    left: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    position: "absolute",
+  },
+  selectedMapBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  selectedPlaceDetails: {
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   placeName: { color: "#1b1b19", fontSize: 15, fontWeight: "800" },
   placeAddress: {
@@ -488,10 +622,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
-    marginTop: 6,
+    marginBottom: 7,
   },
-  changeButton: { justifyContent: "center", minHeight: 44, paddingLeft: 8 },
-  changeText: { color: "#3d6672", fontSize: 13, fontWeight: "800" },
+  changeButton: {
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  changeText: { color: "#103a63", fontSize: 12, fontWeight: "800" },
   results: {
     backgroundColor: "#ffffff",
     borderColor: "#d9dee6",
@@ -518,15 +657,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 12,
   },
+  googleResultHeading: {
+    color: "#8b96a7",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
   dunaVenueMark: {
     alignItems: "center",
-    backgroundColor: "#3d6672",
+    backgroundColor: "#ffffff",
+    borderColor: "#e4e6ec",
     borderRadius: 18,
+    borderWidth: 1,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
-  dunaVenueMarkText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  dunaVenueLogo: { borderRadius: 12, height: 28, width: 28 },
   dunaVenueAction: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
   powered: {
     color: "#8b96a7",

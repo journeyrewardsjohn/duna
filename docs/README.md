@@ -20,6 +20,8 @@ provider operations, and time-sensitive release evidence.
 - [`surfaces/HQ.md`](surfaces/HQ.md) — browser-based operator workspace.
 - [`surfaces/ADMIN.md`](surfaces/ADMIN.md) — Super Admin control plane inside HQ.
 - [`surfaces/PLAYER.md`](surfaces/PLAYER.md) — Duna Player native app and Watch.
+- [`surfaces/PLAYER_SCREEN_INVENTORY.md`](surfaces/PLAYER_SCREEN_INVENTORY.md) —
+  source-backed Player screen, state, navigation, and journey map for redesigns.
 - [`surfaces/PRO.md`](surfaces/PRO.md) — Duna Pro native operator app.
 - [`surfaces/VOICE_AGENTS.md`](surfaces/VOICE_AGENTS.md) — LiveKit voice workers.
 - [`surfaces/PLATFORM.md`](surfaces/PLATFORM.md) — shared API, data, domain, and UI packages.
