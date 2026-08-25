@@ -227,6 +227,83 @@ test("mobile public navigation opens as a full-screen product sheet", async ({
   }
 });
 
+test("public club pages keep the hero readable and the section rail useful", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.goto("/clubs/beach-elite-vb-academy-X3N0ZSW4");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1024, height: 768 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.reload();
+
+    const hero = page.locator(".club-hero");
+    const heading = page.getByRole("heading", {
+      level: 1,
+      name: "Beach Elite VB Academy",
+    });
+    const sectionNav = page.getByRole("navigation", {
+      name: "Explore this club",
+    });
+
+    await expect(hero).toHaveAttribute("data-hero-kind", "gradient");
+    await expect(heading).toBeVisible();
+    await expect(heading).toHaveCSS("color", "rgb(24, 24, 27)");
+    await expect(sectionNav).toBeVisible();
+    await expect(
+      sectionNav.getByRole("link", { name: "Events" }),
+    ).toHaveAttribute("aria-current", "location");
+
+    const [heroBox, navBox] = await Promise.all([
+      getBox(hero),
+      getBox(sectionNav),
+    ]);
+    expect(heroBox.x).toBeLessThanOrEqual(1);
+    expect(heroBox.width).toBeGreaterThanOrEqual(viewport.width - 2);
+    expect(heroBox.height).toBeLessThanOrEqual(720);
+    expect(navBox.y + navBox.height).toBeLessThanOrEqual(viewport.height + 2);
+    await expectNoHorizontalOverflow(page);
+  }
+
+  const sectionNav = page.getByRole("navigation", {
+    name: "Explore this club",
+  });
+  await sectionNav.getByRole("link", { name: "Services" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Train with intention." }),
+  ).toBeVisible();
+  await expect(
+    sectionNav.getByRole("link", { name: "Services" }),
+  ).toHaveAttribute("aria-current", "location");
+
+  const [headerBox, stickyNavBox] = await Promise.all([
+    getBox(page.locator(".site-header")),
+    getBox(sectionNav),
+  ]);
+  expect(stickyNavBox.y).toBeGreaterThanOrEqual(headerBox.height - 2);
+  expect(stickyNavBox.y).toBeLessThanOrEqual(headerBox.height + 2);
+
+  await page.evaluate(() => localStorage.setItem("duna-theme", "dark"));
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator(".club-profile")).toHaveCSS(
+    "background-color",
+    "rgb(16, 24, 36)",
+  );
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Beach Elite VB Academy",
+    }),
+  ).toHaveCSS("color", "rgb(250, 246, 242)");
+  await expectNoHorizontalOverflow(page);
+});
+
 test("club and coach marketing keeps both operating paths clear", async ({
   page,
 }) => {

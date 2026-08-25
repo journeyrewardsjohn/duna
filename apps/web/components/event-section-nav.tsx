@@ -1,19 +1,30 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export type EventSectionNavItem = {
+export type PublicSectionNavItem = {
   readonly id: string;
   readonly label: string;
 };
 
-export function EventSectionNav({
+export type EventSectionNavItem = PublicSectionNavItem;
+
+export function PublicSectionNav({
   items,
+  label,
+  ariaLabel,
+  className,
+  observedContentSelector,
 }: {
-  readonly items: readonly EventSectionNavItem[];
+  readonly items: readonly PublicSectionNavItem[];
+  readonly label: string;
+  readonly ariaLabel: string;
+  readonly className?: string;
+  readonly observedContentSelector: string;
 }) {
   const [activeId, setActiveId] = useState(items[0]?.id ?? "");
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const ids = new Set(items.map((item) => item.id));
@@ -25,10 +36,7 @@ export function EventSectionNav({
     const syncScroll = () => {
       window.cancelAnimationFrame(animationFrame);
       animationFrame = window.requestAnimationFrame(() => {
-        const navBottom =
-          document
-            .querySelector<HTMLElement>(".event-section-nav")
-            ?.getBoundingClientRect().bottom ?? 80;
+        const navBottom = navRef.current?.getBoundingClientRect().bottom ?? 80;
         const marker = navBottom + 48;
         const positions = items
           .map((item) => {
@@ -84,7 +92,7 @@ export function EventSectionNav({
       alignToInitialTarget();
     });
     const eventContent = document.querySelector<HTMLElement>(
-      ".pro-event-content, .event-detail-page",
+      observedContentSelector,
     );
     if (eventContent) layoutObserver.observe(eventContent);
     if (alignInitialHash) {
@@ -124,10 +132,10 @@ export function EventSectionNav({
       window.removeEventListener("wheel", cancelInitialAlignment);
       window.removeEventListener("keydown", cancelInitialAlignment);
     };
-  }, [items]);
+  }, [items, observedContentSelector]);
 
   useEffect(() => {
-    const active = document.querySelector<HTMLElement>(
+    const active = navRef.current?.querySelector<HTMLElement>(
       `.event-section-nav__links a[href="#${CSS.escape(activeId)}"]`,
     );
     active?.scrollIntoView({
@@ -140,10 +148,14 @@ export function EventSectionNav({
   if (items.length < 2) return null;
 
   return (
-    <nav aria-label="On this event page" className="event-section-nav">
+    <nav
+      aria-label={ariaLabel}
+      className={`event-section-nav${className ? ` ${className}` : ""}`}
+      ref={navRef}
+    >
       <div className="event-section-nav__inner">
         <span className="event-section-nav__label">
-          Explore event <ArrowDown aria-hidden size={14} />
+          {label} <ArrowDown aria-hidden size={14} />
         </span>
         <div className="event-section-nav__links">
           {items.map((item) => (
@@ -159,5 +171,20 @@ export function EventSectionNav({
         </div>
       </div>
     </nav>
+  );
+}
+
+export function EventSectionNav({
+  items,
+}: {
+  readonly items: readonly EventSectionNavItem[];
+}) {
+  return (
+    <PublicSectionNav
+      ariaLabel="On this event page"
+      items={items}
+      label="Explore event"
+      observedContentSelector=".pro-event-content, .event-detail-page"
+    />
   );
 }
