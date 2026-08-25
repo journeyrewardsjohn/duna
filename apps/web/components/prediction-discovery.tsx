@@ -41,7 +41,14 @@ export function PredictionDiscoverySection({
   readonly publicMode?: boolean;
 }) {
   return (
-    <section className="prediction-discovery" data-zone="athletic">
+    <section
+      className={
+        publicMode
+          ? "prediction-discovery prediction-discovery--public"
+          : "prediction-discovery"
+      }
+      data-zone="athletic"
+    >
       <header>
         <div>
           <span className="page-eyebrow">
@@ -59,6 +66,8 @@ export function PredictionDiscoverySection({
         <div className="prediction-discovery__grid">
           {discovery.items.map((item) => {
             const market = item.market;
+            const yesProbability = probability(market.yesPriceBps);
+            const noProbability = probability(market.noPriceBps);
             const winner =
               market.resolvedSide === "yes"
                 ? market.yesLabel
@@ -91,7 +100,6 @@ export function PredictionDiscoverySection({
                   </small>
                 </header>
                 <p>{item.reason}</p>
-                <h3>{market.title}</h3>
                 <span className="prediction-discovery-card__competition">
                   {item.competition}
                   {item.scheduledAt
@@ -106,23 +114,23 @@ export function PredictionDiscoverySection({
                 </span>
                 {winner ? (
                   <div className="prediction-discovery-card__determined">
-                    <span>Determined</span>
+                    <h3>{market.title}</h3>
+                    <span>Determined winner</span>
                     <strong>{winner}</strong>
                   </div>
                 ) : (
                   <div className="prediction-discovery-card__sides">
+                    <h3>{market.title}</h3>
                     <span>
                       <b>{market.yesLabel}</b>
-                      <strong>{probability(market.yesPriceBps)}%</strong>
+                      <strong>{yesProbability}%</strong>
                     </span>
                     <i aria-hidden>
-                      <b
-                        style={{ width: probability(market.yesPriceBps) + "%" }}
-                      />
+                      <b style={{ width: yesProbability + "%" }} />
                     </i>
                     <span>
                       <b>{market.noLabel}</b>
-                      <strong>{probability(market.noPriceBps)}%</strong>
+                      <strong>{noProbability}%</strong>
                     </span>
                   </div>
                 )}

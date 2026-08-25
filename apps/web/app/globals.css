@@ -42333,7 +42333,9 @@ button.selected > .choice-radio {
   color: inherit;
   display: flex;
   flex-direction: column;
-  min-height: 305px;
+  min-height: 330px;
+  min-width: 0;
+  overflow: clip;
   padding: 1rem;
   text-decoration: none;
   transition:
@@ -42382,44 +42384,54 @@ button.selected > .choice-radio {
   margin: 1rem 0 0.2rem;
 }
 
-.prediction-discovery-card h3 {
-  font-family: var(--font-display);
-  font-size: clamp(1.35rem, 2.2vw, 1.8rem);
-  letter-spacing: -0.025em;
-  line-height: 1.08;
-  margin: 0;
-}
-
 .prediction-discovery-card__competition {
   color: var(--color-bone-muted);
   font-size: 0.78rem;
   line-height: 1.4;
   margin-top: 0.45rem;
+  overflow-wrap: anywhere;
 }
 
 .prediction-discovery-card__sides {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.65rem;
   margin: auto 0 0.8rem;
+  min-width: 0;
+  padding-top: 1.15rem;
+  position: relative;
+}
+
+.prediction-discovery-card__sides > h3 {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .prediction-discovery-card__sides > span {
-  align-items: center;
-  display: flex;
-  gap: 0.6rem;
-  justify-content: space-between;
+  align-items: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
 }
 
 .prediction-discovery-card__sides > span b {
-  font-size: 0.8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .prediction-discovery-card__sides > span strong {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1rem;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .prediction-discovery-card__sides > i {
@@ -42449,6 +42461,15 @@ button.selected > .choice-radio {
   padding: 0.75rem;
 }
 
+.prediction-discovery-card__determined h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+
 .prediction-discovery-card__determined span {
   color: var(--color-aqua-deep);
   font-size: 0.75rem;
@@ -42458,6 +42479,7 @@ button.selected > .choice-radio {
 
 .prediction-discovery-card__determined strong {
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .prediction-discovery-card > footer {
