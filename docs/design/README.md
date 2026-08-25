@@ -8,8 +8,12 @@ The current references are intentionally separate:
 
 - `duna-font-usage-guide.md` is the authoritative typography contract for all
   web, HQ, Player, and Pro surfaces. It supersedes every earlier font rule.
+- `duna-design-system-v4.md` is the active amendment for the public website,
+  including its hero, color families, band geometry, navigation, footer, and
+  tightly scoped DM Mono metadata accent.
 - `duna-design-system-v3.md` is the active amendment for ground inversion,
-  athletic composition, typography, club color, and player identity.
+  athletic composition, club color, and player identity outside the public-web
+  v4 scope.
 - `duna-hq-component-system.md` is the operational component, content, and
   responsive usage contract for Duna HQ.
 - `duna-implementation-audit.md` records the verified production failures and
@@ -26,8 +30,9 @@ future design-system decision is amended.
 
 ## Typography assets
 
-Duna ships Satoshi for every product word and number. The authoritative weights,
-loading sources, fallbacks, and verification rules live in
+Duna ships Satoshi for every product word and number. Public editorial metadata
+may use the tightly scoped DM Mono accent defined by v4. The authoritative
+weights, loading sources, fallbacks, and verification rules live in
 `duna-font-usage-guide.md`. Older licensed or open-source font assets may remain
 in repository history, but they are not an active product typography contract.
 

@@ -40,26 +40,14 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
-    page.getByRole("heading", {
-      name: /Everything that happens on sand.*One living game/,
-    }),
+    page.getByRole("heading", { name: "The sand keeps score now." }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /Find a game/ })).toBeVisible();
-  const sandCanvas = page.getByTestId("homepage-sand-world").locator("canvas");
-  await expect(sandCanvas).toBeVisible();
-  await expect(sandCanvas).toHaveAttribute(
-    "data-renderer",
-    /^(webgl|fallback)$/,
-  );
-  if ((await sandCanvas.getAttribute("data-renderer")) === "webgl") {
-    await expect(sandCanvas).toHaveAttribute(
-      "data-quality",
-      /^(hardware|software)$/,
-    );
-    if ((await sandCanvas.getAttribute("data-quality")) === "software") {
-      await expect(sandCanvas).toHaveAttribute("data-motion", "static");
-    }
-  }
+  await expect(
+    page.getByRole("img", {
+      name: "Beach volleyball players competing on a packed center court",
+    }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
@@ -145,30 +133,36 @@ test("wide, short homepages keep the hero clear of fixed navigation", async ({
     await page.goto("/");
 
     const header = page.locator(".site-header");
-    const eyebrow = page.getByText("Beach volleyball, connected", {
-      exact: true,
+    const heading = page.getByRole("heading", {
+      name: "The sand keeps score now.",
     });
     const primaryAction = page.getByRole("link", { name: /Find a game/ });
-    const scrollCue = page.getByText("Scroll through the sand", {
-      exact: true,
+    const secondaryAction = page.getByRole("link", {
+      name: "Claim your rating",
     });
 
-    await expect(eyebrow).toBeVisible();
+    await expect(heading).toBeVisible();
     await expect(primaryAction).toBeVisible();
-    await expect(scrollCue).toBeVisible();
+    await expect(secondaryAction).toBeVisible();
 
-    const [headerBox, eyebrowBox, actionBox, cueBox] = await Promise.all([
-      getBox(header),
-      getBox(eyebrow),
-      getBox(primaryAction),
-      getBox(scrollCue),
-    ]);
+    const [headerBox, headingBox, primaryBox, secondaryBox] = await Promise.all(
+      [
+        getBox(header),
+        getBox(heading),
+        getBox(primaryAction),
+        getBox(secondaryAction),
+      ],
+    );
 
-    expect(eyebrowBox.y).toBeGreaterThanOrEqual(
+    expect(headingBox.y).toBeGreaterThanOrEqual(
       headerBox.y + headerBox.height + 8,
     );
-    expect(actionBox.y + actionBox.height + 8).toBeLessThanOrEqual(cueBox.y);
-    expect(cueBox.y + cueBox.height).toBeLessThanOrEqual(viewport.height);
+    expect(primaryBox.y).toBeGreaterThanOrEqual(
+      headingBox.y + headingBox.height + 24,
+    );
+    expect(secondaryBox.y + secondaryBox.height).toBeLessThanOrEqual(
+      viewport.height,
+    );
     await expectNoHorizontalOverflow(page);
   }
 });
@@ -317,21 +311,21 @@ test("public pickup pages keep their story and booking rail contained", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("homepage sand motion respects the reduced-motion preference", async ({
+test("homepage ticker respects the reduced-motion preference", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
-  const sandCanvas = page.getByTestId("homepage-sand-world").locator("canvas");
-  await expect(sandCanvas).toHaveAttribute(
-    "data-renderer",
-    /^(webgl|fallback)$/,
-  );
-
-  if ((await sandCanvas.getAttribute("data-renderer")) === "webgl") {
-    await expect(sandCanvas).toHaveAttribute("data-motion", "static");
-  }
+  const ticker = page.locator('[role="status"][aria-label*="CONNECTED"]');
+  await expect(ticker).toBeVisible();
+  await expect
+    .poll(() =>
+      ticker.locator("div").evaluate((element) => {
+        return getComputedStyle(element).animationPlayState;
+      }),
+    )
+    .toBe("paused");
 
   await expectNoHorizontalOverflow(page);
 });
