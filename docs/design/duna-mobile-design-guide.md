@@ -1,5 +1,11 @@
 # Duna Mobile — Design Guide for Duna Players and Duna Pro
 
+> Navigation, application chrome, Satoshi typography, the five-point grid,
+> chat, Video Library, and Record a Game are superseded by
+> `duna-mobile-interface-v4.md`. This guide remains authoritative for Player and
+> Pro jobs, sunlight behavior, offline expectations, privacy separation, and
+> native capability direction not amended there.
+
 **Companion to:** `duna-design-system.md` (v2, "Golden Hour Performance"). Everything there applies. This document covers what changes when the system moves onto a phone, and how two apps stay unmistakably one product while doing opposite jobs.
 
 **Stack assumption:** Expo / React Native, shared token package, shared primitive components, separate app shells.
@@ -175,7 +181,7 @@ Beaches have bad signal. Design for it as a normal condition, not an error.
 
 One set across both apps. **Draw them; don't install a library** — a default icon pack is the fastest way to make a distinctive system look generic.
 
-Spec: 24×24 grid, 1.75px stroke, round caps, round joins, no fills except status dots, optically balanced rather than mathematically centered. Two weights: regular (1.75) and active (2.25 with a subtle fill at 8% opacity).
+Spec: 24×24 grid, 1.5px stroke, round caps, round joins, no fills except status dots, optically balanced rather than mathematically centered. Two weights: regular (1.5) and active (1.75 with a subtle fill at 8% opacity).
 
 Draw icons from the sport's own objects wherever possible instead of generic metaphors: a net silhouette for courts, a ball for matches, a dune ridge for the Duna home, a whistle for coaching, a raked-line motif for schedule, a rising ridge line for rating. Avoid: trophies, medals, fire, lightning bolts, rocket ships, confetti.
 

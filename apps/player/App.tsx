@@ -13,7 +13,7 @@ import {
   formatMoney,
   formatVenueTime,
   type EventDivisionSummary,
-  type MatchSummary,
+  type EventSummary,
   type PersonSummary,
   googleMapsSearchUrl,
   nativeMapUrl,
@@ -28,11 +28,17 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  mobileControl,
+  mobileGrid,
+  resolveDunaMobileTokens,
+} from "@duna/ui/mobile";
 import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
@@ -59,7 +65,6 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  useColorScheme,
   useWindowDimensions,
   View,
   type ViewStyle,
@@ -92,7 +97,6 @@ import {
 import { VideoStudioScreen, type VideoTransferStatus } from "./video-studio";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
-import { LiveActivitiesPrompt } from "./live-activities-prompt";
 import { PlayerCalendarSettings } from "./calendar-settings";
 import {
   TournamentPasses,
@@ -114,12 +118,18 @@ import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
 import { NativeEventDetails } from "./event-details";
+import { createDeferredModalTransition } from "./deferred-modal-transition";
 import { OrganizationExperienceModal } from "./organization-experience";
 import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
+import { DunaIcon, type DunaIconName } from "./duna-icon";
+import { LiquidGlassSurface } from "./liquid-glass-surface";
 import {
-  LivePlayerRail,
+  playerPrimaryDestination,
+  type PlayerPrimaryDestination,
+} from "./player-navigation";
+import {
   PlayerPickerModal,
   PlayerProfileProvider,
   PlayerProfileSheet,
@@ -159,6 +169,14 @@ import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
 import { PlayerDunaAiScreen } from "./duna-ai-screen";
 import {
+  HomeV3Screen,
+  type HomeV3Avatar,
+  type HomeV3Match,
+  type HomeV3OpenGame,
+  type HomeV3UpcomingItem,
+} from "./home-v3";
+import { linkedHomeEvent } from "./home-v3-data";
+import {
   MobilePlacePicker,
   type MobilePlaceSelection,
 } from "./components/mobile-place-picker";
@@ -168,17 +186,19 @@ import {
   useSatoshiFonts,
 } from "./satoshi-text";
 
+// Keep the native poster in place until the first React frame contains the
+// bundled launch film. This prevents a white bridge frame on cold starts.
+void SplashScreen.preventAutoHideAsync();
+
 // Metro requires static module references so the full Duna mark ships natively.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaPlayerBrandIcon = require("./assets/duna-mark.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
-type PlayerCoachingNote = NonNullable<PlayerRuntime["coachingNotes"]>[number];
-type PlayerVirtualSession = NonNullable<
-  PlayerRuntime["virtualSessions"]
->[number];
 type MobilePredictionDiscoveryItem = NonNullable<
   PlayerRuntime["predictionDiscovery"]
 >["items"][number];
@@ -345,17 +365,19 @@ const demoSandRatingByPersonId = new Map(
   demoPeople.map((person) => [person.id, person.rating.display] as const),
 );
 
+const lightMobileTokens = resolveDunaMobileTokens("light", "editorial");
+
 const lightColors = {
-  canvas: "#f6f5f1",
-  ink: "#1b1b19",
-  depth: "#ffffff",
-  navy: "#efe6d3",
-  navyLift: "#edece6",
-  bone: "#1b1b19",
-  muted: "#766f61",
-  aqua: "#22343b",
-  aquaDeep: "#3a3a36",
-  sand: "#c9a96a",
+  canvas: lightMobileTokens.ground,
+  ink: "#090909",
+  depth: lightMobileTokens.surface1,
+  navy: lightMobileTokens.inactiveFill,
+  navyLift: lightMobileTokens.surface2,
+  bone: "#090909",
+  muted: "#767773",
+  aqua: "#103a63",
+  aquaDeep: "#092b4d",
+  sand: "#d8b47a",
   flare: "#e8683a",
   resultWin: "#efe5ce",
   resultWinBorder: "#d7bd84",
@@ -368,16 +390,16 @@ const lightColors = {
   danger: "#9a4a2e",
   onAccent: "#ffffff",
   white: "#ffffff",
-  overlayRgb: "27,27,25",
-  accentRgb: "34,52,59",
+  overlayRgb: "9,9,9",
+  accentRgb: "16,58,99",
   warningRgb: "138,106,47",
   positiveRgb: "47,107,58",
   dangerRgb: "154,74,46",
   flareRgb: "232,104,58",
-  inkRgb: "27,27,25",
+  inkRgb: "9,9,9",
   depthRgb: "255,255,255",
-  navyRgb: "239,230,211",
-  boneRgb: "27,27,25",
+  navyRgb: "244,244,242",
+  boneRgb: "9,9,9",
   whiteRgb: "255,255,255",
 } as const;
 
@@ -385,52 +407,8 @@ type Palette = {
   readonly [Key in keyof typeof lightColors]: string;
 };
 
-const darkColors: Palette = {
-  canvas: "#141310",
-  ink: "#0d1114",
-  depth: "#1c1a16",
-  navy: "#16232a",
-  navyLift: "#24211c",
-  bone: "#f2f0ea",
-  muted: "#b8b4a8",
-  aqua: "#b5ccd3",
-  aquaDeep: "#8fb0bc",
-  sand: "#d4b77c",
-  flare: "#f4794c",
-  resultWin: "#4a402b",
-  resultWinBorder: "#8d7748",
-  resultLoss: "#294651",
-  resultLossBorder: "#527782",
-  signal: "#b9dc52",
-  signalInk: "#17200d",
-  positive: "#6bae78",
-  warning: "#d4b77c",
-  danger: "#c4785c",
-  onAccent: "#0d1114",
-  white: "#ffffff",
-  overlayRgb: "242,240,234",
-  accentRgb: "181,204,211",
-  warningRgb: "212,183,124",
-  positiveRgb: "107,174,120",
-  dangerRgb: "196,120,92",
-  flareRgb: "244,121,76",
-  inkRgb: "13,17,20",
-  depthRgb: "28,26,22",
-  navyRgb: "22,35,42",
-  boneRgb: "242,240,234",
-  whiteRgb: "255,255,255",
-};
-
 type ThemeName = "light" | "dark";
-type ThemePreference = ThemeName | "system";
-const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
-
-let activePalette: Palette = lightColors;
-const colors = new Proxy(lightColors, {
-  get(_target, property: keyof Palette) {
-    return activePalette[property];
-  },
-}) as Palette;
+const colors: Palette = lightColors;
 
 function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
@@ -465,63 +443,15 @@ function resultRosterName(name: string) {
   return name.trim().split(/\s+/)[0] || name;
 }
 
-const ThemeContext = createContext<{
-  readonly theme: ThemeName;
-  readonly preference: ThemePreference;
-  readonly toggle: () => void;
-}>({ theme: "light", preference: "light", toggle: () => undefined });
-
 const MessagingNavigationContext = createContext<{
   readonly open: (support: boolean) => void;
-  readonly openAi: () => void;
   readonly openProfile: () => void;
   readonly unreadCount: number;
 }>({
   open: () => undefined,
-  openAi: () => undefined,
   openProfile: () => undefined,
   unreadCount: 0,
 });
-
-function PaperPlaneIcon({ color }: { readonly color: string }) {
-  return (
-    <Svg accessibilityElementsHidden height={20} viewBox="0 0 24 24" width={20}>
-      <Path
-        d="M21.3 2.8 3.2 9.6c-1.2.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.7.1 1 .8 1 .5 0 .8-.2 1-.5l2.6-2.5 5.3 3.9c1 .6 1.7.3 1.9-.9l3.1-14.8c.4-1.5-.6-2.2-1.9-1.6Z"
-        fill="none"
-        stroke={color}
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-      />
-      <Path
-        d="m7.7 12.6 11-6.8-8.5 8.2"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-      />
-    </Svg>
-  );
-}
-
-function ThemeButton() {
-  const { preference, theme, toggle } = useContext(ThemeContext);
-  return (
-    <Pressable
-      accessibilityLabel={`Theme: ${preference === "system" ? "match device" : preference}. Change theme`}
-      onPress={() => {
-        selectionHaptic();
-        toggle();
-      }}
-      style={styles.themeButton}
-    >
-      <Text style={styles.themeButtonText}>
-        {preference === "system" ? "◐" : theme === "light" ? "☾" : "☀"}
-      </Text>
-    </Pressable>
-  );
-}
 
 type Tab =
   | "home"
@@ -609,19 +539,8 @@ type CourtBookingRequest = {
   readonly venueId: string;
   readonly date: string;
   readonly durationMinutes: number;
+  readonly intent?: "private" | "host";
 };
-
-const tabs: readonly {
-  key: Tab;
-  label: string;
-  icon: string;
-}[] = [
-  { key: "home", label: "Home", icon: "⌂" },
-  { key: "discover", label: "Discover", icon: "⌖" },
-  { key: "play", label: "Play", icon: "＋" },
-  { key: "plans", label: "Plans", icon: "◫" },
-  { key: "you", label: "You", icon: "◎" },
-];
 
 function displayError(reason: unknown): string {
   return reason instanceof Error
@@ -687,13 +606,14 @@ function closestWeather<
     )[0];
 }
 
-function PreviewBanner() {
+function PreviewBanner({ hidden = false }: { readonly hidden?: boolean }) {
   const { isOffline, lastSuccessfulSyncAt, mode } = usePlayerRuntime();
+  if (hidden) return null;
   if (mode === "preview") {
     return (
       <View style={styles.previewBanner}>
         <Text style={styles.previewBannerText}>
-          PREVIEW DATA · SIGN-IN, BOOKINGS, AND PAYMENTS ARE DISABLED
+          PREVIEW · SIGN-IN AND PAYMENTS ARE DISABLED
         </Text>
       </View>
     );
@@ -725,21 +645,29 @@ function DunaWordmark({
   readonly pro?: boolean;
   readonly tone?: "default" | "light";
 }) {
-  const { theme } = useContext(ThemeContext);
   return (
     <View style={styles.wordmark}>
       <Image
         accessibilityLabel="Duna"
         resizeMode="contain"
         source={
-          tone === "light" || theme === "dark"
-            ? dunaPlayerWordmarkWhite
-            : dunaPlayerWordmarkBlue
+          tone === "light" ? dunaPlayerWordmarkWhite : dunaPlayerWordmarkBlue
         }
         style={styles.wordmarkImage}
       />
       {pro && <Text style={styles.proPill}>PRO</Text>}
     </View>
+  );
+}
+
+function DunaMark({ size }: { readonly size: number }) {
+  return (
+    <Image
+      accessibilityIgnoresInvertColors
+      resizeMode="contain"
+      source={dunaPlayerBrandIcon}
+      style={{ height: size, width: size }}
+    />
   );
 }
 
@@ -1036,23 +964,15 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
         {eyebrow && <Text style={styles.headerEyebrow}>{eyebrow}</Text>}
       </View>
       <View style={styles.headerActions}>
-        <ThemeButton />
         <Pressable
-          accessibilityLabel="Duna AI"
-          accessibilityRole="button"
-          hitSlop={5}
-          onPress={messaging.openAi}
-          style={styles.aiHeaderButton}
-        >
-          <Text style={styles.aiHeaderButtonText}>AI</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Messages"
+          accessibilityLabel="Notifications and messages"
           onPress={() => messaging.open(false)}
-          style={styles.askButton}
+          style={styles.headerNotification}
         >
-          <PaperPlaneIcon color={activePalette.aqua} />
-          {messaging.unreadCount > 0 && <View style={styles.notificationDot} />}
+          <DunaIcon color={colors.bone} name="bell" size={22} />
+          {messaging.unreadCount > 0 && (
+            <View style={styles.headerNotificationDot} />
+          )}
         </Pressable>
         <Pressable
           accessibilityLabel="Your profile"
@@ -1185,15 +1105,46 @@ function CoachCard({
 function CoachProfileModal({
   coach,
   onClose,
+  onOpenSession,
 }: {
   readonly coach?: MobileCoach;
   readonly onClose: () => void;
+  readonly onOpenSession: (
+    session: MobileCoach["upcomingSessions"][number],
+  ) => void;
 }) {
+  const onOpenSessionRef = useRef(onOpenSession);
+  onOpenSessionRef.current = onOpenSession;
+  const sessionTransitionRef = useRef<
+    | ReturnType<
+        typeof createDeferredModalTransition<
+          MobileCoach["upcomingSessions"][number]
+        >
+      >
+    | undefined
+  >(undefined);
+  if (!sessionTransitionRef.current) {
+    sessionTransitionRef.current = createDeferredModalTransition<
+      MobileCoach["upcomingSessions"][number]
+    >({
+      onComplete: (session) => onOpenSessionRef.current(session),
+    });
+  }
+  const sessionTransition = sessionTransitionRef.current;
+
+  useEffect(
+    () => () => {
+      sessionTransition.cancel();
+    },
+    [sessionTransition],
+  );
+
   if (!coach) return null;
 
   return (
     <Modal
       animationType="slide"
+      onDismiss={sessionTransition.complete}
       onRequestClose={onClose}
       presentationStyle="pageSheet"
       visible
@@ -1321,9 +1272,8 @@ function CoachProfileModal({
                     key={session.id}
                     onPress={() => {
                       selectionHaptic();
-                      void WebBrowser.openBrowserAsync(
-                        `${dunaWebUrl}/events/${session.slug}`,
-                      );
+                      sessionTransition.schedule(session);
+                      onClose();
                     }}
                     style={styles.coachSessionRow}
                   >
@@ -1368,7 +1318,11 @@ function organizationRoleLabel(role: string): string {
   return `${role[0]?.toUpperCase() ?? ""}${role.slice(1)}`;
 }
 
-function MemberOrganizationCard() {
+function MemberOrganizationCard({
+  compact = false,
+}: {
+  readonly compact?: boolean;
+}) {
   const {
     activeAuthOrganizationId,
     authOrganizations = [],
@@ -1456,25 +1410,41 @@ function MemberOrganizationCard() {
         }}
         style={({ pressed }) => [
           styles.memberOrganizationCard,
+          compact && styles.memberOrganizationCardCompact,
           pressed && styles.homeQuickActionPressed,
         ]}
       >
-        <View style={styles.memberOrganizationMark}>
-          <Text style={styles.memberOrganizationMarkText}>
-            {organizationName.slice(0, 1).toUpperCase()}
-          </Text>
+        <View
+          style={[
+            styles.memberOrganizationMark,
+            compact && styles.memberOrganizationMarkCompact,
+          ]}
+        >
+          {compact ? (
+            <DunaIcon color={colors.aqua} name="waves" size={22} />
+          ) : (
+            <Text style={styles.memberOrganizationMarkText}>
+              {organizationName.slice(0, 1).toUpperCase()}
+            </Text>
+          )}
         </View>
         <View style={styles.flex}>
-          <Text style={styles.memberOrganizationEyebrow}>YOUR DUNA</Text>
+          <Text style={styles.memberOrganizationEyebrow}>
+            {compact ? "HOME CLUB" : "YOUR DUNA"}
+          </Text>
           <Text numberOfLines={1} style={styles.memberOrganizationName}>
             {organizationName}
           </Text>
-          <Text style={styles.memberOrganizationMeta}>
-            {identity}
-            {fallback ? ` · ${fallback.credits.toLocaleString()} credits` : ""}
-          </Text>
+          {!compact && (
+            <Text style={styles.memberOrganizationMeta}>
+              {identity}
+              {fallback
+                ? ` · ${fallback.credits.toLocaleString()} credits`
+                : ""}
+            </Text>
+          )}
         </View>
-        {organizationCount > 1 && (
+        {!compact && organizationCount > 1 && (
           <Text style={styles.memberOrganizationCount}>
             {organizationCount}
           </Text>
@@ -1664,91 +1634,6 @@ function MemberOrganizationCard() {
   );
 }
 
-function CoachingNoteCard({ note }: { readonly note: PlayerCoachingNote }) {
-  return (
-    <View style={styles.coachingNoteCard}>
-      <View style={styles.coachingNoteAccent} />
-      <View style={styles.coachingNoteTop}>
-        <View style={styles.coachingNoteMark}>
-          <Text style={styles.coachingNoteMarkText}>✦</Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.coachingNoteEyebrow}>FROM YOUR COACH</Text>
-          <Text style={styles.coachingNoteTitle}>
-            {note.subject ?? note.sessionTitle}
-          </Text>
-          <Text style={styles.coachingNoteMeta}>
-            {note.coachName} · {note.organizationName} ·{" "}
-            {new Date(note.publishedAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.coachingNoteSummary}>{note.summary}</Text>
-      <Text style={styles.coachingNoteSession}>{note.sessionTitle}</Text>
-    </View>
-  );
-}
-
-function VirtualSessionCard({
-  session,
-}: {
-  readonly session: PlayerVirtualSession;
-}) {
-  const primaryUrl = session.joinUrl ?? session.recording?.url;
-  const upcoming = Boolean(session.joinUrl);
-  return (
-    <View style={styles.coachingNoteCard}>
-      <View style={styles.coachingNoteAccent} />
-      <View style={styles.coachingNoteTop}>
-        <View style={styles.coachingNoteMark}>
-          <Text style={styles.coachingNoteMarkText}>
-            {upcoming ? "▶" : "✦"}
-          </Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.coachingNoteEyebrow}>
-            {upcoming ? "GOOGLE MEET READY" : "SESSION RECORD"}
-          </Text>
-          <Text style={styles.coachingNoteTitle}>{session.title}</Text>
-          <Text style={styles.coachingNoteMeta}>
-            {new Date(session.startsAt).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-      </View>
-      {session.summary && (
-        <Text style={styles.coachingNoteSummary}>{session.summary}</Text>
-      )}
-      {session.actionItems.slice(0, 3).map((item, index) => (
-        <Text
-          key={`${item.ownerRole}-${index}`}
-          style={styles.coachingNoteSession}
-        >
-          • {item.text}
-        </Text>
-      ))}
-      {primaryUrl && (
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => void Linking.openURL(primaryUrl)}
-          style={styles.virtualSessionAction}
-        >
-          <Text style={styles.virtualSessionActionText}>
-            {upcoming ? "Join Google Meet" : "Watch recording"}
-          </Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
 type HomeQuickAction =
   | "upload-score"
   | "find-match"
@@ -1758,302 +1643,135 @@ type HomeQuickAction =
   | "find-coach"
   | "record-video"
   | "watch-pros"
+  | "messages"
   | "search";
 
 type DiscoverIntentKind = Exclude<
   HomeQuickAction,
-  "record-video" | "upload-score" | "create-match" | "find-coach"
+  "record-video" | "upload-score" | "create-match" | "find-coach" | "messages"
 >;
 
-function HomeResultStoryCard({
-  match,
-  playerId,
-}: {
-  readonly match: MatchSummary;
-  readonly playerId: string;
-}) {
-  const { openPlayerProfile } = usePlayerProfileNavigation();
-  const reducedMotion = useReducedMotion();
-  const reveal = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
-  useEffect(() => {
-    if (reducedMotion) {
-      reveal.setValue(1);
-      return;
-    }
-    Animated.timing(reveal, {
-      toValue: 1,
-      duration: 540,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [reducedMotion, reveal]);
-  const playerSide = match.teamB.some((player) => player.id === playerId)
-    ? "B"
-    : "A";
-  const won = match.winner === playerSide;
-  const playerTeam = playerSide === "A" ? match.teamA : match.teamB;
-  const opponentTeam = playerSide === "A" ? match.teamB : match.teamA;
-  const score = match.score.map((set) =>
-    playerSide === "A" ? set : ([set[1], set[0]] as const),
-  );
-  const subtitle = won
-    ? match.ratingDelta >= 0.08
-      ? "Beat the pre-match signal and earned every point of the rise."
-      : score.length >= 3
-        ? "Stayed composed through the decider and carried it home."
-        : "Set the pace early and kept the result moving your way."
-    : score.length >= 3
-      ? "Took it to the decider—small margins, strong evidence for next time."
-      : "Clear evidence, clean reset, and the next serve already ahead.";
-  const renderTeam = (
-    team: readonly PersonSummary[],
-    side: "player" | "opponent",
-  ) => {
-    const density = resultRosterDensity(team.length);
-    const rosterWidth = resultRosterWidth(team.length);
-    return (
-      <View
-        style={[
-          styles.resultStoryTeam,
-          density === "compact" && styles.resultStoryTeamCompact,
-          density === "dense" && styles.resultStoryTeamDense,
-          team.length > 6 && styles.resultStoryTeamWrapped,
-        ]}
-      >
-        <View style={styles.resultStoryPlayers}>
-          {team.map((person) => (
-            <Pressable
-              accessibilityLabel={"Open " + person.displayName + "'s profile"}
-              key={person.id}
-              onPress={() => openPlayerProfile(person)}
-              style={[
-                styles.resultStoryPlayer,
-                density === "compact" && styles.resultStoryPlayerCompact,
-                density === "dense" && styles.resultStoryPlayerDense,
-                { width: rosterWidth },
-              ]}
-            >
-              {person.avatarUrl ? (
-                <Image
-                  accessibilityIgnoresInvertColors
-                  source={{ uri: person.avatarUrl }}
-                  style={[
-                    styles.resultStoryAvatar,
-                    density === "compact" && styles.resultStoryAvatarCompact,
-                    density === "dense" && styles.resultStoryAvatarDense,
-                  ]}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.resultStoryAvatarFallback,
-                    density === "compact" &&
-                      styles.resultStoryAvatarFallbackCompact,
-                    density === "dense" &&
-                      styles.resultStoryAvatarFallbackDense,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.resultStoryAvatarText,
-                      density === "dense" && styles.resultStoryAvatarTextDense,
-                    ]}
-                  >
-                    {person.initials}
-                  </Text>
-                </View>
-              )}
-              <Text
-                accessibilityLabel={person.displayName}
-                numberOfLines={1}
-                style={[
-                  styles.resultStoryPlayerName,
-                  density === "compact" && styles.resultStoryPlayerNameCompact,
-                  density === "dense" && styles.resultStoryPlayerNameDense,
-                ]}
-              >
-                {resultRosterName(person.displayName)}
-              </Text>
-              <View
-                style={[
-                  styles.resultStoryPlayerRatingPill,
-                  density === "dense" &&
-                    styles.resultStoryPlayerRatingPillDense,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.resultStoryPlayerRating,
-                    density === "dense" && styles.resultStoryPlayerRatingDense,
-                  ]}
-                >
-                  {person.rating.display.toFixed(2)}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.resultStoryScores}>
-          {score.map((set, index) => (
-            <Text
-              key={index}
-              style={[
-                styles.resultStoryScore,
-                set[side === "player" ? 0 : 1] >
-                  set[side === "player" ? 1 : 0] && styles.resultStoryScoreWon,
-              ]}
-            >
-              {set[side === "player" ? 0 : 1]}
-            </Text>
-          ))}
-        </View>
-      </View>
-    );
-  };
-  return (
-    <View
-      style={[
-        styles.resultStoryCard,
-        won ? styles.resultStoryCardWon : styles.resultStoryCardLost,
-      ]}
-    >
-      <View style={styles.resultStoryHeader}>
-        <Animated.View
-          style={[
-            styles.resultStoryHeaderCopy,
-            {
-              opacity: reveal,
-              transform: [
-                {
-                  translateY: reveal.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [8, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Text style={styles.resultStoryEyebrow}>
-            {won ? "Match won" : "Match lost"}
-          </Text>
-          <Text style={styles.resultStorySubtitle}>{subtitle}</Text>
-          <Text style={styles.resultStoryRecapLabel}>DUNA RESULT RECAP</Text>
-        </Animated.View>
-        <Text style={styles.resultStoryDate}>
-          {new Date(match.playedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })}
-        </Text>
-        <View pointerEvents="none" style={styles.resultStoryPlayIcon}>
-          <ResultPlayIcon
-            outcome={won ? "won" : "lost"}
-            playersPerSide={Math.max(playerTeam.length, opponentTeam.length)}
-            size={138}
-          />
-        </View>
-      </View>
-      <View style={styles.resultStoryScorecard}>
-        {renderTeam(playerTeam, "player")}
-        <View style={styles.resultStoryDivider} />
-        {renderTeam(opponentTeam, "opponent")}
-      </View>
-      <View style={styles.resultStoryFooter}>
-        <Text style={styles.resultStoryVenue} numberOfLines={1}>
-          {match.eventName ?? match.venueName}
-        </Text>
-        <Text
-          style={[
-            styles.resultStoryDelta,
-            match.ratingDelta < 0 && styles.resultStoryDeltaNegative,
-          ]}
-        >
-          {match.ratingDelta >= 0 ? "+" : ""}
-          {match.ratingDelta.toFixed(2)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function HomeScreen({
+function HomeScreenV3({
   onAction,
-  onBook,
   onOpenBooking,
-  onPredictions,
+  onOpenEvent,
+  onOpenPerformance,
+  onOpenSchedule,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
-  readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
-  readonly onPredictions: () => void;
+  readonly onOpenEvent: (event: EventSummary) => void;
+  readonly onOpenPerformance: () => void;
+  readonly onOpenSchedule: () => void;
 }) {
-  const reduceMotion = useReducedMotion();
-  const { openPlayerProfile } = usePlayerProfileNavigation();
-  const chartDraw = useRef(new Animated.Value(0)).current;
+  const messaging = useContext(MessagingNavigationContext);
   const {
-    client,
-    coaches,
-    coachingNotes,
     dashboard,
     mode,
     organizationWallets,
-    people,
-    predictionDiscovery,
-    virtualSessions,
+    people: runtimePeople,
   } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const highlightedVirtualSession =
-    virtualSessions?.find(
-      (session) =>
-        Boolean(session.joinUrl) && new Date(session.endsAt) > new Date(),
-    ) ??
-    [...(virtualSessions ?? [])].reverse().find((session) => session.summary);
-  const previewNextActivity = useMemo(() => {
-    const startsAt = new Date();
-    startsAt.setDate(startsAt.getDate() + 1);
-    startsAt.setHours(10, 0, 0, 0);
-    const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
-    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
-  }, []);
-  const bookings =
-    mode === "preview"
-      ? demoBookings.map((booking) =>
-          booking.id === "booking-pickup"
-            ? {
-                ...booking,
-                ...previewNextActivity,
-                sessionId: "event-pickup",
-              }
-            : booking,
-        )
-      : (dashboard?.bookings ?? demoBookings);
-  const events =
-    mode === "preview"
-      ? demoEvents.map((event) =>
-          event.id === "event-pickup"
-            ? { ...event, ...previewNextActivity }
-            : event,
-        )
-      : (dashboard?.events ?? demoEvents);
-  const matches = dashboard?.recentMatches ?? demoMatches;
-  const [performance, setPerformance] = useState<MobilePlayerPerformance>();
-  const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
-
-  useEffect(() => {
-    if (!client || mode === "preview") return;
-    let active = true;
-    void client.public.playerPerformance
-      .query({ handle: player.handle })
-      .then((nextPerformance) => {
-        if (active) setPerformance(nextPerformance);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
+  const previewSchedule = useMemo(() => {
+    const previewTimeZone = "America/Los_Angeles";
+    const zonedDateParts = (instant: Date, timeZone: string) =>
+      Object.fromEntries(
+        new Intl.DateTimeFormat("en-US", {
+          day: "2-digit",
+          hour: "2-digit",
+          hourCycle: "h23",
+          minute: "2-digit",
+          month: "2-digit",
+          second: "2-digit",
+          timeZone,
+          year: "numeric",
+        })
+          .formatToParts(instant)
+          .filter((part) => part.type !== "literal")
+          .map((part) => [part.type, Number(part.value)]),
+      ) as Record<string, number>;
+    const venueWallTime = (
+      dayOffset: number,
+      hour: number,
+      minute: number,
+      timeZone: string,
+    ) => {
+      const today = zonedDateParts(new Date(), timeZone);
+      const wallTime = Date.UTC(
+        today.year!,
+        today.month! - 1,
+        today.day! + dayOffset,
+        hour,
+        minute,
+      );
+      let instant = wallTime;
+      for (let pass = 0; pass < 2; pass += 1) {
+        const local = zonedDateParts(new Date(instant), timeZone);
+        const representedWallTime = Date.UTC(
+          local.year!,
+          local.month! - 1,
+          local.day!,
+          local.hour!,
+          local.minute!,
+          local.second!,
+        );
+        instant += wallTime - representedWallTime;
+      }
+      return new Date(instant);
     };
-  }, [client, mode, player.handle]);
-
+    const makeWindow = (
+      dayOffset: number,
+      hour: number,
+      minute: number,
+      durationMinutes: number,
+    ) => {
+      let startsAt = venueWallTime(dayOffset, hour, minute, previewTimeZone);
+      if (dayOffset === 0 && startsAt.getTime() <= Date.now()) {
+        startsAt = venueWallTime(1, hour, minute, previewTimeZone);
+      }
+      return {
+        startsAt: startsAt.toISOString(),
+        endsAt: new Date(
+          startsAt.getTime() + durationMinutes * 60_000,
+        ).toISOString(),
+      };
+    };
+    const eventWindows: Record<string, { startsAt: string; endsAt: string }> = {
+      "event-pickup": makeWindow(0, 18, 0, 90),
+      "event-open-play": makeWindow(0, 19, 30, 90),
+      "event-clinic": makeWindow(2, 16, 30, 90),
+      "event-summer-series": makeWindow(7, 18, 0, 180),
+      "event-live-open": makeWindow(18, 8, 0, 480),
+    };
+    const bookingWindows: Record<string, { startsAt: string; endsAt: string }> =
+      {
+        "booking-pickup": makeWindow(0, 18, 0, 90),
+        "booking-clinic": makeWindow(2, 16, 30, 90),
+        "booking-league": makeWindow(7, 18, 0, 180),
+      };
+    return {
+      events: eventWindows,
+      bookings: bookingWindows,
+    };
+  }, []);
+  const bookings = (
+    mode === "preview" ? demoBookings : (dashboard?.bookings ?? [])
+  ).map((booking) =>
+    mode === "preview" && previewSchedule.bookings[booking.id]
+      ? { ...booking, ...previewSchedule.bookings[booking.id] }
+      : booking,
+  );
+  const events = (
+    mode === "preview" ? demoEvents : (dashboard?.events ?? [])
+  ).map((event) =>
+    mode === "preview" && previewSchedule.events[event.id]
+      ? { ...event, ...previewSchedule.events[event.id] }
+      : event,
+  );
+  const now = Date.now();
+  const firstName = player.displayName.split(/\s+/)[0] ?? player.displayName;
+  const rating = player.rating.display;
+  const ratingDelta = player.rating.delta ?? 0;
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -2064,699 +1782,405 @@ function HomeScreen({
       (organization) => organization.status === "active",
     ) ??
     organizationWallets?.[0];
-  const isHomeOrganizationEvent = (event: (typeof events)[number]) =>
-    Boolean(
-      homeOrganization &&
-      (event.organizationId === homeOrganization.organizationId ||
-        event.organizationSlug === homeOrganization.organizationSlug),
+  const region =
+    (mode === "preview"
+      ? "South Bay"
+      : homeOrganization?.organizationName
+          .replace(/\s+(beach volleyball|volleyball club|club)$/i, "")
+          .trim()) ||
+    bookings[0]?.venueName.split(/[—·]/)[0]?.trim() ||
+    "Duna";
+  const weatherEvent = events.find((event) => event.weather?.hourly.length);
+  const weather = weatherEvent?.weather
+    ? closestWeather(weatherEvent.weather.hourly, new Date().toISOString())
+    : undefined;
+  const contextLine = [
+    weather?.temperatureC === undefined
+      ? mode === "preview"
+        ? "72°"
+        : undefined
+      : fahrenheit(weather.temperatureC),
+    weather?.condition ?? (mode === "preview" ? "Sunny" : undefined),
+    region,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const dateBlock = (startsAt: string, timeZone?: string) => {
+    const date = new Date(startsAt);
+    const calendarDate = (instant: Date) => {
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-US", {
+          day: "2-digit",
+          month: "2-digit",
+          timeZone,
+          year: "numeric",
+        })
+          .formatToParts(instant)
+          .filter((part) => part.type !== "literal")
+          .map((part) => [part.type, Number(part.value)]),
+      ) as Record<string, number>;
+      return Date.UTC(parts.year!, parts.month! - 1, parts.day!);
+    };
+    const dayDistance = Math.floor(
+      (calendarDate(date) - calendarDate(new Date())) / 86_400_000,
     );
-  const homeEvents = events.filter(isHomeOrganizationEvent);
-  const exploreEvents = homeOrganization
-    ? events.filter((event) => !isHomeOrganizationEvent(event))
-    : events;
-  const homeCoaches =
-    coaches?.filter(
-      (coach) => coach.organizationId === homeOrganization?.organizationId,
-    ) ?? [];
-  const homeNow = Date.now();
-  const liveBooking = [...bookings]
-    .filter((booking) => {
-      const startsAt = new Date(booking.startsAt).getTime();
-      const endsAt = new Date(booking.endsAt).getTime();
-      return startsAt <= homeNow && endsAt > homeNow;
-    })
+    return {
+      day:
+        dayDistance >= 7
+          ? date
+              .toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                timeZone,
+              })
+              .toUpperCase()
+          : date
+              .toLocaleDateString("en-US", { weekday: "short", timeZone })
+              .toUpperCase(),
+      time: date
+        .toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone,
+        })
+        .replace(/\s?(AM|PM)$/i, ""),
+    };
+  };
+  const eventCategory = (
+    kind: EventSummary["kind"],
+  ): HomeV3UpcomingItem["category"] => {
+    if (kind === "clinic" || kind === "private-lesson") return "training";
+    if (kind === "tournament" || kind === "league") return "tournament";
+    return "match";
+  };
+  const eventRecurrence = (event: EventSummary) => {
+    const days = event.recurrence?.days
+      .slice(0, 2)
+      .map((day) => day.day.slice(0, 3).toUpperCase());
+    return days?.length ? `EVERY ${days.join(" & ")}` : undefined;
+  };
+
+  const bookingItems = bookings
+    .filter((booking) => new Date(booking.endsAt).getTime() > now)
+    .map((booking) => {
+      const linkedEvent = linkedHomeEvent(booking, events);
+      const date = dateBlock(
+        booking.startsAt,
+        linkedEvent?.timezone ?? booking.venueTimezone,
+      );
+      return {
+        id: `booking:${booking.id}`,
+        startsAt: booking.startsAt,
+        category: eventCategory(booking.kind),
+        day: date.day,
+        time: date.time,
+        title: booking.title,
+        meta: [linkedEvent?.organizationName, booking.venueName]
+          .filter(Boolean)
+          .join(" · "),
+        recurrence: linkedEvent ? eventRecurrence(linkedEvent) : undefined,
+        status: "going" as const,
+        onPress: () =>
+          linkedEvent ? onOpenEvent(linkedEvent) : onOpenBooking(booking.id),
+      };
+    });
+  const bookedEventIds = new Set(
+    bookings.flatMap((booking) => {
+      const linkedEvent = linkedHomeEvent(booking, events);
+      return [booking.sessionId, linkedEvent?.id].filter((id): id is string =>
+        Boolean(id),
+      );
+    }),
+  );
+  const bookedTitles = new Set(bookings.map((booking) => booking.title));
+  const unbookedEventItems = events
+    .filter(
+      (event) =>
+        new Date(event.endsAt).getTime() > now &&
+        event.lifecycleStatus !== "cancelled" &&
+        !["pickup", "open-play"].includes(event.kind) &&
+        !bookedEventIds.has(event.id) &&
+        !bookedTitles.has(event.title),
+    )
+    .map((event) => {
+      const date = dateBlock(event.startsAt, event.timezone);
+      return {
+        id: `event:${event.id}`,
+        startsAt: event.startsAt,
+        category: eventCategory(event.kind),
+        day: date.day,
+        time: date.time,
+        title: event.title,
+        meta: [event.organizationName, event.venueName]
+          .filter(Boolean)
+          .join(" · "),
+        recurrence: eventRecurrence(event),
+        status:
+          event.spotsRemaining > 0 ? ("action" as const) : ("detail" as const),
+        statusLabel: event.spotsRemaining > 0 ? "Register" : undefined,
+        onPress: () => onOpenEvent(event),
+      };
+    });
+  const upcoming = [...bookingItems, ...unbookedEventItems]
     .sort(
       (left, right) =>
-        new Date(left.endsAt).getTime() - new Date(right.endsAt).getTime(),
-    )[0];
-  const nextBooking =
-    liveBooking ??
-    [...bookings]
-      .filter((booking) => new Date(booking.startsAt).getTime() >= homeNow)
-      .sort(
-        (left, right) =>
-          new Date(left.startsAt).getTime() -
-          new Date(right.startsAt).getTime(),
-      )[0];
-  const nextBookingEventIndex = nextBooking?.sessionId
-    ? events.findIndex((event) => event.id === nextBooking.sessionId)
-    : -1;
-  const nextBookingEvent =
-    nextBookingEventIndex >= 0 ? events[nextBookingEventIndex] : undefined;
-  const nextBookingAttendees = nextBookingEvent?.attendees?.slice(0, 3) ?? [];
-  const nextBookingOpenSpots = nextBookingEvent?.spotsRemaining ?? 0;
-  const isLiveBooking = Boolean(
-    liveBooking && nextBooking?.id === liveBooking.id,
-  );
-  const insight = dashboard?.feed[0];
-  const performanceHistory = performance?.history ?? [];
-  const verifiedWindow = [...performanceHistory].reverse().slice(-14);
-  const verifiedTrend = verifiedWindow.map((match) => ({
-    id: match.id,
-    rating: match.afterDisplay,
-    won: match.actualResult >= 0.5,
-  }));
-  const ratedFallbackMatches = [...matches]
-    .reverse()
-    .filter((match) => typeof match.ratingDelta === "number")
-    .slice(-14);
-  const fallbackStartRating =
-    player.rating.display -
-    ratedFallbackMatches.reduce(
-      (total, match) => total + (match.ratingDelta ?? 0),
-      0,
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )
+    .slice(0, 6);
+
+  const compactPrice = (amountMinor: number, currency: string) =>
+    amountMinor === 0
+      ? "Free"
+      : new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency,
+          maximumFractionDigits: amountMinor % 100 === 0 ? 0 : 2,
+        }).format(amountMinor / 100);
+  const eventMode = (event: EventSummary) =>
+    event.format ??
+    event.tags.find((tag) =>
+      /(^|\s)(2s|4s|6s|doubles|mixed)(\s|$)/i.test(tag),
+    ) ??
+    (event.kind === "pickup" ? "Pickup" : "Open play");
+  const openGameCandidates = events
+    .filter(
+      (event) =>
+        ["pickup", "open-play"].includes(event.kind) &&
+        new Date(event.endsAt).getTime() > now &&
+        event.spotsRemaining > 0 &&
+        event.lifecycleStatus !== "cancelled",
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
     );
-  let fallbackRating = fallbackStartRating;
-  const fallbackTrend = ratedFallbackMatches.map((match) => {
-    fallbackRating += match.ratingDelta ?? 0;
+  const openGames: HomeV3OpenGame[] = openGameCandidates.map(
+    (event, gameIndex) => {
+      const playerSlots: Array<HomeV3OpenGame["teamA"][number]> = (
+        event.attendees ?? []
+      )
+        .slice(0, 4)
+        .map((attendee) => ({
+          id: attendee.id,
+          initials: attendee.initials,
+          name: attendee.displayName,
+          rating: attendee.ratingDisplay?.toFixed(1),
+          uri: attendee.avatarUrl,
+        }));
+      while (playerSlots.length < 4) {
+        playerSlots.push({
+          id: `${event.id}:open:${playerSlots.length}`,
+          open: true,
+        });
+      }
+      const duration = Math.max(
+        30,
+        Math.round(
+          (new Date(event.endsAt).getTime() -
+            new Date(event.startsAt).getTime()) /
+            60_000,
+        ),
+      );
+      const startsAt = new Date(event.startsAt);
+      const venueDate = (instant: Date) =>
+        instant.toLocaleDateString("en-US", { timeZone: event.timezone });
+      const today = venueDate(startsAt) === venueDate(new Date());
+      return {
+        id: event.id,
+        time: `${today ? "Tonight" : startsAt.toLocaleDateString("en-US", { weekday: "short", timeZone: event.timezone })} · ${startsAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: event.timezone }).toLowerCase()}`,
+        booked: bookedEventIds.has(event.id) || bookedTitles.has(event.title),
+        location: event.venueName,
+        teamA: playerSlots.slice(0, 2),
+        teamB: playerSlots.slice(2, 4),
+        level: event.ratingRange
+          ? `${event.kind === "pickup" ? "Competitive" : "Open"} · ${event.ratingRange[0].toFixed(1)} – ${event.ratingRange[1].toFixed(1)}`
+          : "Open level",
+        mode: eventMode(event),
+        price: compactPrice(event.price.amountMinor, event.price.currency),
+        duration: `${duration} min`,
+        tint: gameIndex % 2 === 0 ? "#FECFC0" : "#D3E3F0",
+        onPress: () => onOpenEvent(event),
+      };
+    },
+  );
+
+  const matchData =
+    mode === "preview" ? demoMatches : (dashboard?.recentMatches ?? []);
+  const recentMatches: HomeV3Match[] = matchData.slice(0, 3).map((match) => {
+    const teamName = (team: readonly PersonSummary[]) => {
+      const includesPlayer = team.some((person) => person.id === player.id);
+      const others = team
+        .filter((person) => person.id !== player.id)
+        .map((person) => person.displayName.split(/\s+/)[0]);
+      if (includesPlayer)
+        return others.length ? `You & ${others.join(", ")}` : "You";
+      return team
+        .map((person) => person.displayName.split(/\s+/)[0])
+        .join(" & ");
+    };
+    const teamRating = (team: readonly PersonSummary[]) => {
+      const values = team.map((person) => person.rating.display);
+      if (values.length <= 2)
+        return values.map((value) => value.toFixed(1)).join(" · ");
+      return `${(values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1)} avg`;
+    };
+    const avatar = (person: PersonSummary): HomeV3Avatar => ({
+      id: person.id,
+      initials: person.initials,
+      name: person.displayName,
+      rating: person.rating.display.toFixed(1),
+      uri: person.avatarUrl,
+    });
+    const date = new Date(match.playedAt).toLocaleDateString("en-US", {
+      weekday: "short",
+    });
+    const format =
+      match.formatSummary ?? `${match.teamA.length}V${match.teamB.length}`;
     return {
       id: match.id,
-      rating: fallbackRating,
-      won: match.winner === "A",
+      kicker: `${date} · ${format} · ${match.venueName}`.toUpperCase(),
+      delta: `${match.ratingDelta >= 0 ? "+" : ""}${match.ratingDelta.toFixed(2)}`,
+      deltaTone: match.ratingDelta > 0 ? "positive" : "neutral",
+      onPress: onOpenPerformance,
+      teams: (
+        [
+          {
+            id: "A",
+            people: match.teamA,
+            winner: match.winner === "A",
+            side: 0,
+          },
+          {
+            id: "B",
+            people: match.teamB,
+            winner: match.winner === "B",
+            side: 1,
+          },
+        ] as const
+      ).map((team) => ({
+        id: `${match.id}:${team.id}`,
+        avatars: team.people.slice(0, 2).map(avatar),
+        total: team.people.length,
+        name: teamName(team.people),
+        rating: teamRating(team.people),
+        winner: team.winner,
+        sets: match.score.map((set) => ({
+          value: set[team.side],
+          won: set[team.side] > set[team.side === 0 ? 1 : 0],
+        })),
+      })),
     };
   });
-  const trend = verifiedTrend.length ? verifiedTrend : fallbackTrend;
-  const trendRatings = trend.map((point) => point.rating);
-  const minimumRating = trendRatings.length
-    ? Math.min(...trendRatings)
-    : player.rating.display - 0.1;
-  const maximumRating = trendRatings.length
-    ? Math.max(...trendRatings)
-    : player.rating.display + 0.1;
-  const chartRange = Math.max(0.08, maximumRating - minimumRating);
-  const chartPoints = trend.map((point, index) => ({
-    ...point,
-    x: 14 + (index / Math.max(1, trend.length - 1)) * 292,
-    y: 108 - ((point.rating - minimumRating) / chartRange) * 88,
-  }));
-  const chartPath = chartPoints
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
-    )
-    .join(" ");
-  const chartPathLength = Math.max(
-    1,
-    chartPoints.slice(1).reduce((total, point, index) => {
-      const previous = chartPoints[index];
-      return previous
-        ? total + Math.hypot(point.x - previous.x, point.y - previous.y)
-        : total;
-    }, 0),
+  const chronologicalMatches = [...matchData].slice(0, 10).reverse();
+  const ratingHistory = chronologicalMatches.reduce<number[]>(
+    (history, match) => [
+      ...history,
+      Number((history[history.length - 1]! + match.ratingDelta).toFixed(2)),
+    ],
+    [
+      Number(
+        (
+          rating -
+          chronologicalMatches.reduce(
+            (sum, match) => sum + match.ratingDelta,
+            0,
+          )
+        ).toFixed(2),
+      ),
+    ],
   );
-  const chartArea = chartPoints.length
-    ? `${chartPath} L ${chartPoints.at(-1)!.x.toFixed(1)} 116 L ${chartPoints[0]!.x.toFixed(1)} 116 Z`
-    : "";
-  useEffect(() => {
-    chartDraw.stopAnimation();
-    if (reduceMotion || !chartPath) {
-      chartDraw.setValue(1);
-      return;
-    }
-    chartDraw.setValue(0);
-    Animated.timing(chartDraw, {
-      duration: 760,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: false,
-    }).start();
-  }, [chartDraw, chartPath, reduceMotion]);
-  const chartStrokeOffset = chartDraw.interpolate({
-    inputRange: [0, 1],
-    outputRange: [chartPathLength, 0],
-  });
-  const currentRating =
-    trend.at(-1)?.rating ??
-    performanceHistory[0]?.afterDisplay ??
-    player.rating.display;
-  const trendStartRating = verifiedTrend.length
-    ? verifiedWindow[0]!.beforeDisplay
-    : fallbackTrend.length
-      ? fallbackStartRating
-      : undefined;
-  const ratingMovement =
-    trendStartRating !== undefined
-      ? currentRating - trendStartRating
-      : (player.rating.delta ?? 0);
-  const recentPerformance = performanceHistory.slice(0, 10);
-  const recentWins = recentPerformance.length
-    ? recentPerformance.filter((match) => match.actualResult >= 0.5).length
-    : matches.slice(0, 10).filter((match) => match.winner === "A").length;
-  const recentCount = recentPerformance.length || Math.min(10, matches.length);
-  const firstName = player.displayName.split(" ")[0] ?? player.displayName;
-  const today = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
-    .format(new Date())
-    .toUpperCase();
-  const quickActions: readonly {
-    readonly key: HomeQuickAction;
-    readonly icon: string;
-    readonly label: string;
-    readonly meta: string;
-  }[] = [
-    {
-      key: "upload-score",
-      icon: "↥",
-      label: "Upload a Score",
-      meta: "Report a match you played",
-    },
-    {
-      key: "find-match",
-      icon: "⌖",
-      label: "Find a Match",
-      meta: "Open play nearby",
-    },
-    {
-      key: "book-court",
-      icon: "▦",
-      label: "Book a Court",
-      meta: "Live availability",
-    },
-    {
-      key: "join-event",
-      icon: "✦",
-      label: "Join an Event",
-      meta: "Tournaments + clinics",
-    },
-    {
-      key: "record-video",
-      icon: "●",
-      label: "Record Video",
-      meta: "Open Duna Vision",
-    },
-  ];
+  const people = (mode === "preview" ? demoPeople : (runtimePeople ?? []))
+    .filter((person) => person.id !== player.id)
+    .slice(0, 6);
+  const crewAvatars: HomeV3Avatar[] = people.slice(0, 2).map((person) => ({
+    id: person.id,
+    initials: person.initials,
+    name: person.displayName,
+    rating: person.rating.display.toFixed(1),
+    uri: person.avatarUrl,
+  }));
 
   return (
-    <>
-      <ScrollView
-        contentContainerStyle={styles.screenContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <AppHeader />
-        <LivePlayerRail palette={colors} />
-        <View style={styles.homeWelcome}>
-          <View style={styles.flex}>
-            <Text style={styles.homeWelcomeDate}>
-              {today.replace(", ", " · ")}
-            </Text>
-            <Text style={styles.homeWelcomeTitle}>
-              Ready to play, {firstName}?
-            </Text>
-            <Text style={styles.homeWelcomeBody}>
-              Your next game, nearby courts, events, and performance in one
-              place.
-            </Text>
-          </View>
-          <View style={styles.homeRatingBadge}>
-            <Text style={styles.homeRatingBadgeValue}>
-              {currentRating.toFixed(2)}
-            </Text>
-            <Text style={styles.homeRatingBadgeLabel}>SAND</Text>
-          </View>
-        </View>
-
-        {nextBooking ? (
-          <>
-            <Pressable
-              accessibilityHint={
-                nextBookingEventIndex >= 0
-                  ? "Opens your event registration"
-                  : "Opens your booking details"
-              }
-              accessibilityRole="button"
-              onPress={() => {
-                selectionHaptic();
-                onOpenBooking(nextBooking.id);
-              }}
-              style={({ pressed }) => [
-                styles.homeNextActivity,
-                pressed && styles.homeQuickActionPressed,
-              ]}
-            >
-              <View style={styles.homeNextRoster}>
-                {nextBookingAttendees.map((attendee) => {
-                  const fullPlayer = people?.find(
-                    (candidate) => candidate.id === attendee.id,
-                  );
-                  return (
-                    <Pressable
-                      accessibilityLabel={
-                        "Open " + attendee.displayName + "'s profile"
-                      }
-                      disabled={!fullPlayer}
-                      key={attendee.id}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        if (fullPlayer) openPlayerProfile(fullPlayer);
-                      }}
-                      style={styles.homeNextPlayer}
-                    >
-                      {attendee.avatarUrl ? (
-                        <Image
-                          accessibilityIgnoresInvertColors
-                          source={{ uri: attendee.avatarUrl }}
-                          style={styles.homeNextAvatar}
-                        />
-                      ) : (
-                        <View style={styles.homeNextAvatarFallback}>
-                          <Text style={styles.homeNextAvatarText}>
-                            {attendee.initials}
-                          </Text>
-                        </View>
-                      )}
-                      <Text numberOfLines={1} style={styles.homeNextPlayerName}>
-                        {attendee.displayName.split(" ")[0]}
-                      </Text>
-                      {attendee.ratingDisplay !== undefined && (
-                        <Text style={styles.homeNextRating}>
-                          {attendee.ratingDisplay.toFixed(1)}
-                        </Text>
-                      )}
-                    </Pressable>
-                  );
-                })}
-                {nextBookingOpenSpots > 0 && (
-                  <View style={styles.homeNextPlayer}>
-                    <View style={styles.homeNextAvailableAvatar}>
-                      <Text style={styles.homeNextAvailablePlus}>＋</Text>
-                    </View>
-                    <Text style={styles.homeNextAvailableText}>Available</Text>
-                    <Text style={styles.homeNextAvailableCount}>
-                      {nextBookingOpenSpots}{" "}
-                      {nextBookingOpenSpots === 1 ? "spot" : "spots"}
-                    </Text>
-                  </View>
-                )}
-                {!nextBookingAttendees.length && !nextBookingOpenSpots && (
-                  <View style={styles.homeNextPlayer}>
-                    <View style={styles.homeNextAvatarFallback}>
-                      <Text style={styles.homeNextAvatarText}>
-                        {nextBooking.participantNames?.[0]
-                          ?.split(/\s+/)
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join("") ?? "YOU"}
-                      </Text>
-                    </View>
-                    <Text style={styles.homeNextPlayerName}>You</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.homeNextActivityInfo}>
-                <Text style={styles.homeNextEyebrow}>
-                  {isLiveBooking
-                    ? "LIVE NOW · YOUR ACTIVITY"
-                    : "NEXT UP · YOUR ACTIVITY"}
-                </Text>
-                <Text style={styles.homeNextActivityWhen}>
-                  {new Date(nextBooking.startsAt).toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}{" "}
-                  ·{" "}
-                  {new Date(nextBooking.startsAt).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </Text>
-                <Text style={styles.homeNextTitle}>{nextBooking.title}</Text>
-                <Text style={styles.homeNextMeta}>{nextBooking.venueName}</Text>
-                <View style={styles.homeNextStatusRow}>
-                  <Pill
-                    tone={
-                      isLiveBooking
-                        ? "live"
-                        : nextBookingOpenSpots > 0
-                          ? "warning"
-                          : "positive"
-                    }
-                  >
-                    {isLiveBooking
-                      ? "live now"
-                      : nextBookingOpenSpots > 0
-                        ? nextBookingOpenSpots + " available"
-                        : nextBooking.status.replace("-", " ")}
-                  </Pill>
-                  <Text style={styles.homeNextDetails}>Details →</Text>
-                </View>
-              </View>
-            </Pressable>
-            {isLiveBooking && (
-              <View style={styles.homeLiveActions}>
-                <Pressable
-                  accessibilityLabel="Keep live score"
-                  onPress={() => onAction("upload-score")}
-                  style={({ pressed }) => [
-                    styles.homeLiveAction,
-                    pressed && styles.homeQuickActionPressed,
-                  ]}
-                >
-                  <Text style={styles.homeLiveActionIcon}>⌁</Text>
-                  <Text style={styles.homeLiveActionLabel}>Keep score</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Record event video"
-                  onPress={() => onAction("record-video")}
-                  style={({ pressed }) => [
-                    styles.homeLiveAction,
-                    pressed && styles.homeQuickActionPressed,
-                  ]}
-                >
-                  <Text style={styles.homeLiveActionIcon}>●</Text>
-                  <Text style={styles.homeLiveActionLabel}>Record video</Text>
-                </Pressable>
-              </View>
-            )}
-            {!["pickup", "court-rental"].includes(nextBooking.kind) && (
-              <LiveActivitiesPrompt booking={nextBooking} client={client} />
-            )}
-          </>
-        ) : (
-          <Pressable
-            onPress={() => onAction("find-match")}
-            style={styles.homeNextSession}
-          >
-            <View style={styles.homeNextOpenMark}>
-              <Text style={styles.homeNextOpenMarkText}>＋</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.homeNextEyebrow}>YOUR CALENDAR IS OPEN</Text>
-              <Text style={styles.homeNextTitle}>
-                Find something worth playing.
-              </Text>
-              <Text style={styles.homeNextMeta}>
-                Matches, courts, and events are ready nearby.
-              </Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        )}
-
-        <View style={styles.homeQuickGrid}>
-          {quickActions.map((action, index) => (
-            <Pressable
-              accessibilityRole="button"
-              key={action.key}
-              onPress={() => {
-                selectionHaptic();
-                onAction(action.key);
-              }}
-              style={({ pressed }) => [
-                styles.homeQuickAction,
-                index === 0 && styles.homeQuickActionPrimary,
-                index === 4 && styles.homeQuickActionWarm,
-                pressed && styles.homeQuickActionPressed,
-              ]}
-            >
-              <View
-                style={[
-                  styles.homeQuickIcon,
-                  index === 0 && styles.homeQuickIconPrimary,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.homeQuickIconText,
-                    index === 0 && styles.homeQuickIconTextPrimary,
-                  ]}
-                >
-                  {action.icon}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.homeQuickLabel,
-                  index === 0 && styles.homeQuickLabelPrimary,
-                ]}
-              >
-                {action.label}
-              </Text>
-              <Text
-                style={[
-                  styles.homeQuickMeta,
-                  index === 0 && styles.homeQuickMetaPrimary,
-                ]}
-              >
-                {action.meta}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.homePerformanceCard}>
-          <View style={styles.cardTitleRow}>
-            <View>
-              <Text style={styles.eyebrow}>YOUR PERFORMANCE</Text>
-              <Text style={styles.homePerformanceTitle}>Form over time.</Text>
-            </View>
-            <Pill tone={ratingMovement >= 0 ? "positive" : "warning"}>
-              {`${ratingMovement >= 0 ? "+" : ""}${ratingMovement.toFixed(2)}`}
-            </Pill>
-          </View>
-          <View style={styles.homePerformanceSummary}>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {currentRating.toFixed(2)}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Sand Rating</Text>
-            </View>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {recentCount
-                  ? `${recentWins}–${recentCount - recentWins}`
-                  : "—"}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Recent form</Text>
-            </View>
-            <View>
-              <Text style={styles.homePerformanceValue}>
-                {player.rating.percentile
-                  ? `${player.rating.percentile}%`
-                  : "—"}
-              </Text>
-              <Text style={styles.homePerformanceLabel}>Percentile</Text>
-            </View>
-          </View>
-          {chartPoints.length ? (
-            <View
-              accessibilityLabel={`Rating trend across ${chartPoints.length} verified matches`}
-              style={styles.homePerformanceChart}
-            >
-              <Svg height={132} viewBox="0 0 320 124" width="100%">
-                {[28, 68, 108].map((y) => (
-                  <Line
-                    key={y}
-                    stroke={rgba(colors.overlayRgb, 0.08)}
-                    strokeWidth="1"
-                    x1="12"
-                    x2="308"
-                    y1={y}
-                    y2={y}
-                  />
-                ))}
-                <AnimatedSvgPath
-                  d={chartArea}
-                  fill={rgba(colors.accentRgb, 0.09)}
-                  opacity={chartDraw}
-                />
-                <AnimatedSvgPath
-                  d={chartPath}
-                  fill="none"
-                  stroke={colors.aqua}
-                  strokeDasharray={`${chartPathLength} ${chartPathLength}`}
-                  strokeDashoffset={chartStrokeOffset}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="4"
-                />
-                {chartPoints.map((point) => (
-                  <Circle
-                    cx={point.x}
-                    cy={point.y}
-                    fill={point.won ? colors.aqua : colors.danger}
-                    key={point.id}
-                    r="4.5"
-                    stroke={colors.depth}
-                    strokeWidth="2"
-                  />
-                ))}
-              </Svg>
-            </View>
-          ) : (
-            <View style={styles.homePerformanceEmpty}>
-              <Text style={styles.homePerformanceEmptyMark}>↗</Text>
-              <View style={styles.flex}>
-                <Text style={styles.homePerformanceEmptyTitle}>
-                  Your chart starts with a verified result.
-                </Text>
-                <Text style={styles.homePerformanceEmptyBody}>
-                  Connect a match source or record a result to build your real
-                  rating history.
-                </Text>
-              </View>
-            </View>
-          )}
-          <View style={styles.homePerformanceLegend}>
-            <Text style={styles.homePerformanceLegendWin}>● Win</Text>
-            <Text style={styles.homePerformanceLegendLoss}>● Loss</Text>
-            <Text style={styles.homePerformanceLegendMeta}>
-              {chartPoints.length} rated results
-            </Text>
-          </View>
-        </View>
-
-        <MemberOrganizationCard />
-        <MobilePredictionDiscoveryRail
-          items={predictionDiscovery?.items ?? []}
-          onOpenPortfolio={onPredictions}
-        />
-        {homeEvents.length > 0 && (
-          <>
-            <SectionHeader
-              action="Browse events"
-              eyebrow="FROM YOUR CLUB"
-              onAction={() => onAction("join-event")}
-              title="Made for your membership."
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalBleed}
-            >
-              {homeEvents.slice(0, 6).map((event) => (
-                <EventCard
-                  eventIndex={events.findIndex(
-                    (candidate) => candidate.id === event.id,
-                  )}
-                  key={event.id}
-                  onPress={onBook}
-                />
-              ))}
-            </ScrollView>
-          </>
-        )}
-        {coachingNotes?.[0] && (
-          <>
-            <SectionHeader
-              action={
-                coachingNotes.length > 1
-                  ? `${coachingNotes.length} notes`
-                  : undefined
-              }
-              eyebrow="COACHING"
-              title="Carry the session forward."
-            />
-            <CoachingNoteCard note={coachingNotes[0]} />
-          </>
-        )}
-        {highlightedVirtualSession && (
-          <>
-            <SectionHeader
-              eyebrow="VIRTUAL COACHING"
-              title={
-                highlightedVirtualSession.joinUrl
-                  ? "Your next session is ready."
-                  : "Your session record."
-              }
-            />
-            <VirtualSessionCard session={highlightedVirtualSession} />
-          </>
-        )}
-        {homeCoaches.length > 0 && (
-          <>
-            <SectionHeader
-              action={`${homeCoaches.length} coaches`}
-              eyebrow="YOUR COACHES"
-              title="Train with people you know."
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalBleed}
-            >
-              <View style={styles.coachCardRow}>
-                {homeCoaches.map((coach) => (
-                  <CoachCard
-                    coach={coach}
-                    key={coach.personId}
-                    onPress={setSelectedCoach}
-                    preferred
-                  />
-                ))}
-              </View>
-            </ScrollView>
-          </>
-        )}
-        <SectionHeader
-          action="See all"
-          eyebrow={homeOrganization ? "EXPLORE NEARBY" : "MADE FOR YOUR LEVEL"}
-          onAction={() => onAction("join-event")}
-          title={homeOrganization ? "More ways to play." : "Play next."}
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontalBleed}
-        >
-          {(exploreEvents.length > 0 ? exploreEvents : events)
-            .slice(0, 4)
-            .map((event) => (
-              <EventCard
-                eventIndex={events.findIndex(
-                  (candidate) => candidate.id === event.id,
-                )}
-                key={event.id}
-                onPress={onBook}
-              />
-            ))}
-        </ScrollView>
-        {matches.length > 0 && (
-          <>
-            <SectionHeader
-              action="Matches"
-              eyebrow="RECENT FORM"
-              title="Every result tells a story."
-            />
-            <View style={styles.resultStoryStack}>
-              {matches.slice(0, 2).map((match) => (
-                <HomeResultStoryCard
-                  key={match.id}
-                  match={match}
-                  playerId={player.id}
-                />
-              ))}
-            </View>
-          </>
-        )}
-        {(insight || !dashboard) && (
-          <View style={styles.aiInsight}>
-            <View style={styles.aiIcon}>
-              <Text style={styles.aiIconText}>✦</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.eyebrow}>
-                {insight?.eyebrow ?? "DUNA INSIGHT"}
-              </Text>
-              <Text style={styles.aiTitle}>
-                {insight?.title ?? "Your sideout game is becoming an edge."}
-              </Text>
-              <Text style={styles.aiBody}>
-                {insight?.body ??
-                  "You are winning 8.4% more often than expected in sideout-scored matches. Preview insight only."}
-              </Text>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-      <CoachProfileModal
-        coach={selectedCoach}
-        onClose={() => setSelectedCoach(undefined)}
-      />
-    </>
+    <HomeV3Screen
+      contextLine={contextLine}
+      crew={
+        crewAvatars.length
+          ? {
+              avatars: crewAvatars,
+              overflowCount: Math.min(4, Math.max(0, people.length - 2)),
+              message:
+                "Bring your circle together this weekend. Get a run going.",
+              onPress: () => onAction("create-match"),
+            }
+          : undefined
+      }
+      firstName={firstName}
+      insight={
+        dashboard?.feed[0]?.title ?? "Your sideout game is becoming an edge."
+      }
+      moreOpenGamesCount={Math.max(0, openGameCandidates.length - 2)}
+      notificationCount={messaging.unreadCount}
+      onNotifications={() => onAction("messages")}
+      onOpenInsight={() => messaging.open(true)}
+      onOpenMap={() => onAction("find-match")}
+      onOpenMatches={onOpenPerformance}
+      onOpenMoreGames={() => onAction("find-match")}
+      onOpenSchedule={onOpenSchedule}
+      onSearch={() => onAction("search")}
+      openGames={openGames}
+      quickActions={[
+        {
+          key: "find-match",
+          label: "Find a match",
+          icon: "ball",
+          color: "#D6B143",
+          onPress: () => onAction("find-match"),
+        },
+        {
+          key: "book-court",
+          label: "Book a court",
+          icon: "court-booking",
+          color: "#7C95AB",
+          onPress: () => onAction("book-court"),
+        },
+        {
+          key: "find-coach",
+          label: "Find a coach",
+          icon: "whistle",
+          color: "#142335",
+          onPress: () => onAction("find-coach"),
+        },
+        {
+          key: "record-video",
+          label: "Record video",
+          icon: "video",
+          color: "#18181B",
+          recording: true,
+          onPress: () => onAction("record-video"),
+        },
+        {
+          key: "create-match",
+          label: "Create a match",
+          icon: "plus",
+          color: "#FECFC0",
+          onPress: () => onAction("create-match"),
+        },
+        {
+          key: "upload-score",
+          label: "Report a score",
+          icon: "score",
+          color: "#142335",
+          onPress: () => onAction("upload-score"),
+        },
+      ]}
+      rating={rating.toFixed(2)}
+      ratingDelta={`${ratingDelta >= 0 ? "+" : ""}${ratingDelta.toFixed(2)}`}
+      ratingHistory={ratingHistory}
+      recentMatches={recentMatches}
+      upcoming={upcoming}
+    />
   );
 }
 
@@ -2794,7 +2218,8 @@ function EventCard({
   readonly onPress: (eventIndex: number) => void;
 }) {
   const { dashboard } = usePlayerRuntime();
-  const event = (dashboard?.events ?? demoEvents)[eventIndex]!;
+  const event = (dashboard?.events ?? demoEvents)[eventIndex];
+  if (!event) return null;
   const weather = closestWeather(event.weather?.hourly, event.startsAt);
   const imageUrl =
     event.imageUrl ??
@@ -3516,6 +2941,7 @@ function VenueFinderModal({
 function VenueBookingModal({
   initialDate,
   initialDurationMinutes,
+  initialIntent = "private",
   venueId,
   visible,
   onClose,
@@ -3524,6 +2950,7 @@ function VenueBookingModal({
 }: {
   readonly initialDate?: string;
   readonly initialDurationMinutes?: number;
+  readonly initialIntent?: "private" | "host";
   readonly venueId?: string;
   readonly visible: boolean;
   readonly onClose: () => void;
@@ -3546,7 +2973,7 @@ function VenueBookingModal({
   const [selectedSlot, setSelectedSlot] =
     useState<CourtAvailability["slots"][number]>();
   const [bookingIntent, setBookingIntent] = useState<"private" | "host">(
-    "private",
+    initialIntent,
   );
   const [paymentMode, setPaymentMode] = useState<"full" | "split">("full");
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
@@ -3742,7 +3169,8 @@ function VenueBookingModal({
     if (!visible) return;
     if (initialDate && initialDate >= todayValue) setSelectedDate(initialDate);
     if (initialDurationMinutes) setDurationMinutes(initialDurationMinutes);
-  }, [initialDate, initialDurationMinutes, todayValue, visible]);
+    setBookingIntent(initialIntent);
+  }, [initialDate, initialDurationMinutes, initialIntent, todayValue, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -3996,7 +3424,22 @@ function VenueBookingModal({
   }
 
   async function toggleLookingToPlay() {
-    if (!client || !venueId || mode === "preview") return;
+    if (!venueId || !selectedPlayWindow) {
+      setError("Choose a time before saying you are looking to play.");
+      return;
+    }
+    if (mode === "preview") {
+      selectionHaptic();
+      const active = Boolean(lookingPostId);
+      setLookingPostId(active ? undefined : "preview-looking-to-play");
+      setNotice(
+        active
+          ? "You are no longer shown as looking to play at this time."
+          : "You’re now visible to match creators for this time. Invitations still require your acceptance—this does not reserve or charge for a court.",
+      );
+      return;
+    }
+    if (!client) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -4007,10 +3450,6 @@ function VenueBookingModal({
         });
         setLookingPostId(undefined);
         setNotice("You are no longer shown as looking to play at this time.");
-        return;
-      }
-      if (!selectedPlayWindow) {
-        setError("Choose a time before saying you are looking to play.");
         return;
       }
       const post = await client.player.createMatchAvailability.mutate({
@@ -4278,9 +3717,11 @@ function VenueBookingModal({
                     ? bookingIntent === "host"
                       ? "Create a match"
                       : "Review"
-                    : "Find a game"}
+                    : initialIntent === "host"
+                      ? "Reserve to host"
+                      : "Find a game"}
                 </Text>
-                <ThemeButton />
+                <View style={styles.modalHeaderSpacer} />
               </View>
               {inventory && (
                 <>
@@ -4814,17 +4255,23 @@ function VenueBookingModal({
                                   style={styles.bookingHostButton}
                                 >
                                   <Text style={styles.bookingHostButtonText}>
-                                    Create a Match
+                                    {initialIntent === "host"
+                                      ? "Reserve to host"
+                                      : "Create a Match"}
                                   </Text>
                                 </Pressable>
-                                <Pressable
-                                  onPress={() => reviewSlot(slot, "private")}
-                                  style={styles.bookingPrivateButton}
-                                >
-                                  <Text style={styles.bookingPrivateButtonText}>
-                                    Reserve private
-                                  </Text>
-                                </Pressable>
+                                {initialIntent !== "host" && (
+                                  <Pressable
+                                    onPress={() => reviewSlot(slot, "private")}
+                                    style={styles.bookingPrivateButton}
+                                  >
+                                    <Text
+                                      style={styles.bookingPrivateButtonText}
+                                    >
+                                      Reserve private
+                                    </Text>
+                                  </Pressable>
+                                )}
                               </View>
                             </View>
                           ))}
@@ -4853,7 +4300,13 @@ function VenueBookingModal({
                   )}
                   {selectedPlayWindow && (
                     <Pressable
-                      disabled={busy || mode === "preview"}
+                      accessibilityHint="Makes you visible to match creators for this time without reserving or charging for a court."
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        disabled: busy,
+                        selected: Boolean(lookingPostId),
+                      }}
+                      disabled={busy}
                       onPress={() => void toggleLookingToPlay()}
                       style={[
                         styles.bookingLookingButton,
@@ -7699,6 +7152,8 @@ function DiscoverScreen({
   intent,
   onBook,
   onCreateMatch,
+  onOpenExternalEvent,
+  onOpenEvent,
   onOrganization,
 }: {
   readonly intent?: {
@@ -7707,9 +7162,11 @@ function DiscoverScreen({
   };
   readonly onBook: (eventIndex: number) => void;
   readonly onCreateMatch: () => void;
+  readonly onOpenExternalEvent: (event: EventSummary) => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
   readonly onOrganization: (slug: string) => void;
 }) {
-  const { theme } = useContext(ThemeContext);
+  const theme: ThemeName = "light";
   const [filter, setFilter] = useState("For you");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
   const [hostSeed, setHostSeed] = useState<HostedMatchSeed>();
@@ -7732,6 +7189,7 @@ function DiscoverScreen({
     organizationWallets,
     people,
     proCoverage,
+    publicClient,
     settings,
     venues,
   } = usePlayerRuntime();
@@ -8093,7 +7551,6 @@ function DiscoverScreen({
 
   const openDiscoveryItem = (item: DiscoveryMapItem) => {
     selectionHaptic();
-    setShowDiscoveryMap(false);
     setShowDiscoverySearch(false);
     if (item.entityType === "venue") {
       setBookingVenueId(item.id.replace(/^venue:/, ""));
@@ -8136,7 +7593,20 @@ function DiscoverScreen({
       const eventId = item.id.replace(/^event:/, "");
       const eventIndex = events.findIndex((event) => event.id === eventId);
       if (eventIndex >= 0) {
-        onBook(eventIndex);
+        onOpenEvent(eventIndex);
+        return;
+      }
+      const slug = item.href.match(/^\/events\/([^/?#]+)/)?.[1];
+      if (slug && publicClient) {
+        const decodedSlug = decodeURIComponent(slug);
+        void publicClient.public.eventBySlug
+          .query({ slug: decodedSlug })
+          .then(onOpenExternalEvent)
+          .catch(() =>
+            WebBrowser.openBrowserAsync(
+              `${dunaWebUrl}/events/${encodeURIComponent(decodedSlug)}`,
+            ),
+          );
         return;
       }
     }
@@ -8308,7 +7778,7 @@ function DiscoverScreen({
                     (candidate) => candidate.id === event.id,
                   )}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               ))}
             </ScrollView>
@@ -8370,7 +7840,7 @@ function DiscoverScreen({
                     (candidate) => candidate.id === event.id,
                   )}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               ))}
             </ScrollView>
@@ -8409,7 +7879,7 @@ function DiscoverScreen({
                 <EventCard
                   eventIndex={eventIndex}
                   key={event.id}
-                  onPress={onBook}
+                  onPress={onOpenEvent}
                 />
               );
             })}
@@ -8542,13 +8012,29 @@ function DiscoverScreen({
       <CoachProfileModal
         coach={selectedCoach}
         onClose={() => setSelectedCoach(undefined)}
+        onOpenSession={(session) => {
+          const index = events.findIndex((event) => event.id === session.id);
+          if (index >= 0) {
+            onOpenEvent(index);
+            return;
+          }
+          void WebBrowser.openBrowserAsync(
+            `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+          );
+        }}
       />
     </>
   );
 }
 
-function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
-  const { coaches = [], venues = [] } = usePlayerRuntime();
+function FindCoachScreen({
+  onBack,
+  onOpenEvent,
+}: {
+  readonly onBack: () => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
+}) {
+  const { coaches = [], dashboard, venues = [] } = usePlayerRuntime();
   const [mode, setMode] = useState<"near" | "virtual">("near");
   const [query, setQuery] = useState("");
   const [gender, setGender] = useState("all");
@@ -8678,7 +8164,9 @@ function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
         >
           <Text style={styles.coachFinderBackText}>‹ Play</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>COACHES ON DUNA</Text>
+        <Text style={[styles.eyebrow, styles.coachFinderEyebrow]}>
+          COACHES ON DUNA
+        </Text>
         <Text style={styles.displayTitle}>Find your next level.</Text>
         <Text style={styles.coachFinderIntro}>
           Compare real profiles, experience, programs, availability, and price
@@ -8898,6 +8386,17 @@ function FindCoachScreen({ onBack }: { readonly onBack: () => void }) {
       <CoachProfileModal
         coach={selectedCoach}
         onClose={() => setSelectedCoach(undefined)}
+        onOpenSession={(session) => {
+          const events = dashboard?.events ?? demoEvents;
+          const index = events.findIndex((event) => event.id === session.id);
+          if (index >= 0) {
+            onOpenEvent(index);
+            return;
+          }
+          void WebBrowser.openBrowserAsync(
+            `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+          );
+        }}
       />
     </>
   );
@@ -9011,14 +8510,14 @@ function PlayLauncherScreen({
 }
 
 function PlansScreen({
-  onBook,
   onOpenBooking,
+  onOpenEvent,
   onReserveCourtVenue,
   onTraining,
   onSeeAllMatches,
 }: {
-  readonly onBook: (eventIndex: number) => void;
   readonly onOpenBooking: (bookingId: string) => void;
+  readonly onOpenEvent: (eventIndex: number) => void;
   readonly onReserveCourtVenue: (request: CourtBookingRequest) => void;
   readonly onTraining: () => void;
   readonly onSeeAllMatches: () => void;
@@ -9202,7 +8701,7 @@ function PlansScreen({
             .map((event) => (
               <Pressable
                 key={event.id}
-                onPress={() => onBook(events.indexOf(event))}
+                onPress={() => onOpenEvent(events.indexOf(event))}
                 style={styles.pickupRow}
               >
                 <View style={styles.pickupDate}>
@@ -9493,16 +8992,20 @@ function WalletScreen({ onClose }: { readonly onClose: () => void }) {
       contentContainerStyle={styles.screenContent}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.walletCloseRow}>
+      <View style={styles.walletBackRow}>
         <Pressable
-          accessibilityLabel="Close wallet and return to profile"
+          accessibilityLabel="Back to profile"
+          accessibilityRole="button"
           onPress={onClose}
-          style={styles.walletCloseButton}
+          style={styles.walletBackButton}
         >
-          <Text style={styles.walletCloseText}>×</Text>
+          <DunaIcon color={colors.aqua} name="arrow-left" size={20} />
+          <Text style={styles.walletBackText}>Back</Text>
         </Pressable>
       </View>
-      <AppHeader eyebrow="MEMBERSHIP + STRIPE-MANAGED BALANCE" />
+      <Text style={styles.walletEyebrow}>
+        MEMBERSHIP + STRIPE-MANAGED BALANCE
+      </Text>
       <Text style={styles.displayTitle}>Wallet.</Text>
       {memberCard && (
         <View style={styles.memberCard}>
@@ -11520,9 +11023,11 @@ function PerformanceScreen({
 
 function BookingModal({
   eventIndex,
+  eventOverride,
   onClose,
 }: {
   readonly eventIndex: number | null;
+  readonly eventOverride?: EventSummary;
   readonly onClose: () => void;
 }) {
   const { client, dashboard, mode, people, refresh, settings } =
@@ -11571,7 +11076,8 @@ function BookingModal({
   >(undefined);
   const events = dashboard?.events ?? demoEvents;
   const player = dashboard?.player ?? demoPlayer;
-  const event = eventIndex === null ? null : events[eventIndex];
+  const event =
+    eventOverride ?? (eventIndex === null ? undefined : events[eventIndex]);
   const eventId = event?.id;
   const defaultDivisionId = event?.divisions?.[0]?.id;
   const defaultTicketTypeId = event?.tickets?.[0]?.id;
@@ -12040,7 +11546,7 @@ function BookingModal({
         animationType="slide"
         onRequestClose={close}
         presentationStyle="pageSheet"
-        visible={eventIndex !== null}
+        visible={Boolean(event)}
       >
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
           <ScrollView contentContainerStyle={styles.modalContent}>
@@ -12093,7 +11599,7 @@ function BookingModal({
           animationType="slide"
           onRequestClose={close}
           presentationStyle="pageSheet"
-          visible={eventIndex !== null}
+          visible={Boolean(event)}
         >
           {showPickupPartnerPicker ? (
             <PlayerPickerModal
@@ -12354,7 +11860,7 @@ function BookingModal({
       animationType="slide"
       onRequestClose={close}
       presentationStyle="pageSheet"
-      visible={eventIndex !== null}
+      visible={Boolean(event)}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
         {complete ? (
@@ -13421,6 +12927,7 @@ function PickupModal({
         venueId: value.venueId,
         date: startsAt.slice(0, 10),
         durationMinutes,
+        intent: "host",
       });
     }
   }
@@ -13846,38 +13353,12 @@ function PickupModal({
                         description="Search Duna venues first, or choose any beach, club, or address with Google Places."
                         dunaVenues={venues}
                         label="Venue, beach, or court"
-                        lockedLabel={
-                          placeSelection?.venueId
-                            ? "DUNA VENUE · RESERVATION REQUIRED"
-                            : "LOCATION LOCKED · GOOGLE"
-                        }
+                        lockedLabel="LOCATION LOCKED · GOOGLE"
                         onChange={choosePlace}
                         palette={colors}
+                        selectedPresentation="map"
                         value={placeSelection}
                       />
-                      {placeSelection?.latitude !== undefined &&
-                        placeSelection.longitude !== undefined && (
-                          <View style={styles.hostFlowPlaceMapPreview}>
-                            <Image
-                              source={{
-                                uri: `${dunaWebUrl}/api/places/map?latitude=${encodeURIComponent(String(placeSelection.latitude))}&longitude=${encodeURIComponent(String(placeSelection.longitude))}`,
-                              }}
-                              style={StyleSheet.absoluteFill}
-                            />
-                            <View style={styles.hostFlowPlaceMapGrid} />
-                            <View style={styles.hostFlowPlaceMapPin}>
-                              <Text style={styles.hostFlowPlaceMapPinText}>
-                                ⌖
-                              </Text>
-                            </View>
-                            <View style={styles.hostFlowPlaceMapLabel}>
-                              <Text style={styles.hostFlowPlaceMapLabelText}>
-                                MAP READY ·{" "}
-                                {placeSelection.address ?? placeSelection.name}
-                              </Text>
-                            </View>
-                          </View>
-                        )}
                       {placeSelection && !placeSelection.venueId && (
                         <View style={styles.hostFlowLocationNotice}>
                           <Text style={styles.hostFlowLocationNoticeMark}>
@@ -13893,35 +13374,6 @@ function PickupModal({
                             </Text>
                           </View>
                         </View>
-                      )}
-                      {venueId && (
-                        <Pressable
-                          accessibilityLabel={`Reserve a court at ${venueName}`}
-                          onPress={() => {
-                            if (!onReserveCourtVenue) return;
-                            close();
-                            onReserveCourtVenue({
-                              venueId,
-                              date: startsAt.slice(0, 10),
-                              durationMinutes,
-                            });
-                          }}
-                          style={styles.hostFlowReserveVenue}
-                        >
-                          <View style={styles.flex}>
-                            <Text style={styles.hostFlowReserveVenueTitle}>
-                              Reserve a court at {venueName}
-                            </Text>
-                            <Text style={styles.hostFlowReserveVenueBody}>
-                              Duna venues use live availability, court
-                              selection, and secure payment before the match is
-                              published.
-                            </Text>
-                          </View>
-                          <Text style={styles.hostFlowReserveVenueArrow}>
-                            ›
-                          </Text>
-                        </Pressable>
                       )}
                     </>
                   )}
@@ -14524,62 +13976,254 @@ function PickupModal({
 
 function TabBar({
   active,
+  onDunaAi,
   onChange,
+  onQuickActions,
+  unreadCount,
 }: {
   readonly active: Tab;
-  readonly onChange: (tab: Tab) => void;
+  readonly onDunaAi: () => void;
+  readonly onChange: (destination: PlayerPrimaryDestination) => void;
+  readonly onQuickActions: () => void;
+  readonly unreadCount: number;
 }) {
   const insets = useSafeAreaInsets();
-  const selectedTab =
-    active === "health" ||
-    active === "wallet" ||
-    active === "predictions" ||
-    active === "performance" ||
-    active === "messages"
-      ? "you"
-      : active === "training"
-        ? "plans"
-        : active === "score" || active === "video" || active === "coaches"
-          ? "play"
-          : active;
+  const selected = playerPrimaryDestination(active);
+  const destinationButton = (
+    destination: PlayerPrimaryDestination,
+    label: string,
+    icon: DunaIconName,
+  ) => {
+    const isSelected = selected === destination;
+    return (
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isSelected }}
+        key={destination}
+        onPress={() => {
+          selectionHaptic();
+          onChange(destination);
+        }}
+        style={[styles.tabItem, isSelected && styles.tabItemActive]}
+      >
+        <View style={styles.tabIconWrap}>
+          <DunaIcon
+            color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
+            name={icon}
+            size={24}
+            strokeWidth={isSelected ? 1.75 : 1.45}
+          />
+          {destination === "messages" && unreadCount > 0 && (
+            <View style={styles.tabUnreadBadge}>
+              <Text style={styles.tabUnreadText}>
+                {Math.min(unreadCount, 9)}
+              </Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
   return (
-    <View style={[styles.tabBar, { bottom: Math.max(12, insets.bottom) }]}>
-      {tabs.map((tab) => (
+    <View
+      style={[
+        styles.tabBarPosition,
+        { bottom: Math.max(mobileGrid[2], insets.bottom - mobileGrid[5]) },
+      ]}
+    >
+      <View style={styles.tabBar}>
+        <LiquidGlassSurface
+          borderColor={rgba(colors.whiteRgb, 0.82)}
+          cornerRadius={mobileGrid[7]}
+          fallbackColor={rgba(colors.whiteRgb, 0.82)}
+          tint="#edf4f8"
+        />
+        {destinationButton("home", "Home", "home")}
+        {destinationButton("calendar", "Calendar", "calendar")}
         <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedTab === tab.key }}
-          key={tab.key}
+          accessibilityHint="Opens your full-screen Duna AI copilot"
+          accessibilityLabel="Duna AI"
+          accessibilityRole="button"
           onPress={() => {
             selectionHaptic();
-            onChange(tab.key);
+            onDunaAi();
           }}
+          style={styles.tabAiButton}
+        >
+          <View style={styles.tabAiHalo}>
+            <DunaMark size={mobileGrid[7]} />
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Opens contextual Player actions"
+          accessibilityLabel="Quick actions"
+          accessibilityRole="button"
+          onPress={() => {
+            selectionHaptic();
+            onQuickActions();
+          }}
+          style={styles.tabItem}
+        >
+          <DunaIcon
+            color={rgba(colors.accentRgb, 0.78)}
+            name="plus"
+            size={25}
+            strokeWidth={1.55}
+          />
+        </Pressable>
+        {destinationButton("messages", "Messages", "message")}
+      </View>
+    </View>
+  );
+}
+
+function QuickActionsSheet({
+  onAction,
+  onClose,
+  visible,
+}: {
+  readonly onAction: (action: HomeQuickAction) => void;
+  readonly onClose: () => void;
+  readonly visible: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const actions: readonly {
+    readonly detail: string;
+    readonly icon: DunaIconName;
+    readonly key: HomeQuickAction;
+    readonly label: string;
+  }[] = [
+    {
+      detail: "Capture with Duna Vision",
+      icon: "camera",
+      key: "record-video",
+      label: "Record a game",
+    },
+    {
+      detail: "Add a completed result",
+      icon: "score",
+      key: "upload-score",
+      label: "Upload a score",
+    },
+    {
+      detail: "See open play nearby",
+      icon: "search",
+      key: "find-match",
+      label: "Find a match",
+    },
+    {
+      detail: "Invite players and open spots",
+      icon: "plus",
+      key: "create-match",
+      label: "Create a match",
+    },
+    {
+      detail: "View live availability",
+      icon: "calendar",
+      key: "book-court",
+      label: "Book a court",
+    },
+    {
+      detail: "Profiles and training sessions",
+      icon: "user",
+      key: "find-coach",
+      label: "Find a coach",
+    },
+    {
+      detail: "Tournaments, clinics, and play",
+      icon: "sparkles",
+      key: "join-event",
+      label: "Join an event",
+    },
+    {
+      detail: "Live coverage and matches",
+      icon: "video",
+      key: "watch-pros",
+      label: "Watch the pros",
+    },
+    {
+      detail: "Search all of Duna",
+      icon: "search",
+      key: "search",
+      label: "Search",
+    },
+  ];
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <Pressable onPress={onClose} style={styles.quickSheetBackdrop}>
+        <Pressable
+          accessibilityViewIsModal
+          onPress={(event) => event.stopPropagation()}
           style={[
-            styles.tabItem,
-            tab.key === "play" && styles.tabItemCenter,
-            selectedTab === tab.key && styles.tabItemActive,
+            styles.quickSheet,
+            { paddingBottom: Math.max(mobileGrid[6], insets.bottom) },
           ]}
         >
-          <Text
-            style={[
-              styles.tabIcon,
-              selectedTab === tab.key && styles.tabActive,
-              tab.key === "play" && styles.tabCenterIcon,
-            ]}
+          <View style={styles.quickSheetHandle} />
+          <View style={styles.quickSheetHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.quickSheetEyebrow}>QUICK ACTIONS</Text>
+              <Text style={styles.quickSheetTitle}>What do you need?</Text>
+              <Text style={styles.quickSheetBody}>
+                Start the job here. Duna keeps the full workflow and review
+                steps behind each action.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close quick actions"
+              onPress={onClose}
+              style={styles.quickSheetClose}
+            >
+              <DunaIcon color={colors.bone} name="close" size={20} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.quickSheetList}
+            showsVerticalScrollIndicator={false}
           >
-            {tab.icon}
-          </Text>
-          <Text
-            style={[
-              styles.tabLabel,
-              selectedTab === tab.key && styles.tabActive,
-              tab.key === "play" && styles.tabCenterLabel,
-            ]}
-          >
-            {tab.label}
-          </Text>
+            {actions.map((action) => (
+              <Pressable
+                accessibilityHint={action.detail}
+                accessibilityRole="button"
+                key={action.key}
+                onPress={() => {
+                  selectionHaptic();
+                  onClose();
+                  setTimeout(() => onAction(action.key), 180);
+                }}
+                style={({ pressed }) => [
+                  styles.quickSheetAction,
+                  pressed && styles.homeQuickActionPressed,
+                ]}
+              >
+                <View style={styles.quickSheetActionIcon}>
+                  <DunaIcon color={colors.aqua} name={action.icon} size={22} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.quickSheetActionTitle}>
+                    {action.label}
+                  </Text>
+                  <Text style={styles.quickSheetActionDetail}>
+                    {action.detail}
+                  </Text>
+                </View>
+                <DunaIcon color={colors.muted} name="chevron-right" size={18} />
+              </Pressable>
+            ))}
+          </ScrollView>
         </Pressable>
-      ))}
-    </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -14720,18 +14364,32 @@ function WatchScoreInbox({
   );
 }
 
+type OrganizationModalDestination =
+  | { readonly kind: "coach"; readonly coach: MobileCoach }
+  | { readonly kind: "event"; readonly eventIndex: number }
+  | { readonly kind: "external-event"; readonly slug: string }
+  | { readonly kind: "venue"; readonly venueId: string };
+
 function DunaApp() {
   const runtime = usePlayerRuntime();
-  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
+  const theme: ThemeName = "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [aiReturnTab, setAiReturnTab] = useState<Tab>("home");
+  const [performanceReturnTab, setPerformanceReturnTab] = useState<
+    "home" | "you"
+  >("you");
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
   const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
   const [eventIndex, setEventIndex] = useState<number | null>(null);
+  const [registrationEventOverride, setRegistrationEventOverride] =
+    useState<EventSummary>();
   const [eventDetailIndex, setEventDetailIndex] = useState<number | null>(null);
+  const [externalEventDetail, setExternalEventDetail] =
+    useState<EventSummary>();
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
   const [courtBookingRequest, setCourtBookingRequest] =
@@ -14742,6 +14400,35 @@ function DunaApp() {
     useState<HostedMatchSeed>();
   const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
+  const organizationTransitionRef = useRef<
+    | ReturnType<
+        typeof createDeferredModalTransition<OrganizationModalDestination>
+      >
+    | undefined
+  >(undefined);
+  if (!organizationTransitionRef.current) {
+    organizationTransitionRef.current =
+      createDeferredModalTransition<OrganizationModalDestination>({
+        onComplete: (destination) => {
+          if (destination.kind === "coach") {
+            setOrganizationCoach(destination.coach);
+          }
+          if (destination.kind === "event") {
+            setExternalEventDetail(undefined);
+            setEventDetailIndex(destination.eventIndex);
+          }
+          if (destination.kind === "external-event") {
+            void WebBrowser.openBrowserAsync(
+              `${dunaWebUrl}/events/${encodeURIComponent(destination.slug)}`,
+            );
+          }
+          if (destination.kind === "venue") {
+            setOrganizationVenueId(destination.venueId);
+          }
+        },
+      });
+  }
+  const organizationTransition = organizationTransitionRef.current;
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
   const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
@@ -14750,18 +14437,7 @@ function DunaApp() {
     readonly key: number;
     readonly kind: DiscoverIntentKind;
   }>();
-  const [themePreference, setThemePreference] =
-    useState<ThemePreference>("light");
-  const theme = themePreference === "system" ? deviceTheme : themePreference;
   const screenTransition = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark" || stored === "light" || stored === "system") {
-        setThemePreference(stored);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     if (!videoTransfer) return;
@@ -14777,6 +14453,13 @@ function DunaApp() {
     );
     return () => clearTimeout(timeout);
   }, [videoTransfer]);
+
+  useEffect(
+    () => () => {
+      organizationTransition.cancel();
+    },
+    [organizationTransition],
+  );
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
@@ -14881,10 +14564,13 @@ function DunaApp() {
     if (tab !== "score" && watchScoreDraft) setWatchScoreDraft(undefined);
   }, [tab, watchScoreDraft]);
 
-  activePalette = theme === "dark" ? darkColors : lightColors;
-  activeStyles = theme === "dark" ? darkStyles : lightStyles;
-
   const openHomeAction = (action: HomeQuickAction) => {
+    if (action === "messages") {
+      setMessagesConversationId(undefined);
+      setMessagesOpenToSupport(false);
+      setTab("messages");
+      return;
+    }
     if (action === "upload-score") {
       setWatchScoreDraft(undefined);
       setTab("score");
@@ -14924,6 +14610,7 @@ function DunaApp() {
         (event) => event.id === identifier || event.slug === identifier,
       );
       if (index >= 0) {
+        setExternalEventDetail(undefined);
         setEventDetailIndex(index);
         return;
       }
@@ -14944,6 +14631,7 @@ function DunaApp() {
       return;
     }
     if (/^\/app\/matches(?:\/|$)/.test(path)) {
+      setPerformanceReturnTab("home");
       setTab("performance");
       return;
     }
@@ -14979,12 +14667,16 @@ function DunaApp() {
       return;
     }
     if (action === "book-event") setEventIndex(index);
-    else setEventDetailIndex(index);
+    else {
+      setExternalEventDetail(undefined);
+      setEventDetailIndex(index);
+    }
   };
   const openAiMatch = (matchId: string, href?: string) => {
     if (
       runtime.dashboard?.recentMatches.some((match) => match.id === matchId)
     ) {
+      setPerformanceReturnTab("home");
       setTab("performance");
       return;
     }
@@ -14994,360 +14686,451 @@ function DunaApp() {
   const selectedBooking = runtime.dashboard?.bookings.find(
     (booking) => booking.id === bookingId,
   );
+  const selectedEventDetail =
+    externalEventDetail ??
+    (eventDetailIndex === null
+      ? undefined
+      : (runtime.dashboard?.events ?? demoEvents)[eventDetailIndex]);
+  const selectedEventBooking = selectedEventDetail
+    ? (runtime.dashboard?.bookings ?? demoBookings).find(
+        (booking) =>
+          booking.sessionId === selectedEventDetail.id ||
+          (booking.title === selectedEventDetail.title &&
+            Math.abs(
+              Date.parse(booking.startsAt) -
+                Date.parse(selectedEventDetail.startsAt),
+            ) <
+              15 * 60_000),
+      )
+    : undefined;
+  const openEventDetailAtIndex = (index: number) => {
+    const event = (runtime.dashboard?.events ?? demoEvents)[index];
+    if (!event) return;
+    setExternalEventDetail(undefined);
+    setEventDetailIndex(index);
+  };
+  const openExternalEventDetail = (event: EventSummary) => {
+    setEventDetailIndex(null);
+    setExternalEventDetail(event);
+  };
 
   return (
-    <ThemeContext.Provider
+    <MessagingNavigationContext.Provider
       value={{
-        theme,
-        preference: themePreference,
-        toggle: () => {
-          const next: ThemePreference =
-            themePreference === "system"
-              ? "light"
-              : themePreference === "light"
-                ? "dark"
-                : "system";
-          setThemePreference(next);
-          void AsyncStorage.setItem("duna-theme", next);
+        open: (support) => {
+          setMessagesConversationId(undefined);
+          setMessagesOpenToSupport(support);
+          setTab("messages");
         },
+        openProfile: () => setTab("you"),
+        unreadCount: messagingUnreadCount,
       }}
     >
-      <MessagingNavigationContext.Provider
-        value={{
-          open: (support) => {
-            setMessagesConversationId(undefined);
-            setMessagesOpenToSupport(support);
-            setTab("messages");
-          },
-          openAi: () => {
-            setAiReturnTab(tab === "ai" ? "home" : tab);
-            setTab("ai");
-          },
-          openProfile: () => setTab("you"),
-          unreadCount: messagingUnreadCount,
-        }}
-      >
-        <PlayerProfileProvider palette={colors}>
-          <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
-          {runtime.dashboard ? (
-            <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
-          ) : null}
-          <SafeAreaView edges={["top"]} style={styles.safe}>
-            <StatusBar style={theme === "dark" ? "light" : "dark"} />
-            <View style={styles.app}>
-              <PreviewBanner />
-              <Animated.View
-                style={[
-                  styles.animatedScreen,
-                  {
-                    opacity: screenTransition,
-                    transform: [
-                      {
-                        translateY: screenTransition.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [8, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {tab === "home" && (
-                  <HomeScreen
-                    onAction={openHomeAction}
-                    onBook={setEventDetailIndex}
-                    onOpenBooking={setBookingId}
-                    onPredictions={() => setTab("predictions")}
-                  />
-                )}
-                {tab === "discover" && (
-                  <DiscoverScreen
-                    intent={discoverIntent}
-                    onBook={setEventIndex}
-                    onCreateMatch={() => setCreateMatchOpen(true)}
-                    onOrganization={setOrganizationSlug}
-                  />
-                )}
-                {tab === "score" && (
-                  <ScoreUploadScreen
-                    initialPlayedAt={watchScoreDraft?.capturedAt}
-                    initialSets={watchScoreDraft?.sets}
-                    key={watchScoreDraft?.draftId ?? "score-upload"}
-                    onComplete={() => setTab("performance")}
-                    palette={colors}
-                  />
-                )}
-                {tab === "play" && (
-                  <PlayLauncherScreen onAction={openHomeAction} />
-                )}
-                {tab === "coaches" && (
-                  <FindCoachScreen onBack={() => setTab("play")} />
-                )}
-                {tab === "plans" && (
-                  <PlansScreen
-                    onBook={setEventIndex}
-                    onOpenBooking={setBookingId}
-                    onReserveCourtVenue={setCourtBookingRequest}
-                    onTraining={() => setTab("training")}
-                    onSeeAllMatches={() => {
-                      setDiscoverIntent({
-                        key: Date.now(),
-                        kind: "find-match",
-                      });
-                      setTab("discover");
-                    }}
-                  />
-                )}
-                {tab === "training" && (
-                  <PlayerTrainingScreen onBack={() => setTab("plans")} />
-                )}
-                <VideoStudioScreen
-                  active={tab === "video"}
+      <PlayerProfileProvider palette={colors}>
+        <HealthHistorySyncAgent paused={tab === "health"} runtime={runtime} />
+        {runtime.dashboard ? (
+          <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
+        ) : null}
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <StatusBar style="dark" />
+          <View style={styles.app}>
+            <PreviewBanner
+              hidden={tab === "home" || tab === "messages" || tab === "ai"}
+            />
+            <Animated.View
+              style={[
+                styles.animatedScreen,
+                {
+                  opacity: screenTransition,
+                  transform: [
+                    {
+                      translateY: screenTransition.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [8, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {tab === "home" && (
+                <HomeScreenV3
+                  onAction={openHomeAction}
+                  onOpenBooking={setBookingId}
+                  onOpenEvent={openExternalEventDetail}
+                  onOpenPerformance={() => {
+                    setPerformanceReturnTab("home");
+                    setTab("performance");
+                  }}
+                  onOpenSchedule={() => setTab("plans")}
+                />
+              )}
+              {tab === "discover" && (
+                <DiscoverScreen
+                  intent={discoverIntent}
+                  onBook={setEventIndex}
                   onCreateMatch={() => setCreateMatchOpen(true)}
-                  onTransferStatus={setVideoTransfer}
-                  runtime={runtime}
-                />
-                {tab === "wallet" && (
-                  <WalletScreen onClose={() => setTab("you")} />
-                )}
-                {tab === "predictions" && (
-                  <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
-                )}
-                {tab === "you" && (
-                  <ProfileHubScreen
-                    onArtwork={() => setArtworkStudioOpen(true)}
-                    onDestination={(destination) => setTab(destination)}
-                    onEditProfile={() => setProfileEditorOpen(true)}
-                    onOrganization={setOrganizationSlug}
-                  />
-                )}
-                {tab === "health" && (
-                  <HealthScreen onBack={() => setTab("you")} theme={theme} />
-                )}
-                {tab === "performance" && (
-                  <PerformanceScreen
-                    onArtwork={() => setArtworkStudioOpen(true)}
-                    onBack={() => setTab("you")}
-                    onEditProfile={() => setProfileEditorOpen(true)}
-                    onHealth={() => setTab("health")}
-                    onPredictions={() => setTab("predictions")}
-                    onWallet={() => setTab("wallet")}
-                  />
-                )}
-                {tab === "ai" && (
-                  <PlayerDunaAiScreen
-                    onClose={() =>
-                      setTab(aiReturnTab === "ai" ? "home" : aiReturnTab)
-                    }
-                    onOpenBooking={setBookingId}
-                    onOpenEvent={openAiEvent}
-                    onOpenMatch={openAiMatch}
-                    onOpenPath={openDunaHref}
-                    onOpenVenue={(venueId) => setOrganizationVenueId(venueId)}
-                    palette={{
-                      canvas: colors.canvas,
-                      surface: colors.depth,
-                      surfaceAlt: colors.navyLift,
-                      border: rgba(colors.overlayRgb, 0.12),
-                      text: colors.bone,
-                      muted: colors.muted,
-                      accent: colors.aqua,
-                      onAccent: colors.onAccent,
-                      positive: colors.positive,
-                      warning: colors.warning,
-                      danger: colors.danger,
-                    }}
-                    pathname="/app/ai"
-                  />
-                )}
-                {tab === "messages" && (
-                  <PlayerMessagingScreen
-                    initialConversationId={messagesConversationId}
-                    initialSupport={messagesOpenToSupport}
-                    onOpenDunaAi={() => {
-                      setAiReturnTab("messages");
-                      setTab("ai");
-                    }}
-                    onUnreadCountChange={setMessagingUnreadCount}
-                    onClose={() => {
-                      setMessagesConversationId(undefined);
-                      setMessagesOpenToSupport(false);
-                      setTab("home");
-                    }}
-                    palette={{
-                      canvas: colors.canvas,
-                      surface: colors.depth,
-                      surfaceAlt: colors.navyLift,
-                      border: rgba(colors.overlayRgb, 0.12),
-                      text: colors.bone,
-                      muted: colors.muted,
-                      accent: colors.aqua,
-                      onAccent: colors.onAccent,
-                      positive: colors.positive,
-                      warning: colors.warning,
-                      danger: colors.danger,
-                    }}
-                  />
-                )}
-              </Animated.View>
-              {videoTransfer && (
-                <VideoTransferBanner
-                  onPress={() => setTab("video")}
-                  status={videoTransfer}
+                  onOpenEvent={openEventDetailAtIndex}
+                  onOpenExternalEvent={openExternalEventDetail}
+                  onOrganization={setOrganizationSlug}
                 />
               )}
-              {tab !== "messages" && tab !== "ai" && (
-                <TabBar active={tab} onChange={setTab} />
+              {tab === "score" && (
+                <ScoreUploadScreen
+                  initialPlayedAt={watchScoreDraft?.capturedAt}
+                  initialSets={watchScoreDraft?.sets}
+                  key={watchScoreDraft?.draftId ?? "score-upload"}
+                  onComplete={() => {
+                    setPerformanceReturnTab("you");
+                    setTab("performance");
+                  }}
+                  palette={colors}
+                />
               )}
-              <BookingModal
-                eventIndex={eventIndex}
-                onClose={() => setEventIndex(null)}
-              />
-              <NativeEventDetails
-                client={runtime.client}
-                event={
-                  eventDetailIndex === null
-                    ? undefined
-                    : (runtime.dashboard?.events ?? demoEvents)[
-                        eventDetailIndex
-                      ]
-                }
-                onClose={() => setEventDetailIndex(null)}
-                onRegister={() => {
-                  setEventIndex(eventDetailIndex);
-                  setEventDetailIndex(null);
-                }}
-                onScore={() => {
-                  setEventDetailIndex(null);
-                  setTab("score");
-                }}
-                onVideo={() => {
-                  setEventDetailIndex(null);
-                  setTab("video");
-                }}
-                visible={eventDetailIndex !== null}
-              />
-              <ProfileEditorModal
-                onClose={() => setProfileEditorOpen(false)}
-                visible={profileEditorOpen}
-              />
-              <PlayerArtworkModal
-                onClose={() => setArtworkStudioOpen(false)}
-                visible={artworkStudioOpen}
-              />
-              <BookingManagementModal
-                booking={selectedBooking as ManagedBooking | undefined}
-                client={runtime.client}
-                onClose={() => setBookingId(undefined)}
-                onUpdated={runtime.refresh}
-                palette={colors}
-                visible={Boolean(selectedBooking)}
-              />
-              <VenueFinderModal
-                onClose={() => setCourtFinderOpen(false)}
-                onSelect={(request) => {
-                  setCourtFinderOpen(false);
-                  setCourtBookingRequest(request);
-                }}
-                visible={courtFinderOpen}
-              />
-              <VenueBookingModal
-                initialDate={courtBookingRequest?.date}
-                initialDurationMinutes={courtBookingRequest?.durationMinutes}
-                onClose={() => setCourtBookingRequest(undefined)}
-                onHostReady={(seed) => {
-                  setCourtBookingRequest(undefined);
-                  setTimeout(() => setOrganizationHostSeed(seed), 280);
-                }}
-                onOpenMatch={(matchId, matchSlug) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === matchId,
-                  );
-                  setCourtBookingRequest(undefined);
-                  setTimeout(() => {
-                    if (index >= 0) {
-                      setEventIndex(index);
-                      return;
-                    }
-                    void WebBrowser.openBrowserAsync(
-                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
-                    );
-                  }, 280);
-                }}
-                venueId={courtBookingRequest?.venueId}
-                visible={Boolean(courtBookingRequest)}
-              />
-              <OrganizationExperienceModal
-                onClose={() => setOrganizationSlug(undefined)}
-                onOpenCoach={(coach) => {
-                  setOrganizationCoach(coach);
-                  setOrganizationSlug(undefined);
-                }}
-                onOpenEvent={(eventId) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === eventId,
-                  );
-                  setOrganizationSlug(undefined);
-                  if (index >= 0) setEventIndex(index);
-                }}
-                onOpenVenue={(venueId) => {
-                  setOrganizationSlug(undefined);
-                  setOrganizationVenueId(venueId);
-                }}
-                slug={organizationSlug}
+              {tab === "play" && (
+                <PlayLauncherScreen onAction={openHomeAction} />
+              )}
+              {tab === "coaches" && (
+                <FindCoachScreen
+                  onBack={() => setTab("play")}
+                  onOpenEvent={openEventDetailAtIndex}
+                />
+              )}
+              {tab === "plans" && (
+                <PlansScreen
+                  onOpenBooking={setBookingId}
+                  onOpenEvent={openEventDetailAtIndex}
+                  onReserveCourtVenue={setCourtBookingRequest}
+                  onTraining={() => setTab("training")}
+                  onSeeAllMatches={() => {
+                    setDiscoverIntent({
+                      key: Date.now(),
+                      kind: "find-match",
+                    });
+                    setTab("discover");
+                  }}
+                />
+              )}
+              {tab === "training" && (
+                <PlayerTrainingScreen onBack={() => setTab("plans")} />
+              )}
+              <VideoStudioScreen
+                active={tab === "video"}
+                onCreateMatch={() => setCreateMatchOpen(true)}
+                onTransferStatus={setVideoTransfer}
+                runtime={runtime}
                 theme={theme}
               />
-              <VenueBookingModal
-                onClose={() => setOrganizationVenueId(undefined)}
-                onHostReady={(seed) => {
-                  setOrganizationVenueId(undefined);
-                  setTimeout(() => setOrganizationHostSeed(seed), 280);
-                }}
-                onOpenMatch={(matchId, matchSlug) => {
-                  const index = (runtime.dashboard?.events ?? []).findIndex(
-                    (event) => event.id === matchId,
-                  );
-                  setOrganizationVenueId(undefined);
-                  setTimeout(() => {
-                    if (index >= 0) {
-                      setEventIndex(index);
-                      return;
+              {tab === "wallet" && (
+                <WalletScreen onClose={() => setTab("you")} />
+              )}
+              {tab === "predictions" && (
+                <PredictionPortfolioScreen onBack={() => setTab("wallet")} />
+              )}
+              {tab === "you" && (
+                <ProfileHubScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onDestination={(destination) => {
+                    if (destination === "performance") {
+                      setPerformanceReturnTab("you");
                     }
-                    void WebBrowser.openBrowserAsync(
-                      `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
-                    );
-                  }, 280);
-                }}
-                venueId={organizationVenueId}
-                visible={Boolean(organizationVenueId)}
+                    setTab(destination);
+                  }}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onOrganization={setOrganizationSlug}
+                />
+              )}
+              {tab === "health" && (
+                <HealthScreen onBack={() => setTab("you")} theme={theme} />
+              )}
+              {tab === "performance" && (
+                <PerformanceScreen
+                  onArtwork={() => setArtworkStudioOpen(true)}
+                  onBack={() => setTab(performanceReturnTab)}
+                  onEditProfile={() => setProfileEditorOpen(true)}
+                  onHealth={() => setTab("health")}
+                  onPredictions={() => setTab("predictions")}
+                  onWallet={() => setTab("wallet")}
+                />
+              )}
+              {tab === "ai" && (
+                <PlayerDunaAiScreen
+                  onClose={() =>
+                    setTab(aiReturnTab === "ai" ? "home" : aiReturnTab)
+                  }
+                  onOpenBooking={setBookingId}
+                  onOpenEvent={openAiEvent}
+                  onOpenMatch={openAiMatch}
+                  onOpenMessages={() => {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(false);
+                    setTab("messages");
+                  }}
+                  onOpenPath={openDunaHref}
+                  onOpenVenue={(venueId) => setOrganizationVenueId(venueId)}
+                  palette={{
+                    canvas: colors.canvas,
+                    surface: colors.depth,
+                    surfaceAlt: colors.navyLift,
+                    border: rgba(colors.overlayRgb, 0.12),
+                    text: colors.bone,
+                    muted: colors.muted,
+                    accent: colors.aqua,
+                    onAccent: colors.onAccent,
+                    positive: colors.positive,
+                    warning: colors.warning,
+                    danger: colors.danger,
+                  }}
+                  pathname="/app/ai"
+                />
+              )}
+              {tab === "messages" && (
+                <PlayerMessagingScreen
+                  initialConversationId={messagesConversationId}
+                  initialSupport={messagesOpenToSupport}
+                  onOpenDunaAi={() => {
+                    setAiReturnTab("messages");
+                    setTab("ai");
+                  }}
+                  onUnreadCountChange={setMessagingUnreadCount}
+                  onClose={() => {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(false);
+                    setTab("home");
+                  }}
+                  palette={{
+                    canvas: colors.canvas,
+                    surface: colors.depth,
+                    surfaceAlt: colors.navyLift,
+                    border: rgba(colors.overlayRgb, 0.12),
+                    text: colors.bone,
+                    muted: colors.muted,
+                    accent: colors.aqua,
+                    onAccent: colors.onAccent,
+                    positive: colors.positive,
+                    warning: colors.warning,
+                    danger: colors.danger,
+                  }}
+                />
+              )}
+            </Animated.View>
+            {videoTransfer && (
+              <VideoTransferBanner
+                onPress={() => setTab("video")}
+                status={videoTransfer}
               />
-              <PickupModal
-                initialCourtBooking={organizationHostSeed}
-                onClose={() => {
-                  setCreateMatchOpen(false);
-                  setOrganizationHostSeed(undefined);
+            )}
+            {tab !== "messages" && tab !== "ai" && (
+              <TabBar
+                active={tab}
+                onChange={(destination) => {
+                  if (destination === "calendar") {
+                    setTab("plans");
+                    return;
+                  }
+                  if (destination === "messages") {
+                    setMessagesConversationId(undefined);
+                    setMessagesOpenToSupport(false);
+                    setTab("messages");
+                    return;
+                  }
+                  setTab("home");
                 }}
-                onReserveCourtVenue={(request) => {
-                  setCreateMatchOpen(false);
-                  setCourtBookingRequest(request);
+                onDunaAi={() => {
+                  setMessagesConversationId(undefined);
+                  setMessagesOpenToSupport(false);
+                  setAiReturnTab(tab);
+                  setTab("ai");
                 }}
-                visible={Boolean(organizationHostSeed) || createMatchOpen}
+                onQuickActions={() => setQuickActionsOpen(true)}
+                unreadCount={messagingUnreadCount}
               />
-              <CoachProfileModal
-                coach={organizationCoach}
-                onClose={() => setOrganizationCoach(undefined)}
-              />
-              <WatchScoreInbox
-                onReview={(draft) => {
-                  setWatchScoreDraft(draft);
-                  setTab("score");
-                }}
-              />
-            </View>
-          </SafeAreaView>
-        </PlayerProfileProvider>
-      </MessagingNavigationContext.Provider>
-    </ThemeContext.Provider>
+            )}
+            <QuickActionsSheet
+              onAction={openHomeAction}
+              onClose={() => setQuickActionsOpen(false)}
+              visible={quickActionsOpen}
+            />
+            <BookingModal
+              eventIndex={eventIndex}
+              eventOverride={registrationEventOverride}
+              onClose={() => {
+                setEventIndex(null);
+                setRegistrationEventOverride(undefined);
+              }}
+            />
+            <NativeEventDetails
+              bookingId={selectedEventBooking?.id}
+              client={runtime.client}
+              event={selectedEventDetail}
+              onClose={() => {
+                setEventDetailIndex(null);
+                setExternalEventDetail(undefined);
+              }}
+              onOpenBooking={setBookingId}
+              onRegister={(registrationEvent) => {
+                const index = (
+                  runtime.dashboard?.events ?? demoEvents
+                ).findIndex((event) => event.id === registrationEvent.id);
+                if (index >= 0) {
+                  setEventIndex(index);
+                  return;
+                }
+                setRegistrationEventOverride(registrationEvent);
+              }}
+              onScore={() => {
+                setTab("score");
+              }}
+              onVideo={() => {
+                setTab("video");
+              }}
+              visible={Boolean(selectedEventDetail)}
+            />
+            <ProfileEditorModal
+              onClose={() => setProfileEditorOpen(false)}
+              visible={profileEditorOpen}
+            />
+            <PlayerArtworkModal
+              onClose={() => setArtworkStudioOpen(false)}
+              visible={artworkStudioOpen}
+            />
+            <BookingManagementModal
+              booking={selectedBooking as ManagedBooking | undefined}
+              client={runtime.client}
+              onClose={() => setBookingId(undefined)}
+              onUpdated={runtime.refresh}
+              palette={colors}
+              visible={Boolean(selectedBooking)}
+            />
+            <VenueFinderModal
+              onClose={() => setCourtFinderOpen(false)}
+              onSelect={(request) => {
+                setCourtFinderOpen(false);
+                setCourtBookingRequest(request);
+              }}
+              visible={courtFinderOpen}
+            />
+            <VenueBookingModal
+              initialDate={courtBookingRequest?.date}
+              initialDurationMinutes={courtBookingRequest?.durationMinutes}
+              initialIntent={courtBookingRequest?.intent}
+              onClose={() => setCourtBookingRequest(undefined)}
+              onHostReady={(seed) => {
+                setCourtBookingRequest(undefined);
+                setTimeout(() => setOrganizationHostSeed(seed), 280);
+              }}
+              onOpenMatch={(matchId, matchSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === matchId,
+                );
+                setCourtBookingRequest(undefined);
+                setTimeout(() => {
+                  if (index >= 0) {
+                    setEventIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                  );
+                }, 280);
+              }}
+              venueId={courtBookingRequest?.venueId}
+              visible={Boolean(courtBookingRequest)}
+            />
+            <OrganizationExperienceModal
+              onClose={() => setOrganizationSlug(undefined)}
+              onDismiss={organizationTransition.complete}
+              onOpenCoach={(coach) => {
+                organizationTransition.schedule({ kind: "coach", coach });
+                setOrganizationSlug(undefined);
+              }}
+              onOpenEvent={(eventId, eventSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === eventId,
+                );
+                if (index >= 0) {
+                  organizationTransition.schedule({
+                    kind: "event",
+                    eventIndex: index,
+                  });
+                } else {
+                  organizationTransition.schedule({
+                    kind: "external-event",
+                    slug: eventSlug,
+                  });
+                }
+                setOrganizationSlug(undefined);
+              }}
+              onOpenVenue={(venueId) => {
+                organizationTransition.schedule({ kind: "venue", venueId });
+                setOrganizationSlug(undefined);
+              }}
+              slug={organizationSlug}
+              theme={theme}
+            />
+            <VenueBookingModal
+              onClose={() => setOrganizationVenueId(undefined)}
+              onHostReady={(seed) => {
+                setOrganizationVenueId(undefined);
+                setTimeout(() => setOrganizationHostSeed(seed), 280);
+              }}
+              onOpenMatch={(matchId, matchSlug) => {
+                const index = (runtime.dashboard?.events ?? []).findIndex(
+                  (event) => event.id === matchId,
+                );
+                setOrganizationVenueId(undefined);
+                setTimeout(() => {
+                  if (index >= 0) {
+                    setEventIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
+                  );
+                }, 280);
+              }}
+              venueId={organizationVenueId}
+              visible={Boolean(organizationVenueId)}
+            />
+            <PickupModal
+              initialCourtBooking={organizationHostSeed}
+              onClose={() => {
+                setCreateMatchOpen(false);
+                setOrganizationHostSeed(undefined);
+              }}
+              onReserveCourtVenue={(request) => {
+                setCreateMatchOpen(false);
+                setCourtBookingRequest(request);
+              }}
+              visible={Boolean(organizationHostSeed) || createMatchOpen}
+            />
+            <CoachProfileModal
+              coach={organizationCoach}
+              onClose={() => setOrganizationCoach(undefined)}
+              onOpenSession={(session) => {
+                const events = runtime.dashboard?.events ?? demoEvents;
+                const index = events.findIndex(
+                  (event) => event.id === session.id,
+                );
+                if (index >= 0) {
+                  openEventDetailAtIndex(index);
+                  return;
+                }
+                void WebBrowser.openBrowserAsync(
+                  `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+                );
+              }}
+            />
+            <WatchScoreInbox
+              onReview={(draft) => {
+                setWatchScoreDraft(draft);
+                setTab("score");
+              }}
+            />
+          </View>
+        </SafeAreaView>
+      </PlayerProfileProvider>
+    </MessagingNavigationContext.Provider>
   );
 }
 
@@ -15360,7 +15143,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }}>
+      <View onLayout={() => void SplashScreen.hideAsync()} style={{ flex: 1 }}>
         <PlayerRuntimeProvider>
           <DunaApp />
         </PlayerRuntimeProvider>
@@ -15374,8 +15157,7 @@ export default function App() {
   );
 }
 
-function createStyles(palette: Palette) {
-  activePalette = palette;
+function createStyles() {
   return StyleSheet.create({
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
@@ -16784,60 +16566,6 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       marginTop: 4,
     },
-    hostFlowPlaceMapPreview: {
-      backgroundColor: colors.navyLift,
-      borderColor: rgba(colors.accentRgb, 0.16),
-      borderRadius: 17,
-      borderWidth: 1,
-      height: 120,
-      marginTop: 10,
-      overflow: "hidden",
-      position: "relative",
-    },
-    hostFlowPlaceMapGrid: {
-      backgroundColor: rgba(colors.accentRgb, 0.06),
-      borderColor: rgba(colors.accentRgb, 0.16),
-      borderWidth: 1,
-      height: 188,
-      left: -28,
-      position: "absolute",
-      top: -35,
-      transform: [{ rotate: "-21deg" }],
-      width: 260,
-    },
-    hostFlowPlaceMapPin: {
-      alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderColor: "#ffffff",
-      borderRadius: 22,
-      borderWidth: 3,
-      height: 44,
-      justifyContent: "center",
-      left: "47%",
-      position: "absolute",
-      top: 27,
-      width: 44,
-    },
-    hostFlowPlaceMapPinText: {
-      color: colors.onAccent,
-      fontSize: 22,
-      fontWeight: "900",
-    },
-    hostFlowPlaceMapLabel: {
-      backgroundColor: rgba(colors.inkRgb, 0.8),
-      bottom: 10,
-      left: 10,
-      maxWidth: "90%",
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-      position: "absolute",
-    },
-    hostFlowPlaceMapLabelText: {
-      color: "#ffffff",
-      fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 0.55,
-    },
     hostFlowLocationNotice: {
       alignItems: "flex-start",
       backgroundColor: rgba(colors.positiveRgb, 0.08),
@@ -16866,30 +16594,6 @@ function createStyles(palette: Palette) {
       lineHeight: 17,
       marginTop: 4,
     },
-    hostFlowReserveVenue: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.accentRgb, 0.09),
-      borderColor: colors.aqua,
-      borderRadius: 17,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: 11,
-      marginTop: 10,
-      minHeight: 80,
-      padding: 14,
-    },
-    hostFlowReserveVenueTitle: {
-      color: colors.bone,
-      fontSize: 14,
-      fontWeight: "900",
-    },
-    hostFlowReserveVenueBody: {
-      color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
-      marginTop: 4,
-    },
-    hostFlowReserveVenueArrow: { color: colors.aqua, fontSize: 25 },
     hostFlowDatePickerCard: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
@@ -17365,14 +17069,14 @@ function createStyles(palette: Palette) {
     },
     previewBanner: {
       alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderBottomColor: rgba(colors.warningRgb, 0.24),
+      backgroundColor: rgba(colors.accentRgb, 0.055),
+      borderBottomColor: rgba(colors.accentRgb, 0.1),
       borderBottomWidth: 1,
       paddingHorizontal: 12,
-      paddingVertical: 7,
+      paddingVertical: mobileGrid[1],
     },
     previewBannerText: {
-      color: colors.warning,
+      color: colors.aqua,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
@@ -17399,7 +17103,10 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       fontWeight: "700",
     },
-    screenContent: { paddingBottom: 118, paddingHorizontal: 18 },
+    screenContent: {
+      paddingBottom: mobileGrid[12] + mobileGrid[12] + mobileGrid[4],
+      paddingHorizontal: mobileControl.pageInset,
+    },
     toggleRow: {
       alignItems: "center",
       backgroundColor: rgba(colors.overlayRgb, 0.03),
@@ -17412,27 +17119,36 @@ function createStyles(palette: Palette) {
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingBottom: 22,
-      paddingTop: 10,
+      paddingBottom: mobileGrid[2],
+      paddingTop: mobileGrid[2],
     },
-    headerActions: { flexDirection: "row", gap: 8 },
-    themeButton: {
+    headerActions: { flexDirection: "row", gap: mobileGrid[2] },
+    headerNotification: {
       alignItems: "center",
-      backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 18,
-      borderWidth: 1,
-      height: 36,
+      backgroundColor: colors.navy,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
       justifyContent: "center",
-      width: 36,
+      position: "relative",
+      width: mobileControl.minimumTarget,
     },
-    themeButtonText: {
-      color: colors.bone,
-      fontSize: 17,
-      lineHeight: 20,
+    headerNotificationDot: {
+      backgroundColor: colors.aqua,
+      borderColor: colors.white,
+      borderRadius: 5,
+      borderWidth: 2,
+      height: 10,
+      position: "absolute",
+      right: 7,
+      top: 6,
+      width: 10,
     },
-    wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
-    wordmarkImage: { height: 35, width: 104 },
+    wordmark: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+    },
+    wordmarkImage: { height: mobileGrid[9], width: 142 },
     proPill: {
       backgroundColor: rgba(colors.warningRgb, 0.12),
       borderRadius: 6,
@@ -17450,52 +17166,16 @@ function createStyles(palette: Palette) {
       letterSpacing: 1.2,
       marginTop: 5,
     },
-    aiHeaderButton: {
-      alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderRadius: 19,
-      height: 38,
-      justifyContent: "center",
-      width: 42,
-    },
-    aiHeaderButtonText: {
-      color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 0.5,
-    },
-    askButton: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.accentRgb, 0.09),
-      borderColor: rgba(colors.accentRgb, 0.18),
-      borderRadius: 19,
-      borderWidth: 1,
-      height: 38,
-      justifyContent: "center",
-      width: 38,
-    },
-    askButtonText: { color: colors.aqua, fontSize: 17 },
     avatarButton: {
       alignItems: "center",
-      backgroundColor: colors.navyLift,
-      borderRadius: 19,
-      height: 38,
+      backgroundColor: colors.ink,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
       justifyContent: "center",
       position: "relative",
-      width: 38,
+      width: mobileControl.minimumTarget,
     },
-    avatarText: { color: colors.bone, fontSize: 12, fontWeight: "800" },
-    notificationDot: {
-      backgroundColor: colors.danger,
-      borderColor: colors.ink,
-      borderRadius: 5,
-      borderWidth: 2,
-      height: 9,
-      position: "absolute",
-      right: 0,
-      top: 0,
-      width: 9,
-    },
+    avatarText: { color: colors.white, fontSize: 14, fontWeight: "700" },
     homeWelcome: {
       alignItems: "flex-start",
       flexDirection: "row",
@@ -17510,16 +17190,16 @@ function createStyles(palette: Palette) {
     },
     homeWelcomeTitle: {
       color: colors.bone,
-      fontSize: 32,
-      fontWeight: "800",
-      letterSpacing: -1.5,
+      fontSize: 30,
+      fontWeight: "700",
+      letterSpacing: -1,
       lineHeight: 35,
       marginTop: 5,
     },
     homeWelcomeBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 21,
       marginTop: 7,
       maxWidth: 300,
     },
@@ -17535,8 +17215,8 @@ function createStyles(palette: Palette) {
     },
     homeRatingBadgeValue: {
       color: colors.bone,
-      fontFamily: "Archivo-Table",
       fontSize: 17,
+      fontVariant: ["tabular-nums"],
       letterSpacing: -0.7,
     },
     homeRatingBadgeLabel: {
@@ -17548,54 +17228,36 @@ function createStyles(palette: Palette) {
     },
     homeQuickGrid: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 10,
-      marginBottom: 14,
+      gap: mobileGrid[2],
+      marginBottom: mobileGrid[4],
     },
     homeQuickAction: {
+      alignItems: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
-      borderRadius: 22,
+      borderRadius: mobileControl.cardRadius,
       borderWidth: 1,
-      minHeight: 132,
-      padding: 14,
-      width: "48%",
-    },
-    homeQuickActionPrimary: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.aqua,
-    },
-    homeQuickActionWarm: {
-      backgroundColor: rgba(colors.flareRgb, 0.08),
-      borderColor: rgba(colors.flareRgb, 0.16),
+      flex: 1,
+      justifyContent: "center",
+      minHeight: mobileGrid[12] + mobileGrid[7],
+      padding: mobileGrid[2],
     },
     homeQuickActionPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
     homeQuickIcon: {
       alignItems: "center",
       backgroundColor: rgba(colors.accentRgb, 0.1),
-      borderRadius: 14,
-      height: 38,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
       justifyContent: "center",
-      marginBottom: 13,
-      width: 38,
+      marginBottom: mobileGrid[2],
+      width: mobileGrid[9],
     },
-    homeQuickIconPrimary: { backgroundColor: rgba(colors.whiteRgb, 0.18) },
-    homeQuickIconText: {
-      color: colors.aqua,
-      fontSize: 20,
-      fontWeight: "800",
-      lineHeight: 23,
-    },
-    homeQuickIconTextPrimary: { color: colors.onAccent },
     homeQuickLabel: {
       color: colors.bone,
-      fontSize: 15,
-      fontWeight: "800",
-      letterSpacing: -0.4,
+      fontSize: 13,
+      fontWeight: "700",
+      textAlign: "center",
     },
-    homeQuickLabelPrimary: { color: colors.onAccent },
-    homeQuickMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
-    homeQuickMetaPrimary: { color: rgba(colors.whiteRgb, 0.74) },
     coachFinderBack: {
       alignSelf: "flex-start",
       marginBottom: 18,
@@ -17607,6 +17269,10 @@ function createStyles(palette: Palette) {
       color: colors.aqua,
       fontSize: 14,
       fontWeight: "900",
+    },
+    coachFinderEyebrow: {
+      lineHeight: 17,
+      marginBottom: mobileGrid[1],
     },
     coachFinderIntro: {
       color: colors.muted,
@@ -18153,6 +17819,15 @@ function createStyles(palette: Palette) {
       marginBottom: 4,
       padding: 14,
     },
+    memberOrganizationCardCompact: {
+      backgroundColor: colors.navy,
+      borderColor: "transparent",
+      borderRadius: mobileControl.cardRadius,
+      flex: 1.35,
+      marginBottom: 0,
+      minHeight: mobileGrid[12] + mobileGrid[4],
+      padding: mobileGrid[3],
+    },
     memberOrganizationMark: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -18161,21 +17836,27 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 48,
     },
+    memberOrganizationMarkCompact: {
+      backgroundColor: rgba(colors.warningRgb, 0.14),
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      width: mobileGrid[9],
+    },
     memberOrganizationMarkText: {
       color: colors.onAccent,
       fontSize: 18,
       fontWeight: "900",
     },
     memberOrganizationEyebrow: {
-      color: colors.aqua,
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1,
     },
     memberOrganizationName: {
       color: colors.bone,
-      fontSize: 16,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       marginTop: 3,
     },
     memberOrganizationMeta: {
@@ -21497,26 +21178,31 @@ function createStyles(palette: Palette) {
       transform: [{ rotate: "-34deg" }],
       width: 330,
     },
-    walletCloseRow: {
-      alignItems: "flex-end",
-      marginBottom: -42,
-      position: "relative",
-      zIndex: 4,
+    walletBackRow: {
+      alignItems: "flex-start",
+      marginBottom: mobileGrid[3],
+      paddingTop: mobileGrid[2],
     },
-    walletCloseButton: {
+    walletBackButton: {
       alignItems: "center",
-      backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 24,
-      borderWidth: 1,
-      height: 48,
+      flexDirection: "row",
+      gap: mobileGrid[1],
+      minHeight: mobileControl.minimumTarget,
       justifyContent: "center",
-      width: 48,
+      marginLeft: -mobileGrid[1],
+      paddingHorizontal: mobileGrid[1],
     },
-    walletCloseText: {
-      color: colors.bone,
-      fontSize: 29,
-      lineHeight: 32,
+    walletBackText: {
+      color: colors.aqua,
+      fontSize: 16,
+      fontWeight: "700",
+      lineHeight: 22,
+    },
+    walletEyebrow: {
+      color: colors.muted,
+      fontSize: 12,
+      letterSpacing: 1.2,
+      marginBottom: mobileGrid[1],
     },
     walletTop: {
       alignItems: "center",
@@ -23229,48 +22915,173 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       padding: 14,
     },
-    tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.96),
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 28,
-      borderWidth: 1,
-      flexDirection: "row",
-      left: 18,
-      paddingBottom: 7,
-      paddingHorizontal: 6,
-      paddingTop: 7,
+    tabBarPosition: {
+      left: mobileControl.pageInset,
       position: "absolute",
-      right: 18,
-      shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.14,
-      shadowRadius: 18,
+      right: mobileControl.pageInset,
+      zIndex: 90,
+    },
+    tabBar: {
+      alignItems: "center",
+      backgroundColor: "transparent",
+      borderRadius: mobileGrid[7],
+      flexDirection: "row",
+      minHeight: mobileGrid[12] + mobileGrid[2],
+      paddingHorizontal: mobileGrid[1],
+      paddingVertical: mobileGrid[1],
+      shadowColor: colors.aquaDeep,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.1,
+      shadowRadius: 22,
       elevation: 12,
+      overflow: "visible",
     },
     tabItem: {
       alignItems: "center",
-      borderRadius: 18,
+      borderRadius: mobileControl.pillRadius,
       flex: 1,
-      gap: 3,
-      minHeight: 47,
+      height: mobileGrid[10],
       justifyContent: "center",
-      paddingVertical: 5,
       position: "relative",
     },
-    tabItemActive: { backgroundColor: rgba(colors.accentRgb, 0.1) },
-    tabItemCenter: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.canvas,
-      borderRadius: 24,
-      borderWidth: 4,
-      marginTop: -18,
-      minHeight: 60,
+    tabItemActive: {
+      backgroundColor: rgba(colors.whiteRgb, 0.58),
+      borderColor: rgba(colors.whiteRgb, 0.76),
+      borderWidth: 1,
+      shadowColor: colors.aquaDeep,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
     },
-    tabIcon: { color: colors.muted, fontSize: 18 },
-    tabLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-    tabActive: { color: colors.aqua },
-    tabCenterIcon: { color: colors.onAccent, fontSize: 22 },
-    tabCenterLabel: { color: colors.onAccent, fontWeight: "900" },
+    tabIconWrap: { position: "relative" },
+    tabUnreadBadge: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderColor: colors.white,
+      borderRadius: mobileGrid[2],
+      borderWidth: 2,
+      height: mobileGrid[4],
+      justifyContent: "center",
+      minWidth: mobileGrid[4],
+      position: "absolute",
+      right: -11,
+      top: -10,
+    },
+    tabUnreadText: {
+      color: colors.white,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 14,
+    },
+    tabAiButton: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      marginTop: -mobileGrid[1],
+      minHeight: mobileGrid[12] + mobileGrid[2],
+    },
+    tabAiHalo: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.whiteRgb, 0.76),
+      borderColor: rgba(colors.whiteRgb, 0.92),
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: 1,
+      height: mobileGrid[12],
+      justifyContent: "center",
+      shadowColor: colors.aquaDeep,
+      shadowOffset: { width: 0, height: 7 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      width: mobileGrid[12],
+    },
+    quickSheetBackdrop: {
+      backgroundColor: rgba(colors.inkRgb, 0.42),
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    quickSheet: {
+      backgroundColor: colors.canvas,
+      borderTopLeftRadius: mobileControl.sheetRadius,
+      borderTopRightRadius: mobileControl.sheetRadius,
+      maxHeight: "82%",
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[2],
+    },
+    quickSheetHandle: {
+      alignSelf: "center",
+      backgroundColor: rgba(colors.overlayRgb, 0.18),
+      borderRadius: mobileControl.pillRadius,
+      height: 5,
+      marginBottom: mobileGrid[4],
+      width: mobileGrid[8],
+    },
+    quickSheetHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      marginBottom: mobileGrid[4],
+    },
+    quickSheetEyebrow: {
+      color: colors.sand,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    quickSheetTitle: {
+      color: colors.bone,
+      fontSize: 28,
+      fontWeight: "700",
+      letterSpacing: -0.8,
+      lineHeight: 34,
+      marginTop: mobileGrid[1],
+    },
+    quickSheetBody: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 21,
+      marginTop: mobileGrid[1],
+    },
+    quickSheetClose: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: mobileControl.pillRadius,
+      borderWidth: 1,
+      height: mobileControl.minimumTarget,
+      justifyContent: "center",
+      width: mobileControl.minimumTarget,
+    },
+    quickSheetList: { gap: mobileGrid[2], paddingBottom: mobileGrid[3] },
+    quickSheetAction: {
+      alignItems: "center",
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[2],
+      padding: mobileGrid[3],
+    },
+    quickSheetActionIcon: {
+      alignItems: "center",
+      backgroundColor: rgba(colors.accentRgb, 0.1),
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[10],
+      justifyContent: "center",
+      width: mobileGrid[10],
+    },
+    quickSheetActionTitle: {
+      color: colors.bone,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    quickSheetActionDetail: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
     modalContent: { padding: 18, paddingBottom: 45 },
     hostedReviewHeader: {
@@ -23633,6 +23444,7 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
       marginBottom: 15,
     },
+    modalHeaderSpacer: { height: mobileControl.minimumTarget, width: 50 },
     modalHeaderTitle: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     checkoutArt: {
       backgroundColor: colors.aquaDeep,
@@ -24556,12 +24368,4 @@ function createStyles(palette: Palette) {
   });
 }
 
-const lightStyles = createStyles(lightColors);
-const darkStyles = createStyles(darkColors);
-activePalette = lightColors;
-let activeStyles = lightStyles;
-const styles = new Proxy(lightStyles, {
-  get(_target, property: keyof typeof lightStyles) {
-    return activeStyles[property];
-  },
-}) as typeof lightStyles;
+const styles = createStyles();

@@ -15,6 +15,10 @@ const satoshiFonts = {
   "Satoshi-Medium": require("./assets/fonts/Satoshi-Medium.ttf"),
   "Satoshi-Bold": require("./assets/fonts/Satoshi-Bold.ttf"),
   "Satoshi-Black": require("./assets/fonts/Satoshi-Black.ttf"),
+  Fellix: require("./assets/fonts/Fellix-Regular.ttf"),
+  "Fellix-Medium": require("./assets/fonts/Fellix-Medium.ttf"),
+  "Fellix-SemiBold": require("./assets/fonts/Fellix-SemiBold.ttf"),
+  "Fellix-Bold": require("./assets/fonts/Fellix-Bold.ttf"),
 } as const;
 
 export type DunaNumericTier =
@@ -48,10 +52,27 @@ function satoshiFamily(style: TextProps["style"] | TextInputProps["style"]) {
         : Number.parseInt(weight ?? "400", 10);
 
   if (numericWeight >= 800) return "Satoshi-Black";
-  if (numericWeight >= 700) return "Satoshi-Bold";
+  // Satoshi has no shipped semibold face. Map 600 to Bold instead of
+  // synthesizing an in-between weight that renders differently by platform.
+  if (numericWeight >= 600) return "Satoshi-Bold";
   if (numericWeight >= 500) return "Satoshi-Medium";
   if (numericWeight <= 350) return "Satoshi-Light";
   return "Satoshi";
+}
+
+function fellixFamily(style: TextProps["style"] | TextInputProps["style"]) {
+  const weight = StyleSheet.flatten(style as TextStyle)?.fontWeight;
+  const numericWeight =
+    weight === "bold"
+      ? 700
+      : typeof weight === "number"
+        ? weight
+        : Number.parseInt(weight ?? "400", 10);
+
+  if (numericWeight >= 700) return "Fellix-Bold";
+  if (numericWeight >= 600) return "Fellix-SemiBold";
+  if (numericWeight >= 500) return "Fellix-Medium";
+  return "Fellix";
 }
 
 export function useSatoshiFonts() {
@@ -66,6 +87,16 @@ export function SatoshiText({ style, ...props }: TextProps) {
         style,
         { fontFamily: satoshiFamily(style), fontWeight: "normal" },
       ]}
+    />
+  );
+}
+
+/** Fellix is the product UI voice in the current Duna mobile system. */
+export function FellixText({ style, ...props }: TextProps) {
+  return (
+    <NativeText
+      {...props}
+      style={[style, { fontFamily: fellixFamily(style), fontWeight: "normal" }]}
     />
   );
 }

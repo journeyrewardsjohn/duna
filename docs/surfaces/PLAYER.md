@@ -8,20 +8,25 @@ permissions, plugins, targets, update URL, and EAS project link.
 
 ## Navigation and journeys
 
-`apps/player/App.tsx` defines five persistent tabs:
+`apps/player/App.tsx` defines five persistent dock actions:
 
-| Tab      | Job                                                                       |
-| -------- | ------------------------------------------------------------------------- |
-| Home     | Personal next commitment, direct actions, booking state, live context     |
-| Discover | Players, matches, events, coaches, organizations, venues, travel/map      |
-| Play     | Action launcher for scoring, finding/hosting, booking, joining, recording |
-| Plans    | Bookings, tournament passes, calendar, arrival, and plan management       |
-| You      | Profile, performance, Sand Rating, health, wallet, predictions, settings  |
+| Dock action   | Job                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------- |
+| Home          | Personal next commitment, recent outcomes, direct actions, game context               |
+| Calendar      | Plans, bookings, training, hosted play, and full calendar                             |
+| Duna AI       | Full-screen contextual assistant inside the messaging shell                           |
+| Quick actions | Temporary sheet for scoring, discovery, hosting, booking, events, coaching, and video |
+| Messages      | Full-screen human conversation inbox and threads                                      |
 
 Secondary surfaces include score upload, video/Vision studio, performance,
 Duna Health, wallet and prediction portfolio, messaging, profile/artwork
 editing, booking management, organization/coach/venue views, pickup hosting,
 and Watch-score review.
+
+The implementation-grade inventory of every current screen, state, entry point,
+handoff, and interconnection is in
+[`PLAYER_SCREEN_INVENTORY.md`](PLAYER_SCREEN_INVENTORY.md). Use it as the
+required route/state checklist for Player redesign work.
 
 Deep links currently route messaging, bookings, and live-match context back to
 the owning screen. Authentication returns through the `auth/callback` path on

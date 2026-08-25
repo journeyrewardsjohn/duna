@@ -14,21 +14,25 @@ Read the relevant reference before changing any user-facing surface:
    is the current source of truth for the public website's hero, color families,
    band geometry, navigation, footer, and tightly scoped editorial metadata
    accent.
-3. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
-   remains the source of truth for ground inversion, athletic composition, club
-   color, player identity, and page-level direction outside the public-web v4
-   scope.
-4. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
+3. [`docs/design/duna-mobile-interface-v4.md`](docs/design/duna-mobile-interface-v4.md)
+   is the current direction for native navigation, chat, video, recording,
+   Satoshi translation, icons, sheets, and the five-point mobile grid.
+4. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
+   is the current source of truth for ground inversion, athletic composition,
+   typography, club color, player identity, and page-level direction. It
+   supersedes only the zoning rule in v2; its typography guidance applies only
+   where the font usage guide does not amend it.
+5. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
    is the verified correction ledger. Treat an item as closed only when source,
    computed styles, responsive layout, and live behavior agree.
-5. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
+6. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
    remains the source for brand, imagery, motion, voice, and co-branding where
    v3 does not amend it.
-6. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
+7. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
    extends the system for Duna Players and Duna Pro. It owns mobile navigation,
    adaptive contrast, sunlight behavior, touch targets, offline states, the
    Strand, and the Watch.
-7. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
+8. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
    owns theme architecture. Theme is a preference, zone is meaning, and
    contrast is an environmental condition.
 
@@ -46,9 +50,6 @@ When the documents appear to conflict, preserve these invariants:
   a general CTA or brand color.
 - Brand owns the fill; Duna owns the frame. Partner assets stay inside a Duna
   container and must never be recolored outside their approved usage.
-- Public-web composition uses snow ground, atmospheric sky/blush/cream washes,
-  and a small number of 48px full-width bands. Adjoining colored bands share an
-  edge without a white seam.
 
 ## Shared implementation rules
 
@@ -60,12 +61,15 @@ When the documents appear to conflict, preserve these invariants:
   shared token resolver. Never use the retired `performance` zone.
 - Every theme supports Light, Dark, and Match device. Never hardcode a fog
   dissolve: it must resolve to the active zone ground.
-- Satoshi is Duna's primary face for every product word and number. DM Mono is a
-  restricted public-editorial accent for short uppercase eyebrows, timestamps,
-  live/data labels, and tickers; it never replaces Satoshi in controls, reading
-  copy, scores, HQ, or native applications. Generic `sans-serif` is a failure
-  fallback only. Club-configured theme fonts remain contained tenant content
-  and never replace Duna chrome.
+- Duna ships Satoshi as its primary product typeface. Use it for every word and
+  number across HQ, Player, and Pro, and for all web product copy and controls;
+  use tabular figures for updating or aligned data. DM Mono is restricted to
+  the short public-editorial metadata accents defined by v4 and never replaces
+  Satoshi in controls, reading copy, scores, HQ, or native apps. No serif,
+  optional monument face, or other brand family may enter a product bundle.
+  Generic `sans-serif` is a failure fallback only.
+  Club-configured theme fonts remain contained tenant content and never replace
+  Duna chrome.
 - Never synthesize a font weight. Tracking follows the v3 size curve and is
   never tighter than `-0.030em`; display word spacing compensates negative
   tracking.
@@ -77,7 +81,8 @@ When the documents appear to conflict, preserve these invariants:
   moderation gates.
 - Meaningful numbers use the six Satoshi tiers from the font guide. Score,
   Hero, Block, Table, and Chip use tabular figures; Monument is deliberately
-  proportional. Use `font-variation-settings`, never `font-stretch`.
+  proportional. Never synthesize a font weight. Satoshi is the only product
+  family across web, HQ, Super Admin, and both native apps.
 - Use the four chip classes from the design system. Do not render status,
   taxonomy, identity, and metrics as undifferentiated badges.
 - Do not render misleading empty data such as `0/0`, `0–0`, undifferentiated
@@ -122,19 +127,22 @@ When the documents appear to conflict, preserve these invariants:
 
 ## Homepage creative direction
 
-- The homepage opens on the v4 atmospheric editorial wash with a dynamic event
-  announcement, short verdict headline, two pill actions, one rounded approved
-  volleyball image, and compact connected-network proof. It is content-first
-  and must not depend on WebGL, parallax, autoplay, blur, hover, or motion.
-- Preserve the existing non-hero story and data. Recompose Play, Compete, and
-  Operate through warm, sky, and passport-navy bands, with crisp editorial
-  intervals and no thin white seams between intentionally adjoining bands.
-- Dark ground remains reserved for high-authority tour, club, and live moments;
-  it does not turn the whole public site dark. The user-selected dark preference
-  continues to resolve independently from semantic zones.
-- Approved reference artifacts may define the public design system's pacing and
-  geometry. Keep Duna's actual content, data truth, media permissions, and
-  product access intact unless the brief explicitly authorizes a content change.
+- The homepage opens on a nearly white editorial ground. Its signature is one
+  persistent, scroll-driven procedural sand world that moves through the Play,
+  Compete, and Operate value chapters; do not replace it with a card hero,
+  generic stock loop, or a collection of competing ambient effects.
+- The sand canvas is progressive enhancement. All copy, links, proof, and
+  chapter order remain complete when WebGL is unavailable, reduced motion is
+  requested, or data saving is enabled. In those states, render a composed
+  static sand frame instead of removing the atmosphere. Software-rendered
+  WebGL must also use the low-resolution static path so motion never blocks
+  navigation or theme controls on constrained devices.
+- After the opening world, return to crisp `--surface-1` sections with measured
+  editorial type and one purposeful plane break. Dark ground is reserved for
+  the live Apple Watch / match-control chapter.
+- Reference sites may inform pacing and spatial behavior, never assets,
+  geometry, shaders, copy, or brand motifs. Duna's motion subject is wind-shaped
+  sand, court lines, and the connected game.
 
 ## Imagery and generated media
 

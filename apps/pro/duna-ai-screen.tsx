@@ -7,13 +7,15 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProDunaAiResponse } from "./mobile-api";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { useProRuntime } from "./runtime";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -43,6 +43,7 @@ export async function POST(request: Request) {
           firstName: session.user.firstName,
           id: session.user.id,
           lastName: session.user.lastName,
+          profilePictureUrl: session.user.profilePictureUrl,
         },
       },
       { headers: { "cache-control": "no-store" } },

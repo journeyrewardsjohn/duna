@@ -8,13 +8,14 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Rect } from "react-native-svg";
-import { SatoshiText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 import { usePlayerRuntime, type PlayerTrainingWorkspace } from "./runtime";
 
 type TrainingEvent = PlayerTrainingWorkspace["upcomingEvents"][number];
@@ -245,12 +246,12 @@ function eventGlyph(kind: TrainingEvent["kind"]): string {
   return "●";
 }
 
-function TrainingCourt({ dark }: { readonly dark: boolean }) {
-  const ink = dark ? "#E8F0F0" : "#122D3A";
+function TrainingCourt() {
+  const ink = "#122D3A";
   return (
     <Svg height={146} viewBox="0 0 240 146" width="100%">
       <Rect
-        fill={dark ? "#183B47" : "#E7F4F1"}
+        fill="#E7F4F1"
         height="132"
         rx="12"
         stroke={ink}
@@ -269,7 +270,7 @@ function TrainingCourt({ dark }: { readonly dark: boolean }) {
         <Circle
           cx={Number(x)}
           cy={Number(y)}
-          fill={dark ? "#102B35" : "#FFFFFF"}
+          fill="#FFFFFF"
           key={index}
           r="10"
           stroke={String(color)}
@@ -296,8 +297,7 @@ export function PlayerTrainingScreen({
   readonly onBack: () => void;
 }) {
   const runtime = usePlayerRuntime();
-  const dark = useColorScheme() === "dark";
-  const palette = dark ? darkPalette : lightPalette;
+  const palette = lightPalette;
   const workspace = runtime.training ?? previewTraining();
   const program = workspace.programs[0];
   const practice = workspace.nextPractice;
@@ -461,7 +461,7 @@ export function PlayerTrainingScreen({
             { backgroundColor: palette.surface, borderColor: palette.line },
           ]}
         >
-          <TrainingCourt dark={dark} />
+          <TrainingCourt />
           <Text style={[styles.practicePurpose, { color: palette.text }]}>
             {practice.practice?.purpose}
           </Text>
@@ -811,27 +811,15 @@ export function PlayerTrainingScreen({
 }
 
 const lightPalette = {
-  canvas: "#F4F6F4",
-  surface: "#FFFFFF",
-  soft: "#E3F4EF",
-  text: "#102B35",
-  muted: "#60747C",
-  line: "#D6DFDE",
-  deep: "#103846",
-  accent: "#0AA68D",
-  flare: "#E09A35",
-};
-
-const darkPalette = {
-  canvas: "#081C24",
-  surface: "#102C36",
-  soft: "#173D45",
-  text: "#EFF7F5",
-  muted: "#9CB1B3",
-  line: "#264650",
-  deep: "#102B35",
-  accent: "#28C7AB",
-  flare: "#F0B45A",
+  canvas: "#FFFFFF",
+  surface: "#F4F4F2",
+  soft: "#F1F6F9",
+  text: "#090909",
+  muted: "#767773",
+  line: "#E5E6E3",
+  deep: "#092B4D",
+  accent: "#103A63",
+  flare: "#D8B47A",
 };
 
 const styles = StyleSheet.create({

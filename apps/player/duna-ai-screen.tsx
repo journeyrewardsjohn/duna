@@ -104,6 +104,7 @@ export function PlayerDunaAiScreen({
   onOpenBooking,
   onOpenEvent,
   onOpenMatch,
+  onOpenMessages,
   onOpenPath,
   onOpenVenue,
   palette,
@@ -117,6 +118,7 @@ export function PlayerDunaAiScreen({
     href: string,
   ) => void;
   readonly onOpenMatch: (matchId: string, href?: string) => void;
+  readonly onOpenMessages: () => void;
   readonly onOpenPath: (href: string) => void;
   readonly onOpenVenue: (venueId: string, href: string) => void;
   readonly palette: PlayerDunaAiPalette;
@@ -531,14 +533,25 @@ export function PlayerDunaAiScreen({
         style={styles.safe}
       >
         <View style={styles.header}>
-          <View style={styles.brandLockup}>
-            <View style={styles.aiMark}>
-              <Text style={styles.aiMarkText}>AI</Text>
+          <View style={styles.aiMark}>
+            <Text style={styles.aiMarkText}>✦</Text>
+          </View>
+          <View style={styles.modeSwitch}>
+            <View style={[styles.modeOption, styles.modeOptionSelected]}>
+              <Text
+                style={[styles.modeOptionText, styles.modeOptionTextSelected]}
+              >
+                Duna AI
+              </Text>
             </View>
-            <View style={styles.headerCopy}>
-              <Text style={styles.headerTitle}>Duna AI</Text>
-              <Text style={styles.headerContext}>PRIVATE PLAYER COPILOT</Text>
-            </View>
+            <Pressable
+              accessibilityLabel="Open Messages"
+              accessibilityRole="button"
+              onPress={onOpenMessages}
+              style={styles.modeOption}
+            >
+              <Text style={styles.modeOptionText}>Messages</Text>
+            </Pressable>
           </View>
           <Pressable
             accessibilityLabel="Close Duna AI"
@@ -655,24 +668,38 @@ function createStyles(palette: PlayerDunaAiPalette) {
       paddingHorizontal: 16,
       paddingVertical: 10,
     },
-    brandLockup: { alignItems: "center", flexDirection: "row", gap: 10 },
     aiMark: {
       alignItems: "center",
       backgroundColor: palette.accent,
-      borderRadius: 13,
-      height: 46,
+      borderRadius: 22,
+      height: 44,
       justifyContent: "center",
-      width: 46,
+      width: 44,
     },
-    aiMarkText: { color: palette.onAccent, fontSize: 15, fontWeight: "900" },
-    headerCopy: { gap: 1 },
-    headerTitle: { color: palette.text, fontSize: 18, fontWeight: "900" },
-    headerContext: {
+    aiMarkText: { color: palette.onAccent, fontSize: 17, fontWeight: "700" },
+    modeSwitch: {
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 24,
+      flex: 1,
+      flexDirection: "row",
+      marginHorizontal: 10,
+      padding: 4,
+    },
+    modeOption: {
+      alignItems: "center",
+      borderRadius: 20,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 40,
+      paddingHorizontal: 10,
+    },
+    modeOptionSelected: { backgroundColor: palette.surface },
+    modeOptionText: {
       color: palette.muted,
-      fontSize: 12,
-      fontWeight: "800",
-      letterSpacing: 0.8,
+      fontSize: 14,
+      fontWeight: "700",
     },
+    modeOptionTextSelected: { color: palette.text },
     close: {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,

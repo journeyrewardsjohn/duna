@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import {
   CalendarDays,
@@ -83,6 +84,10 @@ import {
   SatoshiTextInput as TextInput,
   useSatoshiFonts,
 } from "./satoshi-text";
+
+// Keep the native poster in place until the first React frame contains the
+// bundled launch film. This prevents a white bridge frame on cold starts.
+void SplashScreen.preventAutoHideAsync();
 
 // Metro requires static module references so the full Duna mark ships natively.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -5132,7 +5137,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }}>
+      <View onLayout={() => void SplashScreen.hideAsync()} style={{ flex: 1 }}>
         <ProRuntimeProvider>
           <ProApp />
         </ProRuntimeProvider>
