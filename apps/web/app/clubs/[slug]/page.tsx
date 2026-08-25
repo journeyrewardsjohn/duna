@@ -16,7 +16,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { CoachCard } from "@/components/coach-card";
+import { ClubHeroMedia } from "@/components/club-hero-media";
 import { EventCard } from "@/components/event-card";
+import {
+  PublicSectionNav,
+  type PublicSectionNavItem,
+} from "@/components/event-section-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getServerCaller } from "@/lib/api";
@@ -216,8 +221,6 @@ export default async function ClubPage({
     "--club-primary": normalizedClubColor["--club-core"],
     "--club-accent": normalizedClubColor["--club-edge"],
     "--club-sand": normalizedClubColor["--club-tint"],
-    "--club-ink": "#1B1B19",
-    "--club-canvas": theme.palette.canvas,
     "--club-heading": "var(--font-display)",
     "--club-body": "var(--font-body)",
   } as CSSProperties;
@@ -226,6 +229,21 @@ export default async function ClubPage({
   const services = catalog.filter((item) => item.type === "service");
   const plans = catalog.filter((item) => item.type === "plan");
   const goods = catalog.filter((item) => item.type === "good");
+  const hasHeroImage =
+    theme.heroMediaType === "image" && Boolean(theme.heroMediaUrl);
+  const hasHeroVideo =
+    theme.heroMediaType === "video" && Boolean(theme.heroMediaUrl);
+  const hasHeroMedia = hasHeroImage || hasHeroVideo;
+  const sectionNav: PublicSectionNavItem[] = [
+    { id: "book", label: "Events" },
+    ...(services.length > 0 ? [{ id: "services", label: "Services" }] : []),
+    ...(coaches.length > 0 ? [{ id: "coaches", label: "Coaches" }] : []),
+    ...(plans.length > 0
+      ? [{ id: "plans", label: "Memberships + credits" }]
+      : []),
+    ...(goods.length > 0 ? [{ id: "shop", label: "Shop" }] : []),
+    { id: "locations", label: "Locations" },
+  ];
   const clubUrl = absolutePublicUrl(`/clubs/${slug}`);
   const structuredData = {
     "@context": "https://schema.org",
@@ -283,73 +301,84 @@ export default async function ClubPage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         type="application/ld+json"
       />
-      <section className="club-hero">
-        <div
-          className="club-hero__art"
-          style={
-            theme.heroMediaType === "image" && theme.heroMediaUrl
-              ? { backgroundImage: `url("${theme.heroMediaUrl}")` }
-              : undefined
-          }
-        >
-          {theme.heroMediaType === "video" && theme.heroMediaUrl && (
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
+      <section
+        className={`club-hero club-hero--${hasHeroMedia ? "media" : "gradient"}`}
+        data-hero-kind={
+          hasHeroImage ? "image" : hasHeroVideo ? "video" : "gradient"
+        }
+      >
+        {hasHeroMedia && theme.heroMediaUrl && (
+          <div aria-hidden="true" className="club-hero__media">
+            <ClubHeroMedia
+              kind={hasHeroImage ? "image" : "video"}
               poster={theme.heroPosterUrl}
-              src={theme.heroMediaUrl}
+              url={theme.heroMediaUrl}
             />
-          )}
-          <div />
-          <span>{mark}</span>
-        </div>
-        <div className="club-hero__copy">
-          <div>
-            <Badge tone="positive">Verified club</Badge>
-            <Badge>{organization.plan.replace("-", " ")}</Badge>
           </div>
-          {theme.logoUrl && (
-            <img
-              alt={`${organization.name} logo`}
-              className="club-hero__logo"
-              src={theme.logoUrl}
-            />
-          )}
-          <h1>{organization.name}</h1>
-          <p>
-            {theme.tagline ??
-              theme.profileSummary ??
-              "Training, competition, and community in one simple place."}
-          </p>
-          <div className="club-hero__stats">
-            <span>
-              <Numeric>{organization.memberCount}</Numeric>
-              <small>players</small>
+        )}
+        {!hasHeroMedia && (
+          <span aria-hidden="true" className="club-hero__watermark">
+            {mark}
+          </span>
+        )}
+        <div className="club-hero__inner">
+          <div className="club-hero__identity">
+            <span
+              className={`club-hero__mark${theme.logoUrl ? " club-hero__mark--logo" : ""}`}
+            >
+              {theme.logoUrl ? (
+                <img alt={`${organization.name} logo`} src={theme.logoUrl} />
+              ) : (
+                <span aria-hidden="true">{mark}</span>
+              )}
             </span>
-            <span>
-              <Numeric>{organization.staffCount}</Numeric>
-              <small>coaches + staff</small>
-            </span>
-            <span>
-              <Numeric>{organization.venueCount}</Numeric>
-              <small>venues</small>
-            </span>
+            <div className="club-hero__chips">
+              <Badge tone="positive">Verified club</Badge>
+              <Badge>{organization.plan.replace("-", " ")}</Badge>
+            </div>
           </div>
-          <a href="#book">
-            Explore what’s available <ArrowRight size={17} />
-          </a>
+          <div className="club-hero__copy">
+            <h1>{organization.name}</h1>
+            <p>
+              {theme.tagline ??
+                theme.profileSummary ??
+                "Training, competition, and community in one simple place."}
+            </p>
+            <div className="club-hero__footer">
+              <dl className="club-hero__stats">
+                <div>
+                  <dd>
+                    <Numeric>{organization.memberCount}</Numeric>
+                  </dd>
+                  <dt>players</dt>
+                </div>
+                <div>
+                  <dd>
+                    <Numeric>{organization.staffCount}</Numeric>
+                  </dd>
+                  <dt>coaches + staff</dt>
+                </div>
+                <div>
+                  <dd>
+                    <Numeric>{organization.venueCount}</Numeric>
+                  </dd>
+                  <dt>venues</dt>
+                </div>
+              </dl>
+              <a href="#book">
+                Explore what’s available <ArrowRight size={17} />
+              </a>
+            </div>
+          </div>
         </div>
       </section>
-      <nav aria-label="Club profile" className="club-profile-nav">
-        <a href="#book">Events</a>
-        {services.length > 0 && <a href="#services">Services</a>}
-        {coaches.length > 0 && <a href="#coaches">Coaches</a>}
-        {plans.length > 0 && <a href="#plans">Memberships + credits</a>}
-        {goods.length > 0 && <a href="#shop">Shop</a>}
-        <a href="#locations">Locations</a>
-      </nav>
+      <PublicSectionNav
+        ariaLabel="Explore this club"
+        className="club-profile-nav"
+        items={sectionNav}
+        label="Explore club"
+        observedContentSelector=".club-profile"
+      />
       <section className="club-body">
         <div className="section__heading" id="book">
           <div>

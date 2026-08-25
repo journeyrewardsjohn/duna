@@ -30021,113 +30021,347 @@ html {
 }
 
 .club-profile {
-  --club-primary: #173a63;
-  --club-accent: #2b67a4;
-  --club-sand: #e9dfc9;
-  --club-ink: #101828;
-  --club-canvas: #fafaf7;
-  background: var(--club-canvas);
-  color: var(--club-ink);
+  --club-primary: var(--duna-web-navy);
+  --club-accent: var(--duna-web-sky);
+  --club-sand: var(--duna-web-cream);
+  --club-nav-offset: var(--duna-web-nav-height);
+  background: var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+  font-family: var(--club-body, var(--font-body));
+}
+
+:root[data-theme="dark"] .public-detail.club-profile {
+  background: var(--duna-web-snow);
 }
 
 .club-profile .club-hero {
-  background:
-    radial-gradient(
-      circle at 82% 18%,
-      color-mix(in srgb, var(--club-sand) 55%, transparent),
-      transparent 32%
-    ),
-    var(--club-canvas);
-}
-
-.club-profile .club-hero__art {
-  background-color: color-mix(in srgb, var(--club-primary) 88%, black);
-  background-position: center;
-  background-size: cover;
+  background: var(--duna-web-grad-club);
+  border-radius: 0 0 var(--duna-web-radius-band) var(--duna-web-radius-band);
+  display: block;
+  isolation: isolate;
+  margin: 0;
+  max-width: none;
+  min-height: clamp(560px, 62vw, 690px);
   overflow: hidden;
+  padding: 0;
   position: relative;
-}
-
-.club-profile .club-hero__art video {
-  height: 100%;
-  inset: 0;
-  object-fit: cover;
-  position: absolute;
   width: 100%;
 }
 
-.club-profile .club-hero__art::after {
-  background: linear-gradient(180deg, transparent 25%, rgb(9 25 44 / 64%));
+.club-profile .club-hero--media {
+  background: var(--duna-web-navy);
+  color: var(--duna-web-on-navy);
+}
+
+.club-profile .club-hero--gradient {
+  color: var(--duna-web-charcoal);
+}
+
+.club-profile .club-hero--gradient::after {
+  background: linear-gradient(
+    132deg,
+    transparent 0 58%,
+    color-mix(in srgb, var(--club-accent) 44%, transparent) 58% 67%,
+    transparent 67%
+  );
   content: "";
   inset: 0;
   pointer-events: none;
   position: absolute;
+  z-index: -1;
 }
 
-.club-profile .club-hero__art > span {
+.club-profile .club-hero--media::after {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--duna-web-navy) 94%, transparent) 0%,
+      color-mix(in srgb, var(--duna-web-navy) 72%, transparent) 48%,
+      color-mix(in srgb, var(--duna-web-navy) 28%, transparent) 100%
+    ),
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--duna-web-navy) 82%, transparent),
+      transparent 66%
+    );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.club-hero__media,
+.club-hero__media img,
+.club-hero__media video {
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.club-hero__media {
+  z-index: -2;
+}
+
+.club-hero__media img,
+.club-hero__media video {
+  object-fit: cover;
+  object-position: center;
+}
+
+.club-hero__watermark {
+  color: color-mix(in srgb, var(--club-primary) 16%, transparent);
+  font-family: var(--club-heading, var(--font-display));
+  font-size: clamp(15rem, 34vw, 34rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.7;
+  pointer-events: none;
+  position: absolute;
+  right: -0.04em;
+  top: 50%;
+  transform: translateY(-42%);
+  user-select: none;
+  z-index: -1;
+}
+
+.club-hero__inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin: 0 auto;
+  min-height: inherit;
+  padding: clamp(3rem, 6.5vw, 5.75rem)
+    max(1.5rem, calc((100vw - var(--duna-web-content-max)) / 2));
   position: relative;
-  z-index: 2;
+  width: 100%;
+  z-index: 1;
 }
 
-.club-profile .club-hero__copy > a,
-.club-product-card__body > a {
+.club-hero__identity {
   align-items: center;
-  background: var(--club-primary);
-  border-radius: 999px;
-  color: white;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.club-hero__mark {
+  align-items: center;
+  background: var(--duna-web-logo-surface);
+  border: 1px solid
+    color-mix(in srgb, var(--duna-web-logo-ink) 10%, transparent);
+  border-radius: var(--duna-web-radius-item);
+  box-shadow: var(--duna-web-shadow-card);
+  color: var(--club-ink, var(--duna-web-logo-ink));
   display: inline-flex;
-  font-weight: 750;
-  gap: 0.55rem;
+  flex: 0 0 auto;
+  font-family: var(--club-heading, var(--font-display));
+  font-size: 1.25rem;
+  font-weight: 900;
+  height: 68px;
   justify-content: center;
-  text-decoration: none;
+  padding: 0.75rem;
+  width: 68px;
 }
 
-.club-profile .club-hero__copy > a {
-  padding: 0.9rem 1.2rem;
+.club-hero__mark--logo {
+  max-width: min(220px, 52vw);
+  min-width: 68px;
+  padding-inline: 1rem;
+  width: auto;
 }
 
-.club-hero__logo {
-  height: 48px;
+.club-hero__mark img {
+  height: 100%;
   max-width: 180px;
   object-fit: contain;
-  object-position: left center;
+  width: auto;
 }
 
-.club-profile-nav {
-  align-items: center;
-  background: color-mix(in srgb, var(--club-canvas) 94%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--club-ink) 12%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--club-ink) 12%, transparent);
+.club-hero__chips {
   display: flex;
-  gap: 0.4rem;
-  margin: 0 auto;
-  max-width: 1240px;
-  overflow-x: auto;
-  padding: 0.75rem clamp(1rem, 4vw, 2.5rem);
-  position: sticky;
-  top: 0;
-  z-index: 9;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.club-profile-nav a {
-  border-radius: 999px;
-  color: var(--club-ink);
-  flex: 0 0 auto;
-  font-size: 0.78rem;
+.club-hero--media .club-hero__chips .duna-badge {
+  background: color-mix(in srgb, var(--duna-web-on-navy) 12%, transparent);
+  border-color: color-mix(in srgb, var(--duna-web-on-navy) 28%, transparent);
+  color: var(--duna-web-on-navy);
+}
+
+.club-hero--gradient .club-hero__chips .duna-badge {
+  background: color-mix(in srgb, var(--duna-web-white) 82%, transparent);
+  border-color: var(--duna-web-border);
+  color: var(--duna-web-charcoal);
+}
+
+.club-profile .club-hero__copy {
+  align-items: start;
+  background: transparent;
+  display: block;
+  max-width: 1050px;
+  padding: 0;
+}
+
+.club-profile .club-hero h1 {
+  color: inherit;
+  font-family: var(--club-heading, var(--font-display));
+  font-size: clamp(4rem, 8.7vw, 7.5rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.92;
+  margin: clamp(2.5rem, 7vw, 5rem) 0 1.15rem;
+  max-width: 11ch;
+  text-wrap: balance;
+  word-spacing: 0.03em;
+}
+
+.club-profile .club-hero__copy > p {
+  color: var(--duna-web-grey-600);
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 58ch;
+}
+
+.club-profile .club-hero--media .club-hero__copy > p {
+  color: var(--duna-web-on-navy-muted);
+}
+
+.club-hero__footer {
+  align-items: end;
+  display: flex;
+  gap: 2rem;
+  justify-content: space-between;
+  margin-top: clamp(2rem, 4vw, 3.25rem);
+}
+
+.club-profile .club-hero__stats {
+  display: grid;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  grid-template-columns: repeat(3, auto);
+  margin: 0;
+}
+
+.club-profile .club-hero__stats div {
+  display: flex;
+  flex-direction: column;
+}
+
+.club-profile .club-hero__stats dd,
+.club-profile .club-hero__stats dt {
+  margin: 0;
+}
+
+.club-profile .club-hero__stats .duna-numeric {
+  color: inherit;
+  font-family: var(--font-data);
+  font-size: 1.65rem;
   font-weight: 700;
-  padding: 0.7rem 0.9rem;
+  line-height: 1;
+}
+
+.club-profile .club-hero__stats dt {
+  color: var(--duna-web-grey-600);
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: 0.35rem;
+}
+
+.club-profile .club-hero--media .club-hero__stats dt {
+  color: var(--duna-web-on-navy-muted);
+}
+
+.club-hero__footer > a,
+.club-product-card__body > a {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 0.55rem;
+  justify-content: center;
+  min-height: 50px;
   text-decoration: none;
 }
 
-.club-profile-nav a:hover {
-  background: color-mix(in srgb, var(--club-sand) 50%, white);
+.club-hero__footer > a {
+  background: var(--duna-web-charcoal);
+  color: var(--duna-web-snow);
+  flex: 0 0 auto;
+  padding: 0.85rem 1.2rem;
+}
+
+.club-hero--media .club-hero__footer > a {
+  background: var(--duna-web-on-navy);
+  color: var(--duna-web-navy);
+}
+
+.club-profile .club-profile-nav {
+  backdrop-filter: blur(18px) saturate(130%);
+  background: color-mix(in srgb, var(--duna-web-snow) 92%, transparent);
+  border-color: var(--duna-web-hairline);
+  box-shadow: 0 10px 28px
+    color-mix(in srgb, var(--duna-web-navy) 7%, transparent);
+  color: var(--duna-web-charcoal);
+  top: var(--club-nav-offset);
+  z-index: 70;
+}
+
+.club-profile-nav .event-section-nav__inner {
+  gap: 1rem;
+  max-width: calc(var(--duna-web-content-max) + 48px);
+  padding-inline: 24px;
+}
+
+.club-profile-nav .event-section-nav__label {
+  border-color: var(--duna-web-hairline);
+  color: var(--duna-web-grey-600);
+  font-family: var(--duna-web-font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  min-height: 66px;
+  text-transform: uppercase;
+}
+
+.club-profile-nav .event-section-nav__links {
+  padding-block: 0.55rem;
+}
+
+.club-profile-nav .event-section-nav__links a {
+  color: var(--duna-web-charcoal);
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-height: 46px;
+  padding: 0.85rem 1rem;
+}
+
+.club-profile-nav .event-section-nav__links a:hover {
+  background: color-mix(in srgb, var(--duna-web-white) 82%, transparent);
+  border-color: var(--duna-web-border);
+}
+
+.club-profile-nav .event-section-nav__links a[aria-current="location"] {
+  background: var(--duna-web-charcoal);
+  border-color: var(--duna-web-charcoal);
+  color: var(--duna-web-snow);
+}
+
+.club-profile [id] {
+  scroll-margin-top: calc(var(--club-nav-offset) + 86px);
+}
+
+.club-profile .club-body {
+  max-width: calc(var(--duna-web-content-max) + 48px);
+  padding: clamp(3.5rem, 7vw, 6rem) 24px clamp(5rem, 9vw, 8rem);
 }
 
 .club-offerings {
   display: grid;
   gap: 1.35rem;
   margin-top: clamp(2.5rem, 7vw, 5rem);
-  scroll-margin-top: 90px;
 }
 
 .club-offerings > header {
@@ -30142,23 +30376,25 @@ html {
 }
 
 .club-offerings h2 {
-  color: var(--club-ink);
+  color: var(--duna-web-charcoal);
   font-size: clamp(2rem, 4vw, 3.4rem);
   letter-spacing: -0.03em;
   margin: 0.3rem 0 0.55rem;
 }
 
 .club-offerings header p {
-  color: color-mix(in srgb, var(--club-ink) 67%, transparent);
+  color: var(--duna-web-grey-600);
+  font-size: 1rem;
   line-height: 1.65;
   margin: 0;
 }
 
 .club-offerings__icon {
   align-items: center;
-  background: color-mix(in srgb, var(--club-sand) 60%, white);
-  border-radius: 18px;
-  color: var(--club-primary);
+  background: var(--club-sand);
+  border: 1px solid color-mix(in srgb, var(--club-primary) 18%, transparent);
+  border-radius: var(--duna-web-radius-item);
+  color: var(--club-ink);
   display: flex;
   height: 52px;
   justify-content: center;
@@ -30172,16 +30408,16 @@ html {
 }
 
 .club-product-card {
-  background: white;
-  border: 1px solid color-mix(in srgb, var(--club-ink) 11%, transparent);
-  border-radius: 24px;
-  box-shadow: 0 14px 40px rgb(16 24 40 / 5%);
+  background: var(--duna-web-white);
+  border: 1px solid var(--duna-web-hairline);
+  border-radius: var(--duna-web-radius-card);
+  box-shadow: var(--duna-web-shadow-card);
   min-width: 0;
   overflow: hidden;
 }
 
 .club-profile--crisp .club-product-card {
-  border-radius: 8px;
+  border-radius: var(--duna-web-radius-item);
   box-shadow: none;
 }
 
@@ -30193,22 +30429,22 @@ html {
   align-items: flex-start;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--club-sand) 75%, white),
-    color-mix(in srgb, var(--club-accent) 28%, white)
+    color-mix(in srgb, var(--club-sand) 86%, var(--duna-web-logo-surface)),
+    color-mix(in srgb, var(--club-accent) 40%, var(--duna-web-logo-surface))
   );
   background-position: center;
   background-size: cover;
   display: flex;
-  height: 190px;
+  height: 210px;
   justify-content: space-between;
   padding: 1rem;
 }
 
 .club-product-card__media > span:first-child:not(.duna-badge) {
   align-items: center;
-  background: rgb(255 255 255 / 82%);
+  background: color-mix(in srgb, var(--duna-web-logo-surface) 88%, transparent);
   border-radius: 999px;
-  color: var(--club-primary);
+  color: var(--club-ink);
   display: flex;
   font-size: 1.2rem;
   font-weight: 800;
@@ -30219,8 +30455,9 @@ html {
 
 .club-product-card__media .duna-badge {
   backdrop-filter: blur(12px);
-  background: rgb(255 255 255 / 84%);
-  color: var(--club-ink);
+  background: color-mix(in srgb, var(--duna-web-logo-surface) 88%, transparent);
+  border-color: color-mix(in srgb, var(--duna-web-logo-ink) 10%, transparent);
+  color: var(--duna-web-logo-ink);
   margin-left: auto;
   text-transform: capitalize;
 }
@@ -30232,14 +30469,14 @@ html {
 }
 
 .club-product-card h3 {
-  color: var(--club-ink);
+  color: var(--duna-web-charcoal);
   font-size: 1.25rem;
   letter-spacing: -0.025em;
   margin: 0;
 }
 
 .club-product-card p {
-  color: color-mix(in srgb, var(--club-ink) 62%, transparent);
+  color: var(--duna-web-grey-600);
   display: -webkit-box;
   font-size: 0.86rem;
   line-height: 1.55;
@@ -30256,27 +30493,200 @@ html {
 }
 
 .club-product-card__meta strong {
-  color: var(--club-primary);
+  color: var(--duna-web-charcoal);
   font-size: 1rem;
 }
 
 .club-product-card__meta span {
-  color: color-mix(in srgb, var(--club-ink) 55%, transparent);
+  color: var(--duna-web-grey-500);
   font-size: 0.75rem;
 }
 
 .club-product-card__body > a {
+  background: var(--duna-web-charcoal);
+  color: var(--duna-web-snow);
   padding: 0.75rem 0.9rem;
   width: 100%;
 }
 
+.club-profile .club-values {
+  background: var(--duna-web-grad-navy);
+  border-radius: 32px;
+  box-shadow: var(--duna-web-shadow-panel);
+  gap: 0;
+  overflow: hidden;
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.club-profile .club-values article {
+  background: transparent;
+  border: 0;
+  border-right: 1px solid
+    color-mix(in srgb, var(--duna-web-on-navy) 14%, transparent);
+  border-radius: 0;
+  color: var(--duna-web-on-navy);
+  min-height: 190px;
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+}
+
+.club-profile .club-values article:last-child {
+  border-right: 0;
+}
+
+.club-profile .club-values svg {
+  color: var(--duna-web-gold);
+}
+
+.club-profile .club-values strong {
+  color: var(--duna-web-on-navy);
+  font-size: 1.1rem;
+}
+
+.club-profile .club-values p {
+  color: var(--duna-web-on-navy-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.club-profile .club-locations {
+  gap: clamp(2rem, 6vw, 4.5rem);
+  margin-top: clamp(4rem, 8vw, 7rem);
+}
+
+.club-profile .club-locations h2 {
+  color: var(--duna-web-charcoal);
+  font-size: clamp(2.25rem, 4.5vw, 3.75rem);
+}
+
+.club-profile .club-locations > div:last-child {
+  background: var(--duna-web-white);
+  border: 1px solid var(--duna-web-hairline);
+  border-radius: var(--duna-web-radius-card);
+  box-shadow: var(--duna-web-shadow-card);
+}
+
+.club-profile .club-locations article {
+  border-color: var(--duna-web-hairline);
+  padding: 1.1rem 1.2rem;
+}
+
+.club-profile .club-locations article:last-child {
+  border-bottom: 0;
+}
+
+.club-profile .club-locations article > svg {
+  background: var(--club-sand);
+  border-radius: 12px;
+  box-sizing: content-box;
+  color: var(--club-ink);
+  padding: 0.7rem;
+}
+
+.club-profile .club-locations article strong {
+  color: var(--duna-web-charcoal);
+}
+
+.club-profile .club-locations article small {
+  color: var(--duna-web-grey-600);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .club-profile .club-hero {
+    min-height: 610px;
+  }
+}
+
 @media (max-width: 980px) {
+  .club-profile .club-hero {
+    min-height: 600px;
+  }
+
   .club-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
+  .club-profile {
+    --club-nav-offset: 64px;
+  }
+
+  .club-profile .club-hero {
+    border-radius: 0 0 32px 32px;
+    min-height: 560px;
+  }
+
+  .club-profile .club-hero--media::after {
+    background: linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--duna-web-navy) 94%, transparent) 0%,
+      color-mix(in srgb, var(--duna-web-navy) 68%, transparent) 62%,
+      color-mix(in srgb, var(--duna-web-navy) 24%, transparent) 100%
+    );
+  }
+
+  .club-hero__inner {
+    padding: 2.25rem 1.25rem 2rem;
+  }
+
+  .club-hero__identity {
+    gap: 0.7rem;
+  }
+
+  .club-hero__mark {
+    height: 58px;
+    min-width: 58px;
+    width: 58px;
+  }
+
+  .club-hero__mark--logo {
+    width: auto;
+  }
+
+  .club-profile .club-hero h1 {
+    font-size: clamp(3rem, 14vw, 4rem);
+    margin-top: 2.5rem;
+    max-width: 10ch;
+  }
+
+  .club-profile .club-hero__copy > p {
+    font-size: 1rem;
+  }
+
+  .club-hero__footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin-top: 1.75rem;
+  }
+
+  .club-profile .club-hero__stats {
+    gap: 0.75rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .club-profile .club-hero__stats .duna-numeric {
+    font-size: 1.4rem;
+  }
+
+  .club-hero__footer > a {
+    width: 100%;
+  }
+
+  .club-profile-nav .event-section-nav__inner {
+    padding-inline: 12px;
+  }
+
+  .club-profile-nav .event-section-nav__links a {
+    min-height: 44px;
+    padding: 0.8rem 0.9rem;
+  }
+
+  .club-profile .club-body {
+    padding: 3rem 1.25rem 5rem;
+  }
+
   .club-product-grid {
     grid-template-columns: 1fr;
   }
@@ -30291,8 +30701,51 @@ html {
     width: 44px;
   }
 
-  .club-profile-nav {
-    padding-inline: 1rem;
+  .club-profile .club-values {
+    grid-template-columns: 1fr;
+  }
+
+  .club-profile .club-values article {
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--duna-web-on-navy) 14%, transparent);
+    border-right: 0;
+    min-height: 0;
+  }
+
+  .club-profile .club-values article:last-child {
+    border-bottom: 0;
+  }
+
+  .club-profile .club-locations {
+    grid-template-columns: 1fr;
+  }
+
+  .club-profile .club-locations article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .club-profile .club-locations article .duna-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 900px) {
+  .club-profile .club-hero {
+    min-height: 540px;
+  }
+
+  .club-hero__inner {
+    padding-block: 2.5rem;
+  }
+
+  .club-profile .club-hero h1 {
+    font-size: clamp(3.75rem, 7vw, 6rem);
+    margin-top: 2rem;
+  }
+
+  .club-hero__footer {
+    margin-top: 1.75rem;
   }
 }
 
