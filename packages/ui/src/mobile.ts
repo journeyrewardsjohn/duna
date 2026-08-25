@@ -46,6 +46,46 @@ export const mobileType = {
   display: { fontSize: 38, lineHeight: 42 },
 } as const;
 
+/**
+ * Product-app color roles from the current Duna mobile design system.
+ *
+ * Keep these semantic instead of reaching for the broader environmental
+ * palette. The app is deliberately snow/charcoal first; Duna color belongs in
+ * small brand, status, data, and section moments.
+ */
+export const dunaAppColors = {
+  page: "#FCFCFF",
+  card: "#FFFFFF",
+  subtle: "#F5F5F8",
+  subtleStrong: "#F2F3F6",
+  ink: "#18181B",
+  inkPressed: "#464649",
+  textSecondary: "#6E6E72",
+  textTertiary: "#909092",
+  textFaint: "#B9B9BE",
+  hairline: "#E4E6EC",
+  border: "#D7DAE3",
+  navy: "#142335",
+  navyLift: "#2B385C",
+  mist: "#7C95AB",
+  sky: "#D3E3F0",
+  blush: "#FECFC0",
+  sand: "#E6B48C",
+  cream: "#FAF6F2",
+  gold: "#D6B143",
+  positive: "#1E7A46",
+  positiveWash: "#E8F2EC",
+  danger: "#C94443",
+} as const;
+
+export const dunaAppShape = {
+  actionTileRadius: 18,
+  cardRadius: 20,
+  compactRadius: 16,
+  sectionRadius: 28,
+  pillRadius: 999,
+} as const;
+
 /** The supplied launch film is 10.042 seconds; this guard leaves its final
  * frame visible instead of cutting the animation off on a timer boundary. */
 export const dunaLaunchFilmMinimumMs = 10_100;

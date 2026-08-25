@@ -11,6 +11,7 @@ import Svg, {
 export type DunaIconName =
   | "arrow-left"
   | "arrow-right"
+  | "ball"
   | "bell"
   | "calendar"
   | "camera"
@@ -18,6 +19,7 @@ export type DunaIconName =
   | "chevron-right"
   | "close"
   | "court"
+  | "court-booking"
   | "eye"
   | "eye-off"
   | "lock"
@@ -38,6 +40,7 @@ export type DunaIconName =
   | "user"
   | "video"
   | "wallet"
+  | "whistle"
   | "waves";
 
 function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
@@ -54,6 +57,13 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
         <>
           <Line x1="5" x2="19" y1="12" y2="12" />
           <Polyline points="13 6 19 12 13 18" />
+        </>
+      );
+    case "ball":
+      return (
+        <>
+          <Circle cx="12" cy="12" r="9" />
+          <Path d="M3.4 10.1c4.7-2.2 12.5-2.2 17.2 0M10.1 3.4c-2.2 4.7-2.2 12.5 0 17.2M13.9 3.4c2.2 4.7 2.2 12.5 0 17.2" />
         </>
       );
     case "bell":
@@ -97,6 +107,14 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
           <Path d="m4 15 8-5 8 5-8 5Z" />
           <Path d="m8 12.5 8 5M12 10v10M4 15h16" />
           <Path d="M12 10V4M9.5 6.5 12 4l2.5 2.5" />
+        </>
+      );
+    case "court-booking":
+      return (
+        <>
+          <Rect height="14" rx="3" width="19" x="2.5" y="5" />
+          <Line x1="12" x2="12" y1="6.5" y2="17.5" />
+          <Circle cx="7.5" cy="12" fill="currentColor" r="1.6" stroke="none" />
         </>
       );
     case "eye":
@@ -233,6 +251,14 @@ function IconPaths({ name }: { readonly name: DunaIconName }): ReactNode {
           <Path d="M4 6.5h14a2 2 0 0 1 2 2V19H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h11" />
           <Path d="M15 11h6v4h-6a2 2 0 0 1 0-4Z" />
           <Circle cx="16" cy="13" r=".55" fill="currentColor" stroke="none" />
+        </>
+      );
+    case "whistle":
+      return (
+        <>
+          <Path d="M5.5 12.5a6.5 6.5 0 1 0 12.3 2.9H21V10h-6.4a6.5 6.5 0 0 0-9.1 2.5Z" />
+          <Circle cx="11.5" cy="14.5" r="1.7" />
+          <Path d="m7.4 8.7 3.1-4.2" />
         </>
       );
     case "waves":

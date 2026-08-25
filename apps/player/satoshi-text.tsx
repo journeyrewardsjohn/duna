@@ -15,6 +15,10 @@ const satoshiFonts = {
   "Satoshi-Medium": require("./assets/fonts/Satoshi-Medium.ttf"),
   "Satoshi-Bold": require("./assets/fonts/Satoshi-Bold.ttf"),
   "Satoshi-Black": require("./assets/fonts/Satoshi-Black.ttf"),
+  Fellix: require("./assets/fonts/Fellix-Regular.ttf"),
+  "Fellix-Medium": require("./assets/fonts/Fellix-Medium.ttf"),
+  "Fellix-SemiBold": require("./assets/fonts/Fellix-SemiBold.ttf"),
+  "Fellix-Bold": require("./assets/fonts/Fellix-Bold.ttf"),
 } as const;
 
 export type DunaNumericTier =
@@ -56,6 +60,21 @@ function satoshiFamily(style: TextProps["style"] | TextInputProps["style"]) {
   return "Satoshi";
 }
 
+function fellixFamily(style: TextProps["style"] | TextInputProps["style"]) {
+  const weight = StyleSheet.flatten(style as TextStyle)?.fontWeight;
+  const numericWeight =
+    weight === "bold"
+      ? 700
+      : typeof weight === "number"
+        ? weight
+        : Number.parseInt(weight ?? "400", 10);
+
+  if (numericWeight >= 700) return "Fellix-Bold";
+  if (numericWeight >= 600) return "Fellix-SemiBold";
+  if (numericWeight >= 500) return "Fellix-Medium";
+  return "Fellix";
+}
+
 export function useSatoshiFonts() {
   return useFonts(satoshiFonts);
 }
@@ -67,6 +86,19 @@ export function SatoshiText({ style, ...props }: TextProps) {
       style={[
         style,
         { fontFamily: satoshiFamily(style), fontWeight: "normal" },
+      ]}
+    />
+  );
+}
+
+/** Fellix is the product UI voice in the current Duna mobile system. */
+export function FellixText({ style, ...props }: TextProps) {
+  return (
+    <NativeText
+      {...props}
+      style={[
+        style,
+        { fontFamily: fellixFamily(style), fontWeight: "normal" },
       ]}
     />
   );

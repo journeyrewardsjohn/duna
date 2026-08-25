@@ -31,7 +31,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   mobileControl,
   mobileGrid,
-  mobileType,
   resolveDunaMobileTokens,
 } from "@duna/ui/mobile";
 import * as Clipboard from "expo-clipboard";
@@ -166,9 +165,15 @@ import {
   type PolicyScrollMetrics,
 } from "./policy-review";
 import { ResultPlayIcon } from "./result-play-icon";
-import { presentRecentMatch } from "./recent-match-presentation";
 import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
+import {
+  HomeV3Screen,
+  type HomeV3Avatar,
+  type HomeV3Match,
+  type HomeV3OpenGame,
+  type HomeV3UpcomingItem,
+} from "./home-v3";
 import {
   MobilePlacePicker,
   type MobilePlaceSelection,
@@ -1642,80 +1647,137 @@ type DiscoverIntentKind = Exclude<
   "record-video" | "upload-score" | "create-match" | "find-coach" | "messages"
 >;
 
-function HomeScreen({
+function HomeScreenV3({
   onAction,
   onOpenBooking,
+  onOpenEvent,
   onOpenPerformance,
-  onOpenProfile,
   onOpenSchedule,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onOpenBooking: (bookingId: string) => void;
+  readonly onOpenEvent: (event: EventSummary) => void;
   readonly onOpenPerformance: () => void;
-  readonly onOpenProfile: () => void;
   readonly onOpenSchedule: () => void;
 }) {
   const messaging = useContext(MessagingNavigationContext);
-  const { dashboard, mode, organizationWallets } = usePlayerRuntime();
+  const {
+    dashboard,
+    mode,
+    organizationWallets,
+    people: runtimePeople,
+  } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
-  const previewNextActivity = useMemo(() => {
-    const startsAt = new Date();
-    startsAt.setDate(startsAt.getDate() + 1);
-    startsAt.setHours(18, 0, 0, 0);
-    const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
-    return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+  const previewSchedule = useMemo(() => {
+    const previewTimeZone = "America/Los_Angeles";
+    const zonedDateParts = (instant: Date, timeZone: string) =>
+      Object.fromEntries(
+        new Intl.DateTimeFormat("en-US", {
+          day: "2-digit",
+          hour: "2-digit",
+          hourCycle: "h23",
+          minute: "2-digit",
+          month: "2-digit",
+          second: "2-digit",
+          timeZone,
+          year: "numeric",
+        })
+          .formatToParts(instant)
+          .filter((part) => part.type !== "literal")
+          .map((part) => [part.type, Number(part.value)]),
+      ) as Record<string, number>;
+    const venueWallTime = (
+      dayOffset: number,
+      hour: number,
+      minute: number,
+      timeZone: string,
+    ) => {
+      const today = zonedDateParts(new Date(), timeZone);
+      const wallTime = Date.UTC(
+        today.year!,
+        today.month! - 1,
+        today.day! + dayOffset,
+        hour,
+        minute,
+      );
+      let instant = wallTime;
+      for (let pass = 0; pass < 2; pass += 1) {
+        const local = zonedDateParts(new Date(instant), timeZone);
+        const representedWallTime = Date.UTC(
+          local.year!,
+          local.month! - 1,
+          local.day!,
+          local.hour!,
+          local.minute!,
+          local.second!,
+        );
+        instant += wallTime - representedWallTime;
+      }
+      return new Date(instant);
+    };
+    const makeWindow = (
+      dayOffset: number,
+      hour: number,
+      minute: number,
+      durationMinutes: number,
+    ) => {
+      let startsAt = venueWallTime(
+        dayOffset,
+        hour,
+        minute,
+        previewTimeZone,
+      );
+      if (dayOffset === 0 && startsAt.getTime() <= Date.now()) {
+        startsAt = venueWallTime(1, hour, minute, previewTimeZone);
+      }
+      return {
+        startsAt: startsAt.toISOString(),
+        endsAt: new Date(
+          startsAt.getTime() + durationMinutes * 60_000,
+        ).toISOString(),
+      };
+    };
+    const eventWindows: Record<
+      string,
+      { startsAt: string; endsAt: string }
+    > = {
+        "event-pickup": makeWindow(0, 18, 0, 90),
+        "event-open-play": makeWindow(0, 19, 30, 90),
+        "event-clinic": makeWindow(2, 16, 30, 90),
+        "event-summer-series": makeWindow(7, 18, 0, 180),
+        "event-live-open": makeWindow(18, 8, 0, 480),
+      };
+    const bookingWindows: Record<
+      string,
+      { startsAt: string; endsAt: string }
+    > = {
+        "booking-pickup": makeWindow(0, 18, 0, 90),
+        "booking-clinic": makeWindow(2, 16, 30, 90),
+        "booking-league": makeWindow(7, 18, 0, 180),
+      };
+    return {
+      events: eventWindows,
+      bookings: bookingWindows,
+    };
   }, []);
-  const bookings =
-    mode === "preview"
-      ? demoBookings.map((booking) =>
-          booking.id === "booking-pickup"
-            ? {
-                ...booking,
-                ...previewNextActivity,
-                sessionId: "event-pickup",
-              }
-            : booking,
-        )
-      : (dashboard?.bookings ?? demoBookings);
-  const events =
-    mode === "preview"
-      ? demoEvents.map((event) =>
-          event.id === "event-pickup"
-            ? { ...event, ...previewNextActivity }
-            : event,
-        )
-      : (dashboard?.events ?? demoEvents);
+  const bookings = (
+    mode === "preview" ? demoBookings : (dashboard?.bookings ?? [])
+  ).map((booking) =>
+    mode === "preview" && previewSchedule.bookings[booking.id]
+      ? { ...booking, ...previewSchedule.bookings[booking.id] }
+      : booking,
+  );
+  const events = (
+    mode === "preview" ? demoEvents : (dashboard?.events ?? [])
+  ).map((event) =>
+    mode === "preview" && previewSchedule.events[event.id]
+      ? { ...event, ...previewSchedule.events[event.id] }
+      : event,
+  );
   const now = Date.now();
-  const nextBooking = [...bookings]
-    .filter((booking) => new Date(booking.endsAt).getTime() > now)
-    .sort(
-      (left, right) =>
-        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
-    )[0];
-  const nextEvent = nextBooking?.sessionId
-    ? events.find((event) => event.id === nextBooking.sessionId)
-    : undefined;
-  const nextPlayers =
-    nextEvent?.attendees?.slice(0, 3).map((attendee) => ({
-      id: attendee.id,
-      initials: attendee.initials,
-    })) ??
-    nextBooking?.participantNames?.slice(0, 3).map((name) => ({
-      id: name,
-      initials: name
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((part) => part[0])
-        .join("")
-        .toUpperCase(),
-    })) ??
-    [];
-  const confirmedPlayers = nextEvent
-    ? Math.max(
-        nextEvent.attendees?.length ?? 0,
-        nextEvent.capacity - nextEvent.spotsRemaining,
-      )
-    : (nextBooking?.participantNames?.length ?? 0);
+  const firstName = player.displayName.split(/\s+/)[0] ?? player.displayName;
+  const rating = player.rating.display;
+  const ratingDelta = player.rating.delta ?? 0;
   const homeOrganization =
     organizationWallets?.find(
       (organization) =>
@@ -1727,374 +1789,373 @@ function HomeScreen({
     ) ??
     organizationWallets?.[0];
   const region =
-    homeOrganization?.organizationName
-      .replace(/\s+(beach volleyball|volleyball club|club)$/i, "")
-      .trim() ||
-    nextBooking?.venueName.split(/[—·]/)[0]?.trim() ||
+    (mode === "preview"
+      ? "South Bay"
+      : homeOrganization?.organizationName
+          .replace(/\s+(beach volleyball|volleyball club|club)$/i, "")
+          .trim()) ||
+    bookings[0]?.venueName.split(/[—·]/)[0]?.trim() ||
     "Duna";
-  const firstName = player.displayName.split(" ")[0] ?? player.displayName;
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-  }).format(new Date());
-  const rating = player.rating.display;
-  const ratingDelta = player.rating.delta ?? 0;
-  const insight = dashboard?.feed[0];
-  const recentMatches = (
-    mode === "preview" ? demoMatches : (dashboard?.recentMatches ?? [])
-  )
-    .slice(0, 3)
-    .map((match) => ({
+  const weatherEvent = events.find((event) => event.weather?.hourly.length);
+  const weather = weatherEvent?.weather
+    ? closestWeather(
+        weatherEvent.weather.hourly,
+        new Date().toISOString(),
+      )
+    : undefined;
+  const contextLine = [
+    weather?.temperatureC === undefined
+      ? mode === "preview"
+        ? "72°"
+        : undefined
+      : fahrenheit(weather.temperatureC),
+    weather?.condition ?? (mode === "preview" ? "Sunny" : undefined),
+    region,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const dateBlock = (startsAt: string, timeZone?: string) => {
+    const date = new Date(startsAt);
+    const calendarDate = (instant: Date) => {
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-US", {
+          day: "2-digit",
+          month: "2-digit",
+          timeZone,
+          year: "numeric",
+        })
+          .formatToParts(instant)
+          .filter((part) => part.type !== "literal")
+          .map((part) => [part.type, Number(part.value)]),
+      ) as Record<string, number>;
+      return Date.UTC(parts.year!, parts.month! - 1, parts.day!);
+    };
+    const dayDistance = Math.floor(
+      (calendarDate(date) - calendarDate(new Date())) / 86_400_000,
+    );
+    return {
+      day:
+        dayDistance >= 7
+          ? date
+              .toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                timeZone,
+              })
+              .toUpperCase()
+          : date
+              .toLocaleDateString("en-US", { weekday: "short", timeZone })
+              .toUpperCase(),
+      time: date
+        .toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone,
+        })
+        .replace(/\s?(AM|PM)$/i, ""),
+    };
+  };
+  const eventCategory = (
+    kind: EventSummary["kind"],
+  ): HomeV3UpcomingItem["category"] => {
+    if (kind === "clinic" || kind === "private-lesson") return "training";
+    if (kind === "tournament" || kind === "league") return "tournament";
+    return "match";
+  };
+  const eventRecurrence = (event: EventSummary) => {
+    const days = event.recurrence?.days
+      .slice(0, 2)
+      .map((day) => day.day.slice(0, 3).toUpperCase());
+    return days?.length ? `EVERY ${days.join(" & ")}` : undefined;
+  };
+
+  const bookingItems = bookings
+    .filter((booking) => new Date(booking.endsAt).getTime() > now)
+    .map((booking) => {
+      const linkedEvent = events.find(
+        (event) =>
+          event.id === booking.sessionId ||
+          (event.title === booking.title &&
+            Math.abs(
+              new Date(event.startsAt).getTime() -
+                new Date(booking.startsAt).getTime(),
+            ) < 60_000),
+      );
+      const date = dateBlock(
+        booking.startsAt,
+        linkedEvent?.timezone ?? booking.venueTimezone,
+      );
+      return {
+        id: `booking:${booking.id}`,
+        startsAt: booking.startsAt,
+        category: eventCategory(booking.kind),
+        day: date.day,
+        time: date.time,
+        title: booking.title,
+        meta: [linkedEvent?.organizationName, booking.venueName]
+          .filter(Boolean)
+          .join(" · "),
+        recurrence: linkedEvent ? eventRecurrence(linkedEvent) : undefined,
+        status: "going" as const,
+        onPress: () => onOpenBooking(booking.id),
+      };
+    });
+  const bookedEventIds = new Set(
+    bookings.map((booking) => booking.sessionId).filter(Boolean),
+  );
+  const bookedTitles = new Set(bookings.map((booking) => booking.title));
+  const unbookedEventItems = events
+    .filter(
+      (event) =>
+        new Date(event.endsAt).getTime() > now &&
+        event.lifecycleStatus !== "cancelled" &&
+        !["pickup", "open-play"].includes(event.kind) &&
+        !bookedEventIds.has(event.id) &&
+        !bookedTitles.has(event.title),
+    )
+    .map((event) => {
+      const date = dateBlock(event.startsAt, event.timezone);
+      return {
+        id: `event:${event.id}`,
+        startsAt: event.startsAt,
+        category: eventCategory(event.kind),
+        day: date.day,
+        time: date.time,
+        title: event.title,
+        meta: [event.organizationName, event.venueName].filter(Boolean).join(" · "),
+        recurrence: eventRecurrence(event),
+        status: event.spotsRemaining > 0 ? ("action" as const) : ("detail" as const),
+        statusLabel: event.spotsRemaining > 0 ? "Register" : undefined,
+        onPress: () => onOpenEvent(event),
+      };
+    });
+  const upcoming = [...bookingItems, ...unbookedEventItems]
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )
+    .slice(0, 6);
+
+  const compactPrice = (amountMinor: number, currency: string) =>
+    amountMinor === 0
+      ? "Free"
+      : new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency,
+          maximumFractionDigits: amountMinor % 100 === 0 ? 0 : 2,
+        }).format(amountMinor / 100);
+  const eventMode = (event: EventSummary) =>
+    event.format ??
+    event.tags.find((tag) => /(^|\s)(2s|4s|6s|doubles|mixed)(\s|$)/i.test(tag)) ??
+    (event.kind === "pickup" ? "Pickup" : "Open play");
+  const openGameCandidates = events
+    .filter(
+      (event) =>
+        ["pickup", "open-play"].includes(event.kind) &&
+        new Date(event.endsAt).getTime() > now &&
+        event.spotsRemaining > 0 &&
+        event.lifecycleStatus !== "cancelled",
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() -
+        new Date(right.startsAt).getTime(),
+    );
+  const openGames: HomeV3OpenGame[] = openGameCandidates.map(
+    (event, gameIndex) => {
+      const playerSlots: Array<
+        HomeV3OpenGame["teamA"][number]
+      > = (event.attendees ?? []).slice(0, 4).map((attendee) => ({
+        id: attendee.id,
+        initials: attendee.initials,
+        name: attendee.displayName,
+        rating: attendee.ratingDisplay?.toFixed(1),
+        uri: attendee.avatarUrl,
+      }));
+      while (playerSlots.length < 4) {
+        playerSlots.push({ id: `${event.id}:open:${playerSlots.length}`, open: true });
+      }
+      const duration = Math.max(
+        30,
+        Math.round(
+          (new Date(event.endsAt).getTime() -
+            new Date(event.startsAt).getTime()) /
+            60_000,
+        ),
+      );
+      const startsAt = new Date(event.startsAt);
+      const venueDate = (instant: Date) =>
+        instant.toLocaleDateString("en-US", { timeZone: event.timezone });
+      const today = venueDate(startsAt) === venueDate(new Date());
+      return {
+        id: event.id,
+        time: `${today ? "Tonight" : startsAt.toLocaleDateString("en-US", { weekday: "short", timeZone: event.timezone })} · ${startsAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: event.timezone }).toLowerCase()}`,
+        booked:
+          bookedEventIds.has(event.id) || bookedTitles.has(event.title),
+        location: event.venueName,
+        teamA: playerSlots.slice(0, 2),
+        teamB: playerSlots.slice(2, 4),
+        level: event.ratingRange
+          ? `${event.kind === "pickup" ? "Competitive" : "Open"} · ${event.ratingRange[0].toFixed(1)} – ${event.ratingRange[1].toFixed(1)}`
+          : "Open level",
+        mode: eventMode(event),
+        price: compactPrice(event.price.amountMinor, event.price.currency),
+        duration: `${duration} min`,
+        tint: gameIndex % 2 === 0 ? "#FECFC0" : "#D3E3F0",
+        onPress: () => onOpenEvent(event),
+      };
+    },
+  );
+
+  const matchData = mode === "preview" ? demoMatches : (dashboard?.recentMatches ?? []);
+  const recentMatches: HomeV3Match[] = matchData.slice(0, 3).map((match) => {
+    const teamName = (team: readonly PersonSummary[]) => {
+      const includesPlayer = team.some((person) => person.id === player.id);
+      const others = team
+        .filter((person) => person.id !== player.id)
+        .map((person) => person.displayName.split(/\s+/)[0]);
+      if (includesPlayer) return others.length ? `You & ${others.join(", ")}` : "You";
+      return team
+        .map((person) => person.displayName.split(/\s+/)[0])
+        .join(" & ");
+    };
+    const teamRating = (team: readonly PersonSummary[]) => {
+      const values = team.map((person) => person.rating.display);
+      if (values.length <= 2) return values.map((value) => value.toFixed(1)).join(" · ");
+      return `${(values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1)} avg`;
+    };
+    const avatar = (person: PersonSummary): HomeV3Avatar => ({
+      id: person.id,
+      initials: person.initials,
+      name: person.displayName,
+      rating: person.rating.display.toFixed(1),
+      uri: person.avatarUrl,
+    });
+    const date = new Date(match.playedAt).toLocaleDateString("en-US", {
+      weekday: "short",
+    });
+    const format =
+      match.formatSummary ??
+      `${match.teamA.length}V${match.teamB.length}`;
+    return {
       id: match.id,
-      presentation: presentRecentMatch(match, player.id),
-    }));
-  const shortcuts = [
-    {
-      action: "record-video" as const,
-      icon: "video" as const,
-      label: "Record game",
-    },
-    {
-      action: "book-court" as const,
-      icon: "calendar" as const,
-      label: "Book court",
-    },
-    {
-      action: "messages" as const,
-      icon: "message" as const,
-      label: "Messages",
-    },
-  ];
+      kicker: `${date} · ${format} · ${match.venueName}`.toUpperCase(),
+      delta: `${match.ratingDelta >= 0 ? "+" : ""}${match.ratingDelta.toFixed(2)}`,
+      deltaTone: match.ratingDelta > 0 ? "positive" : "neutral",
+      onPress: onOpenPerformance,
+      teams: ([
+        { id: "A", people: match.teamA, winner: match.winner === "A", side: 0 },
+        { id: "B", people: match.teamB, winner: match.winner === "B", side: 1 },
+      ] as const).map((team) => ({
+        id: `${match.id}:${team.id}`,
+        avatars: team.people.slice(0, 2).map(avatar),
+        total: team.people.length,
+        name: teamName(team.people),
+        rating: teamRating(team.people),
+        winner: team.winner,
+        sets: match.score.map((set) => ({
+          value: set[team.side],
+          won: set[team.side] > set[team.side === 0 ? 1 : 0],
+        })),
+      })),
+    };
+  });
+  const chronologicalMatches = [...matchData].slice(0, 10).reverse();
+  const ratingHistory = chronologicalMatches.reduce<number[]>(
+    (history, match) => [
+      ...history,
+      Number((history[history.length - 1]! + match.ratingDelta).toFixed(2)),
+    ],
+    [
+      Number(
+        (
+          rating -
+          chronologicalMatches.reduce((sum, match) => sum + match.ratingDelta, 0)
+        ).toFixed(2),
+      ),
+    ],
+  );
+  const people = (mode === "preview" ? demoPeople : (runtimePeople ?? []))
+    .filter((person) => person.id !== player.id)
+    .slice(0, 6);
+  const crewAvatars: HomeV3Avatar[] = people.slice(0, 2).map((person) => ({
+    id: person.id,
+    initials: person.initials,
+    name: person.displayName,
+    rating: person.rating.display.toFixed(1),
+    uri: person.avatarUrl,
+  }));
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.homeV4Content}
-      showsVerticalScrollIndicator={false}
-    >
-      <AppHeader />
-      <View style={styles.homeV4Welcome}>
-        <Text style={styles.homeV4Context}>
-          {weekday} · {region}
-        </Text>
-        <Text style={styles.homeV4Title}>Good morning, {firstName}.</Text>
-        <Text style={styles.homeV4Subtitle}>Play more. Know your game.</Text>
-      </View>
-
-      <Pressable
-        accessibilityHint="Search courts, players, training, and events"
-        accessibilityLabel="Find your next game"
-        accessibilityRole="button"
-        onPress={() => {
-          selectionHaptic();
-          onAction("find-match");
-        }}
-        style={({ pressed }) => [
-          styles.homeV4Primary,
-          pressed && styles.homeQuickActionPressed,
-        ]}
-      >
-        <View style={styles.homeV4PrimaryIcon}>
-          <DunaIcon color={colors.ink} name="search" size={25} />
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.homeV4PrimaryTitle}>Find your next game</Text>
-          <Text style={styles.homeV4PrimaryBody}>
-            Courts, people, training and events
-          </Text>
-        </View>
-        <DunaIcon color={colors.white} name="arrow-right" size={25} />
-      </Pressable>
-
-      <View style={styles.homeV4ShortcutRow}>
-        {shortcuts.map((shortcut) => (
-          <Pressable
-            accessibilityLabel={shortcut.label}
-            accessibilityRole="button"
-            key={shortcut.action}
-            onPress={() => {
-              selectionHaptic();
-              onAction(shortcut.action);
-            }}
-            style={({ pressed }) => [
-              styles.homeV4Shortcut,
-              pressed && styles.homeQuickActionPressed,
-            ]}
-          >
-            <View style={styles.homeV4ShortcutIcon}>
-              <DunaIcon color={colors.ink} name={shortcut.icon} size={22} />
-            </View>
-            <Text style={styles.homeV4ShortcutLabel}>{shortcut.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.homeV4SectionHeader}>
-        <Text style={styles.homeV4SectionTitle}>Next up</Text>
-        <Pressable onPress={onOpenSchedule}>
-          <Text style={styles.homeV4SectionAction}>See schedule</Text>
-        </Pressable>
-      </View>
-
-      {nextBooking ? (
-        <Pressable
-          accessibilityLabel={`Open ${nextBooking.title}`}
-          accessibilityRole="button"
-          onPress={() => onOpenBooking(nextBooking.id)}
-          style={({ pressed }) => [
-            styles.homeV4NextCard,
-            pressed && styles.homeQuickActionPressed,
-          ]}
-        >
-          <View style={styles.homeV4NextAccent} />
-          <View style={styles.homeV4NextTime}>
-            <Text style={styles.homeV4NextEyebrow}>
-              {new Date(nextBooking.startsAt).getHours() >= 17
-                ? "TONIGHT"
-                : "UPCOMING"}
-            </Text>
-            <Text style={styles.homeV4NextClock}>
-              {new Date(nextBooking.startsAt)
-                .toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  hour12: true,
-                })
-                .replace(/\s?(AM|PM)$/i, "")}
-            </Text>
-            <Text style={styles.homeV4NextMeridiem}>
-              {new Date(nextBooking.startsAt)
-                .toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  hour12: true,
-                })
-                .match(/AM|PM/i)?.[0] ?? ""}
-            </Text>
-          </View>
-          <View style={styles.homeV4NextInfo}>
-            <Text numberOfLines={1} style={styles.homeV4NextTitle}>
-              {nextBooking.title}
-            </Text>
-            <Text numberOfLines={1} style={styles.homeV4NextVenue}>
-              {nextBooking.venueName.replace("—", "•")}
-            </Text>
-            <View style={styles.homeV4Players}>
-              <View style={styles.homeV4AvatarStack}>
-                {nextPlayers.map((person, index) => (
-                  <View
-                    key={person.id}
-                    style={[
-                      styles.homeV4Avatar,
-                      index === 1 && styles.homeV4AvatarBlue,
-                      index === 2 && styles.homeV4AvatarSand,
-                      { marginLeft: index === 0 ? 0 : -7 },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.homeV4AvatarText,
-                        index === 2 && styles.homeV4AvatarTextDark,
-                      ]}
-                    >
-                      {person.initials}
-                    </Text>
-                  </View>
-                ))}
-                {confirmedPlayers > nextPlayers.length && (
-                  <View
-                    style={[
-                      styles.homeV4Avatar,
-                      styles.homeV4AvatarSand,
-                      { marginLeft: -7 },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.homeV4AvatarText,
-                        styles.homeV4AvatarTextDark,
-                      ]}
-                    >
-                      +{confirmedPlayers - nextPlayers.length}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.homeV4PlayerCount}>
-                {confirmedPlayers} players confirmed
-              </Text>
-            </View>
-          </View>
-          <DunaIcon color={colors.ink} name="chevron-right" size={23} />
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={() => onAction("find-match")}
-          style={styles.homeV4EmptyNext}
-        >
-          <Text style={styles.homeV4NextTitle}>Your calendar is open.</Text>
-          <Text style={styles.homeV4NextVenue}>
-            Find a match, court, or event nearby.
-          </Text>
-          <DunaIcon color={colors.ink} name="arrow-right" size={22} />
-        </Pressable>
-      )}
-
-      <View style={styles.homeV4SectionHeader}>
-        <Text style={styles.homeV4SectionTitle}>Recent matches</Text>
-        <Pressable
-          accessibilityLabel="View match history"
-          accessibilityRole="button"
-          onPress={onOpenPerformance}
-        >
-          <Text style={styles.homeV4SectionAction}>View history</Text>
-        </Pressable>
-      </View>
-
-      {recentMatches.length > 0 ? (
-        <View style={styles.homeV4ResultsList}>
-          {recentMatches.map(({ id, presentation }, index) => (
-            <Pressable
-              accessibilityHint="Opens your full performance history"
-              accessibilityLabel={`${presentation.outcome === "win" ? "Win" : "Loss"} against ${presentation.opponentLabel}, ${presentation.matchScore}`}
-              accessibilityRole="button"
-              key={id}
-              onPress={onOpenPerformance}
-              style={({ pressed }) => [
-                styles.homeV4ResultRow,
-                index > 0 && styles.homeV4ResultRowBorder,
-                pressed && styles.homeQuickActionPressed,
-              ]}
-            >
-              <View
-                style={[
-                  styles.homeV4ResultOutcome,
-                  presentation.outcome === "win"
-                    ? styles.homeV4ResultOutcomeWin
-                    : styles.homeV4ResultOutcomeLoss,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.homeV4ResultOutcomeText,
-                    presentation.outcome === "win"
-                      ? styles.homeV4ResultOutcomeTextWin
-                      : styles.homeV4ResultOutcomeTextLoss,
-                  ]}
-                >
-                  {presentation.outcomeCode}
-                </Text>
-              </View>
-              <View style={styles.homeV4ResultInfo}>
-                <Text numberOfLines={1} style={styles.homeV4ResultOpponent}>
-                  vs {presentation.opponentLabel}
-                </Text>
-                <Text numberOfLines={1} style={styles.homeV4ResultMeta}>
-                  {[
-                    presentation.partnerLabel
-                      ? `with ${presentation.partnerLabel}`
-                      : undefined,
-                    presentation.dateLabel,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </Text>
-                <Text numberOfLines={1} style={styles.homeV4ResultVenue}>
-                  {presentation.venueLabel}
-                </Text>
-              </View>
-              <View style={styles.homeV4ResultScoreBlock}>
-                <Text style={styles.homeV4ResultMatchScore}>
-                  {presentation.matchScore}
-                </Text>
-                <Text style={styles.homeV4ResultSetScore}>
-                  {presentation.setScore}
-                </Text>
-                <Text
-                  style={[
-                    styles.homeV4ResultDelta,
-                    presentation.outcome === "loss" &&
-                      styles.homeV4ResultDeltaLoss,
-                  ]}
-                >
-                  {presentation.ratingDeltaLabel} · {presentation.statusLabel}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : (
-        <Pressable
-          accessibilityHint="Opens your performance history"
-          accessibilityLabel="No recent matches. View performance history"
-          accessibilityRole="button"
-          onPress={onOpenPerformance}
-          style={styles.homeV4ResultsEmpty}
-        >
-          <View style={styles.homeV4ResultsEmptyIcon}>
-            <DunaIcon color={colors.aqua} name="score" size={22} />
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.homeV4ResultsEmptyTitle}>No results yet</Text>
-            <Text style={styles.homeV4ResultsEmptyBody}>
-              Your completed matches and rating outcomes will appear here.
-            </Text>
-          </View>
-          <DunaIcon color={colors.muted} name="chevron-right" size={22} />
-        </Pressable>
-      )}
-
-      <View style={styles.homeV4SectionHeader}>
-        <Text style={styles.homeV4SectionTitle}>Your game</Text>
-        <Pressable onPress={onOpenProfile}>
-          <Text style={styles.homeV4SectionAction}>View profile</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.homeV4GameGrid}>
-        <Pressable
-          accessibilityLabel={`Sand Rating ${rating.toFixed(2)}`}
-          onPress={onOpenProfile}
-          style={styles.homeV4RatingCard}
-        >
-          <Text style={styles.homeV4CardEyebrow}>SAND RATING</Text>
-          <View style={styles.homeV4RatingRow}>
-            <Text style={styles.homeV4RatingValue}>{rating.toFixed(2)}</Text>
-            <Text
-              style={[
-                styles.homeV4RatingDelta,
-                ratingDelta < 0 && styles.homeV4RatingDeltaNegative,
-              ]}
-            >
-              {ratingDelta >= 0 ? "+" : ""}
-              {ratingDelta.toFixed(2)}
-            </Text>
-          </View>
-        </Pressable>
-        <MemberOrganizationCard compact />
-      </View>
-
-      <Pressable
-        accessibilityHint="Opens Duna AI with your current Player context"
-        accessibilityLabel="Open Duna insight in Duna AI"
-        onPress={() => messaging.open(true)}
-        style={({ pressed }) => [
-          styles.homeV4Insight,
-          pressed && styles.homeQuickActionPressed,
-        ]}
-      >
-        <View style={styles.homeV4InsightMark}>
-          <DunaMark size={mobileGrid[8]} />
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.homeV4CardEyebrow}>
-            {insight?.eyebrow ?? "DUNA INSIGHT"}
-          </Text>
-          <Text numberOfLines={2} style={styles.homeV4InsightTitle}>
-            {insight?.title ?? "Your sideout game is becoming an edge."}
-          </Text>
-        </View>
-        <DunaIcon color={colors.aqua} name="arrow-right" size={22} />
-      </Pressable>
-    </ScrollView>
+    <HomeV3Screen
+      contextLine={contextLine}
+      crew={
+        crewAvatars.length
+          ? {
+              avatars: crewAvatars,
+              overflowCount: Math.min(4, Math.max(0, people.length - 2)),
+              message: "Bring your circle together this weekend. Get a run going.",
+              onPress: () => onAction("create-match"),
+            }
+          : undefined
+      }
+      firstName={firstName}
+      insight={
+        dashboard?.feed[0]?.title ??
+        "Your sideout game is becoming an edge."
+      }
+      moreOpenGamesCount={Math.max(0, openGameCandidates.length - 2)}
+      notificationCount={messaging.unreadCount}
+      onNotifications={() => onAction("messages")}
+      onOpenInsight={() => messaging.open(true)}
+      onOpenMap={() => onAction("find-match")}
+      onOpenMatches={onOpenPerformance}
+      onOpenMoreGames={() => onAction("find-match")}
+      onOpenSchedule={onOpenSchedule}
+      onSearch={() => onAction("search")}
+      openGames={openGames}
+      quickActions={[
+        {
+          key: "find-match",
+          label: "Find a match",
+          icon: "ball",
+          color: "#D6B143",
+          onPress: () => onAction("find-match"),
+        },
+        {
+          key: "book-court",
+          label: "Book a court",
+          icon: "court-booking",
+          color: "#7C95AB",
+          onPress: () => onAction("book-court"),
+        },
+        {
+          key: "find-coach",
+          label: "Find a coach",
+          icon: "whistle",
+          color: "#142335",
+          onPress: () => onAction("find-coach"),
+        },
+        {
+          key: "record-video",
+          label: "Record video",
+          icon: "video",
+          color: "#18181B",
+          recording: true,
+          onPress: () => onAction("record-video"),
+        },
+      ]}
+      rating={rating.toFixed(2)}
+      ratingDelta={`${ratingDelta >= 0 ? "+" : ""}${ratingDelta.toFixed(2)}`}
+      ratingHistory={ratingHistory}
+      recentMatches={recentMatches}
+      upcoming={upcoming}
+    />
   );
 }
+
 function SectionHeader({
   eyebrow,
   title,
@@ -14588,14 +14649,14 @@ function DunaApp() {
               ]}
             >
               {tab === "home" && (
-                <HomeScreen
+                <HomeScreenV3
                   onAction={openHomeAction}
                   onOpenBooking={setBookingId}
+                  onOpenEvent={openExternalEventDetail}
                   onOpenPerformance={() => {
                     setPerformanceReturnTab("home");
                     setTab("performance");
                   }}
-                  onOpenProfile={() => setTab("you")}
                   onOpenSchedule={() => setTab("plans")}
                 />
               )}
@@ -17051,362 +17112,6 @@ function createStyles() {
       width: mobileControl.minimumTarget,
     },
     avatarText: { color: colors.white, fontSize: 14, fontWeight: "700" },
-    homeV4Content: {
-      backgroundColor: colors.canvas,
-      paddingBottom: mobileGrid[12] + mobileGrid[12] + mobileGrid[4],
-      paddingHorizontal: mobileControl.pageInset,
-    },
-    homeV4Welcome: { marginBottom: mobileGrid[2] },
-    homeV4Context: {
-      color: colors.muted,
-      fontSize: mobileType.body.fontSize,
-      lineHeight: mobileType.body.lineHeight,
-    },
-    homeV4Title: {
-      color: colors.ink,
-      fontSize: 32,
-      fontWeight: "500",
-      letterSpacing: -1.35,
-      lineHeight: 37,
-      marginTop: mobileGrid[1],
-    },
-    homeV4Subtitle: {
-      color: colors.muted,
-      fontSize: mobileType.body.fontSize,
-      lineHeight: mobileType.body.lineHeight,
-      marginTop: mobileGrid[1],
-    },
-    homeV4Primary: {
-      alignItems: "center",
-      backgroundColor: colors.ink,
-      borderRadius: mobileGrid[5],
-      flexDirection: "row",
-      gap: mobileGrid[3],
-      minHeight: mobileGrid[12] + mobileGrid[2],
-      paddingHorizontal: mobileGrid[3],
-    },
-    homeV4PrimaryIcon: {
-      alignItems: "center",
-      backgroundColor: colors.white,
-      borderRadius: mobileControl.nestedRadius,
-      height: mobileGrid[9],
-      justifyContent: "center",
-      width: mobileGrid[9],
-    },
-    homeV4PrimaryTitle: {
-      color: colors.white,
-      fontSize: 20,
-      fontWeight: "500",
-      letterSpacing: -0.4,
-    },
-    homeV4PrimaryBody: {
-      color: rgba(colors.whiteRgb, 0.68),
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: mobileGrid[1],
-    },
-    homeV4ShortcutRow: {
-      flexDirection: "row",
-      gap: mobileGrid[2],
-      marginTop: mobileGrid[2],
-    },
-    homeV4Shortcut: {
-      backgroundColor: colors.navy,
-      borderRadius: mobileControl.cardRadius,
-      flex: 1,
-      minHeight: mobileGrid[12] + mobileGrid[4],
-      padding: mobileGrid[2],
-    },
-    homeV4ShortcutIcon: {
-      alignItems: "center",
-      backgroundColor: colors.white,
-      borderRadius: mobileControl.nestedRadius,
-      height: mobileGrid[9],
-      justifyContent: "center",
-      width: mobileGrid[9],
-    },
-    homeV4ShortcutLabel: {
-      color: colors.ink,
-      fontSize: 15,
-      fontWeight: "500",
-      marginTop: mobileGrid[2],
-    },
-    homeV4SectionHeader: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: mobileGrid[1],
-      marginTop: mobileGrid[1],
-    },
-    homeV4SectionTitle: {
-      color: colors.ink,
-      fontSize: 24,
-      fontWeight: "500",
-      letterSpacing: -0.8,
-      lineHeight: 29,
-    },
-    homeV4SectionAction: { color: colors.muted, fontSize: 15 },
-    homeV4NextCard: {
-      alignItems: "center",
-      backgroundColor: colors.depth,
-      borderColor: rgba(colors.overlayRgb, 0.12),
-      borderRadius: mobileGrid[5],
-      borderWidth: 1,
-      flexDirection: "row",
-      minHeight: mobileGrid[12] + mobileGrid[7],
-      overflow: "hidden",
-      paddingRight: mobileGrid[3],
-    },
-    homeV4NextAccent: {
-      alignSelf: "stretch",
-      backgroundColor: colors.aqua,
-      width: mobileGrid[1],
-    },
-    homeV4NextTime: {
-      justifyContent: "center",
-      paddingHorizontal: mobileGrid[4],
-      width: 105,
-    },
-    homeV4NextEyebrow: {
-      color: colors.muted,
-      fontSize: 12,
-      fontWeight: "500",
-      letterSpacing: 0.8,
-    },
-    homeV4NextClock: {
-      color: colors.ink,
-      fontSize: 28,
-      fontVariant: ["tabular-nums"],
-      letterSpacing: -0.8,
-      lineHeight: 34,
-      marginTop: mobileGrid[1],
-    },
-    homeV4NextMeridiem: { color: colors.muted, fontSize: 12 },
-    homeV4NextInfo: { flex: 1, minWidth: 0, paddingVertical: mobileGrid[3] },
-    homeV4NextTitle: {
-      color: colors.ink,
-      fontSize: 18,
-      fontWeight: "500",
-      letterSpacing: -0.25,
-    },
-    homeV4NextVenue: {
-      color: colors.muted,
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: mobileGrid[2],
-    },
-    homeV4Players: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: mobileGrid[2],
-      marginTop: mobileGrid[2],
-    },
-    homeV4AvatarStack: { flexDirection: "row" },
-    homeV4Avatar: {
-      alignItems: "center",
-      backgroundColor: colors.ink,
-      borderColor: colors.white,
-      borderRadius: mobileGrid[4],
-      borderWidth: 2,
-      height: mobileGrid[8],
-      justifyContent: "center",
-      width: mobileGrid[8],
-    },
-    homeV4AvatarBlue: { backgroundColor: colors.aqua },
-    homeV4AvatarSand: { backgroundColor: colors.sand },
-    homeV4AvatarText: {
-      color: colors.white,
-      fontSize: 12,
-      fontWeight: "700",
-    },
-    homeV4AvatarTextDark: { color: colors.ink },
-    homeV4PlayerCount: { color: colors.muted, flex: 1, fontSize: 12 },
-    homeV4EmptyNext: {
-      alignItems: "center",
-      backgroundColor: colors.navy,
-      borderRadius: mobileGrid[5],
-      flexDirection: "row",
-      gap: mobileGrid[2],
-      minHeight: 90,
-      padding: mobileGrid[4],
-    },
-    homeV4ResultsList: {
-      backgroundColor: colors.white,
-      borderColor: rgba(colors.overlayRgb, 0.11),
-      borderRadius: mobileControl.cardRadius,
-      borderWidth: mobileGrid.hairline,
-      overflow: "hidden",
-    },
-    homeV4ResultRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: mobileGrid[2],
-      minHeight: mobileGrid[12] + mobileGrid[8],
-      paddingHorizontal: mobileGrid[3],
-      paddingVertical: mobileGrid[3],
-    },
-    homeV4ResultRowBorder: {
-      borderTopColor: rgba(colors.overlayRgb, 0.09),
-      borderTopWidth: mobileGrid.hairline,
-    },
-    homeV4ResultOutcome: {
-      alignItems: "center",
-      borderRadius: mobileControl.nestedRadius,
-      height: mobileGrid[9],
-      justifyContent: "center",
-      width: mobileGrid[9],
-    },
-    homeV4ResultOutcomeWin: {
-      backgroundColor: rgba(colors.positiveRgb, 0.1),
-    },
-    homeV4ResultOutcomeLoss: {
-      backgroundColor: rgba(colors.dangerRgb, 0.09),
-    },
-    homeV4ResultOutcomeText: {
-      fontSize: 18,
-      fontWeight: "700",
-    },
-    homeV4ResultOutcomeTextWin: { color: colors.positive },
-    homeV4ResultOutcomeTextLoss: { color: colors.danger },
-    homeV4ResultInfo: { flex: 1, minWidth: 0 },
-    homeV4ResultOpponent: {
-      color: colors.ink,
-      fontSize: 16,
-      fontWeight: "700",
-      lineHeight: 20,
-    },
-    homeV4ResultMeta: {
-      color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
-      marginTop: mobileGrid[1],
-    },
-    homeV4ResultVenue: {
-      color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
-      marginTop: mobileGrid[1],
-    },
-    homeV4ResultScoreBlock: {
-      alignItems: "flex-end",
-      minWidth: 105,
-    },
-    homeV4ResultMatchScore: {
-      color: colors.ink,
-      fontSize: 24,
-      fontVariant: ["tabular-nums"],
-      fontWeight: "700",
-      letterSpacing: -0.5,
-      lineHeight: 28,
-    },
-    homeV4ResultSetScore: {
-      color: colors.muted,
-      fontSize: 12,
-      fontVariant: ["tabular-nums"],
-      lineHeight: 15,
-      marginTop: mobileGrid[1],
-    },
-    homeV4ResultDelta: {
-      color: colors.positive,
-      fontSize: 12,
-      fontVariant: ["tabular-nums"],
-      fontWeight: "500",
-      lineHeight: 15,
-      marginTop: mobileGrid[1],
-    },
-    homeV4ResultDeltaLoss: { color: colors.danger },
-    homeV4ResultsEmpty: {
-      alignItems: "center",
-      backgroundColor: colors.navy,
-      borderRadius: mobileControl.cardRadius,
-      flexDirection: "row",
-      gap: mobileGrid[3],
-      minHeight: mobileGrid[12] + mobileGrid[6],
-      padding: mobileGrid[3],
-    },
-    homeV4ResultsEmptyIcon: {
-      alignItems: "center",
-      backgroundColor: colors.white,
-      borderRadius: mobileControl.nestedRadius,
-      height: mobileGrid[9],
-      justifyContent: "center",
-      width: mobileGrid[9],
-    },
-    homeV4ResultsEmptyTitle: {
-      color: colors.ink,
-      fontSize: 16,
-      fontWeight: "700",
-      lineHeight: 20,
-    },
-    homeV4ResultsEmptyBody: {
-      color: colors.muted,
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: mobileGrid[1],
-    },
-    homeV4GameGrid: { flexDirection: "row", gap: mobileGrid[2] },
-    homeV4RatingCard: {
-      backgroundColor: colors.navy,
-      borderRadius: mobileControl.cardRadius,
-      flex: 0.78,
-      justifyContent: "center",
-      minHeight: mobileGrid[12] + mobileGrid[4],
-      padding: mobileGrid[3],
-    },
-    homeV4CardEyebrow: {
-      color: colors.muted,
-      fontSize: 12,
-      fontWeight: "700",
-      letterSpacing: 1,
-    },
-    homeV4RatingRow: {
-      alignItems: "flex-end",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: mobileGrid[1],
-    },
-    homeV4RatingValue: {
-      color: colors.aquaDeep,
-      fontSize: 31,
-      fontVariant: ["tabular-nums"],
-      letterSpacing: -1,
-    },
-    homeV4RatingDelta: {
-      color: colors.positive,
-      fontSize: 13,
-      fontVariant: ["tabular-nums"],
-      fontWeight: "700",
-      marginBottom: mobileGrid[1],
-    },
-    homeV4RatingDeltaNegative: { color: colors.danger },
-    homeV4Insight: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.accentRgb, 0.055),
-      borderColor: rgba(colors.accentRgb, 0.14),
-      borderRadius: mobileControl.cardRadius,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: mobileGrid[3],
-      marginTop: mobileGrid[1],
-      minHeight: mobileGrid[12] + mobileGrid[1],
-      padding: mobileGrid[3],
-    },
-    homeV4InsightMark: {
-      alignItems: "center",
-      backgroundColor: colors.white,
-      borderRadius: mobileControl.nestedRadius,
-      height: mobileGrid[9],
-      justifyContent: "center",
-      overflow: "hidden",
-      width: mobileGrid[9],
-    },
-    homeV4InsightImage: { height: mobileGrid[8], width: mobileGrid[8] },
-    homeV4InsightTitle: {
-      color: colors.ink,
-      fontSize: 15,
-      lineHeight: 20,
-      marginTop: mobileGrid[2],
-    },
     homeWelcome: {
       alignItems: "flex-start",
       flexDirection: "row",
