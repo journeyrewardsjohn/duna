@@ -1,0 +1,889 @@
+/*
+ * Duna Web Design System v4
+ *
+ * Marketing and public-web language derived from Duna Homepage v2:
+ * Satoshi verdict headlines, DM Mono data, snow/sky/blush washes,
+ * passport-navy brand surfaces, pill controls, and full-bleed section bands.
+ * Product/app surfaces keep the mobile Duna design system.
+ */
+
+:root {
+  --duna-web-snow: #fcfcff;
+  --duna-web-white: #fff;
+  --duna-web-charcoal: #18181b;
+  --duna-web-charcoal-press: #464649;
+  --duna-web-grey-600: #6e6e72;
+  --duna-web-grey-500: #909092;
+  --duna-web-grey-300: #b9b9be;
+  --duna-web-hairline: #e4e6ec;
+  --duna-web-border: #d7dae3;
+  --duna-web-surface-grey: #f2f3f6;
+  --duna-web-navy: #142335;
+  --duna-web-navy-2: #2b385c;
+  --duna-web-mist: #7c95ab;
+  --duna-web-sky-ink: #4a5a6c;
+  --duna-web-sky: #d3e3f0;
+  --duna-web-sky-2: #e4eef6;
+  --duna-web-sky-3: #f3f8fc;
+  --duna-web-sky-border: #c8d8e6;
+  --duna-web-blush: #fecfc0;
+  --duna-web-blush-2: #fbefe8;
+  --duna-web-blush-3: #fdf6f1;
+  --duna-web-blush-border: #f0e3d5;
+  --duna-web-sand: #e6b48c;
+  --duna-web-cream: #faf6f2;
+  --duna-web-cream-2: #fcf8f3;
+  --duna-web-gold: #d6b143;
+  --duna-web-rust: #b0561f;
+  --duna-web-gold-ink: #96792b;
+  --duna-web-live: #c94443;
+  --duna-web-positive: #1e7a46;
+  --duna-web-font-mono: "DM Mono", "SFMono-Regular", Consolas, monospace;
+  --duna-web-content-max: 1216px;
+  --duna-web-nav-height: 78px;
+  --duna-web-radius-band: 48px;
+  --duna-web-radius-glow: 40px;
+  --duna-web-radius-media: 28px;
+  --duna-web-radius-card: 22px;
+  --duna-web-radius-item: 14px;
+  --duna-web-shadow-card: 0 16px 44px rgb(20 35 53 / 7%);
+  --duna-web-shadow-hero: 0 40px 100px rgb(20 35 53 / 18%);
+  --duna-web-shadow-panel: 0 48px 110px rgb(20 35 53 / 30%);
+  --duna-web-glow-blush:
+    0 0 0 1px rgb(254 207 192 / 50%), 0 0 90px 36px rgb(254 207 192 / 35%);
+  --duna-web-glow-sky:
+    0 0 0 1px rgb(211 227 240 / 60%), 0 0 90px 36px rgb(211 227 240 / 45%);
+  --duna-web-grad-hero:
+    radial-gradient(
+      1000px 520px at 14% -10%,
+      rgb(211 227 240 / 85%),
+      rgb(211 227 240 / 0%) 62%
+    ),
+    radial-gradient(
+      1000px 520px at 86% -10%,
+      rgb(254 207 192 / 80%),
+      rgb(254 207 192 / 0%) 62%
+    ),
+    radial-gradient(
+      700px 360px at 50% -4%,
+      rgb(250 246 242 / 90%),
+      rgb(250 246 242 / 0%) 70%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-nav:
+    radial-gradient(
+      900px 480px at 15% -12%,
+      rgb(211 227 240 / 90%),
+      rgb(211 227 240 / 0%) 62%
+    ),
+    radial-gradient(
+      900px 480px at 85% -12%,
+      rgb(254 207 192 / 85%),
+      rgb(254 207 192 / 0%) 62%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-app:
+    radial-gradient(
+      1000px 520px at 20% 110%,
+      rgb(211 227 240 / 80%),
+      rgb(211 227 240 / 0%) 62%
+    ),
+    radial-gradient(
+      1000px 520px at 80% 110%,
+      rgb(254 207 192 / 75%),
+      rgb(254 207 192 / 0%) 62%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-warm:
+    radial-gradient(
+      1100px 560px at 85% -10%,
+      rgb(254 207 192 / 60%),
+      rgb(254 207 192 / 0%) 60%
+    ),
+    radial-gradient(
+      900px 500px at 8% 110%,
+      rgb(230 180 140 / 35%),
+      rgb(230 180 140 / 0%) 60%
+    ),
+    linear-gradient(165deg, #faf6f2, #fdf9f5);
+  --duna-web-grad-sky:
+    radial-gradient(
+      1300px 640px at 50% -20%,
+      rgb(255 255 255 / 95%),
+      rgb(255 255 255 / 0%) 60%
+    ),
+    linear-gradient(170deg, #d3e3f0, #e4eef6 55%, #f3f8fc);
+  --duna-web-grad-navy:
+    radial-gradient(
+      1000px 520px at 82% -12%,
+      rgb(214 177 67 / 24%),
+      rgb(214 177 67 / 0%) 60%
+    ),
+    radial-gradient(
+      900px 500px at 10% 115%,
+      rgb(43 56 92 / 90%),
+      rgb(43 56 92 / 0%) 65%
+    ),
+    var(--duna-web-navy);
+  --duna-web-grad-club:
+    radial-gradient(
+      900px 480px at 12% -12%,
+      rgb(214 177 67 / 30%),
+      rgb(214 177 67 / 0%) 60%
+    ),
+    radial-gradient(
+      800px 440px at 92% 112%,
+      rgb(254 207 192 / 40%),
+      rgb(254 207 192 / 0%) 60%
+    ),
+    linear-gradient(160deg, #faf6f2, #fcf8f3);
+  --duna-web-grad-footer:
+    radial-gradient(
+      1000px 500px at 85% -15%,
+      rgb(43 56 92 / 90%),
+      rgb(43 56 92 / 0%) 60%
+    ),
+    var(--duna-web-navy);
+  --duna-web-grad-protect: linear-gradient(
+    180deg,
+    rgb(20 35 53 / 0%),
+    rgb(20 35 53 / 80%)
+  );
+}
+
+:root[data-theme="dark"] {
+  --duna-web-snow: #101824;
+  --duna-web-white: #172234;
+  --duna-web-charcoal: #faf6f2;
+  --duna-web-charcoal-press: #fff;
+  --duna-web-grey-600: #bdc6d0;
+  --duna-web-grey-500: #96a4b4;
+  --duna-web-grey-300: #718096;
+  --duna-web-hairline: rgb(211 227 240 / 12%);
+  --duna-web-border: rgb(211 227 240 / 22%);
+  --duna-web-surface-grey: #202c3d;
+  --duna-web-navy: #0b1320;
+  --duna-web-navy-2: #1c2a43;
+  --duna-web-mist: #9eb0c2;
+  --duna-web-sky-ink: #c7d7e5;
+  --duna-web-sky: #22344a;
+  --duna-web-sky-2: #1c2d42;
+  --duna-web-sky-3: #17263a;
+  --duna-web-sky-border: #344a62;
+  --duna-web-blush-2: #30242a;
+  --duna-web-blush-3: #251f25;
+  --duna-web-blush-border: #4e3940;
+  --duna-web-cream: #211d20;
+  --duna-web-cream-2: #1b1920;
+  --duna-web-grad-hero:
+    radial-gradient(
+      1000px 520px at 14% -10%,
+      rgb(68 98 126 / 55%),
+      transparent 62%
+    ),
+    radial-gradient(
+      1000px 520px at 86% -10%,
+      rgb(116 69 63 / 42%),
+      transparent 62%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-nav:
+    radial-gradient(
+      900px 480px at 15% -12%,
+      rgb(68 98 126 / 55%),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 480px at 85% -12%,
+      rgb(116 69 63 / 42%),
+      transparent 62%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-app:
+    radial-gradient(
+      1000px 520px at 20% 110%,
+      rgb(68 98 126 / 52%),
+      transparent 62%
+    ),
+    radial-gradient(
+      1000px 520px at 80% 110%,
+      rgb(116 69 63 / 38%),
+      transparent 62%
+    ),
+    var(--duna-web-snow);
+  --duna-web-grad-warm:
+    radial-gradient(
+      900px 520px at 88% 0%,
+      rgb(176 86 31 / 24%),
+      transparent 62%
+    ),
+    linear-gradient(155deg, #211d20, #181b24);
+  --duna-web-grad-sky:
+    radial-gradient(
+      1000px 580px at 50% -20%,
+      rgb(74 90 108 / 42%),
+      transparent 62%
+    ),
+    linear-gradient(170deg, #22344a, #17263a);
+  --duna-web-grad-club:
+    radial-gradient(
+      900px 500px at 12% -12%,
+      rgb(214 177 67 / 18%),
+      transparent 60%
+    ),
+    linear-gradient(160deg, #211d20, #171a22);
+  --duna-web-glow-blush:
+    0 0 0 1px rgb(254 207 192 / 16%), 0 0 90px 30px rgb(176 86 31 / 12%);
+  --duna-web-glow-sky:
+    0 0 0 1px rgb(211 227 240 / 18%), 0 0 90px 30px rgb(68 98 126 / 18%);
+}
+
+/* Public web aliases. These stop at the marketing/public main element. */
+main[data-zone="editorial"],
+.site-mobile-sheet[data-zone="editorial"] {
+  --ground: var(--duna-web-snow);
+  --ground-warm: var(--duna-web-cream);
+  --ground-cool: var(--duna-web-sky);
+  --surface-1: var(--duna-web-white);
+  --surface-2: var(--duna-web-surface-grey);
+  --surface-3: var(--duna-web-white);
+  --hairline: var(--duna-web-hairline);
+  --hairline-strong: var(--duna-web-border);
+  --text-1: var(--duna-web-charcoal);
+  --text-2: var(--duna-web-grey-600);
+  --text-3: var(--duna-web-grey-500);
+  --text-on-accent: var(--duna-web-white);
+  --flare: var(--duna-web-blush);
+  --flare-text: var(--duna-web-rust);
+  --flare-fill: rgb(254 207 192 / 25%);
+  --signal: var(--duna-web-gold);
+  --signal-text: var(--duna-web-navy);
+  --gold: var(--duna-web-gold);
+  --gain: var(--duna-web-positive);
+  --loss: var(--duna-web-live);
+  --btn-primary-bg: var(--duna-web-charcoal);
+  --btn-primary-fg: var(--duna-web-white);
+  --btn-primary-hover: var(--duna-web-charcoal-press);
+  --btn-ghost-border: var(--duna-web-border);
+  --focus-ring: var(--duna-web-rust);
+  --glass-fill: color-mix(in srgb, var(--duna-web-white) 78%, transparent);
+  --glass-border: color-mix(in srgb, var(--duna-web-border) 86%, transparent);
+  --font-data: var(--duna-web-font-mono);
+  --font-mono: var(--duna-web-font-mono);
+  --color-canvas: var(--duna-web-snow);
+  --color-canvas-soft: var(--duna-web-surface-grey);
+  --color-surface: var(--duna-web-white);
+  --color-ink: var(--duna-web-charcoal);
+  --color-depth: var(--duna-web-navy);
+  --color-navy: var(--duna-web-navy);
+  --color-navy-lift: var(--duna-web-navy-2);
+  --color-bone: var(--duna-web-charcoal);
+  --color-bone-muted: var(--duna-web-grey-600);
+  --color-aqua: var(--duna-web-sky);
+  --color-aqua-deep: var(--duna-web-navy-2);
+  --color-sand: var(--duna-web-gold);
+  background: var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+}
+
+main[data-zone="editorial"] :where(h1, h2, h3, .display) {
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-wrap: balance;
+}
+
+main[data-zone="editorial"] :where(h1, .display) {
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+main[data-zone="editorial"] :where(h2) {
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+main[data-zone="editorial"] :where(h3) {
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+main[data-zone="editorial"]
+  :where(
+    .page-eyebrow,
+    .campaign-kicker,
+    .section__eyebrow,
+    .hq-eyebrow,
+    [class*="__eyebrow"]
+  ) {
+  font-family: var(--duna-web-font-mono);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+main[data-zone="editorial"] ::selection,
+.site-mobile-sheet ::selection {
+  background: var(--duna-web-blush);
+  color: #18181b;
+}
+
+/* Navigation: a continuous 78px wash with a full-width dropdown extension. */
+main[data-zone="editorial"] > .site-header {
+  position: sticky;
+  z-index: 100;
+  top: 0;
+  height: var(--duna-web-nav-height);
+  padding: 0;
+  border-bottom: 1px solid var(--duna-web-hairline);
+  background: var(--duna-web-grad-nav);
+}
+
+main[data-zone="editorial"] > .site-header:has(.club-feature-menu[open]) {
+  border-bottom-color: transparent;
+  box-shadow: var(--duna-web-shadow-panel);
+}
+
+main[data-zone="editorial"] > .site-header .site-header__inner {
+  width: min(100%, calc(var(--duna-web-content-max) + 48px));
+  max-width: none;
+  min-height: var(--duna-web-nav-height);
+  margin-inline: auto;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+main[data-zone="editorial"] > .site-header .site-header__brand {
+  min-height: 0;
+}
+
+main[data-zone="editorial"] > .site-header .duna-mark__logo {
+  height: 30px;
+}
+
+main[data-zone="editorial"] > .site-header .site-header__nav {
+  justify-self: center;
+  gap: 4px;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  :is(.club-feature-menu > summary, .site-header__nav > a) {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: var(--duna-web-charcoal);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  :is(.club-feature-menu[open] > summary, .club-feature-menu > summary:hover) {
+  background: rgb(24 24 27 / 5%);
+  color: var(--duna-web-navy-2);
+}
+
+:root[data-theme="dark"]
+  main[data-zone="editorial"]
+  > .site-header
+  :is(.club-feature-menu[open] > summary, .club-feature-menu > summary:hover) {
+  background: rgb(255 255 255 / 8%);
+}
+
+main[data-zone="editorial"] > .site-header .club-feature-menu__backdrop {
+  inset: var(--duna-web-nav-height) 0 0;
+  background: rgb(24 24 27 / 34%);
+  backdrop-filter: blur(8px);
+}
+
+main[data-zone="editorial"] > .site-header .club-feature-menu__panel {
+  top: var(--duna-web-nav-height);
+  width: 100%;
+  max-height: calc(100dvh - var(--duna-web-nav-height));
+  padding: 36px max(24px, calc((100vw - var(--duna-web-content-max)) / 2)) 52px;
+  border: 0;
+  border-radius: 0 0 var(--duna-web-radius-glow) var(--duna-web-radius-glow);
+  background: var(--duna-web-grad-nav);
+  box-shadow: var(--duna-web-shadow-panel);
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .club-feature-menu__panel
+  > header
+  > div
+  > span,
+main[data-zone="editorial"]
+  > .site-header
+  .site-experience-menu__featured
+  > span {
+  font-family: var(--duna-web-font-mono);
+  letter-spacing: 0.1em;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .club-feature-menu__panel
+  > header
+  > div
+  > strong {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .site-experience-menu__groups
+  > section
+  > div
+  > a,
+main[data-zone="editorial"]
+  > .site-header
+  .club-feature-menu__grid
+  section
+  > div:last-child
+  > a {
+  border-radius: var(--duna-web-radius-item);
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .site-experience-menu__groups
+  > section
+  > div
+  > a:hover,
+main[data-zone="editorial"]
+  > .site-header
+  .club-feature-menu__grid
+  section
+  > div:last-child
+  > a:hover {
+  background: color-mix(in srgb, var(--duna-web-white) 76%, transparent);
+  transform: none;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .site-header__nav
+  .site-experience-menu__featured {
+  min-height: 310px;
+  border-radius: var(--duna-web-radius-card);
+  background:
+    var(--duna-web-grad-protect),
+    url("/media/duna-campaign-rally.webp") center / cover;
+  color: #fff;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .site-experience-menu[data-experience="watch"]
+  .site-experience-menu__featured {
+  background:
+    var(--duna-web-grad-protect),
+    url("/media/duna-action-serve.webp") center / cover;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  .site-experience-menu__featured::after {
+  display: none;
+}
+
+main[data-zone="editorial"] > .site-header .site-header__actions {
+  gap: 10px;
+}
+
+main[data-zone="editorial"]
+  > .site-header
+  :is(.theme-toggle, .site-header__operator, .site-header__enter) {
+  min-height: 44px;
+  border-color: var(--duna-web-border);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+main[data-zone="editorial"] > .site-header .theme-toggle {
+  background: color-mix(in srgb, var(--duna-web-white) 70%, transparent);
+}
+
+main[data-zone="editorial"] > .site-header .site-header__operator {
+  padding-inline: 14px 8px;
+  background: color-mix(in srgb, var(--duna-web-white) 70%, transparent);
+}
+
+main[data-zone="editorial"] > .site-header .site-header__enter {
+  background: var(--duna-web-charcoal);
+  color: var(--duna-web-white);
+}
+
+main[data-zone="editorial"] > .site-header .site-header__enter:hover {
+  background: var(--duna-web-charcoal-press);
+}
+
+main[data-zone="editorial"] > .site-header .site-header__enter small {
+  color: color-mix(in srgb, var(--duna-web-white) 64%, transparent);
+}
+
+/* Mobile navigation keeps the product/account workflow in the same web skin. */
+.site-mobile-sheet[data-zone="editorial"] {
+  background: var(--duna-web-grad-hero);
+}
+
+.site-mobile-sheet[data-zone="editorial"] .site-mobile-sheet__header {
+  min-height: var(--duna-web-nav-height);
+  border-bottom-color: var(--duna-web-hairline);
+}
+
+.site-mobile-sheet[data-zone="editorial"] .site-mobile-sheet__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+.site-mobile-sheet[data-zone="editorial"]
+  :is(.site-mobile-product, .site-mobile-sheet__quick-actions a) {
+  border-radius: var(--duna-web-radius-card);
+  box-shadow: var(--duna-web-shadow-card);
+}
+
+.site-mobile-sheet[data-zone="editorial"]
+  :where(.site-mobile-sheet__section-heading, small) {
+  font-family: var(--duna-web-font-mono);
+}
+
+/* Shared editorial pages become a hero wash plus one contentful floating band. */
+.public-detail {
+  background: var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+}
+
+.public-detail > .site-header {
+  position: sticky;
+}
+
+.editorial-hero {
+  display: flex;
+  min-height: 610px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(7rem, 12vw, 10rem) 24px clamp(5rem, 9vw, 7rem);
+  background: var(--duna-web-grad-hero);
+  color: var(--duna-web-charcoal);
+  text-align: center;
+}
+
+.editorial-hero .duna-badge {
+  border: 1px solid var(--duna-web-hairline);
+  background: color-mix(in srgb, var(--duna-web-white) 76%, transparent);
+  color: var(--duna-web-navy-2);
+  font-family: var(--duna-web-font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.editorial-hero h1 {
+  max-width: 11ch;
+  margin: 28px auto 0;
+  color: var(--duna-web-charcoal);
+  font-size: clamp(4.25rem, 9vw, 7.25rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+.editorial-hero p {
+  max-width: 650px;
+  margin: 28px auto 0;
+  color: var(--duna-web-grey-600);
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.editorial-body {
+  max-width: 1080px;
+  margin: 48px auto 104px;
+  padding: clamp(3.5rem, 8vw, 6rem) clamp(1.5rem, 7vw, 5rem);
+  border: 1px solid var(--duna-web-blush-border);
+  border-radius: var(--duna-web-radius-band);
+  background: var(--duna-web-grad-club);
+  box-shadow: var(--duna-web-shadow-card);
+  color: var(--duna-web-grey-600);
+  font-size: 16.5px;
+  line-height: 1.7;
+}
+
+.editorial-body h2 {
+  max-width: 16ch;
+  margin: 3.5rem 0 1.1rem;
+  color: var(--duna-web-charcoal);
+  font-size: clamp(2.4rem, 5vw, 3.75rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.editorial-body h2:first-child {
+  margin-top: 0;
+}
+
+.editorial-body blockquote {
+  margin: 4.5rem 0 0;
+  padding: clamp(2rem, 6vw, 4rem);
+  border-radius: var(--duna-web-radius-glow);
+  background: linear-gradient(
+    170deg,
+    var(--duna-web-blush-2),
+    var(--duna-web-blush-3)
+  );
+  box-shadow: var(--duna-web-glow-blush);
+  color: var(--duna-web-charcoal);
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.14;
+  text-align: center;
+}
+
+/* Sand Rating and rankings use the sky family without changing their content. */
+.rating-methodology-page,
+.rankings-page {
+  background: var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+}
+
+.rating-methodology-hero,
+.rankings-hero {
+  min-height: 640px;
+  padding-top: clamp(6rem, 12vw, 10rem);
+  border-radius: 0 0 var(--duna-web-radius-band) var(--duna-web-radius-band);
+  background: var(--duna-web-grad-sky);
+  color: var(--duna-web-navy);
+}
+
+.rating-methodology-hero h1,
+.rankings-hero h1 {
+  color: var(--duna-web-navy);
+  font-size: clamp(4rem, 8vw, 7.25rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+.rating-methodology-hero p,
+.rankings-hero p {
+  color: var(--duna-web-sky-ink);
+}
+
+.rating-methodology-hero__score {
+  border-left-color: var(--duna-web-sky-border);
+}
+
+.rating-methodology-hero__score .duna-numeric {
+  color: var(--duna-web-navy);
+  font-family: var(--font-display);
+  font-weight: 900;
+}
+
+.rating-methodology-hero__score > span,
+.rating-methodology-hero__score small {
+  color: var(--duna-web-sky-ink);
+  font-family: var(--duna-web-font-mono);
+}
+
+.rating-methodology-hero__actions a:first-child {
+  background: var(--duna-web-navy);
+  color: #fff;
+}
+
+.rating-methodology-hero__actions a:last-child {
+  color: var(--duna-web-navy);
+}
+
+.rating-lab-principles article,
+.rating-lab-panel,
+.rating-lab-split,
+.rating-methodology-copy,
+.rating-metric-notes,
+.rankings-explainer {
+  border-color: var(--duna-web-hairline);
+  border-radius: var(--duna-web-radius-card);
+  background: var(--duna-web-white);
+  box-shadow: var(--duna-web-shadow-card);
+}
+
+.rating-lab-principles svg {
+  color: var(--duna-web-navy-2);
+}
+
+/* Footer joins the final wash without a thin seam. */
+.site-footer {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: var(--duna-web-grad-footer);
+  color: #faf6f2;
+}
+
+.site-footer__top,
+.site-footer__bottom {
+  width: min(100%, calc(var(--duna-web-content-max) + 64px));
+  margin-inline: auto;
+  padding-inline: 32px;
+}
+
+.site-footer__top {
+  padding-top: 80px;
+}
+
+.site-footer__top > div:first-child > p,
+.site-footer__links a {
+  color: var(--duna-web-mist);
+}
+
+.site-footer__links strong {
+  color: var(--duna-web-gold);
+  font-family: var(--duna-web-font-mono);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+.site-footer__links a:hover {
+  color: #fff;
+}
+
+.site-footer__bottom {
+  margin-top: 5rem;
+  padding-top: 1.2rem;
+  padding-bottom: 40px;
+  border-top-color: rgb(250 246 242 / 12%);
+  color: var(--duna-web-mist);
+}
+
+.site-footer .duna-mark__logo--blue {
+  display: none;
+}
+
+.site-footer .duna-mark__logo--white {
+  display: block;
+  height: 42px;
+}
+
+@media (max-width: 1180px) {
+  main[data-zone="editorial"] > .site-header {
+    height: 70px;
+  }
+
+  main[data-zone="editorial"] > .site-header .site-header__inner {
+    min-height: 70px;
+  }
+}
+
+@media (max-width: 920px) {
+  :root {
+    --duna-web-radius-band: 32px;
+  }
+
+  .editorial-hero {
+    min-height: 520px;
+  }
+
+  .editorial-hero h1 {
+    font-size: clamp(3.6rem, 14vw, 5.75rem);
+  }
+
+  .editorial-body {
+    margin-inline: 16px;
+  }
+
+  .rating-methodology-hero,
+  .rankings-hero {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  main[data-zone="editorial"] > .site-header {
+    height: 64px;
+    padding: 0;
+  }
+
+  main[data-zone="editorial"] > .site-header .site-header__inner {
+    min-height: 64px;
+    padding: 0 16px;
+  }
+
+  main[data-zone="editorial"] > .site-header .duna-mark__logo {
+    height: 27px;
+  }
+
+  main[data-zone="editorial"] > .site-header .site-header__menu {
+    width: 44px;
+    height: 44px;
+    border-color: var(--duna-web-border);
+    background: color-mix(in srgb, var(--duna-web-white) 76%, transparent);
+  }
+
+  .site-mobile-sheet[data-zone="editorial"] .site-mobile-sheet__content {
+    padding-top: 2.25rem;
+  }
+
+  .site-mobile-sheet[data-zone="editorial"] .site-mobile-sheet__products {
+    grid-template-columns: 1fr;
+  }
+
+  .editorial-hero {
+    min-height: 470px;
+    padding: 5rem 20px 4rem;
+  }
+
+  .editorial-hero h1 {
+    font-size: clamp(3.2rem, 16vw, 4.7rem);
+  }
+
+  .editorial-hero p {
+    font-size: 16.5px;
+  }
+
+  .editorial-body {
+    margin-top: 32px;
+    margin-bottom: 72px;
+    padding: 3rem 1.35rem;
+  }
+
+  .editorial-body blockquote {
+    margin-inline: -0.25rem;
+  }
+
+  .site-footer__top {
+    gap: 3rem;
+    grid-template-columns: 1fr;
+    padding-top: 64px;
+  }
+
+  .site-footer__links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .site-footer__bottom {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 3.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main[data-zone="editorial"] *,
+  main[data-zone="editorial"] *::before,
+  main[data-zone="editorial"] *::after {
+    scroll-behavior: auto !important;
+  }
+}

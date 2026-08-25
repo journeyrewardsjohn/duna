@@ -3,6 +3,7 @@ import "flag-icons/css/flag-icons.min.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./design-v3.css";
+import "./design-v4.css";
 
 import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
@@ -51,8 +52,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F6F5F1" },
-    { media: "(prefers-color-scheme: dark)", color: "#141310" },
+    { media: "(prefers-color-scheme: light)", color: "#FCFCFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#101824" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -97,7 +98,13 @@ export default function RootLayout({
       <head>
         <link href="https://api.fontshare.com" rel="preconnect" />
         <link
-          href="https://api.fontshare.com/v2/css?f[]=satoshi@1,2&display=swap"
+          href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap"
+          rel="stylesheet"
+        />
+        <link href="https://fonts.googleapis.com" rel="preconnect" />
+        <link href="https://fonts.gstatic.com" rel="preconnect" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />

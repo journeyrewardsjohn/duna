@@ -1,6 +1,10 @@
 .page {
+  --hq-tint: var(--duna-web-cream);
+  --hq-core: var(--duna-web-gold);
+  --hq-ink: var(--duna-web-charcoal);
+  --hq-deep: var(--duna-web-navy);
   --business-hq-wash: var(--hq-tint);
-  --business-hq-soft: color-mix(in srgb, var(--hq-tint) 54%, var(--ground));
+  --business-hq-soft: color-mix(in srgb, var(--hq-core) 12%, var(--ground));
   --hero-progress: 0;
   background: var(--ground);
   color: var(--text-1);
@@ -251,7 +255,7 @@
 .heroCopy h1 {
   font-family: var(--font-display);
   font-size: clamp(3.5rem, 5.8vw, 6.5rem);
-  font-weight: 700;
+  font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1.03;
   margin: 0;
@@ -580,7 +584,7 @@
 .closing h2,
 .assurance h2 {
   font-size: clamp(2.7rem, 4.6vw, 5.15rem);
-  font-weight: 700;
+  font-weight: 900;
   letter-spacing: -0.024em;
   line-height: 1.06;
   margin: 0;
@@ -2264,6 +2268,12 @@
 }
 
 :global(:root[data-theme="dark"]) .page {
+  --hq-tint: color-mix(
+    in srgb,
+    var(--duna-web-navy-2) 78%,
+    var(--duna-web-charcoal)
+  );
+  --hq-ink: var(--duna-web-snow);
   --business-hq-wash: color-mix(in srgb, var(--hq-deep) 38%, var(--ground));
   --business-hq-soft: color-mix(in srgb, var(--hq-deep) 24%, var(--ground));
 }

@@ -19,7 +19,6 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { DunaWatchDevice } from "@/components/duna-watch-device";
-import { HomeSandWorld } from "@/components/home-sand-world";
 import { ProfileAvatarStack } from "@/components/profile-avatar-stack";
 import { PredictionDiscoverySection } from "@/components/prediction-discovery";
 import { RatingOrbit } from "@/components/rating-orbit";
@@ -34,6 +33,7 @@ import {
 import styles from "./homepage.module.css";
 
 const homeMedia = {
+  hero: "/media/duna-hero-poster.webp",
   rally: "/media/brand/duna-home-rally-v3.webp",
   operator: "/media/brand/duna-club-hero-v1.webp",
 } as const;
@@ -63,204 +63,240 @@ export default async function HomePage() {
   const marketNames = [...new Set(venues.map((venue) => venue.city))]
     .filter(Boolean)
     .join(" · ");
+  const tickerItems = [
+    ...events
+      .slice(0, 4)
+      .map((event) =>
+        event.live
+          ? `${event.title.toUpperCase()} — LIVE NOW`
+          : `${event.title.toUpperCase()} — ${event.spotsRemaining} SPOTS OPEN`,
+      ),
+    ...venues
+      .slice(0, 4)
+      .map(
+        (venue) =>
+          `${venue.city.toUpperCase()} — ${venue.courtCount} ${venue.courtCount === 1 ? "COURT" : "COURTS"} CONNECTED`,
+      ),
+  ];
 
   return (
     <main className={`campaign-home ${styles.home}`} data-zone="editorial">
       <SiteHeader />
 
-      <div className={styles.world} data-sand-world>
-        <div className={styles.worldStage} aria-hidden="true">
-          <HomeSandWorld className={styles.sandWorld} />
-          <div className={styles.worldAtmosphere} />
-          <div className={styles.worldContour} />
-          <div className={styles.worldRail}>
-            <span>Play</span>
-            <span>Compete</span>
-            <span>Operate</span>
-          </div>
-        </div>
+      <section aria-labelledby="home-hero-heading" className={styles.hero}>
+        <div className={styles.shell}>
+          {featuredEvent ? (
+            <Link
+              className={styles.heroAnnouncement}
+              href={`/events/${featuredEvent.slug}`}
+            >
+              <span>{featuredEvent.live ? "Live" : "Up next"}</span>
+              {featuredEvent.title}
+              <b aria-hidden>→</b>
+            </Link>
+          ) : null}
 
-        <div className={styles.worldChapters}>
-          <section
-            aria-labelledby="home-hero-heading"
-            className={`${styles.worldChapter} ${styles.heroChapter}`}
-          >
-            <div className={`${styles.shell} ${styles.heroLayout}`}>
-              <div className={styles.heroCopy}>
-                <span className={styles.eyebrow}>
-                  Beach volleyball, connected
-                </span>
-                <h1 id="home-hero-heading">
-                  Everything that happens on sand.
-                  <span>One living game.</span>
-                </h1>
-                <p>
-                  Find your next game, compete with a verified record, follow
-                  the world tour, or run the whole club. Duna keeps every side
-                  of beach volleyball moving together.
-                </p>
-                <div className={styles.actions}>
-                  <Link className={styles.primaryAction} href="/discover">
-                    Find a game <ArrowRight aria-hidden size={18} />
-                  </Link>
-                  <Link
-                    className={styles.secondaryAction}
-                    href="/run-your-club"
-                  >
-                    Run your club
-                  </Link>
-                </div>
-              </div>
-
-              <div className={styles.heroProof} aria-label="Duna network">
-                <div>
-                  <Numeric tier="block">{people.length}</Numeric>
-                  <span>connected players</span>
-                </div>
-                <div>
-                  <Numeric tier="block">{events.length}</Numeric>
-                  <span>ways to play</span>
-                </div>
-                <div>
-                  <Numeric tier="block">{courtCount}</Numeric>
-                  <span>connected courts</span>
-                </div>
-              </div>
-
-              <div className={styles.scrollCue} aria-hidden="true">
-                <span />
-                Scroll through the sand
-              </div>
-            </div>
-          </section>
-
-          <section
-            aria-labelledby="home-play-heading"
-            className={`${styles.worldChapter} ${styles.playChapter}`}
-          >
-            <div className={`${styles.shell} ${styles.chapterLayout}`}>
-              <div className={styles.chapterCopy}>
-                <span className={styles.eyebrow}>Play</span>
-                <h2 id="home-play-heading">The next game is already moving.</h2>
-                <p>
-                  Search courts, pickups, coaching, clinics, leagues, and
-                  tournaments around your city and level. Book without leaving
-                  the network.
-                </p>
-                <Link className={styles.textLink} href="/discover">
-                  Explore what&apos;s next <ArrowRight aria-hidden size={17} />
-                </Link>
-              </div>
-
-              <Link
-                className={styles.chapterSignal}
-                href={
-                  featuredEvent ? `/events/${featuredEvent.slug}` : "/discover"
-                }
-              >
-                <span>
-                  <Radio aria-hidden size={15} />
-                  {featuredEvent?.live ? "Live now" : "Up next"}
-                </span>
-                <strong>{featuredEvent?.title ?? "Find play near you"}</strong>
-                <small>
-                  {featuredEvent?.venueName ??
-                    "Courts, people, and competition"}
-                </small>
-                {featuredEvent?.attendees &&
-                  featuredEvent.attendees.length > 0 && (
-                    <div className={styles.chapterAttendance}>
-                      <ProfileAvatarStack
-                        label={`${featuredEvent.attendees.length} people attending ${featuredEvent.title}`}
-                        people={withDemoProfileAvatars(featuredEvent.attendees)}
-                        size="sm"
-                      />
-                      <small>{featuredEvent.attendees.length} going</small>
-                    </div>
-                  )}
-                <ArrowRight aria-hidden size={17} />
+          <div className={styles.heroCopy}>
+            <h1 id="home-hero-heading">The sand keeps score now.</h1>
+            <p>
+              Find a game tonight, get one verified rating, and watch every
+              court worth watching.
+            </p>
+            <div className={styles.actions}>
+              <Link className={styles.primaryAction} href="/discover">
+                Find a game
+              </Link>
+              <Link className={styles.secondaryAction} href="/sign-up">
+                Claim your rating
               </Link>
             </div>
-          </section>
+          </div>
 
-          <section
-            aria-labelledby="home-record-heading"
-            className={`${styles.worldChapter} ${styles.recordChapter}`}
-          >
-            <div className={`${styles.shell} ${styles.chapterLayout}`}>
-              <div className={styles.ratingSignal}>
-                <span>Sand Rating</span>
-                <Numeric tier="hero">
-                  {featuredPlayer?.rating.display ?? 1}
-                </Numeric>
-                <small>
-                  {featuredPlayer?.rating.confidence ?? "Provisional"} · every
-                  result explained
-                </small>
-              </div>
-
-              <div className={styles.chapterCopy}>
-                <span className={styles.eyebrow}>Compete</span>
-                <h2 id="home-record-heading">Every point becomes proof.</h2>
-                <p>
-                  Partners, opponents, scores, and verification become one
-                  portable performance history—so your rating moves when your
-                  game does.
-                </p>
-                <Link className={styles.textLink} href="/methodology">
-                  See how Sand Rating works <ArrowRight aria-hidden size={17} />
-                </Link>
-              </div>
+          <div className={styles.heroMedia}>
+            <Image
+              alt="Beach volleyball players competing on a packed center court"
+              fill
+              priority
+              sizes="(max-width: 1280px) calc(100vw - 48px), 1216px"
+              src={homeMedia.hero}
+            />
+            <div className={styles.heroLive}>
+              <i />
+              {featuredEvent?.live ? "Live" : "On the sand"} ·{" "}
+              {featuredEvent?.venueName ?? "Every connected court"}
             </div>
-          </section>
+            <div className={styles.heroRating}>
+              <span>Sand Rating</span>
+              <strong>{featuredPlayer?.rating.display ?? 1}</strong>
+              <small>
+                {featuredPlayer?.rating.confidence ?? "Provisional"} ·{" "}
+                {people.length} connected players
+              </small>
+            </div>
+          </div>
 
-          <section
-            aria-labelledby="home-operate-heading"
-            className={`${styles.worldChapter} ${styles.operateChapter}`}
-          >
-            <div className={`${styles.shell} ${styles.chapterLayout}`}>
-              <div className={styles.chapterCopy}>
-                <span className={styles.eyebrow}>Operate</span>
-                <h2 id="home-operate-heading">The whole club, in motion.</h2>
-                <p>
-                  Scheduling, payments, memberships, events, people, courts, and
-                  messaging share one operational picture—clear enough to run
-                  between sessions.
-                </p>
-                <Link className={styles.textLink} href="/run-your-club">
-                  Meet Duna HQ <ArrowRight aria-hidden size={17} />
-                </Link>
-              </div>
+          <div className={styles.heroProof} aria-label="Duna network">
+            <div>
+              <Numeric tier="block">{people.length}</Numeric>
+              <span>connected players</span>
+            </div>
+            <div>
+              <Numeric tier="block">{events.length}</Numeric>
+              <span>ways to play</span>
+            </div>
+            <div>
+              <Numeric tier="block">{courtCount}</Numeric>
+              <span>connected courts</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-              <div className={styles.operatorSignal}>
-                <span>Duna HQ</span>
-                <div>
-                  <small>Published sessions</small>
-                  <Numeric tier="block">{events.length}</Numeric>
-                </div>
-                <div>
-                  <small>Connected courts</small>
-                  <Numeric tier="block">{courtCount}</Numeric>
-                </div>
-                <p>
-                  <i /> Connected ·{" "}
-                  {marketNames || "ready for your first market"}
-                </p>
-                <section className={styles.operatorPeople}>
+      {tickerItems.length > 0 ? (
+        <div
+          aria-label={tickerItems.join(". ")}
+          className={styles.ticker}
+          role="status"
+        >
+          <div aria-hidden className={styles.tickerTrack}>
+            {[0, 1].map((segment) => (
+              <span className={styles.tickerSegment} key={segment}>
+                {tickerItems.map((item, itemIndex) => (
+                  <span key={`${segment}-${itemIndex}`}>
+                    {item} <i>●</i>
+                  </span>
+                ))}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className={styles.featureStack}>
+        <section
+          aria-labelledby="home-play-heading"
+          className={`${styles.featureBand} ${styles.playBand}`}
+        >
+          <div className={`${styles.shell} ${styles.chapterLayout}`}>
+            <div className={styles.chapterCopy}>
+              <span className={styles.eyebrow}>Play</span>
+              <h2 id="home-play-heading">The next game is already moving.</h2>
+              <p>
+                Search courts, pickups, coaching, clinics, leagues, and
+                tournaments around your city and level. Book without leaving the
+                network.
+              </p>
+              <Link className={styles.primaryAction} href="/discover">
+                Explore what&apos;s next
+              </Link>
+            </div>
+
+            <Link
+              className={styles.chapterSignal}
+              href={
+                featuredEvent ? `/events/${featuredEvent.slug}` : "/discover"
+              }
+            >
+              <span>
+                <Radio aria-hidden size={15} />
+                {featuredEvent?.live ? "Live now" : "Up next"}
+              </span>
+              <strong>{featuredEvent?.title ?? "Find play near you"}</strong>
+              <small>
+                {featuredEvent?.venueName ?? "Courts, people, and competition"}
+              </small>
+              {featuredEvent?.attendees &&
+              featuredEvent.attendees.length > 0 ? (
+                <div className={styles.chapterAttendance}>
                   <ProfileAvatarStack
-                    label="Players connected to today's sessions"
-                    people={marketingPlayerGroup}
+                    label={`${featuredEvent.attendees.length} people attending ${featuredEvent.title}`}
+                    people={withDemoProfileAvatars(featuredEvent.attendees)}
                     size="sm"
                   />
-                  <span>
-                    <strong>Players connected</strong>
-                    <small>Profiles follow every booking</small>
-                  </span>
-                </section>
-              </div>
+                  <small>{featuredEvent.attendees.length} going</small>
+                </div>
+              ) : null}
+              <ArrowRight aria-hidden size={17} />
+            </Link>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="home-record-heading"
+          className={`${styles.featureBand} ${styles.recordBand}`}
+        >
+          <div className={`${styles.shell} ${styles.chapterLayout}`}>
+            <div className={styles.ratingSignal}>
+              <span>Sand Rating</span>
+              <Numeric tier="hero">
+                {featuredPlayer?.rating.display ?? 1}
+              </Numeric>
+              <small>
+                {featuredPlayer?.rating.confidence ?? "Provisional"} · every
+                result explained
+              </small>
             </div>
-          </section>
-        </div>
+
+            <div className={styles.chapterCopy}>
+              <span className={styles.eyebrow}>Compete</span>
+              <h2 id="home-record-heading">Every point becomes proof.</h2>
+              <p>
+                Partners, opponents, scores, and verification become one
+                portable performance history—so your rating moves when your game
+                does.
+              </p>
+              <Link className={styles.primaryAction} href="/methodology">
+                See how Sand Rating works
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="home-operate-heading"
+          className={`${styles.featureBand} ${styles.operateBand}`}
+        >
+          <div className={`${styles.shell} ${styles.chapterLayout}`}>
+            <div className={styles.chapterCopy}>
+              <span className={styles.eyebrow}>Operate</span>
+              <h2 id="home-operate-heading">The whole club, in motion.</h2>
+              <p>
+                Scheduling, payments, memberships, events, people, courts, and
+                messaging share one operational picture—clear enough to run
+                between sessions.
+              </p>
+              <Link className={styles.primaryAction} href="/run-your-club">
+                Meet Duna HQ
+              </Link>
+            </div>
+
+            <div className={styles.operatorSignal}>
+              <span>Duna HQ</span>
+              <div>
+                <small>Published sessions</small>
+                <Numeric tier="block">{events.length}</Numeric>
+              </div>
+              <div>
+                <small>Connected courts</small>
+                <Numeric tier="block">{courtCount}</Numeric>
+              </div>
+              <p>
+                <i /> Connected · {marketNames || "ready for your first market"}
+              </p>
+              <section className={styles.operatorPeople}>
+                <ProfileAvatarStack
+                  label="Players connected to today's sessions"
+                  people={marketingPlayerGroup}
+                  size="sm"
+                />
+                <span>
+                  <strong>Players connected</strong>
+                  <small>Profiles follow every booking</small>
+                </span>
+              </section>
+            </div>
+          </div>
+        </section>
       </div>
 
       <section aria-labelledby="home-now-heading" className={styles.nowSection}>
@@ -358,15 +394,17 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <div className={styles.shell + " homepage-predictions"}>
-        <PredictionDiscoverySection
-          allHref="/pro"
-          description="Make your call on live and upcoming beach volleyball with free-play credits. Crowd prices move with every matched position."
-          discovery={predictionDiscovery}
-          publicMode
-          title="What happens next?"
-        />
-      </div>
+      <section className={styles.predictionsSection}>
+        <div className={`${styles.shell} homepage-predictions`}>
+          <PredictionDiscoverySection
+            allHref="/pro"
+            description="Make your call on live and upcoming beach volleyball with free-play credits. Crowd prices move with every matched position."
+            discovery={predictionDiscovery}
+            publicMode
+            title="What happens next?"
+          />
+        </div>
+      </section>
 
       <section
         aria-labelledby="home-intelligence-heading"

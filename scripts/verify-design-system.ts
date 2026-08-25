@@ -17,12 +17,14 @@ const requiredFiles = [
   "docs/design/duna-font-usage-guide.md",
   "docs/design/duna-design-system.md",
   "docs/design/duna-design-system-v3.md",
+  "docs/design/duna-design-system-v4.md",
   "docs/design/duna-hq-component-system.md",
   "docs/design/duna-implementation-audit.md",
   "docs/design/duna-mobile-design-guide.md",
   "docs/design/duna-theming-light-dark.md",
   "docs/licenses/Archivo-OFL-1.1.txt",
   "apps/web/app/design-v3.css",
+  "apps/web/app/design-v4.css",
   "apps/web/app/homepage.module.css",
   "apps/web/app/app/player-dashboard.module.css",
   "apps/web/app/not-found.tsx",
@@ -72,30 +74,33 @@ const homepageSource = readFileSync(
   join(root, "apps/web/app/page.tsx"),
   "utf8",
 );
-const homepageSandSource = readFileSync(
-  join(root, "apps/web/components/home-sand-world.tsx"),
-  "utf8",
-);
 for (const contract of [
-  "HomeSandWorld",
-  "data-sand-world",
+  "The sand keeps score now.",
+  "styles.heroMedia",
+  "styles.heroProof",
+  "styles.ticker",
   'data-zone="live"',
 ] as const) {
   if (!homepageSource.includes(contract)) {
     violations.push(`apps/web/app/page.tsx must preserve ${contract}`);
   }
 }
+
+const publicWebSystemSource = readFileSync(
+  join(root, "apps/web/app/design-v4.css"),
+  "utf8",
+);
 for (const contract of [
-  "prefers-reduced-motion: reduce",
-  "connection?.saveData",
-  "softwareRenderer",
-  'canvas.dataset.renderer = "fallback"',
-  "IntersectionObserver",
+  "--duna-web-snow: #fcfcff",
+  "--duna-web-charcoal: #18181b",
+  "--duna-web-navy: #142335",
+  "--duna-web-sky: #d3e3f0",
+  "--duna-web-blush: #fecfc0",
+  "--duna-web-radius-band: 48px",
+  '--duna-web-font-mono: "DM Mono"',
 ] as const) {
-  if (!homepageSandSource.includes(contract)) {
-    violations.push(
-      `apps/web/components/home-sand-world.tsx must preserve ${contract}`,
-    );
+  if (!publicWebSystemSource.includes(contract)) {
+    violations.push(`apps/web/app/design-v4.css must preserve ${contract}`);
   }
 }
 
@@ -338,9 +343,14 @@ for (const app of ["web", "hq"] as const) {
       `apps/${app}/app/layout.tsx must load Satoshi through Fontshare, not ${match[1]}`,
     );
   }
-  if (!layoutSource.includes("api.fontshare.com/v2/css?f[]=satoshi@1,2")) {
+  if (!layoutSource.includes("api.fontshare.com/v2/css?f[]=satoshi@")) {
     violations.push(
       `apps/${app}/app/layout.tsx must load Satoshi from Fontshare`,
+    );
+  }
+  if (app === "web" && !layoutSource.includes("family=DM+Mono")) {
+    violations.push(
+      "apps/web/app/layout.tsx must load DM Mono for public editorial metadata",
     );
   }
 }
@@ -865,5 +875,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Design system verified: Satoshi is the Duna system family, local app faces, semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
+  "Design system verified: Satoshi remains primary, the public DM Mono metadata accent is scoped, and semantic zoning, contrast, identity, icons, imagery, recovery, naming, and country-code policy are intact.",
 );

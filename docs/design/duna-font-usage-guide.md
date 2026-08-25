@@ -5,11 +5,14 @@ Fellix/Archivo font rules in the design-system, mobile guidance, and audits.
 **Scope:** public web, Player web, Duna HQ, Super Admin, Player, Pro, Watch,
 Live Activities, transactional UI, and product media.
 
-## One-family system
+## Primary-family system
 
 Duna uses **Satoshi** for every product word and number. The family is the
 single source of typographic character across product surfaces; hierarchy comes
-from its weight, size, spacing, and numeric treatment, not a second brand face.
+from its weight, size, spacing, and numeric treatment. The only public-web
+exception is **DM Mono** for short uppercase eyebrows, timestamps, live/data
+labels, and tickers defined by `duna-design-system-v4.md`. DM Mono is an accent,
+not a product or reading face, and is not used in HQ or native applications.
 
 | Weight | Role                                                  |
 | ------ | ----------------------------------------------------- |
@@ -39,6 +42,9 @@ tenant content and must not replace Duna chrome.
 }
 ```
 
+The public website exposes the exception as `--duna-web-font-mono`; shared
+product tokens deliberately continue to resolve to Satoshi.
+
 ## Accessibility and scale
 
 - Product text never renders below **12px (0.75rem)**. That floor is for dense
@@ -55,8 +61,9 @@ tenant content and must not replace Duna chrome.
 ## Delivery
 
 - Web and HQ load the official variable normal and italic Satoshi faces through
-  the Fontshare API in their root layouts. Do not copy webfont files into
-  `public/`, Vercel, Cloudflare, or another CDN.
+  the Fontshare API in their root layouts. Web also loads DM Mono from Google
+  Fonts for the restricted public-editorial role. Do not copy webfont files
+  into `public/`, Vercel, Cloudflare, or another CDN.
 - Player and Pro bundle the official static Light, Regular, Medium, Bold, and
   Black faces via Expo Font. This maps native weights consistently and keeps
   type available offline.
