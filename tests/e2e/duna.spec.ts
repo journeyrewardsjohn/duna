@@ -231,7 +231,7 @@ test("public club pages keep the hero readable and the section rail useful", asy
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await page.goto("/clubs/beach-elite-vb-academy-X3N0ZSW4");
+  await page.goto("/clubs/south-bay-volleyball");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
   for (const viewport of [
@@ -245,7 +245,7 @@ test("public club pages keep the hero readable and the section rail useful", asy
     const hero = page.locator(".club-hero");
     const heading = page.getByRole("heading", {
       level: 1,
-      name: "Beach Elite VB Academy",
+      name: "South Bay Volleyball Club",
     });
     const sectionNav = page.getByRole("navigation", {
       name: "Explore this club",
@@ -273,12 +273,10 @@ test("public club pages keep the hero readable and the section rail useful", asy
   const sectionNav = page.getByRole("navigation", {
     name: "Explore this club",
   });
-  await sectionNav.getByRole("link", { name: "Services" }).click();
+  await sectionNav.getByRole("link", { name: "Locations" }).click();
+  await expect(page.locator(".club-locations")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Train with intention." }),
-  ).toBeVisible();
-  await expect(
-    sectionNav.getByRole("link", { name: "Services" }),
+    sectionNav.getByRole("link", { name: "Locations" }),
   ).toHaveAttribute("aria-current", "location");
 
   const [headerBox, stickyNavBox] = await Promise.all([
@@ -298,7 +296,7 @@ test("public club pages keep the hero readable and the section rail useful", asy
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Beach Elite VB Academy",
+      name: "South Bay Volleyball Club",
     }),
   ).toHaveCSS("color", "rgb(250, 246, 242)");
   await expectNoHorizontalOverflow(page);
