@@ -51,6 +51,28 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "Duna HQ" }).first(),
   ).toHaveAttribute("href", /.+/);
+  await expect(
+    page.getByRole("heading", { name: "What happens next?" }),
+  ).toBeVisible();
+
+  const predictionCards = page.locator(
+    ".homepage-predictions .prediction-discovery-card",
+  );
+  if ((await predictionCards.count()) > 0) {
+    const overflowingCards = await predictionCards.evaluateAll((cards) =>
+      cards.flatMap((card, index) => {
+        const overflowingChoice = Array.from(
+          card.querySelectorAll(".prediction-discovery-card__sides > span"),
+        ).some((choice) => choice.scrollWidth > choice.clientWidth + 1);
+
+        return card.scrollWidth > card.clientWidth + 1 || overflowingChoice
+          ? [index]
+          : [];
+      }),
+    );
+
+    expect(overflowingCards).toEqual([]);
+  }
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/app/discover");
