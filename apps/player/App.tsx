@@ -166,6 +166,7 @@ import {
   type PolicyScrollMetrics,
 } from "./policy-review";
 import { ResultPlayIcon } from "./result-play-icon";
+import { presentRecentMatch } from "./recent-match-presentation";
 import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
 import {
@@ -1644,11 +1645,13 @@ type DiscoverIntentKind = Exclude<
 function HomeScreen({
   onAction,
   onOpenBooking,
+  onOpenPerformance,
   onOpenProfile,
   onOpenSchedule,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onOpenBooking: (bookingId: string) => void;
+  readonly onOpenPerformance: () => void;
   readonly onOpenProfile: () => void;
   readonly onOpenSchedule: () => void;
 }) {
@@ -1736,6 +1739,14 @@ function HomeScreen({
   const rating = player.rating.display;
   const ratingDelta = player.rating.delta ?? 0;
   const insight = dashboard?.feed[0];
+  const recentMatches = (
+    mode === "preview" ? demoMatches : (dashboard?.recentMatches ?? [])
+  )
+    .slice(0, 3)
+    .map((match) => ({
+      id: match.id,
+      presentation: presentRecentMatch(match, player.id),
+    }));
   const shortcuts = [
     {
       action: "record-video" as const,
@@ -1922,6 +1933,110 @@ function HomeScreen({
             Find a match, court, or event nearby.
           </Text>
           <DunaIcon color={colors.ink} name="arrow-right" size={22} />
+        </Pressable>
+      )}
+
+      <View style={styles.homeV4SectionHeader}>
+        <Text style={styles.homeV4SectionTitle}>Recent matches</Text>
+        <Pressable
+          accessibilityLabel="View match history"
+          accessibilityRole="button"
+          onPress={onOpenPerformance}
+        >
+          <Text style={styles.homeV4SectionAction}>View history</Text>
+        </Pressable>
+      </View>
+
+      {recentMatches.length > 0 ? (
+        <View style={styles.homeV4ResultsList}>
+          {recentMatches.map(({ id, presentation }, index) => (
+            <Pressable
+              accessibilityHint="Opens your full performance history"
+              accessibilityLabel={`${presentation.outcome === "win" ? "Win" : "Loss"} against ${presentation.opponentLabel}, ${presentation.matchScore}`}
+              accessibilityRole="button"
+              key={id}
+              onPress={onOpenPerformance}
+              style={({ pressed }) => [
+                styles.homeV4ResultRow,
+                index > 0 && styles.homeV4ResultRowBorder,
+                pressed && styles.homeQuickActionPressed,
+              ]}
+            >
+              <View
+                style={[
+                  styles.homeV4ResultOutcome,
+                  presentation.outcome === "win"
+                    ? styles.homeV4ResultOutcomeWin
+                    : styles.homeV4ResultOutcomeLoss,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.homeV4ResultOutcomeText,
+                    presentation.outcome === "win"
+                      ? styles.homeV4ResultOutcomeTextWin
+                      : styles.homeV4ResultOutcomeTextLoss,
+                  ]}
+                >
+                  {presentation.outcomeCode}
+                </Text>
+              </View>
+              <View style={styles.homeV4ResultInfo}>
+                <Text numberOfLines={1} style={styles.homeV4ResultOpponent}>
+                  vs {presentation.opponentLabel}
+                </Text>
+                <Text numberOfLines={1} style={styles.homeV4ResultMeta}>
+                  {[
+                    presentation.partnerLabel
+                      ? `with ${presentation.partnerLabel}`
+                      : undefined,
+                    presentation.dateLabel,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+                <Text numberOfLines={1} style={styles.homeV4ResultVenue}>
+                  {presentation.venueLabel}
+                </Text>
+              </View>
+              <View style={styles.homeV4ResultScoreBlock}>
+                <Text style={styles.homeV4ResultMatchScore}>
+                  {presentation.matchScore}
+                </Text>
+                <Text style={styles.homeV4ResultSetScore}>
+                  {presentation.setScore}
+                </Text>
+                <Text
+                  style={[
+                    styles.homeV4ResultDelta,
+                    presentation.outcome === "loss" &&
+                      styles.homeV4ResultDeltaLoss,
+                  ]}
+                >
+                  {presentation.ratingDeltaLabel} · {presentation.statusLabel}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <Pressable
+          accessibilityHint="Opens your performance history"
+          accessibilityLabel="No recent matches. View performance history"
+          accessibilityRole="button"
+          onPress={onOpenPerformance}
+          style={styles.homeV4ResultsEmpty}
+        >
+          <View style={styles.homeV4ResultsEmptyIcon}>
+            <DunaIcon color={colors.aqua} name="score" size={22} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.homeV4ResultsEmptyTitle}>No results yet</Text>
+            <Text style={styles.homeV4ResultsEmptyBody}>
+              Your completed matches and rating outcomes will appear here.
+            </Text>
+          </View>
+          <DunaIcon color={colors.muted} name="chevron-right" size={22} />
         </Pressable>
       )}
 
@@ -14195,6 +14310,9 @@ function DunaApp() {
   const theme: ThemeName = "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
+  const [performanceReturnTab, setPerformanceReturnTab] = useState<
+    "home" | "you"
+  >("you");
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
   const [messagesConversationId, setMessagesConversationId] =
@@ -14473,6 +14591,10 @@ function DunaApp() {
                 <HomeScreen
                   onAction={openHomeAction}
                   onOpenBooking={setBookingId}
+                  onOpenPerformance={() => {
+                    setPerformanceReturnTab("home");
+                    setTab("performance");
+                  }}
                   onOpenProfile={() => setTab("you")}
                   onOpenSchedule={() => setTab("plans")}
                 />
@@ -14492,7 +14614,10 @@ function DunaApp() {
                   initialPlayedAt={watchScoreDraft?.capturedAt}
                   initialSets={watchScoreDraft?.sets}
                   key={watchScoreDraft?.draftId ?? "score-upload"}
-                  onComplete={() => setTab("performance")}
+                  onComplete={() => {
+                    setPerformanceReturnTab("you");
+                    setTab("performance");
+                  }}
                   palette={colors}
                 />
               )}
@@ -14539,7 +14664,12 @@ function DunaApp() {
               {tab === "you" && (
                 <ProfileHubScreen
                   onArtwork={() => setArtworkStudioOpen(true)}
-                  onDestination={(destination) => setTab(destination)}
+                  onDestination={(destination) => {
+                    if (destination === "performance") {
+                      setPerformanceReturnTab("you");
+                    }
+                    setTab(destination);
+                  }}
                   onEditProfile={() => setProfileEditorOpen(true)}
                   onOrganization={setOrganizationSlug}
                 />
@@ -14550,7 +14680,7 @@ function DunaApp() {
               {tab === "performance" && (
                 <PerformanceScreen
                   onArtwork={() => setArtworkStudioOpen(true)}
-                  onBack={() => setTab("you")}
+                  onBack={() => setTab(performanceReturnTab)}
                   onEditProfile={() => setProfileEditorOpen(true)}
                   onHealth={() => setTab("health")}
                   onPredictions={() => setTab("predictions")}
@@ -17099,6 +17229,120 @@ function createStyles() {
       gap: mobileGrid[2],
       minHeight: 90,
       padding: mobileGrid[4],
+    },
+    homeV4ResultsList: {
+      backgroundColor: colors.white,
+      borderColor: rgba(colors.overlayRgb, 0.11),
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      overflow: "hidden",
+    },
+    homeV4ResultRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      minHeight: mobileGrid[12] + mobileGrid[8],
+      paddingHorizontal: mobileGrid[3],
+      paddingVertical: mobileGrid[3],
+    },
+    homeV4ResultRowBorder: {
+      borderTopColor: rgba(colors.overlayRgb, 0.09),
+      borderTopWidth: mobileGrid.hairline,
+    },
+    homeV4ResultOutcome: {
+      alignItems: "center",
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    homeV4ResultOutcomeWin: {
+      backgroundColor: rgba(colors.positiveRgb, 0.1),
+    },
+    homeV4ResultOutcomeLoss: {
+      backgroundColor: rgba(colors.dangerRgb, 0.09),
+    },
+    homeV4ResultOutcomeText: {
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    homeV4ResultOutcomeTextWin: { color: colors.positive },
+    homeV4ResultOutcomeTextLoss: { color: colors.danger },
+    homeV4ResultInfo: { flex: 1, minWidth: 0 },
+    homeV4ResultOpponent: {
+      color: colors.ink,
+      fontSize: 16,
+      fontWeight: "700",
+      lineHeight: 20,
+    },
+    homeV4ResultMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: mobileGrid[1],
+    },
+    homeV4ResultVenue: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: mobileGrid[1],
+    },
+    homeV4ResultScoreBlock: {
+      alignItems: "flex-end",
+      minWidth: 105,
+    },
+    homeV4ResultMatchScore: {
+      color: colors.ink,
+      fontSize: 24,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "700",
+      letterSpacing: -0.5,
+      lineHeight: 28,
+    },
+    homeV4ResultSetScore: {
+      color: colors.muted,
+      fontSize: 12,
+      fontVariant: ["tabular-nums"],
+      lineHeight: 15,
+      marginTop: mobileGrid[1],
+    },
+    homeV4ResultDelta: {
+      color: colors.positive,
+      fontSize: 12,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "500",
+      lineHeight: 15,
+      marginTop: mobileGrid[1],
+    },
+    homeV4ResultDeltaLoss: { color: colors.danger },
+    homeV4ResultsEmpty: {
+      alignItems: "center",
+      backgroundColor: colors.navy,
+      borderRadius: mobileControl.cardRadius,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: mobileGrid[12] + mobileGrid[6],
+      padding: mobileGrid[3],
+    },
+    homeV4ResultsEmptyIcon: {
+      alignItems: "center",
+      backgroundColor: colors.white,
+      borderRadius: mobileControl.nestedRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    homeV4ResultsEmptyTitle: {
+      color: colors.ink,
+      fontSize: 16,
+      fontWeight: "700",
+      lineHeight: 20,
+    },
+    homeV4ResultsEmptyBody: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
     },
     homeV4GameGrid: { flexDirection: "row", gap: mobileGrid[2] },
     homeV4RatingCard: {
