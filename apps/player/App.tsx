@@ -157,6 +157,7 @@ import {
 import { ResultPlayIcon } from "./result-play-icon";
 import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
+import { PlayerDunaAiScreen } from "./duna-ai-screen";
 import {
   MobilePlacePicker,
   type MobilePlaceSelection,
@@ -472,10 +473,12 @@ const ThemeContext = createContext<{
 
 const MessagingNavigationContext = createContext<{
   readonly open: (support: boolean) => void;
+  readonly openAi: () => void;
   readonly openProfile: () => void;
   readonly unreadCount: number;
 }>({
   open: () => undefined,
+  openAi: () => undefined,
   openProfile: () => undefined,
   unreadCount: 0,
 });
@@ -534,7 +537,8 @@ type Tab =
   | "health"
   | "performance"
   | "coaches"
-  | "messages";
+  | "messages"
+  | "ai";
 
 type CourtInventory = Awaited<
   ReturnType<DunaApiClient["public"]["courtBookingInventory"]["query"]>
@@ -1033,6 +1037,15 @@ function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
       </View>
       <View style={styles.headerActions}>
         <ThemeButton />
+        <Pressable
+          accessibilityLabel="Duna AI"
+          accessibilityRole="button"
+          hitSlop={5}
+          onPress={messaging.openAi}
+          style={styles.aiHeaderButton}
+        >
+          <Text style={styles.aiHeaderButtonText}>AI</Text>
+        </Pressable>
         <Pressable
           accessibilityLabel="Messages"
           onPress={() => messaging.open(false)}
@@ -14712,6 +14725,7 @@ function DunaApp() {
   const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
+  const [aiReturnTab, setAiReturnTab] = useState<Tab>("home");
   const [messagesOpenToSupport, setMessagesOpenToSupport] = useState(false);
   const [messagesConversationId, setMessagesConversationId] =
     useState<string>();
@@ -14773,6 +14787,12 @@ function DunaApp() {
         void WebBrowser.openBrowserAsync(
           `${dunaWebUrl}/waivers/complete?${query}`,
         );
+        return;
+      }
+      if (url?.startsWith("duna://ai")) {
+        setEventIndex(null);
+        setAiReturnTab("home");
+        setTab("ai");
         return;
       }
       if (url?.startsWith("duna://messages")) {
@@ -14885,6 +14905,92 @@ function DunaApp() {
     setDiscoverIntent({ key: Date.now(), kind: action });
     setTab("discover");
   };
+  const openDunaHref = (href: string) => {
+    let path = href;
+    if (/^https?:\/\//i.test(href)) {
+      try {
+        const url = new URL(href);
+        path = `${url.pathname}${url.search}`;
+      } catch {
+        void WebBrowser.openBrowserAsync(href);
+        return;
+      }
+    }
+
+    const eventPath = path.match(/^\/events\/([^/?#]+)/);
+    if (eventPath?.[1]) {
+      const identifier = decodeURIComponent(eventPath[1]);
+      const index = (runtime.dashboard?.events ?? demoEvents).findIndex(
+        (event) => event.id === identifier || event.slug === identifier,
+      );
+      if (index >= 0) {
+        setEventDetailIndex(index);
+        return;
+      }
+    }
+    const venuePath = path.match(/^\/venues\/([^/?#]+)/);
+    if (venuePath?.[1]) {
+      setOrganizationVenueId(decodeURIComponent(venuePath[1]));
+      return;
+    }
+    const clubPath = path.match(/^\/clubs\/([^/?#]+)/);
+    if (clubPath?.[1]) {
+      setOrganizationSlug(decodeURIComponent(clubPath[1]));
+      return;
+    }
+    const bookingPath = path.match(/^\/(?:app\/)?bookings?\/([^/?#]+)/);
+    if (bookingPath?.[1]) {
+      setBookingId(decodeURIComponent(bookingPath[1]));
+      return;
+    }
+    if (/^\/app\/matches(?:\/|$)/.test(path)) {
+      setTab("performance");
+      return;
+    }
+    if (/^\/(?:app\/)?discover(?:\/|$)/.test(path)) {
+      setTab("discover");
+      return;
+    }
+    if (/^\/app\/play(?:\/|$)/.test(path)) {
+      setTab("plans");
+      return;
+    }
+    if (path === "/app" || path.startsWith("/app?")) {
+      setTab("home");
+      return;
+    }
+
+    void WebBrowser.openBrowserAsync(
+      /^https?:\/\//i.test(href)
+        ? href
+        : `${dunaWebUrl}${href.startsWith("/") ? href : `/${href}`}`,
+    );
+  };
+  const openAiEvent = (
+    eventId: string,
+    action: "book-event" | "view-event",
+    href: string,
+  ) => {
+    const index = (runtime.dashboard?.events ?? demoEvents).findIndex(
+      (event) => event.id === eventId,
+    );
+    if (index < 0) {
+      openDunaHref(href);
+      return;
+    }
+    if (action === "book-event") setEventIndex(index);
+    else setEventDetailIndex(index);
+  };
+  const openAiMatch = (matchId: string, href?: string) => {
+    if (
+      runtime.dashboard?.recentMatches.some((match) => match.id === matchId)
+    ) {
+      setTab("performance");
+      return;
+    }
+    if (href) openDunaHref(href);
+    else setTab("discover");
+  };
   const selectedBooking = runtime.dashboard?.bookings.find(
     (booking) => booking.id === bookingId,
   );
@@ -14912,6 +15018,10 @@ function DunaApp() {
             setMessagesConversationId(undefined);
             setMessagesOpenToSupport(support);
             setTab("messages");
+          },
+          openAi: () => {
+            setAiReturnTab(tab === "ai" ? "home" : tab);
+            setTab("ai");
           },
           openProfile: () => setTab("you"),
           unreadCount: messagingUnreadCount,
@@ -15024,10 +15134,40 @@ function DunaApp() {
                     onWallet={() => setTab("wallet")}
                   />
                 )}
+                {tab === "ai" && (
+                  <PlayerDunaAiScreen
+                    onClose={() =>
+                      setTab(aiReturnTab === "ai" ? "home" : aiReturnTab)
+                    }
+                    onOpenBooking={setBookingId}
+                    onOpenEvent={openAiEvent}
+                    onOpenMatch={openAiMatch}
+                    onOpenPath={openDunaHref}
+                    onOpenVenue={(venueId) => setOrganizationVenueId(venueId)}
+                    palette={{
+                      canvas: colors.canvas,
+                      surface: colors.depth,
+                      surfaceAlt: colors.navyLift,
+                      border: rgba(colors.overlayRgb, 0.12),
+                      text: colors.bone,
+                      muted: colors.muted,
+                      accent: colors.aqua,
+                      onAccent: colors.onAccent,
+                      positive: colors.positive,
+                      warning: colors.warning,
+                      danger: colors.danger,
+                    }}
+                    pathname="/app/ai"
+                  />
+                )}
                 {tab === "messages" && (
                   <PlayerMessagingScreen
                     initialConversationId={messagesConversationId}
                     initialSupport={messagesOpenToSupport}
+                    onOpenDunaAi={() => {
+                      setAiReturnTab("messages");
+                      setTab("ai");
+                    }}
                     onUnreadCountChange={setMessagingUnreadCount}
                     onClose={() => {
                       setMessagesConversationId(undefined);
@@ -15056,7 +15196,9 @@ function DunaApp() {
                   status={videoTransfer}
                 />
               )}
-              {tab !== "messages" && <TabBar active={tab} onChange={setTab} />}
+              {tab !== "messages" && tab !== "ai" && (
+                <TabBar active={tab} onChange={setTab} />
+              )}
               <BookingModal
                 eventIndex={eventIndex}
                 onClose={() => setEventIndex(null)}
@@ -17307,6 +17449,20 @@ function createStyles(palette: Palette) {
       fontSize: 12,
       letterSpacing: 1.2,
       marginTop: 5,
+    },
+    aiHeaderButton: {
+      alignItems: "center",
+      backgroundColor: colors.aqua,
+      borderRadius: 19,
+      height: 38,
+      justifyContent: "center",
+      width: 42,
+    },
+    aiHeaderButtonText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.5,
     },
     askButton: {
       alignItems: "center",

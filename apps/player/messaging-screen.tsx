@@ -69,6 +69,7 @@ interface PlayerMessagingScreenProps {
   readonly initialConversationId?: string;
   readonly initialSupport?: boolean;
   readonly onClose: () => void;
+  readonly onOpenDunaAi: () => void;
   readonly onUnreadCountChange?: (count: number) => void;
   readonly palette: MessagingPalette;
 }
@@ -769,6 +770,7 @@ export function PlayerMessagingScreen({
   initialConversationId,
   initialSupport = false,
   onClose,
+  onOpenDunaAi,
   onUnreadCountChange,
   palette,
 }: PlayerMessagingScreenProps) {
@@ -1967,11 +1969,19 @@ export function PlayerMessagingScreen({
       )}
       {detail.conversation.type === "support" && (
         <View style={styles.aiBanner}>
-          <Text style={styles.aiIcon}>✦</Text>
+          <Text style={styles.aiIcon}>?</Text>
           <Text style={styles.aiText}>
-            Duna Support can use your Duna events, lessons, rentals, and
-            payments to help. Ask for a person at any time.
+            This is your human support thread. For live answers, match and
+            calendar widgets, or help booking, use Duna AI.
           </Text>
+          <Pressable
+            accessibilityLabel="Open Duna AI"
+            accessibilityRole="button"
+            onPress={onOpenDunaAi}
+            style={styles.aiAction}
+          >
+            <Text style={styles.aiActionText}>Open AI</Text>
+          </Pressable>
         </View>
       )}
       <ScrollView
@@ -2764,6 +2774,19 @@ function createStyles(palette: MessagingPalette) {
     },
     aiIcon: { color: palette.accent, fontSize: 15, fontWeight: "900" },
     aiText: { color: palette.muted, flex: 1, fontSize: 12, lineHeight: 15 },
+    aiAction: {
+      alignItems: "center",
+      backgroundColor: palette.accent,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    aiActionText: {
+      color: palette.onAccent,
+      fontSize: 12,
+      fontWeight: "900",
+    },
     messages: {
       flexGrow: 1,
       gap: 14,

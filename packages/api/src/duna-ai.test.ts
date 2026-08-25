@@ -14,6 +14,7 @@ import {
   resolveDunaAiCopilotModel,
   resolveDunaAiGatewayCredential,
   resolveDunaAiGatewayCredentialSource,
+  runDunaAiAgent,
   transcribeDunaAiAudio,
 } from "./duna-ai";
 import { proposeAgentAction } from "./risk";
@@ -161,6 +162,58 @@ describe("Duna AI context", () => {
         expect.objectContaining({
           kind: "link",
           title: "Sunset doubles training",
+        }),
+      ]),
+    );
+  });
+
+  it("returns player calendar and match widgets from permission-scoped context", async () => {
+    const response = await getDunaAiSuggestions({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000010",
+        displayName: "Mara Lewis",
+        roles: ["player"],
+        scopes: ["profile:read", "bookings:read", "matches:read"],
+        ageBand: "adult",
+        isDemo: true,
+      },
+      surface: "player",
+      page: "/app/ai",
+      now: new Date("2026-07-30T16:00:00.000Z"),
+    });
+
+    expect(response.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "calendar" }),
+        expect.objectContaining({ kind: "match", matchId: "match-1" }),
+      ]),
+    );
+  });
+
+  it("uses the first-party player harness and emits bookable event widgets", async () => {
+    const response = await runDunaAiAgent({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000010",
+        displayName: "Mara Lewis",
+        roles: ["player"],
+        scopes: ["profile:read", "bookings:read", "bookings:write"],
+        ageBand: "adult",
+        isDemo: true,
+      },
+      message: "Find an event that fits my schedule",
+      surface: "player",
+      page: "/app/ai",
+      requestId: "player-ai-test",
+      now: new Date("2026-07-30T16:00:00.000Z"),
+    });
+
+    expect(response.reply).not.toContain("Duna Support has your message");
+    expect(response.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "event",
+          eventId: expect.any(String),
+          primaryAction: expect.stringMatching(/book-event|view-event/),
         }),
       ]),
     );
