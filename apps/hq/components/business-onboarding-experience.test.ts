@@ -30,6 +30,7 @@ describe("business onboarding experience", () => {
     expect(onboarding).toContain('value="year"');
     expect(onboarding).toContain("plan.definition.productName");
     expect(onboarding).toContain("plan.definition.defaultCommissionBps / 100");
+    expect(onboarding).toContain("plan.annualSavingsPercent");
     expect(onboarding).toContain("plan.features.slice(0, 4)");
     expect(onboarding).toContain('className="workspace-plan-card__selection"');
     expect(stylesheet).toContain('.workspace-plan-card[data-featured="true"]');
