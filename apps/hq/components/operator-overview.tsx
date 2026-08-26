@@ -149,13 +149,20 @@ export function OperatorOverview({
             <div className="hq-analytics-metrics">
               {supportingMetrics.map((metric, index) => {
                 const Icon = metricIcons[(index + 1) % metricIcons.length]!;
-                return (
-                  <article data-tone={metric.tone} key={metric.label}>
+                const paymentSetup = metric.label === "Payments";
+                const cardContent = (
+                  <>
                     <span>
                       {metric.label}
                       <Icon aria-hidden size={16} />
                     </span>
-                    <Numeric>{metric.value}</Numeric>
+                    {paymentSetup ? (
+                      <strong className="hq-analytics-metric__status">
+                        {metric.value}
+                      </strong>
+                    ) : (
+                      <Numeric>{metric.value}</Numeric>
+                    )}
                     <small>{metric.change ?? "Connected now"}</small>
                     {metric.label === "Members" && members.length > 0 && (
                       <div className="metric-avatars">
@@ -167,9 +174,34 @@ export function OperatorOverview({
                         )}
                       </div>
                     )}
-                    {metric.label === "Payments" && (
-                      <Badge tone="warning">Action required</Badge>
+                    {paymentSetup && (
+                      <span className="hq-analytics-metric__action">
+                        Open secure setup <ArrowRight aria-hidden size={15} />
+                      </span>
                     )}
+                  </>
+                );
+
+                if (paymentSetup) {
+                  return (
+                    <Link
+                      className="hq-analytics-metric hq-analytics-metric--link"
+                      data-tone={metric.tone}
+                      href="/payments/setup"
+                      key={metric.label}
+                    >
+                      {cardContent}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <article
+                    className="hq-analytics-metric"
+                    data-tone={metric.tone}
+                    key={metric.label}
+                  >
+                    {cardContent}
                   </article>
                 );
               })}
@@ -373,7 +405,10 @@ export function OperatorOverview({
                     label: "Needs attention",
                     title: topAlert.title,
                     detail: topAlert.detail,
-                    href: topAlert.id === "stripe" ? "/payments" : "/calendar",
+                    href:
+                      topAlert.id === "stripe"
+                        ? "/payments/setup"
+                        : "/calendar",
                   },
                 ]
               : nearlyFull[0]

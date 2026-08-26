@@ -6205,7 +6205,7 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 }
 
 /* The overview schedule is an operational roster, not a passive status list. */
-.hq-analytics-metrics > article[data-tone="warning"] > small {
+.hq-analytics-metrics > .hq-analytics-metric[data-tone="warning"] > small {
   color: var(--color-warning);
 }
 

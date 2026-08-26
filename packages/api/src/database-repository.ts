@@ -3750,12 +3750,12 @@ export const databaseRepository = {
                   label: "Payments",
                   value:
                     organization.stripeStatus === "pending"
-                      ? "Finish setup"
-                      : "Needs review",
+                      ? "Set up payments"
+                      : "Review payments",
                   change:
                     organization.stripeStatus === "pending"
-                      ? "Verify the account before publishing paid sessions."
-                      : "Charges or payouts may be paused.",
+                      ? "Connect Stripe to accept payments and receive payouts."
+                      : "Resolve Stripe requirements to restore charges or payouts.",
                   tone: "warning" as const,
                 },
               ]),
@@ -3768,12 +3768,15 @@ export const databaseRepository = {
             : [
                 {
                   id: "stripe",
-                  title: "Payments need attention",
+                  title:
+                    organization.stripeStatus === "pending"
+                      ? "Set up payments"
+                      : "Review payment setup",
                   detail:
                     organization.stripeStatus === "pending"
-                      ? "Finish account verification before publishing paid sessions."
-                      : "Charges or payouts are limited. Review the processor requirements.",
-                  action: "Review payments",
+                      ? "Connect your Stripe account before publishing paid sessions."
+                      : "Resolve the Stripe requirements limiting charges or payouts.",
+                  action: "Open secure setup",
                   tone: "warning",
                 },
               ],
