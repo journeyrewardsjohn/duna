@@ -5,7 +5,8 @@ import {
   provisionWorkOSOrganization,
 } from "@duna/api";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
-import { DunaMark } from "@duna/ui";
+import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
+import { DunaMark, Numeric } from "@duna/ui";
 import {
   getWorkOS,
   switchToOrganization,
@@ -18,13 +19,47 @@ import {
   Layers3,
   Plus,
   ShieldCheck,
+  Smartphone,
   SunMedium,
+  Video,
   Warehouse,
 } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 const planIds = new Set(HQ_PLAN_OPTIONS.map((plan) => plan.id));
+const pricingPlans = HQ_PLAN_OPTIONS.map((plan) => {
+  const definition = ORGANIZATION_PLANS[plan.id];
+  return {
+    ...plan,
+    definition,
+    annualSavingsPercent:
+      definition.monthlyPriceMinor > 0
+        ? Math.round(
+            (1 -
+              definition.annualPriceMinor /
+                (definition.monthlyPriceMinor * 12)) *
+              100,
+          )
+        : 0,
+  };
+});
+const paidPricingPlans = pricingPlans.filter(
+  (plan) => plan.definition.monthlyPriceMinor > 0,
+);
+const annualSavingsPercent = paidPricingPlans.length
+  ? Math.round(
+      paidPricingPlans.reduce(
+        (total, plan) =>
+          total +
+          (1 -
+            plan.definition.annualPriceMinor /
+              (plan.definition.monthlyPriceMinor * 12)) *
+            100,
+        0,
+      ) / paidPricingPlans.length,
+    )
+  : 0;
 
 async function createWorkspace(formData: FormData) {
   "use server";
@@ -156,7 +191,7 @@ export default async function OrganizationOnboardingPage({
           <DunaMark />
           <span>Duna HQ</span>
         </header>
-        <div>
+        <div className="organization-onboarding__intro">
           <span className="hq-eyebrow">Your operating workspace</span>
           <h1>
             {createOnly
@@ -199,11 +234,6 @@ export default async function OrganizationOnboardingPage({
               </div>
             )}
             <form action={createWorkspace} className="workspace-create-form">
-              <input
-                name="interval"
-                type="hidden"
-                value={query.interval === "year" ? "year" : "month"}
-              />
               <div className="workspace-create-form__heading">
                 <span>
                   <Layers3 aria-hidden size={20} />
@@ -281,12 +311,45 @@ export default async function OrganizationOnboardingPage({
               <fieldset className="workspace-plan-picker">
                 <legend>
                   <span className="hq-eyebrow">Plans + pricing</span>
-                  <strong>Choose how you want to start.</strong>
+                  <strong>Choose the plan that fits today.</strong>
+                  <small>
+                    Every plan includes the complete Duna HQ platform. Upgrade
+                    only when the lower transaction fee saves your organization
+                    more.
+                  </small>
                 </legend>
-                <div>
-                  {HQ_PLAN_OPTIONS.map((plan) => (
+                <fieldset className="workspace-billing-picker">
+                  <legend>Billing cadence</legend>
+                  <label>
+                    <input
+                      defaultChecked={query.interval !== "year"}
+                      name="interval"
+                      type="radio"
+                      value="month"
+                    />
+                    <span>Monthly</span>
+                  </label>
+                  <label>
+                    <input
+                      defaultChecked={query.interval === "year"}
+                      name="interval"
+                      type="radio"
+                      value="year"
+                    />
+                    <span>
+                      Annual prepay <b>Save {annualSavingsPercent}%</b>
+                    </span>
+                  </label>
+                </fieldset>
+                <p className="workspace-billing-note">
+                  Annual prepay includes the same complete Duna HQ platform and
+                  is billed once for the year.
+                </p>
+                <div className="workspace-plan-grid">
+                  {pricingPlans.map((plan) => (
                     <label
                       className="workspace-plan-card"
+                      data-featured={plan.id === "coach" ? "true" : undefined}
                       key={plan.id}
                       title={plan.description}
                     >
@@ -299,19 +362,92 @@ export default async function OrganizationOnboardingPage({
                       <span className="workspace-plan-card__check">
                         <Check aria-hidden size={15} />
                       </span>
-                      <span className="workspace-plan-card__name">
-                        <strong>{plan.name}</strong>
-                        <b>{plan.priceLabel}</b>
+                      <header>
+                        <span className="workspace-plan-card__tier">
+                          {plan.definition.name}
+                          {plan.id === "coach" && <b>Best place to start</b>}
+                        </span>
+                        <h3>{plan.definition.productName}</h3>
+                        <p>{plan.definition.tagline}</p>
+                      </header>
+                      <div className="workspace-plan-card__price">
+                        <Numeric
+                          className="workspace-plan-card__price-monthly"
+                          tier="hero"
+                        >
+                          {formatMoney(
+                            plan.definition.monthlyPriceMinor,
+                            "USD",
+                          )}
+                        </Numeric>
+                        <Numeric
+                          className="workspace-plan-card__price-annual"
+                          tier="hero"
+                        >
+                          {formatMoney(
+                            Math.round(plan.definition.annualPriceMinor / 12),
+                            "USD",
+                          )}
+                        </Numeric>
+                        <span>/ month</span>
+                      </div>
+                      <small className="workspace-plan-card__billing">
+                        <span className="workspace-plan-card__billing-monthly">
+                          {plan.id === "coach"
+                            ? "No software subscription"
+                            : `${formatMoney(plan.definition.annualPriceMinor, "USD")} with annual prepay`}
+                        </span>
+                        <span className="workspace-plan-card__billing-annual">
+                          {plan.id === "coach"
+                            ? "No software subscription"
+                            : `${formatMoney(plan.definition.annualPriceMinor, "USD")} billed once yearly · save ${plan.annualSavingsPercent}%`}
+                        </span>
+                      </small>
+                      <span className="workspace-plan-card__fee">
+                        Stripe processing averages 2.9%* +{" "}
+                        <Numeric tier="chip">
+                          {plan.definition.defaultCommissionBps / 100}%
+                        </Numeric>{" "}
+                        Duna organization fee
                       </span>
-                      <small>{plan.recommendedFor}</small>
-                      <p>{plan.description}</p>
                       <ul>
-                        {plan.features.map((feature) => (
+                        {plan.features.slice(0, 4).map((feature) => (
                           <li key={feature}>
-                            <Check aria-hidden size={13} /> {feature}
+                            <Check aria-hidden size={15} /> {feature}
                           </li>
                         ))}
                       </ul>
+                      <span className="workspace-plan-card__selection">
+                        <span>
+                          Choose {plan.definition.name}
+                          <ArrowRight aria-hidden size={16} />
+                        </span>
+                        <strong>
+                          <Check aria-hidden size={16} /> Selected
+                        </strong>
+                      </span>
+                      <footer>
+                        <span>
+                          <Video aria-hidden size={16} />
+                          <Numeric tier="chip">
+                            {plan.definition.monthlyUploadSeconds / 60 / 60}
+                          </Numeric>{" "}
+                          uploaded-video hours
+                        </span>
+                        <span>
+                          <Smartphone aria-hidden size={16} />
+                          <Numeric tier="chip">
+                            {plan.definition.monthlyLiveSeconds / 60 / 60}
+                          </Numeric>{" "}
+                          live hours monthly
+                        </span>
+                        {plan.id === "coach" && (
+                          <small>
+                            +10 upload and +2 live hours for every $40 in
+                            organization fees collected that month
+                          </small>
+                        )}
+                      </footer>
                     </label>
                   ))}
                 </div>
@@ -320,12 +456,11 @@ export default async function OrganizationOnboardingPage({
               <div className="workspace-pricing-note">
                 <ShieldCheck aria-hidden size={18} />
                 <span>
-                  <strong>Start with a clean workspace.</strong>
+                  <strong>Every plan starts complete.</strong>
                   <small>
-                    Free includes every Duna HQ feature. If you choose a paid
-                    plan, secure Stripe checkout is the next step. Card
-                    processing, organization, and player service fees remain
-                    itemized before transactions.
+                    If you choose a paid plan, secure Stripe checkout is the
+                    next step. Card processing, organization, and player service
+                    fees remain itemized before transactions.
                   </small>
                 </span>
               </div>
