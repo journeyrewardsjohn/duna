@@ -69,6 +69,7 @@ export async function startCourtCheckoutAction(input: {
 export async function quoteCourtCheckoutAction(input: {
   readonly courtId: string;
   readonly subjectPersonId?: string;
+  readonly localStartsAt: string;
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
   readonly participants: readonly {
@@ -83,6 +84,7 @@ export async function quoteCourtCheckoutAction(input: {
     const result = await caller.player.courtCheckoutQuote({
       courtId: input.courtId,
       subjectPersonId: input.subjectPersonId,
+      localStartsAt: input.localStartsAt,
       durationMinutes: input.durationMinutes,
       paymentMode: input.paymentMode,
       participants: [...input.participants],

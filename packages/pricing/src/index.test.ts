@@ -5,9 +5,104 @@ import {
   calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
   priceConsumerOrder,
+  selectLowestQualifiedCourtRate,
 } from "./index";
 
 describe("Duna pricing", () => {
+  it("chooses the lowest date-qualified court rate after normalizing units", () => {
+    const result = selectLowestQualifiedCourtRate({
+      localDate: "2026-07-06",
+      durationMinutes: 120,
+      isMember: false,
+      personId: "person-1",
+      plans: [
+        {
+          id: "standard",
+          name: "Standard",
+          audience: "everyone",
+          baseAmountMinor: 6_000,
+          nonMemberAmountMinor: 6_000,
+          rateUnitMinutes: 60,
+        },
+        {
+          id: "summer-monday",
+          name: "Summer Mondays",
+          audience: "everyone",
+          baseAmountMinor: 4_500,
+          nonMemberAmountMinor: 4_500,
+          rateUnitMinutes: 60,
+          weekdays: [1],
+          startsOn: "2026-06-01",
+          endsOn: "2026-08-31",
+        },
+        {
+          id: "two-hour-special",
+          name: "Two-hour special",
+          audience: "everyone",
+          baseAmountMinor: 8_000,
+          rateUnitMinutes: 120,
+          specificDates: ["2026-07-06"],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      planId: "two-hour-special",
+      amountMinor: 8_000,
+      priceKind: "base",
+    });
+  });
+
+  it("keeps user-only rates private and uses the member price when qualified", () => {
+    const plans = [
+      {
+        id: "standard",
+        name: "Standard",
+        audience: "everyone" as const,
+        baseAmountMinor: 6_000,
+        memberAmountMinor: 5_000,
+        nonMemberAmountMinor: 6_500,
+        rateUnitMinutes: 60,
+      },
+      {
+        id: "player-rate",
+        name: "Player rate",
+        audience: "selected-users" as const,
+        eligiblePersonIds: ["person-1", "person-2"],
+        baseAmountMinor: 4_000,
+        memberAmountMinor: 3_500,
+        rateUnitMinutes: 60,
+      },
+    ];
+
+    expect(
+      selectLowestQualifiedCourtRate({
+        plans,
+        localDate: "2026-07-06",
+        durationMinutes: 60,
+        isMember: true,
+        personId: "person-1",
+      }),
+    ).toMatchObject({
+      planId: "player-rate",
+      amountMinor: 3_500,
+      priceKind: "member",
+    });
+    expect(
+      selectLowestQualifiedCourtRate({
+        plans,
+        localDate: "2026-07-06",
+        durationMinutes: 60,
+        isMember: false,
+        personId: "person-3",
+      }),
+    ).toMatchObject({
+      planId: "standard",
+      amountMinor: 6_500,
+      priceKind: "public",
+    });
+  });
+
   it("charges a 7.5% service fee on eligible transactions", () => {
     expect(
       calculateConsumerPlatformFee({

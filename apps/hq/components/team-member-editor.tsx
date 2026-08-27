@@ -1,13 +1,15 @@
 "use client";
 
 import type { OperatorWorkspace } from "@duna/api";
+import {
+  findRecurringScheduleConflicts,
+  parseNaturalLanguageSchedule,
+  type NaturalLanguageScheduleDraft,
+} from "@duna/scheduling";
 import { Badge, Field, Input, Select } from "@duna/ui";
 import {
-  CalendarDays,
   Bot,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleAlert,
   Plus,
   ShieldCheck,
@@ -21,6 +23,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { AddressEntry } from "./place-address-fields";
+import { AvailabilityCalendar } from "./availability-calendar";
 import { DunaDateTimePicker } from "./duna-date-time-picker";
 
 type StaffProfile = OperatorWorkspace["staff"][number];
@@ -61,10 +64,6 @@ const days = [
   "Saturday",
 ] as const;
 
-function localDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function displayDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -80,6 +79,10 @@ function displayTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(time);
+}
+
+function minuteTime(value: number): string {
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
 function dateIsBlackout(
@@ -210,6 +213,8 @@ export function TeamMemberEditor({
     () => normalizeSchedules(person.availability)[0]?.id ?? "usual",
   );
   const [schedulePrompt, setSchedulePrompt] = useState("");
+  const [scheduleDraft, setScheduleDraft] =
+    useState<NaturalLanguageScheduleDraft>();
   const [blackouts, setBlackouts] = useState<BlackoutDate[]>(
     normalizeBlackouts(person.availability),
   );
@@ -217,10 +222,6 @@ export function TeamMemberEditor({
   const [blackoutEnd, setBlackoutEnd] = useState("");
   const [blackoutStartTime, setBlackoutStartTime] = useState("09:00");
   const [blackoutEndTime, setBlackoutEndTime] = useState("17:00");
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
   const activeSchedule =
     schedules.find((schedule) => schedule.id === activeScheduleId) ??
     schedules[0];
@@ -273,59 +274,29 @@ export function TeamMemberEditor({
     }));
   }
 
-  function createScheduleFromPrompt() {
-    const text = schedulePrompt.toLowerCase();
-    const weekdayRange = text.match(
-      /(sun|mon|tue|wed|thu|fri|sat)[a-z]*\s*(?:-|to|through)\s*(sun|mon|tue|wed|thu|fri|sat)/,
-    );
-    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-    const selectedDays = weekdayRange
-      ? (() => {
-          const start = dayKeys.findIndex((day) =>
-            (weekdayRange[1] ?? "").startsWith(day),
-          );
-          const end = dayKeys.findIndex((day) =>
-            (weekdayRange[2] ?? "").startsWith(day),
-          );
-          return start <= end
-            ? dayKeys.slice(start, end + 1).map((_, index) => start + index)
-            : [];
-        })()
-      : dayKeys.flatMap((day, index) => (text.includes(day) ? [index] : []));
-    const times = [
-      ...text.matchAll(
-        /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|-|–)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/g,
-      ),
-    ].map((match) => {
-      const asTime = (
-        hour: string,
-        minute: string | undefined,
-        meridiem: string,
-      ) => {
-        const normalizedHour =
-          (Number(hour) % 12) + (meridiem === "pm" ? 12 : 0);
-        return `${String(normalizedHour).padStart(2, "0")}:${minute ?? "00"}`;
-      };
-      return {
-        startsAt: asTime(match[1] ?? "", match[2], match[3] ?? ""),
-        endsAt: asTime(match[4] ?? "", match[5], match[6] ?? ""),
-      };
-    });
-    if (!selectedDays.length || !times.length) return;
+  function reviewSchedulePrompt() {
+    setScheduleDraft(parseNaturalLanguageSchedule(schedulePrompt));
+  }
+
+  function applyScheduleDraft() {
+    if (!scheduleDraft || scheduleDraft.status !== "ready") return;
     const id = crypto.randomUUID();
-    const name = "New availability schedule";
+    const name = scheduleDraft.summary;
     setSchedules((current) => [
       ...current,
       {
         id,
         name,
-        blocks: selectedDays.flatMap((weekday) =>
-          times.map((time) => ({ weekday, ...time })),
-        ),
+        blocks: scheduleDraft.blocks.map((block) => ({
+          weekday: block.weekday,
+          startsAt: minuteTime(block.startsAtMinute),
+          endsAt: minuteTime(block.endsAtMinute),
+        })),
       },
     ]);
     setActiveScheduleId(id);
     setSchedulePrompt("");
+    setScheduleDraft(undefined);
   }
 
   function addBlackout() {
@@ -348,40 +319,33 @@ export function TeamMemberEditor({
     setBlackoutEnd("");
   }
 
-  const months = useMemo(
-    () =>
-      Array.from({ length: 4 }, (_, offset) => {
-        const start = new Date(
-          calendarMonth.getFullYear(),
-          calendarMonth.getMonth() + offset,
-          1,
-        );
-        const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-        return {
-          label: new Intl.DateTimeFormat("en-US", {
-            month: "long",
-            year: "numeric",
-          }).format(start),
-          days: [
-            ...Array.from(
-              { length: start.getDay() },
-              () => undefined as Date | undefined,
-            ),
-            ...Array.from(
-              { length: end.getDate() },
-              (_, index) =>
-                new Date(start.getFullYear(), start.getMonth(), index + 1),
-            ),
-          ],
-        };
-      }),
-    [calendarMonth],
-  );
   const activeCoaches = workspace.staff.filter(
     (candidate) =>
       candidate.active &&
       candidate.role === "coach" &&
       candidate.personId !== person.personId,
+  );
+  const scheduleDraftConflicts = useMemo(
+    () =>
+      scheduleDraft
+        ? findRecurringScheduleConflicts({
+            proposed: scheduleDraft.blocks,
+            existing: schedules.flatMap((schedule) =>
+              schedule.blocks.map((block) => ({
+                weekday: block.weekday,
+                startsAtMinute:
+                  Number(block.startsAt.slice(0, 2)) * 60 +
+                  Number(block.startsAt.slice(3, 5)),
+                endsAtMinute:
+                  Number(block.endsAt.slice(0, 2)) * 60 +
+                  Number(block.endsAt.slice(3, 5)),
+                scheduleId: schedule.id,
+                scheduleName: schedule.name,
+              })),
+            ),
+          })
+        : [],
+    [scheduleDraft, schedules],
   );
 
   function coverageTone(date: Date): "quiet" | "balanced" | "needed" {
@@ -769,160 +733,78 @@ export function TeamMemberEditor({
               </p>
             </div>
           </header>
-          <div className="team-availability-calendar">
-            <header>
-              <div>
-                <span className="team-calendar-icon">
-                  <CalendarDays aria-hidden size={17} />
-                </span>
-                <span>
-                  <strong>Plan the next four months</strong>
-                  <small>
-                    Coverage is based on the other active coaches’ recurring
-                    availability. Select a day to reserve it as an all-day
-                    blackout.
-                  </small>
-                </span>
-              </div>
-              <span className="team-calendar-controls">
-                <button
-                  aria-label="Previous four months"
-                  onClick={() =>
-                    setCalendarMonth(
-                      (current) =>
-                        new Date(
-                          current.getFullYear(),
-                          current.getMonth() - 4,
-                          1,
+          <AvailabilityCalendar
+            description="Coverage is based on the other active coaches’ recurring availability. Select a day to reserve it as an all-day blackout."
+            getDay={(date, dateKey) => {
+              const blackout = dateIsBlackout(dateKey, blackouts);
+              const available = schedules.some(
+                (schedule) =>
+                  (!schedule.effectiveFrom ||
+                    dateKey >= schedule.effectiveFrom) &&
+                  (!schedule.effectiveTo || dateKey <= schedule.effectiveTo) &&
+                  schedule.blocks.some(
+                    (block) => block.weekday === date.getDay(),
+                  ),
+              );
+              return {
+                available,
+                selected: blackout,
+                tone: coverageTone(date),
+                title: blackout
+                  ? "Remove all-day blackout"
+                  : available
+                    ? "Coach is available. Add an all-day blackout"
+                    : "Coach is unavailable. Add an all-day blackout",
+              };
+            }}
+            legend={[
+              {
+                className: "team-calendar-legend__quiet",
+                label: "Well covered",
+              },
+              {
+                className: "team-calendar-legend__balanced",
+                label: "Balanced",
+              },
+              {
+                className: "team-calendar-legend__available",
+                label: "Coach available",
+              },
+              {
+                className: "team-calendar-legend__unavailable",
+                label: "Coach unavailable",
+              },
+              {
+                className: "team-calendar-legend__needed",
+                label: "Coverage needed",
+              },
+              {
+                className: "team-calendar-legend__blackout",
+                label: "Blackout",
+              },
+            ]}
+            onToggle={(dateKey, blackout) =>
+              blackout
+                ? setBlackouts((current) =>
+                    current.filter(
+                      (block) =>
+                        !(
+                          dateKey >= block.startsOn &&
+                          dateKey <= (block.endsOn ?? block.startsOn)
                         ),
-                    )
-                  }
-                  type="button"
-                >
-                  <ChevronLeft aria-hidden size={17} />
-                </button>
-                <button
-                  aria-label="Next four months"
-                  onClick={() =>
-                    setCalendarMonth(
-                      (current) =>
-                        new Date(
-                          current.getFullYear(),
-                          current.getMonth() + 4,
-                          1,
-                        ),
-                    )
-                  }
-                  type="button"
-                >
-                  <ChevronRight aria-hidden size={17} />
-                </button>
-              </span>
-            </header>
-            <div className="team-calendar-months">
-              {months.map((month) => (
-                <section className="team-calendar-month" key={month.label}>
-                  <h3>{month.label}</h3>
-                  <div className="team-calendar-weekdays">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (day) => (
-                        <span key={day}>{day}</span>
-                      ),
-                    )}
-                  </div>
-                  <div className="team-calendar-grid">
-                    {month.days.map((date, index) => {
-                      if (!date) {
-                        return (
-                          <span
-                            className="team-calendar-blank"
-                            key={`${month.label}-blank-${index}`}
-                          />
-                        );
-                      }
-                      const dateKey = localDateKey(date);
-                      const blackout = dateIsBlackout(dateKey, blackouts);
-                      const available = schedules.some(
-                        (schedule) =>
-                          (!schedule.effectiveFrom ||
-                            dateKey >= schedule.effectiveFrom) &&
-                          (!schedule.effectiveTo ||
-                            dateKey <= schedule.effectiveTo) &&
-                          schedule.blocks.some(
-                            (block) => block.weekday === date.getDay(),
-                          ),
-                      );
-                      const tone = coverageTone(date);
-                      return (
-                        <button
-                          className={`team-calendar-day team-calendar-day--${tone}${available ? " team-calendar-day--available" : " team-calendar-day--unavailable"}${blackout ? " team-calendar-day--blackout" : ""}`}
-                          key={dateKey}
-                          onClick={() =>
-                            blackout
-                              ? setBlackouts((current) =>
-                                  current.filter(
-                                    (block) =>
-                                      !(
-                                        dateKey >= block.startsOn &&
-                                        dateKey <=
-                                          (block.endsOn ?? block.startsOn)
-                                      ),
-                                  ),
-                                )
-                              : setBlackouts((current) => [
-                                  ...current,
-                                  {
-                                    startsOn: dateKey,
-                                    startsAt: "00:00",
-                                    endsAt: "23:59",
-                                  },
-                                ])
-                          }
-                          title={
-                            blackout
-                              ? "Remove all-day blackout"
-                              : available
-                                ? "Available in this coach's selected schedule. Add all-day blackout"
-                                : "Unavailable in this coach's schedules. Add all-day blackout"
-                          }
-                          type="button"
-                        >
-                          <span>{date.getDate()}</span>
-                          {blackout ? <X aria-hidden size={13} /> : <i />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-            <footer>
-              <span>
-                <i className="team-calendar-legend__quiet" />
-                Well covered
-              </span>
-              <span>
-                <i className="team-calendar-legend__balanced" />
-                Balanced
-              </span>
-              <span>
-                <i className="team-calendar-legend__available" />
-                Coach available
-              </span>
-              <span>
-                <i className="team-calendar-legend__unavailable" />
-                Coach unavailable
-              </span>
-              <span>
-                <i className="team-calendar-legend__needed" />
-                Coverage needed
-              </span>
-              <span>
-                <i className="team-calendar-legend__blackout" />
-                Blackout
-              </span>
-            </footer>
-          </div>
+                    ),
+                  )
+                : setBlackouts((current) => [
+                    ...current,
+                    {
+                      startsOn: dateKey,
+                      startsAt: "00:00",
+                      endsAt: "23:59",
+                    },
+                  ])
+            }
+            title="Plan the next four months"
+          />
           <section className="team-blackouts">
             <header>
               <div>
@@ -1034,27 +916,109 @@ export function TeamMemberEditor({
               </button>
             </header>
             <div className="team-schedule-ai">
-              <Bot aria-hidden size={18} />
+              <Bot aria-hidden size={19} />
               <span>
-                <strong>Create a schedule with Duna AI</strong>
+                <strong>Draft with Duna AI</strong>
                 <small>
-                  Try “Mon–Fri 9am to 1pm and 3pm to 7pm.” Review the draft
-                  before saving.
+                  Describe days and hours naturally. Duna will show the result
+                  and check it against every existing schedule before you use
+                  it.
                 </small>
               </span>
               <input
-                onChange={(event) => setSchedulePrompt(event.target.value)}
-                placeholder="Describe the weekly rhythm…"
+                onChange={(event) => {
+                  setSchedulePrompt(event.target.value);
+                  setScheduleDraft(undefined);
+                }}
+                placeholder="Every Friday, 8am until 2pm EST"
                 value={schedulePrompt}
               />
               <button
                 className="hq-button hq-button--secondary hq-button--compact"
                 disabled={!schedulePrompt.trim()}
-                onClick={createScheduleFromPrompt}
+                onClick={reviewSchedulePrompt}
                 type="button"
               >
-                <Sparkles aria-hidden size={15} /> Create draft
+                <Sparkles aria-hidden size={15} /> Review draft
               </button>
+              {scheduleDraft && (
+                <div className="team-schedule-ai__review" role="status">
+                  <div>
+                    <span
+                      className={`team-schedule-ai__status team-schedule-ai__status--${scheduleDraft.status}`}
+                    >
+                      {scheduleDraft.status === "ready"
+                        ? "Ready to review"
+                        : "Needs a detail"}
+                    </span>
+                    <strong>{scheduleDraft.summary}</strong>
+                    <small>
+                      {scheduleDraft.blocks.length} weekly block
+                      {scheduleDraft.blocks.length === 1 ? "" : "s"} found
+                    </small>
+                  </div>
+                  {scheduleDraft.warnings.length > 0 && (
+                    <ul>
+                      {scheduleDraft.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {scheduleDraft.status === "ready" && (
+                    <div className="team-schedule-ai__conflicts">
+                      {scheduleDraftConflicts.length > 0 ? (
+                        <>
+                          <CircleAlert aria-hidden size={16} />
+                          <span>
+                            <strong>
+                              {scheduleDraftConflicts.length} overlap
+                              {scheduleDraftConflicts.length === 1 ? "" : "s"}
+                            </strong>
+                            Review overlapping schedules:{" "}
+                            {[
+                              ...new Set(
+                                scheduleDraftConflicts.map(
+                                  (conflict) =>
+                                    conflict.existing.scheduleName ??
+                                    "Existing schedule",
+                                ),
+                              ),
+                            ].join(", ")}
+                            .
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Check aria-hidden size={16} />
+                          <span>
+                            <strong>No schedule conflicts</strong>
+                            This draft does not overlap the current weekly
+                            schedules.
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className="team-schedule-ai__actions">
+                    <button
+                      className="hq-button hq-button--secondary hq-button--compact"
+                      onClick={() => setScheduleDraft(undefined)}
+                      type="button"
+                    >
+                      Keep editing
+                    </button>
+                    {scheduleDraft.status === "ready" && (
+                      <button
+                        className="hq-button hq-button--primary hq-button--compact"
+                        onClick={applyScheduleDraft}
+                        type="button"
+                      >
+                        <Check aria-hidden size={15} /> Use this draft
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="team-schedule-tabs" role="tablist">
               {schedules.map((schedule) => (
@@ -1091,33 +1055,35 @@ export function TeamMemberEditor({
                     value={activeSchedule.name}
                   />
                 </label>
-                <label>
-                  <span>Applies from · optional</span>
-                  <input
-                    onChange={(event) =>
-                      updateSchedule(activeSchedule.id, (schedule) => ({
-                        ...schedule,
-                        effectiveFrom: event.target.value || undefined,
-                      }))
-                    }
-                    type="date"
-                    value={activeSchedule.effectiveFrom ?? ""}
-                  />
-                </label>
-                <label>
-                  <span>Through · optional</span>
-                  <input
-                    min={activeSchedule.effectiveFrom}
-                    onChange={(event) =>
-                      updateSchedule(activeSchedule.id, (schedule) => ({
-                        ...schedule,
-                        effectiveTo: event.target.value || undefined,
-                      }))
-                    }
-                    type="date"
-                    value={activeSchedule.effectiveTo ?? ""}
-                  />
-                </label>
+                <DunaDateTimePicker
+                  dateOnly
+                  label="Applies from · optional"
+                  onChange={(value) =>
+                    updateSchedule(activeSchedule.id, (schedule) => ({
+                      ...schedule,
+                      effectiveFrom: value.date || undefined,
+                    }))
+                  }
+                  value={{
+                    date: activeSchedule.effectiveFrom ?? "",
+                    time: "00:00",
+                  }}
+                />
+                <DunaDateTimePicker
+                  dateOnly
+                  label="Through · optional"
+                  minDate={activeSchedule.effectiveFrom}
+                  onChange={(value) =>
+                    updateSchedule(activeSchedule.id, (schedule) => ({
+                      ...schedule,
+                      effectiveTo: value.date || undefined,
+                    }))
+                  }
+                  value={{
+                    date: activeSchedule.effectiveTo ?? "",
+                    time: "23:59",
+                  }}
+                />
               </div>
             )}
             <div className="team-availability">

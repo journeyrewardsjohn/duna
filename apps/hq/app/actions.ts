@@ -2202,6 +2202,20 @@ export async function createRatePlanAction(
   formData: FormData,
 ): Promise<OperatorActionState> {
   try {
+    const audience = field(formData, "audience");
+    if (audience !== "everyone" && audience !== "selected-users") {
+      throw new Error("Choose who can use this rate plan.");
+    }
+    const weekdays = JSON.parse(field(formData, "weekdays")) as number[];
+    const specificDates = JSON.parse(
+      optionalField(formData, "specificDates") || "[]",
+    ) as string[];
+    const courtIds = JSON.parse(
+      optionalField(formData, "courtIds") || "[]",
+    ) as string[];
+    const eligiblePersonIds = JSON.parse(
+      optionalField(formData, "eligiblePersonIds") || "[]",
+    ) as string[];
     const caller = await getServerCaller();
     await caller.operator.createRatePlan({
       name: field(formData, "name"),
@@ -2209,6 +2223,13 @@ export async function createRatePlanAction(
       memberAmountMinor: optionalMoneyMinor(formData, "memberAmount"),
       nonMemberAmountMinor: optionalMoneyMinor(formData, "nonMemberAmount"),
       rateUnitMinutes: numberField(formData, "rateUnitMinutes"),
+      audience,
+      weekdays,
+      startsOn: optionalField(formData, "startsOn"),
+      endsOn: optionalField(formData, "endsOn"),
+      specificDates,
+      courtIds,
+      eligiblePersonIds,
       confirmed: confirmed(formData),
       idempotencyKey: crypto.randomUUID(),
     });

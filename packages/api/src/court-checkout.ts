@@ -5,6 +5,7 @@ import {
   bookingPolicyAcceptances,
   courtBookingParticipants,
   courtBookings,
+  courtRatePlanAssignments,
   courts,
   getDatabase,
   memberships,
@@ -18,6 +19,7 @@ import {
   pickupParticipants,
   pickupSessions,
   ratePlans,
+  ratePlanEligiblePeople,
   scheduleBlocks,
   scheduleOverrides,
   schedules,
@@ -27,7 +29,9 @@ import {
   calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
   priceConsumerOrder,
+  selectLowestQualifiedCourtRate,
   type AppliedFee,
+  type CourtRatePlanCandidate,
   type CurrencyCode,
 } from "@duna/pricing";
 import { solveAvailableSlots } from "@duna/scheduling";
@@ -97,6 +101,98 @@ function currencyCode(value: string): CurrencyCode | undefined {
   return supportedCurrencies.includes(value as CurrencyCode)
     ? (value as CurrencyCode)
     : undefined;
+}
+
+interface StoredCourtRateCandidate extends CourtRatePlanCandidate {
+  readonly organizationId: string;
+  readonly currency: CurrencyCode;
+}
+
+async function loadCourtRateCandidates(
+  courtIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly StoredCourtRateCandidate[]>> {
+  const result = new Map<string, StoredCourtRateCandidate[]>();
+  if (courtIds.length === 0) return result;
+
+  const database = getDatabase();
+  const [courtRows, assignmentRows] = await Promise.all([
+    database
+      .select({ id: courts.id, primaryRatePlanId: courts.ratePlanId })
+      .from(courts)
+      .where(inArray(courts.id, [...courtIds])),
+    database
+      .select({
+        courtId: courtRatePlanAssignments.courtId,
+        ratePlanId: courtRatePlanAssignments.ratePlanId,
+      })
+      .from(courtRatePlanAssignments)
+      .where(inArray(courtRatePlanAssignments.courtId, [...courtIds])),
+  ]);
+  const planIdsByCourt = new Map<string, Set<string>>();
+  for (const court of courtRows) {
+    planIdsByCourt.set(
+      court.id,
+      new Set(court.primaryRatePlanId ? [court.primaryRatePlanId] : []),
+    );
+  }
+  for (const assignment of assignmentRows) {
+    const planIds = planIdsByCourt.get(assignment.courtId) ?? new Set<string>();
+    planIds.add(assignment.ratePlanId);
+    planIdsByCourt.set(assignment.courtId, planIds);
+  }
+  const planIds = [
+    ...new Set([...planIdsByCourt.values()].flatMap((ids) => [...ids])),
+  ];
+  if (planIds.length === 0) return result;
+
+  const [planRows, eligibleRows] = await Promise.all([
+    database.select().from(ratePlans).where(inArray(ratePlans.id, planIds)),
+    database
+      .select({
+        ratePlanId: ratePlanEligiblePeople.ratePlanId,
+        personId: ratePlanEligiblePeople.personId,
+      })
+      .from(ratePlanEligiblePeople)
+      .where(inArray(ratePlanEligiblePeople.ratePlanId, planIds)),
+  ]);
+  const eligiblePeopleByPlan = new Map<string, string[]>();
+  for (const row of eligibleRows) {
+    const personIds = eligiblePeopleByPlan.get(row.ratePlanId) ?? [];
+    personIds.push(row.personId);
+    eligiblePeopleByPlan.set(row.ratePlanId, personIds);
+  }
+  const candidatesById = new Map<string, StoredCourtRateCandidate>();
+  for (const plan of planRows) {
+    const currency = currencyCode(plan.currency);
+    if (!currency) continue;
+    candidatesById.set(plan.id, {
+      id: plan.id,
+      name: plan.name,
+      organizationId: plan.organizationId,
+      currency,
+      baseAmountMinor: plan.baseAmountMinor,
+      memberAmountMinor: plan.memberAmountMinor,
+      nonMemberAmountMinor: plan.nonMemberAmountMinor,
+      rateUnitMinutes: plan.rateUnitMinutes,
+      audience:
+        plan.audience === "selected-users" ? "selected-users" : "everyone",
+      eligiblePersonIds: eligiblePeopleByPlan.get(plan.id) ?? [],
+      weekdays: plan.weekdays,
+      startsOn: plan.startsOn,
+      endsOn: plan.endsOn,
+      specificDates: plan.specificDates,
+    });
+  }
+  for (const courtId of courtIds) {
+    result.set(
+      courtId,
+      [...(planIdsByCourt.get(courtId) ?? [])].flatMap((planId) => {
+        const plan = candidatesById.get(planId);
+        return plan ? [plan] : [];
+      }),
+    );
+  }
+  return result;
 }
 
 const defaultCancellationPolicy: CourtCancellationPolicy = {
@@ -607,6 +703,7 @@ export async function loadCourtAvailability(input: {
   });
   const courtIds = candidates.map((court) => court.id);
   const database = getDatabase();
+  const rateCandidatesByCourt = await loadCourtRateCandidates(courtIds);
   const scheduleRows = await database
     .select({
       id: schedules.id,
@@ -802,21 +899,22 @@ export async function loadCourtAvailability(input: {
         new Date(slot.startsAt) >= noticeBoundary &&
         new Date(slot.endsAt) <= advanceBoundary,
     );
-    const rate = court.pricing;
+    const publicRate = selectLowestQualifiedCourtRate({
+      plans: rateCandidatesByCourt.get(court.id) ?? [],
+      localDate: input.date,
+      durationMinutes: input.durationMinutes,
+      isMember: false,
+    });
+    const selectedPlan = publicRate
+      ? (rateCandidatesByCourt.get(court.id) ?? []).find(
+          (plan) => plan.id === publicRate.planId,
+        )
+      : undefined;
     const price =
-      rate &&
-      currencyCode(rate.currency) &&
-      Number.isFinite(rate.nonMemberAmountMinor ?? rate.baseAmountMinor)
+      publicRate && selectedPlan
         ? {
-            amountMinor: Math.max(
-              (rate.nonMemberAmountMinor ?? rate.baseAmountMinor) === 0 ? 0 : 1,
-              Math.round(
-                ((rate.nonMemberAmountMinor ?? rate.baseAmountMinor) *
-                  input.durationMinutes) /
-                  rate.rateUnitMinutes,
-              ),
-            ),
-            currency: rate.currency,
+            amountMinor: publicRate.amountMinor,
+            currency: selectedPlan.currency,
           }
         : undefined;
     return solved.flatMap((slot) => {
@@ -1036,30 +1134,10 @@ async function checkoutResource(courtId: string) {
       "This court is not open for consumer booking.",
     );
   }
-  if (
-    !row.ratePlanId ||
-    row.baseAmountMinor === null ||
-    row.rateUnitMinutes === null ||
-    row.rateOrganizationId !== row.organizationId
-  ) {
-    throw new CourtCheckoutError(
-      "RATE_NOT_CONFIGURED",
-      "This court does not have an operator-approved rate plan yet.",
-    );
-  }
-  const currency = row.currency ? currencyCode(row.currency) : undefined;
-  if (!currency) {
-    throw new CourtCheckoutError(
-      "RATE_NOT_CONFIGURED",
-      "This court rate uses an unsupported currency.",
-    );
-  }
   return {
     ...row,
-    currency,
-    ratePlanId: row.ratePlanId,
-    baseAmountMinor: row.baseAmountMinor,
-    rateUnitMinutes: row.rateUnitMinutes,
+    currency: row.currency ? (currencyCode(row.currency) ?? "USD") : "USD",
+    rateUnitMinutes: row.rateUnitMinutes ?? 60,
   };
 }
 
@@ -1130,6 +1208,9 @@ export interface CourtCheckoutPricing {
   readonly shareCount: number;
   readonly currency: CurrencyCode;
   readonly rateUnitMinutes: number;
+  readonly ratePlanId: string;
+  readonly ratePlanName: string;
+  readonly priceKind: "base" | "public" | "member";
   readonly memberRateApplied: boolean;
   readonly dunaPlusApplied: boolean;
 }
@@ -1143,6 +1224,7 @@ async function priceCourtCheckout(input: {
   readonly resource: Awaited<ReturnType<typeof checkoutResource>>;
   readonly buyerPersonId: string;
   readonly subjectPersonId: string;
+  readonly localStartsAt: string;
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
   readonly invitedCount: number;
@@ -1156,17 +1238,31 @@ async function priceCourtCheckout(input: {
     }),
     hasActiveDunaPlusMembership(input.buyerPersonId, input.now),
   ]);
-  const rateAmountMinor = organizationMember
-    ? (resource.memberAmountMinor ?? resource.baseAmountMinor)
-    : (resource.nonMemberAmountMinor ?? resource.baseAmountMinor);
-  const subtotalMinor = Math.max(
-    rateAmountMinor === 0 ? 0 : 1,
-    Math.round(
-      (rateAmountMinor * input.durationMinutes) / resource.rateUnitMinutes,
-    ),
+  const candidates = (await loadCourtRateCandidates([resource.courtId])).get(
+    resource.courtId,
   );
+  const applicableCandidates = (candidates ?? []).filter(
+    (plan) => plan.organizationId === resource.organizationId,
+  );
+  const selectedRate = selectLowestQualifiedCourtRate({
+    plans: applicableCandidates,
+    localDate: dateOfLocalDateTime(input.localStartsAt),
+    durationMinutes: input.durationMinutes,
+    isMember: organizationMember,
+    personId: input.subjectPersonId,
+  });
+  const selectedPlan = selectedRate
+    ? applicableCandidates.find((plan) => plan.id === selectedRate.planId)
+    : undefined;
+  if (!selectedRate || !selectedPlan) {
+    throw new CourtCheckoutError(
+      "RATE_NOT_CONFIGURED",
+      "No court rate applies to this player and date.",
+    );
+  }
+  const subtotalMinor = selectedRate.amountMinor;
   const priced = priceConsumerOrder({
-    currency: resource.currency,
+    currency: selectedPlan.currency,
     isDunaPlus: hasDunaPlus,
     items: [
       {
@@ -1207,9 +1303,11 @@ async function priceCourtCheckout(input: {
     participantShareMinor,
     shareCount,
     currency: priced.currency,
-    rateUnitMinutes: resource.rateUnitMinutes,
-    memberRateApplied:
-      organizationMember && resource.memberAmountMinor !== null,
+    rateUnitMinutes: selectedRate.rateUnitMinutes,
+    ratePlanId: selectedRate.planId,
+    ratePlanName: selectedRate.planName,
+    priceKind: selectedRate.priceKind,
+    memberRateApplied: selectedRate.priceKind === "member",
     dunaPlusApplied: hasDunaPlus,
   };
 }
@@ -1250,6 +1348,7 @@ export async function quoteCourtCheckout(input: {
   readonly actor: ApiActor;
   readonly subjectPersonId?: string;
   readonly courtId: string;
+  readonly localStartsAt: string;
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
   readonly participants: readonly CourtBookingInviteInput[];
@@ -1264,6 +1363,7 @@ export async function quoteCourtCheckout(input: {
   const subjectPersonId = input.subjectPersonId ?? input.actor.personId;
   await assertSubjectAuthority({ actor: input.actor, subjectPersonId });
   const resource = await checkoutResource(input.courtId);
+  venueWallTimeToUtc(input.localStartsAt, resource.timezone);
   if (!resource.durationOptionsMinutes.includes(input.durationMinutes)) {
     throw new CourtCheckoutError(
       "INVALID_DURATION",
@@ -1274,6 +1374,7 @@ export async function quoteCourtCheckout(input: {
     resource,
     buyerPersonId: input.actor.personId,
     subjectPersonId,
+    localStartsAt: input.localStartsAt,
     durationMinutes: input.durationMinutes,
     paymentMode: input.paymentMode,
     invitedCount: dedupeCourtBookingInvites({
@@ -1456,6 +1557,7 @@ export async function startCourtCheckout(input: {
     resource,
     buyerPersonId: input.actor.personId,
     subjectPersonId,
+    localStartsAt: input.localStartsAt,
     durationMinutes: input.durationMinutes,
     paymentMode: input.paymentMode,
     invitedCount: invitedPeople.length,

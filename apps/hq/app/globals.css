@@ -26800,6 +26800,66 @@ body {
   padding: 0.45rem 0.6rem;
 }
 
+.team-schedule-ai__review {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(230px, 1fr) auto;
+  padding: 0.75rem;
+}
+
+.team-schedule-ai__review > div:first-child,
+.team-schedule-ai__conflicts > span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.team-schedule-ai__status {
+  color: var(--color-aqua);
+  font-size: max(0.75rem, 12px);
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.team-schedule-ai__status--needs-clarification {
+  color: var(--color-warning);
+}
+
+.team-schedule-ai__review ul {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.team-schedule-ai__conflicts {
+  align-items: flex-start;
+  background: var(--color-canvas-soft);
+  border-radius: 10px;
+  display: flex;
+  font-size: max(0.75rem, 12px);
+  gap: 0.45rem;
+  line-height: 1.4;
+  padding: 0.65rem;
+}
+
+.team-schedule-ai__conflicts > svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.team-schedule-ai__actions {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
 .team-schedule-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -26835,6 +26895,14 @@ body {
 .team-schedule-details {
   background: var(--color-canvas-soft);
   grid-template-columns: minmax(180px, 1.4fr) repeat(2, minmax(150px, 0.8fr));
+}
+
+.team-schedule-details > .duna-date-time-picker {
+  align-self: stretch;
+}
+
+.team-schedule-details .duna-date-time-picker__trigger {
+  min-height: 40px;
 }
 .team-schedule-details label {
   display: grid;
@@ -27112,6 +27180,15 @@ body {
   width: 100%;
 }
 
+.duna-date-time-picker--date-only .duna-date-time-picker__trigger {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.duna-date-time-picker--date-only .duna-date-time-picker__popover {
+  grid-template-columns: minmax(250px, 1fr);
+  width: min(328px, calc(100vw - 2.5rem));
+}
+
 .duna-date-time-picker__trigger > span {
   align-items: center;
   display: flex;
@@ -27315,6 +27392,403 @@ body {
   color: var(--color-bone-muted);
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+/* Court-rate creation is progressive: each section answers one pricing
+ * question and keeps the precedence rule visible at the point of review. */
+.rate-plan-builder {
+  overflow: visible;
+}
+
+.rate-plan-builder > .hq-card-heading {
+  align-items: flex-start;
+}
+
+.rate-plan-builder > .operator-form {
+  gap: 0.8rem;
+}
+
+.rate-plan-step {
+  background: var(--color-canvas-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.85rem;
+  padding: clamp(0.85rem, 2vw, 1.15rem);
+}
+
+.rate-plan-step > header {
+  align-items: flex-start;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+
+.rate-plan-step > header > span {
+  align-items: center;
+  background: var(--color-aqua);
+  border-radius: 50%;
+  color: var(--color-surface);
+  display: inline-flex;
+  font-size: max(0.75rem, 12px);
+  font-weight: 850;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.rate-plan-step > header h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.rate-plan-step > header p,
+.rate-plan-subsection > p {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.45;
+  margin: 0.15rem 0 0;
+}
+
+.rate-plan-price-guide {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rate-plan-price-guide article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.rate-plan-price-guide strong {
+  display: block;
+  font-size: max(0.78rem, 12px);
+  margin-bottom: 0.25rem;
+}
+
+.rate-plan-price-guide p {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.rate-plan-lowest-rule {
+  align-items: flex-start;
+  background: rgb(var(--accent-rgb) / 8%);
+  border: 1px solid rgb(var(--accent-rgb) / 20%);
+  border-radius: 12px;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: max(0.75rem, 12px);
+  gap: 0.55rem;
+  line-height: 1.45;
+  padding: 0.7rem 0.8rem;
+}
+
+.rate-plan-lowest-rule svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+}
+
+.rate-plan-lowest-rule span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.rate-plan-lowest-rule strong {
+  color: var(--color-ink);
+}
+
+.rate-plan-subsection {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rate-plan-subsection > strong {
+  font-size: max(0.78rem, 12px);
+}
+
+.rate-plan-choice-grid {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.rate-plan-choice-grid label,
+.rate-plan-people-picker label {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  cursor: pointer;
+  display: flex;
+  gap: 0.55rem;
+  min-height: 48px;
+  padding: 0.55rem 0.65rem;
+}
+
+.rate-plan-choice-grid label:has(input:checked),
+.rate-plan-people-picker label:has(input:checked) {
+  background: rgb(var(--accent-rgb) / 8%);
+  border-color: rgb(var(--accent-rgb) / 45%);
+}
+
+.rate-plan-choice-grid input,
+.rate-plan-people-picker label input {
+  accent-color: var(--color-aqua);
+  flex: 0 0 auto;
+  height: 17px;
+  min-height: 0;
+  width: 17px;
+}
+
+.rate-plan-choice-grid label > span,
+.rate-plan-people-picker label > span {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.rate-plan-choice-grid strong,
+.rate-plan-people-picker label strong {
+  font-size: max(0.75rem, 12px);
+}
+
+.rate-plan-choice-grid small,
+.rate-plan-people-picker label small {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+}
+
+.rate-plan-empty-choice {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+}
+
+.rate-plan-weekdays,
+.rate-plan-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rate-plan-weekdays button,
+.rate-plan-segmented button {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-bone-muted);
+  font: inherit;
+  font-size: max(0.75rem, 12px);
+  font-weight: 760;
+  min-height: 38px;
+  padding: 0 0.75rem;
+}
+
+.rate-plan-weekdays button[aria-pressed="true"],
+.rate-plan-segmented button[aria-pressed="true"] {
+  background: var(--color-aqua);
+  border-color: var(--color-aqua);
+  color: var(--color-surface);
+}
+
+.rate-plan-date-range {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+  max-width: 720px;
+}
+
+.rate-plan-date-range > span {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  margin-bottom: 0.82rem;
+}
+
+.rate-plan-specific-dates,
+.rate-plan-people-picker {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.rate-plan-specific-dates > div:first-child {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(220px, 320px) auto;
+  justify-content: start;
+}
+
+.rate-plan-date-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rate-plan-date-chips > span {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: max(0.75rem, 12px);
+  font-weight: 720;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0 0.35rem 0 0.65rem;
+}
+
+.rate-plan-date-chips > span > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-bone-muted);
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.rate-plan-audience-options {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rate-plan-audience-options > button {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-ink);
+  display: flex;
+  font: inherit;
+  gap: 0.65rem;
+  min-height: 64px;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.rate-plan-audience-options > button[aria-pressed="true"] {
+  background: rgb(var(--accent-rgb) / 8%);
+  border-color: var(--color-aqua);
+  box-shadow: inset 0 0 0 1px var(--color-aqua);
+}
+
+.rate-plan-audience-options > button > svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.rate-plan-audience-options > button > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.rate-plan-audience-options strong {
+  font-size: max(0.78rem, 12px);
+}
+
+.rate-plan-audience-options small {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+}
+
+.rate-plan-people-picker > input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 11px;
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+}
+
+.rate-plan-people-picker > div {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.rate-plan-people-picker > small {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  font-weight: 740;
+}
+
+.rate-plan-review {
+  margin-top: 0.15rem;
+}
+
+.court-rate-summary {
+  background: rgb(var(--accent-rgb) / 7%);
+  border: 1px solid rgb(var(--accent-rgb) / 18%);
+  border-radius: 13px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.court-rate-summary > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.court-rate-summary > span > small {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.4;
+}
+
+.court-rate-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.court-rate-summary > div > span {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.08rem;
+  min-width: 150px;
+  padding: 0.55rem 0.65rem;
+}
+
+.court-rate-summary > div strong,
+.court-rate-summary > div small {
+  font-size: max(0.75rem, 12px);
+}
+
+.court-rate-summary > div small {
+  color: var(--color-bone-muted);
+}
+
+@media (max-width: 760px) {
+  .rate-plan-price-guide,
+  .rate-plan-prices,
+  .rate-plan-audience-options {
+    grid-template-columns: 1fr;
+  }
+
+  .rate-plan-date-range {
+    grid-template-columns: 1fr;
+  }
+
+  .rate-plan-date-range > span {
+    display: none;
+  }
+
+  .rate-plan-specific-dates > div:first-child {
+    grid-template-columns: 1fr;
+  }
 }
 
 .team-availability-calendar {
@@ -28600,6 +29074,22 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .team-schedule-ai {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .team-schedule-ai > input {
+    grid-column: 1 / 3;
+  }
+
+  .team-schedule-ai__review {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .team-schedule-ai__actions {
+    grid-column: 1 / -1;
+  }
+
   .team-blackouts__form {
     grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
   }
@@ -28641,8 +29131,27 @@ body {
   }
 
   .team-member-editor__hero,
-  .team-availability__day {
+  .team-availability__day,
+  .team-schedule-details,
+  .team-schedule-ai,
+  .team-schedule-ai__review {
     grid-template-columns: 1fr;
+  }
+
+  .team-schedule-ai > input,
+  .team-schedule-ai__actions {
+    grid-column: 1;
+  }
+
+  .team-schedule-ai > .hq-button,
+  .team-schedule-ai__actions {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .team-schedule-ai__actions > .hq-button {
+    flex: 1;
+    justify-content: center;
   }
 
   .team-directory__header,
@@ -28669,6 +29178,10 @@ body {
   .duna-date-time-picker__popover {
     grid-template-columns: minmax(0, 1fr) 118px;
     width: min(390px, calc(100vw - 2rem));
+  }
+
+  .duna-date-time-picker--date-only .duna-date-time-picker__popover {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .duna-date-time-picker__calendar {
