@@ -6050,6 +6050,45 @@ export const adminOverviewSchema = z.object({
     )
     .readonly(),
 });
+export const organizationPlanPolicySchema = z.object({
+  organizationId: z.string().uuid(),
+  configuredPlan: z.enum(["coach", "small-club", "club"]),
+  adminPlanOverride: z.enum(["coach", "small-club", "club"]).optional(),
+  effectivePlan: z.enum(["coach", "small-club", "club"]),
+  source: z.enum(["admin-assigned", "stripe-subscription", "free"]),
+  subscriptionStatus: z.string(),
+  hasStripeSubscription: z.boolean(),
+  interval: z.enum(["month", "year"]).optional(),
+  currentPeriodEndsAt: z.iso.datetime().optional(),
+  cancelAtPeriodEnd: z.boolean(),
+  discount: z
+    .object({
+      percentBps: z.number().int().min(1).max(10_000),
+      duration: z.enum(["once", "repeating", "forever"]),
+      months: z.number().int().min(1).max(36).optional(),
+      couponId: z.string().optional(),
+    })
+    .optional(),
+  stripeSyncStatus: z.enum(["not-connected", "not-synced", "synced", "failed"]),
+  stripeSyncedAt: z.iso.datetime().optional(),
+  stripeSyncError: z.string().optional(),
+});
+export const videoAllowanceGrantSchema = z.object({
+  id: z.string().uuid(),
+  targetType: z.enum(["organization", "person"]),
+  targetId: z.string().uuid(),
+  targetName: z.string(),
+  uploadSeconds: z.number().int().nonnegative(),
+  liveSeconds: z.number().int().nonnegative(),
+  cadence: z.enum(["current-period", "recurring"]),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime().optional(),
+  reason: z.string(),
+  active: z.boolean(),
+  grantedByName: z.string().optional(),
+  revokedAt: z.iso.datetime().optional(),
+  revokedByName: z.string().optional(),
+});
 export const adminOrganizationDetailSchema = z.object({
   organization: organizationSummarySchema,
   canManageCommission: z.boolean(),
@@ -6059,6 +6098,7 @@ export const adminOrganizationDetailSchema = z.object({
   events: z.array(eventSummarySchema).readonly(),
   audit: z.array(auditEventSchema).readonly(),
   billing: z.object({
+    planPolicy: organizationPlanPolicySchema,
     configuredPlan: z.enum(["coach", "small-club", "club"]),
     effectivePlan: z.enum(["coach", "small-club", "club"]),
     subscriptionStatus: z.string(),
@@ -6066,6 +6106,21 @@ export const adminOrganizationDetailSchema = z.object({
     currentPeriodEndsAt: z.iso.datetime().optional(),
     cancelAtPeriodEnd: z.boolean(),
     commission: organizationCommissionPolicySchema,
+  }),
+  videoAllowance: z.object({
+    baseUploadSeconds: z.number().int().nonnegative(),
+    baseLiveSeconds: z.number().int().nonnegative(),
+    paidUploadSeconds: z.number().int().nonnegative(),
+    paidLiveSeconds: z.number().int().nonnegative(),
+    earnedUploadSeconds: z.number().int().nonnegative(),
+    earnedLiveSeconds: z.number().int().nonnegative(),
+    grantedUploadSeconds: z.number().int().nonnegative(),
+    grantedLiveSeconds: z.number().int().nonnegative(),
+    totalUploadSeconds: z.number().int().nonnegative(),
+    totalLiveSeconds: z.number().int().nonnegative(),
+    payAsYouGo: z.boolean(),
+    periodEndsAt: z.iso.datetime(),
+    grants: z.array(videoAllowanceGrantSchema).readonly(),
   }),
   commerce: z.object({
     paidOrders: z.number().int().nonnegative(),

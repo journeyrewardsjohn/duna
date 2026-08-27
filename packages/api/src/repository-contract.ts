@@ -10,7 +10,10 @@ import type {
   VenueSummary,
   WalletEntry,
 } from "@duna/core";
-import type { OrganizationCommissionPolicy } from "./organization-billing";
+import type {
+  OrganizationCommissionPolicy,
+  OrganizationPlanPolicy,
+} from "./organization-billing";
 import type {
   CurrencyCode,
   OrderPricing,
@@ -353,6 +356,7 @@ export interface AdminOrganizationDetail {
   readonly events: readonly EventSummary[];
   readonly audit: readonly AuditEvent[];
   readonly billing: {
+    readonly planPolicy: OrganizationPlanPolicy;
     readonly configuredPlan: OrganizationSummary["plan"];
     readonly effectivePlan: OrganizationSummary["plan"];
     readonly subscriptionStatus: string;
@@ -361,6 +365,21 @@ export interface AdminOrganizationDetail {
     readonly cancelAtPeriodEnd: boolean;
     readonly commission: OrganizationCommissionPolicy;
   };
+  readonly videoAllowance: {
+    readonly baseUploadSeconds: number;
+    readonly baseLiveSeconds: number;
+    readonly paidUploadSeconds: number;
+    readonly paidLiveSeconds: number;
+    readonly earnedUploadSeconds: number;
+    readonly earnedLiveSeconds: number;
+    readonly grantedUploadSeconds: number;
+    readonly grantedLiveSeconds: number;
+    readonly totalUploadSeconds: number;
+    readonly totalLiveSeconds: number;
+    readonly payAsYouGo: boolean;
+    readonly periodEndsAt: string;
+    readonly grants: readonly VideoAllowanceGrant[];
+  };
   readonly commerce: {
     readonly paidOrders: number;
     readonly pendingOrders: number;
@@ -368,6 +387,23 @@ export interface AdminOrganizationDetail {
     readonly grossVolumeMinor: number;
     readonly currency: string;
   };
+}
+
+export interface VideoAllowanceGrant {
+  readonly id: string;
+  readonly targetType: "organization" | "person";
+  readonly targetId: string;
+  readonly targetName: string;
+  readonly uploadSeconds: number;
+  readonly liveSeconds: number;
+  readonly cadence: "current-period" | "recurring";
+  readonly startsAt: string;
+  readonly endsAt?: string;
+  readonly reason: string;
+  readonly active: boolean;
+  readonly grantedByName?: string;
+  readonly revokedAt?: string;
+  readonly revokedByName?: string;
 }
 
 export interface DunaRepository {

@@ -12,6 +12,8 @@ export type FeatureFlagActionState = GuardianReviewActionState;
 export type VideoAdminActionState = GuardianReviewActionState;
 export type VisionAdminActionState = GuardianReviewActionState;
 export type OrganizationCommissionActionState = GuardianReviewActionState;
+export type OrganizationPlanActionState = GuardianReviewActionState;
+export type OrganizationVideoAllowanceActionState = GuardianReviewActionState;
 export type PredictionAdminActionState = GuardianReviewActionState;
 export type DemoDataActionState = GuardianReviewActionState;
 export interface PeopleAdminActionState extends GuardianReviewActionState {
@@ -674,6 +676,204 @@ export async function updateOrganizationCommissionAction(
         error instanceof Error
           ? error.message
           : "The organization fee could not be updated.",
+    };
+  }
+}
+
+export async function updateOrganizationPlanPolicyAction(
+  _previous: OrganizationPlanActionState,
+  formData: FormData,
+): Promise<OrganizationPlanActionState> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const accessMode = String(formData.get("accessMode") ?? "");
+  const plan = String(formData.get("plan") ?? "");
+  const synchronizeStripe = formData.get("synchronizeStripe") === "true";
+  const discountMode = String(formData.get("discountMode") ?? "preserve");
+  const discountPercent = Number(formData.get("discountPercent"));
+  const discountDuration = String(formData.get("discountDuration") ?? "once");
+  const discountMonths = Number(formData.get("discountMonths"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  const validAccessMode = ["admin-assigned", "billing-managed"].includes(
+    accessMode,
+  );
+  const validPlan = ["coach", "small-club", "club"].includes(plan);
+  const validDiscountMode = ["preserve", "clear", "apply"].includes(
+    discountMode,
+  );
+  const validDuration = ["once", "repeating", "forever"].includes(
+    discountDuration,
+  );
+  if (
+    !organizationId ||
+    !validAccessMode ||
+    !validPlan ||
+    !validDiscountMode ||
+    reason.length < 10 ||
+    !confirmed ||
+    (!synchronizeStripe && discountMode !== "preserve") ||
+    (synchronizeStripe && plan === "coach") ||
+    (discountMode === "apply" &&
+      (!Number.isFinite(discountPercent) ||
+        discountPercent <= 0 ||
+        discountPercent > 100 ||
+        !validDuration)) ||
+    (discountMode === "apply" &&
+      discountDuration === "repeating" &&
+      (!Number.isInteger(discountMonths) ||
+        discountMonths < 1 ||
+        discountMonths > 36))
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose a valid access plan and Stripe option, add a reason of at least 10 characters, and confirm the change. Free can be assigned locally but not synchronized to a paid Stripe subscription.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const policy = await caller.admin.updateOrganizationPlanPolicy({
+      organizationId,
+      accessMode: accessMode as "admin-assigned" | "billing-managed",
+      plan: plan as "coach" | "small-club" | "club",
+      synchronizeStripe,
+      discountMode: discountMode as "preserve" | "clear" | "apply",
+      discountPercentBps:
+        discountMode === "apply"
+          ? Math.round(discountPercent * 100)
+          : undefined,
+      discountDuration:
+        discountMode === "apply"
+          ? (discountDuration as "once" | "repeating" | "forever")
+          : undefined,
+      discountMonths:
+        discountMode === "apply" && discountDuration === "repeating"
+          ? discountMonths
+          : undefined,
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath(`/admin/organizations/${organizationId}`);
+    revalidatePath("/admin/organizations");
+    const planLabel =
+      policy.effectivePlan === "coach"
+        ? "Duna HQ Free"
+        : policy.effectivePlan === "small-club"
+          ? "Duna HQ Club"
+          : "Duna HQ Scale";
+    return {
+      status: "success",
+      message: `${planLabel} is now effective via ${policy.source.replaceAll("-", " ")}. Stripe billing was ${synchronizeStripe ? "updated" : "left unchanged"}.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The organization plan could not be updated.",
+    };
+  }
+}
+
+export async function grantOrganizationVideoAllowanceAction(
+  _previous: OrganizationVideoAllowanceActionState,
+  formData: FormData,
+): Promise<OrganizationVideoAllowanceActionState> {
+  const scopeOrganizationId = String(formData.get("scopeOrganizationId") ?? "");
+  const target = String(formData.get("target") ?? "");
+  const [targetType, targetId] = target.split(":", 2);
+  const uploadHours = Number(formData.get("uploadHours"));
+  const liveHours = Number(formData.get("liveHours"));
+  const cadence = String(formData.get("cadence") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (
+    !scopeOrganizationId ||
+    !targetId ||
+    !["organization", "person"].includes(targetType ?? "") ||
+    !Number.isFinite(uploadHours) ||
+    !Number.isFinite(liveHours) ||
+    uploadHours < 0 ||
+    liveHours < 0 ||
+    uploadHours > 10_000 ||
+    liveHours > 10_000 ||
+    (uploadHours === 0 && liveHours === 0) ||
+    !["current-period", "recurring"].includes(cadence) ||
+    reason.length < 10 ||
+    !confirmed
+  ) {
+    return {
+      status: "error",
+      message:
+        "Choose the organization or one of its players, add upload or live hours, choose a duration, add a reason, and confirm the grant.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const grant = await caller.admin.grantVideoAllowance({
+      scopeOrganizationId,
+      targetType: targetType as "organization" | "person",
+      targetId,
+      uploadSeconds: Math.round(uploadHours * 3_600),
+      liveSeconds: Math.round(liveHours * 3_600),
+      cadence: cadence as "current-period" | "recurring",
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath(`/admin/organizations/${scopeOrganizationId}`);
+    return {
+      status: "success",
+      message: `Added ${grant.uploadSeconds / 3_600} upload hours and ${grant.liveSeconds / 3_600} live hours to ${grant.targetName}.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The video allowance could not be granted.",
+    };
+  }
+}
+
+export async function revokeOrganizationVideoAllowanceAction(
+  _previous: OrganizationVideoAllowanceActionState,
+  formData: FormData,
+): Promise<OrganizationVideoAllowanceActionState> {
+  const scopeOrganizationId = String(formData.get("scopeOrganizationId") ?? "");
+  const grantId = String(formData.get("grantId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const confirmed = formData.get("confirmed") === "true";
+  if (!scopeOrganizationId || !grantId || reason.length < 10 || !confirmed) {
+    return {
+      status: "error",
+      message: "Add a revocation reason of at least 10 characters and confirm.",
+    };
+  }
+  try {
+    const caller = await getServerCaller();
+    const grant = await caller.admin.revokeVideoAllowance({
+      scopeOrganizationId,
+      grantId,
+      reason,
+      confirmed: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    revalidatePath(`/admin/organizations/${scopeOrganizationId}`);
+    return {
+      status: "success",
+      message: `The extra video allowance for ${grant.targetName} was revoked.`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The video allowance could not be revoked.",
     };
   }
 }

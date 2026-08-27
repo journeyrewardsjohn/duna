@@ -13,6 +13,8 @@ import {
   createBillingPortalSession,
   createOrganizationPlanCheckout,
   isStripeConfigured,
+  type OrganizationSubscriptionDiscount,
+  updateOrganizationPlanSubscription,
   updateConnectAccountFeeMetadata,
 } from "./payments";
 
@@ -34,6 +36,33 @@ export interface OrganizationCommissionPolicy {
   readonly stripeSyncError?: string;
 }
 
+export type OrganizationPlanSource =
+  "admin-assigned" | "stripe-subscription" | "free";
+export type OrganizationDiscountDuration = "once" | "repeating" | "forever";
+
+export interface OrganizationPlanPolicy {
+  readonly organizationId: string;
+  readonly configuredPlan: OrganizationPlanId;
+  readonly adminPlanOverride?: OrganizationPlanId;
+  readonly effectivePlan: OrganizationPlanId;
+  readonly source: OrganizationPlanSource;
+  readonly subscriptionStatus: string;
+  readonly hasStripeSubscription: boolean;
+  readonly interval?: OrganizationBillingInterval;
+  readonly currentPeriodEndsAt?: string;
+  readonly cancelAtPeriodEnd: boolean;
+  readonly discount?: {
+    readonly percentBps: number;
+    readonly duration: OrganizationDiscountDuration;
+    readonly months?: number;
+    readonly couponId?: string;
+  };
+  readonly stripeSyncStatus:
+    "not-connected" | "not-synced" | "synced" | "failed";
+  readonly stripeSyncedAt?: string;
+  readonly stripeSyncError?: string;
+}
+
 function organizationPlanId(value: string): OrganizationPlanId {
   return organizationPlan(value).id;
 }
@@ -46,13 +75,76 @@ export function organizationSubscriptionIsActive(
 
 export function effectiveOrganizationPlan(input: {
   readonly plan: string;
+  readonly adminPlanOverride?: string | null;
   readonly stripeSubscriptionStatus?: string | null;
 }): OrganizationPlanId {
+  if (input.adminPlanOverride) {
+    return organizationPlanId(input.adminPlanOverride);
+  }
   const configured = organizationPlanId(input.plan);
   if (configured === "coach") return "coach";
   return organizationSubscriptionIsActive(input.stripeSubscriptionStatus)
     ? configured
     : "coach";
+}
+
+export function resolveOrganizationPlanPolicy(
+  organization: typeof organizations.$inferSelect,
+): OrganizationPlanPolicy {
+  const configuredPlan = organizationPlanId(organization.plan);
+  const adminPlanOverride = organization.adminPlanOverride
+    ? organizationPlanId(organization.adminPlanOverride)
+    : undefined;
+  const effectivePlan = effectiveOrganizationPlan(organization);
+  const subscriptionStatus =
+    organization.stripeSubscriptionStatus ??
+    (configuredPlan === "coach" ? "free" : "incomplete");
+  const discountDuration = ["once", "repeating", "forever"].includes(
+    organization.stripeSubscriptionDiscountDuration ?? "",
+  )
+    ? (organization.stripeSubscriptionDiscountDuration as OrganizationDiscountDuration)
+    : undefined;
+  const discount =
+    organization.stripeSubscriptionDiscountBps && discountDuration
+      ? {
+          percentBps: organization.stripeSubscriptionDiscountBps,
+          duration: discountDuration,
+          months: organization.stripeSubscriptionDiscountMonths ?? undefined,
+          couponId:
+            organization.stripeSubscriptionDiscountCouponId ?? undefined,
+        }
+      : undefined;
+  return {
+    organizationId: organization.id,
+    configuredPlan,
+    adminPlanOverride,
+    effectivePlan,
+    source: adminPlanOverride
+      ? "admin-assigned"
+      : configuredPlan === "coach"
+        ? "free"
+        : "stripe-subscription",
+    subscriptionStatus,
+    hasStripeSubscription: Boolean(organization.stripeSubscriptionId),
+    interval:
+      organization.planBillingInterval === "month" ||
+      organization.planBillingInterval === "year"
+        ? organization.planBillingInterval
+        : undefined,
+    currentPeriodEndsAt: organization.planCurrentPeriodEndsAt?.toISOString(),
+    cancelAtPeriodEnd: organization.planCancelAtPeriodEnd,
+    discount,
+    stripeSyncStatus: !organization.stripeSubscriptionId
+      ? "not-connected"
+      : organization.stripeBillingPolicyError
+        ? "failed"
+        : organization.stripeBillingPolicySyncedAt
+          ? "synced"
+          : "not-synced",
+    stripeSyncedAt:
+      organization.stripeBillingPolicySyncedAt?.toISOString() ?? undefined,
+    stripeSyncError: organization.stripeBillingPolicyError ?? undefined,
+  };
 }
 
 export function resolveOrganizationCommissionPolicy(
@@ -87,6 +179,197 @@ export function resolveOrganizationCommissionPolicy(
       organization.stripeFeeMetadataSyncedAt?.toISOString() ?? undefined,
     stripeSyncError: organization.stripeFeeMetadataError ?? undefined,
   };
+}
+
+function validateOrganizationDiscount(
+  discount: OrganizationSubscriptionDiscount,
+): void {
+  if (discount.mode !== "apply") return;
+  if (
+    !Number.isSafeInteger(discount.percentBps) ||
+    discount.percentBps < 1 ||
+    discount.percentBps > 10_000
+  ) {
+    throw new Error(
+      "Stripe subscription discount must be between 0.01% and 100%.",
+    );
+  }
+  if (
+    discount.duration === "repeating" &&
+    (!Number.isSafeInteger(discount.months) ||
+      (discount.months ?? 0) < 1 ||
+      (discount.months ?? 0) > 36)
+  ) {
+    throw new Error("A first-month discount must run for 1 to 36 months.");
+  }
+}
+
+export async function updateOrganizationPlanPolicy(input: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly accessMode: "admin-assigned" | "billing-managed";
+  readonly plan: OrganizationPlanId;
+  readonly synchronizeStripe: boolean;
+  readonly discount: OrganizationSubscriptionDiscount;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+  readonly idempotencyKey: string;
+}): Promise<OrganizationPlanPolicy> {
+  validateOrganizationDiscount(input.discount);
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, input.organizationId),
+  });
+  if (!organization) throw new Error("Organization was not found.");
+  const before = resolveOrganizationPlanPolicy(organization);
+  let stripeResult:
+    | {
+        readonly interval: OrganizationBillingInterval;
+        readonly couponId?: string;
+      }
+    | undefined;
+
+  if (input.synchronizeStripe) {
+    if (input.plan === "coach") {
+      throw new Error(
+        "Free is a local access plan. To stop a paid subscription, use Stripe billing or keep the paid plan and apply a 100% discount.",
+      );
+    }
+    if (!organization.stripeSubscriptionId) {
+      throw new Error(
+        "This organization does not have a Stripe subscription to update. Assign access locally or have the organization start checkout first.",
+      );
+    }
+    try {
+      stripeResult = await updateOrganizationPlanSubscription({
+        organizationId: organization.id,
+        organizationName: organization.name,
+        subscriptionId: organization.stripeSubscriptionId,
+        plan: input.plan,
+        discount: input.discount,
+        changedAt: input.now,
+        idempotencyKey: input.idempotencyKey,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message.slice(0, 1_000)
+          : "Stripe billing synchronization failed.";
+      await database.batch([
+        database
+          .update(organizations)
+          .set({
+            stripeBillingPolicySyncedAt: null,
+            stripeBillingPolicyError: message,
+            updatedAt: input.now,
+          })
+          .where(eq(organizations.id, organization.id)),
+        database.insert(auditLog).values({
+          organizationId: organization.id,
+          actorPersonId: input.actor.personId,
+          actorType: "person",
+          action: "organization.plan_policy_sync_failed",
+          entityType: "organization",
+          entityId: organization.id,
+          beforeHash: stableHash(before),
+          afterHash: stableHash({ requestedPlan: input.plan, error: message }),
+          reason: `${input.reason} Stripe rejected the requested billing change: ${message}`,
+          traceId: input.requestId,
+          ipAddress: input.ipAddress,
+          createdAt: input.now,
+        }),
+      ]);
+      throw new Error(message, { cause: error });
+    }
+  }
+
+  const nextDiscount =
+    input.discount.mode === "preserve"
+      ? {
+          stripeSubscriptionDiscountBps:
+            organization.stripeSubscriptionDiscountBps,
+          stripeSubscriptionDiscountDuration:
+            organization.stripeSubscriptionDiscountDuration,
+          stripeSubscriptionDiscountMonths:
+            organization.stripeSubscriptionDiscountMonths,
+          stripeSubscriptionDiscountCouponId:
+            organization.stripeSubscriptionDiscountCouponId,
+        }
+      : input.discount.mode === "clear"
+        ? {
+            stripeSubscriptionDiscountBps: null,
+            stripeSubscriptionDiscountDuration: null,
+            stripeSubscriptionDiscountMonths: null,
+            stripeSubscriptionDiscountCouponId: null,
+          }
+        : {
+            stripeSubscriptionDiscountBps: input.discount.percentBps,
+            stripeSubscriptionDiscountDuration: input.discount.duration,
+            stripeSubscriptionDiscountMonths:
+              input.discount.duration === "repeating"
+                ? input.discount.months
+                : null,
+            stripeSubscriptionDiscountCouponId: stripeResult?.couponId ?? null,
+          };
+  const adminPlanOverride =
+    input.accessMode === "admin-assigned" ? input.plan : null;
+  await database.batch([
+    database
+      .update(organizations)
+      .set({
+        ...(stripeResult
+          ? {
+              plan: input.plan,
+              planBillingInterval: stripeResult.interval,
+              stripeBillingPolicySyncedAt: input.now,
+              stripeBillingPolicyError: null,
+              ...nextDiscount,
+            }
+          : {}),
+        adminPlanOverride,
+        stripeFeeMetadataStatus: organization.stripeAccountId
+          ? "pending"
+          : "not-connected",
+        stripeFeeMetadataSyncedAt: null,
+        stripeFeeMetadataError: null,
+        updatedAt: input.now,
+      })
+      .where(eq(organizations.id, organization.id)),
+    database.insert(auditLog).values({
+      organizationId: organization.id,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "organization.plan_policy_updated",
+      entityType: "organization",
+      entityId: organization.id,
+      beforeHash: stableHash(before),
+      afterHash: stableHash({
+        accessMode: input.accessMode,
+        plan: input.plan,
+        synchronizeStripe: input.synchronizeStripe,
+        discount: input.discount,
+      }),
+      reason: `${input.reason} Access is ${
+        input.accessMode === "admin-assigned"
+          ? `admin-assigned to ${ORGANIZATION_PLANS[input.plan].name}`
+          : "managed by Stripe billing"
+      }; Stripe billing was ${input.synchronizeStripe ? "updated" : "left unchanged"}.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    }),
+  ]);
+  await synchronizeOrganizationFeeMetadata({
+    organizationId: organization.id,
+    now: input.now,
+  });
+  const updated = await database.query.organizations.findFirst({
+    where: eq(organizations.id, organization.id),
+  });
+  if (!updated) throw new Error("Organization was not found after the update.");
+  return resolveOrganizationPlanPolicy(updated);
 }
 
 export async function loadOrganizationCommissionPolicy(
