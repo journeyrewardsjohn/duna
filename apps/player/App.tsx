@@ -3280,6 +3280,7 @@ function VenueBookingModal({
     void client.player.courtCheckoutQuote
       .query({
         courtId: selectedSlot.courtId,
+        localStartsAt: selectedSlot.localStartsAt,
         durationMinutes,
         paymentMode,
         participants: courtCheckoutParticipants(participants),

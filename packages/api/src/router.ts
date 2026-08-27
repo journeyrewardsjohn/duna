@@ -6821,6 +6821,7 @@ const playerRouter = router({
       z.object({
         courtId: z.string().uuid(),
         subjectPersonId: z.string().uuid().optional(),
+        localStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
         durationMinutes: z.number().int().min(15).max(480),
         paymentMode: z.enum(["full", "split"]).default("full"),
         participants: courtCheckoutParticipantsSchema,
@@ -6833,6 +6834,7 @@ const playerRouter = router({
           actor: ctx.actor!,
           subjectPersonId: input.subjectPersonId,
           courtId: input.courtId,
+          localStartsAt: input.localStartsAt,
           durationMinutes: input.durationMinutes,
           paymentMode: input.paymentMode,
           participants: input.participants,
@@ -11696,6 +11698,17 @@ const operatorRouter = router({
           .max(10_000_000)
           .optional(),
         rateUnitMinutes: z.number().int().min(15).max(1_440),
+        audience: z.enum(["everyone", "selected-users"]).default("everyone"),
+        weekdays: z
+          .array(z.number().int().min(0).max(6))
+          .min(1)
+          .max(7)
+          .default([0, 1, 2, 3, 4, 5, 6]),
+        startsOn: z.iso.date().optional(),
+        endsOn: z.iso.date().optional(),
+        specificDates: z.array(z.iso.date()).max(180).default([]),
+        courtIds: z.array(z.string().uuid()).max(100).default([]),
+        eligiblePersonIds: z.array(z.string().uuid()).max(250).default([]),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
       }),
@@ -11716,6 +11729,13 @@ const operatorRouter = router({
               memberAmountMinor: input.memberAmountMinor,
               nonMemberAmountMinor: input.nonMemberAmountMinor,
               rateUnitMinutes: input.rateUnitMinutes,
+              audience: input.audience,
+              weekdays: input.weekdays,
+              startsOn: input.startsOn,
+              endsOn: input.endsOn,
+              specificDates: input.specificDates,
+              courtIds: input.courtIds,
+              eligiblePersonIds: input.eligiblePersonIds,
               confirmed: input.confirmed,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,

@@ -32,6 +32,8 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { createCourtMediaPath, optimizeImageUpload } from "@/lib/media-storage";
+import { AvailabilityCalendar } from "./availability-calendar";
+import { DunaDateTimePicker } from "./duna-date-time-picker";
 
 type Venue = OperatorWorkspace["venues"][number];
 type Court = Venue["courts"][number];
@@ -83,6 +85,18 @@ function minuteToTime(minute: number): string {
 function timeToMinute(value: string): number {
   const [hour = "0", minute = "0"] = value.split(":");
   return Number(hour) * 60 + Number(minute);
+}
+
+function dateInTimezone(value: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone,
+    year: "numeric",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function policyHiddenFields(court: Court) {
@@ -363,10 +377,14 @@ function CourtRulesEditor({
     updateCourtBookingConfigurationAction,
     initialState,
   );
+  const courtRates = workspace.ratePlans.filter((rate) =>
+    court.ratePlanIds.includes(rate.id),
+  );
   return (
     <form action={action} className="court-editor-card hq-card">
       <input name="courtId" type="hidden" value={court.id} />
       <input name="capacity" type="hidden" value={court.capacity} />
+      <input name="ratePlanId" type="hidden" value={court.ratePlanId ?? ""} />
       <header>
         <div>
           <span className="hq-eyebrow">Pricing & rules</span>
@@ -389,22 +407,34 @@ function CourtRulesEditor({
           </Link>
         </header>
         <div className="court-editor-fields">
-          <label className="court-editor-fields__wide">
-            <span>Rate plan</span>
-            <select defaultValue={court.ratePlanId ?? ""} name="ratePlanId">
-              <option value="">Not available for paid checkout</option>
-              {workspace.ratePlans.map((rate) => (
-                <option key={rate.id} value={rate.id}>
-                  {rate.name} ·{" "}
-                  {formatMoney(
-                    rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
-                    rate.currency,
-                  )}{" "}
-                  / {rate.rateUnitMinutes} min
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="court-editor-fields__wide court-rate-summary">
+            <span>
+              <strong>
+                {courtRates.length} rate plan
+                {courtRates.length === 1 ? "" : "s"} attached
+              </strong>
+              <small>
+                Duna compares every plan that applies to the player and date,
+                then uses the lowest qualified price.
+              </small>
+            </span>
+            {courtRates.length > 0 && (
+              <div>
+                {courtRates.map((rate) => (
+                  <span key={rate.id}>
+                    <strong>{rate.name}</strong>
+                    <small>
+                      {formatMoney(
+                        rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
+                        rate.currency,
+                      )}{" "}
+                      / {rate.rateUnitMinutes} min
+                    </small>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <label>
             <span>Minimum duration</span>
             <select
@@ -624,6 +654,10 @@ function CourtAvailabilityEditor({
     blockCourtTimeAction,
     initialState,
   );
+  const [blackoutStart, setBlackoutStart] = useState("");
+  const [blackoutStartTime, setBlackoutStartTime] = useState("09:00");
+  const [blackoutEnd, setBlackoutEnd] = useState("");
+  const [blackoutEndTime, setBlackoutEndTime] = useState("17:00");
 
   function updateBlock(index: number, update: Partial<ScheduleBlock>) {
     setBlocks((current) =>
@@ -635,6 +669,55 @@ function CourtAvailabilityEditor({
 
   return (
     <div className="court-availability-workspace">
+      <AvailabilityCalendar
+        description="See recurring court hours and saved closures together. Select an open day to prepare a new all-day blackout below."
+        getDay={(date, dateKey) => {
+          const selected = court.overrides.some(
+            (override) =>
+              (override.mode === "blocked" ||
+                override.mode === "maintenance") &&
+              dateKey >= dateInTimezone(override.startsAt, timezone) &&
+              dateKey <= dateInTimezone(override.endsAt, timezone),
+          );
+          const available = blocks.some(
+            (block) =>
+              block.weekday === date.getDay() &&
+              (!block.effectiveFrom || dateKey >= block.effectiveFrom) &&
+              (!block.effectiveTo || dateKey <= block.effectiveTo) &&
+              !["blocked", "maintenance"].includes(block.mode),
+          );
+          return {
+            available,
+            selected,
+            tone: available ? "quiet" : "balanced",
+            title: selected
+              ? "This date already has a saved blackout"
+              : "Prepare an all-day court blackout",
+          };
+        }}
+        legend={[
+          {
+            className: "team-calendar-legend__available",
+            label: "Court open",
+          },
+          {
+            className: "team-calendar-legend__unavailable",
+            label: "Court closed",
+          },
+          {
+            className: "team-calendar-legend__blackout",
+            label: "Blackout",
+          },
+        ]}
+        onToggle={(dateKey, selected) => {
+          if (selected) return;
+          setBlackoutStart(dateKey);
+          setBlackoutStartTime("00:00");
+          setBlackoutEnd(dateKey);
+          setBlackoutEndTime("23:59");
+        }}
+        title="Court hours and blackouts"
+      />
       <section className="court-schedule-editor hq-card">
         <header>
           <div>
@@ -831,14 +914,36 @@ function CourtAvailabilityEditor({
         </header>
         <form action={blockAction}>
           <input name="courtId" type="hidden" value={court.id} />
-          <label>
-            <span>Starts</span>
-            <input name="localStartsAt" required type="datetime-local" />
-          </label>
-          <label>
-            <span>Ends</span>
-            <input name="localEndsAt" required type="datetime-local" />
-          </label>
+          <input
+            name="localStartsAt"
+            type="hidden"
+            value={blackoutStart ? `${blackoutStart}T${blackoutStartTime}` : ""}
+          />
+          <input
+            name="localEndsAt"
+            type="hidden"
+            value={blackoutEnd ? `${blackoutEnd}T${blackoutEndTime}` : ""}
+          />
+          <DunaDateTimePicker
+            label="Starts"
+            onChange={(value) => {
+              setBlackoutStart(value.date);
+              setBlackoutStartTime(value.time);
+            }}
+            value={{ date: blackoutStart, time: blackoutStartTime }}
+          />
+          <DunaDateTimePicker
+            label="Ends"
+            minDate={blackoutStart || undefined}
+            minTime={
+              blackoutEnd === blackoutStart ? blackoutStartTime : undefined
+            }
+            onChange={(value) => {
+              setBlackoutEnd(value.date);
+              setBlackoutEndTime(value.time);
+            }}
+            value={{ date: blackoutEnd, time: blackoutEndTime }}
+          />
           <label className="court-blackout-editor__wide">
             <span>Reason</span>
             <input name="reason" placeholder="Net maintenance" required />
@@ -854,7 +959,14 @@ function CourtAvailabilityEditor({
             <ActionNotice state={blockState} />
             <button
               className="hq-button hq-button--secondary"
-              disabled={blockPending}
+              disabled={
+                blockPending ||
+                !blackoutStart ||
+                !blackoutEnd ||
+                blackoutEnd < blackoutStart ||
+                (blackoutEnd === blackoutStart &&
+                  blackoutEndTime <= blackoutStartTime)
+              }
               type="submit"
             >
               {blockPending ? "Blocking time…" : "Block court time"}
@@ -902,7 +1014,9 @@ export function CourtManagementWorkspace({
     activateCourtAction,
     initialState,
   );
-  const rate = workspace.ratePlans.find((item) => item.id === court.ratePlanId);
+  const courtRates = workspace.ratePlans.filter((rate) =>
+    court.ratePlanIds.includes(rate.id),
+  );
   const membershipConfigured = workspace.catalog.some(
     (item) =>
       item.type === "plan" &&
@@ -967,13 +1081,10 @@ export function CourtManagementWorkspace({
         <article>
           <Banknote aria-hidden size={18} />
           <span>
-            <small>Public rate</small>
+            <small>Rate plans</small>
             <strong>
-              {rate
-                ? formatMoney(
-                    rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
-                    rate.currency,
-                  )
+              {courtRates.length > 0
+                ? `${courtRates.length} attached`
                 : "Not attached"}
             </strong>
           </span>
@@ -991,7 +1102,7 @@ export function CourtManagementWorkspace({
           <ActionNotice state={activateState} />
           <button
             className="hq-button hq-button--primary"
-            disabled={activatePending || !court.ratePlanId}
+            disabled={activatePending || court.ratePlanIds.length === 0}
             type="submit"
           >
             {activatePending ? "Activating…" : "Activate court"}

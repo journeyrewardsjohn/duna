@@ -44,6 +44,134 @@ export interface OrderPricing {
   readonly dunaPlusSavingsMinor: number;
 }
 
+export type CourtRateAudience = "everyone" | "selected-users";
+
+export interface CourtRatePlanCandidate {
+  readonly id: string;
+  readonly name: string;
+  readonly baseAmountMinor: number;
+  readonly memberAmountMinor?: number | null;
+  readonly nonMemberAmountMinor?: number | null;
+  readonly rateUnitMinutes: number;
+  readonly audience: CourtRateAudience;
+  readonly eligiblePersonIds?: readonly string[];
+  readonly weekdays?: readonly number[];
+  readonly startsOn?: string | null;
+  readonly endsOn?: string | null;
+  readonly specificDates?: readonly string[];
+}
+
+export interface QualifiedCourtRate {
+  readonly planId: string;
+  readonly planName: string;
+  readonly amountMinor: number;
+  readonly unitAmountMinor: number;
+  readonly rateUnitMinutes: number;
+  readonly priceKind: "member" | "public" | "base";
+}
+
+function weekdayForLocalDate(localDate: string): number | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate)) return undefined;
+  const parsed = new Date(`${localDate}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.getUTCDay();
+}
+
+function courtRateApplies(input: {
+  readonly plan: CourtRatePlanCandidate;
+  readonly localDate: string;
+  readonly personId?: string;
+}): boolean {
+  const { plan } = input;
+  if (
+    plan.audience === "selected-users" &&
+    (!input.personId || !plan.eligiblePersonIds?.includes(input.personId))
+  ) {
+    return false;
+  }
+  if (plan.startsOn && input.localDate < plan.startsOn) return false;
+  if (plan.endsOn && input.localDate > plan.endsOn) return false;
+  if (
+    plan.specificDates?.length &&
+    !plan.specificDates.includes(input.localDate)
+  ) {
+    return false;
+  }
+  const weekday = weekdayForLocalDate(input.localDate);
+  return (
+    weekday !== undefined &&
+    (!plan.weekdays?.length || plan.weekdays.includes(weekday))
+  );
+}
+
+/**
+ * Resolves the price for one player, court, duration, and venue-local date.
+ * Every matching plan is normalized to the requested duration before the
+ * lowest amount wins, so plans with different rate units remain comparable.
+ */
+export function selectLowestQualifiedCourtRate(input: {
+  readonly plans: readonly CourtRatePlanCandidate[];
+  readonly localDate: string;
+  readonly durationMinutes: number;
+  readonly isMember: boolean;
+  readonly personId?: string;
+}): QualifiedCourtRate | undefined {
+  if (
+    !Number.isSafeInteger(input.durationMinutes) ||
+    input.durationMinutes <= 0
+  )
+    throw new Error("durationMinutes must be a positive integer");
+  if (weekdayForLocalDate(input.localDate) === undefined)
+    throw new Error("localDate must be an ISO calendar date");
+
+  return input.plans
+    .filter((plan) => courtRateApplies({ ...input, plan }))
+    .map((plan): QualifiedCourtRate => {
+      assertMinorAmount(plan.baseAmountMinor, `${plan.id}.baseAmountMinor`);
+      if (
+        !Number.isSafeInteger(plan.rateUnitMinutes) ||
+        plan.rateUnitMinutes <= 0
+      )
+        throw new Error(
+          `${plan.id}.rateUnitMinutes must be a positive integer`,
+        );
+      const memberPrice = plan.memberAmountMinor;
+      const publicPrice = plan.nonMemberAmountMinor;
+      if (memberPrice != null)
+        assertMinorAmount(memberPrice, `${plan.id}.memberAmountMinor`);
+      if (publicPrice != null)
+        assertMinorAmount(publicPrice, `${plan.id}.nonMemberAmountMinor`);
+      const priceKind = input.isMember
+        ? memberPrice != null
+          ? "member"
+          : "base"
+        : publicPrice != null
+          ? "public"
+          : "base";
+      const unitAmountMinor = input.isMember
+        ? (memberPrice ?? plan.baseAmountMinor)
+        : (publicPrice ?? plan.baseAmountMinor);
+      return {
+        planId: plan.id,
+        planName: plan.name,
+        unitAmountMinor,
+        rateUnitMinutes: plan.rateUnitMinutes,
+        priceKind,
+        amountMinor: Math.max(
+          unitAmountMinor === 0 ? 0 : 1,
+          Math.round(
+            (unitAmountMinor * input.durationMinutes) / plan.rateUnitMinutes,
+          ),
+        ),
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.amountMinor - right.amountMinor ||
+        left.planName.localeCompare(right.planName) ||
+        left.planId.localeCompare(right.planId),
+    )[0];
+}
+
 export const CONSUMER_FEE_ELIGIBLE_KINDS = [
   "booking",
   "registration",

@@ -12,16 +12,17 @@ import {
   Bell,
   Building2,
   CalendarClock,
+  CalendarRange,
   CalendarOff,
   CalendarPlus,
   Camera,
   Check,
   CircleAlert,
+  CircleDollarSign,
   Clock3,
   CreditCard,
   Gauge,
   ImageIcon,
-  Landmark,
   Mail,
   MapPinned,
   MessageSquareText,
@@ -34,12 +35,20 @@ import {
   UserRoundX,
   UserPlus,
   Users,
+  UsersRound,
   UploadCloud,
   Waves,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, type ReactNode } from "react";
+import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   activateCourtAction,
   blockCourtTimeAction,
@@ -62,6 +71,7 @@ import {
   type OperatorActionState,
 } from "@/app/actions";
 import { AddressEntry } from "./place-address-fields";
+import { DunaDateTimePicker } from "./duna-date-time-picker";
 import {
   createCourtMediaPath,
   createVenueMediaPath,
@@ -764,76 +774,453 @@ function TeamMemberComposer({
 
 export function RatePlanComposer({
   workspace,
+  venueId,
 }: {
   readonly workspace: OperatorWorkspace;
+  readonly venueId?: string;
 }) {
   const [state, action, pending] = useActionState(
     createRatePlanAction,
     initialOperatorActionState,
   );
+  const eligibleCourts = useMemo(
+    () =>
+      workspace.venues
+        .filter((venue) => !venueId || venue.id === venueId)
+        .flatMap((venue) =>
+          venue.courts.map((court) => ({
+            id: court.id,
+            name: court.name,
+            venueName: venue.name,
+          })),
+        ),
+    [venueId, workspace.venues],
+  );
+  const [courtIds, setCourtIds] = useState<Set<string>>(
+    () => new Set(eligibleCourts.map((court) => court.id)),
+  );
+  const [audience, setAudience] = useState<"everyone" | "selected-users">(
+    "everyone",
+  );
+  const [personIds, setPersonIds] = useState<Set<string>>(new Set());
+  const [personQuery, setPersonQuery] = useState("");
+  const [weekdays, setWeekdays] = useState<Set<number>>(
+    new Set([0, 1, 2, 3, 4, 5, 6]),
+  );
+  const [dateMode, setDateMode] = useState<"ongoing" | "range" | "specific">(
+    "ongoing",
+  );
+  const [startsOn, setStartsOn] = useState("");
+  const [endsOn, setEndsOn] = useState("");
+  const [specificDateDraft, setSpecificDateDraft] = useState("");
+  const [specificDates, setSpecificDates] = useState<string[]>([]);
+  const visiblePeople = useMemo(() => {
+    const query = personQuery.trim().toLowerCase();
+    return workspace.people
+      .filter(
+        (person) =>
+          person.status === "active" &&
+          (!query ||
+            person.displayName.toLowerCase().includes(query) ||
+            person.email?.toLowerCase().includes(query)),
+      )
+      .sort((left, right) => {
+        const selectedDifference =
+          Number(personIds.has(right.personId)) -
+          Number(personIds.has(left.personId));
+        return (
+          selectedDifference ||
+          left.displayName.localeCompare(right.displayName)
+        );
+      })
+      .slice(0, 12);
+  }, [personIds, personQuery, workspace.people]);
+  const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function toggleSetValue<T>(
+    setter: (value: Set<T>) => void,
+    current: Set<T>,
+    value: T,
+  ) {
+    const next = new Set(current);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    setter(next);
+  }
+
+  function addSpecificDate() {
+    if (!specificDateDraft || specificDates.includes(specificDateDraft)) return;
+    setSpecificDates((current) => [...current, specificDateDraft].sort());
+    setSpecificDateDraft("");
+  }
+
   return (
-    <section className="hq-card operator-control-card" id="court-pricing">
+    <section
+      className="hq-card operator-control-card rate-plan-builder"
+      id="court-pricing"
+    >
       <header className="hq-card-heading">
         <div>
           <span className="hq-eyebrow">Court pricing</span>
-          <h2>Set what a court costs</h2>
+          <h2>Build a rate plan</h2>
           <p>
-            Create a reusable {workspace.organization.currency} rate, then
-            attach it while adding or editing a court below.
+            Choose the courts, dates, and people this price is for. When more
+            than one plan applies, Duna automatically gives the player the
+            lowest qualified price.
           </p>
         </div>
-        <Landmark aria-hidden size={24} />
+        <CircleDollarSign aria-hidden size={25} />
       </header>
       <form action={action} className="operator-form">
-        <div className="operator-form-grid operator-form-grid--two">
-          <label>
-            <span>Plan name</span>
-            <input
-              name="name"
-              placeholder="Peak court hour"
-              maxLength={80}
+        <input name="audience" type="hidden" value={audience} />
+        <input
+          name="courtIds"
+          type="hidden"
+          value={JSON.stringify([...courtIds])}
+        />
+        <input
+          name="eligiblePersonIds"
+          type="hidden"
+          value={JSON.stringify([...personIds])}
+        />
+        <input
+          name="weekdays"
+          type="hidden"
+          value={JSON.stringify([...weekdays].sort())}
+        />
+        <input
+          name="specificDates"
+          type="hidden"
+          value={JSON.stringify(dateMode === "specific" ? specificDates : [])}
+        />
+        <input
+          name="startsOn"
+          type="hidden"
+          value={dateMode === "range" ? startsOn : ""}
+        />
+        <input
+          name="endsOn"
+          type="hidden"
+          value={dateMode === "range" ? endsOn : ""}
+        />
+
+        <section className="rate-plan-step">
+          <header>
+            <span>1</span>
+            <div>
+              <h3>Name the plan</h3>
+              <p>Use a name staff will recognize when comparing plans.</p>
+            </div>
+          </header>
+          <div className="operator-form-grid operator-form-grid--two">
+            <label>
+              <span>Plan name</span>
+              <input
+                name="name"
+                placeholder="Weekday mornings"
+                maxLength={80}
+                required
+              />
+            </label>
+            <label>
+              <span>Price duration</span>
+              <select name="rateUnitMinutes" defaultValue="60">
+                <option value="30">Per 30 minutes</option>
+                <option value="60">Per hour</option>
+                <option value="90">Per 90 minutes</option>
+                <option value="120">Per 2 hours</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="rate-plan-step">
+          <header>
+            <span>2</span>
+            <div>
+              <h3>Set the prices</h3>
+              <p>Base is the safety net; public and member can override it.</p>
+            </div>
+          </header>
+          <div className="rate-plan-price-guide">
+            <article>
+              <strong>Base price</strong>
+              <p>
+                The required fallback. Duna uses it whenever the matching public
+                or member price is left blank.
+              </p>
+            </article>
+            <article>
+              <strong>Public price</strong>
+              <p>What a non-member pays. Leave blank to use the base price.</p>
+            </article>
+            <article>
+              <strong>Member price</strong>
+              <p>
+                What an active member pays. Leave blank to use the base price.
+              </p>
+            </article>
+          </div>
+          <div className="operator-form-grid operator-form-grid--three rate-plan-prices">
+            <MoneyInput
+              label="Base price"
+              name="baseAmount"
+              defaultValue="0.00"
               required
             />
-          </label>
-          <label>
-            <span>Rate unit</span>
-            <select name="rateUnitMinutes" defaultValue="60">
-              <option value="30">30 minutes</option>
-              <option value="60">60 minutes</option>
-              <option value="90">90 minutes</option>
-              <option value="120">120 minutes</option>
-            </select>
-          </label>
-          <MoneyInput
-            label="Base price"
-            name="baseAmount"
-            defaultValue="0.00"
-            required
-          />
-          <MoneyInput label="Member price" name="memberAmount" />
-          <MoneyInput label="Public price" name="nonMemberAmount" />
-        </div>
-        <label className="operator-confirmation">
+            <MoneyInput
+              label="Public price · optional"
+              name="nonMemberAmount"
+            />
+            <MoneyInput label="Member price · optional" name="memberAmount" />
+          </div>
+          <div className="rate-plan-lowest-rule">
+            <Sparkles aria-hidden size={17} />
+            <span>
+              <strong>Lowest qualified price wins</strong>
+              If this overlaps another plan, Duna compares the final price for
+              that player, court, date, and duration—and applies the lowest one.
+            </span>
+          </div>
+        </section>
+
+        <section className="rate-plan-step">
+          <header>
+            <span>3</span>
+            <div>
+              <h3>Choose where and when it applies</h3>
+              <p>Combine courts, weekdays, and an optional date boundary.</p>
+            </div>
+          </header>
+          <div className="rate-plan-subsection">
+            <strong>Courts</strong>
+            <div className="rate-plan-choice-grid">
+              {eligibleCourts.map((court) => (
+                <label key={court.id}>
+                  <input
+                    checked={courtIds.has(court.id)}
+                    onChange={() =>
+                      toggleSetValue(setCourtIds, courtIds, court.id)
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{court.name}</strong>
+                    {!venueId && <small>{court.venueName}</small>}
+                  </span>
+                </label>
+              ))}
+              {eligibleCourts.length === 0 && (
+                <p className="rate-plan-empty-choice">
+                  Add a court first, then return here to attach pricing.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="rate-plan-subsection">
+            <strong>Days of the week</strong>
+            <div className="rate-plan-weekdays">
+              {weekdayNames.map((day, weekday) => (
+                <button
+                  aria-pressed={weekdays.has(weekday)}
+                  key={day}
+                  onClick={() => toggleSetValue(setWeekdays, weekdays, weekday)}
+                  type="button"
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="rate-plan-subsection">
+            <strong>Date coverage</strong>
+            <div className="rate-plan-segmented" role="group">
+              {(
+                [
+                  ["ongoing", "Ongoing"],
+                  ["range", "Date range"],
+                  ["specific", "Certain dates"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  aria-pressed={dateMode === value}
+                  key={value}
+                  onClick={() => setDateMode(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {dateMode === "range" && (
+              <div className="rate-plan-date-range">
+                <DunaDateTimePicker
+                  dateOnly
+                  label="Starts"
+                  onChange={(value) => setStartsOn(value.date)}
+                  value={{ date: startsOn, time: "00:00" }}
+                />
+                <span aria-hidden>through</span>
+                <DunaDateTimePicker
+                  dateOnly
+                  label="Ends"
+                  minDate={startsOn || undefined}
+                  onChange={(value) => setEndsOn(value.date)}
+                  value={{ date: endsOn, time: "23:59" }}
+                />
+              </div>
+            )}
+            {dateMode === "specific" && (
+              <div className="rate-plan-specific-dates">
+                <div>
+                  <DunaDateTimePicker
+                    dateOnly
+                    label="Add a date"
+                    onChange={(value) => setSpecificDateDraft(value.date)}
+                    value={{ date: specificDateDraft, time: "00:00" }}
+                  />
+                  <button
+                    className="hq-button hq-button--secondary hq-button--compact"
+                    disabled={!specificDateDraft}
+                    onClick={addSpecificDate}
+                    type="button"
+                  >
+                    <Plus aria-hidden size={15} /> Add date
+                  </button>
+                </div>
+                <div className="rate-plan-date-chips">
+                  {specificDates.map((date) => (
+                    <span key={date}>
+                      <CalendarRange aria-hidden size={14} />
+                      {new Intl.DateTimeFormat("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      }).format(new Date(`${date}T12:00:00`))}
+                      <button
+                        aria-label={`Remove ${date}`}
+                        onClick={() =>
+                          setSpecificDates((current) =>
+                            current.filter((candidate) => candidate !== date),
+                          )
+                        }
+                        type="button"
+                      >
+                        <X aria-hidden size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rate-plan-step">
+          <header>
+            <span>4</span>
+            <div>
+              <h3>Choose who qualifies</h3>
+              <p>Make this visible to everyone or only named Duna users.</p>
+            </div>
+          </header>
+          <div className="rate-plan-audience-options">
+            <button
+              aria-pressed={audience === "everyone"}
+              onClick={() => setAudience("everyone")}
+              type="button"
+            >
+              <Users aria-hidden size={19} />
+              <span>
+                <strong>Everyone</strong>
+                <small>Any eligible booker can qualify.</small>
+              </span>
+            </button>
+            <button
+              aria-pressed={audience === "selected-users"}
+              onClick={() => setAudience("selected-users")}
+              type="button"
+            >
+              <UsersRound aria-hidden size={19} />
+              <span>
+                <strong>Selected users</strong>
+                <small>Only the people you choose below.</small>
+              </span>
+            </button>
+          </div>
+          {audience === "selected-users" && (
+            <div className="rate-plan-people-picker">
+              <input
+                aria-label="Search people"
+                onChange={(event) => setPersonQuery(event.target.value)}
+                placeholder="Search players, members, and staff…"
+                type="search"
+                value={personQuery}
+              />
+              <div>
+                {visiblePeople.map((person) => (
+                  <label key={person.personId}>
+                    <input
+                      checked={personIds.has(person.personId)}
+                      onChange={() =>
+                        toggleSetValue(setPersonIds, personIds, person.personId)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{person.displayName}</strong>
+                      <small>
+                        {person.membershipName ??
+                          person.roles.join(" · ") ??
+                          "Duna user"}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <small>{personIds.size} selected</small>
+            </div>
+          )}
+        </section>
+
+        <label className="operator-confirmation rate-plan-review">
           <input type="checkbox" name="confirmed" value="true" required />
           <span>
-            <strong>I reviewed these exact prices.</strong>
-            Price creation is audit-logged and never delegated to Duna AI.
+            <strong>I reviewed the prices and eligibility.</strong>
+            Duna will audit this plan and always apply the lowest price a user
+            qualifies for.
           </span>
         </label>
         <div className="operator-form-footer">
           <ActionNotice state={state} />
-          <SubmitButton pending={pending}>
+          <SubmitButton
+            disabled={
+              courtIds.size === 0 ||
+              weekdays.size === 0 ||
+              (audience === "selected-users" && personIds.size === 0) ||
+              (dateMode === "range" &&
+                (!startsOn || !endsOn || endsOn < startsOn)) ||
+              (dateMode === "specific" && specificDates.length === 0)
+            }
+            pending={pending}
+          >
             <Plus aria-hidden size={16} /> Create rate plan
           </SubmitButton>
         </div>
       </form>
-      {workspace.ratePlans.length > 0 && (
+      {workspace.ratePlans.length > 0 && !venueId && (
         <div className="operator-compact-list">
           {workspace.ratePlans.map((rate) => (
             <article key={rate.id}>
               <span>
                 <strong>{rate.name}</strong>
-                <small>{rate.rateUnitMinutes} minute unit</small>
+                <small>
+                  {rate.courtIds.length} court
+                  {rate.courtIds.length === 1 ? "" : "s"} ·{" "}
+                  {rate.audience === "selected-users"
+                    ? `${rate.eligiblePersonIds.length} selected users`
+                    : "everyone"}
+                </small>
               </span>
               <Numeric>
                 {formatMoney(

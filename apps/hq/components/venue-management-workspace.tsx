@@ -672,27 +672,39 @@ function VenueCourts({
           <Badge>{workspace.organization.currency}</Badge>
         </header>
         <div>
-          {workspace.ratePlans.map((rate) => (
-            <article key={rate.id}>
-              <span>
-                <Clock3 aria-hidden size={17} />
-                <strong>{rate.name}</strong>
-                <small>{rate.rateUnitMinutes} minute unit</small>
-              </span>
-              <Numeric>
-                {formatMoney(
-                  rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
-                  rate.currency,
-                )}
-              </Numeric>
-            </article>
-          ))}
+          {workspace.ratePlans
+            .filter((rate) =>
+              rate.courtIds.some((courtId) =>
+                venue.courts.some((court) => court.id === courtId),
+              ),
+            )
+            .map((rate) => (
+              <article key={rate.id}>
+                <span>
+                  <Clock3 aria-hidden size={17} />
+                  <strong>{rate.name}</strong>
+                  <small>
+                    {rate.courtIds.length} court
+                    {rate.courtIds.length === 1 ? "" : "s"} ·{" "}
+                    {rate.audience === "selected-users"
+                      ? `${rate.eligiblePersonIds.length} selected users`
+                      : "everyone"}
+                  </small>
+                </span>
+                <Numeric>
+                  {formatMoney(
+                    rate.nonMemberAmountMinor ?? rate.baseAmountMinor,
+                    rate.currency,
+                  )}
+                </Numeric>
+              </article>
+            ))}
         </div>
         <details className="venue-rate-plans__creator">
           <summary>
             <Plus aria-hidden size={16} /> Create a rate plan
           </summary>
-          <RatePlanComposer workspace={workspace} />
+          <RatePlanComposer venueId={venue.id} workspace={workspace} />
         </details>
       </section>
     </div>

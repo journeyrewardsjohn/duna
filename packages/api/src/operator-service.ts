@@ -6,6 +6,7 @@ import {
   communicationUsagePeriods,
   consents,
   courtBookings,
+  courtRatePlanAssignments,
   courts,
   divisions,
   eventBlueprints,
@@ -32,6 +33,7 @@ import {
   people,
   programs,
   ratePlans,
+  ratePlanEligiblePeople,
   registrations,
   scheduleBlocks,
   scheduleOverrides,
@@ -831,6 +833,11 @@ export function loadDemoOperatorWorkspace(
         memberAmountMinor: 4_800,
         nonMemberAmountMinor: 6_000,
         rateUnitMinutes: 60,
+        audience: "everyone",
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        specificDates: [],
+        courtIds: [courtOneId, courtTwoId],
+        eligiblePersonIds: [],
       },
     ],
     venues: [
@@ -876,6 +883,7 @@ export function loadDemoOperatorWorkspace(
             status: "active",
             bookingPolicy: "public",
             ratePlanId,
+            ratePlanIds: [ratePlanId],
             minimumDurationMinutes: 60,
             maximumDurationMinutes: 120,
             durationOptionsMinutes: [60, 90, 120],
@@ -912,6 +920,7 @@ export function loadDemoOperatorWorkspace(
             status: "active",
             bookingPolicy: "members",
             ratePlanId,
+            ratePlanIds: [ratePlanId],
             minimumDurationMinutes: 60,
             maximumDurationMinutes: 120,
             durationOptionsMinutes: [60, 90, 120],
@@ -1251,6 +1260,8 @@ export async function loadOperatorWorkspace(
   const thirtyDaysAhead = new Date(now.getTime() + 30 * 24 * 60 * 60_000);
   const [
     ratePlanRows,
+    ratePlanCourtRows,
+    ratePlanPersonRows,
     venueRows,
     courtRows,
     scheduleRows,
@@ -1279,6 +1290,25 @@ export async function loadOperatorWorkspace(
       .from(ratePlans)
       .where(eq(ratePlans.organizationId, organizationId))
       .orderBy(asc(ratePlans.name)),
+    database
+      .select({
+        ratePlanId: courtRatePlanAssignments.ratePlanId,
+        courtId: courtRatePlanAssignments.courtId,
+      })
+      .from(courtRatePlanAssignments)
+      .innerJoin(
+        ratePlans,
+        eq(courtRatePlanAssignments.ratePlanId, ratePlans.id),
+      )
+      .where(eq(ratePlans.organizationId, organizationId)),
+    database
+      .select({
+        ratePlanId: ratePlanEligiblePeople.ratePlanId,
+        personId: ratePlanEligiblePeople.personId,
+      })
+      .from(ratePlanEligiblePeople)
+      .innerJoin(ratePlans, eq(ratePlanEligiblePeople.ratePlanId, ratePlans.id))
+      .where(eq(ratePlans.organizationId, organizationId)),
     database
       .select()
       .from(venues)
@@ -1997,6 +2027,18 @@ export async function loadOperatorWorkspace(
       memberAmountMinor: row.memberAmountMinor ?? undefined,
       nonMemberAmountMinor: row.nonMemberAmountMinor ?? undefined,
       rateUnitMinutes: row.rateUnitMinutes,
+      audience:
+        row.audience === "selected-users" ? "selected-users" : "everyone",
+      weekdays: row.weekdays,
+      startsOn: row.startsOn ?? undefined,
+      endsOn: row.endsOn ?? undefined,
+      specificDates: row.specificDates,
+      courtIds: ratePlanCourtRows
+        .filter((assignment) => assignment.ratePlanId === row.id)
+        .map((assignment) => assignment.courtId),
+      eligiblePersonIds: ratePlanPersonRows
+        .filter((assignment) => assignment.ratePlanId === row.id)
+        .map((assignment) => assignment.personId),
     })),
     venues: venueRows.map((venue) => {
       const planningWeather = venuePlanningWeather.get(venue.id);
@@ -2054,6 +2096,14 @@ export async function loadOperatorWorkspace(
                 ? court.bookingPolicy
                 : "public",
             ratePlanId: court.ratePlanId ?? undefined,
+            ratePlanIds: [
+              ...new Set([
+                ...(court.ratePlanId ? [court.ratePlanId] : []),
+                ...ratePlanCourtRows
+                  .filter((assignment) => assignment.courtId === court.id)
+                  .map((assignment) => assignment.ratePlanId),
+              ]),
+            ],
             minimumDurationMinutes: court.minimumDurationMinutes,
             maximumDurationMinutes: court.maximumDurationMinutes,
             durationOptionsMinutes: court.durationOptionsMinutes,
@@ -4520,6 +4570,13 @@ export async function createRatePlan(input: {
   readonly memberAmountMinor?: number;
   readonly nonMemberAmountMinor?: number;
   readonly rateUnitMinutes: number;
+  readonly audience: "everyone" | "selected-users";
+  readonly weekdays: readonly number[];
+  readonly startsOn?: string;
+  readonly endsOn?: string;
+  readonly specificDates: readonly string[];
+  readonly courtIds: readonly string[];
+  readonly eligiblePersonIds: readonly string[];
   readonly confirmed: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -4534,6 +4591,102 @@ export async function createRatePlan(input: {
   }
   const organizationId = requireOrganization(input.actor);
   const organization = await organizationRow(organizationId);
+  const weekdays = [...new Set(input.weekdays)].sort(
+    (left, right) => left - right,
+  );
+  const specificDates = [...new Set(input.specificDates)].sort();
+  const courtIds = [...new Set(input.courtIds)];
+  const eligiblePersonIds = [...new Set(input.eligiblePersonIds)];
+  if (
+    weekdays.length === 0 ||
+    weekdays.some((weekday) => weekday < 0 || weekday > 6)
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Choose at least one day of the week for this rate plan.",
+    );
+  }
+  if (
+    (input.startsOn && !/^\d{4}-\d{2}-\d{2}$/.test(input.startsOn)) ||
+    (input.endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(input.endsOn)) ||
+    (input.startsOn && input.endsOn && input.endsOn < input.startsOn) ||
+    specificDates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))
+  ) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Choose a valid date, date range, or ongoing schedule.",
+    );
+  }
+  if (input.audience === "selected-users" && eligiblePersonIds.length === 0) {
+    throw new OperatorServiceError(
+      "INVALID_CONFIGURATION",
+      "Select at least one person for this private rate plan.",
+    );
+  }
+  const database = getDatabase();
+  if (courtIds.length > 0) {
+    const ownedCourts = await database
+      .select({ id: courts.id })
+      .from(courts)
+      .innerJoin(venues, eq(courts.venueId, venues.id))
+      .where(
+        and(
+          inArray(courts.id, courtIds),
+          eq(venues.organizationId, organizationId),
+        ),
+      );
+    if (ownedCourts.length !== courtIds.length) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Choose courts owned by this organization.",
+      );
+    }
+  }
+  if (eligiblePersonIds.length > 0) {
+    const [participantPeople, staffPeople, memberPeople] = await Promise.all([
+      database
+        .select({ personId: organizationParticipants.personId })
+        .from(organizationParticipants)
+        .where(
+          and(
+            eq(organizationParticipants.organizationId, organizationId),
+            inArray(organizationParticipants.personId, eligiblePersonIds),
+          ),
+        ),
+      database
+        .select({ personId: organizationMemberships.personId })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.organizationId, organizationId),
+            inArray(organizationMemberships.personId, eligiblePersonIds),
+          ),
+        ),
+      database
+        .select({ personId: memberships.personId })
+        .from(memberships)
+        .innerJoin(membershipTiers, eq(memberships.tierId, membershipTiers.id))
+        .where(
+          and(
+            eq(membershipTiers.organizationId, organizationId),
+            inArray(memberships.personId, eligiblePersonIds),
+          ),
+        ),
+    ]);
+    const connectedPersonIds = new Set(
+      [...participantPeople, ...staffPeople, ...memberPeople].map(
+        (row) => row.personId,
+      ),
+    );
+    if (
+      eligiblePersonIds.some((personId) => !connectedPersonIds.has(personId))
+    ) {
+      throw new OperatorServiceError(
+        "INVALID_CONFIGURATION",
+        "Select people connected to this organization.",
+      );
+    }
+  }
   const id = crypto.randomUUID();
   const values = {
     name: input.name.trim(),
@@ -4542,28 +4695,46 @@ export async function createRatePlan(input: {
     memberAmountMinor: input.memberAmountMinor,
     nonMemberAmountMinor: input.nonMemberAmountMinor,
     rateUnitMinutes: input.rateUnitMinutes,
+    audience: input.audience,
+    weekdays,
+    startsOn: input.startsOn,
+    endsOn: input.endsOn,
+    specificDates,
   };
-  const database = getDatabase();
-  await database.batch([
-    database.insert(ratePlans).values({
+  const tx = getTransactionalDatabase();
+  await tx.transaction(async (transaction) => {
+    await transaction.insert(ratePlans).values({
       id,
       organizationId,
       ...values,
-    }),
-    database.insert(auditLog).values({
+    });
+    if (courtIds.length > 0) {
+      await transaction
+        .insert(courtRatePlanAssignments)
+        .values(courtIds.map((courtId) => ({ courtId, ratePlanId: id })));
+    }
+    if (input.audience === "selected-users") {
+      await transaction.insert(ratePlanEligiblePeople).values(
+        eligiblePersonIds.map((personId) => ({
+          ratePlanId: id,
+          personId,
+        })),
+      );
+    }
+    await transaction.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
       actorType: "person",
       action: "rate-plan.created",
       entityType: "rate-plan",
       entityId: id,
-      afterHash: stableHash(values),
+      afterHash: stableHash({ ...values, courtIds, eligiblePersonIds }),
       reason: "Operator confirmed and created an auditable court rate plan.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
-    }),
-  ]);
+    });
+  });
   return { id, entity: "rate-plan", status: "active" };
 }
 
@@ -5463,7 +5634,13 @@ export async function activateCourt(input: {
       "Court belongs to another organization.",
     );
   }
-  if (row.court.bookingPolicy !== "none" && !row.court.ratePlanId) {
+  const assignedRatePlan = row.court.ratePlanId
+    ? { ratePlanId: row.court.ratePlanId }
+    : await database.query.courtRatePlanAssignments.findFirst({
+        where: eq(courtRatePlanAssignments.courtId, input.courtId),
+        columns: { ratePlanId: true },
+      });
+  if (row.court.bookingPolicy !== "none" && !assignedRatePlan) {
     throw new OperatorServiceError(
       "INVALID_CONFIGURATION",
       "Attach a rate plan before making this court bookable.",

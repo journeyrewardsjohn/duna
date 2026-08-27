@@ -2029,6 +2029,17 @@ export const ratePlans = pgTable(
     memberAmountMinor: integer("member_amount_minor"),
     nonMemberAmountMinor: integer("non_member_amount_minor"),
     rateUnitMinutes: integer("rate_unit_minutes").notNull().default(60),
+    audience: varchar("audience", { length: 24 }).notNull().default("everyone"),
+    weekdays: integer("weekdays")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[0, 1, 2, 3, 4, 5, 6]::integer[]`),
+    startsOn: date("starts_on", { mode: "string" }),
+    endsOn: date("ends_on", { mode: "string" }),
+    specificDates: date("specific_dates", { mode: "string" })
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::date[]`),
     dynamicFloorMinor: integer("dynamic_floor_minor"),
     dynamicCeilingMinor: integer("dynamic_ceiling_minor"),
     dailyChangeCapBps: integer("daily_change_cap_bps"),
@@ -2041,6 +2052,35 @@ export const ratePlans = pgTable(
       sql`${table.baseAmountMinor} >= 0 AND (${table.memberAmountMinor} IS NULL OR ${table.memberAmountMinor} >= 0) AND (${table.nonMemberAmountMinor} IS NULL OR ${table.nonMemberAmountMinor} >= 0)`,
     ),
     check("rate_plan_unit_positive", sql`${table.rateUnitMinutes} > 0`),
+    check(
+      "rate_plan_audience_valid",
+      sql`${table.audience} IN ('everyone', 'selected-users')`,
+    ),
+    check(
+      "rate_plan_weekdays_valid",
+      sql`cardinality(${table.weekdays}) > 0 AND 0 <= ALL(${table.weekdays}) AND 6 >= ALL(${table.weekdays})`,
+    ),
+    check(
+      "rate_plan_date_window_valid",
+      sql`${table.endsOn} IS NULL OR ${table.startsOn} IS NULL OR ${table.endsOn} >= ${table.startsOn}`,
+    ),
+  ],
+);
+
+export const ratePlanEligiblePeople = pgTable(
+  "rate_plan_eligible_people",
+  {
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.ratePlanId, table.personId] }),
+    index("rate_plan_eligible_person_idx").on(table.personId),
   ],
 );
 
@@ -2159,6 +2199,23 @@ export const courts = pgTable(
       "court_duration_options_valid",
       sql`cardinality(${table.durationOptionsMinutes}) > 0 AND 0 < ALL(${table.durationOptionsMinutes})`,
     ),
+  ],
+);
+
+export const courtRatePlanAssignments = pgTable(
+  "court_rate_plan_assignments",
+  {
+    courtId: uuid("court_id")
+      .notNull()
+      .references(() => courts.id, { onDelete: "cascade" }),
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.courtId, table.ratePlanId] }),
+    index("court_rate_plan_rate_idx").on(table.ratePlanId),
   ],
 );
 

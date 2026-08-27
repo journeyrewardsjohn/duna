@@ -3652,6 +3652,13 @@ export const operatorRatePlanSchema = z.object({
   memberAmountMinor: z.number().int().nonnegative().optional(),
   nonMemberAmountMinor: z.number().int().nonnegative().optional(),
   rateUnitMinutes: z.number().int().positive(),
+  audience: z.enum(["everyone", "selected-users"]),
+  weekdays: z.array(z.number().int().min(0).max(6)).min(1).readonly(),
+  startsOn: z.iso.date().optional(),
+  endsOn: z.iso.date().optional(),
+  specificDates: z.array(z.iso.date()).readonly(),
+  courtIds: z.array(z.string().uuid()).readonly(),
+  eligiblePersonIds: z.array(z.string().uuid()).readonly(),
 });
 
 export const operatorAvailabilityBlockSchema = z.object({
@@ -3709,6 +3716,7 @@ export const operatorCourtSchema = z.object({
   status: z.enum(["draft", "active", "maintenance", "seasonal", "closed"]),
   bookingPolicy: z.enum(["public", "members", "tiers", "staff", "none"]),
   ratePlanId: z.string().uuid().optional(),
+  ratePlanIds: z.array(z.string().uuid()).readonly(),
   minimumDurationMinutes: z.number().int().positive(),
   maximumDurationMinutes: z.number().int().positive(),
   durationOptionsMinutes: z.array(z.number().int().positive()).readonly(),
@@ -6583,6 +6591,9 @@ export const courtCheckoutQuoteSchema = z.object({
   shareCount: z.number().int().positive(),
   currency: currencySchema,
   rateUnitMinutes: z.number().int().positive(),
+  ratePlanId: z.string().uuid(),
+  ratePlanName: z.string(),
+  priceKind: z.enum(["base", "public", "member"]),
   memberRateApplied: z.boolean(),
   dunaPlusApplied: z.boolean(),
 });

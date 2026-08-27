@@ -58,6 +58,7 @@ async function startConfirmedCourtCheckout(input: ConfirmedCourtCheckoutInput) {
     actor: input.actor,
     subjectPersonId: input.subjectPersonId,
     courtId: input.courtId,
+    localStartsAt: input.localStartsAt,
     durationMinutes: input.durationMinutes,
     paymentMode: input.paymentMode,
     participants: input.participants,

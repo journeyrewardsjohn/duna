@@ -311,18 +311,9 @@ export function CourtBookingPanel({
   }, [policy?.requireFullScroll, reviewOpen]);
 
   const publicEstimate = useMemo(() => {
-    if (!selectedCourt?.pricing) return undefined;
-    const unitAmount =
-      selectedCourt.pricing.nonMemberAmountMinor ??
-      selectedCourt.pricing.baseAmountMinor;
-    const subtotalMinor = Math.max(
-      unitAmount === 0 ? 0 : 1,
-      Math.round(
-        (unitAmount * durationMinutes) / selectedCourt.pricing.rateUnitMinutes,
-      ),
-    );
+    if (!selectedCourt || !selectedSlot?.price) return undefined;
     return priceConsumerOrder({
-      currency: selectedCourt.pricing.currency,
+      currency: selectedSlot.price.currency,
       isDunaPlus,
       items: [
         {
@@ -330,11 +321,11 @@ export function CourtBookingPanel({
           kind: "booking",
           description: selectedCourt.name,
           quantity: 1,
-          unitAmountMinor: subtotalMinor,
+          unitAmountMinor: selectedSlot.price.amountMinor,
         },
       ],
     });
-  }, [durationMinutes, isDunaPlus, selectedCourt]);
+  }, [isDunaPlus, selectedCourt, selectedSlot?.price]);
 
   useEffect(() => {
     if (authenticationHref || !selectedCourt || !selectedSlot) {
@@ -348,6 +339,7 @@ export function CourtBookingPanel({
     void quoteCourtCheckoutAction({
       courtId: selectedCourt.id,
       subjectPersonId: selectedSubject?.id,
+      localStartsAt: selectedSlot.localStartsAt,
       durationMinutes,
       paymentMode,
       participants: players.map((player) => ({
@@ -381,6 +373,7 @@ export function CourtBookingPanel({
     players,
     selectedCourt?.id,
     selectedSlot?.courtId,
+    selectedSlot?.localStartsAt,
     selectedSubject?.id,
   ]);
 
@@ -1358,6 +1351,11 @@ export function CourtBookingPanel({
                       )
                     : formatMoney(estimate.totalMinor, estimate.currency)}
                 </strong>
+                {quote && (
+                  <small>
+                    {quote.ratePlanName} · {quote.priceKind} price applied
+                  </small>
+                )}
               </span>
               {dunaPlusApplied && (
                 <Badge tone="positive">
