@@ -1112,11 +1112,12 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("radio", { name: "Private restrooms" }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Courts & rates/ }).click();
+  const venueCourtList = page.locator(".venue-court-list");
   await expect(
-    page.getByText("Championship Court", { exact: true }),
+    venueCourtList.getByText("Championship Court", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Community Court", { exact: true }),
+    venueCourtList.getByText("Community Court", { exact: true }),
   ).toBeVisible();
   await clickAndWaitForUrl(
     page,
@@ -1142,9 +1143,13 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await page
     .getByRole("button", { name: "Pricing & rules", exact: true })
     .click();
-  await expect(page.getByLabel("Rate plan")).toHaveValue(
-    "10000000-0000-4000-8000-000000000102",
-  );
+  const courtRateSummary = page.locator(".court-rate-summary");
+  await expect(
+    courtRateSummary.getByText("1 rate plan attached", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    courtRateSummary.getByText("Standard court time", { exact: true }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto(
