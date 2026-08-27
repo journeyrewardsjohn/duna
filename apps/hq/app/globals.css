@@ -31447,6 +31447,493 @@ body {
   margin: 0 auto 0 0;
 }
 
+.admin-org-plan-policy,
+.admin-org-video-policy {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.admin-org-plan-policy .hq-card-heading p,
+.admin-org-video-policy .hq-card-heading p {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.5;
+  margin: 0.35rem 0 0;
+  max-width: 760px;
+}
+
+.admin-org-plan-policy__summary {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-org-plan-policy__summary > div {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem;
+}
+
+.admin-org-plan-policy__summary small,
+.admin-org-plan-card > small,
+.admin-org-video-policy__meters small {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 12px);
+}
+
+.admin-org-plan-policy__summary strong {
+  font-size: max(0.8rem, 13px);
+  text-transform: capitalize;
+}
+
+.admin-org-plan-policy__form,
+.admin-org-video-policy__form {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 1rem;
+  padding-top: 1.1rem;
+}
+
+.admin-org-plan-policy__form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-org-plan-policy__form legend,
+.admin-org-plan-policy__form label > span:first-child,
+.admin-org-video-policy__form label > span:first-child {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  font-weight: 750;
+  margin-bottom: 0.45rem;
+}
+
+.admin-org-plan-policy__access {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-org-plan-policy__access legend {
+  grid-column: 1 / -1;
+}
+
+.admin-org-plan-policy__access label {
+  align-items: flex-start;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.9rem;
+}
+
+.admin-org-plan-policy__access label:has(input:checked) {
+  border-color: var(--color-aqua);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-aqua), transparent 82%);
+}
+
+.admin-org-plan-policy__access label span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.admin-org-plan-policy__access small,
+.admin-org-stripe-policy small,
+.admin-org-stripe-policy > p {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 12px);
+  line-height: 1.45;
+}
+
+.admin-org-plan-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-org-plan-grid > legend {
+  grid-column: 1 / -1;
+}
+
+.admin-org-plan-card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 275px;
+  padding: 1rem;
+  position: relative;
+}
+
+.admin-org-plan-card--selected {
+  background: color-mix(in srgb, var(--color-warning), transparent 92%);
+  border-color: color-mix(in srgb, var(--color-warning), var(--color-aqua) 38%);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--color-warning), transparent 80%);
+}
+
+.admin-org-plan-card > input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.admin-org-plan-card:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--color-aqua), transparent 65%);
+  outline-offset: 2px;
+}
+
+.admin-org-plan-card__check {
+  align-items: center;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 50%;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  width: 28px;
+}
+
+.admin-org-plan-card--selected .admin-org-plan-card__check {
+  background: var(--color-aqua);
+  color: white;
+}
+
+.admin-org-plan-card > strong {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  margin: 0.5rem 0 0;
+}
+
+.admin-org-plan-card__price {
+  align-items: baseline;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 800;
+  gap: 0.3rem;
+  margin-top: 1rem;
+}
+
+.admin-org-plan-card__price small {
+  color: var(--color-bone-muted);
+  font-family: var(--font-body);
+  font-size: max(0.72rem, 12px);
+  font-weight: 500;
+}
+
+.admin-org-plan-card__annual {
+  color: var(--color-bone);
+  font-size: max(0.72rem, 12px);
+  font-weight: 750;
+  margin-top: 0.25rem;
+}
+
+.admin-org-plan-card p {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 12px);
+  line-height: 1.45;
+  margin: 0.7rem 0;
+}
+
+.admin-org-plan-card ul {
+  display: grid;
+  font-size: max(0.72rem, 12px);
+  gap: 0.35rem;
+  list-style: none;
+  margin: auto 0 0;
+  padding: 0;
+}
+
+.admin-org-plan-card li::before {
+  color: var(--color-positive);
+  content: "✓";
+  font-weight: 900;
+  margin-right: 0.4rem;
+}
+
+.admin-org-stripe-policy {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.admin-org-stripe-policy > header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.admin-org-stripe-policy > header > div,
+.admin-org-stripe-policy > header > div > span {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.admin-org-stripe-policy > header > div > span {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.admin-org-stripe-policy .operator-switch {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.6rem;
+  max-width: 340px;
+}
+
+.admin-org-stripe-policy .operator-switch > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-org-stripe-policy > p {
+  margin: 0;
+}
+
+.admin-org-stripe-policy__discount {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 0.8rem;
+}
+
+.admin-org-stripe-policy__discount label,
+.admin-org-plan-policy__reason,
+.admin-org-video-policy__fields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-org-stripe-policy__discount > p {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 12px);
+  grid-column: 1 / -1;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.admin-org-plan-policy__form
+  :is(input:not([type="radio"], [type="checkbox"]), select, textarea),
+.admin-org-video-policy__form
+  :is(input:not([type="radio"], [type="checkbox"]), select, textarea),
+.admin-org-video-grant__revoke input:not([type="checkbox"]) {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 12px;
+  color: var(--color-bone);
+  min-height: 46px;
+  padding: 0.72rem 0.8rem;
+  width: 100%;
+}
+
+.admin-org-plan-policy__form textarea,
+.admin-org-video-policy__form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.admin-org-stripe-policy__error {
+  align-items: center;
+  color: var(--color-danger) !important;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.admin-org-plan-policy__confirm,
+.admin-org-video-policy__confirm {
+  align-items: flex-start;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: max(0.75rem, 12px);
+  gap: 0.55rem;
+  line-height: 1.45;
+}
+
+.admin-org-plan-policy__confirm span,
+.admin-org-video-policy__confirm span {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.admin-org-plan-policy__form > footer,
+.admin-org-video-policy__form > footer {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.admin-org-plan-policy__form > footer .operator-action-notice,
+.admin-org-video-policy__form > footer .operator-action-notice {
+  margin: 0 auto 0 0;
+}
+
+.admin-org-video-policy__scope-rule {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--color-aqua), transparent 91%);
+  border: 1px solid color-mix(in srgb, var(--color-aqua), transparent 72%);
+  border-radius: 16px;
+  display: flex;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.admin-org-video-policy__scope-rule svg {
+  color: var(--color-aqua);
+  flex: 0 0 auto;
+}
+
+.admin-org-video-policy__scope-rule p {
+  color: var(--color-bone-muted);
+  font-size: max(0.75rem, 12px);
+  line-height: 1.5;
+  margin: 0.3rem 0 0;
+}
+
+.admin-org-video-policy__meters {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-org-video-policy__meters > article {
+  align-items: start;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.55rem 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 1rem;
+}
+
+.admin-org-video-policy__meters > article > svg {
+  color: var(--color-warning);
+}
+
+.admin-org-video-policy__meters > article > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.admin-org-video-policy__meters > article > span strong {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+}
+
+.admin-org-video-policy__meters > article > small {
+  grid-column: 2;
+  line-height: 1.45;
+}
+
+.admin-org-video-policy__fields {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 0.45fr));
+}
+
+.admin-org-video-policy__reason {
+  grid-column: 1 / -1;
+}
+
+.admin-org-video-policy__grants {
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0;
+  padding-top: 1rem;
+}
+
+.admin-org-video-policy__grants > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 0.7rem;
+}
+
+.admin-org-video-policy__grants h3 {
+  margin: 0.2rem 0 0;
+}
+
+.admin-org-video-grant {
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.9rem 0;
+}
+
+.admin-org-video-grant__identity {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.admin-org-video-grant__identity > span {
+  align-items: center;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  display: flex;
+  flex: 0 0 auto;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.admin-org-video-grant__identity > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.admin-org-video-grant__identity small {
+  color: var(--color-bone-muted);
+  font-size: max(0.72rem, 12px);
+  line-height: 1.4;
+}
+
+.admin-org-video-grant__revoke {
+  align-items: center;
+  display: grid;
+  gap: 0.6rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+}
+
+.admin-org-video-grant__revoke label {
+  align-items: center;
+  color: var(--color-bone-muted);
+  display: flex;
+  font-size: max(0.72rem, 12px);
+  gap: 0.35rem;
+}
+
+.admin-org-video-grant__revoke .operator-action-notice {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .admin-entity-list article {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -31560,6 +32047,15 @@ body {
   .player-directory-results {
     grid-template-columns: 1fr;
   }
+
+  .admin-org-video-policy__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-org-video-policy__target,
+  .admin-org-video-policy__reason {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 900px) {
@@ -31585,6 +32081,33 @@ body {
   .admin-org-fee-policy__confirm,
   .admin-org-fee-policy__form > footer {
     grid-column: auto;
+  }
+
+  .admin-org-plan-policy__summary,
+  .admin-org-plan-grid,
+  .admin-org-plan-policy__access,
+  .admin-org-video-policy__meters {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-org-plan-policy__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-org-plan-grid > legend,
+  .admin-org-plan-policy__access legend {
+    grid-column: auto;
+  }
+
+  .admin-org-stripe-policy > header,
+  .admin-org-plan-policy__form > footer,
+  .admin-org-video-policy__form > footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-org-stripe-policy__discount {
+    grid-template-columns: 1fr;
   }
 
   .mapping-review {
@@ -31688,6 +32211,24 @@ body {
 
   .admin-org-commerce dl {
     grid-template-columns: 1fr;
+  }
+
+  .admin-org-plan-policy__summary,
+  .admin-org-video-policy__fields,
+  .admin-org-video-grant,
+  .admin-org-video-grant__revoke {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-org-video-policy__target,
+  .admin-org-video-policy__reason,
+  .admin-org-video-grant__revoke {
+    grid-column: auto;
+  }
+
+  .admin-org-video-policy__confirm span,
+  .admin-org-plan-policy__confirm span {
+    align-items: flex-start;
   }
 
   .admin-audit-table p,

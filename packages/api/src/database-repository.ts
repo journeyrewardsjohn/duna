@@ -117,7 +117,11 @@ import { loadGuardianReviewQueue } from "./identity";
 import { loadIdentityVerification } from "./identity-verification";
 import { resolveCanonicalEventLocation } from "./event-location";
 import { getDunaPlusEntitlement, membershipPlanOffers } from "./membership";
-import { resolveOrganizationCommissionPolicy } from "./organization-billing";
+import {
+  resolveOrganizationCommissionPolicy,
+  resolveOrganizationPlanPolicy,
+} from "./organization-billing";
+import { loadOrganizationVideoAllowance } from "./video-service";
 
 const publicSessionStatuses = [
   "published",
@@ -2377,34 +2381,42 @@ async function loadAdminOrganization(
   });
   if (!organizationRecord) return undefined;
   const commission = resolveOrganizationCommissionPolicy(organizationRecord);
+  const planPolicy = resolveOrganizationPlanPolicy(organizationRecord);
 
-  const [membershipRows, organizationVenues, scopedEvents, orderRows, audit] =
-    await Promise.all([
-      database
-        .select({ personId: organizationMemberships.personId })
-        .from(organizationMemberships)
-        .where(
-          and(
-            eq(organizationMemberships.organizationId, organizationId),
-            eq(organizationMemberships.active, true),
-          ),
+  const [
+    membershipRows,
+    organizationVenues,
+    scopedEvents,
+    orderRows,
+    audit,
+    videoAllowance,
+  ] = await Promise.all([
+    database
+      .select({ personId: organizationMemberships.personId })
+      .from(organizationMemberships)
+      .where(
+        and(
+          eq(organizationMemberships.organizationId, organizationId),
+          eq(organizationMemberships.active, true),
         ),
-      loadVenues(organizationId),
-      loadEvents({ includeUnlistedPickups: true }).then((rows) =>
-        rows
-          .filter((row) => row.organizationId === organizationId)
-          .map((row) => row.event),
       ),
-      database
-        .select({
-          status: orders.status,
-          totalMinor: orders.totalMinor,
-          currency: orders.currency,
-        })
-        .from(orders)
-        .where(eq(orders.organizationId, organizationId)),
-      loadAudit(organizationId),
-    ]);
+    loadVenues(organizationId),
+    loadEvents({ includeUnlistedPickups: true }).then((rows) =>
+      rows
+        .filter((row) => row.organizationId === organizationId)
+        .map((row) => row.event),
+    ),
+    database
+      .select({
+        status: orders.status,
+        totalMinor: orders.totalMinor,
+        currency: orders.currency,
+      })
+      .from(orders)
+      .where(eq(orders.organizationId, organizationId)),
+    loadAudit(organizationId),
+    loadOrganizationVideoAllowance(organizationId),
+  ]);
 
   const peopleForOrganization = await loadPeople([
     ...new Set(membershipRows.map((row) => row.personId)),
@@ -2458,6 +2470,7 @@ async function loadAdminOrganization(
     events: scopedEvents,
     audit,
     billing: {
+      planPolicy,
       configuredPlan: commission.configuredPlan,
       effectivePlan: commission.effectivePlan,
       subscriptionStatus: commission.subscriptionStatus,
@@ -2471,6 +2484,7 @@ async function loadAdminOrganization(
       cancelAtPeriodEnd: organizationRecord.planCancelAtPeriodEnd,
       commission,
     },
+    videoAllowance,
     commerce: {
       paidOrders: paidOrders.length,
       pendingOrders: orderRows.filter((row) => row.status === "pending").length,

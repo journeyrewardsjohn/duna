@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "3da7fd9d9ea9e67e39f447261597755e65c13f4d92e6745fef899bb50caeb0c1",
+    "4dcb8b67bfb2f75ad98b44c278d3200e83ab7aad228e581759b9e6180a0036e2",
   modules: [
     {
       id: "M1",
@@ -256,6 +256,7 @@ export const generatedDunaFeatureKnowledge = {
     "grantComplimentaryDunaPlus",
     "grantOrganizationAccess",
     "grantPersonOrganizationRole",
+    "grantVideoAllowance",
     "guardianInvitation",
     "guardianships",
     "handleAvailability",
@@ -400,6 +401,7 @@ export const generatedDunaFeatureKnowledge = {
     "reviseAudience",
     "revisePromoCode",
     "revokeComplimentaryDunaPlus",
+    "revokeVideoAllowance",
     "revokeVideoVisionLearningConsent",
     "revokeVisionRemote",
     "sandData",
@@ -471,6 +473,7 @@ export const generatedDunaFeatureKnowledge = {
     "updateMemberProfile",
     "updateMoneySettings",
     "updateOrganizationCommission",
+    "updateOrganizationPlanPolicy",
     "updateOrganizationProfile",
     "updatePickup",
     "updatePlayerIdentity",

@@ -1099,6 +1099,7 @@ export const organizations = pgTable(
     name: text("name").notNull(),
     legalName: text("legal_name"),
     plan: varchar("plan", { length: 24 }).notNull().default("coach"),
+    adminPlanOverride: varchar("admin_plan_override", { length: 24 }),
     volleyballTypes: text("volleyball_types")
       .array()
       .notNull()
@@ -1145,6 +1146,23 @@ export const organizations = pgTable(
     stripeSubscriptionStatus: varchar("stripe_subscription_status", {
       length: 32,
     }),
+    stripeSubscriptionDiscountBps: integer("stripe_subscription_discount_bps"),
+    stripeSubscriptionDiscountDuration: varchar(
+      "stripe_subscription_discount_duration",
+      { length: 16 },
+    ),
+    stripeSubscriptionDiscountMonths: integer(
+      "stripe_subscription_discount_months",
+    ),
+    stripeSubscriptionDiscountCouponId: varchar(
+      "stripe_subscription_discount_coupon_id",
+      { length: 128 },
+    ),
+    stripeBillingPolicySyncedAt: timestamp("stripe_billing_policy_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    stripeBillingPolicyError: text("stripe_billing_policy_error"),
     planBillingInterval: varchar("plan_billing_interval", { length: 12 }),
     planCurrentPeriodStartsAt: timestamp("plan_current_period_starts_at", {
       withTimezone: true,
@@ -1183,6 +1201,10 @@ export const organizations = pgTable(
       sql`${table.plan} IN ('coach', 'small-club', 'club')`,
     ),
     check(
+      "organization_admin_plan_override_valid",
+      sql`${table.adminPlanOverride} IS NULL OR ${table.adminPlanOverride} IN ('coach', 'small-club', 'club')`,
+    ),
+    check(
       "organization_volleyball_types_valid",
       sql`cardinality(${table.volleyballTypes}) BETWEEN 1 AND 2 AND ${table.volleyballTypes} <@ ARRAY['beach', 'indoor']::text[]`,
     ),
@@ -1197,6 +1219,10 @@ export const organizations = pgTable(
     check(
       "organization_plan_billing_interval_valid",
       sql`${table.planBillingInterval} IS NULL OR ${table.planBillingInterval} IN ('month', 'year')`,
+    ),
+    check(
+      "organization_subscription_discount_valid",
+      sql`(${table.stripeSubscriptionDiscountBps} IS NULL AND ${table.stripeSubscriptionDiscountDuration} IS NULL AND ${table.stripeSubscriptionDiscountMonths} IS NULL) OR (${table.stripeSubscriptionDiscountBps} BETWEEN 1 AND 10000 AND ${table.stripeSubscriptionDiscountDuration} IN ('once', 'repeating', 'forever') AND ((${table.stripeSubscriptionDiscountDuration} = 'repeating' AND ${table.stripeSubscriptionDiscountMonths} BETWEEN 1 AND 36) OR (${table.stripeSubscriptionDiscountDuration} <> 'repeating' AND ${table.stripeSubscriptionDiscountMonths} IS NULL)))`,
     ),
     check(
       "organization_video_addons_nonnegative",
@@ -3841,6 +3867,82 @@ export const videoQuotaPolicies = pgTable(
     check(
       "video_quota_upload_nonnegative",
       sql`${table.monthlyUploadSeconds} >= 0`,
+    ),
+  ],
+);
+
+export const videoAllowanceGrants = pgTable(
+  "video_allowance_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    personId: uuid("person_id").references(() => people.id, {
+      onDelete: "cascade",
+    }),
+    scopeOrganizationId: uuid("scope_organization_id").references(
+      () => organizations.id,
+      { onDelete: "set null" },
+    ),
+    uploadSeconds: integer("upload_seconds").notNull().default(0),
+    liveSeconds: integer("live_seconds").notNull().default(0),
+    cadence: varchar("cadence", { length: 24 })
+      .notNull()
+      .default("current-period"),
+    startsAt: timestamp("starts_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .notNull()
+      .defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true, mode: "date" }),
+    reason: text("reason").notNull(),
+    grantedByPersonId: uuid("granted_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    revokedAt: timestamp("revoked_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    revokedByPersonId: uuid("revoked_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("video_allowance_grant_organization_idx").on(
+      table.organizationId,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index("video_allowance_grant_person_idx").on(
+      table.personId,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index("video_allowance_grant_scope_idx").on(
+      table.scopeOrganizationId,
+      table.createdAt,
+    ),
+    check(
+      "video_allowance_grant_target_valid",
+      sql`(${table.organizationId} IS NOT NULL)::int + (${table.personId} IS NOT NULL)::int = 1`,
+    ),
+    check(
+      "video_allowance_grant_seconds_valid",
+      sql`${table.uploadSeconds} >= 0 AND ${table.liveSeconds} >= 0 AND (${table.uploadSeconds} > 0 OR ${table.liveSeconds} > 0)`,
+    ),
+    check(
+      "video_allowance_grant_cadence_valid",
+      sql`${table.cadence} IN ('current-period', 'recurring')`,
+    ),
+    check(
+      "video_allowance_grant_window_valid",
+      sql`${table.endsAt} IS NULL OR ${table.endsAt} > ${table.startsAt}`,
     ),
   ],
 );

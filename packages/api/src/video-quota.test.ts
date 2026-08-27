@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveMembershipVideoQuota } from "./video-service";
+import {
+  activeVideoAllowanceTotals,
+  resolveMembershipVideoQuota,
+} from "./video-service";
 
 describe("membership video quota resolution", () => {
   it("enforces the launch allowance for every plan", () => {
@@ -54,5 +57,64 @@ describe("membership video quota resolution", () => {
       monthlyUploadSeconds: 12 * 60 * 60,
       enforceUploadLimit: false,
     });
+  });
+});
+
+describe("Super Admin video allowance grants", () => {
+  const now = new Date("2026-08-27T12:00:00.000Z");
+
+  it("adds only active, unrevoked upload and live grants", () => {
+    expect(
+      activeVideoAllowanceTotals(
+        [
+          {
+            uploadSeconds: 10 * 3_600,
+            liveSeconds: 2 * 3_600,
+            startsAt: new Date("2026-08-01T00:00:00.000Z"),
+            endsAt: new Date("2026-09-01T00:00:00.000Z"),
+            revokedAt: null,
+          },
+          {
+            uploadSeconds: 25 * 3_600,
+            liveSeconds: 5 * 3_600,
+            startsAt: new Date("2026-08-20T00:00:00.000Z"),
+            endsAt: null,
+            revokedAt: null,
+          },
+          {
+            uploadSeconds: 100 * 3_600,
+            liveSeconds: 100 * 3_600,
+            startsAt: new Date("2026-08-01T00:00:00.000Z"),
+            endsAt: null,
+            revokedAt: new Date("2026-08-25T00:00:00.000Z"),
+          },
+          {
+            uploadSeconds: 50 * 3_600,
+            liveSeconds: 10 * 3_600,
+            startsAt: new Date("2026-09-01T00:00:00.000Z"),
+            endsAt: null,
+            revokedAt: null,
+          },
+        ],
+        now,
+      ),
+    ).toEqual({ uploadSeconds: 35 * 3_600, liveSeconds: 7 * 3_600 });
+  });
+
+  it("expires a current-period grant exactly at the next UTC month", () => {
+    const grant = {
+      uploadSeconds: 3_600,
+      liveSeconds: 3_600,
+      startsAt: new Date("2026-08-27T12:00:00.000Z"),
+      endsAt: new Date("2026-09-01T00:00:00.000Z"),
+      revokedAt: null,
+    };
+    expect(activeVideoAllowanceTotals([grant], now)).toEqual({
+      uploadSeconds: 3_600,
+      liveSeconds: 3_600,
+    });
+    expect(
+      activeVideoAllowanceTotals([grant], new Date("2026-09-01T00:00:00.000Z")),
+    ).toEqual({ uploadSeconds: 0, liveSeconds: 0 });
   });
 });

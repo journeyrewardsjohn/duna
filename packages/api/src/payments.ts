@@ -5,7 +5,10 @@ import type {
   PaidMembershipPlanId,
   PaidOrganizationPlanId,
 } from "@duna/core";
-import { ORGANIZATION_FEE_POLICY_VERSION } from "@duna/core";
+import {
+  ORGANIZATION_FEE_POLICY_VERSION,
+  ORGANIZATION_PLANS,
+} from "@duna/core";
 import type { MembershipSubscriptionPolicy } from "@duna/core";
 import Stripe from "stripe";
 import {
@@ -196,6 +199,178 @@ export function isOrganizationPlanPriceConfigured(
   interval: OrganizationBillingInterval,
 ): boolean {
   return Boolean(organizationPlanPriceId(plan, interval));
+}
+
+export type OrganizationSubscriptionDiscount =
+  | {
+      readonly mode: "preserve";
+    }
+  | {
+      readonly mode: "clear";
+    }
+  | {
+      readonly mode: "apply";
+      readonly percentBps: number;
+      readonly duration: "once" | "repeating" | "forever";
+      readonly months?: number;
+    };
+
+export function organizationSubscriptionDiscountUpdateParams(
+  discount: OrganizationSubscriptionDiscount,
+  couponId?: string,
+): Pick<Stripe.SubscriptionUpdateParams, "discounts"> {
+  if (discount.mode === "preserve") return {};
+  if (discount.mode === "clear") return { discounts: "" };
+  if (!couponId) {
+    throw new Error(
+      "A Stripe coupon is required to apply a subscription discount.",
+    );
+  }
+  return { discounts: [{ coupon: couponId }] };
+}
+
+export function organizationDiscountCouponParams(input: {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly plan: PaidOrganizationPlanId;
+  readonly discount: Extract<
+    OrganizationSubscriptionDiscount,
+    { readonly mode: "apply" }
+  >;
+}): Stripe.CouponCreateParams {
+  if (
+    !Number.isSafeInteger(input.discount.percentBps) ||
+    input.discount.percentBps < 1 ||
+    input.discount.percentBps > 10_000
+  ) {
+    throw new Error("Stripe coupon percent must be between 0.01% and 100%.");
+  }
+  if (
+    input.discount.duration === "repeating" &&
+    (!Number.isSafeInteger(input.discount.months) ||
+      (input.discount.months ?? 0) < 1 ||
+      (input.discount.months ?? 0) > 36)
+  ) {
+    throw new Error("Stripe coupon duration must be between 1 and 36 months.");
+  }
+  return {
+    percent_off: input.discount.percentBps / 100,
+    duration: input.discount.duration,
+    duration_in_months:
+      input.discount.duration === "repeating"
+        ? input.discount.months
+        : undefined,
+    max_redemptions: 1,
+    name: `${input.organizationName} · ${input.discount.percentBps / 100}% Duna HQ`.slice(
+      0,
+      40,
+    ),
+    metadata: {
+      dunaOrganizationId: input.organizationId,
+      dunaPlan: input.plan,
+      dunaCreatedBy: "super-admin",
+    },
+  };
+}
+
+export async function updateOrganizationPlanSubscription(input: {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly subscriptionId: string;
+  readonly plan: PaidOrganizationPlanId;
+  readonly discount: OrganizationSubscriptionDiscount;
+  readonly changedAt: Date;
+  readonly idempotencyKey: string;
+}): Promise<{
+  readonly plan: PaidOrganizationPlanId;
+  readonly interval: OrganizationBillingInterval;
+  readonly couponId?: string;
+}> {
+  const stripe = getStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(
+    input.subscriptionId,
+  );
+  if (["canceled", "incomplete_expired"].includes(subscription.status)) {
+    throw new Error(
+      "The Stripe subscription is no longer editable. Start a new checkout before synchronizing this plan.",
+    );
+  }
+  const planItem = subscription.items.data.find((item) => {
+    const priceId =
+      typeof item.price === "string" ? item.price : item.price?.id;
+    return Boolean(priceId && organizationPlanForPriceId(priceId));
+  });
+  const currentPriceId =
+    typeof planItem?.price === "string" ? planItem.price : planItem?.price?.id;
+  const currentPlan = currentPriceId
+    ? organizationPlanForPriceId(currentPriceId)
+    : undefined;
+  if (!planItem || !currentPlan) {
+    throw new Error(
+      "The Stripe subscription does not contain a mapped Duna HQ plan item.",
+    );
+  }
+  if (
+    currentPlan.interval === "year" &&
+    input.discount.mode === "apply" &&
+    input.discount.duration === "repeating"
+  ) {
+    throw new Error(
+      "First-X-month discounts are only supported for monthly Stripe subscriptions. Use a next-invoice or forever discount for annual prepay.",
+    );
+  }
+  const targetPriceId = organizationPlanPriceId(
+    input.plan,
+    currentPlan.interval,
+  );
+  if (!targetPriceId) {
+    throw new Error(
+      `${ORGANIZATION_PLANS[input.plan].name} ${currentPlan.interval} billing is not configured in Stripe.`,
+    );
+  }
+
+  let couponId: string | undefined;
+  if (input.discount.mode === "apply") {
+    const coupon = await stripe.coupons.create(
+      organizationDiscountCouponParams({
+        organizationId: input.organizationId,
+        organizationName: input.organizationName,
+        plan: input.plan,
+        discount: input.discount,
+      }),
+      { idempotencyKey: `${input.idempotencyKey}:coupon` },
+    );
+    couponId = coupon.id;
+  }
+
+  await stripe.subscriptions.update(
+    input.subscriptionId,
+    {
+      items: [
+        {
+          id: planItem.id,
+          price: targetPriceId,
+          quantity: 1,
+        },
+      ],
+      proration_behavior: "none",
+      payment_behavior: "error_if_incomplete",
+      ...organizationSubscriptionDiscountUpdateParams(input.discount, couponId),
+      metadata: {
+        ...subscription.metadata,
+        dunaOrganizationId: input.organizationId,
+        dunaPlan: input.plan,
+        product: "duna-hq",
+        dunaAdminPolicyChangedAt: input.changedAt.toISOString(),
+      },
+    },
+    { idempotencyKey: `${input.idempotencyKey}:subscription` },
+  );
+  return {
+    plan: input.plan,
+    interval: currentPlan.interval,
+    couponId,
+  };
 }
 
 export type OrganizationVideoPriceKind =

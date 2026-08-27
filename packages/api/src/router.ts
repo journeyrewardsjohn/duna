@@ -104,6 +104,7 @@ import {
   publicVenueLayoutSchema,
   publicCatalogRecommendationsSchema,
   organizationCommissionPolicySchema,
+  organizationPlanPolicySchema,
   organizationWalletSummarySchema,
   organizationSummarySchema,
   personSummarySchema,
@@ -151,6 +152,7 @@ import {
   dunaPlusGrantSchema,
   liveVideoSessionSchema,
   videoAssociationOptionSchema,
+  videoAllowanceGrantSchema,
   videoMetricsSchema,
   videoAnalysisMarkerInputSchema,
   videoAnalysisReportSchema,
@@ -260,6 +262,7 @@ import {
   openOrganizationBillingPortal,
   startOrganizationPlanCheckout,
   updateOrganizationCommissionOverride,
+  updateOrganizationPlanPolicy,
 } from "./organization-billing";
 import {
   grantOrganizationAccess,
@@ -417,6 +420,7 @@ import {
   createVideoShareLink,
   finishLiveVideo,
   grantComplimentaryDunaPlus,
+  grantVideoAllowance,
   loadAdminVideoOverview,
   loadOwnedVideoMetrics,
   loadPublicVideos,
@@ -430,6 +434,7 @@ import {
   revokeVideoVisionLearningConsent,
   reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
+  revokeVideoAllowance,
   searchVideoAssociations,
   updateVideoPrivacy,
   updateVideoQuotaPolicy,
@@ -1411,6 +1416,7 @@ function throwDomainError(error: unknown): never {
       error.code === "VIDEO_NOT_FOUND" ||
       error.code === "ASSOCIATION_NOT_FOUND" ||
       error.code === "GRANT_NOT_FOUND" ||
+      error.code === "ALLOWANCE_GRANT_NOT_FOUND" ||
       error.code === "CALIBRATION_SAMPLE_NOT_FOUND"
         ? "NOT_FOUND"
         : error.code === "PLAYBACK_FORBIDDEN"
@@ -1424,6 +1430,7 @@ function throwDomainError(error: unknown): never {
             ? "INTERNAL_SERVER_ERROR"
             : error.code === "INVALID_ASSOCIATION" ||
                 error.code === "UPLOAD_PART_INVALID" ||
+                error.code === "INVALID_ALLOWANCE_GRANT" ||
                 error.code === "INVALID_GRANT_WINDOW"
               ? "BAD_REQUEST"
               : "PRECONDITION_FAILED";
@@ -13867,6 +13874,111 @@ const adminRouter = router({
         },
       }),
     ),
+  grantVideoAllowance: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-video-allowance-grant",
+        capacity: 40,
+        refillPerMinute: 10,
+        scope: "actor",
+      }),
+    )
+    .input(
+      z
+        .object({
+          scopeOrganizationId: z.string().uuid(),
+          targetType: z.enum(["organization", "person"]),
+          targetId: z.string().uuid(),
+          uploadSeconds: z
+            .number()
+            .int()
+            .min(0)
+            .max(10_000 * 60 * 60),
+          liveSeconds: z
+            .number()
+            .int()
+            .min(0)
+            .max(10_000 * 60 * 60),
+          cadence: z.enum(["current-period", "recurring"]),
+          reason: z.string().trim().min(10).max(500),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .refine((value) => value.uploadSeconds > 0 || value.liveSeconds > 0, {
+          message: "Add upload hours, live-stream hours, or both.",
+          path: ["uploadSeconds"],
+        }),
+    )
+    .output(videoAllowanceGrantSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.grantVideoAllowance",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await grantVideoAllowance({
+              actor: ctx.actor!,
+              scopeOrganizationId: input.scopeOrganizationId,
+              targetType: input.targetType,
+              targetId: input.targetId,
+              uploadSeconds: input.uploadSeconds,
+              liveSeconds: input.liveSeconds,
+              cadence: input.cadence,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  revokeVideoAllowance: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-video-allowance-revoke",
+        capacity: 40,
+        refillPerMinute: 10,
+        scope: "actor",
+      }),
+    )
+    .input(
+      z.object({
+        scopeOrganizationId: z.string().uuid(),
+        grantId: z.string().uuid(),
+        reason: z.string().trim().min(10).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(videoAllowanceGrantSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.revokeVideoAllowance",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await revokeVideoAllowance({
+              actor: ctx.actor!,
+              scopeOrganizationId: input.scopeOrganizationId,
+              grantId: input.grantId,
+              reason: input.reason,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   updateVideoQuotaPolicy: superAdminProcedure
     .input(
       z.object({
@@ -14904,6 +15016,96 @@ const adminRouter = router({
             requestId: ctx.requestId,
             ipAddress: ctx.ipAddress,
             now: ctx.now,
+          }),
+      }),
+    ),
+  updateOrganizationPlanPolicy: superAdminProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "admin-organization-plan-policy",
+        capacity: 20,
+        refillPerMinute: 5,
+        scope: "actor",
+      }),
+    )
+    .input(
+      z
+        .object({
+          organizationId: z.string().uuid(),
+          accessMode: z.enum(["admin-assigned", "billing-managed"]),
+          plan: z.enum(["coach", "small-club", "club"]),
+          synchronizeStripe: z.boolean(),
+          discountMode: z.enum(["preserve", "clear", "apply"]),
+          discountPercentBps: z.number().int().min(1).max(10_000).optional(),
+          discountDuration: z.enum(["once", "repeating", "forever"]).optional(),
+          discountMonths: z.number().int().min(1).max(36).optional(),
+          reason: z.string().trim().min(10).max(500),
+          confirmed: z.literal(true),
+          idempotencyKey: z.string().uuid(),
+        })
+        .superRefine((value, context) => {
+          if (!value.synchronizeStripe && value.discountMode !== "preserve") {
+            context.addIssue({
+              code: "custom",
+              message:
+                "Stripe synchronization is required to change a discount.",
+              path: ["discountMode"],
+            });
+          }
+          if (
+            value.discountMode === "apply" &&
+            (!value.discountPercentBps || !value.discountDuration)
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "A discount percentage and duration are required.",
+              path: ["discountPercentBps"],
+            });
+          }
+          if (
+            value.discountMode === "apply" &&
+            value.discountDuration === "repeating" &&
+            !value.discountMonths
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "Choose how many months the discount should repeat.",
+              path: ["discountMonths"],
+            });
+          }
+        }),
+    )
+    .output(organizationPlanPolicySchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "admin.updateOrganizationPlanPolicy",
+        request: input,
+        ctx,
+        execute: () =>
+          updateOrganizationPlanPolicy({
+            actor: ctx.actor!,
+            organizationId: input.organizationId,
+            accessMode: input.accessMode,
+            plan: input.plan,
+            synchronizeStripe: input.synchronizeStripe,
+            discount:
+              input.discountMode === "apply"
+                ? {
+                    mode: "apply",
+                    percentBps: input.discountPercentBps!,
+                    duration: input.discountDuration!,
+                    months:
+                      input.discountDuration === "repeating"
+                        ? input.discountMonths
+                        : undefined,
+                  }
+                : { mode: input.discountMode },
+            reason: input.reason,
+            requestId: ctx.requestId,
+            ipAddress: ctx.ipAddress,
+            now: ctx.now,
+            idempotencyKey: input.idempotencyKey,
           }),
       }),
     ),

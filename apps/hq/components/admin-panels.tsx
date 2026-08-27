@@ -45,6 +45,8 @@ import type { AdminModule } from "./navigation";
 import { FeatureFlagControls } from "./feature-flag-controls";
 import { GuardianReviewCard } from "./guardian-review-card";
 import { OrganizationCommissionControls } from "./organization-commission-controls";
+import { OrganizationPlanControls } from "./organization-plan-controls";
+import { OrganizationVideoAllowanceControls } from "./organization-video-allowance-controls";
 import { OrganizationAccessControls } from "./organization-access-controls";
 import {
   PlayerMappingPanel,
@@ -458,10 +460,17 @@ export function AdminOrganizationDetailView({
         </section>
       </section>
 
+      <OrganizationPlanControls
+        billing={detail.billing}
+        canManage={detail.canManageCommission}
+      />
+
       <OrganizationCommissionControls
         billing={detail.billing}
         canManage={detail.canManageCommission}
       />
+
+      <OrganizationVideoAllowanceControls detail={detail} />
 
       <OrganizationAccessControls
         canManage={detail.canManageCommission}

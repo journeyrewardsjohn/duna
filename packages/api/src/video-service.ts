@@ -26,6 +26,7 @@ import {
   teamMembers,
   teams,
   venues,
+  videoAllowanceGrants,
   videoQuotaPolicies,
   videoInsightFeedback,
   videoShareLinks,
@@ -41,11 +42,13 @@ import {
   and,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
   isNull,
   lt,
+  lte,
   or,
   sql,
   type SQL,
@@ -61,6 +64,7 @@ import type {
   VideoUsage,
 } from "./contracts";
 import { courtCalibrationSchema } from "./contracts";
+import type { VideoAllowanceGrant } from "./repository-contract";
 import { getDunaPlusEntitlement } from "./membership";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import { recordOrganizationVideoMeterEvent } from "./payments";
@@ -185,6 +189,8 @@ export class VideoServiceError extends Error {
       | "UPLOAD_PART_INVALID"
       | "UPLOAD_INCOMPLETE"
       | "GRANT_NOT_FOUND"
+      | "ALLOWANCE_GRANT_NOT_FOUND"
+      | "INVALID_ALLOWANCE_GRANT"
       | "CALIBRATION_SAMPLE_NOT_FOUND"
       | "CALIBRATION_SAMPLE_ALREADY_REVIEWED"
       | "CALIBRATION_SAMPLE_PREVIEW_REQUIRED"
@@ -238,6 +244,37 @@ function monthBounds(now: Date): { startsAt: Date; endsAt: Date } {
     startsAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
     endsAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
   };
+}
+
+type VideoAllowanceGrantWindow = Pick<
+  typeof videoAllowanceGrants.$inferSelect,
+  "uploadSeconds" | "liveSeconds" | "startsAt" | "endsAt" | "revokedAt"
+>;
+
+function videoAllowanceGrantIsActive(
+  grant: VideoAllowanceGrantWindow,
+  now: Date,
+): boolean {
+  return (
+    !grant.revokedAt &&
+    grant.startsAt <= now &&
+    (!grant.endsAt || grant.endsAt > now)
+  );
+}
+
+export function activeVideoAllowanceTotals(
+  grants: readonly VideoAllowanceGrantWindow[],
+  now = new Date(),
+): { readonly uploadSeconds: number; readonly liveSeconds: number } {
+  return grants
+    .filter((grant) => videoAllowanceGrantIsActive(grant, now))
+    .reduce(
+      (total, grant) => ({
+        uploadSeconds: total.uploadSeconds + grant.uploadSeconds,
+        liveSeconds: total.liveSeconds + grant.liveSeconds,
+      }),
+      { uploadSeconds: 0, liveSeconds: 0 },
+    );
 }
 
 function validRoles(roles: readonly string[]): readonly PersonRole[] {
@@ -455,6 +492,176 @@ async function loadVideoSummary(videoId: string): Promise<VideoSummary> {
   return summary;
 }
 
+async function loadOrganizationQuotaBreakdown(
+  organizationId: string,
+  now: Date,
+) {
+  const database = getDatabase();
+  const { startsAt, endsAt } = monthBounds(now);
+  const [organization, feeRows, grantRows] = await Promise.all([
+    database.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }),
+    database
+      .select({
+        grossMinor: paymentFundSchedules.grossMinor,
+        organizationFeeMinor: paymentFundSchedules.organizationFeeMinor,
+        refundedMinor: paymentFundSchedules.refundedMinor,
+        disputedMinor: paymentFundSchedules.disputedMinor,
+      })
+      .from(paymentFundSchedules)
+      .where(
+        and(
+          eq(paymentFundSchedules.organizationId, organizationId),
+          gte(paymentFundSchedules.createdAt, startsAt),
+          lt(paymentFundSchedules.createdAt, endsAt),
+        ),
+      ),
+    database
+      .select()
+      .from(videoAllowanceGrants)
+      .where(
+        and(
+          eq(videoAllowanceGrants.organizationId, organizationId),
+          isNull(videoAllowanceGrants.revokedAt),
+          lte(videoAllowanceGrants.startsAt, now),
+          or(
+            isNull(videoAllowanceGrants.endsAt),
+            gt(videoAllowanceGrants.endsAt, now),
+          ),
+        ),
+      ),
+  ]);
+  if (!organization) {
+    throw new VideoServiceError(
+      "VIDEO_NOT_FOUND",
+      "Organization video workspace was not found.",
+    );
+  }
+  const effectivePlan =
+    resolveOrganizationCommissionPolicy(organization).effectivePlan;
+  const plan = ORGANIZATION_PLANS[effectivePlan];
+  const feesCollectedMinor = feeRows.reduce(
+    (sum, row) => sum + netCollectedOrganizationFeeMinor(row),
+    0,
+  );
+  const earnedBonus =
+    effectivePlan === "coach"
+      ? freePlanVideoBonus(feesCollectedMinor)
+      : { uploadSeconds: 0, liveSeconds: 0 };
+  const granted = activeVideoAllowanceTotals(grantRows, now);
+  return {
+    organization,
+    effectivePlan,
+    plan,
+    earnedBonus,
+    granted,
+    periodEndsAt: endsAt,
+    monthlyLiveSeconds:
+      plan.monthlyLiveSeconds +
+      organization.videoLiveAddonSeconds +
+      earnedBonus.liveSeconds +
+      granted.liveSeconds,
+    monthlyUploadSeconds:
+      plan.monthlyUploadSeconds +
+      organization.videoUploadAddonSeconds +
+      earnedBonus.uploadSeconds +
+      granted.uploadSeconds,
+    enforceLiveLimit: !organization.videoPaygEnabled,
+    enforceUploadLimit: !organization.videoPaygEnabled,
+  };
+}
+
+function videoAllowanceGrantResult(
+  grant: typeof videoAllowanceGrants.$inferSelect,
+  organizationName: string,
+  peopleById: ReadonlyMap<string, PersonSummary>,
+  now: Date,
+): VideoAllowanceGrant {
+  const targetType = grant.organizationId ? "organization" : "person";
+  const targetId = grant.organizationId ?? grant.personId;
+  if (!targetId) {
+    throw new VideoServiceError(
+      "GRANT_NOT_FOUND",
+      "Video allowance grant target was not found.",
+    );
+  }
+  return {
+    id: grant.id,
+    targetType,
+    targetId,
+    targetName:
+      targetType === "organization"
+        ? organizationName
+        : (peopleById.get(targetId)?.displayName ?? "Removed player"),
+    uploadSeconds: grant.uploadSeconds,
+    liveSeconds: grant.liveSeconds,
+    cadence: grant.cadence as "current-period" | "recurring",
+    startsAt: grant.startsAt.toISOString(),
+    endsAt: grant.endsAt?.toISOString(),
+    reason: grant.reason,
+    active: videoAllowanceGrantIsActive(grant, now),
+    grantedByName: grant.grantedByPersonId
+      ? peopleById.get(grant.grantedByPersonId)?.displayName
+      : undefined,
+    revokedAt: grant.revokedAt?.toISOString(),
+    revokedByName: grant.revokedByPersonId
+      ? peopleById.get(grant.revokedByPersonId)?.displayName
+      : undefined,
+  };
+}
+
+export async function loadOrganizationVideoAllowance(
+  organizationId: string,
+  now = new Date(),
+) {
+  requireDatabase();
+  const database = getDatabase();
+  const [breakdown, grantRows] = await Promise.all([
+    loadOrganizationQuotaBreakdown(organizationId, now),
+    database
+      .select()
+      .from(videoAllowanceGrants)
+      .where(
+        or(
+          eq(videoAllowanceGrants.scopeOrganizationId, organizationId),
+          eq(videoAllowanceGrants.organizationId, organizationId),
+        ),
+      )
+      .orderBy(desc(videoAllowanceGrants.createdAt))
+      .limit(100),
+  ]);
+  const peopleById = await loadPersonSummaries(
+    grantRows.flatMap((grant) =>
+      [grant.personId, grant.grantedByPersonId, grant.revokedByPersonId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    ),
+  );
+  return {
+    baseUploadSeconds: breakdown.plan.monthlyUploadSeconds,
+    baseLiveSeconds: breakdown.plan.monthlyLiveSeconds,
+    paidUploadSeconds: breakdown.organization.videoUploadAddonSeconds,
+    paidLiveSeconds: breakdown.organization.videoLiveAddonSeconds,
+    earnedUploadSeconds: breakdown.earnedBonus.uploadSeconds,
+    earnedLiveSeconds: breakdown.earnedBonus.liveSeconds,
+    grantedUploadSeconds: breakdown.granted.uploadSeconds,
+    grantedLiveSeconds: breakdown.granted.liveSeconds,
+    totalUploadSeconds: breakdown.monthlyUploadSeconds,
+    totalLiveSeconds: breakdown.monthlyLiveSeconds,
+    payAsYouGo: breakdown.organization.videoPaygEnabled,
+    periodEndsAt: breakdown.periodEndsAt.toISOString(),
+    grants: grantRows.map((grant) =>
+      videoAllowanceGrantResult(
+        grant,
+        breakdown.organization.name,
+        peopleById,
+        now,
+      ),
+    ),
+  };
+}
+
 async function loadQuotaPolicy(
   personId?: string,
   now = new Date(),
@@ -462,88 +669,69 @@ async function loadQuotaPolicy(
 ): Promise<VideoQuotaLimits> {
   const database = getDatabase();
   if (organizationId) {
-    const { startsAt, endsAt } = monthBounds(now);
-    const [organization, feeRows] = await Promise.all([
-      database.query.organizations.findFirst({
-        where: eq(organizations.id, organizationId),
-      }),
-      database
-        .select({
-          grossMinor: paymentFundSchedules.grossMinor,
-          organizationFeeMinor: paymentFundSchedules.organizationFeeMinor,
-          refundedMinor: paymentFundSchedules.refundedMinor,
-          disputedMinor: paymentFundSchedules.disputedMinor,
-        })
-        .from(paymentFundSchedules)
-        .where(
-          and(
-            eq(paymentFundSchedules.organizationId, organizationId),
-            gte(paymentFundSchedules.createdAt, startsAt),
-            lt(paymentFundSchedules.createdAt, endsAt),
-          ),
-        ),
-    ]);
-    if (!organization) {
-      throw new VideoServiceError(
-        "VIDEO_NOT_FOUND",
-        "Organization video workspace was not found.",
-      );
-    }
-    const effectivePlan =
-      resolveOrganizationCommissionPolicy(organization).effectivePlan;
-    const plan = ORGANIZATION_PLANS[effectivePlan];
-    const feesCollectedMinor = feeRows.reduce(
-      (sum, row) => sum + netCollectedOrganizationFeeMinor(row),
-      0,
-    );
-    const earnedBonus =
-      effectivePlan === "coach"
-        ? freePlanVideoBonus(feesCollectedMinor)
-        : { uploadSeconds: 0, liveSeconds: 0 };
+    const breakdown = await loadOrganizationQuotaBreakdown(organizationId, now);
     return {
-      monthlyLiveSeconds:
-        plan.monthlyLiveSeconds +
-        organization.videoLiveAddonSeconds +
-        earnedBonus.liveSeconds,
-      monthlyUploadSeconds:
-        plan.monthlyUploadSeconds +
-        organization.videoUploadAddonSeconds +
-        earnedBonus.uploadSeconds,
-      enforceLiveLimit: !organization.videoPaygEnabled,
-      enforceUploadLimit: !organization.videoPaygEnabled,
+      monthlyLiveSeconds: breakdown.monthlyLiveSeconds,
+      monthlyUploadSeconds: breakdown.monthlyUploadSeconds,
+      enforceLiveLimit: breakdown.enforceLiveLimit,
+      enforceUploadLimit: breakdown.enforceUploadLimit,
     };
   }
-  const [personPolicy, globalPolicy, entitlement] = await Promise.all([
-    personId
-      ? database.query.videoQuotaPolicies.findFirst({
-          where: eq(videoQuotaPolicies.personId, personId),
-        })
-      : Promise.resolve(undefined),
-    database.query.videoQuotaPolicies.findFirst({
-      where: isNull(videoQuotaPolicies.personId),
-    }),
-    personId
-      ? getDunaPlusEntitlement(personId, now)
-      : Promise.resolve(undefined),
-  ]);
+  const [personPolicy, globalPolicy, entitlement, grantRows] =
+    await Promise.all([
+      personId
+        ? database.query.videoQuotaPolicies.findFirst({
+            where: eq(videoQuotaPolicies.personId, personId),
+          })
+        : Promise.resolve(undefined),
+      database.query.videoQuotaPolicies.findFirst({
+        where: isNull(videoQuotaPolicies.personId),
+      }),
+      personId
+        ? getDunaPlusEntitlement(personId, now)
+        : Promise.resolve(undefined),
+      personId
+        ? database
+            .select()
+            .from(videoAllowanceGrants)
+            .where(
+              and(
+                eq(videoAllowanceGrants.personId, personId),
+                isNull(videoAllowanceGrants.revokedAt),
+                lte(videoAllowanceGrants.startsAt, now),
+                or(
+                  isNull(videoAllowanceGrants.endsAt),
+                  gt(videoAllowanceGrants.endsAt, now),
+                ),
+              ),
+            )
+        : Promise.resolve([]),
+    ]);
   const globalLiveSeconds =
     globalPolicy?.monthlyLiveSeconds ??
     DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS;
   const globalUploadSeconds =
     globalPolicy?.monthlyUploadSeconds ??
     DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS;
-  if (personId && entitlement) {
-    return resolveMembershipVideoQuota({
-      plan: entitlement.plan,
-      personPolicy,
-      globalPolicy,
-    });
-  }
+  const base =
+    personId && entitlement
+      ? resolveMembershipVideoQuota({
+          plan: entitlement.plan,
+          personPolicy,
+          globalPolicy,
+        })
+      : {
+          monthlyLiveSeconds: globalLiveSeconds,
+          monthlyUploadSeconds: globalUploadSeconds,
+          enforceLiveLimit: globalPolicy?.enforceLiveLimit ?? true,
+          enforceUploadLimit: globalPolicy?.enforceUploadLimit ?? true,
+        };
+  const granted = activeVideoAllowanceTotals(grantRows, now);
   return {
-    monthlyLiveSeconds: globalLiveSeconds,
-    monthlyUploadSeconds: globalUploadSeconds,
-    enforceLiveLimit: globalPolicy?.enforceLiveLimit ?? true,
-    enforceUploadLimit: globalPolicy?.enforceUploadLimit ?? true,
+    monthlyLiveSeconds: base.monthlyLiveSeconds + granted.liveSeconds,
+    monthlyUploadSeconds: base.monthlyUploadSeconds + granted.uploadSeconds,
+    enforceLiveLimit: base.enforceLiveLimit,
+    enforceUploadLimit: base.enforceUploadLimit,
   };
 }
 
@@ -707,10 +895,7 @@ export async function loadVideoStudio(
           type: "person",
           label: entitlement.label,
         },
-    canBroadcast: organizationPlan
-      ? ORGANIZATION_PLANS[organizationPlan].monthlyLiveSeconds > 0
-      : entitlement.active &&
-        MEMBERSHIP_PLANS[entitlement.plan].monthlyLiveSeconds > 0,
+    canBroadcast: usage.live.limitSeconds > 0,
     usage,
     videos: ownVideos,
     liveNow,
@@ -1138,7 +1323,11 @@ export async function createLiveVideo(input: {
     loadVideoUsage(input.actor.personId, input.now, input.actor.organizationId),
     validateAssociation(input),
   ]);
-  if (!input.actor.organizationId && !entitlement.active) {
+  if (
+    !input.actor.organizationId &&
+    !entitlement.active &&
+    usage.live.limitSeconds <= 0
+  ) {
     throw new VideoServiceError(
       "DUNA_PLUS_REQUIRED",
       "Live broadcasting is available with Premium or Premium+.",
@@ -2902,6 +3091,217 @@ export async function revokeComplimentaryDunaPlus(input: {
     ),
   );
   return grantResult(updated, peopleById);
+}
+
+export async function grantVideoAllowance(input: {
+  readonly actor: ApiActor;
+  readonly scopeOrganizationId: string;
+  readonly targetType: "organization" | "person";
+  readonly targetId: string;
+  readonly uploadSeconds: number;
+  readonly liveSeconds: number;
+  readonly cadence: "current-period" | "recurring";
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<VideoAllowanceGrant> {
+  requireDatabase();
+  if (
+    !Number.isSafeInteger(input.uploadSeconds) ||
+    !Number.isSafeInteger(input.liveSeconds) ||
+    input.uploadSeconds < 0 ||
+    input.liveSeconds < 0 ||
+    (input.uploadSeconds === 0 && input.liveSeconds === 0)
+  ) {
+    throw new VideoServiceError(
+      "INVALID_ALLOWANCE_GRANT",
+      "Add a positive number of upload or live-stream hours.",
+    );
+  }
+  const database = getDatabase();
+  const organization = await database.query.organizations.findFirst({
+    where: eq(organizations.id, input.scopeOrganizationId),
+  });
+  if (!organization) {
+    throw new VideoServiceError(
+      "INVALID_ALLOWANCE_GRANT",
+      "Organization was not found.",
+    );
+  }
+  if (
+    input.targetType === "organization" &&
+    input.targetId !== input.scopeOrganizationId
+  ) {
+    throw new VideoServiceError(
+      "INVALID_ALLOWANCE_GRANT",
+      "The organization allowance target does not match this workspace.",
+    );
+  }
+  if (input.targetType === "person") {
+    const membership = await database.query.organizationMemberships.findFirst({
+      where: and(
+        eq(organizationMemberships.organizationId, input.scopeOrganizationId),
+        eq(organizationMemberships.personId, input.targetId),
+        eq(organizationMemberships.active, true),
+      ),
+    });
+    if (!membership) {
+      throw new VideoServiceError(
+        "INVALID_ALLOWANCE_GRANT",
+        "Choose an active member of this organization.",
+      );
+    }
+  }
+  const endsAt =
+    input.cadence === "current-period"
+      ? monthBounds(input.now).endsAt
+      : undefined;
+  const grant = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      const [createdGrant] = await transaction
+        .insert(videoAllowanceGrants)
+        .values({
+          organizationId:
+            input.targetType === "organization" ? input.targetId : null,
+          personId: input.targetType === "person" ? input.targetId : null,
+          scopeOrganizationId: input.scopeOrganizationId,
+          uploadSeconds: input.uploadSeconds,
+          liveSeconds: input.liveSeconds,
+          cadence: input.cadence,
+          startsAt: input.now,
+          endsAt,
+          reason: input.reason,
+          grantedByPersonId: input.actor.personId,
+          createdAt: input.now,
+          updatedAt: input.now,
+        })
+        .returning();
+      if (!createdGrant) {
+        throw new VideoServiceError(
+          "ALLOWANCE_GRANT_NOT_FOUND",
+          "Video allowance grant was not created.",
+        );
+      }
+      await transaction.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        organizationId: input.scopeOrganizationId,
+        actorType: "person",
+        action: "video.allowance-granted",
+        entityType:
+          input.targetType === "organization" ? "organization" : "person",
+        entityId: input.targetId,
+        reason: `${input.reason} Added ${input.uploadSeconds / 3_600} upload hours and ${input.liveSeconds / 3_600} live hours ${input.cadence === "recurring" ? "each month until revoked" : `through ${endsAt!.toISOString()}`}.`,
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      });
+      return createdGrant;
+    },
+  );
+  const peopleById = await loadPersonSummaries(
+    [grant.personId, grant.grantedByPersonId].filter((id): id is string =>
+      Boolean(id),
+    ),
+  );
+  return videoAllowanceGrantResult(
+    grant,
+    organization.name,
+    peopleById,
+    input.now,
+  );
+}
+
+export async function revokeVideoAllowance(input: {
+  readonly actor: ApiActor;
+  readonly scopeOrganizationId: string;
+  readonly grantId: string;
+  readonly reason: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<VideoAllowanceGrant> {
+  requireDatabase();
+  const database = getDatabase();
+  const [organization, grant] = await Promise.all([
+    database.query.organizations.findFirst({
+      where: eq(organizations.id, input.scopeOrganizationId),
+    }),
+    database.query.videoAllowanceGrants.findFirst({
+      where: eq(videoAllowanceGrants.id, input.grantId),
+    }),
+  ]);
+  if (!organization || !grant) {
+    throw new VideoServiceError(
+      "ALLOWANCE_GRANT_NOT_FOUND",
+      "Video allowance grant was not found.",
+    );
+  }
+  if (
+    grant.scopeOrganizationId !== input.scopeOrganizationId &&
+    grant.organizationId !== input.scopeOrganizationId
+  ) {
+    throw new VideoServiceError(
+      "ALLOWANCE_GRANT_NOT_FOUND",
+      "Video allowance grant does not belong to this organization.",
+    );
+  }
+  if (grant.revokedAt) {
+    throw new VideoServiceError(
+      "INVALID_ALLOWANCE_GRANT",
+      "Video allowance grant has already been revoked.",
+    );
+  }
+  const updated = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      const [revokedGrant] = await transaction
+        .update(videoAllowanceGrants)
+        .set({
+          revokedAt: input.now,
+          revokedByPersonId: input.actor.personId,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(videoAllowanceGrants.id, grant.id),
+            isNull(videoAllowanceGrants.revokedAt),
+          ),
+        )
+        .returning();
+      if (!revokedGrant) {
+        throw new VideoServiceError(
+          "INVALID_ALLOWANCE_GRANT",
+          "Video allowance grant was already revoked by another administrator.",
+        );
+      }
+      await transaction.insert(auditLog).values({
+        actorPersonId: input.actor.personId,
+        organizationId: input.scopeOrganizationId,
+        actorType: "person",
+        action: "video.allowance-revoked",
+        entityType: "video-allowance-grant",
+        entityId: grant.id,
+        reason: input.reason,
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+        createdAt: input.now,
+      });
+      return revokedGrant;
+    },
+  );
+  const peopleById = await loadPersonSummaries(
+    [
+      updated.personId,
+      updated.grantedByPersonId,
+      updated.revokedByPersonId,
+    ].filter((id): id is string => Boolean(id)),
+  );
+  return videoAllowanceGrantResult(
+    updated,
+    organization.name,
+    peopleById,
+    input.now,
+  );
 }
 
 export async function updateVideoQuotaPolicy(input: {
