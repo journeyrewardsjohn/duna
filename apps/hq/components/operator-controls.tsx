@@ -348,18 +348,22 @@ function MarketingFlowConnector({ label }: { readonly label: string }) {
 }
 
 function MoneyInput({
+  className,
+  hint,
   label,
   name,
   defaultValue,
   required,
 }: {
+  readonly className?: string;
+  readonly hint?: string;
   readonly label: string;
   readonly name: string;
   readonly defaultValue?: string;
   readonly required?: boolean;
 }) {
   return (
-    <label>
+    <label className={className}>
       <span>{label}</span>
       <span className="operator-money-input">
         <small>$</small>
@@ -373,6 +377,7 @@ function MoneyInput({
           inputMode="decimal"
         />
       </span>
+      {hint && <small className="operator-money-input__hint">{hint}</small>}
     </label>
   );
 }
@@ -934,53 +939,45 @@ export function RatePlanComposer({
           </div>
         </section>
 
-        <section className="rate-plan-step">
+        <section className="rate-plan-step rate-plan-step--pricing">
           <header>
             <span>2</span>
             <div>
               <h3>Set the prices</h3>
-              <p>Base is the safety net; public and member can override it.</p>
+              <p>
+                Start with the fallback. Add a public or member price only when
+                it differs.
+              </p>
             </div>
           </header>
-          <div className="rate-plan-price-guide">
-            <article>
-              <strong>Base price</strong>
-              <p>
-                The required fallback. Duna uses it whenever the matching public
-                or member price is left blank.
-              </p>
-            </article>
-            <article>
-              <strong>Public price</strong>
-              <p>What a non-member pays. Leave blank to use the base price.</p>
-            </article>
-            <article>
-              <strong>Member price</strong>
-              <p>
-                What an active member pays. Leave blank to use the base price.
-              </p>
-            </article>
-          </div>
-          <div className="operator-form-grid operator-form-grid--three rate-plan-prices">
+          <div className="rate-plan-price-grid">
             <MoneyInput
+              className="rate-plan-price-field rate-plan-price-field--base"
               label="Base price"
+              hint="Required fallback for every eligible booking."
               name="baseAmount"
               defaultValue="0.00"
               required
             />
             <MoneyInput
-              label="Public price · optional"
+              className="rate-plan-price-field"
+              label="Public price"
+              hint="Optional · used for non-members."
               name="nonMemberAmount"
             />
-            <MoneyInput label="Member price · optional" name="memberAmount" />
+            <MoneyInput
+              className="rate-plan-price-field"
+              label="Member price"
+              hint="Optional · used for active members."
+              name="memberAmount"
+            />
           </div>
           <div className="rate-plan-lowest-rule">
             <Sparkles aria-hidden size={17} />
-            <span>
-              <strong>Lowest qualified price wins</strong>
-              If this overlaps another plan, Duna compares the final price for
-              that player, court, date, and duration—and applies the lowest one.
-            </span>
+            <p>
+              <strong>Lowest qualified price wins.</strong> If plans overlap,
+              Duna gives each player the lowest price they qualify for.
+            </p>
           </div>
         </section>
 
