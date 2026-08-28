@@ -1119,6 +1119,30 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     venueCourtList.getByText("Community Court", { exact: true }),
   ).toBeVisible();
+  const ratePlanCreator = page.locator(".venue-rate-plans__creator");
+  await expect(ratePlanCreator).toBeVisible();
+  await ratePlanCreator.locator("summary").press("Enter");
+  const ratePlanPricingStep = ratePlanCreator.locator(
+    ".rate-plan-step--pricing",
+  );
+  await expect(ratePlanPricingStep).toBeVisible();
+  await expect(
+    ratePlanPricingStep.locator(".rate-plan-price-field"),
+  ).toHaveCount(3);
+  const currencyInsets = await ratePlanPricingStep
+    .locator(".operator-money-input")
+    .evaluateAll((moneyInputs) =>
+      moneyInputs.map((moneyInput) => {
+        const field = moneyInput.getBoundingClientRect();
+        const currency = moneyInput
+          .querySelector("small")
+          ?.getBoundingClientRect();
+
+        return currency ? currency.left - field.left : 0;
+      }),
+    );
+  currencyInsets.forEach((inset) => expect(inset).toBeGreaterThanOrEqual(8));
+  await expectNoHorizontalOverflow(page);
   await clickAndWaitForUrl(
     page,
     page.getByRole("link", { name: /Championship Court/ }),

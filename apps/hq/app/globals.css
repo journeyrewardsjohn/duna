@@ -27452,43 +27452,94 @@ body {
   margin: 0.15rem 0 0;
 }
 
-.rate-plan-price-guide {
+.rate-plan-step--pricing {
+  gap: 1rem;
+}
+
+.rate-plan-price-grid {
   display: grid;
-  gap: 0.55rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.12fr) repeat(2, minmax(0, 1fr));
 }
 
-.rate-plan-price-guide article {
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  padding: 0.75rem;
+.rate-plan-price-field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
-.rate-plan-price-guide strong {
-  display: block;
+.rate-plan-price-field > span:first-child {
+  color: var(--color-ink);
   font-size: max(0.78rem, 12px);
-  margin-bottom: 0.25rem;
+  font-weight: 780;
 }
 
-.rate-plan-price-guide p {
+.rate-plan-price-field > .operator-money-input {
+  align-items: center;
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.55rem;
+  min-height: 56px;
+  overflow: visible;
+  padding: 0 0.75rem;
+}
+
+.rate-plan-price-field--base > .operator-money-input {
+  border-color: rgb(var(--accent-rgb) / 38%);
+}
+
+.rate-plan-price-field > .operator-money-input small {
+  align-items: center;
+  background: rgb(var(--accent-rgb) / 9%);
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-aqua);
+  display: flex;
+  flex: 0 0 30px;
+  font-size: max(0.82rem, 12px);
+  height: 30px;
+  justify-content: center;
+  left: auto;
+  min-width: 30px;
+  padding: 0;
+  position: static;
+}
+
+.rate-plan-price-field > .operator-money-input input {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  flex: 1 1 auto;
+  font-size: 1.1rem;
+  min-height: 54px;
+  min-width: 0;
+  padding: 0;
+}
+
+.rate-plan-price-field > .operator-money-input input:focus-visible {
+  box-shadow: none;
+}
+
+.rate-plan-price-field > .operator-money-input__hint {
   color: var(--color-bone-muted);
-  font-size: max(0.75rem, 12px);
-  line-height: 1.45;
-  margin: 0;
+  font-size: max(0.72rem, 12px);
+  line-height: 1.35;
 }
 
 .rate-plan-lowest-rule {
   align-items: flex-start;
-  background: rgb(var(--accent-rgb) / 8%);
-  border: 1px solid rgb(var(--accent-rgb) / 20%);
-  border-radius: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--color-line);
   color: var(--color-bone-muted);
   display: flex;
   font-size: max(0.75rem, 12px);
   gap: 0.55rem;
   line-height: 1.45;
-  padding: 0.7rem 0.8rem;
+  padding: 0.75rem 0 0;
 }
 
 .rate-plan-lowest-rule svg {
@@ -27497,9 +27548,8 @@ body {
   margin-top: 0.08rem;
 }
 
-.rate-plan-lowest-rule span {
-  display: grid;
-  gap: 0.12rem;
+.rate-plan-lowest-rule p {
+  margin: 0;
 }
 
 .rate-plan-lowest-rule strong {
@@ -27772,8 +27822,7 @@ body {
 }
 
 @media (max-width: 760px) {
-  .rate-plan-price-guide,
-  .rate-plan-prices,
+  .rate-plan-price-grid,
   .rate-plan-audience-options {
     grid-template-columns: 1fr;
   }
