@@ -11,6 +11,7 @@ import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
+import * as WebBrowser from "expo-web-browser";
 import {
   useCallback,
   useEffect,
@@ -21,6 +22,7 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Image,
   KeyboardAvoidingView,
@@ -172,6 +174,8 @@ interface CaptureForm {
   readonly hasAudio: boolean;
   readonly liveVisibility: LiveVisibility;
   readonly recordingVisibility: RecordingVisibility;
+  readonly simulcastToDunaYoutube: boolean;
+  readonly youtubeConnectionIds: readonly string[];
   readonly publishedToProfile: boolean;
   readonly courtWidthMeters: number;
   readonly courtLengthMeters: number;
@@ -258,6 +262,8 @@ const initialCaptureForm: CaptureForm = {
   hasAudio: true,
   liveVisibility: "public",
   recordingVisibility: "private",
+  simulcastToDunaYoutube: false,
+  youtubeConnectionIds: [],
   publishedToProfile: false,
   courtWidthMeters: 8,
   courtLengthMeters: 16,
@@ -853,6 +859,7 @@ function RecordingChoiceSheet({
 }
 
 function CaptureSetupForm({
+  broadcast,
   client,
   form,
   mode,
@@ -860,8 +867,10 @@ function CaptureSetupForm({
   onChange,
   onContinue,
   onCreateMatch,
+  onYoutubeConnectionsChanged,
   theme,
 }: {
+  readonly broadcast?: VideoStudioData["broadcast"];
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
   readonly mode: "live" | "record";
@@ -869,10 +878,15 @@ function CaptureSetupForm({
   readonly onChange: (form: CaptureForm) => void;
   readonly onContinue: () => void;
   readonly onCreateMatch?: () => void;
+  readonly onYoutubeConnectionsChanged?: () => Promise<void>;
   readonly theme: DunaTheme;
 }) {
   const insets = useSafeAreaInsets();
   const [sheet, setSheet] = useState<CaptureSetupSheet>();
+  const [linkingYoutube, setLinkingYoutube] = useState(false);
+  const [disconnectingYoutubeId, setDisconnectingYoutubeId] =
+    useState<string>();
+  const [youtubeNotice, setYoutubeNotice] = useState<string>();
   const tokens = useMemo(
     () => resolveDunaMobileTokens(theme, "athletic"),
     [theme],
@@ -896,6 +910,85 @@ function CaptureSetupForm({
       : form.netHeightMeters === 2.24
         ? "Women · 2.24m"
         : "Juniors · 2.12m";
+
+  const connectYoutube = async (scope: "personal" | "organization") => {
+    if (!client || linkingYoutube) return;
+    setLinkingYoutube(true);
+    setYoutubeNotice(undefined);
+    try {
+      const connection =
+        await client.player.beginYoutubeChannelConnection.mutate({
+          scope,
+          returnUrl: "duna://video",
+        });
+      const result = await WebBrowser.openAuthSessionAsync(
+        connection.authorizationUrl,
+        "duna://video",
+      );
+      if (result.type === "success") {
+        const callback = new URL(result.url);
+        if (callback.searchParams.get("youtube") === "connected") {
+          setYoutubeNotice(
+            callback.searchParams.get("channel")
+              ? `${callback.searchParams.get("channel")} is connected.`
+              : "YouTube channel connected.",
+          );
+          await onYoutubeConnectionsChanged?.();
+        } else {
+          setYoutubeNotice(
+            callback.searchParams.get("reason") ||
+              "YouTube did not finish connecting.",
+          );
+        }
+      } else if (result.type !== "cancel") {
+        setYoutubeNotice("YouTube did not finish connecting.");
+      }
+    } catch (error) {
+      setYoutubeNotice(displayError(error));
+    } finally {
+      setLinkingYoutube(false);
+    }
+  };
+
+  const disconnectYoutube = (
+    connection: VideoStudioData["broadcast"]["youtube"]["connections"][number],
+  ) => {
+    if (!client || disconnectingYoutubeId) return;
+    Alert.alert(
+      `Disconnect ${connection.channelTitle}?`,
+      "Duna will revoke its YouTube access. Existing YouTube videos are not deleted.",
+      [
+        { text: "Keep connected", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: () => {
+            setDisconnectingYoutubeId(connection.id);
+            setYoutubeNotice(undefined);
+            void client.player.disconnectYoutubeChannel
+              .mutate({
+                connectionId: connection.id,
+                idempotencyKey: idempotencyKey(),
+              })
+              .then(async () => {
+                onChange({
+                  ...form,
+                  youtubeConnectionIds: form.youtubeConnectionIds.filter(
+                    (id) => id !== connection.id,
+                  ),
+                });
+                setYoutubeNotice(`${connection.channelTitle} is disconnected.`);
+                await onYoutubeConnectionsChanged?.();
+              })
+              .catch((error: unknown) => {
+                setYoutubeNotice(displayError(error));
+              })
+              .finally(() => setDisconnectingYoutubeId(undefined));
+          },
+        },
+      ],
+    );
+  };
 
   const applyAssociation = (association: VideoAssociation | undefined) => {
     if (!association) {
@@ -1199,6 +1292,186 @@ function CaptureSetupForm({
               value={form.hasAudio ? "On" : "Off"}
             />
           </View>
+
+          {mode === "live" && (
+            <View style={setupStyles.destinationSection}>
+              <View style={setupStyles.destinationHeading}>
+                <View style={setupStyles.detailsIcon}>
+                  <DunaIcon color={tokens.text1} name="video" />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={setupStyles.sectionLabel}>
+                    Simulcast to YouTube
+                  </Text>
+                  <Text style={setupStyles.destinationIntro}>
+                    Duna stays the primary stream. Choose every YouTube channel
+                    that should receive this match.
+                  </Text>
+                </View>
+              </View>
+
+              {broadcast?.preferredProvider !== "cloudflare" ? (
+                <Text style={setupStyles.disclosureText}>
+                  YouTube simulcast becomes available when Cloudflare Stream is
+                  the active live provider.
+                </Text>
+              ) : (
+                <>
+                  {broadcast.youtube.dunaChannel && (
+                    <View style={setupStyles.advancedToggle}>
+                      <View style={styles.flex}>
+                        <Text style={setupStyles.advancedToggleTitle}>
+                          {broadcast.youtube.dunaChannel.channelTitle}
+                        </Text>
+                        <Text style={setupStyles.advancedToggleBody}>
+                          Duna’s official YouTube channel
+                        </Text>
+                      </View>
+                      <Switch
+                        accessibilityLabel={`Simulcast to ${broadcast.youtube.dunaChannel.channelTitle}`}
+                        onValueChange={(simulcastToDunaYoutube) =>
+                          onChange({ ...form, simulcastToDunaYoutube })
+                        }
+                        thumbColor={tokens.surface1}
+                        trackColor={{
+                          false: tokens.hairlineStrong,
+                          true: tokens.buttonPrimaryBackground,
+                        }}
+                        value={form.simulcastToDunaYoutube}
+                      />
+                    </View>
+                  )}
+
+                  {broadcast.youtube.connections.map((connection) => {
+                    const selected = form.youtubeConnectionIds.includes(
+                      connection.id,
+                    );
+                    return (
+                      <View
+                        key={connection.id}
+                        style={setupStyles.advancedToggle}
+                      >
+                        <View style={styles.flex}>
+                          <Text style={setupStyles.advancedToggleTitle}>
+                            {connection.channelTitle}
+                          </Text>
+                          <Text style={setupStyles.advancedToggleBody}>
+                            {connection.scope === "organization"
+                              ? "Organization YouTube channel"
+                              : "Your YouTube channel"}
+                            {connection.status === "error"
+                              ? " · Reconnect required"
+                              : ""}
+                          </Text>
+                        </View>
+                        <View style={setupStyles.destinationControls}>
+                          <Switch
+                            accessibilityLabel={`Simulcast to ${connection.channelTitle}`}
+                            disabled={connection.status === "error"}
+                            onValueChange={(enabled) =>
+                              onChange({
+                                ...form,
+                                youtubeConnectionIds: enabled
+                                  ? [
+                                      ...new Set([
+                                        ...form.youtubeConnectionIds,
+                                        connection.id,
+                                      ]),
+                                    ]
+                                  : form.youtubeConnectionIds.filter(
+                                      (id) => id !== connection.id,
+                                    ),
+                              })
+                            }
+                            thumbColor={tokens.surface1}
+                            trackColor={{
+                              false: tokens.hairlineStrong,
+                              true: tokens.buttonPrimaryBackground,
+                            }}
+                            value={selected}
+                          />
+                          {(connection.scope === "personal" ||
+                            broadcast.youtube
+                              .canManageOrganizationConnections) && (
+                            <Pressable
+                              accessibilityLabel={`Disconnect ${connection.channelTitle}`}
+                              accessibilityRole="button"
+                              disabled={Boolean(disconnectingYoutubeId)}
+                              hitSlop={mobileGrid[2]}
+                              onPress={() => disconnectYoutube(connection)}
+                              style={setupStyles.youtubeDisconnectButton}
+                            >
+                              {disconnectingYoutubeId === connection.id ? (
+                                <ActivityIndicator
+                                  color={tokens.text3}
+                                  size="small"
+                                />
+                              ) : (
+                                <DunaIcon
+                                  color={tokens.text3}
+                                  name="close"
+                                  size={17}
+                                />
+                              )}
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  {broadcast.youtube.linkingConfigured && (
+                    <View style={setupStyles.youtubeActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={linkingYoutube}
+                        onPress={() => void connectYoutube("personal")}
+                        style={setupStyles.youtubeLinkButton}
+                      >
+                        {linkingYoutube ? (
+                          <ActivityIndicator
+                            color={tokens.text1}
+                            size="small"
+                          />
+                        ) : (
+                          <DunaIcon
+                            color={tokens.text1}
+                            name="plus"
+                            size={19}
+                          />
+                        )}
+                        <Text style={setupStyles.youtubeLinkButtonText}>
+                          Link your YouTube
+                        </Text>
+                      </Pressable>
+                      {broadcast.youtube.canManageOrganizationConnections && (
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={linkingYoutube}
+                          onPress={() => void connectYoutube("organization")}
+                          style={setupStyles.youtubeLinkButton}
+                        >
+                          <DunaIcon
+                            color={tokens.text1}
+                            name="plus"
+                            size={19}
+                          />
+                          <Text style={setupStyles.youtubeLinkButtonText}>
+                            Link organization channel
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+                  {youtubeNotice && (
+                    <Text style={setupStyles.disclosureText}>
+                      {youtubeNotice}
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
           <Pressable
             accessibilityRole="button"
@@ -1535,6 +1808,55 @@ function createRecordingSetupStyles(
       flexDirection: "row",
       flexWrap: "wrap",
       gap: mobileGrid[2],
+    },
+    destinationSection: {
+      backgroundColor: tokens.inactiveFill,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      gap: mobileGrid[3],
+      padding: mobileGrid[3],
+    },
+    destinationHeading: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[3],
+    },
+    destinationIntro: {
+      color: tokens.text3,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: mobileGrid[1],
+    },
+    youtubeActions: { gap: mobileGrid[2] },
+    destinationControls: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[1],
+    },
+    youtubeDisconnectButton: {
+      alignItems: "center",
+      borderRadius: mobileControl.pillRadius,
+      height: mobileControl.minimumTarget,
+      justifyContent: "center",
+      width: mobileControl.minimumTarget,
+    },
+    youtubeLinkButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairlineStrong,
+      borderRadius: mobileControl.nestedRadius,
+      borderWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      justifyContent: "center",
+      minHeight: mobileControl.minimumTarget,
+      paddingHorizontal: mobileGrid[3],
+    },
+    youtubeLinkButtonText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "700",
     },
     settingTile: {
       alignItems: "stretch",
@@ -2120,6 +2442,7 @@ function ImportedVisionSetupCard({
 }
 
 function VideoDetailsForm({
+  broadcast,
   client,
   form,
   importedVision,
@@ -2132,10 +2455,12 @@ function VideoDetailsForm({
   onEditImportedCourt,
   onIdentifyImportedPlayers,
   onImportedVisionChange,
+  onYoutubeConnectionsChanged,
   preparedVideo,
   foregroundOnlyUpload,
   theme,
 }: {
+  readonly broadcast?: VideoStudioData["broadcast"];
   readonly client?: DunaApiClient;
   readonly form: CaptureForm;
   readonly importedVision?: ImportedVisionSetup;
@@ -2149,12 +2474,14 @@ function VideoDetailsForm({
   readonly onEditImportedCourt: () => void;
   readonly onIdentifyImportedPlayers: () => void;
   readonly onImportedVisionChange: (setup: ImportedVisionSetup) => void;
+  readonly onYoutubeConnectionsChanged?: () => Promise<void>;
   readonly foregroundOnlyUpload: boolean;
   readonly theme: DunaTheme;
 }) {
   if (mode === "live" || mode === "record") {
     return (
       <CaptureSetupForm
+        broadcast={broadcast}
         client={client}
         form={form}
         mode={mode}
@@ -2162,6 +2489,7 @@ function VideoDetailsForm({
         onChange={onChange}
         onContinue={onContinue}
         onCreateMatch={onCreateMatch}
+        onYoutubeConnectionsChanged={onYoutubeConnectionsChanged}
         theme={theme}
       />
     );
@@ -3378,12 +3706,22 @@ function CaptureExperience({
           liveVisibility: form.liveVisibility,
           recordingVisibility: form.recordingVisibility,
           hasAudio: form.hasAudio,
+          simulcastToDunaYoutube: form.simulcastToDunaYoutube,
+          youtubeConnectionIds: [...form.youtubeConnectionIds],
           visionLearningConsent: form.contributeCalibration,
           courtCalibration: calibration(),
           idempotencyKey: idempotencyKey(),
         });
         createdSession = created;
         setSession(created);
+        const failedDestinations = created.destinations.filter(
+          (destination) => destination.status === "failed",
+        );
+        if (failedDestinations.length > 0) {
+          setVisionNotice(
+            `Duna is ready. ${failedDestinations.map((destination) => destination.channelTitle).join(", ")} could not connect to YouTube.`,
+          );
+        }
         const currentVision = sessionRef.current;
         if (currentVision) {
           const attached =
@@ -6341,6 +6679,7 @@ export function VideoStudioScreen({
           !editingImportedCourt &&
           detailsMode && (
             <VideoDetailsForm
+              broadcast={studio?.broadcast}
               client={client}
               form={form}
               importedVision={importedVision}
@@ -6372,6 +6711,7 @@ export function VideoStudioScreen({
                 setIdentifyingImportedPlayers(true)
               }
               onImportedVisionChange={setImportedVision}
+              onYoutubeConnectionsChanged={load}
               preparedVideo={preparedVideo}
               foregroundOnlyUpload={!isIos}
               theme={theme}

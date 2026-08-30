@@ -29,6 +29,86 @@ function muxCurrentTime(event: Event) {
   return typeof target?.currentTime === "number" ? target.currentTime : 0;
 }
 
+interface CloudflarePlayerController {
+  readonly currentTime: number;
+  addEventListener(type: string, listener: () => void): void;
+  removeEventListener(type: string, listener: () => void): void;
+}
+
+type CloudflareStreamWindow = Window & {
+  readonly Stream?: (iframe: HTMLIFrameElement) => CloudflarePlayerController;
+};
+
+function CloudflareStreamPlayer({
+  onEnded,
+  onPause,
+  onTimeUpdate,
+  src,
+  title,
+}: {
+  readonly onEnded: (seconds: number) => void;
+  readonly onPause: (seconds: number) => void;
+  readonly onTimeUpdate: (seconds: number) => void;
+  readonly src: string;
+  readonly title: string;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const callbacks = useRef({ onEnded, onPause, onTimeUpdate });
+  callbacks.current = { onEnded, onPause, onTimeUpdate };
+
+  useEffect(() => {
+    let active = true;
+    let controller: CloudflarePlayerController | undefined;
+    let script = document.querySelector<HTMLScriptElement>(
+      "script[data-duna-cloudflare-stream-sdk]",
+    );
+    const timeUpdate = () =>
+      callbacks.current.onTimeUpdate(controller?.currentTime ?? 0);
+    const pause = () => callbacks.current.onPause(controller?.currentTime ?? 0);
+    const ended = () => callbacks.current.onEnded(controller?.currentTime ?? 0);
+    const attach = () => {
+      const iframe = iframeRef.current;
+      const factory = (window as CloudflareStreamWindow).Stream;
+      if (!active || !iframe || !factory) return;
+      controller = factory(iframe);
+      controller.addEventListener("timeupdate", timeUpdate);
+      controller.addEventListener("pause", pause);
+      controller.addEventListener("ended", ended);
+    };
+
+    if ((window as CloudflareStreamWindow).Stream) {
+      attach();
+    } else {
+      if (!script) {
+        script = document.createElement("script");
+        script.async = true;
+        script.dataset.dunaCloudflareStreamSdk = "true";
+        script.src = "https://embed.cloudflarestream.com/embed/sdk.latest.js";
+        document.head.append(script);
+      }
+      script.addEventListener("load", attach, { once: true });
+    }
+
+    return () => {
+      active = false;
+      script?.removeEventListener("load", attach);
+      controller?.removeEventListener("timeupdate", timeUpdate);
+      controller?.removeEventListener("pause", pause);
+      controller?.removeEventListener("ended", ended);
+    };
+  }, [src]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+      allowFullScreen
+      src={src}
+      title={title}
+    />
+  );
+}
+
 function matchLabelTeams(label: string | undefined) {
   if (!label) return { teamA: "Side A", teamB: "Side B" };
   const [left, right] = label.split(/\s+(?:vs\.?|v\.?|—|–|-)\s+/i);
@@ -298,6 +378,17 @@ export function DunaVideoGallery({
                 setCurrentTime(seconds);
                 reportView(seconds, false);
               }}
+            />
+          ) : playback.provider === "cloudflare" && playback.embedUrl ? (
+            <CloudflareStreamPlayer
+              onEnded={(seconds) => reportView(seconds, true)}
+              onPause={(seconds) => reportView(seconds, false)}
+              onTimeUpdate={(seconds) => {
+                setCurrentTime(seconds);
+                reportView(seconds, false);
+              }}
+              src={playback.embedUrl}
+              title={playback.video.title}
             />
           ) : playback.sourceUrl ? (
             <video

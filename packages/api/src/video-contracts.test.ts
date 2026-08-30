@@ -621,6 +621,7 @@ describe("Duna Video contracts", () => {
         insightFeedback: { helpful: 0, notHelpful: 0 },
         calibrationSamples: [],
       },
+      cloudflareConfigured: true,
       muxConfigured: false,
       r2Configured: true,
     });

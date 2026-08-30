@@ -2623,6 +2623,7 @@ export const videoSummarySchema = z.object({
   organizationId: z.string().uuid().optional(),
   owner: personSummarySchema,
   source: videoSourceSchema,
+  liveProvider: z.enum(["cloudflare", "mux"]).optional(),
   category: videoCategorySchema,
   title: z.string(),
   status: videoStatusSchema,
@@ -2704,6 +2705,35 @@ export const videoStudioSchema = z.object({
   liveConfigured: z.boolean(),
   uploadsConfigured: z.boolean(),
   dataEnvironmentKey: z.string().optional(),
+  broadcast: z.object({
+    preferredProvider: z.enum(["cloudflare", "mux"]).optional(),
+    cloudflareConfigured: z.boolean(),
+    muxConfigured: z.boolean(),
+    srtIngestAvailable: z.boolean(),
+    activeClientIngest: z.enum(["rtmps", "srt"]),
+    youtube: z.object({
+      linkingConfigured: z.boolean(),
+      canManageOrganizationConnections: z.boolean(),
+      dunaChannel: z
+        .object({
+          channelId: z.string(),
+          channelTitle: z.string(),
+        })
+        .optional(),
+      connections: z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            channelId: z.string(),
+            channelTitle: z.string(),
+            scope: z.enum(["personal", "organization"]),
+            status: z.enum(["active", "error"]),
+            lastError: z.string().optional(),
+          }),
+        )
+        .readonly(),
+    }),
+  }),
 });
 export const videoAssociationOptionSchema = z.object({
   type: z.enum(["event", "match"]),
@@ -2734,10 +2764,11 @@ export const videoAssociationOptionSchema = z.object({
 });
 export const videoPlaybackSchema = z.object({
   video: videoSummarySchema,
-  provider: z.enum(["mux", "r2"]),
+  provider: z.enum(["cloudflare", "mux", "r2"]),
   playbackId: z.string().optional(),
   playbackToken: z.string().optional(),
   sourceUrl: z.url().optional(),
+  embedUrl: z.url().optional(),
   posterUrl: z.url().optional(),
   dataEnvironmentKey: z.string().optional(),
   viewSessionId: z.string().uuid(),
@@ -2748,8 +2779,35 @@ export const videoPlaybackSchema = z.object({
 });
 export const liveVideoSessionSchema = z.object({
   video: videoSummarySchema,
+  provider: z.enum(["cloudflare", "mux"]),
   streamUrl: z.url(),
   streamKey: z.string().min(8),
+  ingests: z.object({
+    rtmps: z.object({
+      url: z.url(),
+      streamKey: z.string().min(8),
+    }),
+    srt: z
+      .object({
+        url: z.url(),
+        streamId: z.string().min(1),
+        passphrase: z.string().min(10),
+      })
+      .optional(),
+  }),
+  destinations: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        kind: z.enum(["duna-youtube", "connected-youtube"]),
+        channelId: z.string(),
+        channelTitle: z.string(),
+        status: z.enum(["ready", "failed"]),
+        watchUrl: z.url().optional(),
+        error: z.string().optional(),
+      }),
+    )
+    .readonly(),
   maximumDurationSeconds: z.number().int().positive(),
   shareUrl: z.url(),
 });
@@ -2876,6 +2934,7 @@ export const adminVideoOverviewSchema = z.object({
     }),
     calibrationSamples: z.array(visionCalibrationReviewSampleSchema).readonly(),
   }),
+  cloudflareConfigured: z.boolean(),
   muxConfigured: z.boolean(),
   r2Configured: z.boolean(),
 });
@@ -7036,6 +7095,7 @@ export type VideoSummary = z.infer<typeof videoSummarySchema>;
 export type VideoStudio = z.infer<typeof videoStudioSchema>;
 export type VideoUsage = z.infer<typeof videoUsageSchema>;
 export type VideoPlayback = z.infer<typeof videoPlaybackSchema>;
+export type LiveVideoSession = z.infer<typeof liveVideoSessionSchema>;
 export type VideoMetrics = z.infer<typeof videoMetricsSchema>;
 export type VisionSession = z.infer<typeof visionSessionSchema>;
 export type VisionSessionSettings = z.infer<typeof visionSessionSettingsSchema>;

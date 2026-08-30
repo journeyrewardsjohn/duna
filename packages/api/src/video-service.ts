@@ -27,6 +27,7 @@ import {
   teams,
   venues,
   videoAllowanceGrants,
+  videoBroadcastDestinations,
   videoQuotaPolicies,
   videoInsightFeedback,
   videoShareLinks,
@@ -57,6 +58,7 @@ import type { ApiActor } from "./context";
 import type {
   AdminVideoOverview,
   DunaPlusGrant,
+  LiveVideoSession,
   VideoMetrics,
   VideoPlayback,
   VideoStudio,
@@ -72,27 +74,44 @@ import { loadPublicMatchScoringState } from "./match-service";
 import { loadHealthVideoOverlay } from "./health-service";
 import {
   abortR2VideoUpload,
+  cloudflareEmbedUrl,
+  cloudflareSignedPlaybackUrl,
   completeMuxLiveVideo,
   completeR2VideoUpload,
+  createCloudflareLiveVideo,
   createMuxLiveVideo,
   createR2VideoUpload,
+  disableCloudflareLiveInput,
   headR2VideoObject,
+  isCloudflareSrtIngestEnabled,
+  isCloudflareStreamConfigured,
   isR2MultipartUploadAlreadyAbsent,
   isMuxSignedPlaybackConfigured,
   isMuxLivePlanUnavailable,
   isMuxVideoConfigured,
   isR2VideoConfigured,
+  loadCloudflareLiveVideo,
+  loadMuxLiveStreamKey,
   loadMuxVideoMetrics,
   muxDataEnvironmentKey,
   listR2VideoUploadParts,
+  listCloudflareLiveRecordings,
   presignR2VideoPart,
   presignR2VideoPlayback,
   R2_VIDEO_PART_SIZE_BYTES,
   replaceMuxAssetPlaybackPolicy,
   replaceMuxLivePlaybackPolicy,
   signMuxPlayback,
+  signCloudflarePlayback,
+  updateCloudflareLiveInputAccess,
+  updateCloudflareVideoAccess,
   type R2MultipartPart,
 } from "./video-providers";
+import {
+  endYoutubeBroadcastDestinations,
+  loadYoutubeBroadcastOptions,
+  provisionYoutubeBroadcastDestinations,
+} from "./video-youtube-service";
 import { loadVisionPlayback } from "./vision-service";
 
 const DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS = 8 * 60 * 60;
@@ -104,6 +123,22 @@ const VIDEO_UPLOAD_SESSION_SECONDS = 24 * 60 * 60;
 const LEGACY_R2_VIDEO_PART_SIZE_BYTES = 16 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 ** 4;
 const PUBLIC_VIDEO_STATUSES = ["live", "ready", "ended", "processing"] as const;
+
+type LiveVideoProvider = "cloudflare" | "mux";
+
+export function preferredLiveVideoProvider(): LiveVideoProvider | undefined {
+  const preference = (process.env.DUNA_LIVE_PROVIDER ?? "auto")
+    .trim()
+    .toLowerCase();
+  if (preference === "cloudflare") {
+    return isCloudflareStreamConfigured() ? "cloudflare" : undefined;
+  }
+  if (preference === "mux") {
+    return isMuxVideoConfigured() ? "mux" : undefined;
+  }
+  if (isCloudflareStreamConfigured()) return "cloudflare";
+  return isMuxVideoConfigured() ? "mux" : undefined;
+}
 
 interface VideoQuotaLimits {
   readonly monthlyLiveSeconds: number;
@@ -170,6 +205,7 @@ export class VideoServiceError extends Error {
   constructor(
     readonly code:
       | "DATABASE_REQUIRED"
+      | "LIVE_PROVIDER_REQUIRED"
       | "MUX_REQUIRED"
       | "R2_REQUIRED"
       | "SIGNED_PLAYBACK_REQUIRED"
@@ -436,6 +472,12 @@ async function loadVideoSummaries(
         organizationId: video.organizationId ?? undefined,
         owner,
         source: video.source as "live" | "upload",
+        liveProvider:
+          video.liveProvider === "cloudflare" || video.liveProvider === "mux"
+            ? video.liveProvider
+            : video.muxLiveStreamId
+              ? "mux"
+              : undefined,
         category: video.category as VideoCategory,
         title: video.title,
         status: video.status as VideoSummary["status"],
@@ -848,12 +890,13 @@ async function reportOrganizationVideoOverage(input: {
 }
 
 export async function loadVideoStudio(
-  personId: string,
+  actor: ApiActor,
   now = new Date(),
-  organizationId?: string,
 ): Promise<VideoStudio> {
   requireDatabase();
-  const [entitlement, usage, ownVideos, liveNow, organization] =
+  const personId = actor.personId;
+  const organizationId = actor.organizationId;
+  const [entitlement, usage, ownVideos, liveNow, organization, youtube] =
     await Promise.all([
       getDunaPlusEntitlement(personId, now),
       loadVideoUsage(personId, now, organizationId),
@@ -878,10 +921,15 @@ export async function loadVideoStudio(
             where: eq(organizations.id, organizationId),
           })
         : Promise.resolve(undefined),
+      loadYoutubeBroadcastOptions(actor),
     ]);
   const organizationPlan = organization
     ? resolveOrganizationCommissionPolicy(organization).effectivePlan
     : undefined;
+  const preferredProvider = preferredLiveVideoProvider();
+  const liveConfigured =
+    preferredProvider === "cloudflare" ||
+    (preferredProvider === "mux" && isMuxSignedPlaybackConfigured());
   return {
     entitlement,
     quotaScope: organization
@@ -899,12 +947,21 @@ export async function loadVideoStudio(
     usage,
     videos: ownVideos,
     liveNow,
-    liveConfigured:
-      isMuxVideoConfigured() &&
-      (isMuxSignedPlaybackConfigured() ||
-        !ownVideos.some((video) => video.liveVisibility === "link-only")),
+    liveConfigured,
     uploadsConfigured: isR2VideoConfigured(),
     dataEnvironmentKey: muxDataEnvironmentKey(),
+    broadcast: {
+      preferredProvider,
+      cloudflareConfigured: isCloudflareStreamConfigured(),
+      muxConfigured: isMuxVideoConfigured(),
+      srtIngestAvailable:
+        isCloudflareStreamConfigured() && isCloudflareSrtIngestEnabled(),
+      // The current HaishinKit CocoaPods bridge is RTMPS-only. Cloudflare SRT
+      // credentials are returned below so the native SPM migration can be
+      // device-tested without another backend or database change.
+      activeClientIngest: "rtmps",
+      youtube,
+    },
   };
 }
 
@@ -1282,19 +1339,15 @@ export async function createLiveVideo(input: {
   readonly liveVisibility: LiveVisibility;
   readonly recordingVisibility: RecordingVisibility;
   readonly hasAudio: boolean;
+  readonly simulcastToDunaYoutube: boolean;
+  readonly youtubeConnectionIds: readonly string[];
   readonly visionLearningConsent: boolean;
   readonly courtCalibration?: CourtCalibration;
   readonly idempotencyKey: string;
   readonly requestId: string;
   readonly ipAddress?: string;
   readonly now: Date;
-}): Promise<{
-  readonly video: VideoSummary;
-  readonly streamUrl: string;
-  readonly streamKey: string;
-  readonly maximumDurationSeconds: number;
-  readonly shareUrl: string;
-}> {
+}): Promise<LiveVideoSession> {
   requireDatabase();
   if (input.actor.ageBand !== "adult") {
     throw new VideoServiceError(
@@ -1302,13 +1355,24 @@ export async function createLiveVideo(input: {
       "Live streaming currently requires an adult Duna account.",
     );
   }
-  if (!isMuxVideoConfigured()) {
+  const liveProvider = preferredLiveVideoProvider();
+  if (!liveProvider) {
     throw new VideoServiceError(
-      "MUX_REQUIRED",
-      "Mux Video must be connected before live streaming.",
+      "LIVE_PROVIDER_REQUIRED",
+      "Cloudflare Stream or Mux Video must be connected before live streaming.",
     );
   }
   if (
+    liveProvider !== "cloudflare" &&
+    (input.simulcastToDunaYoutube || input.youtubeConnectionIds.length > 0)
+  ) {
+    throw new VideoServiceError(
+      "LIVE_PROVIDER_REQUIRED",
+      "YouTube simulcast requires Cloudflare Stream to be the live provider.",
+    );
+  }
+  if (
+    liveProvider === "mux" &&
     (input.liveVisibility === "link-only" ||
       input.recordingVisibility === "private") &&
     !isMuxSignedPlaybackConfigured()
@@ -1360,6 +1424,7 @@ export async function createLiveVideo(input: {
     latitude: input.venue?.latitude,
     longitude: input.venue?.longitude,
     status: "draft",
+    liveProvider,
     liveVisibility: input.liveVisibility,
     recordingVisibility: input.recordingVisibility,
     hasAudio: input.hasAudio,
@@ -1371,7 +1436,68 @@ export async function createLiveVideo(input: {
     createdAt: input.now,
     updatedAt: input.now,
   });
+  let cloudflareLiveInputId: string | undefined;
   try {
+    if (liveProvider === "cloudflare") {
+      const cloudflare = await createCloudflareLiveVideo({
+        videoId,
+        title: input.title,
+        liveVisibility: input.liveVisibility,
+        recordingVisibility: input.recordingVisibility,
+      });
+      cloudflareLiveInputId = cloudflare.liveInputId;
+      await database
+        .update(videos)
+        .set({
+          liveProviderInputId: cloudflare.liveInputId,
+          liveProviderPlaybackId: cloudflare.playbackId,
+          liveProviderPlaybackUrl: cloudflare.playbackHlsUrl,
+          liveProviderPlaybackPolicy: cloudflare.playbackPolicy,
+          updatedAt: input.now,
+        })
+        .where(eq(videos.id, videoId));
+      const [share, destinations] = await Promise.all([
+        createStoredShareLink({
+          videoId,
+          ownerPersonId: input.actor.personId,
+        }),
+        provisionYoutubeBroadcastDestinations({
+          actor: input.actor,
+          videoId,
+          liveInputId: cloudflare.liveInputId,
+          title: input.title,
+          liveVisibility: input.liveVisibility,
+          simulcastToDunaYoutube: input.simulcastToDunaYoutube,
+          youtubeConnectionIds: input.youtubeConnectionIds,
+          now: input.now,
+        }),
+      ]);
+      await recordAudit({
+        actorPersonId: input.actor.personId,
+        organizationId: input.actor.organizationId,
+        action: "video.live-created",
+        entityType: "video",
+        entityId: videoId,
+        reason: `Created ${input.liveVisibility} Duna live stream with Cloudflare and ${destinations.filter((destination) => destination.status === "ready").length} simulcast destination(s).`,
+        requestId: input.requestId,
+        ipAddress: input.ipAddress,
+        now: input.now,
+      });
+      return {
+        video: await loadVideoSummary(videoId),
+        provider: "cloudflare",
+        streamUrl: cloudflare.rtmps.url,
+        streamKey: cloudflare.rtmps.streamKey,
+        ingests: {
+          rtmps: cloudflare.rtmps,
+          srt: cloudflare.srt,
+        },
+        destinations,
+        maximumDurationSeconds,
+        shareUrl: share.url,
+      };
+    }
+
     const [mux, share] = await Promise.all([
       createMuxLiveVideo({
         videoId,
@@ -1393,6 +1519,9 @@ export async function createLiveVideo(input: {
           muxLiveStreamId: mux.liveStreamId,
           muxLivePlaybackId: mux.playbackId,
           muxLivePlaybackPolicy: mux.playbackPolicy,
+          liveProviderInputId: mux.liveStreamId,
+          liveProviderPlaybackId: mux.playbackId,
+          liveProviderPlaybackPolicy: mux.playbackPolicy,
           updatedAt: input.now,
         })
         .where(eq(videos.id, videoId)),
@@ -1402,7 +1531,7 @@ export async function createLiveVideo(input: {
         action: "video.live-created",
         entityType: "video",
         entityId: videoId,
-        reason: `Created ${input.liveVisibility} Duna live stream.`,
+        reason: `Created ${input.liveVisibility} Duna live stream with Mux.`,
         requestId: input.requestId,
         ipAddress: input.ipAddress,
         now: input.now,
@@ -1410,12 +1539,25 @@ export async function createLiveVideo(input: {
     ]);
     return {
       video: await loadVideoSummary(videoId),
+      provider: "mux",
       streamUrl: "rtmps://global-live.mux.com:443/app",
       streamKey: mux.streamKey,
+      ingests: {
+        rtmps: {
+          url: "rtmps://global-live.mux.com:443/app",
+          streamKey: mux.streamKey,
+        },
+      },
+      destinations: [],
       maximumDurationSeconds,
       shareUrl: share.url,
     };
   } catch (error) {
+    if (cloudflareLiveInputId) {
+      await disableCloudflareLiveInput(cloudflareLiveInputId).catch(
+        () => undefined,
+      );
+    }
     await database
       .update(videos)
       .set({
@@ -1426,7 +1568,7 @@ export async function createLiveVideo(input: {
       })
       .where(eq(videos.id, videoId));
     console.error("Duna live provider setup failed", { error, videoId });
-    if (isMuxLivePlanUnavailable(error)) {
+    if (liveProvider === "mux" && isMuxLivePlanUnavailable(error)) {
       throw new VideoServiceError(
         "LIVE_PLAN_UNAVAILABLE",
         "Mux still reports that live streaming is unavailable for Duna's account. Record with Duna now while an administrator enables Mux live access.",
@@ -1450,6 +1592,85 @@ async function ownedVideo(
     throw new VideoServiceError("VIDEO_NOT_FOUND", "Video not found.");
   }
   return video;
+}
+
+export async function hydrateLiveVideoSessionReplay(input: {
+  readonly actor: ApiActor;
+  readonly videoId: string;
+  readonly maximumDurationSeconds: number;
+}): Promise<LiveVideoSession> {
+  requireDatabase();
+  const video = await ownedVideo(input.actor.personId, input.videoId);
+  const provider =
+    video.liveProvider === "cloudflare" || video.liveProvider === "mux"
+      ? video.liveProvider
+      : video.muxLiveStreamId
+        ? "mux"
+        : undefined;
+  const liveInputId = video.liveProviderInputId ?? video.muxLiveStreamId;
+  if (
+    video.source !== "live" ||
+    !provider ||
+    !liveInputId ||
+    video.status === "failed" ||
+    video.status === "deleted"
+  ) {
+    throw new VideoServiceError(
+      "VIDEO_NOT_FOUND",
+      "The original live-stream session is no longer available.",
+    );
+  }
+  const [summary, share, storedDestinations] = await Promise.all([
+    loadVideoSummary(video.id),
+    createStoredShareLink({
+      videoId: video.id,
+      ownerPersonId: input.actor.personId,
+    }),
+    getDatabase()
+      .select()
+      .from(videoBroadcastDestinations)
+      .where(eq(videoBroadcastDestinations.videoId, video.id))
+      .orderBy(videoBroadcastDestinations.createdAt),
+  ]);
+  const destinations = storedDestinations.map((destination) => ({
+    id: destination.id,
+    kind: destination.kind as "duna-youtube" | "connected-youtube",
+    channelId: destination.channelId,
+    channelTitle: destination.channelTitle,
+    status: destination.youtubeWatchUrl
+      ? ("ready" as const)
+      : ("failed" as const),
+    watchUrl: destination.youtubeWatchUrl ?? undefined,
+    error: destination.failureReason ?? undefined,
+  }));
+  if (provider === "cloudflare") {
+    const cloudflare = await loadCloudflareLiveVideo(liveInputId);
+    return {
+      video: summary,
+      provider,
+      streamUrl: cloudflare.rtmps.url,
+      streamKey: cloudflare.rtmps.streamKey,
+      ingests: { rtmps: cloudflare.rtmps, srt: cloudflare.srt },
+      destinations,
+      maximumDurationSeconds: input.maximumDurationSeconds,
+      shareUrl: share.url,
+    };
+  }
+  const streamKey = await loadMuxLiveStreamKey(liveInputId);
+  const rtmps = {
+    url: "rtmps://global-live.mux.com:443/app",
+    streamKey,
+  };
+  return {
+    video: summary,
+    provider,
+    streamUrl: rtmps.url,
+    streamKey,
+    ingests: { rtmps },
+    destinations,
+    maximumDurationSeconds: input.maximumDurationSeconds,
+    shareUrl: share.url,
+  };
 }
 
 export function videoIdFromBeginUploadIdempotencyResult(
@@ -1534,13 +1755,24 @@ export async function finishLiveVideo(input: {
 }): Promise<VideoSummary> {
   requireDatabase();
   const video = await ownedVideo(input.actor.personId, input.videoId);
-  if (video.source !== "live" || !video.muxLiveStreamId) {
+  const provider =
+    video.liveProvider === "cloudflare" || video.liveProvider === "mux"
+      ? video.liveProvider
+      : video.muxLiveStreamId
+        ? "mux"
+        : undefined;
+  const liveInputId = video.liveProviderInputId ?? video.muxLiveStreamId;
+  if (video.source !== "live" || !provider || !liveInputId) {
     throw new VideoServiceError(
       "VIDEO_NOT_FOUND",
       "An active live stream was not found.",
     );
   }
-  await completeMuxLiveVideo(video.muxLiveStreamId);
+  if (provider === "cloudflare") {
+    await disableCloudflareLiveInput(liveInputId);
+  } else {
+    await completeMuxLiveVideo(video.muxLiveStreamId ?? liveInputId);
+  }
   const durationSeconds = video.startedAt
     ? Math.max(
         0,
@@ -1575,8 +1807,92 @@ export async function finishLiveVideo(input: {
       videoId: video.id,
       now: input.now,
     }),
+    endYoutubeBroadcastDestinations(video.id, input.now),
   ]);
   return loadVideoSummary(video.id);
+}
+
+export async function handleCloudflareLiveWebhook(
+  payload: unknown,
+  now = new Date(),
+): Promise<{ readonly handled: boolean; readonly videoId?: string }> {
+  requireDatabase();
+  if (!payload || typeof payload !== "object") return { handled: false };
+  const data = (payload as { readonly data?: unknown }).data;
+  if (!data || typeof data !== "object") return { handled: false };
+  const eventType = (data as { readonly event_type?: unknown }).event_type;
+  const liveInputId = (data as { readonly input_id?: unknown }).input_id;
+  if (typeof eventType !== "string" || typeof liveInputId !== "string") {
+    return { handled: false };
+  }
+  const video = await getDatabase().query.videos.findFirst({
+    where: and(
+      eq(videos.liveProvider, "cloudflare"),
+      eq(videos.liveProviderInputId, liveInputId),
+    ),
+  });
+  if (!video) return { handled: false };
+  if (eventType === "live_input.connected") {
+    await getDatabase()
+      .update(videos)
+      .set({
+        status: "live",
+        startedAt: video.startedAt ?? now,
+        failureReason: null,
+        updatedAt: now,
+      })
+      .where(eq(videos.id, video.id));
+    return { handled: true, videoId: video.id };
+  }
+  if (eventType === "live_input.disconnected") {
+    const endedAt = video.endedAt ?? now;
+    const durationSeconds = video.startedAt
+      ? Math.max(
+          0,
+          Math.floor((endedAt.getTime() - video.startedAt.getTime()) / 1_000),
+        )
+      : video.durationSeconds;
+    await Promise.all([
+      getDatabase()
+        .update(videos)
+        .set({
+          status: "processing",
+          endedAt,
+          durationSeconds,
+          updatedAt: now,
+        })
+        .where(eq(videos.id, video.id)),
+      endYoutubeBroadcastDestinations(video.id, now),
+    ]);
+    return { handled: true, videoId: video.id };
+  }
+  if (eventType === "live_input.errored") {
+    const error = (
+      data as {
+        readonly live_input_errored?: {
+          readonly error?: {
+            readonly code?: unknown;
+            readonly message?: unknown;
+          };
+        };
+      }
+    ).live_input_errored?.error;
+    const failureReason = [error?.code, error?.message]
+      .filter((value): value is string => typeof value === "string")
+      .join(" · ")
+      .slice(0, 2_000);
+    await getDatabase()
+      .update(videos)
+      .set({
+        status: "failed",
+        failureReason: failureReason || "Cloudflare live input failed.",
+        endedAt: video.endedAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(videos.id, video.id));
+    return { handled: true, videoId: video.id };
+  }
+  return { handled: false };
 }
 
 export async function updateVideoPrivacy(input: {
@@ -1597,27 +1913,53 @@ export async function updateVideoPrivacy(input: {
     input.actor.ageBand === "adult" ? input.recordingVisibility : "private";
   let livePlaybackId = video.muxLivePlaybackId;
   let assetPlaybackId = video.muxAssetPlaybackId;
-  if (
-    liveVisibility !== video.liveVisibility &&
-    video.muxLiveStreamId &&
-    video.muxLivePlaybackId
-  ) {
-    livePlaybackId = await replaceMuxLivePlaybackPolicy({
-      liveStreamId: video.muxLiveStreamId,
-      previousPlaybackId: video.muxLivePlaybackId,
-      policy: liveVisibility === "public" ? "public" : "signed",
-    });
-  }
-  if (
-    recordingVisibility !== video.recordingVisibility &&
-    video.muxAssetId &&
-    video.muxAssetPlaybackId
-  ) {
-    assetPlaybackId = await replaceMuxAssetPlaybackPolicy({
-      assetId: video.muxAssetId,
-      previousPlaybackId: video.muxAssetPlaybackId,
-      policy: recordingVisibility === "public" ? "public" : "signed",
-    });
+  const provider =
+    video.liveProvider === "cloudflare" || video.liveProvider === "mux"
+      ? video.liveProvider
+      : video.muxLiveStreamId
+        ? "mux"
+        : undefined;
+  const cloudflareRequiresSignedUrls =
+    liveVisibility === "link-only" || recordingVisibility === "private";
+  if (provider === "cloudflare") {
+    if (video.liveProviderInputId) {
+      await updateCloudflareLiveInputAccess({
+        liveInputId: video.liveProviderInputId,
+        requireSignedUrls: cloudflareRequiresSignedUrls,
+      });
+    }
+    if (
+      video.liveProviderPlaybackId &&
+      video.liveProviderPlaybackId !== video.liveProviderInputId
+    ) {
+      await updateCloudflareVideoAccess({
+        videoId: video.liveProviderPlaybackId,
+        requireSignedUrls: cloudflareRequiresSignedUrls,
+      });
+    }
+  } else {
+    if (
+      liveVisibility !== video.liveVisibility &&
+      video.muxLiveStreamId &&
+      video.muxLivePlaybackId
+    ) {
+      livePlaybackId = await replaceMuxLivePlaybackPolicy({
+        liveStreamId: video.muxLiveStreamId,
+        previousPlaybackId: video.muxLivePlaybackId,
+        policy: liveVisibility === "public" ? "public" : "signed",
+      });
+    }
+    if (
+      recordingVisibility !== video.recordingVisibility &&
+      video.muxAssetId &&
+      video.muxAssetPlaybackId
+    ) {
+      assetPlaybackId = await replaceMuxAssetPlaybackPolicy({
+        assetId: video.muxAssetId,
+        previousPlaybackId: video.muxAssetPlaybackId,
+        policy: recordingVisibility === "public" ? "public" : "signed",
+      });
+    }
   }
   const publishedToProfile =
     recordingVisibility === "public" && input.publishedToProfile;
@@ -1628,12 +1970,26 @@ export async function updateVideoPrivacy(input: {
         liveVisibility,
         recordingVisibility,
         publishedToProfile,
+        liveProviderPlaybackPolicy:
+          provider === "cloudflare"
+            ? cloudflareRequiresSignedUrls
+              ? "signed"
+              : "public"
+            : video.liveProviderPlaybackPolicy,
         muxLivePlaybackId: livePlaybackId,
         muxLivePlaybackPolicy:
-          liveVisibility === "public" ? "public" : "signed",
+          provider === "mux"
+            ? liveVisibility === "public"
+              ? "public"
+              : "signed"
+            : video.muxLivePlaybackPolicy,
         muxAssetPlaybackId: assetPlaybackId,
         muxAssetPlaybackPolicy:
-          recordingVisibility === "public" ? "public" : "signed",
+          provider === "mux"
+            ? recordingVisibility === "public"
+              ? "public"
+              : "signed"
+            : video.muxAssetPlaybackPolicy,
         updatedAt: input.now,
       })
       .where(eq(videos.id, video.id)),
@@ -2430,6 +2786,62 @@ async function resolveShareAccess(
   return link.id;
 }
 
+async function reconcileCloudflareRecording(
+  video: typeof videos.$inferSelect,
+  now: Date,
+): Promise<typeof videos.$inferSelect> {
+  if (
+    video.liveProvider !== "cloudflare" ||
+    !video.liveProviderInputId ||
+    (video.status !== "processing" && video.status !== "ended")
+  ) {
+    return video;
+  }
+  try {
+    const recordings = await listCloudflareLiveRecordings(
+      video.liveProviderInputId,
+    );
+    const recording = recordings
+      .filter((item) => item.ready)
+      .sort((left, right) =>
+        (right.createdAt ?? "").localeCompare(left.createdAt ?? ""),
+      )[0];
+    if (!recording) return video;
+    const playbackUrl =
+      recording.playbackHlsUrl ?? video.liveProviderPlaybackUrl;
+    await getDatabase()
+      .update(videos)
+      .set({
+        liveProviderPlaybackId: recording.videoId,
+        liveProviderPlaybackUrl: playbackUrl,
+        liveProviderPosterUrl:
+          recording.thumbnailUrl ?? video.liveProviderPosterUrl,
+        durationSeconds: recording.durationSeconds ?? video.durationSeconds,
+        status: "ready",
+        readyAt: now,
+        updatedAt: now,
+      })
+      .where(eq(videos.id, video.id));
+    return {
+      ...video,
+      liveProviderPlaybackId: recording.videoId,
+      liveProviderPlaybackUrl: playbackUrl,
+      liveProviderPosterUrl:
+        recording.thumbnailUrl ?? video.liveProviderPosterUrl,
+      durationSeconds: recording.durationSeconds ?? video.durationSeconds,
+      status: "ready",
+      readyAt: now,
+      updatedAt: now,
+    };
+  } catch (error) {
+    console.error("Duna Cloudflare recording reconciliation failed", {
+      error,
+      videoId: video.id,
+    });
+    return video;
+  }
+}
+
 export async function loadVideoPlayback(input: {
   readonly videoId: string;
   readonly accessToken?: string;
@@ -2441,21 +2853,27 @@ export async function loadVideoPlayback(input: {
 }): Promise<VideoPlayback> {
   requireDatabase();
   const database = getDatabase();
-  const video = await database.query.videos.findFirst({
+  const storedVideo = await database.query.videos.findFirst({
     where: eq(videos.id, input.videoId),
   });
-  if (!video || video.status === "deleted" || video.status === "failed") {
+  if (
+    !storedVideo ||
+    storedVideo.status === "deleted" ||
+    storedVideo.status === "failed"
+  ) {
     throw new VideoServiceError("VIDEO_NOT_FOUND", "Video not found.");
   }
+  const video = await reconcileCloudflareRecording(storedVideo, input.now);
   const isOwner = input.actor?.personId === video.ownerPersonId;
   const shareLinkId = isOwner
     ? undefined
     : await resolveShareAccess(video.id, input.accessToken, input.now);
   const livePlayback =
     video.status === "live" ||
-    (!video.muxAssetPlaybackId &&
-      video.source === "live" &&
-      Boolean(video.muxLivePlaybackId));
+    (video.source === "live" &&
+      (video.liveProvider === "cloudflare"
+        ? video.status === "draft"
+        : !video.muxAssetPlaybackId && Boolean(video.muxLivePlaybackId)));
   const visibility = livePlayback
     ? video.liveVisibility
     : video.recordingVisibility === "public"
@@ -2467,12 +2885,38 @@ export async function loadVideoPlayback(input: {
       "This private video requires its share link.",
     );
   }
-  let provider: "mux" | "r2";
+  let provider: "cloudflare" | "mux" | "r2";
   let playbackId: string | undefined;
   let playbackToken: string | undefined;
   let sourceUrl: string | undefined;
+  let embedUrl: string | undefined;
   let posterUrl: string | undefined;
-  if (video.source === "live") {
+  if (video.source === "live" && video.liveProvider === "cloudflare") {
+    provider = "cloudflare";
+    playbackId = video.liveProviderPlaybackId ?? undefined;
+    const playbackUrl = video.liveProviderPlaybackUrl ?? undefined;
+    if (!playbackId || !playbackUrl) {
+      throw new VideoServiceError(
+        "PLAYBACK_NOT_READY",
+        "The Cloudflare live recording is still being prepared.",
+      );
+    }
+    if (video.liveProviderPlaybackPolicy === "signed") {
+      playbackToken = await signCloudflarePlayback({
+        playbackId,
+        durationSeconds: video.durationSeconds ?? undefined,
+      });
+      sourceUrl = cloudflareSignedPlaybackUrl(
+        playbackUrl,
+        playbackId,
+        playbackToken,
+      );
+    } else {
+      sourceUrl = playbackUrl;
+    }
+    embedUrl = cloudflareEmbedUrl(playbackUrl, playbackId, playbackToken);
+    posterUrl = video.liveProviderPosterUrl ?? undefined;
+  } else if (video.source === "live") {
     provider = "mux";
     playbackId = livePlayback
       ? (video.muxLivePlaybackId ?? undefined)
@@ -2548,6 +2992,7 @@ export async function loadVideoPlayback(input: {
     playbackId,
     playbackToken,
     sourceUrl,
+    embedUrl,
     posterUrl,
     dataEnvironmentKey: muxDataEnvironmentKey(),
     viewSessionId,
@@ -2866,6 +3311,7 @@ export async function loadAdminVideoOverview(
         ];
       }),
     },
+    cloudflareConfigured: isCloudflareStreamConfigured(),
     muxConfigured: isMuxVideoConfigured(),
     r2Configured: isR2VideoConfigured(),
   };

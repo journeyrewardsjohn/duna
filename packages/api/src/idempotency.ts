@@ -185,6 +185,8 @@ export async function executeIdempotent<T extends object>(input: {
   readonly ttlMilliseconds?: number;
   readonly store?: IdempotencyStore;
   readonly execute: () => Promise<T>;
+  readonly serializeResult?: (result: T) => JsonObject;
+  readonly hydrateReplay?: (storedResult: JsonObject) => Promise<T>;
 }): Promise<{ readonly result: T; readonly replayed: boolean }> {
   const requestHash = stableHash(input.request);
   const store =
@@ -203,17 +205,25 @@ export async function executeIdempotent<T extends object>(input: {
   if (claim.kind === "conflict") throw new IdempotencyConflictError();
   if (claim.kind === "in-progress") throw new IdempotencyInProgressError();
   if (claim.kind === "replay") {
-    return { result: claim.result as T, replayed: true };
+    return {
+      result: input.hydrateReplay
+        ? await input.hydrateReplay(claim.result)
+        : (claim.result as T),
+      replayed: true,
+    };
   }
 
   try {
     const result = await input.execute();
+    const storedResult = input.serializeResult
+      ? input.serializeResult(result)
+      : (result as JsonObject);
     await store.complete({
       key: input.key,
       procedure: input.procedure,
       requestHash,
-      result: result as JsonObject,
-      resultHash: stableHash(result),
+      result: storedResult,
+      resultHash: stableHash(storedResult),
     });
     return { result, replayed: false };
   } catch (error) {
