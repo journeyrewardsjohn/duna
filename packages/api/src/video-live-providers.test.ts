@@ -4,7 +4,9 @@ import {
   cloudflareSignedPlaybackUrl,
   createCloudflareLiveOutput,
   createCloudflareLiveVideo,
+  createMuxLiveOutput,
   isCloudflareStreamConfigured,
+  muxLiveVideoQuality,
 } from "./video-providers";
 import { preferredLiveVideoProvider } from "./video-service";
 import {
@@ -39,17 +41,45 @@ function configureYoutube() {
   );
 }
 
-describe("Cloudflare Stream live provider", () => {
+describe("live provider routing", () => {
   it("does not mistake a generic Cloudflare or R2 token for Stream access", () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-123");
     vi.stubEnv("CF_TOKEN_VALUE", "generic-account-token");
     expect(isCloudflareStreamConfigured()).toBe(false);
   });
 
-  it("prefers Cloudflare and returns both RTMPS and SRT without persisting credentials", async () => {
+  it("routes everyday streams to Cloudflare and top Duna tiers to Mux", () => {
     configureCloudflare();
     vi.stubEnv("MUX_TOKEN_ID", "mux-id");
     vi.stubEnv("MUX_TOKEN_SECRET", "mux-secret");
+
+    expect(preferredLiveVideoProvider({ membershipPlan: "premium" })).toBe(
+      "cloudflare",
+    );
+    expect(preferredLiveVideoProvider({ membershipPlan: "premium-plus" })).toBe(
+      "mux",
+    );
+    expect(preferredLiveVideoProvider({ organizationPlan: "small-club" })).toBe(
+      "cloudflare",
+    );
+    expect(preferredLiveVideoProvider({ organizationPlan: "club" })).toBe(
+      "mux",
+    );
+    vi.stubEnv("DUNA_LIVE_PROVIDER", "cloudflare");
+    expect(preferredLiveVideoProvider({ membershipPlan: "premium-plus" })).toBe(
+      "cloudflare",
+    );
+    vi.stubEnv("DUNA_LIVE_PROVIDER", "mux");
+    expect(preferredLiveVideoProvider({ membershipPlan: "premium" })).toBe(
+      "mux",
+    );
+    expect(muxLiveVideoQuality()).toBe("plus");
+    vi.stubEnv("MUX_LIVE_VIDEO_QUALITY", "premium");
+    expect(muxLiveVideoQuality()).toBe("premium");
+  });
+
+  it("returns both RTMPS and SRT without persisting credentials", async () => {
+    configureCloudflare();
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
         success: true,
@@ -73,7 +103,6 @@ describe("Cloudflare Stream live provider", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     expect(isCloudflareStreamConfigured()).toBe(true);
-    expect(preferredLiveVideoProvider()).toBe("cloudflare");
     await expect(
       createCloudflareLiveVideo({
         videoId: crypto.randomUUID(),
@@ -130,6 +159,39 @@ describe("Cloudflare Stream live provider", () => {
     );
   });
 
+  it("creates a Mux simulcast target without retaining the YouTube key", async () => {
+    vi.stubEnv("MUX_TOKEN_ID", "mux-id");
+    vi.stubEnv("MUX_TOKEN_SECRET", "mux-secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        data: {
+          id: "mux-target-123",
+          status: "idle",
+          url: "rtmps://a.rtmp.youtube.com/live2",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createMuxLiveOutput({
+        liveInputId: "mux-live-123",
+        url: "rtmps://a.rtmp.youtube.com/live2",
+        streamKey: "youtube-secret-key",
+        passthrough: "destination-123",
+      }),
+    ).resolves.toEqual({ outputId: "mux-target-123" });
+    const request = fetchMock.mock.calls[0];
+    expect(String(request?.[0])).toContain(
+      "/video/v1/live-streams/mux-live-123/simulcast-targets",
+    );
+    expect(JSON.parse(String((request?.[1] as RequestInit)?.body))).toEqual({
+      passthrough: "destination-123",
+      stream_key: "youtube-secret-key",
+      url: "rtmps://a.rtmp.youtube.com/live2",
+    });
+  });
+
   it("builds public and signed Cloudflare player URLs", () => {
     const hls = "https://customer.example.com/video-123/manifest/video.m3u8";
     expect(cloudflareSignedPlaybackUrl(hls, "video-123", "signed-token")).toBe(
@@ -160,7 +222,7 @@ describe("YouTube live destinations", () => {
     expect(decryptYoutubeRefreshToken(encrypted)).toBe("refresh-secret");
   });
 
-  it("creates and binds a non-reusable YouTube stream for Cloudflare", async () => {
+  it("creates and binds a non-reusable YouTube stream for simulcast", async () => {
     configureYoutube();
     const fetchMock = vi
       .fn()

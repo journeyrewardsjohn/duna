@@ -1310,10 +1310,10 @@ function CaptureSetupForm({
                 </View>
               </View>
 
-              {broadcast?.preferredProvider !== "cloudflare" ? (
+              {!broadcast?.preferredProvider ? (
                 <Text style={setupStyles.disclosureText}>
-                  YouTube simulcast becomes available when Cloudflare Stream is
-                  the active live provider.
+                  YouTube simulcast becomes available when a Duna live provider
+                  is connected.
                 </Text>
               ) : (
                 <>

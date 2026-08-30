@@ -5,7 +5,7 @@ CREATE TABLE "video_broadcast_destinations" (
 	"kind" varchar(32) NOT NULL,
 	"channel_id" varchar(128) NOT NULL,
 	"channel_title" text NOT NULL,
-	"cloudflare_output_id" varchar(128),
+	"provider_output_id" varchar(128),
 	"youtube_broadcast_id" varchar(128),
 	"youtube_stream_id" varchar(128),
 	"youtube_watch_url" text,

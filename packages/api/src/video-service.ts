@@ -6,6 +6,7 @@ import {
   incrementalVideoOverageSeconds,
   netCollectedOrganizationFeeMinor,
   type MembershipPlanId,
+  type OrganizationPlanId,
   type PersonRole,
   type PersonSummary,
 } from "@duna/core";
@@ -82,6 +83,7 @@ import {
   createMuxLiveVideo,
   createR2VideoUpload,
   disableCloudflareLiveInput,
+  deleteMuxLiveVideo,
   headR2VideoObject,
   isCloudflareSrtIngestEnabled,
   isCloudflareStreamConfigured,
@@ -126,7 +128,21 @@ const PUBLIC_VIDEO_STATUSES = ["live", "ready", "ended", "processing"] as const;
 
 type LiveVideoProvider = "cloudflare" | "mux";
 
-export function preferredLiveVideoProvider(): LiveVideoProvider | undefined {
+interface LiveVideoProviderContext {
+  readonly membershipPlan?: MembershipPlanId;
+  readonly organizationPlan?: OrganizationPlanId;
+}
+
+/**
+ * `auto` is a product policy, not a provider failover alias. Community and
+ * everyday broadcasts use Cloudflare's economical origin; the highest Duna
+ * tiers retain Mux's player, low-latency pipeline, and included Mux Data.
+ * Explicit environment choices remain available for staged rollout and
+ * incident response.
+ */
+export function preferredLiveVideoProvider(
+  context: LiveVideoProviderContext = {},
+): LiveVideoProvider | undefined {
   const preference = (process.env.DUNA_LIVE_PROVIDER ?? "auto")
     .trim()
     .toLowerCase();
@@ -136,6 +152,10 @@ export function preferredLiveVideoProvider(): LiveVideoProvider | undefined {
   if (preference === "mux") {
     return isMuxVideoConfigured() ? "mux" : undefined;
   }
+  const premiumExperience = context.organizationPlan
+    ? context.organizationPlan === "club"
+    : context.membershipPlan === "premium-plus";
+  if (premiumExperience && isMuxVideoConfigured()) return "mux";
   if (isCloudflareStreamConfigured()) return "cloudflare";
   return isMuxVideoConfigured() ? "mux" : undefined;
 }
@@ -926,7 +946,10 @@ export async function loadVideoStudio(
   const organizationPlan = organization
     ? resolveOrganizationCommissionPolicy(organization).effectivePlan
     : undefined;
-  const preferredProvider = preferredLiveVideoProvider();
+  const preferredProvider = preferredLiveVideoProvider({
+    membershipPlan: entitlement.plan,
+    organizationPlan,
+  });
   const liveConfigured =
     preferredProvider === "cloudflare" ||
     (preferredProvider === "mux" && isMuxSignedPlaybackConfigured());
@@ -955,7 +978,7 @@ export async function loadVideoStudio(
       cloudflareConfigured: isCloudflareStreamConfigured(),
       muxConfigured: isMuxVideoConfigured(),
       srtIngestAvailable:
-        isCloudflareStreamConfigured() && isCloudflareSrtIngestEnabled(),
+        preferredProvider === "cloudflare" && isCloudflareSrtIngestEnabled(),
       // The current HaishinKit CocoaPods bridge is RTMPS-only. Cloudflare SRT
       // credentials are returned below so the native SPM migration can be
       // device-tested without another backend or database change.
@@ -1355,20 +1378,27 @@ export async function createLiveVideo(input: {
       "Live streaming currently requires an adult Duna account.",
     );
   }
-  const liveProvider = preferredLiveVideoProvider();
+  const [entitlement, usage, association, organization] = await Promise.all([
+    getDunaPlusEntitlement(input.actor.personId, input.now),
+    loadVideoUsage(input.actor.personId, input.now, input.actor.organizationId),
+    validateAssociation(input),
+    input.actor.organizationId
+      ? getDatabase().query.organizations.findFirst({
+          where: eq(organizations.id, input.actor.organizationId),
+        })
+      : Promise.resolve(undefined),
+  ]);
+  const organizationPlan = organization
+    ? resolveOrganizationCommissionPolicy(organization).effectivePlan
+    : undefined;
+  const liveProvider = preferredLiveVideoProvider({
+    membershipPlan: entitlement.plan,
+    organizationPlan,
+  });
   if (!liveProvider) {
     throw new VideoServiceError(
       "LIVE_PROVIDER_REQUIRED",
       "Cloudflare Stream or Mux Video must be connected before live streaming.",
-    );
-  }
-  if (
-    liveProvider !== "cloudflare" &&
-    (input.simulcastToDunaYoutube || input.youtubeConnectionIds.length > 0)
-  ) {
-    throw new VideoServiceError(
-      "LIVE_PROVIDER_REQUIRED",
-      "YouTube simulcast requires Cloudflare Stream to be the live provider.",
     );
   }
   if (
@@ -1382,11 +1412,6 @@ export async function createLiveVideo(input: {
       "Mux signed playback must be configured for private video.",
     );
   }
-  const [entitlement, usage, association] = await Promise.all([
-    getDunaPlusEntitlement(input.actor.personId, input.now),
-    loadVideoUsage(input.actor.personId, input.now, input.actor.organizationId),
-    validateAssociation(input),
-  ]);
   if (
     !input.actor.organizationId &&
     !entitlement.active &&
@@ -1437,6 +1462,7 @@ export async function createLiveVideo(input: {
     updatedAt: input.now,
   });
   let cloudflareLiveInputId: string | undefined;
+  let muxLiveInputId: string | undefined;
   try {
     if (liveProvider === "cloudflare") {
       const cloudflare = await createCloudflareLiveVideo({
@@ -1464,6 +1490,7 @@ export async function createLiveVideo(input: {
         provisionYoutubeBroadcastDestinations({
           actor: input.actor,
           videoId,
+          liveProvider: "cloudflare",
           liveInputId: cloudflare.liveInputId,
           title: input.title,
           liveVisibility: input.liveVisibility,
@@ -1498,45 +1525,55 @@ export async function createLiveVideo(input: {
       };
     }
 
-    const [mux, share] = await Promise.all([
-      createMuxLiveVideo({
-        videoId,
-        title: input.title,
-        liveVisibility: input.liveVisibility,
-        recordingVisibility: input.recordingVisibility,
-        maximumDurationSeconds,
-        idempotencyKey: input.idempotencyKey,
-      }),
+    const mux = await createMuxLiveVideo({
+      videoId,
+      title: input.title,
+      liveVisibility: input.liveVisibility,
+      recordingVisibility: input.recordingVisibility,
+      maximumDurationSeconds,
+      idempotencyKey: input.idempotencyKey,
+    });
+    muxLiveInputId = mux.liveStreamId;
+    await database
+      .update(videos)
+      .set({
+        muxLiveStreamId: mux.liveStreamId,
+        muxLivePlaybackId: mux.playbackId,
+        muxLivePlaybackPolicy: mux.playbackPolicy,
+        liveProviderInputId: mux.liveStreamId,
+        liveProviderPlaybackId: mux.playbackId,
+        liveProviderPlaybackPolicy: mux.playbackPolicy,
+        updatedAt: input.now,
+      })
+      .where(eq(videos.id, videoId));
+    const [share, destinations] = await Promise.all([
       createStoredShareLink({
         videoId,
         ownerPersonId: input.actor.personId,
       }),
-    ]);
-    await Promise.all([
-      database
-        .update(videos)
-        .set({
-          muxLiveStreamId: mux.liveStreamId,
-          muxLivePlaybackId: mux.playbackId,
-          muxLivePlaybackPolicy: mux.playbackPolicy,
-          liveProviderInputId: mux.liveStreamId,
-          liveProviderPlaybackId: mux.playbackId,
-          liveProviderPlaybackPolicy: mux.playbackPolicy,
-          updatedAt: input.now,
-        })
-        .where(eq(videos.id, videoId)),
-      recordAudit({
-        actorPersonId: input.actor.personId,
-        organizationId: input.actor.organizationId,
-        action: "video.live-created",
-        entityType: "video",
-        entityId: videoId,
-        reason: `Created ${input.liveVisibility} Duna live stream with Mux.`,
-        requestId: input.requestId,
-        ipAddress: input.ipAddress,
+      provisionYoutubeBroadcastDestinations({
+        actor: input.actor,
+        videoId,
+        liveProvider: "mux",
+        liveInputId: mux.liveStreamId,
+        title: input.title,
+        liveVisibility: input.liveVisibility,
+        simulcastToDunaYoutube: input.simulcastToDunaYoutube,
+        youtubeConnectionIds: input.youtubeConnectionIds,
         now: input.now,
       }),
     ]);
+    await recordAudit({
+      actorPersonId: input.actor.personId,
+      organizationId: input.actor.organizationId,
+      action: "video.live-created",
+      entityType: "video",
+      entityId: videoId,
+      reason: `Created ${input.liveVisibility} Duna live stream with Mux and ${destinations.filter((destination) => destination.status === "ready").length} simulcast destination(s).`,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    });
     return {
       video: await loadVideoSummary(videoId),
       provider: "mux",
@@ -1548,7 +1585,7 @@ export async function createLiveVideo(input: {
           streamKey: mux.streamKey,
         },
       },
-      destinations: [],
+      destinations,
       maximumDurationSeconds,
       shareUrl: share.url,
     };
@@ -1557,6 +1594,9 @@ export async function createLiveVideo(input: {
       await disableCloudflareLiveInput(cloudflareLiveInputId).catch(
         () => undefined,
       );
+    }
+    if (muxLiveInputId) {
+      await deleteMuxLiveVideo(muxLiveInputId).catch(() => undefined);
     }
     await database
       .update(videos)

@@ -33,8 +33,10 @@ export const VIDEO_COST_MARKUP_MULTIPLIER = 5;
 
 // Uploaded video is stored in R2. The cost model assumes a 1080p source at
 // roughly 8 Mbps (3.6 GB per hour) for one GB-month at the published R2 rate.
-// Live video uses Mux Plus 1080p input plus one month of storage. Customer
-// rates are exactly 5x those modeled provider costs, rounded to the cent.
+// Live video keeps the conservative Mux Plus 1080p input plus one month of
+// storage as its billing cost basis. Cloudflare-routed tiers create additional
+// margin; simulcast and audience delivery remain separately monitored COGS.
+// Customer rates are 5x this modeled origin cost, rounded to the cent.
 export const ORGANIZATION_VIDEO_RATES = {
   upload: {
     label: "uploaded video",

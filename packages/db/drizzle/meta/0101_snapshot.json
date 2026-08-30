@@ -37260,8 +37260,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "cloudflare_output_id": {
-          "name": "cloudflare_output_id",
+        "provider_output_id": {
+          "name": "provider_output_id",
           "type": "varchar(128)",
           "primaryKey": false,
           "notNull": false

@@ -825,6 +825,7 @@ describe("Duna Video provider readiness", () => {
       playback_policies: ["public"],
       new_asset_settings: {
         playback_policies: ["signed"],
+        video_quality: "plus",
         meta: { external_id: videoId },
       },
     });

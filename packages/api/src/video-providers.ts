@@ -958,6 +958,12 @@ export function muxDataEnvironmentKey(): string | undefined {
   return process.env.MUX_DATA_ENV_KEY?.trim() || undefined;
 }
 
+export function muxLiveVideoQuality(): "plus" | "premium" {
+  return process.env.MUX_LIVE_VIDEO_QUALITY?.trim().toLowerCase() === "premium"
+    ? "premium"
+    : "plus";
+}
+
 export function buildMuxLiveStreamInput(input: {
   readonly videoId: string;
   readonly title: string;
@@ -993,6 +999,10 @@ export function buildMuxLiveStreamInput(input: {
       },
       new_asset_settings: {
         playback_policies: [recordingPolicy],
+        // Duna customer tier and Mux encoder quality are separate decisions.
+        // Premium Duna routes default to cost-equivalent Mux Plus; Premium
+        // encoding remains an explicit operational choice for marquee events.
+        video_quality: muxLiveVideoQuality(),
         meta: {
           title: input.title,
           external_id: input.videoId,
@@ -1059,6 +1069,26 @@ export async function loadMuxLiveStreamKey(
     throw new Error("Mux did not return the live-stream ingest key.");
   }
   return streamKey;
+}
+
+export async function createMuxLiveOutput(input: {
+  readonly liveInputId: string;
+  readonly url: string;
+  readonly streamKey: string;
+  readonly passthrough: string;
+}): Promise<{ readonly outputId: string }> {
+  const target = await getMuxClient().video.liveStreams.createSimulcastTarget(
+    input.liveInputId,
+    {
+      url: input.url,
+      stream_key: input.streamKey,
+      passthrough: input.passthrough,
+    },
+  );
+  if (!target.id?.trim()) {
+    throw new Error("Mux did not return a simulcast target ID.");
+  }
+  return { outputId: target.id };
 }
 
 function providerResourceMissing(error: unknown): boolean {

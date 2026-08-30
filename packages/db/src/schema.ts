@@ -4317,7 +4317,7 @@ export const videoBroadcastDestinations = pgTable(
     kind: varchar("kind", { length: 32 }).notNull(),
     channelId: varchar("channel_id", { length: 128 }).notNull(),
     channelTitle: text("channel_title").notNull(),
-    cloudflareOutputId: varchar("cloudflare_output_id", { length: 128 }),
+    providerOutputId: varchar("provider_output_id", { length: 128 }),
     youtubeBroadcastId: varchar("youtube_broadcast_id", { length: 128 }),
     youtubeStreamId: varchar("youtube_stream_id", { length: 128 }),
     youtubeWatchUrl: text("youtube_watch_url"),

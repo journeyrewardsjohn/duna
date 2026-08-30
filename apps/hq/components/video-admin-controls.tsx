@@ -826,17 +826,19 @@ export function VideoAdminControls({
             </small>
           </div>
           <Badge tone={overview.cloudflareConfigured ? "positive" : "warning"}>
-            {overview.cloudflareConfigured ? "preferred" : "needs environment"}
+            {overview.cloudflareConfigured
+              ? "everyday ready"
+              : "needs environment"}
           </Badge>
         </article>
         <article className="hq-card">
           <Cloud aria-hidden size={22} />
           <div>
-            <strong>Mux live fallback</strong>
-            <small>Existing Mux streams and recordings remain playable</small>
+            <strong>Mux premium live</strong>
+            <small>Premium playback, stream health, Data, and YouTube</small>
           </div>
           <Badge tone={overview.muxConfigured ? "neutral" : "warning"}>
-            {overview.muxConfigured ? "available" : "not configured"}
+            {overview.muxConfigured ? "premium ready" : "not configured"}
           </Badge>
         </article>
         <article className="hq-card">

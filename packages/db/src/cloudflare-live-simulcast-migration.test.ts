@@ -44,6 +44,7 @@ describe("Cloudflare live and YouTube simulcast migration", () => {
     expect(migration).toContain(
       'CONSTRAINT "video_broadcast_destination_status_valid"',
     );
+    expect(migration).toContain('"provider_output_id" varchar(128)');
     expect(migration).not.toContain('"stream_key"');
     expect(migration).not.toContain('"access_token"');
   });

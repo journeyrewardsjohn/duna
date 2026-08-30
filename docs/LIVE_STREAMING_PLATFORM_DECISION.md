@@ -5,25 +5,40 @@ Reviewed: August 30, 2026
 
 ## Decision
 
-Duna should use Cloudflare Stream as the managed live origin, recorder,
-playback service, and simulcast fan-out layer. New Duna live sessions should
-use Cloudflare RTMPS now; SRT should become the preferred mobile contribution
-protocol only after the native iOS broadcaster completes its SRT module
-migration and physical-device validation.
+Duna should not wholesale replace Mux. Use a tier-aware, provider-neutral live
+control plane:
 
-Keep Mux available for existing recordings and as a controlled rollback during
-the migration. Do not add AWS Elemental MediaConnect or operate a Duna SRT
-relay for the first release.
+- Cloudflare Stream for personal Premium and Duna HQ Free/Club broadcasts,
+  where economical ingest, recording, and multi-destination fan-out matter
+  most.
+- Mux Plus for personal Premium+ and Duna HQ Scale broadcasts, where Duna's
+  first-party player, low-latency controls, stream-health visibility, and Mux
+  Data are part of the premium experience.
+- Mux Premium encoding only as an explicit marquee-event or future paid
+  entitlement. A Duna Premium+ customer does not automatically require Mux's
+  more expensive Premium encoding profile.
+
+Both origins can simulcast to Duna's, a player's, or an organization's YouTube
+channel. An environment override can temporarily force either provider during
+rollout or an incident. Do not add AWS Elemental MediaConnect or operate a Duna
+SRT relay for the first release.
+
+New mobile sessions use RTMPS now. Cloudflare SRT can become an additional
+contribution path only after the native iOS broadcaster completes its SRT
+module migration and physical-device validation.
 
 This gives Duna the important part of Playcam's relay model without taking on a
 24/7 media control plane:
 
 ```text
-Player iPhone -- RTMPS now / SRT later --> Cloudflare Stream
-                                           |-- Duna live + replay
-                                           |-- Duna YouTube
-                                           |-- player YouTube
-                                           `-- organization YouTube
+Player iPhone -- RTMPS now --> Duna provider policy
+                                  |-- Cloudflare Stream (everyday/economical)
+                                  `-- Mux Plus (premium experience)
+                                        |
+                                        |-- Duna live + recording
+                                        |-- Duna YouTube
+                                        |-- player YouTube
+                                        `-- organization YouTube
 
 Apple Watch / second device --> Duna match-event timeline --> Duna overlay now
                                                    `-------> program compositor later
@@ -84,12 +99,12 @@ compute, storage, or support have zero cost.
 
 ## Why Cloudflare instead of AWS MediaConnect
 
-| Option                | What it solves                                                                                                      | Missing work                                                                                                                                     | Duna decision                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
-| Cloudflare Stream     | RTMPS/SRT ingest, adaptive playback, automatic recording, signed playback, analytics, and up to 50 RTMP/SRT outputs | Program graphics, replay switching, sponsor composition                                                                                          | Use now                          |
-| AWS MediaConnect      | Broadcast-grade SRT/RIST/RTP/Zixi contribution transport                                                            | No direct RTMP/RTMPS output to YouTube; add MediaLive or a custom bridge, playback CDN, recording, and orchestration                             | Do not add now                   |
-| Self-hosted SRT relay | Full protocol and placement control                                                                                 | High availability, patching, failover, transcoding, recording integrity, signed playback, metrics, abuse handling, egress, and on-call ownership | Revisit only at proven scale     |
-| Mux                   | Managed live ingest, playback, recording, and established legacy Duna assets                                        | Higher-cost dependency for the intended fan-out model                                                                                            | Preserve for legacy and rollback |
+| Option                | What it solves                                                                                                      | Missing work                                                                                                                                     | Duna decision                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Cloudflare Stream     | RTMPS/SRT ingest, adaptive playback, automatic recording, signed playback, analytics, and up to 50 RTMP/SRT outputs | Program graphics, replay switching, sponsor composition                                                                                          | Use now                      |
+| AWS MediaConnect      | Broadcast-grade SRT/RIST/RTP/Zixi contribution transport                                                            | No direct RTMP/RTMPS output to YouTube; add MediaLive or a custom bridge, playback CDN, recording, and orchestration                             | Do not add now               |
+| Self-hosted SRT relay | Full protocol and placement control                                                                                 | High availability, patching, failover, transcoding, recording integrity, signed playback, metrics, abuse handling, egress, and on-call ownership | Revisit only at proven scale |
+| Mux                   | Strong live player, low-latency modes, recording, stream health, Mux Data, and RTMP/SRT simulcast targets           | Simulcast targets cost materially more than Cloudflare outputs; Premium encoding is 50% above Plus input                                         | Use for top Duna tiers       |
 
 MediaConnect is excellent when Duna needs broadcast contribution between
 venues, production control rooms, and AWS services. It is not the shortest
@@ -129,6 +144,28 @@ and Duna playback for the richer first-party experience.
 
 Source: [Cloudflare Stream pricing](https://developers.cloudflare.com/stream/pricing/).
 
+Mux Plus 1080p currently lists input at $0.03125/minute, storage at
+$0.003/minute/month, and delivery at $0.001/minute after the account's first
+100,000 monthly delivery minutes. A 60-minute match therefore has about $1.88
+of Plus input and $0.18/month of hot storage before viewer delivery. Mux live
+simulcast is $0.02/minute per target, or $1.20 per target for that match. Mux
+Premium 1080p input is $0.046875/minute—50% above Plus—and its storage and
+delivery use the higher Premium multiplier.
+
+That makes Cloudflare the clear fan-out cost winner, but not automatically the
+better premium product. Mux includes Mux Data for hosted streams, exposes live
+stream health including drift, and has an integrated player that understands
+the live edge. Cloudflare's low-latency HLS pipeline is still documented as
+beta. Duna should treat long-session latency drift as a measured provider gate:
+run the same iPhone encoder and player for 15, 60, and 180 minutes and compare
+p50/p95 live-edge distance, startup, rebuffering, reconnect recovery, and score
+overlay error before changing the tier policy.
+
+Sources: [Mux pricing](https://www.mux.com/docs/pricing/overview),
+[Mux low-latency guidance](https://www.mux.com/docs/guides/reduce-live-stream-latency),
+[Mux stream-health metrics](https://www.mux.com/docs/guides/show-live-stream-health-stats),
+and [Cloudflare low-latency requirements](https://developers.cloudflare.com/stream/stream-live/start-stream-live/).
+
 ## YouTube ownership model
 
 Each broadcast is explicit opt-in. A creator may choose any combination of:
@@ -139,10 +176,11 @@ Each broadcast is explicit opt-in. A creator may choose any combination of:
 
 Duna creates a one-use YouTube live stream and broadcast through OAuth, binds
 them, and sends the resulting RTMPS address and key directly to a Cloudflare
-output. Duna stores provider IDs, status, and watch URL. It does not store the
-YouTube stream key, Google access token, Cloudflare ingest key, SRT passphrase,
-or private share URL in its application or idempotency records. Linked refresh
-credentials are AES-256-GCM encrypted and can be revoked from Duna.
+output or Mux simulcast target. Duna stores provider IDs, status, and watch URL.
+It does not store the YouTube stream key, Google access token, provider ingest
+key, SRT passphrase, or private share URL in its application or idempotency
+records. Linked refresh credentials are AES-256-GCM encrypted and can be
+revoked from Duna.
 
 Public Duna streams map to Public YouTube broadcasts. Link-only Duna streams
 map to Unlisted YouTube broadcasts. A YouTube destination failure is isolated
@@ -150,11 +188,12 @@ and visible; it does not incorrectly fail the healthy Duna stream.
 
 Sources: [YouTube Live API overview](https://developers.google.com/youtube/v3/live/getting-started),
 [create and bind broadcasts](https://developers.google.com/youtube/v3/live/guides/implementation/broadcasts-and-streams),
-and [RTMPS ingest](https://developers.google.com/youtube/v3/live/guides/rtmps-ingestion).
+[RTMPS ingest](https://developers.google.com/youtube/v3/live/guides/rtmps-ingestion),
+and [Mux simulcast targets](https://www.mux.com/docs/guides/stream-live-to-3rd-party-platforms).
 
 ## Second screen, score, replay, and ads
 
-Cloudflare is a relay and delivery service, not a live video compositor. The
+Cloudflare and Mux are relay/delivery services, not live video compositors. The
 first release therefore keeps Duna's existing Apple Watch and remote-device
 score timeline authoritative and renders it over Duna playback. YouTube
 receives the clean camera and court-audio feed.
@@ -214,10 +253,14 @@ and [Cloudflare Stream Player ads](https://developers.cloudflare.com/stream/view
    live-enabled channel.
 4. Exercise public, link-only, private recording, official-channel, personal,
    and organization simulcast paths in Preview.
-5. Validate RTMPS capture on a physical iPhone and live scoring on Watch and a
-   second device before setting Production to Cloudflare-first.
-6. Monitor Cloudflare minutes, YouTube API quota, output failures, startup
-   time, disconnect recovery, and recording reconciliation during rollout.
+5. Run the same long-duration RTMPS and playback matrix against Cloudflare and
+   Mux on physical iPhones. Include live-edge drift, startup, rebuffering,
+   reconnect recovery, score synchronization, recording reconciliation, and
+   one linked YouTube output from each provider.
+6. Activate tier-aware `auto` routing only after personal Premium/Premium+ and
+   Duna HQ Free/Club/Scale accounts resolve to the intended provider.
+7. Monitor provider minutes, Mux stream health/Data, YouTube API quota, output
+   failures, startup time, disconnect recovery, and recording reconciliation.
 
 Native SRT and composited score/replay/ads are separate device-tested releases;
 they should not be described as active merely because Cloudflare can accept an

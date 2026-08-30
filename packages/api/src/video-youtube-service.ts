@@ -8,7 +8,10 @@ import {
 } from "@duna/db";
 import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { ApiActor } from "./context";
-import { createCloudflareLiveOutput } from "./video-providers";
+import {
+  createCloudflareLiveOutput,
+  createMuxLiveOutput,
+} from "./video-providers";
 import {
   buildYoutubeAuthorizationUrl,
   createYoutubeLiveDestination,
@@ -366,6 +369,7 @@ export interface BroadcastDestinationSummary {
 export async function provisionYoutubeBroadcastDestinations(input: {
   readonly actor: ApiActor;
   readonly videoId: string;
+  readonly liveProvider: "cloudflare" | "mux";
   readonly liveInputId: string;
   readonly title: string;
   readonly liveVisibility: "public" | "link-only";
@@ -462,15 +466,23 @@ export async function provisionYoutubeBroadcastDestinations(input: {
           // refresh and parallel destination creation without delaying play.
           scheduledStartTime: new Date(input.now.getTime() + 30_000),
         });
-        const output = await createCloudflareLiveOutput({
-          liveInputId: input.liveInputId,
-          url: youtube.ingestionUrl,
-          streamKey: youtube.streamKey,
-        });
+        const output =
+          input.liveProvider === "cloudflare"
+            ? await createCloudflareLiveOutput({
+                liveInputId: input.liveInputId,
+                url: youtube.ingestionUrl,
+                streamKey: youtube.streamKey,
+              })
+            : await createMuxLiveOutput({
+                liveInputId: input.liveInputId,
+                url: youtube.ingestionUrl,
+                streamKey: youtube.streamKey,
+                passthrough: id,
+              });
         await getDatabase()
           .update(videoBroadcastDestinations)
           .set({
-            cloudflareOutputId: output.outputId,
+            providerOutputId: output.outputId,
             youtubeBroadcastId: youtube.broadcastId,
             youtubeStreamId: youtube.streamId,
             youtubeWatchUrl: youtube.watchUrl,

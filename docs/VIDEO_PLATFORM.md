@@ -1,9 +1,9 @@
 # Duna Video
 
 Duna Video is an iOS-first capture, live-streaming, upload, playback, and
-governance system for players. New live sessions prefer Cloudflare Stream;
-existing Mux sessions and an explicit Mux fallback remain supported. Uploaded
-originals use a private Cloudflare R2 bucket.
+governance system for players. New live sessions use tier-aware Cloudflare or
+Mux routing, while every provider-specific recording remains playable.
+Uploaded originals use a private Cloudflare R2 bucket.
 
 ## Product surfaces
 
@@ -47,15 +47,16 @@ client analytics.
 
 ### YouTube simulcast
 
-Cloudflare is the live origin and fan-out layer. A player may explicitly select
-the Duna YouTube channel, their connected channel, and any connected channel
-owned by the active organization. For each selected channel Duna:
+The selected Duna live provider is also the fan-out layer. A player may
+explicitly select the Duna YouTube channel, their connected channel, and any
+connected channel owned by the active organization. For each selected channel
+Duna:
 
 1. uses the channel's encrypted OAuth refresh credential to create a YouTube
    broadcast and one-use live stream;
 2. binds them through the YouTube Live Streaming API;
-3. gives the resulting RTMP address and key directly to a Cloudflare live
-   output; and
+3. gives the resulting RTMP address and key directly to a Cloudflare output or
+   Mux simulcast target; and
 4. stores only provider IDs, status, and the public watch URL.
 
 The Google access token and YouTube stream key are never stored. OAuth state is
@@ -66,13 +67,21 @@ organization broadcaster may select them. A Public Duna live stream maps to a
 Public YouTube broadcast; Link-only maps to Unlisted. Destination failures are
 reported per channel and do not falsely mark a healthy Duna stream as failed.
 
-`DUNA_LIVE_PROVIDER=auto` prefers Cloudflare whenever its scoped Stream token is
-configured. Mux remains a fallback for existing sessions and controlled
-rollback, but YouTube fan-out requires Cloudflare.
+`DUNA_LIVE_PROVIDER=auto` is tier-aware: Premium+ personal streams and Duna HQ
+Scale streams prefer Mux; Premium personal streams and Free/Club organization
+streams prefer Cloudflare. If the selected provider is unavailable, `auto`
+uses the other configured provider. An explicit `cloudflare` or `mux` value
+remains available for rollout and incident control. YouTube fan-out works with
+either provider.
+
+Mux-routed streams explicitly use Plus video quality by default. This is
+separate from a customer's Duna Premium or Premium+ entitlement. Set
+`MUX_LIVE_VIDEO_QUALITY=premium` only for an intentional marquee-event policy;
+it is not the default merely because a customer is on Duna Premium+.
 
 ### Program feed, scoring, replays, and ads
 
-Cloudflare forwards the encoded program feed; it does not compose Duna's live
+Cloudflare and Mux forward the encoded program feed; neither composes Duna's live
 scoreboard, replay, or sponsor creative into that feed. In the first Cloudflare
 release, Duna's Watch and remote-device scoring remain synchronized metadata
 and render over Duna playback, while YouTube receives the camera and court
@@ -387,6 +396,7 @@ MUX_WEBHOOK_SECRET
 MUX_SIGNING_KEY_ID
 MUX_PRIVATE_KEY
 MUX_DATA_ENV_KEY
+MUX_LIVE_VIDEO_QUALITY=plus
 ```
 
 `CLOUDFLARE_STREAM_API_TOKEN` must be a separately scoped Stream Read/Write
@@ -397,7 +407,7 @@ the redirect URI must exactly match the production callback and the Google
 OAuth client configuration.
 
 The runtime also accepts Mux's dashboard-oriented `MUX_SECRET_KEY` and
-`MUX_SIGNING_SECRET` names for fallback sessions. The signing secret may be
+`MUX_SIGNING_SECRET` names. The signing secret may be
 either the complete PEM or the base64 value Mux displays when the key is
 generated.
 
@@ -433,9 +443,10 @@ The implementation follows Cloudflare's
 and [signed playback](https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/)
 models; and YouTube's
 [broadcast and stream](https://developers.google.com/youtube/v3/live/guides/implementation/broadcasts-and-streams)
-model. The Mux fallback follows Mux's
+model. The Mux path follows Mux's
 [native live-streaming guidance](https://www.mux.com/docs/guides/live-streaming-from-your-app),
 [signed playback guidance](https://www.mux.com/docs/guides/secure-video-playback),
+its [simulcast guidance](https://www.mux.com/docs/guides/stream-live-to-3rd-party-platforms),
 and [Data monitoring guidance](https://www.mux.com/docs/guides/monitor-react-native-video).
 R2 uploads follow Cloudflare's
 [presigned URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
@@ -464,31 +475,35 @@ models.
    without deleting existing YouTube videos. Monitor YouTube API quota; the
    default project allocation is finite and higher-volume rollout may require
    Google's quota and compliance review.
-5. Create a fresh iOS build. Expo Go cannot load the local native capture
+5. Repeat the same Preview matrix with `DUNA_LIVE_PROVIDER=mux`, including
+   linked YouTube output, low-latency playback, reconnect behavior, and Mux Data
+   attribution. Confirm Plus quality is selected unless the test explicitly
+   exercises Premium encoding.
+6. Create a fresh iOS build. Expo Go cannot load the local native capture
    module.
-6. Validate one Public and one Link-only live stream, a private recording, a
+7. Validate one Public and one Link-only live stream, a private recording, a
    public recording, two angles on one match, and an R2 upload.
-7. On physical iPhone and Watch hardware, validate all four gestures, offline
+8. On physical iPhone and Watch hardware, validate all four gestures, offline
    event recovery, favorite timestamps, score overlay timing, live score
    authority, QR expiry/revocation, remote version conflicts, camera preview,
    and remote start/stop.
-8. Promote Production to `DUNA_LIVE_PROVIDER=auto` only after the Preview and
-   device gates pass. Leave Mux credentials present for legacy playback and a
-   controlled rollback; new Cloudflare sessions no longer require Mux Video.
-9. Treat native SRT as a separate release: migrate HaishinKit from the current
-   CocoaPods RTMP module to its SPM SRT module, then validate caller mode,
-   reconnection, thermal behavior, and constrained cellular networks on
-   physical devices. Until then, production capture remains RTMPS even though
-   the backend safely returns SRT credentials.
-10. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
+9. Promote Production to `DUNA_LIVE_PROVIDER=auto` only after both provider
+   matrices and the device gates pass. Verify Premium+, Premium, Scale, Club,
+   and Free accounts resolve to the intended provider before activation.
+10. Treat native SRT as a separate release: migrate HaishinKit from the current
+    CocoaPods RTMP module to its SPM SRT module, then validate caller mode,
+    reconnection, thermal behavior, and constrained cellular networks on
+    physical devices. Until then, production capture remains RTMPS even though
+    the backend safely returns SRT credentials.
+11. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
     migration.
-11. If model processing is enabled, configure the dedicated worker with scoped
+12. If model processing is enabled, configure the dedicated worker with scoped
     R2 credentials plus `DUNA_ANALYSIS_WORKER_URL` and
     `DUNA_ANALYSIS_WORKER_TOKEN`; verify a callback creates a versioned,
     confidence-labeled observation and a private artifact under the correct
     video prefix. A missing worker is a visible queued-analysis state, not a
     completed analysis.
-12. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
+13. Run `pnpm verify`, the connected repository smoke, and an iOS physical-device
     stream before production promotion.
 
 Cloudflare Stream subscription, Google OAuth verification, YouTube API quota,
