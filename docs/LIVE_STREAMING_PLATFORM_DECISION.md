@@ -1,6 +1,6 @@
 # Duna live streaming platform decision
 
-Status: implementation-ready, production activation gated
+Status: implemented in source, production activation gated
 Reviewed: August 30, 2026
 
 ## Decision
@@ -23,15 +23,18 @@ channel. An environment override can temporarily force either provider during
 rollout or an incident. Do not add AWS Elemental MediaConnect or operate a Duna
 SRT relay for the first release.
 
-New mobile sessions use RTMPS now. Cloudflare SRT can become an additional
-contribution path only after the native iOS broadcaster completes its SRT
-module migration and physical-device validation.
+The native broadcaster now supports both transports. It selects secure SRT for
+cellular/field contribution, where packet recovery matters most, and RTMPS on
+Wi-Fi or Ethernet, where Cloudflare recommends RTMP for its lowest-latency HLS
+path. Every SRT session retains the same provider's RTMPS credentials as an
+automatic fallback. This adaptive policy still requires physical-device,
+thermal, and long-session validation before production activation.
 
 This gives Duna the important part of Playcam's relay model without taking on a
 24/7 media control plane:
 
 ```text
-Player iPhone -- RTMPS now --> Duna provider policy
+Player iPhone -- SRT or RTMPS --> Duna provider policy
                                   |-- Cloudflare Stream (everyday/economical)
                                   `-- Mux Plus (premium experience)
                                         |
@@ -40,8 +43,9 @@ Player iPhone -- RTMPS now --> Duna provider policy
                                         |-- player YouTube
                                         `-- organization YouTube
 
-Apple Watch / second device --> Duna match-event timeline --> Duna overlay now
-                                                   `-------> program compositor later
+Apple Watch / second device --> Duna match-event timeline
+                                      |-- score / replay / sponsor commands
+                                      `-- iPhone program compositor --> every output
 ```
 
 ## What Playcam publicly reveals
@@ -191,47 +195,53 @@ Sources: [YouTube Live API overview](https://developers.google.com/youtube/v3/li
 [RTMPS ingest](https://developers.google.com/youtube/v3/live/guides/rtmps-ingestion),
 and [Mux simulcast targets](https://www.mux.com/docs/guides/stream-live-to-3rd-party-platforms).
 
-## Second screen, score, replay, and ads
+## Second screen, score, replay, ads, and commentary
 
-Cloudflare and Mux are relay/delivery services, not live video compositors. The
-first release therefore keeps Duna's existing Apple Watch and remote-device
-score timeline authoritative and renders it over Duna playback. YouTube
-receives the clean camera and court-audio feed.
+Cloudflare and Mux are relay/delivery services, not live video compositors.
+Duna's native camera now creates the initial program feed before sending it to
+either provider. The same rendered frames therefore reach Duna and every
+selected YouTube channel. This release includes:
 
-### Phase 1: connected metadata
+- an authoritative score bug driven by the linked match/Watch/second-screen
+  timeline;
+- a bounded 15-second rolling replay buffer with 8-, 10-, and 15-second
+  operator actions, a visible replay badge, and automatic return to live;
+- sponsor-safe text lower thirds controlled from the second screen; and
+- source-linked score and replay events for audit and later analysis.
 
-- Watch and remote scoring continue to write ordered Duna match events.
-- Duna web and app players render the live score over Cloudflare playback.
-- Score events remain source-linked for replay markers, clips, and later
-  analysis.
-- YouTube destinations receive the same clean encoded feed.
+The QR now opens `duna://vision/remote/<token>` directly in the Duna iOS app,
+with the existing expiring HTTPS control URL available when the app is not
+installed. An invited iPhone or iPad can preview the camera, score, show/hide
+the score bug, request replay, take/return a sponsor graphic, and start/end the
+camera. Optimistic version checks prevent one stale controller from silently
+overwriting another.
 
-### Phase 2: native SRT contribution
+The first compositor is deliberately phone-side, matching the cost shape that
+Playcam describes. The current local recording follows that program output.
+Preserving simultaneous clean and program masters is a separate producer-grade
+feature; Duna must not claim a clean master until dual recording is implemented
+and device-tested.
 
-- Move the iOS broadcaster from its current RTMP-only CocoaPods bridge to the
-  HaishinKit SPM SRT module.
-- Validate Cloudflare SRT caller mode, reconnect behavior, keyframe interval,
-  battery, thermals, audio continuity, and constrained cellular networks on
-  physical devices.
-- Retain RTMPS as an automatic operational fallback.
+### Invited commentator audio
 
-### Phase 3: a real Duna program feed
+Commentary is not safely solved by adding another audio track to SRT or mixing a
+remote call directly on the camera phone. The production design is a
+permissioned LiveKit room and cloud program stage:
 
-Add a compositor that consumes the authoritative event timeline before the
-feed is fanned out. The same rendered program then reaches Duna and every
-YouTube channel. It can support:
+```text
+camera contribution --> LiveKit room <-- invited commentator audio
+                               |
+                    room/web composite + audio mix
+                               |
+                    LiveKit egress --> Cloudflare or Mux --> YouTube
+```
 
-- score bug, serving indicator, set count, and sponsor-safe lower thirds;
-- operator-triggered full-screen or bumper ads with duration limits;
-- a bounded replay buffer with a clear return-to-live action; and
-- an insertion audit containing sponsor, operator, start, end, and affected
-  destinations.
-
-The lower-cost first implementation is phone-side composition, matching what
-Playcam says it does. Duna should locally preserve a clean recording while
-sending the composited program feed. If multiple cameras, higher reliability,
-or clean/program cloud masters become requirements, introduce a dedicated
-producer service then—not merely an SRT relay.
+That stage can keep commentator identity, invitations, mute/removal, isolated
+tracks, gain/ducking, monitoring, echo control, reconnection, and A/V sync
+auditable. It also becomes the right boundary for multiple cameras and clean
+plus program masters. Commentary remains activation-gated until those controls,
+moderation, youth-safety, and real-device latency tests exist; this iOS release
+does not pretend remote commentator audio is already mixed.
 
 Cloudflare's Live Instant Clipping can make a recent clip manifest or MP4, but
 it does not switch that clip back into the outgoing YouTube program. Likewise,
@@ -240,7 +250,10 @@ burn a sponsor message into simulcast output. Universal replay and sponsor
 graphics therefore belong at the compositor.
 
 Sources: [Cloudflare Live Instant Clipping](https://developers.cloudflare.com/stream/stream-live/live-instant-clipping/)
-and [Cloudflare Stream Player ads](https://developers.cloudflare.com/stream/viewing-videos/using-the-stream-player/).
+and [Cloudflare Stream Player ads](https://developers.cloudflare.com/stream/viewing-videos/using-the-stream-player/),
+[Mux SRT ingest](https://www.mux.com/docs/guides/use-srt-to-live-stream),
+[LiveKit ingress and egress](https://docs.livekit.io/transport/media/ingress-egress/),
+and [LiveKit web compositing](https://docs.livekit.io/home/egress/web/).
 
 ## Activation gates
 
@@ -253,15 +266,16 @@ and [Cloudflare Stream Player ads](https://developers.cloudflare.com/stream/view
    live-enabled channel.
 4. Exercise public, link-only, private recording, official-channel, personal,
    and organization simulcast paths in Preview.
-5. Run the same long-duration RTMPS and playback matrix against Cloudflare and
-   Mux on physical iPhones. Include live-edge drift, startup, rebuffering,
-   reconnect recovery, score synchronization, recording reconciliation, and
-   one linked YouTube output from each provider.
+5. Run the same long-duration SRT/RTMPS and playback matrix against Cloudflare
+   and Mux on physical iPhones. Include live-edge drift, startup, rebuffering,
+   SRT-to-RTMPS recovery, battery/thermal behavior, audio continuity, score and
+   sponsor synchronization, replay return-to-live, recording reconciliation,
+   and one linked YouTube output from each provider.
 6. Activate tier-aware `auto` routing only after personal Premium/Premium+ and
    Duna HQ Free/Club/Scale accounts resolve to the intended provider.
 7. Monitor provider minutes, Mux stream health/Data, YouTube API quota, output
    failures, startup time, disconnect recovery, and recording reconciliation.
 
-Native SRT and composited score/replay/ads are separate device-tested releases;
-they should not be described as active merely because Cloudflare can accept an
-SRT input or create a clip.
+Native SRT and the phone-side score/replay/sponsor program are implemented but
+must not be described as production-active until this physical-device matrix
+passes. Invited commentary remains a later cloud-producer release.

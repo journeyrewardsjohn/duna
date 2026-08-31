@@ -66,16 +66,20 @@ export async function saveVideoNetworkPreferences(
 export async function canUseVideoTransport(
   transport: VideoTransport,
   preferences: VideoNetworkPreferences,
-): Promise<{ readonly allowed: boolean; readonly reason?: string }> {
+): Promise<{
+  readonly allowed: boolean;
+  readonly reason?: string;
+  readonly networkType?: "wifi" | "ethernet" | "cellular" | "other";
+}> {
   const state = await Network.getNetworkStateAsync();
   if (!state.isConnected || state.isInternetReachable === false) {
     return { allowed: false, reason: "Offline" };
   }
-  if (
-    state.type === Network.NetworkStateType.WIFI ||
-    state.type === Network.NetworkStateType.ETHERNET
-  ) {
-    return { allowed: true };
+  if (state.type === Network.NetworkStateType.WIFI) {
+    return { allowed: true, networkType: "wifi" };
+  }
+  if (state.type === Network.NetworkStateType.ETHERNET) {
+    return { allowed: true, networkType: "ethernet" };
   }
   if (state.type === Network.NetworkStateType.CELLULAR) {
     const allowed =
@@ -84,6 +88,7 @@ export async function canUseVideoTransport(
         : preferences.allowCellularLive;
     return {
       allowed,
+      networkType: "cellular",
       reason: allowed
         ? undefined
         : transport === "upload"
@@ -94,6 +99,7 @@ export async function canUseVideoTransport(
   return {
     allowed: false,
     reason: "Waiting for a Wi‑Fi connection",
+    networkType: "other",
   };
 }
 

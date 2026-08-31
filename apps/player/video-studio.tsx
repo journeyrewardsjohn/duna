@@ -72,7 +72,6 @@ import {
 } from "./watch-scoring";
 import {
   edgeVisibility,
-  courtCalibrationChecklist,
   geometryFromGuidance,
   geometrySettings,
   interpolatePoint,
@@ -289,6 +288,7 @@ interface StoredCaptureDefaults {
 }
 
 const captureDefaultsKey = "duna.video.capture-defaults.v2";
+const videoMatchDeviceKey = "duna.video.match-device.v1";
 
 function captureFormFromDefaults(
   stored: StoredCaptureDefaults | undefined,
@@ -448,14 +448,6 @@ function importedVisionSettings(
     teamB: "Side B",
     ...(imported?.geometry ? geometrySettings(imported.geometry) : {}),
   };
-}
-
-function qualityLabel(grade: CaptureGuidance["qualityGrade"]): string {
-  if (grade === "excellent")
-    return "Excellent · advanced trajectories expected";
-  if (grade === "good") return "Good · traditional statistics expected";
-  if (grade === "limited") return "Limited · rallies and basic events only";
-  return "Poor · reposition for better analysis";
 }
 
 function idempotencyKey(): string {
@@ -2194,6 +2186,16 @@ function AssociationPicker({
         </View>
       ) : (
         <>
+          {category === "match" && onCreateMatch && (
+            <Pressable
+              onPress={onCreateMatch}
+              style={styles.createMatchInlineButton}
+            >
+              <Text style={styles.createMatchInlineText}>
+                + Create a new match
+              </Text>
+            </Pressable>
+          )}
           {scheduledMatches.length > 0 && (
             <View style={styles.scheduledAssociationSection}>
               <View style={styles.scheduledAssociationHeading}>
@@ -2255,22 +2257,171 @@ function AssociationPicker({
                 <Text style={styles.helper}>
                   Search all Duna events. Your registrations appear first.
                 </Text>
-                {category === "match" && onCreateMatch && (
-                  <Pressable
-                    onPress={onCreateMatch}
-                    style={styles.createMatchInlineButton}
-                  >
-                    <Text style={styles.createMatchInlineText}>
-                      + Create a Match
-                    </Text>
-                  </Pressable>
-                )}
               </View>
             )}
           </View>
         </>
       )}
     </View>
+  );
+}
+
+function QuickRecordingMatchSetup({
+  client,
+  host,
+  onCancel,
+  onCreated,
+  venue,
+}: {
+  readonly client: DunaApiClient;
+  readonly host: PersonSummary;
+  readonly onCancel: () => void;
+  readonly onCreated: (association: VideoAssociation) => void;
+  readonly venue?: VenueSelection;
+}) {
+  const [players, setPlayers] = useState<readonly PersonSummary[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(true);
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const create = async () => {
+    const [partner, opponentA, opponentB] = players;
+    if (!partner || !opponentA || !opponentB || !consent || busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      let deviceId = await AsyncStorage.getItem(videoMatchDeviceKey);
+      if (!deviceId) {
+        deviceId = `video-${Crypto.randomUUID()}`;
+        await AsyncStorage.setItem(videoMatchDeviceKey, deviceId);
+      }
+      const teamAIds = [host.id, partner.id];
+      const teamBIds = [opponentA.id, opponentB.id];
+      const scoring = await client.player.startMatch.mutate({
+        teamAIds,
+        teamBIds,
+        venueId: venue?.venueId,
+        scoringSystem: "rally",
+        matchType: "competitive",
+        allPlayersAgreedToRecord: true,
+        serviceOrder: { A: teamAIds, B: teamBIds },
+        initialServerPersonId: host.id,
+        deviceId,
+        idempotencyKey: idempotencyKey(),
+      });
+      onCreated({
+        type: "match",
+        id: scoring.matchId,
+        title: `${scoring.teamA.name} vs ${scoring.teamB.name}`,
+        subtitle: `Live scoring · ${scoring.venueName}`,
+        associated: true,
+        venue,
+        captureDefaults: {
+          courtWidthMeters: 8,
+          courtLengthMeters: 16,
+          netHeightMeters: 2.43,
+          orientation: "landscape",
+        },
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (pickerOpen) {
+    return (
+      <PlayerPickerModal
+        embedded
+        excludedPersonIds={[host.id]}
+        maxSelected={3}
+        onChange={setPlayers}
+        onClose={() => setPickerOpen(false)}
+        palette={importedPlayerPalette}
+        selected={players}
+        title="Choose partner, then two opponents"
+        visible
+      />
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.quickMatchSafe}>
+      <View style={styles.quickMatchHeader}>
+        <Pressable onPress={onCancel} style={styles.headerTap}>
+          <Text style={styles.headerAction}>Cancel</Text>
+        </Pressable>
+        <Text style={styles.modalTitle}>New match</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+      <ScrollView contentContainerStyle={styles.quickMatchContent}>
+        <View style={styles.formHero}>
+          <Text style={styles.formStep}>RECORD + SCORE</Text>
+          <Text style={styles.formTitle}>Create the match first.</Text>
+          <Text style={styles.formIntro}>
+            The recording, second-screen scoreboard, Watch events, and replay
+            markers will all share this match timeline.
+          </Text>
+        </View>
+        <View style={styles.quickMatchTeams}>
+          <View style={styles.quickMatchTeamCard}>
+            <Text style={styles.quickMatchTeamLabel}>YOUR TEAM</Text>
+            <Text style={styles.quickMatchPlayer}>{host.displayName}</Text>
+            <Text style={styles.quickMatchPlayer}>
+              {players[0]?.displayName ?? "Choose your partner"}
+            </Text>
+          </View>
+          <View style={styles.quickMatchTeamCard}>
+            <Text style={styles.quickMatchTeamLabel}>OPPONENTS</Text>
+            <Text style={styles.quickMatchPlayer}>
+              {players[1]?.displayName ?? "Choose opponent"}
+            </Text>
+            <Text style={styles.quickMatchPlayer}>
+              {players[2]?.displayName ?? "Choose opponent"}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => setPickerOpen(true)}
+          style={styles.quickMatchChoose}
+        >
+          <Text style={styles.quickMatchChooseText}>
+            {players.length === 3 ? "Change players" : "Choose 3 players"}
+          </Text>
+        </Pressable>
+        <View style={styles.quickMatchConsent}>
+          <View style={styles.flex}>
+            <Text style={styles.quickMatchConsentTitle}>
+              Everyone agreed to be recorded
+            </Text>
+            <Text style={styles.quickMatchConsentBody}>
+              Confirm with all four players before creating this recorded match.
+            </Text>
+          </View>
+          <Switch onValueChange={setConsent} value={consent} />
+        </View>
+        {!!error && <Text style={styles.errorText}>{error}</Text>}
+      </ScrollView>
+      <View style={styles.modalFooter}>
+        <Pressable
+          disabled={busy || players.length !== 3 || !consent}
+          onPress={() => void create()}
+          style={[
+            styles.primaryButton,
+            (busy || players.length !== 3 || !consent) && styles.disabled,
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Create + link match</Text>
+          )}
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -2895,6 +3046,20 @@ function CourtOverlay({
   const hasFramingGuide = Boolean(
     guidance?.groundPlaneDetected || hasCourtGeometry || hasNetEvidence,
   );
+  const alignmentCorners =
+    !hasCourtGeometry && guidance?.alignmentCorners?.length === 4
+      ? guidance.alignmentCorners
+      : undefined;
+  const alignmentNetStart = alignmentCorners
+    ? interpolatePoint(alignmentCorners[0]!, alignmentCorners[3]!, 0.5)
+    : undefined;
+  const alignmentNetEnd = alignmentCorners
+    ? interpolatePoint(alignmentCorners[1]!, alignmentCorners[2]!, 0.5)
+    : undefined;
+  const alignmentNetCenter =
+    alignmentNetStart && alignmentNetEnd
+      ? interpolatePoint(alignmentNetStart, alignmentNetEnd, 0.5)
+      : undefined;
   return (
     <View
       onLayout={onLayout}
@@ -2950,6 +3115,40 @@ function CourtOverlay({
               ))}
             </>
           )}
+          {alignmentCorners && (
+            <>
+              {alignmentCorners.map((point, index) => (
+                <CourtLine
+                  color={palette.sand}
+                  dashed
+                  end={alignmentCorners[(index + 1) % 4]!}
+                  key={`alignment-${index}`}
+                  opacity={0.34}
+                  size={size}
+                  start={point}
+                />
+              ))}
+              <CourtLine
+                color={palette.sand}
+                dashed
+                end={alignmentNetEnd!}
+                opacity={0.46}
+                size={size}
+                start={alignmentNetStart!}
+              />
+              <View
+                style={[
+                  styles.alignmentNetLabel,
+                  {
+                    left: alignmentNetCenter!.x * size.width - 25,
+                    top: alignmentNetCenter!.y * size.height - 13,
+                  },
+                ]}
+              >
+                <Text style={styles.alignmentNetLabelText}>NET</Text>
+              </View>
+            </>
+          )}
           {(hasCourtGeometry || hasNetEvidence) && geometry.netTopLine && (
             <CourtLine
               color={color}
@@ -2990,18 +3189,6 @@ function CourtOverlay({
                   },
                 ]}
               />
-              {!hasCourtGeometry && !hasNetEvidence && (
-                <View
-                  style={[
-                    styles.framingGuideLabel,
-                    { top: (guidance?.horizonY ?? 0.16) * size.height + 8 },
-                  ]}
-                >
-                  <Text style={styles.framingGuideLabelText}>
-                    FRAME THE NET HERE
-                  </Text>
-                </View>
-              )}
             </>
           )}
         </>
@@ -3322,6 +3509,7 @@ function CaptureExperience({
   const [streamState, setStreamState] = useState<
     "preview" | "connecting" | "live" | "stopped"
   >("preview");
+  const [streamTransport, setStreamTransport] = useState<"srt" | "rtmps">();
   const [session, setSession] = useState<LiveVideoSession>();
   const [recording, setRecording] = useState(false);
   const [orientationLockState, setOrientationLockState] = useState<
@@ -3344,11 +3532,16 @@ function CaptureExperience({
     overlayScoreboard: true,
     teamA: labels.teamA,
     teamB: labels.teamB,
+    program: {
+      scoreboardVisible: true,
+      score: initialScore,
+    },
   });
   const [visionScore, setVisionScore] = useState<VisionScore>(initialScore);
   const [matchScoring, setMatchScoring] = useState<MatchScoringState>();
   const [showRemote, setShowRemote] = useState(false);
   const [previewHidden, setPreviewHidden] = useState(false);
+  const [replayBusy, setReplayBusy] = useState(false);
   const activeRef = useRef(false);
   const busyRef = useRef(false);
   const permissionRef = useRef(false);
@@ -3364,6 +3557,9 @@ function CaptureExperience({
   const watchEventChain = useRef<Promise<void>>(Promise.resolve());
   const visionCreation = useRef<Promise<void> | undefined>(undefined);
   const remoteCommand = useRef<string | undefined>(undefined);
+  const remoteScoreCommand = useRef<string | undefined>(undefined);
+  const remoteMatchScoreCommand = useRef<string | undefined>(undefined);
+  const remoteReplayCommand = useRef<string | undefined>(undefined);
   const startRef = useRef<() => void>(() => undefined);
   const stopRef = useRef<() => void>(() => undefined);
 
@@ -3413,6 +3609,10 @@ function CaptureExperience({
     settingsRef.current = next.settings;
     setVisionSession(next);
     setVisionSettings(next.settings);
+    if (next.settings.program?.score) {
+      scoreRef.current = next.settings.program.score;
+      setVisionScore(next.settings.program.score);
+    }
     if (next.settings.corners?.length === 4) {
       const nextGeometry = geometryFromGuidance(guidanceRef.current, {
         corners: next.settings.corners,
@@ -3428,6 +3628,69 @@ function CaptureExperience({
       setCourtGeometry(nextGeometry);
     }
   }, []);
+
+  useEffect(() => {
+    if (!VideoCapture) return;
+    const score = matchScoring ? compactScore(matchScoring.score) : visionScore;
+    const currentSet = score.sets[
+      Math.min(score.setIndex, score.sets.length - 1)
+    ] ?? {
+      a: 0,
+      b: 0,
+    };
+    const sponsor = visionSettings.program?.sponsor;
+    void VideoCapture.updateProgramState(
+      JSON.stringify({
+        teamA: visionSettings.teamA,
+        teamB: visionSettings.teamB,
+        scoreA: currentSet.a,
+        scoreB: currentSet.b,
+        setLabel: `SET ${score.setIndex + 1}`,
+        scoreboardVisible:
+          visionSettings.overlayScoreboard &&
+          (visionSettings.program?.scoreboardVisible ?? true),
+        sponsorHeadline: sponsor?.headline,
+        sponsorBody: sponsor?.body,
+        sponsorVisible: sponsor?.active ?? false,
+      }),
+    ).catch((error: unknown) => {
+      setVisionNotice(
+        `Program graphics are unavailable: ${displayError(error)}`,
+      );
+    });
+  }, [matchScoring, visionScore, visionSettings]);
+
+  useEffect(() => {
+    const current = sessionRef.current;
+    if (
+      !current ||
+      current.status === "ended" ||
+      current.status === "expired"
+    ) {
+      return;
+    }
+    const currentScore = current.settings.program?.score;
+    if (JSON.stringify(currentScore) === JSON.stringify(visionScore)) return;
+    const timer = setTimeout(() => {
+      const latest = sessionRef.current;
+      if (!latest) return;
+      const settings: VisionSettings = {
+        ...latest.settings,
+        program: {
+          ...latest.settings.program,
+          scoreboardVisible:
+            latest.settings.program?.scoreboardVisible ??
+            latest.settings.overlayScoreboard,
+          score: visionScore,
+        },
+      };
+      void client.player.updateVisionSession
+        .mutate({ sessionId: latest.id, settings })
+        .then(updateSessionState)
+        .catch(() => undefined);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [client, updateSessionState, visionScore]);
 
   useEffect(() => {
     let active = true;
@@ -3570,7 +3833,7 @@ function CaptureExperience({
       netDetected: hasCourtEvidence && Boolean(geometry.netTopLine),
       antennaDetected: hasCourtEvidence && Boolean(geometry.antennaPoints),
       calibrationMode: geometry.mode,
-      modelVersion: guidance?.modelVersion ?? "court-v2-partial-2026-08-05",
+      modelVersion: guidance?.modelVersion ?? "court-v4-spatial-2026-08-30",
     };
   };
 
@@ -3579,7 +3842,8 @@ function CaptureExperience({
       | "recording-started"
       | "favorite"
       | "recording-stopped"
-      | "calibration-updated",
+      | "calibration-updated"
+      | "review-marker",
     label?: string,
     occurredAt = new Date(),
     payload?: Record<string, unknown>,
@@ -3732,11 +3996,22 @@ function CaptureExperience({
             });
           updateSessionState(attached);
         }
+        const srt = created.ingests.srt;
+        const rtmps = created.ingests.rtmps;
+        const useSrt =
+          Boolean(srt) &&
+          connection.networkType !== "wifi" &&
+          connection.networkType !== "ethernet";
         await VideoCapture.startStream(
-          created.streamUrl,
-          created.streamKey,
+          useSrt ? srt!.url : rtmps.url,
+          useSrt ? srt!.streamId : rtmps.streamKey,
           form.hasAudio,
+          useSrt ? "srt" : "rtmps",
+          useSrt ? srt!.passphrase : undefined,
+          useSrt ? rtmps.url : undefined,
+          useSrt ? rtmps.streamKey : undefined,
         );
+        setStreamTransport(useSrt ? "srt" : "rtmps");
         startedAt = new Date();
         activeRef.current = true;
       }
@@ -3807,6 +4082,144 @@ function CaptureExperience({
   startRef.current = () => void start();
   stopRef.current = () => void stop();
 
+  const appendRemoteProgramEvent = useCallback(
+    async (input: {
+      readonly id: string;
+      readonly type: "rally-won" | "review-marker";
+      readonly occurredAt: string;
+      readonly winnerSide?: "A" | "B";
+      readonly score?: VisionScore;
+      readonly label: string;
+      readonly payload?: Record<string, unknown>;
+    }) => {
+      const current = sessionRef.current;
+      if (!current) return;
+      await client.player.appendVisionTimelineEvents.mutate({
+        sessionId: current.id,
+        events: [
+          {
+            id: input.id,
+            sessionId: current.id,
+            source: "remote",
+            type: input.type,
+            winnerSide: input.winnerSide,
+            elapsedMs: captureStartedAtMs.current
+              ? Math.min(
+                  43_200_000,
+                  Math.max(
+                    0,
+                    Date.parse(input.occurredAt) - captureStartedAtMs.current,
+                  ),
+                )
+              : 0,
+            occurredAt: input.occurredAt,
+            score: input.score,
+            label: input.label,
+            payload: input.payload,
+          },
+        ],
+      });
+    },
+    [client],
+  );
+
+  const processRemoteProgram = useCallback(
+    async (next: VisionSession) => {
+      const scoreCommand = next.settings.program?.scoreCommand;
+      if (scoreCommand && remoteScoreCommand.current !== scoreCommand.id) {
+        remoteScoreCommand.current = scoreCommand.id;
+        const score = next.settings.program?.score;
+        if (score) {
+          scoreRef.current = score;
+          setVisionScore(score);
+        }
+        await appendRemoteProgramEvent({
+          id: scoreCommand.id,
+          type: "rally-won",
+          occurredAt: scoreCommand.occurredAt,
+          winnerSide: scoreCommand.winnerSide,
+          score,
+          label: `${scoreCommand.winnerSide === "A" ? next.settings.teamA : next.settings.teamB} won the rally`,
+          payload: { command: "second-screen-score" },
+        }).catch(() => undefined);
+      }
+
+      // Timeline acceptance and linked-match scoring are independent writes.
+      // Keep retrying the authoritative match event if that write was the only
+      // part interrupted; the event ID makes the retry naturally idempotent.
+      if (
+        scoreCommand &&
+        matchId &&
+        remoteMatchScoreCommand.current !== scoreCommand.id
+      ) {
+        remoteMatchScoreCommand.current = scoreCommand.id;
+        try {
+          const current = await client.player.matchScoringState.query({
+            matchId,
+          });
+          const result = await client.player.appendMatchEvents.mutate({
+            matchId,
+            deviceId: current.deviceId,
+            events: [
+              {
+                sequence: current.nextSequence,
+                monotonicCounter: current.nextMonotonicCounter,
+                event: {
+                  id: scoreCommand.id,
+                  type: "rally-won",
+                  winner: scoreCommand.winnerSide,
+                  occurredAt: scoreCommand.occurredAt,
+                },
+              },
+            ],
+            idempotencyKey: idempotencyKey(),
+          });
+          setMatchScoring(result.scoring);
+          const authoritativeScore = compactScore(result.scoring.score);
+          scoreRef.current = authoritativeScore;
+          setVisionScore(authoritativeScore);
+        } catch (error) {
+          remoteMatchScoreCommand.current = undefined;
+          setVisionNotice(
+            `Second-screen score received; linked match scoring is waiting to sync: ${displayError(error)}`,
+          );
+        }
+      }
+
+      const replayRequest = next.settings.program?.replayRequest;
+      if (
+        replayRequest &&
+        remoteReplayCommand.current !== replayRequest.id &&
+        activeRef.current
+      ) {
+        remoteReplayCommand.current = replayRequest.id;
+        const result = await VideoCapture?.insertReplay(
+          replayRequest.durationSeconds,
+        );
+        await appendRemoteProgramEvent({
+          id: replayRequest.id,
+          type: "review-marker",
+          occurredAt: replayRequest.requestedAt,
+          score: scoreRef.current,
+          label: result?.accepted
+            ? `${replayRequest.durationSeconds}-second instant replay`
+            : "Instant replay requested while buffer was warming up",
+          payload: {
+            command: "second-screen-replay",
+            accepted: result?.accepted ?? false,
+            durationSeconds: result?.durationSeconds ?? 0,
+          },
+        }).catch(() => undefined);
+        setVisionNotice(
+          result?.accepted
+            ? `Playing the last ${result.durationSeconds} seconds.`
+            : "Replay is warming up. Try again after the next rally.",
+        );
+      }
+    },
+    [appendRemoteProgramEvent, client, matchId],
+  );
+
   useEffect(() => {
     const sessionId = visionSession?.id;
     if (!sessionId) return;
@@ -3816,6 +4229,7 @@ function CaptureExperience({
         const next = await client.player.visionSession.query({ sessionId });
         if (!active) return;
         updateSessionState(next);
+        await processRemoteProgram(next);
         const commandKey = `${next.controlVersion}:${next.status}`;
         if (
           next.status === "recording" &&
@@ -3844,7 +4258,7 @@ function CaptureExperience({
       active = false;
       clearInterval(timer);
     };
-  }, [client, updateSessionState, visionSession?.id]);
+  }, [client, processRemoteProgram, updateSessionState, visionSession?.id]);
 
   const processWatchEvents = useCallback(
     async (events: readonly WatchVisionEvent[], sessionId: string) => {
@@ -3996,6 +4410,35 @@ function CaptureExperience({
     }
   };
 
+  const insertInstantReplay = async (durationSeconds = 10) => {
+    if (!VideoCapture || replayBusy) return;
+    setReplayBusy(true);
+    try {
+      const result = await VideoCapture.insertReplay(durationSeconds);
+      await appendPhoneEvent(
+        "review-marker",
+        result.accepted
+          ? `${result.durationSeconds}-second instant replay`
+          : "Instant replay requested while buffer was warming up",
+        new Date(),
+        {
+          command: "camera-replay",
+          accepted: result.accepted,
+          durationSeconds: result.durationSeconds,
+        },
+      ).catch(() => undefined);
+      setVisionNotice(
+        result.accepted
+          ? `Playing the last ${result.durationSeconds} seconds.`
+          : "Replay is warming up. Try again after the next rally.",
+      );
+    } catch (error) {
+      setVisionNotice(`Replay is unavailable: ${displayError(error)}`);
+    } finally {
+      setReplayBusy(false);
+    }
+  };
+
   const closeCapture = async () => {
     const current = sessionRef.current;
     if (current && current.status !== "ended" && current.status !== "expired") {
@@ -4059,8 +4502,8 @@ function CaptureExperience({
           </View>
           <Text style={styles.reviewTitle}>Your recording is processing.</Text>
           <Text style={styles.reviewBody}>
-            Choose what happens after Mux prepares it. You can change this again
-            from your video archive.
+            Choose what happens after Duna prepares it. You can change this
+            again from your video archive.
           </Text>
           <ChoiceRow
             label="Recording visibility"
@@ -4118,13 +4561,6 @@ function CaptureExperience({
 
   const isActive =
     recording || streamState === "connecting" || streamState === "live";
-  const calibrationChecklist = courtCalibrationChecklist(
-    guidance,
-    form.orientation,
-  );
-  const activeCalibrationStep = calibrationChecklist.find(
-    (step) => step.active,
-  );
   return (
     <View style={styles.captureRoot}>
       {orientationLockState === "locking" ? (
@@ -4162,6 +4598,9 @@ function CaptureExperience({
           onStreamState={(event) => {
             const next = event.nativeEvent.state;
             setStreamState(next);
+            if (event.nativeEvent.transport) {
+              setStreamTransport(event.nativeEvent.transport);
+            }
             if (next === "connecting" || next === "live")
               activeRef.current = true;
             if (next === "stopped") {
@@ -4194,15 +4633,6 @@ function CaptureExperience({
         />
       )}
       <CourtOverlay geometry={courtGeometry} guidance={guidance} />
-      {visionSettings.overlayScoreboard && (matchId || isActive) && (
-        <VisionScoreboard
-          compact
-          landscape={isLandscapeViewport}
-          score={matchScoring ? compactScore(matchScoring.score) : visionScore}
-          teamA={visionSettings.teamA}
-          teamB={visionSettings.teamB}
-        />
-      )}
       {isActive && previewHidden && (
         <View pointerEvents="none" style={styles.lowPowerOverlay}>
           <View style={styles.lowPowerMark}>
@@ -4250,7 +4680,7 @@ function CaptureExperience({
                 {recording
                   ? "RECORDING"
                   : streamState === "live"
-                    ? "LIVE"
+                    ? `LIVE · ${streamTransport?.toUpperCase() ?? "VIDEO"}`
                     : streamState === "connecting"
                       ? "CONNECTING"
                       : mode === "live"
@@ -4282,125 +4712,69 @@ function CaptureExperience({
         >
           {!isActive && (
             <View style={styles.guidanceCard}>
-              {guidance?.orientationMatches === false && (
-                <View style={styles.orientationWarning}>
-                  <Text style={styles.orientationWarningIcon}>↻</Text>
-                  <View style={styles.flex}>
-                    <Text style={styles.orientationWarningTitle}>
-                      Rotate to {form.orientation}
-                    </Text>
-                    <Text style={styles.orientationWarningBody}>
-                      Duna has opened this recorder in {form.orientation}. Turn
-                      your phone sideways before you begin.
-                    </Text>
-                  </View>
-                </View>
-              )}
               <View style={styles.guidanceTop}>
-                <Text
+                <View
                   style={[
-                    styles.guidanceGrade,
-                    guidance?.acceptable && { color: palette.positive },
+                    styles.guidanceReadyDot,
+                    guidance?.acceptable && styles.guidanceReadyDotActive,
                   ]}
-                >
-                  {guidance
-                    ? qualityLabel(guidance.qualityGrade)
-                    : "Analyzing court geometry…"}
-                </Text>
+                />
+                <View style={styles.flex}>
+                  <Text
+                    style={[
+                      styles.guidanceGrade,
+                      guidance?.acceptable && { color: palette.positive },
+                    ]}
+                  >
+                    {guidance?.orientationMatches === false
+                      ? `Rotate to ${form.orientation}`
+                      : guidance?.courtDetected
+                        ? "Court locked"
+                        : guidance?.netDetected
+                          ? "Net found · widen the frame"
+                          : guidance?.groundPlaneDetected
+                            ? "Ground mapped · find the net"
+                            : "Map the court"}
+                  </Text>
+                  <Text numberOfLines={2} style={styles.guidanceWarning}>
+                    {guidance?.orientationMatches === false
+                      ? `Turn the phone ${form.orientation} before starting.`
+                      : (guidance?.warnings[0] ??
+                        "Aim at the net and move slowly for a spatial lock.")}
+                  </Text>
+                </View>
                 <Text style={styles.guidanceScore}>
-                  {guidance?.qualityScore ?? 0}/100
+                  {guidance?.qualityScore ?? 0}
                 </Text>
-              </View>
-              <Text style={styles.guidanceWarning}>
-                {guidance?.orientationMatches === false
-                  ? `Turn your phone to ${form.orientation}; the recorder is already set for it.`
-                  : guidance?.courtDetected || guidance?.netDetected
-                    ? (guidance?.warnings[0] ??
-                      "Court evidence found. Keep the net and sidelines in frame for stronger analysis.")
-                    : "Find the net first. Duna keeps the court guide hidden until it sees a real court."}
-              </Text>
-              <Text style={styles.guidanceNote}>
-                {guidance?.courtDetected || guidance?.netDetected
-                  ? guidance?.projectionSource === "lidar"
-                    ? "LiDAR confirms the ground while Duna follows visible court evidence."
-                    : "Court guide is evidence-based. You can still adjust visible landmarks yourself."
-                  : guidance?.groundPlaneDetected
-                    ? "Ground found, not a court yet. Keep the net near the horizon and include both sidelines."
-                    : "Point toward the court and move slowly so Duna can find the sand and net."}
-              </Text>
-              <View style={styles.calibrationGuide}>
-                <View style={styles.calibrationGuideHeader}>
-                  <Text style={styles.calibrationGuideEyebrow}>
-                    CALIBRATION GUIDE
-                  </Text>
-                  <Text style={styles.calibrationGuideState}>
-                    {orientationLockState === "locking"
-                      ? "SETTING ORIENTATION"
-                      : orientationLockState === "ready"
-                        ? `${form.orientation.toUpperCase()} LOCKED`
-                        : "FOLLOW PHONE ROTATION"}
-                  </Text>
-                </View>
-                <Text style={styles.calibrationGuidePrompt}>
-                  {activeCalibrationStep
-                    ? activeCalibrationStep.detail
-                    : "Court setup is complete. Lock the guide or refine any landmark below."}
-                </Text>
-                <View style={styles.calibrationGuideSteps}>
-                  {calibrationChecklist.map((step) => (
-                    <View key={step.id} style={styles.calibrationGuideStep}>
-                      <Text
-                        style={[
-                          styles.calibrationGuideMark,
-                          step.complete && styles.calibrationGuideMarkDone,
-                          step.active && styles.calibrationGuideMarkActive,
-                        ]}
-                      >
-                        {step.complete ? "✓" : step.active ? "→" : "○"}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.calibrationGuideStepText,
-                          step.active && styles.calibrationGuideStepTextActive,
-                        ]}
-                      >
-                        {step.label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
               </View>
               <View style={styles.guidanceSignals}>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
-                    {guidance?.groundPlaneDetected ? "✓ Ground" : "○ Ground"}
+                    {guidance?.groundPlaneDetected ? "● Ground" : "○ Ground"}
                   </Text>
                 </View>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
-                    {courtGeometry.netTopLine ? "✓ Net" : "○ Net"}
+                    {courtGeometry.netTopLine ? "● Net" : "○ Net"}
                   </Text>
                 </View>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
-                    {visibleCornerCount(courtGeometry)}/4 corners visible
+                    {guidance?.courtDetected
+                      ? `${visibleCornerCount(courtGeometry)}/4 corners`
+                      : "○ Court"}
                   </Text>
                 </View>
+                <Pressable
+                  onPress={() => setCalibrationDraft(courtGeometry)}
+                  style={styles.guidanceAdjustCompact}
+                >
+                  <Text style={styles.guidanceAdjustCompactText}>Adjust</Text>
+                </Pressable>
               </View>
-              <Pressable
-                onPress={() => setCalibrationDraft(courtGeometry)}
-                style={styles.adjustCalibrationButton}
-              >
-                <Text style={styles.adjustCalibrationButtonText}>
-                  {guidance?.courtDetected || guidance?.netDetected
-                    ? "Adjust court, net + antennas"
-                    : "Mark court manually"}
-                </Text>
-              </Pressable>
               {!courtGeometry.nearLineVisible && (
                 <Text style={styles.partialCourtNote}>
-                  Near line is outside the frame. Recording remains available;
-                  advanced trajectory confidence may be lower.
+                  Near line is off-screen; capture still works.
                 </Text>
               )}
             </View>
@@ -4436,6 +4810,19 @@ function CaptureExperience({
               >
                 <DunaIcon color={palette.sand} name="star" size={21} />
                 <Text style={styles.favoriteMomentText}>Moment</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Insert a ten second instant replay"
+                disabled={replayBusy}
+                onPress={() => void insertInstantReplay()}
+                style={styles.favoriteMomentButton}
+              >
+                {replayBusy ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <DunaIcon color="#ffffff" name="rotate" size={21} />
+                )}
+                <Text style={styles.favoriteMomentText}>Replay</Text>
               </Pressable>
               <Pressable
                 accessibilityLabel={
@@ -4551,10 +4938,10 @@ function CaptureExperience({
                 </Pressable>
               </View>
               <Text style={styles.remoteBody}>
-                A trusted second device can align court corners, set heights,
-                confirm teams, watch the low-resolution preview, and start or
-                end this {mode === "live" ? "live stream" : "recording"}. The
-                link expires automatically.
+                A trusted iPhone or iPad can watch the preview, run the score,
+                insert replays, take sponsor graphics, and start or end this{" "}
+                {mode === "live" ? "live stream" : "recording"}. The link
+                expires automatically.
               </Text>
               {visionAccess ? (
                 <View style={styles.qrFrame}>
@@ -4562,7 +4949,7 @@ function CaptureExperience({
                     backgroundColor="#ffffff"
                     color={palette.navy}
                     size={214}
-                    value={visionAccess.remoteUrl}
+                    value={visionAccess.appUrl}
                   />
                 </View>
               ) : (
@@ -4586,8 +4973,8 @@ function CaptureExperience({
                 <Pressable
                   onPress={() =>
                     void Share.share({
-                      message: `Control ${form.title} in Duna Vision: ${visionAccess.remoteUrl}`,
-                      url: visionAccess.remoteUrl,
+                      message: `Control ${form.title} in the Duna app: ${visionAccess.appUrl}\n\nBrowser fallback: ${visionAccess.remoteUrl}`,
+                      url: visionAccess.appUrl,
                     })
                   }
                   style={styles.remoteShareButton}
@@ -5430,6 +5817,7 @@ export function VideoStudioScreen({
     "live" | "record" | "upload"
   >();
   const [captureMode, setCaptureMode] = useState<"live" | "record">();
+  const [quickMatchOpen, setQuickMatchOpen] = useState(false);
   const [form, setForm] = useState<CaptureForm>(initialCaptureForm);
   const [savedCaptureDefaults, setSavedCaptureDefaults] =
     useState<StoredCaptureDefaults>();
@@ -6272,7 +6660,9 @@ export function VideoStudioScreen({
     studio?.usage.uploads.limitSeconds ?? plan.monthlyUploadSeconds;
   const livePercent = Math.min(1, liveUsed / Math.max(1, liveLimit));
   const uploadPercent = Math.min(1, uploadUsed / Math.max(1, uploadLimit));
-  const videoSurfaceVisible = Boolean(detailsMode || captureMode);
+  const videoSurfaceVisible = Boolean(
+    detailsMode || captureMode || quickMatchOpen,
+  );
   const closeVideoSurface = () => {
     if (captureMode) {
       VideoCapture?.releasePreview();
@@ -6287,7 +6677,20 @@ export function VideoStudioScreen({
       setEditingImportedCourt(false);
       return;
     }
+    if (quickMatchOpen) {
+      setQuickMatchOpen(false);
+      return;
+    }
     setDetailsMode(undefined);
+  };
+
+  const openQuickMatch = () => {
+    if (client && runtime.dashboard?.player) {
+      setQuickMatchOpen(true);
+      return;
+    }
+    setDetailsMode(undefined);
+    setTimeout(() => onCreateMatch?.(), 280);
   };
 
   if (!active) return null;
@@ -6626,23 +7029,61 @@ export function VideoStudioScreen({
             }}
           />
         )}
-        {!captureMode && identifyingImportedPlayers && detailsMode && (
-          <PlayerPickerModal
-            embedded
-            maxSelected={8}
-            onChange={(players) =>
-              setImportedVision((current) =>
-                current ? { ...current, players } : current,
-              )
-            }
-            onClose={() => setIdentifyingImportedPlayers(false)}
-            palette={importedPlayerPalette}
-            selected={importedVision?.players ?? []}
-            title="Who appears in this video?"
-            visible
-          />
-        )}
         {!captureMode &&
+          quickMatchOpen &&
+          client &&
+          runtime.dashboard?.player && (
+            <QuickRecordingMatchSetup
+              client={client}
+              host={runtime.dashboard.player}
+              onCancel={() => setQuickMatchOpen(false)}
+              onCreated={(association) => {
+                setForm((current) => ({
+                  ...current,
+                  category: "match",
+                  association,
+                  title: association.title,
+                  venue: association.venue ?? current.venue,
+                  courtWidthMeters:
+                    association.captureDefaults?.courtWidthMeters ??
+                    current.courtWidthMeters,
+                  courtLengthMeters:
+                    association.captureDefaults?.courtLengthMeters ??
+                    current.courtLengthMeters,
+                  netHeightMeters:
+                    association.captureDefaults?.netHeightMeters ??
+                    current.netHeightMeters,
+                  orientation:
+                    association.captureDefaults?.orientation ??
+                    current.orientation,
+                }));
+                setQuickMatchOpen(false);
+                void load();
+              }}
+              venue={form.venue}
+            />
+          )}
+        {!captureMode &&
+          !quickMatchOpen &&
+          identifyingImportedPlayers &&
+          detailsMode && (
+            <PlayerPickerModal
+              embedded
+              maxSelected={8}
+              onChange={(players) =>
+                setImportedVision((current) =>
+                  current ? { ...current, players } : current,
+                )
+              }
+              onClose={() => setIdentifyingImportedPlayers(false)}
+              palette={importedPlayerPalette}
+              selected={importedVision?.players ?? []}
+              title="Who appears in this video?"
+              visible
+            />
+          )}
+        {!captureMode &&
+          !quickMatchOpen &&
           editingImportedCourt &&
           importedVision &&
           importedCourtDraft && (
@@ -6675,6 +7116,7 @@ export function VideoStudioScreen({
             </View>
           )}
         {!captureMode &&
+          !quickMatchOpen &&
           !identifyingImportedPlayers &&
           !editingImportedCourt &&
           detailsMode && (
@@ -6685,7 +7127,7 @@ export function VideoStudioScreen({
               importedVision={importedVision}
               importedVisionLoading={samplingImportedFrames}
               mode={detailsMode}
-              onCreateMatch={onCreateMatch}
+              onCreateMatch={openQuickMatch}
               onCancel={() => setDetailsMode(undefined)}
               onChange={setForm}
               onContinue={() => {
@@ -7134,6 +7576,67 @@ const styles = StyleSheet.create({
   analyticsTitle: { color: palette.positive, fontSize: 13, fontWeight: "800" },
   analyticsBody: { color: "#48645a", fontSize: 12, lineHeight: 17 },
   modalSafe: { backgroundColor: palette.canvas, flex: 1 },
+  quickMatchSafe: { backgroundColor: palette.canvas, flex: 1 },
+  quickMatchHeader: {
+    alignItems: "center",
+    borderBottomColor: palette.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 62,
+    paddingHorizontal: 18,
+  },
+  quickMatchContent: { gap: 20, padding: 20, paddingBottom: 120 },
+  quickMatchTeams: { flexDirection: "row", gap: 10 },
+  quickMatchTeamCard: {
+    backgroundColor: palette.depth,
+    borderColor: palette.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 7,
+    minHeight: 122,
+    padding: 14,
+  },
+  quickMatchTeamLabel: {
+    color: palette.aqua,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+  },
+  quickMatchPlayer: { color: palette.ink, fontSize: 14, fontWeight: "800" },
+  quickMatchChoose: {
+    alignItems: "center",
+    borderColor: palette.aqua,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 50,
+  },
+  quickMatchChooseText: {
+    color: palette.aqua,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  quickMatchConsent: {
+    alignItems: "center",
+    backgroundColor: "#eef5f4",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 14,
+    padding: 15,
+  },
+  quickMatchConsentTitle: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  quickMatchConsentBody: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
   modalHeader: {
     alignItems: "center",
     borderBottomColor: palette.line,
@@ -7559,17 +8062,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: "3%",
   },
-  framingGuideLabel: {
-    alignSelf: "center",
+  alignmentNetLabel: {
+    alignItems: "center",
     backgroundColor: "rgba(3,8,11,0.68)",
     borderColor: "rgba(212,183,124,0.58)",
     borderRadius: 9,
     borderWidth: 1,
+    minWidth: 50,
     paddingHorizontal: 8,
     paddingVertical: 4,
     position: "absolute",
   },
-  framingGuideLabelText: {
+  alignmentNetLabelText: {
     color: palette.sand,
     fontSize: 12,
     fontWeight: "900",
@@ -7929,8 +8433,16 @@ const styles = StyleSheet.create({
   guidanceTop: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 9,
     justifyContent: "space-between",
   },
+  guidanceReadyDot: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 6,
+    height: 12,
+    width: 12,
+  },
+  guidanceReadyDotActive: { backgroundColor: palette.positive },
   guidanceGrade: {
     color: palette.sand,
     flex: 1,
@@ -8015,6 +8527,20 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
     fontSize: 12,
     fontWeight: "800",
+  },
+  guidanceAdjustCompact: {
+    alignItems: "center",
+    borderColor: "rgba(201,169,106,0.7)",
+    borderRadius: 9,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 28,
+    paddingHorizontal: 10,
+  },
+  guidanceAdjustCompactText: {
+    color: palette.sand,
+    fontSize: 12,
+    fontWeight: "900",
   },
   adjustCalibrationButton: {
     alignItems: "center",

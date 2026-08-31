@@ -3351,6 +3351,7 @@ const playerRouter = router({
       z.object({
         session: visionSessionSchema,
         remoteUrl: z.url(),
+        appUrl: z.url(),
       }),
     )
     .mutation(({ input, ctx }) =>

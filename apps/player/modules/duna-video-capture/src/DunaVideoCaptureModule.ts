@@ -3,6 +3,7 @@ import type {
   DunaCourtCalibration,
   DunaVideoCaptureModuleEvents,
   PreparedVideo,
+  ReplayInsertionResult,
   VideoFrameSample,
 } from "./DunaVideoCapture.types";
 
@@ -16,8 +17,14 @@ declare class DunaVideoCaptureNativeModule extends NativeModule<DunaVideoCapture
     streamUrl: string,
     streamKey: string,
     audioEnabled: boolean,
+    transport: "srt" | "rtmps",
+    srtPassphrase?: string,
+    fallbackUrl?: string,
+    fallbackKey?: string,
   ): Promise<void>;
   stopStream(): Promise<void>;
+  updateProgramState(payloadJson: string): Promise<void>;
+  insertReplay(durationSeconds: number): Promise<ReplayInsertionResult>;
   startRecording(audioEnabled: boolean): Promise<void>;
   stopRecording(): Promise<PreparedVideo>;
   pickVideo(): Promise<PreparedVideo | null>;

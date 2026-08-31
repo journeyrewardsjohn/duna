@@ -1022,6 +1022,7 @@ export async function createMuxLiveVideo(input: {
 }): Promise<{
   readonly liveStreamId: string;
   readonly streamKey: string;
+  readonly srtPassphrase: string;
   readonly playbackId: string;
   readonly playbackPolicy: "public" | "signed";
 }> {
@@ -1042,12 +1043,18 @@ export async function createMuxLiveVideo(input: {
   const playback = liveStream.playback_ids?.find(
     (candidate) => candidate.policy === playbackPolicy,
   );
-  if (!liveStream.id || !liveStream.stream_key || !playback?.id) {
+  if (
+    !liveStream.id ||
+    !liveStream.stream_key ||
+    !liveStream.srt_passphrase ||
+    !playback?.id
+  ) {
     throw new Error("Mux did not return a complete live-stream session.");
   }
   return {
     liveStreamId: liveStream.id,
     streamKey: liveStream.stream_key,
+    srtPassphrase: liveStream.srt_passphrase,
     playbackId: playback.id,
     playbackPolicy,
   };
@@ -1059,16 +1066,17 @@ export async function completeMuxLiveVideo(
   await getMuxClient().video.liveStreams.complete(liveStreamId);
 }
 
-export async function loadMuxLiveStreamKey(
+export async function loadMuxLiveIngest(
   liveStreamId: string,
-): Promise<string> {
+): Promise<{ readonly streamKey: string; readonly srtPassphrase: string }> {
   const liveStream =
     await getMuxClient().video.liveStreams.retrieve(liveStreamId);
   const streamKey = liveStream.stream_key?.trim();
-  if (!streamKey) {
-    throw new Error("Mux did not return the live-stream ingest key.");
+  const srtPassphrase = liveStream.srt_passphrase?.trim();
+  if (!streamKey || !srtPassphrase) {
+    throw new Error("Mux did not return complete live-stream ingest keys.");
   }
-  return streamKey;
+  return { streamKey, srtPassphrase };
 }
 
 export async function createMuxLiveOutput(input: {

@@ -1530,25 +1530,6 @@ export const courtCalibrationSchema = z.object({
   warnings: z.array(z.string().max(240)).max(12).readonly(),
   calibratedAt: z.iso.datetime(),
 });
-export const visionSessionSettingsSchema = z.object({
-  // Upload sessions retain the same calibrated event graph as Duna-recorded
-  // footage, but disclose that the player supplied setup after the fact.
-  captureMode: z.enum(["record", "live", "upload"]).optional(),
-  courtWidthMeters: z.number().positive().max(30),
-  courtLengthMeters: z.number().positive().max(40),
-  netHeightMeters: z.number().positive().max(4),
-  cameraHeightMeters: z.number().positive().max(20).optional(),
-  overlayScoreboard: z.boolean(),
-  teamA: z.string().trim().min(1).max(80),
-  teamB: z.string().trim().min(1).max(80),
-  corners: z.array(capturePointSchema).length(4).readonly().optional(),
-  netLine: captureLineSchema.optional(),
-  netTopLine: captureLineSchema.optional(),
-  antennaPoints: captureLineSchema.optional(),
-  nearLineVisible: z.boolean().optional(),
-  edgeVisibility: captureEdgeVisibilitySchema.optional(),
-  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
-});
 export const visionScoreSnapshotSchema = z
   .object({
     setIndex: z.number().int().nonnegative(),
@@ -1569,6 +1550,54 @@ export const visionScoreSnapshotSchema = z
     message: "The active set must exist in the score snapshot.",
     path: ["setIndex"],
   });
+export const visionProgramStateSchema = z.object({
+  scoreboardVisible: z.boolean(),
+  score: visionScoreSnapshotSchema.optional(),
+  scoreCommand: z
+    .object({
+      id: z.string().uuid(),
+      type: z.literal("rally-won"),
+      winnerSide: z.enum(["A", "B"]),
+      occurredAt: z.iso.datetime(),
+    })
+    .optional(),
+  replayRequest: z
+    .object({
+      id: z.string().uuid(),
+      durationSeconds: z.number().int().min(4).max(15),
+      requestedAt: z.iso.datetime(),
+    })
+    .optional(),
+  sponsor: z
+    .object({
+      id: z.string().uuid(),
+      headline: z.string().trim().min(1).max(80),
+      body: z.string().trim().max(160).optional(),
+      active: z.boolean(),
+    })
+    .optional(),
+});
+export const visionSessionSettingsSchema = z.object({
+  // Upload sessions retain the same calibrated event graph as Duna-recorded
+  // footage, but disclose that the player supplied setup after the fact.
+  captureMode: z.enum(["record", "live", "upload"]).optional(),
+  courtWidthMeters: z.number().positive().max(30),
+  courtLengthMeters: z.number().positive().max(40),
+  netHeightMeters: z.number().positive().max(4),
+  cameraHeightMeters: z.number().positive().max(20).optional(),
+  overlayScoreboard: z.boolean(),
+  teamA: z.string().trim().min(1).max(80),
+  teamB: z.string().trim().min(1).max(80),
+  corners: z.array(capturePointSchema).length(4).readonly().optional(),
+  netLine: captureLineSchema.optional(),
+  netTopLine: captureLineSchema.optional(),
+  antennaPoints: captureLineSchema.optional(),
+  nearLineVisible: z.boolean().optional(),
+  edgeVisibility: captureEdgeVisibilitySchema.optional(),
+  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
+  /** Producer controls mirrored to the camera and burned into its program feed. */
+  program: visionProgramStateSchema.optional(),
+});
 export const visionTimelineEventSchema = z
   .object({
     id: z.string().uuid(),

@@ -24,6 +24,8 @@ export interface CaptureGuidance {
   readonly acceptable: boolean;
   readonly warnings: readonly string[];
   readonly corners?: readonly CapturePoint[];
+  /** A faint AR/LiDAR placement estimate. It is never saved as court evidence. */
+  readonly alignmentCorners?: readonly CapturePoint[];
   /** The net line projected onto the sand plane. */
   readonly netLine?: CaptureLine;
   /** The visible top tape, which is intentionally separate from the sand plane. */
@@ -57,6 +59,23 @@ export interface CaptureGuidance {
   readonly lens?: string;
   readonly zoomFactor?: number;
   readonly calibratedAt: string;
+}
+
+export interface DunaProgramState {
+  readonly teamA: string;
+  readonly teamB: string;
+  readonly scoreA: number;
+  readonly scoreB: number;
+  readonly setLabel: string;
+  readonly scoreboardVisible: boolean;
+  readonly sponsorHeadline?: string;
+  readonly sponsorBody?: string;
+  readonly sponsorVisible: boolean;
+}
+
+export interface ReplayInsertionResult {
+  readonly accepted: boolean;
+  readonly durationSeconds: number;
 }
 
 export interface DunaCourtCalibration extends CaptureGuidance {
@@ -101,6 +120,7 @@ export interface DunaVideoCaptureViewProps {
   readonly onStreamState?: (event: {
     readonly nativeEvent: {
       readonly state: "preview" | "connecting" | "live" | "stopped";
+      readonly transport?: "srt" | "rtmps";
     };
   }) => void;
   readonly onCaptureError?: (event: {

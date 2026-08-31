@@ -7,14 +7,14 @@ Uploaded originals use a private Cloudflare R2 bucket.
 
 ## Product surfaces
 
-| Surface     | Capability                                                                                                                                                                                                                                    |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Duna iOS    | Go Live, guided camera setup, native Duna Vision recording, Watch scoring and review cues, visible-court marker verification, remote setup QR, live score overlay, library upload, playback, privacy controls, share links, and owner metrics |
-| Apple Watch | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, a source-linked last-rally review cue, haptics, and a low-frame-rate camera alignment check                                                            |
-| Public web  | Cloudflare/Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay; authenticated Duna Vision Studio reports                                              |
-| Duna Pro    | Cleaner live scorer with a persistent exit, associated match video/live angles, and a focused handoff to Player Studio for source-linked coaching review                                                                                      |
-| Remote web  | Time-limited QR control for team/court setup, draggable court corners, camera and net heights, camera preview, and record/stop controls                                                                                                       |
-| Super Admin | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                                                              |
+| Surface       | Capability                                                                                                                                                                                                                                |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duna iOS      | Go Live over adaptive SRT/RTMPS, spatially guided camera setup, native recording, Watch scoring, program score/replay/sponsor graphics, second-screen control, library upload, playback, privacy controls, share links, and owner metrics |
+| Apple Watch   | Large live scoreboard, four-direction gesture scoring, favorite/undo/side-change tags, a source-linked last-rally review cue, haptics, and a low-frame-rate camera alignment check                                                        |
+| Public web    | Cloudflare/Mux/R2 playback on player, event, and match pages; multiple stream angles for the same match; link-only playback; timestamped score overlay; authenticated Duna Vision Studio reports                                          |
+| Duna Pro      | Cleaner live scorer with a persistent exit, associated match video/live angles, and a focused handoff to Player Studio for source-linked coaching review                                                                                  |
+| Second screen | Time-limited QR/deep-link control on iPhone or iPad for preview, scoring, scoreboard visibility, 8/10/15-second replay, sponsor lower thirds, and camera start/end; HTTPS remains the setup fallback                                      |
+| Super Admin   | Provider readiness, safety ceilings, current streams, usage, storage, watch time, and Complimentary Duna+ grants                                                                                                                          |
 
 Android capture is intentionally unavailable in this release. Public playback
 continues to work on supported browsers and inside the app.
@@ -31,10 +31,11 @@ continues to work on supported browsers and inside the app.
    SRT ingest credentials only to that player. Recordings are preserved unless
    an explicit retention period is configured; Duna must never enable deletion
    until a durable archive/export policy is active.
-4. The current native AVFoundation/HaishinKit bridge sends H.264/AAC over
-   RTMPS. The API already returns Cloudflare's SRT caller credentials, but the
-   iOS client must complete its CocoaPods-to-SPM SRT module migration and
-   real-device validation before selecting them.
+4. The native AVFoundation/HaishinKit bridge sends H.264/AAC over secure SRT on
+   cellular/field networks and RTMPS on Wi-Fi or Ethernet. SRT uses caller mode,
+   a provider-issued passphrase, 500 ms latency, and 25% recovery overhead. The
+   client automatically falls back to that session's RTMPS ingest if SRT cannot
+   connect or drops. Physical-device validation remains an activation gate.
 5. Authenticated Cloudflare live notifications move the stream from draft to
    live and processing. Playback lazily reconciles the ready recording video ID
    because the recording is a separate Cloudflare resource.
@@ -81,31 +82,35 @@ it is not the default merely because a customer is on Duna Premium+.
 
 ### Program feed, scoring, replays, and ads
 
-Cloudflare and Mux forward the encoded program feed; neither composes Duna's live
-scoreboard, replay, or sponsor creative into that feed. In the first Cloudflare
-release, Duna's Watch and remote-device scoring remain synchronized metadata
-and render over Duna playback, while YouTube receives the camera and court
-audio. This boundary must remain explicit in product copy.
+Cloudflare and Mux forward Duna's encoded program feed; neither creates it. The
+primary iPhone now composites the authoritative score and sponsor lower third,
+maintains a bounded 15-second replay buffer, switches a requested replay into
+the outgoing video, marks it visibly, and returns automatically to live. Since
+composition happens before provider fan-out, Duna and every selected YouTube
+channel see the same program.
 
-To put the same graphics on Duna and YouTube, the primary iPhone (or a later
-producer service) must render a program feed before it reaches Cloudflare. The
-existing Vision session is already the control plane: Watch scoring, the QR
-remote, official match events, favorite markers, and replay requests are
-source-linked and ordered. A production compositor can consume that state to:
+The Vision session is the versioned control plane. Watch scoring, the native
+second screen, official match events, favorite markers, replay requests, and
+sponsor state stay source-linked and ordered. The camera persists score and
+replay actions to the timeline; a linked match remains scoring authority.
 
-- burn the authoritative score and sponsor-safe lower thirds into outgoing
-  frames;
-- maintain a bounded rolling replay buffer and switch briefly to a selected
-  clip before returning live; and
-- insert approved bumper or full-screen ad assets at explicit operator cues,
-  while recording every insertion and preserving the uninterrupted source.
+This first release supports sponsor text lower thirds, not arbitrary uploaded
+creative or unattended ad decisions. Sponsor approval, insertion duration,
+audio behavior, youth safeguards, and an emergency return-to-live remain gates
+for bumper/full-screen creative. The local recording currently follows the
+program output; simultaneous clean and program masters require a later
+producer-grade pipeline.
 
 Cloudflare Live Instant Clipping can expose highlights from the live recording,
 but inserting a clip back into the outgoing YouTube feed still requires this
 program compositor. Ad insertion likewise needs an encoded source transition;
-it is not created merely by adding a Cloudflare simulcast output. Sponsor
-rights, maximum interruption, audio behavior, youth safeguards, and an
-emergency return-to-live control are release gates for that phase.
+it is not created merely by adding a Cloudflare simulcast output.
+
+Invited commentator audio is a later cloud-producer capability. Use a
+permissioned LiveKit room, room/web composite, and egress into the selected
+Cloudflare/Mux input so commentator access, isolated audio, mute/removal,
+monitoring, gain/ducking, echo control, reconnect, and A/V sync are governed.
+Do not mix an untrusted remote call directly into the camera phone.
 
 ### Uploads
 
@@ -207,15 +212,18 @@ already exists and otherwise remains email-bound until the account is resolved.
 The local Expo module combines ARKit, AVFoundation, Apple Vision, Core Motion,
 and HaishinKit:
 
-- Before capture, ARKit finds a horizontal ground plane and projects the known
-  court geometry from the usual position behind an end line. On supported
-  devices, LiDAR scene depth and mesh reconstruction improve the ground lock.
-  Non-LiDAR phones use ARKit plane detection and then Vision/Core Motion.
+- Before capture, ARKit finds a horizontal ground plane and projects several
+  regulation-court hypotheses for end-line, sideline, and oblique viewpoints.
+  On supported devices, LiDAR scene depth and mesh reconstruction improve the
+  ground scale and camera-height lock. Non-LiDAR phones use ARKit plane
+  detection and then Vision/Core Motion.
 - AVFoundation owns camera, microphone, focus/exposure, local recording, and
   capture buffers.
-- Vision checks the frame for court-like rectangular geometry and human body
-  poses. A ground plane alone is not enough to award a Good grade; Duna also
-  looks for boundary evidence so an indoor floor is not labeled as a court.
+- Vision checks the frame for court-like geometry, elongated net candidates at
+  horizontal or diagonal angles, and human body poses. It ranks the visual
+  court and spatial hypotheses against the observed net across multiple frames.
+  A ground plane alone is not enough to award a Good grade, so an indoor floor
+  is not labeled as a volleyball court.
 - Core Motion checks device stability and records attitude.
 - The overlay continuously projects four outside corners, net line, center,
   horizon, and safe margins as the camera moves.
@@ -276,16 +284,18 @@ and background-behavior testing is required before release.
 
 ### Connect Remote Device
 
-The iPhone displays a QR code containing a random, time-limited control URL.
-The server stores only a hash of that token. The remote page is excluded from
-search indexing and can be revoked by the recording owner.
+The iPhone displays a QR code containing a random, time-limited Duna app deep
+link. The share sheet also includes the HTTPS fallback. The server stores only
+a hash of the token; the browser route is excluded from search indexing, and
+the recording owner can revoke either controller.
 
-The remote can view the throttled alignment preview, drag the four court
-corners, select court and net presets, set camera height and team labels, toggle
-the score overlay, and request start or stop. Optimistic version checks prevent
-two controllers from silently overwriting each other. The QR grants control of
-that Vision session only; it does not grant a Duna account or general match
-administration.
+Scanning on an iPhone or iPad opens the native second screen for the throttled
+preview, match score, score-overlay visibility, 8/10/15-second replay, sponsor
+lower third, and camera start/end. The HTTPS setup fallback retains court-corner,
+dimension, camera-height, and team-label controls. Optimistic version checks
+prevent two controllers from silently overwriting each other. The token grants
+control of that Vision session only; it does not grant a Duna account or
+general match administration.
 
 ### Score overlays and Duna Vision analysis
 
@@ -468,7 +478,7 @@ models.
    live-enabled YouTube channel for its server refresh token. A connected
    player or organization channel must also have YouTube live streaming
    enabled and no current live restriction.
-4. In Preview, set `DUNA_LIVE_PROVIDER=cloudflare`. Validate RTMPS ingest,
+4. In Preview, set `DUNA_LIVE_PROVIDER=cloudflare`. Validate SRT and RTMPS ingest,
    Cloudflare live state notifications, signed live playback, recording-ID
    reconciliation, and one opt-in simulcast each to Duna, a personal channel,
    and an organization channel. Confirm that disconnect revokes Duna's access
@@ -490,11 +500,11 @@ models.
 9. Promote Production to `DUNA_LIVE_PROVIDER=auto` only after both provider
    matrices and the device gates pass. Verify Premium+, Premium, Scale, Club,
    and Free accounts resolve to the intended provider before activation.
-10. Treat native SRT as a separate release: migrate HaishinKit from the current
-    CocoaPods RTMP module to its SPM SRT module, then validate caller mode,
-    reconnection, thermal behavior, and constrained cellular networks on
-    physical devices. Until then, production capture remains RTMPS even though
-    the backend safely returns SRT credentials.
+10. Validate the implemented native SRT caller on constrained cellular service,
+    including SRT-to-RTMPS fallback, long-session battery/thermal behavior,
+    audio continuity, replay-buffer rotation, score/sponsor output, and return
+    to live. Keep production on RTMPS/provider overrides until this matrix
+    passes; source completion is not device activation.
 11. Confirm the `john@beachelite.org` profile displays Complimentary Duna+ after
     migration.
 12. If model processing is enabled, configure the dedicated worker with scoped

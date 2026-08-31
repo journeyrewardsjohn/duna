@@ -4410,6 +4410,35 @@ export const visionSessions = pgTable(
           readonly net: boolean;
         };
         readonly calibrationMode?: "automatic" | "assisted" | "manual";
+        readonly program?: {
+          readonly scoreboardVisible: boolean;
+          readonly score?: {
+            readonly setIndex: number;
+            readonly sets: readonly {
+              readonly a: number;
+              readonly b: number;
+            }[];
+            readonly serving?: "A" | "B";
+            readonly status: "not-started" | "live" | "complete" | "forfeit";
+          };
+          readonly scoreCommand?: {
+            readonly id: string;
+            readonly type: "rally-won";
+            readonly winnerSide: "A" | "B";
+            readonly occurredAt: string;
+          };
+          readonly replayRequest?: {
+            readonly id: string;
+            readonly durationSeconds: number;
+            readonly requestedAt: string;
+          };
+          readonly sponsor?: {
+            readonly id: string;
+            readonly headline: string;
+            readonly body?: string;
+            readonly active: boolean;
+          };
+        };
       }>()
       .notNull(),
     controlVersion: integer("control_version").notNull().default(1),

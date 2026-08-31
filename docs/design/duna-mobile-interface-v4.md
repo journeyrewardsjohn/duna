@@ -114,13 +114,12 @@ entire multi-step workflow into one sheet.
 
 ## Launch and account entry
 
-Player and Pro embed the same approved 10.042-second Duna launch film in the
-native install. Every cold open plays the whole film edge to edge; there is no
-shortened repeat-open variant, loading caption, progress copy, or network-bound
-extension. Returning from the background keeps the current screen, so an
-active recording, score, or session is never covered by the launch film.
-Reduced-motion users see the film's static opening composition for the same
-deterministic handoff interval.
+Player uses only the short native launch poster and reveals the first usable
+React frame as soon as fonts and runtime initialization are ready. It no longer
+bundles or plays the 10.042-second launch film, so an active recording, score,
+or second-screen session cannot be delayed behind it. Pro retains the approved
+launch film for its separate business-app experience. Returning from the
+background keeps the current screen in both apps.
 
 After the film, signed-out Player uses the approved muted, looping background
 film with a subtle blur and contrast wash behind `Create your free account`

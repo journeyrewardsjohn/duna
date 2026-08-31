@@ -180,10 +180,11 @@ cron active and alert on repeated `virtual_session_meetings.last_error` values.
 
 ## Duna Video delivery
 
-Live streaming uses Mux RTMPS ingest and signed/public playback. Native uploads
-use private Cloudflare R2 multipart uploads with short-lived presigned URLs.
-Provider variables, privacy boundaries, migration order, and the physical-device
-release checklist are documented in
+Live streaming uses tier-aware Cloudflare or Mux, adaptive native SRT/RTMPS
+contribution, and signed/public playback. Native uploads use private Cloudflare
+R2 multipart uploads with short-lived presigned URLs. Provider variables,
+privacy boundaries, migration order, and the physical-device release checklist
+are documented in
 [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md).
 
 R2 S3 credentials must be present in every server project that executes upload,
@@ -339,8 +340,8 @@ still requires external approvals or account data:
 - Apple Developer and Google Play organization credentials and store review
 - Knock, Resend, Sent, Twilio 10DLC, Inngest, Upstash, R2, Sentry, Axiom, and PostHog
   production credentials
-- Mux account activation, API/signing keys, signed webhook, and a
-  physical-device iOS streaming check
+- Cloudflare Stream and Mux account activation, API/signing keys, authenticated
+  webhooks, and physical-device SRT/RTMPS streaming checks
 - An approved audio-isolation processor before music-removal requests can
   modify recordings
 - Provider authorization, retention terms, and credentials for player-data

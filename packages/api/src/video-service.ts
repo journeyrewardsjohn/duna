@@ -93,7 +93,7 @@ import {
   isMuxVideoConfigured,
   isR2VideoConfigured,
   loadCloudflareLiveVideo,
-  loadMuxLiveStreamKey,
+  loadMuxLiveIngest,
   loadMuxVideoMetrics,
   muxDataEnvironmentKey,
   listR2VideoUploadParts,
@@ -953,6 +953,9 @@ export async function loadVideoStudio(
   const liveConfigured =
     preferredProvider === "cloudflare" ||
     (preferredProvider === "mux" && isMuxSignedPlaybackConfigured());
+  const srtIngestAvailable =
+    preferredProvider === "mux" ||
+    (preferredProvider === "cloudflare" && isCloudflareSrtIngestEnabled());
   return {
     entitlement,
     quotaScope: organization
@@ -977,12 +980,10 @@ export async function loadVideoStudio(
       preferredProvider,
       cloudflareConfigured: isCloudflareStreamConfigured(),
       muxConfigured: isMuxVideoConfigured(),
-      srtIngestAvailable:
-        preferredProvider === "cloudflare" && isCloudflareSrtIngestEnabled(),
-      // The current HaishinKit CocoaPods bridge is RTMPS-only. Cloudflare SRT
-      // credentials are returned below so the native SPM migration can be
-      // device-tested without another backend or database change.
-      activeClientIngest: "rtmps",
+      srtIngestAvailable,
+      // The iOS client chooses SRT for field/cellular contribution and RTMPS
+      // for stable Wi-Fi, with RTMPS retained as an automatic SRT fallback.
+      activeClientIngest: srtIngestAvailable ? "srt" : "rtmps",
       youtube,
     },
   };
@@ -1584,6 +1585,11 @@ export async function createLiveVideo(input: {
           url: "rtmps://global-live.mux.com:443/app",
           streamKey: mux.streamKey,
         },
+        srt: {
+          url: "srt://global-live.mux.com:6001",
+          streamId: mux.streamKey,
+          passphrase: mux.srtPassphrase,
+        },
       },
       destinations,
       maximumDurationSeconds,
@@ -1602,12 +1608,17 @@ export async function createLiveVideo(input: {
       .update(videos)
       .set({
         status: "failed",
-        failureReason:
-          error instanceof Error ? error.message.slice(0, 2_000) : "Unknown",
+        failureReason: `${liveProvider} live setup failed before ingest began.`,
         updatedAt: input.now,
       })
       .where(eq(videos.id, videoId));
-    console.error("Duna live provider setup failed", { error, videoId });
+    // Provider errors can carry request objects containing ingest credentials.
+    // Keep operational logs useful without ever serializing those payloads.
+    console.error("Duna live provider setup failed", {
+      errorType: error instanceof Error ? error.name : "unknown",
+      provider: liveProvider,
+      videoId,
+    });
     if (liveProvider === "mux" && isMuxLivePlanUnavailable(error)) {
       throw new VideoServiceError(
         "LIVE_PLAN_UNAVAILABLE",
@@ -1696,7 +1707,7 @@ export async function hydrateLiveVideoSessionReplay(input: {
       shareUrl: share.url,
     };
   }
-  const streamKey = await loadMuxLiveStreamKey(liveInputId);
+  const { streamKey, srtPassphrase } = await loadMuxLiveIngest(liveInputId);
   const rtmps = {
     url: "rtmps://global-live.mux.com:443/app",
     streamKey,
@@ -1706,7 +1717,14 @@ export async function hydrateLiveVideoSessionReplay(input: {
     provider,
     streamUrl: rtmps.url,
     streamKey,
-    ingests: { rtmps },
+    ingests: {
+      rtmps,
+      srt: {
+        url: "srt://global-live.mux.com:6001",
+        streamId: streamKey,
+        passphrase: srtPassphrase,
+      },
+    },
     destinations,
     maximumDurationSeconds: input.maximumDurationSeconds,
     shareUrl: share.url,
