@@ -3,7 +3,7 @@
     "name": "Duna",
     "slug": "duna-player",
     "scheme": "duna",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "platforms": ["ios", "android"],
     "orientation": "default",
     "userInterfaceStyle": "automatic",
@@ -57,6 +57,7 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "RECORD_AUDIO",
         "READ_CONTACTS"
       ]
     },
@@ -70,6 +71,7 @@
       "@bacons/apple-targets",
       "@rnmapbox/maps",
       "expo-contacts",
+      "expo-audio",
       "expo-notifications",
       [
         "expo-image-picker",

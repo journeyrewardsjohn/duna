@@ -1,4 +1,5 @@
 import type {
+  CommunityCommentSummary,
   PredictionMarketView,
   PredictionWallet,
   PublicProEvent,
@@ -29,6 +30,7 @@ import { ProEventVenueCard } from "@/components/pro-event-venue-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { CountryCode } from "@/components/country-code";
+import { CommunityThread } from "@/components/community-thread";
 import {
   EventSectionNav,
   type EventSectionNavItem,
@@ -625,11 +627,20 @@ function AvpOverallStandings({
 }
 
 export function ProEventDetail({
+  communityAccess,
+  comments = [],
   event,
   eventMarkets = [],
   matchMarkets = {},
   predictionWallet,
 }: {
+  readonly communityAccess?: {
+    readonly verified: boolean;
+    readonly paidPremium: boolean;
+    readonly canComment: boolean;
+    readonly reason?: string;
+  };
+  readonly comments?: readonly CommunityCommentSummary[];
   readonly event: PublicProEvent;
   readonly eventMarkets?: readonly PredictionMarketView[];
   readonly matchMarkets?: Readonly<Record<string, PredictionMarketView>>;
@@ -1470,6 +1481,14 @@ export function ProEventDetail({
             </details>
           )}
         </section>
+
+        <CommunityThread
+          access={communityAccess}
+          comments={comments}
+          returnTo={`/events/${event.slug}`}
+          subject={{ type: "pro-event", id: event.id }}
+          title="Event conversation"
+        />
       </div>
       <SiteFooter />
     </main>

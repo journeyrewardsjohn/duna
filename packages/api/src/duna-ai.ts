@@ -271,6 +271,43 @@ export interface DunaAiDashboardInsights extends z.infer<
   readonly source: "ai" | "deterministic";
 }
 
+const matchJournalSummarySchema = z.object({
+  summary: z.string().trim().min(1).max(480),
+  focus: z
+    .array(
+      z.enum([
+        "self-performance",
+        "teammate-coordination",
+        "opponent-tendency",
+        "tactics",
+        "conditions",
+        "next-session",
+      ]),
+    )
+    .max(6),
+  playerInsights: z
+    .array(
+      z.object({
+        personId: z.string().uuid().optional(),
+        name: z.string().trim().min(1).max(120),
+        relationship: z.enum(["self", "teammate", "opponent"]),
+        observation: z.string().trim().min(1).max(320),
+      }),
+    )
+    .max(8),
+  nextActions: z.array(z.string().trim().min(1).max(240)).max(5),
+});
+
+export interface MatchJournalSummaryResult {
+  readonly status: "ready" | "unavailable";
+  readonly summary?: string;
+  readonly insights?: Omit<
+    z.infer<typeof matchJournalSummarySchema>,
+    "summary"
+  >;
+  readonly model?: string;
+}
+
 interface DunaAiRuntime {
   readonly credential: string;
   readonly modelProvider: OpenAIProvider;
@@ -2959,6 +2996,81 @@ export async function runDunaAiAgent(input: {
       providerAvailable: Boolean(webResearch),
       researchUsed: Boolean(webResearch),
     };
+  }
+}
+
+export async function summarizeMatchJournalFeedback(input: {
+  readonly actor: ApiActor;
+  readonly body: string;
+  readonly roster: readonly {
+    readonly personId: string;
+    readonly name: string;
+    readonly relationship: "self" | "teammate" | "opponent";
+  }[];
+  readonly requestOidcToken?: string;
+  readonly now: Date;
+}): Promise<MatchJournalSummaryResult> {
+  // Private notes from minors never leave Duna under the general AI provider
+  // contract. A guardian-consented, zero-retention flow can be added later.
+  if (input.actor.ageBand !== "adult") return { status: "unavailable" };
+  const rateLimit = await consumeRateLimit({
+    key: `duna-ai-match-journal:${input.actor.personId}`,
+    capacity: 20,
+    refillPerMinute: 8,
+    now: input.now,
+  });
+  if (!rateLimit.allowed) return { status: "unavailable" };
+  const runtime = dunaAiRuntime(input.requestOidcToken);
+  if (!runtime) return { status: "unavailable" };
+  const configured = process.env.DUNA_MATCH_JOURNAL_MODEL?.trim();
+  const model = configured
+    ? configured.includes("/")
+      ? configured
+      : `openai/${configured}`
+    : "openai/gpt-5.6-luna";
+  const agent = new Agent({
+    name: "Duna Match Journal",
+    model,
+    outputType: matchJournalSummarySchema,
+    instructions: [
+      "Organize one player's private reflection about a beach-volleyball match.",
+      "Use only the reflection and supplied roster. Never invent a play, motive, tendency, diagnosis, statistic, or identity.",
+      "Separate the author's own performance, teammate coordination, and opponent tendencies when the text supports that distinction.",
+      "Only attach a personId when the named or clearly referenced person matches exactly one supplied roster entry.",
+      "Phrase observations as the author's perspective, not objective scouting fact. Preserve uncertainty.",
+      "Make next actions specific, constructive, and short. Do not produce medical advice.",
+      "The summary should help the player remember the match without sounding clinical or judgmental.",
+    ].join("\n"),
+  });
+  try {
+    const runner = new Runner({
+      modelProvider: runtime.modelProvider,
+      tracingDisabled: true,
+      traceIncludeSensitiveData: false,
+    });
+    const result = await runner.run(
+      agent,
+      JSON.stringify({ reflection: input.body, roster: input.roster }),
+      { maxTurns: 3 },
+    );
+    const parsed = matchJournalSummarySchema.parse(result.finalOutput);
+    return {
+      status: "ready",
+      summary: parsed.summary,
+      insights: {
+        focus: parsed.focus,
+        playerInsights: parsed.playerInsights,
+        nextActions: parsed.nextActions,
+      },
+      model,
+    };
+  } catch (error) {
+    console.error("[duna-ai] match journal summary failed", {
+      credentialSource: runtime.credentialSource,
+      error: providerErrorMessage(error),
+      model,
+    });
+    return { status: "unavailable", model };
   }
 }
 

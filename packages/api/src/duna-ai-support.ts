@@ -64,6 +64,7 @@ const safetyDecisionSchema = z.object({
   explanation: z.string().min(1).max(1_000),
 });
 type SafetyDecision = z.infer<typeof safetyDecisionSchema>;
+export type CommunityModerationDecision = SafetyDecision;
 
 type DunaAiTransaction = Parameters<
   Parameters<ReturnType<typeof getTransactionalDatabase>["transaction"]>[0]
@@ -765,6 +766,50 @@ async function screenWithDunaSafety(input: {
       categories: ["provider-error"],
       explanation:
         "Automated screening did not complete. Human review is required before delivery.",
+    };
+  }
+}
+
+export async function screenPublicCommunityComment(
+  body: string,
+): Promise<CommunityModerationDecision> {
+  const runtime = dunaAiRuntime();
+  if (!runtime) {
+    return {
+      decision: "review",
+      severity: "medium",
+      categories: ["provider-unavailable"],
+      explanation:
+        "Automated public-comment screening is unavailable. The comment is held for review.",
+    };
+  }
+  const agent = new Agent({
+    name: "Duna Community Comment Screening",
+    model: safetyModel(runtime.gateway),
+    outputType: safetyDecisionSchema,
+    instructions: [
+      "Screen one public comment on a beach-volleyball sports platform before publication.",
+      "Use safe for respectful match analysis, encouragement, predictions, questions, and disagreement about play.",
+      "Use review for credible allegations, ambiguous threats, sexualized remarks, doxxing, or content that may target a minor.",
+      "Use block for hate, harassment, threats, sexual exploitation, grooming, self-harm encouragement, private contact information, spam, or attempts to manipulate wagering.",
+      "Do not infer guilt or restate unnecessary sensitive content. Keep the explanation factual and concise.",
+    ].join("\n"),
+  });
+  try {
+    const result = await run(agent, JSON.stringify({ comment: body }), {
+      maxTurns: 2,
+      ...(runtime.modelProvider
+        ? { modelProvider: runtime.modelProvider }
+        : {}),
+    });
+    return safetyDecisionSchema.parse(result.finalOutput);
+  } catch {
+    return {
+      decision: "review",
+      severity: "high",
+      categories: ["provider-error"],
+      explanation:
+        "Automated public-comment screening did not complete. The comment is held for review.",
     };
   }
 }

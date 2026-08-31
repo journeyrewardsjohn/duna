@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-file-system", () => ({
   File: class ExpoFileMock extends Blob {
+    readonly exists = true;
     readonly name: string;
 
     constructor(uri: string) {
       super(["image-bytes"], { type: "image/jpeg" });
       this.name = uri.split("/").at(-1) || "photo.jpg";
     }
+
+    delete() {}
   },
 }));
 
@@ -15,6 +18,7 @@ import {
   askPlayerDunaAi,
   confirmPlayerDunaAiAction,
   getMobileAuthToken,
+  transcribeMatchJournalVoice,
   uploadPlayerMedia,
 } from "./mobile-api";
 
@@ -138,5 +142,34 @@ describe("Duna AI mobile transport", () => {
       draftId: "draft-1",
       confirmationNonce: "nonce-1",
     });
+  });
+});
+
+describe("private match-journal voice transport", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("marks audio as match-journal input and sends an authenticated byte-backed file", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "I served the short seam well." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      transcribeMatchJournalVoice(async () => "player-token", {
+        name: "reflection.m4a",
+        uri: "file:///tmp/reflection.m4a",
+      }),
+    ).resolves.toBe("I served the short seam well.");
+
+    const [url, request] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toContain("/api/duna-ai/transcribe");
+    expect(new Headers(request?.headers).get("authorization")).toBe(
+      "Bearer player-token",
+    );
+    const body = request?.body as FormData;
+    expect(body.get("purpose")).toBe("match-journal");
+    expect(body.get("audio")).toBeInstanceOf(Blob);
   });
 });

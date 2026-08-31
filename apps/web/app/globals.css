@@ -2,6 +2,351 @@
   box-sizing: border-box;
 }
 
+/* Public match learning and community */
+.match-journal,
+.community-thread {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 1.5rem;
+  display: grid;
+  gap: 1.25rem;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.match-journal__header,
+.community-thread__header {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.85rem;
+}
+
+.match-journal__header > span,
+.community-thread__header > span {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 0.9rem;
+  display: flex;
+  flex: 0 0 auto;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.match-journal h2,
+.community-thread h2 {
+  color: var(--text-1);
+  font-size: clamp(1.2rem, 2.5vw, 1.55rem);
+  margin: 0;
+}
+
+.match-journal__header p,
+.community-thread__header p,
+.match-journal__invite p,
+.match-journal__premium p {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0.25rem 0 0;
+}
+
+.match-journal__composer,
+.community-thread__composer {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 1.1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.match-journal textarea,
+.community-thread textarea {
+  background: transparent;
+  border: 0;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 7rem;
+  outline: none;
+  resize: vertical;
+  width: 100%;
+}
+
+.match-journal__composer > div,
+.community-thread__composer {
+  align-items: center;
+}
+
+.match-journal__composer > div {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.match-journal button,
+.community-thread button,
+.match-journal__invite a,
+.match-journal__premium a {
+  align-items: center;
+  background: var(--btn-primary-bg);
+  border: 0;
+  border-radius: 999px;
+  color: var(--btn-primary-fg);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 3.125rem;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+
+.match-journal button:disabled,
+.community-thread button:disabled {
+  cursor: default;
+  opacity: 0.46;
+}
+
+.match-journal__entries,
+.community-thread__comments {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.match-journal__entries > article {
+  border: 1px solid var(--hairline);
+  border-radius: 1.1rem;
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.match-journal__entries > article > header,
+.community-thread__comments article header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.match-journal__entries > article > header span {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.match-journal__entries time,
+.community-thread time {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.match-journal__entries > article > p,
+.community-thread__comments article p {
+  color: var(--text-1);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.match-journal__entries article > section {
+  background: var(--surface-2);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem;
+}
+
+.match-journal__entries article > section > strong {
+  align-items: center;
+  color: var(--flare-text);
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.4rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.match-journal__entries article > section p,
+.match-journal__entries dl,
+.match-journal__entries ol {
+  margin: 0;
+}
+
+.match-journal__entries dl {
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.55rem;
+}
+
+.match-journal__entries dt {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.match-journal__entries dd,
+.match-journal__entries li {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.match-journal__invite,
+.match-journal__premium,
+.match-journal__signed-out,
+.community-thread__gate {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 1rem;
+  display: flex;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.match-journal__invite > div,
+.match-journal__premium > div {
+  flex: 1;
+}
+
+.match-journal__share {
+  justify-self: start;
+}
+
+.match-journal__share-row {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 0.9rem;
+}
+
+.match-journal__share-row span,
+.match-journal__shared {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.match-journal__share-row small,
+.match-journal__empty,
+.match-journal > small,
+.community-thread > small {
+  color: var(--text-3);
+}
+
+.match-journal__share-row button {
+  background: transparent;
+  color: var(--flare-text);
+  min-height: 2.75rem;
+  padding-inline: 0.5rem;
+}
+
+.match-journal__shared {
+  border-left: 3px solid var(--flare);
+  padding-left: 1rem;
+}
+
+.community-thread__comments article {
+  align-items: flex-start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-block: 0.55rem;
+}
+
+.community-thread__avatar {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 999px;
+  color: var(--text-1);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  height: 2.4rem;
+  justify-content: center;
+  overflow: hidden;
+  text-decoration: none;
+  width: 2.4rem;
+}
+
+.community-thread__avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.community-thread__comments article > div {
+  min-width: 0;
+}
+
+.community-thread__comments article header a {
+  color: var(--text-1);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.community-thread__comments article > button {
+  background: transparent;
+  color: var(--text-3);
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0;
+}
+
+.community-thread__empty {
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 1rem;
+  color: var(--text-2);
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+}
+
+.community-thread__composer {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.community-thread__composer textarea {
+  min-height: 3.125rem;
+  resize: none;
+}
+
+.match-journal__signed-out a,
+.community-thread__gate a {
+  color: var(--text-1);
+  font-weight: 800;
+}
+
+@media (max-width: 680px) {
+  .match-journal,
+  .community-thread {
+    border-radius: 1.1rem;
+    margin-inline: -0.35rem;
+  }
+
+  .match-journal__composer > div,
+  .match-journal__invite,
+  .match-journal__premium {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .community-thread__composer {
+    grid-template-columns: 1fr;
+  }
+
+  .community-thread__composer button {
+    justify-self: stretch;
+  }
+}
+
 /* Hosted-match player search keeps profile discovery and roster building in one step. */
 .pickup-player-picker {
   background: color-mix(in srgb, var(--signal) 5%, var(--surface-1));
@@ -17721,6 +18066,10 @@ a.play-day__booking {
     linear-gradient(145deg, #07172f 0%, #0d2945 54%, #143d58 100%);
   border-color: rgb(255 255 255 / 12%);
   color: var(--color-white);
+}
+
+.public-match-page .match-detail__hero :is(h1, h2) {
+  color: inherit;
 }
 
 .public-match-page .match-detail__hero .page-eyebrow {

@@ -11,9 +11,11 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
+import { CommunityThread } from "@/components/community-thread";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { MatchConfirmation } from "@/components/match-confirmation";
 import { MatchHistoryControls } from "@/components/match-history-controls";
+import { MatchJournalPanel } from "@/components/match-journal-panel";
 import { PredictionMarketDetail } from "@/components/prediction-market";
 import { getServerCaller } from "@/lib/api";
 
@@ -114,16 +116,32 @@ export default async function MatchPage({
 }) {
   const { id } = await params;
   const caller = await getServerCaller();
-  const [match, videos, predictionMarket, predictionWallet] = await Promise.all(
-    [
-      caller.player.matchById({ matchId: id }),
-      caller.public.videos({ matchId: id }).catch(() => []),
-      caller.public
-        .matchPredictionMarket({ matchId: id })
-        .catch(() => undefined),
-      caller.player.predictionWallet().catch(() => undefined),
-    ],
-  );
+  const [
+    match,
+    videos,
+    predictionMarket,
+    predictionWallet,
+    journal,
+    comments,
+    communityAccess,
+  ] = await Promise.all([
+    caller.player.matchById({ matchId: id }),
+    caller.player.matchVideos({ matchId: id }).catch(() => []),
+    caller.public.matchPredictionMarket({ matchId: id }).catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+    caller.player.matchJournal({ matchId: id }).catch(() => undefined),
+    caller.public
+      .communityComments({ subject: { type: "match", id } })
+      .catch(() => []),
+    caller.player.communityAccess().catch(() => undefined),
+  ]);
+  const predictionComments = predictionMarket
+    ? await caller.public
+        .communityComments({
+          subject: { type: "prediction-market", id: predictionMarket.id },
+        })
+        .catch(() => [])
+    : [];
   const explanation = ratingExplanation(match);
   const weather = match.weather ? weatherSummary(match.weather) : undefined;
   return (
@@ -226,6 +244,18 @@ export default async function MatchPage({
           videos={videos}
         />
       )}
+      <MatchJournalPanel
+        accessKnown
+        matchId={id}
+        returnTo={`/app/matches/${id}`}
+        workspace={journal}
+      />
+      <CommunityThread
+        access={communityAccess}
+        comments={comments}
+        returnTo={`/app/matches/${id}`}
+        subject={{ type: "match", id }}
+      />
       <section className="match-detail__insight">
         <article>
           <TrendingUp aria-hidden size={21} />
@@ -288,6 +318,10 @@ export default async function MatchPage({
       </section>
       {predictionMarket && (
         <PredictionMarketDetail
+          conversation={{
+            access: communityAccess,
+            comments: predictionComments,
+          }}
           market={predictionMarket}
           returnTo={`/app/matches/${id}`}
           target={{ kind: "match", matchId: id }}

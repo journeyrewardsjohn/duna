@@ -85,6 +85,11 @@ import {
   healthSampleInputSchema,
   healthSharingScopeSchema,
   matchSummarySchema,
+  matchJournalNoteSchema,
+  matchJournalWorkspaceSchema,
+  communityAccessSchema,
+  communityCommentSchema,
+  communitySubjectSchema,
   matchScoringStateSchema,
   matchAvailabilityCandidateSchema,
   matchAvailabilityPostSchema,
@@ -295,6 +300,19 @@ import {
   loadPlayerEventNotes,
 } from "./player-event-notes-service";
 import {
+  claimMatchNoteShare,
+  createCommunityComment,
+  createMatchJournalNote,
+  createMatchNoteShare,
+  deleteCommunityComment,
+  loadCommunityAccess,
+  loadCommunityComments,
+  loadMatchJournal,
+  MatchSocialError,
+  refreshMatchJournalSummary,
+  revokeMatchNoteShare,
+} from "./match-social-service";
+import {
   addOrganizationBrandKnowledgeSource,
   addCalendarEquipment,
   addCalendarParticipant,
@@ -424,6 +442,7 @@ import {
   hydrateLiveVideoSessionReplay,
   loadAdminVideoOverview,
   loadOwnedVideoMetrics,
+  loadMatchVideosForActor,
   loadPublicVideos,
   loadVideoPlayback,
   loadVideoStudio,
@@ -1423,6 +1442,24 @@ function throwDomainError(error: unknown): never {
           : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof MatchSocialError) {
+    const code =
+      error.code === "MATCH_NOT_FOUND" ||
+      error.code === "SUBJECT_NOT_FOUND" ||
+      error.code === "NOTE_NOT_FOUND" ||
+      error.code === "SHARE_NOT_FOUND" ||
+      error.code === "COMMENT_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "SHARE_ALREADY_CLAIMED"
+          ? "CONFLICT"
+          : error.code === "PARTICIPANT_REQUIRED" ||
+              error.code === "VERIFIED_ACCOUNT_REQUIRED" ||
+              error.code === "PAID_PREMIUM_REQUIRED" ||
+              error.code === "COMMENT_FORBIDDEN"
+            ? "FORBIDDEN"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof VideoServiceError) {
     const code =
       error.code === "VIDEO_NOT_FOUND" ||
@@ -1809,6 +1846,19 @@ const publicRouter = router({
       const match = await loadPublicImportedMatchSummary(input.matchId);
       if (!match) throw new TRPCError({ code: "NOT_FOUND" });
       return match;
+    }),
+  communityComments: publicProcedure
+    .input(z.object({ subject: communitySubjectSchema }))
+    .output(z.array(communityCommentSchema).readonly())
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadCommunityComments({
+          subject: input.subject,
+          actor: ctx.actor,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
     }),
   visionRemoteSession: publicProcedure
     .use(
@@ -2569,6 +2619,229 @@ const publicRouter = router({
 });
 
 const playerRouter = router({
+  matchVideos: protectedProcedure
+    .use(requireScope("matches:read"))
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(z.array(videoSummarySchema).readonly())
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadMatchVideosForActor({
+          actor: ctx.actor!,
+          matchId: input.matchId,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  communityAccess: protectedProcedure
+    .use(requireScope("profile:read"))
+    .output(communityAccessSchema)
+    .query(async ({ ctx }) => {
+      try {
+        return await loadCommunityAccess({ actor: ctx.actor!, now: ctx.now });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  matchJournal: protectedProcedure
+    .use(requireScope("matches:read"))
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(matchJournalWorkspaceSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadMatchJournal({
+          actor: ctx.actor!,
+          matchId: input.matchId,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createMatchJournalNote: protectedProcedure
+    .use(requireScope("matches:read"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-match-journal-create",
+        capacity: 20,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        matchId: z.string().uuid(),
+        body: z.string().trim().min(1).max(5_000),
+        source: z.enum(["typed", "voice"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(matchJournalNoteSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createMatchJournalNote",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createMatchJournalNote({
+              actor: ctx.actor!,
+              matchId: input.matchId,
+              body: input.body,
+              source: input.source,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  refreshMatchJournalSummary: protectedProcedure
+    .use(requireScope("matches:read"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-match-journal-summary",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(z.object({ noteId: z.string().uuid() }))
+    .output(matchJournalNoteSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await refreshMatchJournalSummary({
+          actor: ctx.actor!,
+          noteId: input.noteId,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createMatchNoteShare: protectedProcedure
+    .use(requireScope("matches:read"))
+    .use(
+      rateLimitMiddleware({
+        id: "player-match-note-share",
+        capacity: 8,
+        refillPerMinute: 2,
+      }),
+    )
+    .input(z.object({ matchId: z.string().uuid() }))
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        token: z.string().min(32),
+        path: z.string().startsWith("/matches/"),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await createMatchNoteShare({
+          actor: ctx.actor!,
+          matchId: input.matchId,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  claimMatchNoteShare: protectedProcedure
+    .use(requireScope("profile:read"))
+    .input(z.object({ token: z.string().trim().min(32).max(160) }))
+    .output(z.object({ matchId: z.string().uuid(), claimed: z.literal(true) }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await claimMatchNoteShare({
+          actor: ctx.actor!,
+          token: input.token,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  revokeMatchNoteShare: protectedProcedure
+    .use(requireScope("matches:read"))
+    .input(z.object({ shareId: z.string().uuid() }))
+    .output(z.object({ revoked: z.literal(true) }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await revokeMatchNoteShare({
+          actor: ctx.actor!,
+          shareId: input.shareId,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  createCommunityComment: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "community-comment-create",
+        capacity: 12,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        subject: communitySubjectSchema,
+        body: z.string().trim().min(1).max(1_500),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(communityCommentSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.createCommunityComment",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await createCommunityComment({
+              actor: ctx.actor!,
+              subject: input.subject,
+              body: input.body,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  deleteCommunityComment: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(z.object({ commentId: z.string().uuid() }))
+    .output(z.object({ removed: z.literal(true) }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await deleteCommunityComment({
+          actor: ctx.actor!,
+          commentId: input.commentId,
+          requestId: ctx.requestId,
+          ipAddress: ctx.ipAddress,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
   trainingWorkspace: protectedProcedure
     .use(requireScope("profile:read"))
     .output(playerTrainingWorkspaceSchema)

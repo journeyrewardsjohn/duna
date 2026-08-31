@@ -12,6 +12,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { CommunityThread } from "@/components/community-thread";
+import { MatchJournalPanel } from "@/components/match-journal-panel";
 import { PredictionMarketDetail } from "@/components/prediction-market";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -27,11 +29,15 @@ export const dynamic = "force-dynamic";
 
 const loadMatch = cache(async (matchId: string) => {
   const caller = await getServerCaller();
-  const [match, videos] = await Promise.all([
+  const [match, publicVideos, playerVideos, comments] = await Promise.all([
     caller.public.matchDetails({ matchId }).catch(() => undefined),
     caller.public.videos({ matchId }).catch(() => []),
+    caller.player.matchVideos({ matchId }).catch(() => undefined),
+    caller.public
+      .communityComments({ subject: { type: "match", id: matchId } })
+      .catch(() => []),
   ]);
-  return { match, videos };
+  return { comments, match, videos: playerVideos ?? publicVideos };
 });
 
 function teamLabel(
@@ -114,17 +120,32 @@ export async function generateMetadata({
 
 export default async function PublicMatchPage({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ matchId: string }>;
+  readonly searchParams: Promise<{ notes?: string | readonly string[] }>;
 }) {
   const { matchId } = await params;
-  const { match, videos } = await loadMatch(matchId);
+  const query = await searchParams;
+  const shareToken =
+    typeof query.notes === "string" ? query.notes : query.notes?.[0];
+  const { comments, match, videos } = await loadMatch(matchId);
   if (!match) notFound();
   const caller = await getServerCaller();
-  const [market, predictionWallet] = await Promise.all([
-    caller.public.matchPredictionMarket({ matchId }).catch(() => undefined),
-    caller.player.predictionWallet().catch(() => undefined),
-  ]);
+  const [market, predictionWallet, journal, communityAccess] =
+    await Promise.all([
+      caller.public.matchPredictionMarket({ matchId }).catch(() => undefined),
+      caller.player.predictionWallet().catch(() => undefined),
+      caller.player.matchJournal({ matchId }).catch(() => undefined),
+      caller.player.communityAccess().catch(() => undefined),
+    ]);
+  const predictionComments = market
+    ? await caller.public
+        .communityComments({
+          subject: { type: "prediction-market", id: market.id },
+        })
+        .catch(() => [])
+    : [];
   const teamA = teamLabel(match.teamA, true);
   const teamB = teamLabel(match.teamB, true);
   const sourceUrl = publicSourceUrl(match.sourceUrl);
@@ -237,6 +258,10 @@ export default async function PublicMatchPage({
 
         {market && (
           <PredictionMarketDetail
+            conversation={{
+              access: communityAccess,
+              comments: predictionComments,
+            }}
             market={market}
             returnTo={`/matches/${matchId}`}
             target={{ kind: "match", matchId }}
@@ -292,6 +317,21 @@ export default async function PublicMatchPage({
             videos={videos}
           />
         )}
+
+        <MatchJournalPanel
+          accessKnown={Boolean(communityAccess)}
+          matchId={matchId}
+          returnTo={`/matches/${matchId}${shareToken ? `?notes=${encodeURIComponent(shareToken)}` : ""}`}
+          shareToken={shareToken}
+          workspace={journal}
+        />
+
+        <CommunityThread
+          access={communityAccess}
+          comments={comments}
+          returnTo={`/matches/${matchId}`}
+          subject={{ type: "match", id: matchId }}
+        />
       </div>
       <SiteFooter />
     </main>

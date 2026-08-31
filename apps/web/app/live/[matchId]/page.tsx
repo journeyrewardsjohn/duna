@@ -11,9 +11,15 @@ export default async function PublicLiveMatchPage({
 }) {
   const { matchId } = await params;
   const caller = await getServerCaller();
-  const match = await caller.public
-    .liveMatch({ matchId })
-    .catch(() => undefined);
+  const [match, comments, access] = await Promise.all([
+    caller.public.liveMatch({ matchId }).catch(() => undefined),
+    caller.public
+      .communityComments({ subject: { type: "match", id: matchId } })
+      .catch(() => []),
+    caller.player.communityAccess().catch(() => undefined),
+  ]);
   if (!match) notFound();
-  return <PublicLiveScore initialMatch={match} />;
+  return (
+    <PublicLiveScore access={access} comments={comments} initialMatch={match} />
+  );
 }

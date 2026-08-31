@@ -6,6 +6,7 @@ import {
   auditLog,
   calendarChangeProposals,
   calendarConnections,
+  communityComments,
   consents,
   dunaPlusGrants,
   externalPlayerProfiles,
@@ -31,6 +32,8 @@ import {
   organizationStaffProfiles,
   organizations,
   people,
+  playerMatchNotes,
+  playerMatchNoteShares,
   playerSourceConnections,
   professionalEventPredictionHistory,
   professionalEventPredictions,
@@ -152,6 +155,16 @@ export async function containAccountMedia(input: {
   if (request.status === "completed") {
     return { contained: 0, cancelled: false };
   }
+
+  await database
+    .update(playerMatchNoteShares)
+    .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
+    .where(
+      or(
+        eq(playerMatchNoteShares.ownerPersonId, input.personId),
+        eq(playerMatchNoteShares.claimedByPersonId, input.personId),
+      ),
+    );
 
   const videoRows = await loadDeletionVideos(input.personId);
   for (const video of videoRows) {
@@ -387,6 +400,20 @@ export async function permanentlyDeleteAccount(input: {
     database
       .delete(videoShareLinks)
       .where(eq(videoShareLinks.createdByPersonId, input.personId)),
+    database
+      .delete(playerMatchNoteShares)
+      .where(
+        or(
+          eq(playerMatchNoteShares.ownerPersonId, input.personId),
+          eq(playerMatchNoteShares.claimedByPersonId, input.personId),
+        ),
+      ),
+    database
+      .delete(playerMatchNotes)
+      .where(eq(playerMatchNotes.personId, input.personId)),
+    database
+      .delete(communityComments)
+      .where(eq(communityComments.authorPersonId, input.personId)),
     database
       .update(videoViews)
       .set({ viewerPersonId: null })

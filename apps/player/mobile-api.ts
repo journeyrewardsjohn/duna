@@ -72,9 +72,10 @@ export interface UploadedPlayerMedia {
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init?: RequestInit,
+  timeoutMs = MOBILE_API_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MOBILE_API_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const abort = () => controller.abort();
   if (init?.signal?.aborted) abort();
   init?.signal?.addEventListener("abort", abort, { once: true });
@@ -83,6 +84,42 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeout);
     init?.signal?.removeEventListener("abort", abort);
+  }
+}
+
+export async function transcribeMatchJournalVoice(
+  getToken: TokenGetter,
+  input: {
+    readonly uri: string;
+    readonly name?: string;
+  },
+): Promise<string> {
+  const token = await getMobileAuthToken(getToken);
+  if (!token) throw new Error("Sign in again before recording a match note.");
+  const file = new File(input.uri);
+  try {
+    const form = new FormData();
+    form.append("audio", file, input.name ?? file.name ?? "match-note.m4a");
+    form.append("purpose", "match-journal");
+    const response = await fetchWithTimeout(
+      `${dunaApiBaseUrl}/api/duna-ai/transcribe`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      },
+      60_000,
+    );
+    const payload = (await response.json()) as {
+      readonly text?: string;
+      readonly error?: string;
+    };
+    if (!response.ok || !payload.text) {
+      throw new Error(payload.error ?? "Duna could not transcribe that note.");
+    }
+    return payload.text;
+  } finally {
+    if (file.exists) file.delete();
   }
 }
 
@@ -165,7 +202,16 @@ export function createDunaApiClient(getToken: TokenGetter): DunaApiClient {
     links: [
       httpBatchLink({
         url: dunaApiUrl,
-        fetch: fetchWithTimeout,
+        fetch: (input, init) =>
+          fetchWithTimeout(
+            input,
+            init,
+            String(input).includes("MatchJournalSummary") ||
+              String(input).includes("createMatchJournalNote") ||
+              String(input).includes("createCommunityComment")
+              ? 60_000
+              : MOBILE_API_TIMEOUT_MS,
+          ),
         headers: async () => {
           const token = await getMobileAuthToken(getToken);
           return token ? { authorization: `Bearer ${token}` } : {};

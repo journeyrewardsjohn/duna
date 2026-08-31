@@ -3898,6 +3898,170 @@ export const matches = pgTable(
   ],
 );
 
+// Match journals are a player's private learning record. They intentionally
+// live outside public match data and organization coaching notes so hosting a
+// match never grants access to a player's reflections.
+export const playerMatchNotes = pgTable(
+  "player_match_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 24 }).notNull().default("typed"),
+    body: text("body").notNull(),
+    aiSummary: text("ai_summary"),
+    aiInsights: jsonb("ai_insights").$type<{
+      readonly focus: readonly (
+        | "self-performance"
+        | "teammate-coordination"
+        | "opponent-tendency"
+        | "tactics"
+        | "conditions"
+        | "next-session"
+      )[];
+      readonly playerInsights: readonly {
+        readonly personId?: string;
+        readonly name: string;
+        readonly relationship: "self" | "teammate" | "opponent";
+        readonly observation: string;
+      }[];
+      readonly nextActions: readonly string[];
+    }>(),
+    aiStatus: varchar("ai_status", { length: 24 }).notNull().default("pending"),
+    aiModel: varchar("ai_model", { length: 160 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_match_note_person_match_idx").on(
+      table.personId,
+      table.matchId,
+      table.createdAt,
+    ),
+    check(
+      "player_match_note_source_valid",
+      sql`${table.source} IN ('typed', 'voice')`,
+    ),
+    check(
+      "player_match_note_ai_status_valid",
+      sql`${table.aiStatus} IN ('pending', 'ready', 'unavailable')`,
+    ),
+    check(
+      "player_match_note_body_valid",
+      sql`char_length(${table.body}) BETWEEN 1 AND 5000`,
+    ),
+  ],
+);
+
+// A share link grants one verified Duna member access to all of its owner's
+// notes for one match. The plaintext token is returned once and never stored.
+export const playerMatchNoteShares = pgTable(
+  "player_match_note_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    claimedByPersonId: uuid("claimed_by_person_id").references(
+      () => people.id,
+      { onDelete: "cascade" },
+    ),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "date" }),
+    lastViewedAt: timestamp("last_viewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("player_match_note_share_owner_idx").on(
+      table.ownerPersonId,
+      table.matchId,
+      table.status,
+    ),
+    index("player_match_note_share_claimant_idx").on(
+      table.claimedByPersonId,
+      table.status,
+    ),
+    check(
+      "player_match_note_share_status_valid",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "player_match_note_share_people_distinct",
+      sql`${table.claimedByPersonId} IS NULL OR ${table.claimedByPersonId} <> ${table.ownerPersonId}`,
+    ),
+    check(
+      "player_match_note_share_claim_valid",
+      sql`(${table.claimedByPersonId} IS NULL AND ${table.claimedAt} IS NULL) OR (${table.claimedByPersonId} IS NOT NULL AND ${table.claimedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// Public conversation uses one subject model so matches, live streams, pro
+// events, and prediction markets share the same identity and moderation rules.
+export const communityComments = pgTable(
+  "community_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectType: varchar("subject_type", { length: 32 }).notNull(),
+    subjectId: text("subject_id").notNull(),
+    authorPersonId: uuid("author_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("held"),
+    moderationState: varchar("moderation_state", { length: 24 })
+      .notNull()
+      .default("screening"),
+    moderationReason: text("moderation_reason"),
+    editedAt: timestamp("edited_at", { withTimezone: true, mode: "date" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("community_comment_subject_idx").on(
+      table.subjectType,
+      table.subjectId,
+      table.status,
+      table.createdAt,
+    ),
+    index("community_comment_author_idx").on(
+      table.authorPersonId,
+      table.createdAt,
+    ),
+    check(
+      "community_comment_subject_type_valid",
+      sql`${table.subjectType} IN ('match', 'live-stream', 'pro-event', 'prediction-market')`,
+    ),
+    check(
+      "community_comment_status_valid",
+      sql`${table.status} IN ('held', 'visible', 'removed')`,
+    ),
+    check(
+      "community_comment_moderation_valid",
+      sql`${table.moderationState} IN ('screening', 'safe', 'review', 'blocked')`,
+    ),
+    check(
+      "community_comment_body_valid",
+      sql`char_length(${table.body}) BETWEEN 1 AND 1500`,
+    ),
+  ],
+);
+
 // Player video, live streaming, direct uploads, sharing, and engagement
 export const videoQuotaPolicies = pgTable(
   "video_quota_policies",

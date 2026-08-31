@@ -872,18 +872,6 @@ export async function loadPublicImportedMatchSummary(
   matchId: string,
 ): Promise<MatchSummary | undefined> {
   const database = getDatabase();
-  const [importedMatch] = await database
-    .select({ id: importedMatches.id })
-    .from(importedMatches)
-    .where(
-      and(
-        eq(importedMatches.canonicalMatchId, matchId),
-        eq(importedMatches.importState, "approved"),
-      ),
-    )
-    .limit(1);
-  if (!importedMatch) return undefined;
-
   const [match] = await database
     .select({
       teamAId: matches.teamAId,
@@ -896,7 +884,9 @@ export async function loadPublicImportedMatchSummary(
   if (
     !match?.teamAId ||
     !match.teamBId ||
-    !["verified", "complete"].includes(match.status)
+    !["pending-verification", "verified", "disputed", "complete"].includes(
+      match.status,
+    )
   ) {
     return undefined;
   }

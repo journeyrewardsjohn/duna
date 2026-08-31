@@ -43,6 +43,7 @@ import {
   createDunaApiClient,
   createPlayerMessagingDeliveryEngine,
   getPlayerDunaAiSuggestions,
+  transcribeMatchJournalVoice,
   uploadPlayerMedia,
   type DunaApiClient,
   type PlayerDunaAiActionOutcome,
@@ -192,6 +193,10 @@ export interface PlayerRuntime {
     readonly width: number;
     readonly height: number;
   }) => Promise<UploadedPlayerMedia>;
+  readonly transcribeMatchJournalVoice?: (input: {
+    readonly uri: string;
+    readonly name?: string;
+  }) => Promise<string>;
   readonly askDunaAi?: (input: {
     readonly message: string;
     readonly pathname: string;
@@ -818,6 +823,8 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         confirmDunaAiAction: (input) =>
           confirmPlayerDunaAiAction(getToken, input),
         uploadPlayerMedia: (input) => uploadPlayerMedia(getToken, input),
+        transcribeMatchJournalVoice: (input) =>
+          transcribeMatchJournalVoice(getToken, input),
         signOut: safeSignOut,
       }}
     >

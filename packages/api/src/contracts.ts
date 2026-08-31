@@ -857,6 +857,118 @@ export const matchSummarySchema = z.object({
   ]),
 });
 export type MatchSummary = z.infer<typeof matchSummarySchema>;
+
+export const communitySubjectSchema = z.object({
+  type: z.enum(["match", "live-stream", "pro-event", "prediction-market"]),
+  id: z.string().uuid(),
+});
+
+export const communityCommentSchema = z.object({
+  id: z.string().uuid(),
+  subject: communitySubjectSchema,
+  author: z.object({
+    id: z.string().uuid(),
+    displayName: z.string(),
+    handle: z.string(),
+    avatarUrl: z.string().optional(),
+    publicPath: z.string().startsWith("/players/"),
+  }),
+  body: z.string().min(1).max(1_500),
+  status: z.enum(["held", "visible"]),
+  moderationState: z.enum(["screening", "safe", "review", "blocked"]),
+  viewerCanDelete: z.boolean(),
+  editedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const communityAccessSchema = z.object({
+  verified: z.boolean(),
+  paidPremium: z.boolean(),
+  canComment: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export const matchJournalInsightSchema = z.object({
+  focus: z
+    .array(
+      z.enum([
+        "self-performance",
+        "teammate-coordination",
+        "opponent-tendency",
+        "tactics",
+        "conditions",
+        "next-session",
+      ]),
+    )
+    .max(6)
+    .readonly(),
+  playerInsights: z
+    .array(
+      z.object({
+        personId: z.string().uuid().optional(),
+        name: z.string(),
+        relationship: z.enum(["self", "teammate", "opponent"]),
+        observation: z.string(),
+      }),
+    )
+    .max(8)
+    .readonly(),
+  nextActions: z.array(z.string()).max(5).readonly(),
+});
+
+export const matchJournalNoteSchema = z.object({
+  id: z.string().uuid(),
+  matchId: z.string().uuid(),
+  body: z.string().min(1).max(5_000),
+  source: z.enum(["typed", "voice"]),
+  aiSummary: z.string().optional(),
+  aiInsights: matchJournalInsightSchema.optional(),
+  aiStatus: z.enum(["pending", "ready", "unavailable"]),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const matchNoteShareSchema = z.object({
+  id: z.string().uuid(),
+  claimedBy: z
+    .object({
+      id: z.string().uuid(),
+      displayName: z.string(),
+      handle: z.string(),
+    })
+    .optional(),
+  status: z.enum(["active", "revoked"]),
+  expiresAt: z.iso.datetime().optional(),
+  claimedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const matchJournalWorkspaceSchema = z.object({
+  access: communityAccessSchema.extend({
+    participant: z.boolean(),
+    canWriteNotes: z.boolean(),
+    canUseAi: z.boolean(),
+  }),
+  notes: z.array(matchJournalNoteSchema).readonly(),
+  sharedJournals: z
+    .array(
+      z.object({
+        owner: z.object({
+          id: z.string().uuid(),
+          displayName: z.string(),
+          handle: z.string(),
+          avatarUrl: z.string().optional(),
+        }),
+        notes: z.array(matchJournalNoteSchema).readonly(),
+      }),
+    )
+    .readonly(),
+  shares: z.array(matchNoteShareSchema).readonly(),
+});
+export type CommunityCommentSummary = z.infer<typeof communityCommentSchema>;
+export type CommunitySubjectSummary = z.infer<typeof communitySubjectSchema>;
+export type MatchJournalNoteSummary = z.infer<typeof matchJournalNoteSchema>;
+export type MatchJournalWorkspace = z.infer<typeof matchJournalWorkspaceSchema>;
 export const bookingSummarySchema = z.object({
   id: z.string(),
   source: z.enum(["registration", "pickup", "court"]).optional(),

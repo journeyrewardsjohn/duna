@@ -85,17 +85,25 @@ export default async function ProfessionalMatchPage({
 }) {
   const { slug, matchId, matchSlug } = await params;
   const caller = await getServerCaller();
-  const [detail, videos, predictionMarket, predictionWallet] =
-    await Promise.all([
-      caller.public
-        .proMatch({ eventSlug: slug, matchId })
-        .catch(() => undefined),
-      caller.public.videos({ matchId }).catch(() => []),
-      caller.public
-        .proMatchPredictionMarket({ eventSlug: slug, matchId })
-        .catch(() => undefined),
-      caller.player.predictionWallet().catch(() => undefined),
-    ]);
+  const [
+    detail,
+    videos,
+    predictionMarket,
+    predictionWallet,
+    comments,
+    communityAccess,
+  ] = await Promise.all([
+    caller.public.proMatch({ eventSlug: slug, matchId }).catch(() => undefined),
+    caller.public.videos({ matchId }).catch(() => []),
+    caller.public
+      .proMatchPredictionMarket({ eventSlug: slug, matchId })
+      .catch(() => undefined),
+    caller.player.predictionWallet().catch(() => undefined),
+    caller.public
+      .communityComments({ subject: { type: "match", id: matchId } })
+      .catch(() => []),
+    caller.player.communityAccess().catch(() => undefined),
+  ]);
   if (!detail) {
     const event = await caller.public.proEvent({ slug }).catch(() => undefined);
     const replacement = event
@@ -104,9 +112,19 @@ export default async function ProfessionalMatchPage({
     if (replacement) redirect(replacement.canonicalPath);
     notFound();
   }
+  const predictionComments = predictionMarket
+    ? await caller.public
+        .communityComments({
+          subject: { type: "prediction-market", id: predictionMarket.id },
+        })
+        .catch(() => [])
+    : [];
   return (
     <ProMatchDetail
+      comments={comments}
+      communityAccess={communityAccess}
       detail={detail}
+      predictionComments={predictionComments}
       predictionMarket={predictionMarket}
       predictionWallet={predictionWallet}
       videos={videos}

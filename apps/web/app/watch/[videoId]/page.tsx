@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CommunityThread } from "@/components/community-thread";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -31,12 +32,22 @@ export default async function WatchVideoPage({
     .catch(() => undefined);
   if (!playback) notFound();
 
-  const related = await caller.public
-    .videos({
-      eventId: playback.video.event?.id,
-      matchId: playback.video.match?.id,
-    })
-    .catch(() => []);
+  const [related, comments, communityAccess] = await Promise.all([
+    caller.public
+      .videos({
+        eventId: playback.video.event?.id,
+        matchId: playback.video.match?.id,
+      })
+      .catch(() => []),
+    playback.video.liveVisibility === "public"
+      ? caller.public
+          .communityComments({
+            subject: { type: "live-stream", id: playback.video.id },
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
+    caller.player.communityAccess().catch(() => undefined),
+  ]);
   const videos = [
     playback.video,
     ...related.filter((video) => video.id !== playback.video.id),
@@ -60,6 +71,19 @@ export default async function WatchVideoPage({
           title={playback.video.title}
           videos={videos}
         />
+        {playback.video.liveVisibility === "public" ? (
+          <CommunityThread
+            access={communityAccess}
+            comments={comments}
+            returnTo={`/watch/${playback.video.id}`}
+            subject={{ type: "live-stream", id: playback.video.id }}
+            title={
+              playback.video.status === "live"
+                ? "Live conversation"
+                : "Stream conversation"
+            }
+          />
+        ) : null}
       </div>
       <SiteFooter />
     </main>

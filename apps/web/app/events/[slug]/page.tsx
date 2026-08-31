@@ -150,7 +150,13 @@ export default async function EventPage({
   ]);
   if (!event && proEvent) {
     const marketMatches = proEvent.matches.slice(0, 40);
-    const [eventMarkets, predictionWallet, matchMarkets] = await Promise.all([
+    const [
+      eventMarkets,
+      predictionWallet,
+      matchMarkets,
+      comments,
+      communityAccess,
+    ] = await Promise.all([
       caller.public
         .proEventPredictionMarkets({ eventSlug: slug })
         .catch(() => []),
@@ -163,9 +169,17 @@ export default async function EventPage({
           })),
         })
         .catch(() => ({})),
+      caller.public
+        .communityComments({
+          subject: { type: "pro-event", id: proEvent.id },
+        })
+        .catch(() => []),
+      caller.player.communityAccess().catch(() => undefined),
     ]);
     return (
       <ProEventDetail
+        comments={comments}
+        communityAccess={communityAccess}
         event={proEvent}
         eventMarkets={eventMarkets}
         matchMarkets={matchMarkets}
