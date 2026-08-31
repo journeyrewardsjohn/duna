@@ -390,6 +390,33 @@ export interface EventSummary {
   readonly tags: readonly string[];
 }
 
+export interface MatchWeatherSnapshot {
+  readonly provider: "Tomorrow.io";
+  readonly source:
+    | "realtime"
+    | "recent-history"
+    | "timeline-history"
+    | "historical-reanalysis";
+  readonly matchTime: string;
+  readonly observedAt: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly condition: string;
+  readonly weatherCode?: number;
+  readonly temperatureC?: number;
+  readonly apparentTemperatureC?: number;
+  readonly humidityPercent?: number;
+  readonly precipitationProbabilityPercent?: number;
+  readonly precipitationIntensityMmPerHour?: number;
+  readonly precipitationAccumulationMm?: number;
+  readonly rainIntensityMmPerHour?: number;
+  readonly cloudCoverPercent?: number;
+  readonly windSpeedKph?: number;
+  readonly windGustKph?: number;
+  readonly windDirectionDegrees?: number;
+  readonly uvIndex?: number;
+}
+
 export interface MatchSummary {
   readonly id: string;
   readonly status?:
@@ -426,6 +453,7 @@ export interface MatchSummary {
     readonly latitude?: number;
     readonly longitude?: number;
   };
+  readonly weather?: MatchWeatherSnapshot;
   readonly prediction?: {
     readonly teamA: number;
     readonly teamB: number;

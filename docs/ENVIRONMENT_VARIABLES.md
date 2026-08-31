@@ -202,7 +202,7 @@ selector or URL variable.
 | `GOOGLE_WORKSPACE_MEET_CALENDAR_ID`      | Server config                    | Optional organizer-owned calendar ID; defaults to the organizer email       |
 | `MAPBOX_API_TOKEN_PUBLIC`                | Public config stored server-side | Preferred public `pk` token returned by the Web/HQ token proxy              |
 | `MAPBOX_API_TOKEN`                       | Public-or-server token           | Compatibility fallback; route accepts only a public `pk` token for clients  |
-| `TOMORROW_IO_API_KEY`                    | Server secret                    | Weather/daylight context                                                    |
+| `TOMORROW_IO_API_KEY`                    | Server secret                    | Weather/daylight context and immutable match-time weather snapshots         |
 
 Use `EXPO_PUBLIC_MAPBOX_API_TOKEN` only for the restricted native public token.
 Secret-scope Mapbox tokens never belong in Expo.

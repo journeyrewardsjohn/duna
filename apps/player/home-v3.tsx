@@ -91,6 +91,7 @@ export interface HomeV3MatchTeam {
 export interface HomeV3Match {
   readonly id: string;
   readonly kicker: string;
+  readonly weather?: string;
   readonly delta: string;
   readonly deltaTone: "positive" | "neutral";
   readonly teams: readonly HomeV3MatchTeam[];
@@ -538,7 +539,7 @@ function MatchTeamRow({ team }: { readonly team: HomeV3MatchTeam }) {
 function MatchCard({ match }: { readonly match: HomeV3Match }) {
   return (
     <Pressable
-      accessibilityLabel={`${match.kicker}, rating ${match.delta}`}
+      accessibilityLabel={`${match.kicker}${match.weather ? `, ${match.weather}` : ""}, rating ${match.delta}`}
       accessibilityRole="button"
       onPress={match.onPress}
       style={({ pressed }) => [styles.matchCard, pressed && styles.pressed]}
@@ -556,6 +557,11 @@ function MatchCard({ match }: { readonly match: HomeV3Match }) {
           {match.delta}
         </Text>
       </View>
+      {match.weather ? (
+        <Text numberOfLines={1} style={styles.matchWeather}>
+          {match.weather}
+        </Text>
+      ) : null}
       <View style={styles.matchTeams}>
         {match.teams.map((team) => (
           <MatchTeamRow key={team.id} team={team} />
@@ -1320,6 +1326,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   matchDeltaPositive: { color: c.positive },
+  matchWeather: {
+    color: c.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: mobileGrid[1],
+  },
   matchTeams: { gap: mobileGrid[2], marginTop: mobileGrid[2] + 2 },
   matchTeamRow: {
     alignItems: "center",

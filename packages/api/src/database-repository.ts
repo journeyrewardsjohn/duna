@@ -820,6 +820,7 @@ async function loadMatchHistory(personId: string): Promise<MatchSummary[]> {
         ratingAfter: rating?.after,
         ratingExplanation: rating?.explanation,
         location: storedLocation,
+        weather: match.weatherSnapshot ?? undefined,
         ...(teamAChance !== undefined
           ? {
               prediction: {

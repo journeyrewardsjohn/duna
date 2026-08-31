@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetWeatherCacheForTests,
+  captureMatchWeatherSnapshot,
   daylightStatus,
   loadWeatherForecast,
   resolveWeatherCoordinates,
@@ -227,7 +228,156 @@ describe("weather and daylight planning", () => {
     });
   });
 
-  it("resolves legacy venue text through Google Places and caches it", async () => {
+  it("captures rich realtime match conditions including UV and wind", async () => {
+    vi.stubEnv("TOMORROW_IO_API_KEY", "test-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            time: "2026-08-31T18:04:00.000Z",
+            values: {
+              temperature: 30,
+              temperatureApparent: 34,
+              humidity: 72,
+              precipitationProbability: 18,
+              precipitationIntensity: 0,
+              rainIntensity: 0,
+              cloudCover: 22,
+              windSpeed: 6,
+              windGust: 9,
+              windDirection: 82,
+              uvIndex: 8,
+              weatherCode: 1100,
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await captureMatchWeatherSnapshot({
+      latitude: 18.4497,
+      longitude: -66.0841,
+      matchTime: new Date("2026-08-31T18:00:00.000Z"),
+      now: new Date("2026-08-31T18:04:00.000Z"),
+    });
+
+    const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestUrl.pathname).toBe("/v4/weather/realtime");
+    expect(requestUrl.searchParams.get("location")).toBe("18.4497,-66.0841");
+    expect(snapshot).toMatchObject({
+      provider: "Tomorrow.io",
+      source: "realtime",
+      matchTime: "2026-08-31T18:00:00.000Z",
+      observedAt: "2026-08-31T18:04:00.000Z",
+      condition: "Mostly clear",
+      temperatureC: 30,
+      apparentTemperatureC: 34,
+      humidityPercent: 72,
+      windSpeedKph: 21.6,
+      windGustKph: 32.4,
+      windDirectionDegrees: 82,
+      uvIndex: 8,
+    });
+  });
+
+  it("uses recent history instead of current conditions for a finished match", async () => {
+    vi.stubEnv("TOMORROW_IO_API_KEY", "test-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          timelines: {
+            hourly: [
+              {
+                time: "2026-08-31T15:00:00.000Z",
+                values: { temperature: 29, weatherCode: 1000 },
+              },
+              {
+                time: "2026-08-31T16:00:00.000Z",
+                values: { temperature: 31, weatherCode: 1101 },
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await captureMatchWeatherSnapshot({
+      latitude: 18.4497,
+      longitude: -66.0841,
+      matchTime: new Date("2026-08-31T15:12:00.000Z"),
+      now: new Date("2026-08-31T18:08:00.000Z"),
+    });
+
+    const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestUrl.pathname).toBe("/v4/weather/history/recent");
+    expect(snapshot).toMatchObject({
+      source: "recent-history",
+      observedAt: "2026-08-31T15:00:00.000Z",
+      temperatureC: 29,
+      condition: "Clear",
+    });
+  });
+
+  it("uses historical reanalysis fields for an older match", async () => {
+    vi.stubEnv("TOMORROW_IO_API_KEY", "test-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            timelines: [
+              {
+                timestep: "1h",
+                intervals: [
+                  {
+                    startTime: "2026-08-01T18:00:00.000Z",
+                    values: {
+                      temperature: 29,
+                      humidity: 78,
+                      windSpeed: 4,
+                      windGust: 7,
+                      precipitationAccumulation: 1.2,
+                      cloudCover: 94,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await captureMatchWeatherSnapshot({
+      latitude: 18.4497,
+      longitude: -66.0841,
+      matchTime: new Date("2026-08-01T18:10:00.000Z"),
+      now: new Date("2026-08-31T18:08:00.000Z"),
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v4/historical");
+    const body = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ) as { fields: readonly string[] };
+    expect(body.fields).toContain("precipitationAccumulation");
+    expect(body.fields).not.toContain("uvIndex");
+    expect(snapshot).toMatchObject({
+      source: "historical-reanalysis",
+      condition: "Rain",
+      precipitationAccumulationMm: 1.2,
+      cloudCoverPercent: 94,
+      windSpeedKph: 14.4,
+      windGustKph: 25.2,
+    });
+    expect(snapshot?.uvIndex).toBeUndefined();
+  });
+
+  it("resolves international venue text through unrestricted Google Places", async () => {
     vi.stubEnv("GOOGLE_PLACES_API_KEY", "places-test-key");
     const fetchMock = vi
       .fn()
@@ -237,7 +387,7 @@ describe("weather and daylight planning", () => {
             suggestions: [
               {
                 placePrediction: {
-                  placeId: "ChIJHermosaPierCourts",
+                  placeId: "ChIJVivoBeachClubPuertoRico",
                 },
               },
             ],
@@ -248,10 +398,10 @@ describe("weather and daylight planning", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            id: "ChIJHermosaPierCourts",
+            id: "ChIJVivoBeachClubPuertoRico",
             location: {
-              latitude: 33.8622,
-              longitude: -118.3995,
+              latitude: 18.4497,
+              longitude: -66.0841,
             },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -260,20 +410,25 @@ describe("weather and daylight planning", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const first = await resolveWeatherCoordinates({
-      query: "Hermosa Beach Pier Courts",
+      query: "Vivo Beach Club, Puerto Rico",
       now: new Date("2026-08-02T12:00:00.000Z"),
     });
     const second = await resolveWeatherCoordinates({
-      query: "Hermosa   Beach Pier Courts",
+      query: "Vivo   Beach Club, Puerto Rico",
       now: new Date("2026-08-02T12:05:00.000Z"),
     });
 
     expect(first).toEqual({
-      latitude: 33.8622,
-      longitude: -118.3995,
-      googlePlaceId: "ChIJHermosaPierCourts",
+      latitude: 18.4497,
+      longitude: -66.0841,
+      googlePlaceId: "ChIJVivoBeachClubPuertoRico",
     });
     expect(second).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.parse(
+        String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body),
+      ),
+    ).toEqual({ input: "Vivo Beach Club, Puerto Rico" });
   });
 });

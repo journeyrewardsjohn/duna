@@ -590,6 +590,21 @@ function weatherSymbol(icon: string | undefined): string {
   return "☁";
 }
 
+function recordedWeatherSymbol(condition: string): string {
+  const normalized = condition.toLowerCase();
+  if (normalized.includes("thunder")) return "⛈";
+  if (normalized.includes("rain") || normalized.includes("drizzle")) {
+    return "🌦";
+  }
+  if (normalized.includes("snow") || normalized.includes("ice")) return "❄";
+  if (normalized.includes("fog")) return "≋";
+  if (normalized.includes("partly") || normalized.includes("mostly cloudy")) {
+    return "🌤";
+  }
+  if (normalized.includes("clear")) return "☀";
+  return "☁";
+}
+
 function fahrenheit(celsius: number | undefined): string {
   return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
 }
@@ -2039,9 +2054,26 @@ function HomeScreenV3({
     });
     const format =
       match.formatSummary ?? `${match.teamA.length}V${match.teamB.length}`;
+    const recordedWeather = match.weather
+      ? [
+          `${recordedWeatherSymbol(match.weather.condition)} ${fahrenheit(match.weather.temperatureC) || match.weather.condition}`,
+          match.weather.temperatureC !== undefined
+            ? match.weather.condition
+            : undefined,
+          match.weather.windSpeedKph !== undefined
+            ? `${Math.round(match.weather.windSpeedKph * 0.621371)} mph wind`
+            : undefined,
+          match.weather.uvIndex !== undefined
+            ? `UV ${Math.round(match.weather.uvIndex)}`
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : undefined;
     return {
       id: match.id,
       kicker: `${date} · ${format} · ${match.venueName}`.toUpperCase(),
+      weather: recordedWeather,
       delta: `${match.ratingDelta >= 0 ? "+" : ""}${match.ratingDelta.toFixed(2)}`,
       deltaTone: match.ratingDelta > 0 ? "positive" : "neutral",
       onPress: onOpenPerformance,
