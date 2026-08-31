@@ -46,6 +46,7 @@ import {
   gt,
   inArray,
   isNotNull,
+  isNull,
   ne,
   or,
   sql,
@@ -56,6 +57,10 @@ import { publishMatchLiveActivity } from "./live-activities";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { sendTransactionalEmail } from "./resend";
 import { sendTemplateSms } from "./sent";
+import {
+  captureMatchWeatherSnapshot,
+  resolveWeatherCoordinates,
+} from "./weather";
 
 export class MatchServiceError extends Error {
   constructor(
@@ -76,6 +81,76 @@ export class MatchServiceError extends Error {
     super(message);
     this.name = "MatchServiceError";
   }
+}
+
+async function captureStoredMatchWeather(input: {
+  readonly venueId?: string;
+  readonly location?: MatchFormat["location"];
+  readonly matchTime: Date;
+  readonly now: Date;
+}) {
+  const database = getDatabase();
+  const venue = input.venueId
+    ? await database
+        .select({
+          name: venues.name,
+          addressLine1: venues.addressLine1,
+          addressLine2: venues.addressLine2,
+          locality: venues.locality,
+          administrativeArea: venues.administrativeArea,
+          postalCode: venues.postalCode,
+          countryCode: venues.countryCode,
+          googlePlaceId: venues.googlePlaceId,
+          latitude: venues.latitude,
+          longitude: venues.longitude,
+        })
+        .from(venues)
+        .where(eq(venues.id, input.venueId))
+        .limit(1)
+        .then((rows) => rows[0])
+    : undefined;
+  const locationHasCoordinates =
+    input.location?.latitude !== undefined &&
+    input.location.longitude !== undefined;
+  const venueLatitude = venue?.latitude ?? undefined;
+  const venueLongitude = venue?.longitude ?? undefined;
+  const venueHasCoordinates =
+    venueLatitude !== undefined && venueLongitude !== undefined;
+  const coordinates = await resolveWeatherCoordinates({
+    latitude: locationHasCoordinates
+      ? input.location?.latitude
+      : venueHasCoordinates
+        ? venueLatitude
+        : undefined,
+    longitude: locationHasCoordinates
+      ? input.location?.longitude
+      : venueHasCoordinates
+        ? venueLongitude
+        : undefined,
+    googlePlaceId:
+      input.location?.googlePlaceId ?? venue?.googlePlaceId ?? undefined,
+    query: [
+      input.location?.name,
+      input.location?.address,
+      venue?.name,
+      venue?.addressLine1,
+      venue?.addressLine2,
+      venue?.locality,
+      venue?.administrativeArea,
+      venue?.postalCode,
+      venue?.countryCode,
+    ]
+      .filter(Boolean)
+      .join(", "),
+    now: input.now,
+  });
+  if (!coordinates) return undefined;
+  return captureMatchWeatherSnapshot({
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    matchTime: input.matchTime,
+    now: input.now,
+  });
 }
 
 export interface ScoringPerson {
@@ -712,6 +787,11 @@ export async function startOperatorMatchScoring(input: {
       "Both teams need rostered players before scoring can begin.",
     );
   }
+  const weatherSnapshot = await captureStoredMatchWeather({
+    venueId: match.venueId,
+    matchTime: input.now,
+    now: input.now,
+  }).catch(() => undefined);
   const startEvent: ScoreEvent = {
     id: crypto.randomUUID(),
     type: "match-started",
@@ -794,6 +874,19 @@ export async function startOperatorMatchScoring(input: {
       "MATCH_NOT_SCORABLE",
       "This scheduled match was already started or changed.",
     );
+  }
+  if (weatherSnapshot) {
+    await getDatabase()
+      .update(matches)
+      .set({
+        weatherSnapshot,
+        weatherCapturedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(
+        and(eq(matches.id, input.matchId), isNull(matches.weatherSnapshot)),
+      )
+      .catch(() => undefined);
   }
   return loadMatchScoringState({
     actor: input.actor,
@@ -1041,6 +1134,11 @@ export async function startSelfReportedMatch(input: {
           }
         : { status: "ready-for-confirmation", requiredClaims: 0 },
   };
+  const weatherSnapshot = await captureStoredMatchWeather({
+    venueId: input.venueId,
+    matchTime: input.now,
+    now: input.now,
+  }).catch(() => undefined);
   await database.batch([
     database.insert(teams).values({
       id: teamAId,
@@ -1080,6 +1178,8 @@ export async function startSelfReportedMatch(input: {
       status: "live",
       startedAt: input.now,
       format: format as unknown as Record<string, unknown>,
+      weatherSnapshot,
+      weatherCapturedAt: weatherSnapshot ? input.now : undefined,
       authoritativeDeviceId: input.deviceId,
       ratingEligible: false,
       createdAt: input.now,
@@ -1466,6 +1566,12 @@ export async function recordCompletedMatch(input: {
       occurredAt: input.playedAt.toISOString(),
     })),
   ];
+  const weatherSnapshot = await captureStoredMatchWeather({
+    venueId: input.venueId,
+    location: input.location,
+    matchTime: input.playedAt,
+    now: input.now,
+  }).catch(() => undefined);
   await database.batch([
     database.insert(teams).values({
       id: teamAId,
@@ -1522,6 +1628,8 @@ export async function recordCompletedMatch(input: {
       startedAt: input.playedAt,
       completedAt: input.playedAt,
       format: format as unknown as Record<string, unknown>,
+      weatherSnapshot,
+      weatherCapturedAt: weatherSnapshot ? input.now : undefined,
       authoritativeDeviceId: input.deviceId,
       verification: "self-reported",
       verificationWeightBps:
@@ -2310,6 +2418,14 @@ export async function appendMatchEvents(input: {
       ...participation.teamAIds,
       ...participation.teamBIds,
     ].includes(input.actor.personId);
+    const weatherSnapshot =
+      participation.match.weatherSnapshot ??
+      (await captureStoredMatchWeather({
+        venueId: participation.match.venueId ?? undefined,
+        location: completedFormat.location,
+        matchTime: participation.match.startedAt ?? input.now,
+        now: input.now,
+      }).catch(() => undefined));
     await database.batch([
       database
         .update(matches)
@@ -2320,6 +2436,10 @@ export async function appendMatchEvents(input: {
           verificationWeightBps: ratingCapable ? 2_500 : 0,
           winnerTeamId,
           ratingEligible: false,
+          weatherSnapshot,
+          weatherCapturedAt:
+            participation.match.weatherCapturedAt ??
+            (weatherSnapshot ? input.now : undefined),
           updatedAt: input.now,
         })
         .where(and(eq(matches.id, input.matchId), eq(matches.status, "live"))),

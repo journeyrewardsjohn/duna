@@ -754,6 +754,33 @@ export const tournamentCompetitionSnapshotSchema = z.object({
 export type TournamentCompetitionSnapshot = z.infer<
   typeof tournamentCompetitionSnapshotSchema
 >;
+export const matchWeatherSnapshotSchema = z.object({
+  provider: z.literal("Tomorrow.io"),
+  source: z.enum([
+    "realtime",
+    "recent-history",
+    "timeline-history",
+    "historical-reanalysis",
+  ]),
+  matchTime: z.iso.datetime(),
+  observedAt: z.iso.datetime(),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  condition: z.string(),
+  weatherCode: z.number().optional(),
+  temperatureC: z.number().optional(),
+  apparentTemperatureC: z.number().optional(),
+  humidityPercent: z.number().min(0).max(100).optional(),
+  precipitationProbabilityPercent: z.number().min(0).max(100).optional(),
+  precipitationIntensityMmPerHour: z.number().nonnegative().optional(),
+  precipitationAccumulationMm: z.number().nonnegative().optional(),
+  rainIntensityMmPerHour: z.number().nonnegative().optional(),
+  cloudCoverPercent: z.number().min(0).max(100).optional(),
+  windSpeedKph: z.number().nonnegative().optional(),
+  windGustKph: z.number().nonnegative().optional(),
+  windDirectionDegrees: z.number().min(0).max(360).optional(),
+  uvIndex: z.number().nonnegative().optional(),
+});
 export const matchSummarySchema = z.object({
   id: z.string(),
   status: z
@@ -797,6 +824,7 @@ export const matchSummarySchema = z.object({
       longitude: z.number().optional(),
     })
     .optional(),
+  weather: matchWeatherSnapshotSchema.optional(),
   prediction: z
     .object({
       teamA: z.number().min(0).max(100),

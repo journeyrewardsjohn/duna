@@ -1,7 +1,8 @@
-import { formatVenueTime } from "@duna/core";
+import { formatVenueTime, type MatchWeatherSnapshot } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowLeft,
+  CloudSun,
   ExternalLink,
   MapPin,
   Radio,
@@ -17,6 +18,36 @@ import { PredictionMarketDetail } from "@/components/prediction-market";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Match result" };
+
+function weatherSummary(weather: MatchWeatherSnapshot) {
+  const details = [
+    weather.windSpeedKph !== undefined
+      ? `${Math.round(weather.windSpeedKph * 0.621371)} mph wind`
+      : undefined,
+    weather.precipitationProbabilityPercent !== undefined
+      ? `${Math.round(weather.precipitationProbabilityPercent)}% rain chance`
+      : weather.precipitationAccumulationMm !== undefined
+        ? `${weather.precipitationAccumulationMm.toFixed(1)} mm precipitation`
+        : undefined,
+    weather.cloudCoverPercent !== undefined
+      ? `${Math.round(weather.cloudCoverPercent)}% cloud cover`
+      : undefined,
+    weather.uvIndex !== undefined
+      ? `UV ${Math.round(weather.uvIndex)}`
+      : undefined,
+  ].filter(Boolean);
+  return {
+    headline: [
+      weather.temperatureC !== undefined
+        ? `${Math.round((weather.temperatureC * 9) / 5 + 32)}°F`
+        : undefined,
+      weather.condition,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    detail: [...details, "Tomorrow.io"].join(" · "),
+  };
+}
 
 function percentage(value: number | undefined) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : undefined;
@@ -94,6 +125,7 @@ export default async function MatchPage({
     ],
   );
   const explanation = ratingExplanation(match);
+  const weather = match.weather ? weatherSummary(match.weather) : undefined;
   return (
     <main className="standard-page match-detail">
       <header className="match-detail__header">
@@ -220,6 +252,15 @@ export default async function MatchPage({
             <small>Verification basis</small>
           </span>
         </article>
+        {weather && (
+          <article>
+            <CloudSun aria-hidden size={21} />
+            <span>
+              <strong>{weather.headline}</strong>
+              <small>{weather.detail}</small>
+            </span>
+          </article>
+        )}
         {match.prediction && (
           <article
             className={

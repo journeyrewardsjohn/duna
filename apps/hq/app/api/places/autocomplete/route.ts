@@ -37,7 +37,6 @@ export async function GET(request: Request) {
       },
       body: JSON.stringify({
         input: query,
-        includedRegionCodes: ["us", "ca", "au", "br"],
       }),
       cache: "no-store",
     },

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { MatchWeatherSnapshot } from "@duna/core";
 import {
   type AnyPgColumn,
   bigint,
@@ -3861,6 +3862,13 @@ export const matches = pgTable(
       mode: "date",
     }),
     format: jsonb("format").notNull().$type<Record<string, unknown>>(),
+    // Captured once from the match's exact time and coordinates. Never replace
+    // this with a later current forecast when rendering historical results.
+    weatherSnapshot: jsonb("weather_snapshot").$type<MatchWeatherSnapshot>(),
+    weatherCapturedAt: timestamp("weather_captured_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     assignedScorekeeperPersonId: uuid(
       "assigned_scorekeeper_person_id",
     ).references(() => people.id),

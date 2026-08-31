@@ -1,3 +1,4 @@
+import type { MatchWeatherSnapshot } from "@duna/core";
 import type {
   WeatherForecast,
   WeatherForecastDay,
@@ -6,6 +7,10 @@ import type {
 
 const TOMORROW_TIMELINES_URL = "https://api.tomorrow.io/v4/timelines";
 const TOMORROW_FORECAST_URL = "https://api.tomorrow.io/v4/weather/forecast";
+const TOMORROW_REALTIME_URL = "https://api.tomorrow.io/v4/weather/realtime";
+const TOMORROW_RECENT_HISTORY_URL =
+  "https://api.tomorrow.io/v4/weather/history/recent";
+const TOMORROW_HISTORICAL_URL = "https://api.tomorrow.io/v4/historical";
 const GOOGLE_PLACES_AUTOCOMPLETE_URL =
   "https://places.googleapis.com/v1/places:autocomplete";
 const GOOGLE_PLACES_DETAILS_URL = "https://places.googleapis.com/v1/places";
@@ -14,6 +19,10 @@ const TOMORROW_STANDARD_FORECAST_HORIZON_MS = 5 * 24 * 60 * 60_000;
 export const WEATHER_FORECAST_HORIZON_MS = 14 * 24 * 60 * 60_000;
 const LOCATION_CACHE_MS = 7 * 24 * 60 * 60_000;
 const LOCATION_MISS_CACHE_MS = 30 * 60_000;
+const MATCH_REALTIME_WINDOW_MS = 5 * 60_000;
+const MATCH_RECENT_HISTORY_WINDOW_MS = 24 * 60 * 60_000;
+const MATCH_TIMELINE_HISTORY_WINDOW_MS = 7 * 24 * 60 * 60_000;
+const MATCH_WEATHER_FUTURE_TOLERANCE_MS = 10 * 60_000;
 
 type CacheEntry = {
   readonly expiresAt: number;
@@ -66,6 +75,10 @@ type TomorrowForecastResponse = {
     readonly hourly?: readonly TimelineInterval[];
     readonly daily?: readonly TimelineInterval[];
   };
+};
+
+type TomorrowRealtimeResponse = {
+  readonly data?: TimelineInterval;
 };
 
 type GoogleAutocompleteResponse = {
@@ -188,7 +201,6 @@ export async function resolveWeatherCoordinates(input: {
         },
         body: JSON.stringify({
           input: query,
-          includedRegionCodes: ["us", "ca", "au", "br"],
         }),
         signal: controller.signal,
       });
@@ -368,6 +380,268 @@ export function weatherPresentation(code: number | undefined): {
       return { condition: "Thunderstorms", icon: "storm" };
     default:
       return { condition: "Forecast pending", icon: "unknown" };
+  }
+}
+
+function boundedNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | undefined {
+  const number = finiteNumber(value);
+  return number === undefined
+    ? undefined
+    : Math.min(maximum, Math.max(minimum, number));
+}
+
+function nonnegativeNumber(value: unknown): number | undefined {
+  const number = finiteNumber(value);
+  return number === undefined ? undefined : Math.max(0, number);
+}
+
+function matchWeatherCondition(
+  values: Readonly<Record<string, unknown>>,
+): string {
+  const weatherCode = finiteNumber(values.weatherCode);
+  if (weatherCode !== undefined) {
+    return weatherPresentation(weatherCode).condition;
+  }
+  const rainIntensity =
+    nonnegativeNumber(values.rainIntensity) ??
+    nonnegativeNumber(values.precipitationIntensity);
+  const precipitationAccumulation = nonnegativeNumber(
+    values.precipitationAccumulation,
+  );
+  if (
+    (rainIntensity !== undefined && rainIntensity > 0) ||
+    (precipitationAccumulation !== undefined && precipitationAccumulation > 0)
+  ) {
+    return "Rain";
+  }
+  const cloudCover = boundedNumber(values.cloudCover, 0, 100);
+  if (cloudCover === undefined) return "Conditions recorded";
+  if (cloudCover <= 15) return "Clear";
+  if (cloudCover <= 40) return "Mostly clear";
+  if (cloudCover <= 70) return "Partly cloudy";
+  if (cloudCover <= 90) return "Mostly cloudy";
+  return "Cloudy";
+}
+
+function nearestInterval(
+  intervals: readonly TimelineInterval[],
+  instant: Date,
+): TimelineInterval | undefined {
+  return intervals
+    .flatMap((interval) => {
+      const observedAt =
+        isoString(interval.time) ?? isoString(interval.startTime);
+      return observedAt ? [{ interval, observedAt }] : [];
+    })
+    .sort(
+      (left, right) =>
+        Math.abs(Date.parse(left.observedAt) - instant.getTime()) -
+        Math.abs(Date.parse(right.observedAt) - instant.getTime()),
+    )[0]?.interval;
+}
+
+function normalizeMatchWeatherSnapshot(input: {
+  readonly interval: TimelineInterval | undefined;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly matchTime: Date;
+  readonly source: MatchWeatherSnapshot["source"];
+}): MatchWeatherSnapshot | undefined {
+  if (!input.interval) return undefined;
+  const observedAt =
+    isoString(input.interval.time) ?? isoString(input.interval.startTime);
+  if (!observedAt) return undefined;
+  const values = input.interval.values ?? {};
+  const weatherCode = finiteNumber(values.weatherCode);
+  const temperatureC = finiteNumber(values.temperature);
+  const apparentTemperatureC = finiteNumber(values.temperatureApparent);
+  const humidityPercent = boundedNumber(values.humidity, 0, 100);
+  const precipitationProbabilityPercent = boundedNumber(
+    values.precipitationProbability,
+    0,
+    100,
+  );
+  const precipitationIntensityMmPerHour = nonnegativeNumber(
+    values.precipitationIntensity,
+  );
+  const precipitationAccumulationMm = nonnegativeNumber(
+    values.precipitationAccumulation,
+  );
+  const rainIntensityMmPerHour = nonnegativeNumber(values.rainIntensity);
+  const cloudCoverPercent = boundedNumber(values.cloudCover, 0, 100);
+  const windSpeedKph = metricWindKph(values.windSpeed);
+  const windGustKph = metricWindKph(values.windGust);
+  const windDirection = finiteNumber(values.windDirection);
+  const windDirectionDegrees =
+    windDirection === undefined ? undefined : normalizeDegrees(windDirection);
+  const uvIndex = nonnegativeNumber(values.uvIndex);
+  if (
+    [
+      weatherCode,
+      temperatureC,
+      apparentTemperatureC,
+      humidityPercent,
+      precipitationProbabilityPercent,
+      precipitationIntensityMmPerHour,
+      precipitationAccumulationMm,
+      rainIntensityMmPerHour,
+      cloudCoverPercent,
+      windSpeedKph,
+      windGustKph,
+      windDirectionDegrees,
+      uvIndex,
+    ].every((value) => value === undefined)
+  ) {
+    return undefined;
+  }
+  return {
+    provider: "Tomorrow.io",
+    source: input.source,
+    matchTime: input.matchTime.toISOString(),
+    observedAt,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    condition: matchWeatherCondition(values),
+    weatherCode,
+    temperatureC,
+    apparentTemperatureC,
+    humidityPercent,
+    precipitationProbabilityPercent,
+    precipitationIntensityMmPerHour,
+    precipitationAccumulationMm,
+    rainIntensityMmPerHour,
+    cloudCoverPercent,
+    windSpeedKph,
+    windGustKph,
+    windDirectionDegrees,
+    uvIndex,
+  };
+}
+
+/**
+ * Captures one immutable weather observation for a stored match. Requests are
+ * deliberately split by provider data window so an old match never receives
+ * today's realtime conditions or a future forecast presented as history.
+ */
+export async function captureMatchWeatherSnapshot(input: {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly matchTime: Date;
+  readonly now?: Date;
+}): Promise<MatchWeatherSnapshot | undefined> {
+  const apiKey = process.env.TOMORROW_IO_API_KEY?.trim();
+  if (!apiKey) return undefined;
+  const now = input.now ?? new Date();
+  const age = now.getTime() - input.matchTime.getTime();
+  if (age < -MATCH_WEATHER_FUTURE_TOLERANCE_MS) return undefined;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6_000);
+  try {
+    if (age <= MATCH_REALTIME_WINDOW_MS) {
+      const url = new URL(TOMORROW_REALTIME_URL);
+      url.searchParams.set("location", `${input.latitude},${input.longitude}`);
+      url.searchParams.set("units", "metric");
+      url.searchParams.set("apikey", apiKey);
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) return undefined;
+      const payload = (await response.json()) as TomorrowRealtimeResponse;
+      return normalizeMatchWeatherSnapshot({
+        interval: payload.data,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        matchTime: input.matchTime,
+        source: "realtime",
+      });
+    }
+
+    if (age <= MATCH_RECENT_HISTORY_WINDOW_MS) {
+      const url = new URL(TOMORROW_RECENT_HISTORY_URL);
+      url.searchParams.set("location", `${input.latitude},${input.longitude}`);
+      url.searchParams.set("timesteps", "1h");
+      url.searchParams.set("units", "metric");
+      url.searchParams.set("apikey", apiKey);
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) return undefined;
+      const payload = (await response.json()) as TomorrowForecastResponse;
+      return normalizeMatchWeatherSnapshot({
+        interval: nearestInterval(
+          payload.timelines?.hourly ?? [],
+          input.matchTime,
+        ),
+        latitude: input.latitude,
+        longitude: input.longitude,
+        matchTime: input.matchTime,
+        source: "recent-history",
+      });
+    }
+
+    const startTime = new Date(input.matchTime.getTime() - 30 * 60_000);
+    const endTime = new Date(input.matchTime.getTime() + 30 * 60_000);
+    const historical = age > MATCH_TIMELINE_HISTORY_WINDOW_MS;
+    const response = await fetch(
+      historical
+        ? `${TOMORROW_HISTORICAL_URL}?apikey=${encodeURIComponent(apiKey)}`
+        : `${TOMORROW_TIMELINES_URL}?apikey=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          location: [input.latitude, input.longitude],
+          fields: historical
+            ? [
+                "temperature",
+                "humidity",
+                "windSpeed",
+                "windDirection",
+                "windGust",
+                "precipitationAccumulation",
+                "cloudCover",
+              ]
+            : [
+                "temperature",
+                "temperatureApparent",
+                "humidity",
+                "precipitationProbability",
+                "precipitationIntensity",
+                "precipitationAccumulation",
+                "rainIntensity",
+                "cloudCover",
+                "windSpeed",
+                "windGust",
+                "windDirection",
+                "uvIndex",
+                "weatherCode",
+              ],
+          timesteps: ["1h"],
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          units: "metric",
+          timezone: "UTC",
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) return undefined;
+    const payload = (await response.json()) as TomorrowTimelineResponse;
+    const intervals =
+      payload.data?.timelines?.find((timeline) => timeline.timestep === "1h")
+        ?.intervals ?? [];
+    return normalizeMatchWeatherSnapshot({
+      interval: nearestInterval(intervals, input.matchTime),
+      latitude: input.latitude,
+      longitude: input.longitude,
+      matchTime: input.matchTime,
+      source: historical ? "historical-reanalysis" : "timeline-history",
+    });
+  } catch {
+    // Weather enrichment is best effort and must never block recording a match.
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
