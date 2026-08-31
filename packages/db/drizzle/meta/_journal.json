@@ -715,6 +715,13 @@
       "when": 1788125629254,
       "tag": "0101_strange_norrin_radd",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1788186535210,
+      "tag": "0102_rare_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

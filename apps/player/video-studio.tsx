@@ -8,6 +8,7 @@ import {
 import type { DunaTheme } from "@duna/ui/tokens";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
+import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -24,6 +25,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -79,6 +81,7 @@ import {
   moveAntennaAnchor,
   moveCourtCorner,
   moveNetTopAnchor,
+  moveNetTopLine,
   toggleAntennas,
   visibleCornerCount,
   withFullCourtVisible,
@@ -109,6 +112,7 @@ import {
 import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
 import { startDunaLiveActivity } from "./live-activities";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
+import type { ProvisionalParticipant } from "./score-upload";
 import {
   acknowledgeLegacyVisionConsentRevocation,
   createVisionLearningConsentReceipt,
@@ -396,10 +400,27 @@ function formatBytes(bytes: number): string {
 }
 
 function displayError(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "Duna could not complete that video request.";
+  const payload =
+    typeof error === "object" && error !== null
+      ? (error as { readonly code?: unknown; readonly message?: unknown })
+      : undefined;
+  const code = typeof payload?.code === "string" ? payload.code : "";
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof payload?.message === "string"
+        ? payload.message
+        : "";
+  const message = rawMessage.trim();
+  if (
+    code === "ERR_DUNA_VIDEO_PICKER" ||
+    code === "ERR_DUNA_VIDEO_EXPORT" ||
+    message.includes("ERR_DUNA_VIDEO_PICKER") ||
+    message.includes("ERR_DUNA_VIDEO_EXPORT")
+  ) {
+    return "That video could not be read from Photos. Download it to this iPhone if it is stored in iCloud, then choose it again.";
   }
-  const message = error.message.trim();
+  if (!message) return "Duna could not complete that video request.";
   if (
     message.includes("new_asset_settings.passthrough") ||
     /^\d{3}\s*\{/.test(message)
@@ -2266,6 +2287,10 @@ function AssociationPicker({
   );
 }
 
+type QuickMatchParticipant =
+  | { readonly kind: "duna"; readonly person: PersonSummary }
+  | ProvisionalParticipant;
+
 function QuickRecordingMatchSetup({
   client,
   host,
@@ -2279,11 +2304,23 @@ function QuickRecordingMatchSetup({
   readonly onCreated: (association: VideoAssociation) => void;
   readonly venue?: VenueSelection;
 }) {
-  const [players, setPlayers] = useState<readonly PersonSummary[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(true);
+  const [players, setPlayers] = useState<
+    readonly (QuickMatchParticipant | undefined)[]
+  >([undefined, undefined, undefined]);
+  const [pickerTarget, setPickerTarget] = useState<number>();
+  const [guestTarget, setGuestTarget] = useState<number>();
+  const [guestGivenName, setGuestGivenName] = useState("");
+  const [guestFamilyName, setGuestFamilyName] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const quickPlayerName = (participant: QuickMatchParticipant | undefined) =>
+    participant?.kind === "duna"
+      ? participant.person.displayName
+      : participant
+        ? `${participant.givenName} ${participant.familyName}`
+        : undefined;
+  const rosterComplete = players.every(Boolean);
 
   const create = async () => {
     const [partner, opponentA, opponentB] = players;
@@ -2296,11 +2333,34 @@ function QuickRecordingMatchSetup({
         deviceId = `video-${Crypto.randomUUID()}`;
         await AsyncStorage.setItem(videoMatchDeviceKey, deviceId);
       }
-      const teamAIds = [host.id, partner.id];
-      const teamBIds = [opponentA.id, opponentB.id];
+      const teamAIds = [
+        host.id,
+        ...(partner.kind === "duna" ? [partner.person.id] : []),
+      ];
+      const teamBIds = [opponentA, opponentB].flatMap((participant) =>
+        participant.kind === "duna" ? [participant.person.id] : [],
+      );
+      const provisionalParticipants = [
+        { participant: partner, side: "A" as const },
+        { participant: opponentA, side: "B" as const },
+        { participant: opponentB, side: "B" as const },
+      ].flatMap(({ participant, side }) =>
+        participant.kind === "provisional"
+          ? [
+              {
+                side,
+                givenName: participant.givenName,
+                familyName: participant.familyName,
+                email: participant.email,
+                phoneE164: participant.phoneE164,
+              },
+            ]
+          : [],
+      );
       const scoring = await client.player.startMatch.mutate({
         teamAIds,
         teamBIds,
+        provisionalParticipants,
         venueId: venue?.venueId,
         scoringSystem: "rally",
         matchType: "competitive",
@@ -2310,6 +2370,24 @@ function QuickRecordingMatchSetup({
         deviceId,
         idempotencyKey: idempotencyKey(),
       });
+      if (scoring.participantClaims?.shareUrl) {
+        const shareUrl = scoring.participantClaims.shareUrl;
+        Alert.alert(
+          "Guest claim link ready",
+          "The match stays private and unrated until every guest claims their place.",
+          [
+            { text: "Share later", style: "cancel" },
+            {
+              text: "Share now",
+              onPress: () =>
+                void Share.share({
+                  message: `Claim your player place in our Duna match.\n${shareUrl}`,
+                  url: shareUrl,
+                }),
+            },
+          ],
+        );
+      }
       onCreated({
         type: "match",
         id: scoring.matchId,
@@ -2332,19 +2410,116 @@ function QuickRecordingMatchSetup({
     }
   };
 
-  if (pickerOpen) {
+  if (pickerTarget !== undefined) {
     return (
       <PlayerPickerModal
         embedded
-        excludedPersonIds={[host.id]}
-        maxSelected={3}
-        onChange={setPlayers}
-        onClose={() => setPickerOpen(false)}
+        excludedPersonIds={[
+          host.id,
+          ...players.flatMap((participant, index) =>
+            index !== pickerTarget && participant?.kind === "duna"
+              ? [participant.person.id]
+              : [],
+          ),
+        ]}
+        maxSelected={1}
+        onAddProvisional={() => {
+          setGuestTarget(pickerTarget);
+          setPickerTarget(undefined);
+        }}
+        onChange={(selected) => {
+          const person = selected[0];
+          if (!person) return;
+          setPlayers((current) =>
+            current.map((participant, index) =>
+              index === pickerTarget ? { kind: "duna", person } : participant,
+            ),
+          );
+        }}
+        onClose={() => setPickerTarget(undefined)}
         palette={importedPlayerPalette}
-        selected={players}
-        title="Choose partner, then two opponents"
+        selected={
+          players[pickerTarget]?.kind === "duna"
+            ? [players[pickerTarget].person]
+            : []
+        }
+        title={
+          pickerTarget === 0
+            ? "Choose your partner"
+            : `Choose opponent ${pickerTarget}`
+        }
         visible
       />
+    );
+  }
+
+  if (guestTarget !== undefined) {
+    const saveGuest = () => {
+      const givenName = guestGivenName.trim();
+      const familyName = guestFamilyName.trim();
+      if (!givenName || !familyName) {
+        setError("Add the guest's first and last name.");
+        return;
+      }
+      setPlayers((current) =>
+        current.map((participant, index) =>
+          index === guestTarget
+            ? {
+                kind: "provisional",
+                id: Crypto.randomUUID(),
+                givenName,
+                familyName,
+              }
+            : participant,
+        ),
+      );
+      setGuestGivenName("");
+      setGuestFamilyName("");
+      setGuestTarget(undefined);
+      setError(undefined);
+    };
+    return (
+      <SafeAreaView style={styles.quickMatchSafe}>
+        <View style={styles.quickMatchHeader}>
+          <Pressable
+            onPress={() => setGuestTarget(undefined)}
+            style={styles.headerTap}
+          >
+            <Text style={styles.headerAction}>Back</Text>
+          </Pressable>
+          <Text style={styles.modalTitle}>Add guest</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <ScrollView contentContainerStyle={styles.quickMatchContent}>
+          <Text style={styles.formTitle}>Who is playing?</Text>
+          <Text style={styles.formIntro}>
+            No email or phone is required. Duna will create one share link so
+            they can claim and correct their player place later.
+          </Text>
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setGuestGivenName}
+            placeholder="First name"
+            placeholderTextColor="#98a2b3"
+            style={styles.input}
+            value={guestGivenName}
+          />
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setGuestFamilyName}
+            placeholder="Last name"
+            placeholderTextColor="#98a2b3"
+            style={styles.input}
+            value={guestFamilyName}
+          />
+          {!!error && <Text style={styles.errorText}>{error}</Text>}
+        </ScrollView>
+        <View style={styles.modalFooter}>
+          <Pressable onPress={saveGuest} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>Add guest player</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -2371,27 +2546,37 @@ function QuickRecordingMatchSetup({
             <Text style={styles.quickMatchTeamLabel}>YOUR TEAM</Text>
             <Text style={styles.quickMatchPlayer}>{host.displayName}</Text>
             <Text style={styles.quickMatchPlayer}>
-              {players[0]?.displayName ?? "Choose your partner"}
+              {quickPlayerName(players[0]) ?? "Choose your partner"}
             </Text>
           </View>
           <View style={styles.quickMatchTeamCard}>
             <Text style={styles.quickMatchTeamLabel}>OPPONENTS</Text>
             <Text style={styles.quickMatchPlayer}>
-              {players[1]?.displayName ?? "Choose opponent"}
+              {quickPlayerName(players[1]) ?? "Choose opponent"}
             </Text>
             <Text style={styles.quickMatchPlayer}>
-              {players[2]?.displayName ?? "Choose opponent"}
+              {quickPlayerName(players[2]) ?? "Choose opponent"}
             </Text>
           </View>
         </View>
-        <Pressable
-          onPress={() => setPickerOpen(true)}
-          style={styles.quickMatchChoose}
-        >
-          <Text style={styles.quickMatchChooseText}>
-            {players.length === 3 ? "Change players" : "Choose 3 players"}
-          </Text>
-        </Pressable>
+        {["Partner", "Opponent 1", "Opponent 2"].map((label, index) => (
+          <Pressable
+            key={label}
+            onPress={() => setPickerTarget(index)}
+            style={styles.quickMatchChoose}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.quickMatchChooseText}>{label}</Text>
+              <Text style={styles.quickMatchPlayer}>
+                {quickPlayerName(players[index]) ??
+                  "Choose a Duna player or add a guest"}
+              </Text>
+            </View>
+            <Text style={styles.textAction}>
+              {players[index] ? "Change" : "Add"}
+            </Text>
+          </Pressable>
+        ))}
         <View style={styles.quickMatchConsent}>
           <View style={styles.flex}>
             <Text style={styles.quickMatchConsentTitle}>
@@ -2407,11 +2592,11 @@ function QuickRecordingMatchSetup({
       </ScrollView>
       <View style={styles.modalFooter}>
         <Pressable
-          disabled={busy || players.length !== 3 || !consent}
+          disabled={busy || !rosterComplete || !consent}
           onPress={() => void create()}
           style={[
             styles.primaryButton,
-            (busy || players.length !== 3 || !consent) && styles.disabled,
+            (busy || !rosterComplete || !consent) && styles.disabled,
           ]}
         >
           {busy ? (
@@ -3218,29 +3403,39 @@ function CalibrationAnchor({
   readonly tone?: "court" | "net" | "antenna";
 }) {
   const start = useRef(point);
-  start.current = point;
+  const pointRef = useRef(point);
+  const onMoveRef = useRef(onMove);
+  const sizeRef = useRef(size);
+  pointRef.current = point;
+  onMoveRef.current = onMove;
+  sizeRef.current = size;
   const responder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
-          start.current = point;
+          start.current = pointRef.current;
         },
         onPanResponderMove: (_event, gesture) => {
-          if (size.width <= 0 || size.height <= 0) return;
-          onMove({
+          const currentSize = sizeRef.current;
+          if (currentSize.width <= 0 || currentSize.height <= 0) return;
+          onMoveRef.current({
             x: Math.max(
               -1.5,
-              Math.min(2.5, start.current.x + gesture.dx / size.width),
+              Math.min(2.5, start.current.x + gesture.dx / currentSize.width),
             ),
             y: Math.max(
               -1.5,
-              Math.min(2.5, start.current.y + gesture.dy / size.height),
+              Math.min(2.5, start.current.y + gesture.dy / currentSize.height),
             ),
           });
         },
+        onPanResponderTerminationRequest: () => false,
       }),
-    [onMove, point, size.height, size.width],
+    [],
   );
   const display = clampedScreenPoint(point);
   const offscreen = !isCapturePointVisible(point);
@@ -3255,8 +3450,8 @@ function CalibrationAnchor({
         tone === "antenna" && styles.calibrationAnchorAntenna,
         offscreen && styles.calibrationAnchorOffscreen,
         {
-          left: display.x * size.width - 23,
-          top: display.y * size.height - 23,
+          left: display.x * size.width - 27,
+          top: display.y * size.height - 27,
         },
       ]}
     >
@@ -3337,6 +3532,19 @@ function CourtCalibrationEditor({
             tone="net"
           />
         ))}
+      {size.width > 0 && geometry.netTopLine && (
+        <CalibrationAnchor
+          label="MOVE NET"
+          onMove={(next) => onChange(moveNetTopLine(geometry, next))}
+          point={interpolatePoint(
+            geometry.netTopLine[0],
+            geometry.netTopLine[1],
+            0.5,
+          )}
+          size={size}
+          tone="net"
+        />
+      )}
       {size.width > 0 &&
         geometry.antennaPoints?.map((anchor, index) => (
           <CalibrationAnchor
@@ -3463,15 +3671,19 @@ function CaptureExperience({
   form,
   mode,
   networkPreferences,
+  onActiveChange,
   onClose,
   onFallbackToRecord,
   onFinished,
   onRecorded,
+  onRestartOrientation,
+  preferSrt,
 }: {
   readonly client: DunaApiClient;
   readonly form: CaptureForm;
   readonly mode: "live" | "record";
   readonly networkPreferences: VideoNetworkPreferences;
+  readonly onActiveChange: (active: boolean) => void;
   readonly onClose: () => void;
   readonly onFallbackToRecord: () => void;
   readonly onFinished: () => Promise<void>;
@@ -3480,6 +3692,10 @@ function CaptureExperience({
     calibration: DunaCourtCalibration,
     visionSessionId?: string,
   ) => void;
+  readonly onRestartOrientation: (
+    orientation: "landscape" | "portrait",
+  ) => void;
+  readonly preferSrt: boolean;
 }) {
   const { height, width } = useWindowDimensions();
   const isLandscapeViewport = width > height;
@@ -3512,6 +3728,8 @@ function CaptureExperience({
   const [streamTransport, setStreamTransport] = useState<"srt" | "rtmps">();
   const [session, setSession] = useState<LiveVideoSession>();
   const [recording, setRecording] = useState(false);
+  const isActive =
+    recording || streamState === "connecting" || streamState === "live";
   const [orientationLockState, setOrientationLockState] = useState<
     "locking" | "ready" | "unavailable"
   >("locking");
@@ -3571,6 +3789,26 @@ function CaptureExperience({
   elapsedRef.current = elapsedSeconds;
   permissionRef.current = permissionsReady;
   busyRef.current = busy;
+
+  useEffect(() => {
+    onActiveChange(isActive || busy);
+    return () => onActiveChange(false);
+  }, [busy, isActive, onActiveChange]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    return BackHandler.addEventListener("hardwareBackPress", () => {
+      if (showRemote) {
+        setShowRemote(false);
+        return true;
+      }
+      if (calibrationDraft) {
+        setCalibrationDraft(undefined);
+        return true;
+      }
+      return isActive || busy;
+    }).remove;
+  }, [busy, calibrationDraft, isActive, showRemote]);
 
   useEffect(() => {
     if (Platform.OS === "web") {
@@ -3936,7 +4174,17 @@ function CaptureExperience({
 
   const start = async () => {
     if (!VideoCapture || busyRef.current || activeRef.current) return;
+    if (guidanceRef.current?.orientationMatches === false) {
+      const required = form.orientation;
+      const actual = guidanceRef.current.deviceOrientation;
+      setCaptureError(
+        `Rotate your phone to ${required} to start, or restart this recording in ${actual === "unknown" || !actual ? "the phone's current" : actual} mode.`,
+      );
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     busyRef.current = true;
+    onActiveChange(true);
     setBusy(true);
     setCaptureError(undefined);
     let createdSession: LiveVideoSession | undefined;
@@ -3998,10 +4246,10 @@ function CaptureExperience({
         }
         const srt = created.ingests.srt;
         const rtmps = created.ingests.rtmps;
-        const useSrt =
-          Boolean(srt) &&
-          connection.networkType !== "wifi" &&
-          connection.networkType !== "ethernet";
+        // Provider capability selects the preferred contribution protocol.
+        // The native encoder falls back to RTMPS if SRT cannot connect or
+        // drops; adaptive bitrate remains independent of this choice.
+        const useSrt = Boolean(srt) && preferSrt;
         await VideoCapture.startStream(
           useSrt ? srt!.url : rtmps.url,
           useSrt ? srt!.streamId : rtmps.streamKey,
@@ -4033,6 +4281,7 @@ function CaptureExperience({
     } finally {
       busyRef.current = false;
       setBusy(false);
+      if (!activeRef.current) onActiveChange(false);
     }
   };
 
@@ -4559,8 +4808,6 @@ function CaptureExperience({
     );
   }
 
-  const isActive =
-    recording || streamState === "connecting" || streamState === "live";
   return (
     <View style={styles.captureRoot}>
       {orientationLockState === "locking" ? (
@@ -4667,7 +4914,7 @@ function CaptureExperience({
         >
           <Pressable
             accessibilityLabel="Close camera guide"
-            disabled={isActive}
+            disabled={isActive || busy}
             onPress={() => void closeCapture()}
             style={styles.captureClose}
           >
@@ -4738,7 +4985,7 @@ function CaptureExperience({
                   </Text>
                   <Text numberOfLines={2} style={styles.guidanceWarning}>
                     {guidance?.orientationMatches === false
-                      ? `Turn the phone ${form.orientation} before starting.`
+                      ? `Rotate your phone to ${form.orientation} to start, or restart in ${guidance.deviceOrientation === "unknown" || !guidance.deviceOrientation ? "the phone's current" : guidance.deviceOrientation} mode.`
                       : (guidance?.warnings[0] ??
                         "Aim at the net and move slowly for a spatial lock.")}
                   </Text>
@@ -4747,6 +4994,22 @@ function CaptureExperience({
                   {guidance?.qualityScore ?? 0}
                 </Text>
               </View>
+              {guidance?.orientationMatches === false &&
+                guidance.deviceOrientation !== "unknown" &&
+                guidance.deviceOrientation && (
+                  <Pressable
+                    onPress={() =>
+                      onRestartOrientation(
+                        guidance.deviceOrientation as "landscape" | "portrait",
+                      )
+                    }
+                    style={styles.orientationRestartButton}
+                  >
+                    <Text style={styles.orientationRestartButtonText}>
+                      Restart in {guidance.deviceOrientation}
+                    </Text>
+                  </Pressable>
+                )}
               <View style={styles.guidanceSignals}>
                 <View style={styles.guidanceSignal}>
                   <Text style={styles.guidanceSignalText}>
@@ -4840,25 +5103,6 @@ function CaptureExperience({
                   {previewHidden ? "Show" : "Hide"}
                 </Text>
               </Pressable>
-              <Pressable
-                accessibilityLabel={
-                  visionSession.remoteConnected
-                    ? "Remote device connected"
-                    : "Connect a remote device"
-                }
-                onPress={() => setShowRemote(true)}
-                style={styles.remoteStatusPill}
-              >
-                <View
-                  style={[
-                    styles.remoteStatusDot,
-                    visionSession.remoteConnected && styles.remoteStatusDotLive,
-                  ]}
-                />
-                <Text style={styles.remoteStatusText}>
-                  {visionSession.remoteConnected ? "Remote" : "Connect"}
-                </Text>
-              </Pressable>
             </View>
           )}
           {session && streamState === "live" && (
@@ -4867,12 +5111,19 @@ function CaptureExperience({
             </Pressable>
           )}
           <Pressable
-            disabled={!permissionsReady || busy}
+            disabled={
+              !permissionsReady ||
+              busy ||
+              (!isActive && guidance?.orientationMatches === false)
+            }
             onPress={() => void (isActive ? stop() : start())}
             style={[
               styles.captureButton,
               isActive && styles.captureButtonStop,
-              (!permissionsReady || busy) && styles.disabled,
+              (!permissionsReady ||
+                busy ||
+                (!isActive && guidance?.orientationMatches === false)) &&
+                styles.disabled,
             ]}
           >
             {busy ? (
@@ -4891,12 +5142,16 @@ function CaptureExperience({
                       ? "End stream"
                       : "Stop recording"
                     : mode === "live"
-                      ? guidance?.acceptable
-                        ? "Lock + go live"
-                        : "Go live anyway"
-                      : guidance?.acceptable
-                        ? "Lock + record"
-                        : "Record anyway"}
+                      ? guidance?.orientationMatches === false
+                        ? `Rotate to ${form.orientation}`
+                        : guidance?.acceptable
+                          ? "Lock + go live"
+                          : "Go live"
+                      : guidance?.orientationMatches === false
+                        ? `Rotate to ${form.orientation}`
+                        : guidance?.acceptable
+                          ? "Lock + record"
+                          : "Record"}
                 </Text>
               </>
             )}
@@ -5750,6 +6005,14 @@ function VideoCard({
   return (
     <Pressable onPress={onPress} style={styles.videoCard}>
       <View style={styles.videoThumb}>
+        {video.posterUrl && (
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="cover"
+            source={{ uri: video.posterUrl }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
         <View style={styles.videoPlay}>
           <Text style={styles.videoPlayText}>▶</Text>
         </View>
@@ -5817,6 +6080,7 @@ export function VideoStudioScreen({
     "live" | "record" | "upload"
   >();
   const [captureMode, setCaptureMode] = useState<"live" | "record">();
+  const [captureActive, setCaptureActive] = useState(false);
   const [quickMatchOpen, setQuickMatchOpen] = useState(false);
   const [form, setForm] = useState<CaptureForm>(initialCaptureForm);
   const [savedCaptureDefaults, setSavedCaptureDefaults] =
@@ -5989,40 +6253,53 @@ export function VideoStudioScreen({
         "Duna is preparing a reliable local upload. You can keep using the app.",
     });
     try {
-      const selected = VideoCapture
-        ? await VideoCapture.pickVideo()
-        : await (async (): Promise<PreparedVideo | null> => {
-            const permission =
-              await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permission.granted) {
-              throw new Error(
-                "Photo library permission is needed to upload a video.",
-              );
-            }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["videos"],
-            });
-            const asset = result.assets?.[0];
-            if (result.canceled || !asset?.uri) return null;
-            if (!asset.fileSize || asset.fileSize <= 0) {
-              throw new Error("Duna could not read the selected video size.");
-            }
-            if (asset.mimeType && asset.mimeType !== "video/mp4") {
-              throw new Error(
-                "Android uploads currently require an MP4 video.",
-              );
-            }
-            return {
-              fileUri: asset.uri,
-              fileName: asset.fileName ?? `duna-upload-${Date.now()}.mp4`,
-              mimeType: "video/mp4",
-              bytes: asset.fileSize,
-              durationSeconds: Math.max(
-                1,
-                Math.ceil((asset.duration ?? 1_000) / 1_000),
-              ),
-            };
-          })();
+      const pickWithExpo = async (): Promise<PreparedVideo | null> => {
+        const permission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          throw new Error(
+            "Photo library permission is needed to upload a video.",
+          );
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["videos"],
+        });
+        const asset = result.assets?.[0];
+        if (result.canceled || !asset?.uri) return null;
+        const localFile = new File(asset.uri);
+        const bytes = asset.fileSize ?? localFile.size;
+        if (!bytes || bytes <= 0) {
+          throw new Error("Duna could not read the selected video size.");
+        }
+        const quickTime =
+          asset.mimeType === "video/quicktime" ||
+          asset.fileName?.toLowerCase().endsWith(".mov");
+        const mimeType = quickTime ? "video/quicktime" : "video/mp4";
+        const extension = quickTime ? "mov" : "mp4";
+        return {
+          fileUri: asset.uri,
+          fileName: asset.fileName ?? `duna-upload-${Date.now()}.${extension}`,
+          mimeType,
+          bytes,
+          durationSeconds: Math.max(
+            1,
+            Math.ceil((asset.duration ?? 1_000) / 1_000),
+          ),
+        };
+      };
+      let selected: PreparedVideo | null;
+      try {
+        // Expo's Photos picker is the most reliable route for iCloud-backed
+        // and very large library assets, and returns a durable local URI.
+        selected = await pickWithExpo();
+      } catch (expoError) {
+        if (Platform.OS !== "ios" || !VideoCapture) throw expoError;
+        try {
+          selected = await VideoCapture.pickVideo();
+        } catch (nativeError) {
+          throw nativeError instanceof Error ? nativeError : expoError;
+        }
+      }
       if (!selected) {
         reportTransfer(undefined);
         return;
@@ -6665,6 +6942,15 @@ export function VideoStudioScreen({
   );
   const closeVideoSurface = () => {
     if (captureMode) {
+      if (captureActive) {
+        Alert.alert(
+          captureMode === "live"
+            ? "End the live stream first"
+            : "Stop recording first",
+          "Duna is keeping the camera session open so the video can finish safely.",
+        );
+        return;
+      }
       VideoCapture?.releasePreview();
       setCaptureMode(undefined);
       return;
@@ -7007,10 +7293,12 @@ export function VideoStudioScreen({
           <CaptureExperience
             client={client}
             form={form}
-            key={captureMode}
+            key={`${captureMode}:${form.orientation}`}
             mode={captureMode}
             networkPreferences={networkPreferences}
+            onActiveChange={setCaptureActive}
             onClose={() => {
+              if (captureActive) return;
               VideoCapture?.releasePreview();
               setCaptureMode(undefined);
             }}
@@ -7027,6 +7315,11 @@ export function VideoStudioScreen({
               setCaptureMode(undefined);
               setDetailsMode("upload");
             }}
+            onRestartOrientation={(orientation) => {
+              if (captureActive) return;
+              setForm((current) => ({ ...current, orientation }));
+            }}
+            preferSrt={studio?.broadcast.activeClientIngest === "srt"}
           />
         )}
         {!captureMode &&
@@ -8191,12 +8484,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(201,169,106,0.24)",
     borderColor: palette.sand,
-    borderRadius: 23,
+    borderRadius: 27,
     borderWidth: 2,
-    height: 46,
+    height: 54,
     justifyContent: "center",
     position: "absolute",
-    width: 46,
+    width: 54,
     zIndex: 24,
   },
   calibrationAnchorNet: {
@@ -8561,6 +8854,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 13,
     marginTop: 2,
+  },
+  orientationRestartButton: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    borderColor: "rgba(255,255,255,0.38)",
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  orientationRestartButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
   },
   captureError: {
     alignSelf: "stretch",

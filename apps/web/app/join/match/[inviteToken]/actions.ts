@@ -4,12 +4,16 @@ import { getServerCaller } from "@/lib/api";
 
 export async function claimMatchParticipantInvitationAction(input: {
   readonly inviteToken: string;
+  readonly provisionalPersonId: string;
+  readonly correctedDisplayName?: string;
   readonly idempotencyKey: string;
 }) {
   try {
     const caller = await getServerCaller();
     const result = await caller.player.claimMatchParticipantInvitation({
       inviteToken: input.inviteToken,
+      provisionalPersonId: input.provisionalPersonId,
+      correctedDisplayName: input.correctedDisplayName,
       idempotencyKey: input.idempotencyKey,
     });
     return { ok: true as const, result };

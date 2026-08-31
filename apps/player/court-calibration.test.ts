@@ -8,6 +8,7 @@ import {
   moveAntennaAnchor,
   moveCourtCorner,
   moveNetTopAnchor,
+  moveNetTopLine,
   toggleAntennas,
   visibleCornerCount,
   withNearLineOffscreen,
@@ -68,6 +69,30 @@ describe("court calibration geometry", () => {
     });
     geometry = moveAntennaAnchor(geometry, 0, { x: 0.2, y: 0.12 });
     expect(geometry.antennaPoints![0]).toEqual({ x: 0.2, y: 0.12 });
+  });
+
+  it("moves the complete net and its antennas as one rigid guide", () => {
+    let geometry = toggleAntennas(geometryFromGuidance(undefined), true);
+    const originalNet = geometry.netTopLine ?? geometry.netLine;
+    const originalAntennas = geometry.antennaPoints!;
+    const center = {
+      x: (originalNet[0].x + originalNet[1].x) / 2 + 0.12,
+      y: (originalNet[0].y + originalNet[1].y) / 2 - 0.08,
+    };
+
+    geometry = moveNetTopLine(geometry, center);
+
+    expect(geometry.netTopLine![0]).toEqual({
+      x: originalNet[0].x + 0.12,
+      y: originalNet[0].y - 0.08,
+    });
+    expect(geometry.netTopLine![1].x - geometry.netTopLine![0].x).toBeCloseTo(
+      originalNet[1].x - originalNet[0].x,
+    );
+    expect(geometry.antennaPoints![1]).toEqual({
+      x: originalAntennas[1].x + 0.12,
+      y: originalAntennas[1].y - 0.08,
+    });
   });
 
   it("walks the player through each missing calibration signal", () => {

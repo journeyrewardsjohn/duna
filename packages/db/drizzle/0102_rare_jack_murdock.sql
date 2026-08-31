@@ -1,0 +1,1 @@
+ALTER TABLE "match_participant_invitations" DROP CONSTRAINT "match_participant_invitation_destination_present";

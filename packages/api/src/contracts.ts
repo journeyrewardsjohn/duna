@@ -2687,6 +2687,7 @@ export const videoSummarySchema = z.object({
   musicRemovalStatus: videoMusicRemovalStatusSchema,
   durationSeconds: z.number().int().nonnegative().optional(),
   bytes: z.number().int().nonnegative().optional(),
+  posterUrl: z.string().optional(),
   courtCalibration: courtCalibrationSchema.optional(),
   startedAt: z.iso.datetime().optional(),
   endedAt: z.iso.datetime().optional(),
@@ -6367,6 +6368,20 @@ export const matchScoringStateSchema = z.object({
       })
       .optional(),
   }),
+  participantClaims: z
+    .object({
+      shareUrl: z.string().url(),
+      pending: z
+        .array(
+          z.object({
+            personId: z.string().uuid(),
+            displayName: z.string(),
+            side: z.enum(["A", "B"]),
+          }),
+        )
+        .readonly(),
+    })
+    .optional(),
 });
 export const availableSlotSchema = z.object({
   startsAt: z.iso.datetime(),

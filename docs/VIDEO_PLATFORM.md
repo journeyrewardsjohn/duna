@@ -31,11 +31,13 @@ continues to work on supported browsers and inside the app.
    SRT ingest credentials only to that player. Recordings are preserved unless
    an explicit retention period is configured; Duna must never enable deletion
    until a durable archive/export policy is active.
-4. The native AVFoundation/HaishinKit bridge sends H.264/AAC over secure SRT on
-   cellular/field networks and RTMPS on Wi-Fi or Ethernet. SRT uses caller mode,
-   a provider-issued passphrase, 500 ms latency, and 25% recovery overhead. The
-   client automatically falls back to that session's RTMPS ingest if SRT cannot
-   connect or drops. Physical-device validation remains an activation gate.
+4. Provider policy selects secure SRT whenever the active Mux or Cloudflare
+   input exposes it; otherwise the client starts with RTMPS. SRT uses caller
+   mode, a provider-issued passphrase, 500 ms latency, and 25% recovery
+   overhead. The client automatically falls back to that same session's RTMPS
+   ingest if SRT cannot connect or drops. Adaptive bitrate responds to observed
+   network pressure independently; the network interface name is not treated
+   as a quality test. Physical-device validation remains an activation gate.
 5. Authenticated Cloudflare live notifications move the stream from draft to
    live and processing. Playback lazily reconciles the ready recording video ID
    because the recording is a separate Cloudflare resource.
@@ -114,7 +116,8 @@ Do not mix an untrusted remote call directly into the camera phone.
 
 ### Uploads
 
-1. iOS records an MP4 or converts a library selection to MP4 locally.
+1. iOS records an MP4 and imports locally retained MP4 or QuickTime/MOV assets
+   without forcing a long, failure-prone transcode before upload.
 2. The API creates a private R2 multipart upload.
 3. iOS stages file-backed 64 MiB ranges using a bounded copy buffer, then a
    background `URLSession` sends them to 24-hour presigned URLs. It persists

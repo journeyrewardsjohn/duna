@@ -2411,14 +2411,53 @@ private final class DunaVideoPicker: NSObject, PHPickerViewControllerDelegate {
         .appendingPathExtension(url.pathExtension)
       do {
         try FileManager.default.copyItem(at: url, to: source)
-        Self.transcode(source: source, promise: promise)
+        let extensionName = source.pathExtension.lowercased()
+        if extensionName == "mov" || extensionName == "mp4" {
+          Self.resolveSource(source: source, promise: promise)
+        } else {
+          Self.transcode(source: source, promise: promise)
+        }
       } catch {
         promise.reject(
           "ERR_DUNA_VIDEO_PICKER",
-          "The selected video could not be prepared."
+          "The selected video could not be prepared: \(error.localizedDescription)"
         )
       }
     }
+  }
+
+  private static func resolveSource(source: URL, promise: Promise) {
+    let asset = AVURLAsset(url: source)
+    let seconds = CMTimeGetSeconds(asset.duration)
+    guard seconds.isFinite, seconds > 0 else {
+      try? FileManager.default.removeItem(at: source)
+      promise.reject(
+        "ERR_DUNA_VIDEO_PICKER",
+        "The selected video does not contain a readable movie."
+      )
+      return
+    }
+    let attributes = try? FileManager.default.attributesOfItem(
+      atPath: source.path
+    )
+    let bytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+    guard bytes > 0 else {
+      try? FileManager.default.removeItem(at: source)
+      promise.reject(
+        "ERR_DUNA_VIDEO_PICKER",
+        "The selected video is empty."
+      )
+      return
+    }
+    promise.resolve([
+      "fileUri": source.absoluteString,
+      "fileName": source.lastPathComponent,
+      "mimeType": source.pathExtension.lowercased() == "mov"
+        ? "video/quicktime"
+        : "video/mp4",
+      "bytes": bytes,
+      "durationSeconds": max(1, Int(seconds.rounded()))
+    ])
   }
 
   private static func transcode(source: URL, promise: Promise) {

@@ -5702,10 +5702,6 @@ export const matchParticipantInvitations = pgTable(
       table.status,
     ),
     check(
-      "match_participant_invitation_destination_present",
-      sql`${table.invitedEmail} IS NOT NULL OR ${table.invitedPhoneE164} IS NOT NULL`,
-    ),
-    check(
       "match_participant_invitation_status_valid",
       sql`${table.status} IN ('pending', 'claimed', 'expired', 'cancelled')`,
     ),

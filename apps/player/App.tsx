@@ -60,6 +60,7 @@ import {
   ImageBackground,
   Linking,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -12743,6 +12744,12 @@ type LookingToPlayCandidate = Awaited<
   ReturnType<DunaApiClient["player"]["matchAvailabilityCandidates"]["query"]>
 >[number];
 
+type PickupGuest = {
+  readonly id: string;
+  readonly givenName: string;
+  readonly familyName: string;
+};
+
 function PickupModal({
   visible,
   onClose,
@@ -12785,7 +12792,11 @@ function PickupModal({
   const [selectedPlayers, setSelectedPlayers] = useState<
     readonly PersonSummary[]
   >([]);
+  const [guestPlayers, setGuestPlayers] = useState<readonly PickupGuest[]>([]);
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
+  const [showGuestEditor, setShowGuestEditor] = useState(false);
+  const [guestGivenName, setGuestGivenName] = useState("");
+  const [guestFamilyName, setGuestFamilyName] = useState("");
   const [published, setPublished] = useState<{
     readonly pickupSessionId: string;
     readonly title: string;
@@ -12936,6 +12947,9 @@ function PickupModal({
   function close() {
     setError(undefined);
     setShowPlayerPicker(false);
+    setShowGuestEditor(false);
+    setGuestGivenName("");
+    setGuestFamilyName("");
     setPlaceSelection(undefined);
     setHostSheetOpen(false);
     if (published) {
@@ -12945,6 +12959,7 @@ function PickupModal({
       setNote("");
       setStep(0);
       setSelectedPlayers([]);
+      setGuestPlayers([]);
       setCourtBookingId(undefined);
       setVenueId(undefined);
     }
@@ -12974,7 +12989,10 @@ function PickupModal({
       setError("Choose a future start time.");
       return;
     }
-    if (step === 2 && selectedPlayers.length + 1 > capacity) {
+    if (
+      step === 2 &&
+      selectedPlayers.length + guestPlayers.length + 1 > capacity
+    ) {
       setError("Remove a player or increase the match capacity.");
       return;
     }
@@ -13024,6 +13042,10 @@ function PickupModal({
         currency: "USD",
         recordMatches,
         participantPersonIds: selectedPlayers.map((player) => player.id),
+        provisionalParticipants: guestPlayers.map((guest) => ({
+          givenName: guest.givenName,
+          familyName: guest.familyName,
+        })),
         ratingMinimum:
           ratingEnabled && matchType === "competitive" ? ratingMin : undefined,
         ratingMaximum:
@@ -13052,6 +13074,9 @@ function PickupModal({
           playerNames: [
             host.displayName,
             ...selectedPlayers.map((player) => player.displayName),
+            ...guestPlayers.map(
+              (guest) => `${guest.givenName} ${guest.familyName}`,
+            ),
           ],
           detailsUrl: `${dunaWebUrl}/events/${event.slug}`,
         },
@@ -13120,7 +13145,11 @@ function PickupModal({
           <PlayerPickerModal
             embedded
             excludedPersonIds={[host.id]}
-            maxSelected={Math.max(1, capacity - 1)}
+            maxSelected={Math.max(1, capacity - guestPlayers.length - 1)}
+            onAddProvisional={() => {
+              setShowPlayerPicker(false);
+              setShowGuestEditor(true);
+            }}
             onChange={setSelectedPlayers}
             onClose={() => setShowPlayerPicker(false)}
             palette={colors}
@@ -13128,6 +13157,78 @@ function PickupModal({
             title="Add players"
             visible
           />
+        ) : showGuestEditor ? (
+          <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+            <View style={styles.hostFlowHeader}>
+              <Pressable
+                accessibilityLabel="Back to match players"
+                onPress={() => setShowGuestEditor(false)}
+                style={styles.hostFlowClose}
+              >
+                <DunaIcon color={colors.bone} name="arrow-left" size={22} />
+              </Pressable>
+              <View style={styles.flex}>
+                <Text style={styles.hostFlowEyebrow}>GUEST PLAYER</Text>
+                <Text style={styles.hostFlowHeaderTitle}>Add by name</Text>
+              </View>
+            </View>
+            <ScrollView contentContainerStyle={styles.hostFlowContent}>
+              <Text style={styles.hostFlowTitle}>Who is playing?</Text>
+              <Text style={styles.hostFlowBody}>
+                No email or phone is required. Their place remains private and
+                can be claimed when the match result is reported.
+              </Text>
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={setGuestGivenName}
+                placeholder="First name"
+                placeholderTextColor={colors.muted}
+                style={styles.hostFlowInput}
+                value={guestGivenName}
+              />
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={setGuestFamilyName}
+                placeholder="Last name"
+                placeholderTextColor={colors.muted}
+                style={styles.hostFlowInput}
+                value={guestFamilyName}
+              />
+              {!!error && <Text style={styles.formError}>{error}</Text>}
+            </ScrollView>
+            <View style={styles.hostFlowFooter}>
+              <Pressable
+                onPress={() => {
+                  const givenName = guestGivenName.trim();
+                  const familyName = guestFamilyName.trim();
+                  if (!givenName || !familyName) {
+                    setError("Add the guest's first and last name.");
+                    return;
+                  }
+                  if (
+                    selectedPlayers.length + guestPlayers.length + 1 >=
+                    capacity
+                  ) {
+                    setError("This match roster is full.");
+                    return;
+                  }
+                  setGuestPlayers((current) => [
+                    ...current,
+                    { id: Crypto.randomUUID(), givenName, familyName },
+                  ]);
+                  setGuestGivenName("");
+                  setGuestFamilyName("");
+                  setError(undefined);
+                  setShowGuestEditor(false);
+                }}
+                style={styles.hostFlowContinue}
+              >
+                <Text style={styles.hostFlowContinueText}>
+                  Add guest player
+                </Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
         ) : (
           <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
             <View style={styles.hostFlowHeader}>
@@ -13223,6 +13324,20 @@ function PickupModal({
                             setCapacity(nextCapacity);
                             setSelectedPlayers((current) =>
                               current.slice(0, nextCapacity - 1),
+                            );
+                            setGuestPlayers((current) =>
+                              current.slice(
+                                0,
+                                Math.max(
+                                  0,
+                                  nextCapacity -
+                                    1 -
+                                    Math.min(
+                                      selectedPlayers.length,
+                                      nextCapacity - 1,
+                                    ),
+                                ),
+                              ),
                             );
                           }}
                           style={[
@@ -13511,22 +13626,30 @@ function PickupModal({
                 <>
                   <Text style={styles.hostFlowTitle}>Who is playing?</Text>
                   <Text style={styles.hostFlowBody}>
-                    You are already in. Add known players now or leave places
-                    available for discovery.
+                    You are already in. Add Duna players, name a guest without
+                    an email or phone, or leave places open for discovery.
                   </Text>
                   <View style={styles.hostFlowRosterSummary}>
                     <View>
                       <Text style={styles.hostFlowRosterCount}>
-                        {selectedPlayers.length + 1} / {capacity}
+                        {selectedPlayers.length + guestPlayers.length + 1} /{" "}
+                        {capacity}
                       </Text>
                       <Text style={styles.hostFlowRosterMeta}>
-                        {capacity - selectedPlayers.length - 1} places available
+                        {capacity -
+                          selectedPlayers.length -
+                          guestPlayers.length -
+                          1}{" "}
+                        places available
                       </Text>
                     </View>
                     <Pressable
                       accessibilityLabel="Add players"
                       accessibilityRole="button"
-                      disabled={selectedPlayers.length >= capacity - 1}
+                      disabled={
+                        selectedPlayers.length + guestPlayers.length >=
+                        capacity - 1
+                      }
                       onPress={() => setShowPlayerPicker(true)}
                       style={styles.hostFlowAddPlayers}
                     >
@@ -13535,6 +13658,20 @@ function PickupModal({
                       </Text>
                     </Pressable>
                   </View>
+                  <Pressable
+                    accessibilityLabel="Add a guest by name"
+                    accessibilityRole="button"
+                    disabled={
+                      selectedPlayers.length + guestPlayers.length >=
+                      capacity - 1
+                    }
+                    onPress={() => setShowGuestEditor(true)}
+                    style={styles.hostFlowAddPlayers}
+                  >
+                    <Text style={styles.hostFlowAddPlayersText}>
+                      ＋ Add guest without contact details
+                    </Text>
+                  </Pressable>
                   <View style={styles.hostFlowLookingSection}>
                     <View style={styles.hostFlowLookingHeader}>
                       <View style={styles.flex}>
@@ -13560,7 +13697,9 @@ function PickupModal({
                       const selected = selectedPlayers.some(
                         (player) => player.id === candidate.person.id,
                       );
-                      const full = selectedPlayers.length >= capacity - 1;
+                      const full =
+                        selectedPlayers.length + guestPlayers.length >=
+                        capacity - 1;
                       return (
                         <View
                           key={candidate.postId}
@@ -13670,14 +13809,55 @@ function PickupModal({
                         )}
                       </View>
                     ))}
+                    {guestPlayers.map((guest) => {
+                      const displayName = `${guest.givenName} ${guest.familyName}`;
+                      return (
+                        <View key={guest.id} style={styles.hostFlowPlayerRow}>
+                          <View style={styles.hostFlowPlayerAvatarFallback}>
+                            <Text style={styles.hostFlowPlayerAvatarText}>
+                              {`${guest.givenName[0] ?? ""}${guest.familyName[0] ?? ""}`.toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.flex}>
+                            <Text style={styles.hostFlowPlayerName}>
+                              {displayName}
+                            </Text>
+                            <Text style={styles.hostFlowPlayerMeta}>
+                              Guest · claim after the result is reported
+                            </Text>
+                          </View>
+                          <Pressable
+                            accessibilityLabel={`Remove ${displayName}`}
+                            onPress={() =>
+                              setGuestPlayers((current) =>
+                                current.filter(
+                                  (candidate) => candidate.id !== guest.id,
+                                ),
+                              )
+                            }
+                            style={styles.hostFlowRemovePlayer}
+                          >
+                            <Text style={styles.hostFlowRemovePlayerText}>
+                              ×
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
                     {Array.from({
                       length: Math.min(
                         4,
-                        Math.max(0, capacity - selectedPlayers.length - 1),
+                        Math.max(
+                          0,
+                          capacity -
+                            selectedPlayers.length -
+                            guestPlayers.length -
+                            1,
+                        ),
                       ),
                     }).map((_, index) => (
                       <Pressable
-                        accessibilityLabel={`Add player to place ${index + selectedPlayers.length + 2}`}
+                        accessibilityLabel={`Add player to place ${index + selectedPlayers.length + guestPlayers.length + 2}`}
                         accessibilityRole="button"
                         key={index}
                         onPress={() => setShowPlayerPicker(true)}
@@ -14229,57 +14409,126 @@ function QuickActionsSheet({
 }
 
 function VideoTransferBanner({
+  onDismiss,
   onPress,
   status,
 }: {
+  readonly onDismiss: () => void;
   readonly onPress: () => void;
   readonly status: VideoTransferStatus;
 }) {
+  const slideX = useRef(new Animated.Value(0)).current;
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
   const progress = Math.max(0, Math.min(1, status.progress ?? 0));
   const active =
     status.stage === "importing" ||
     status.stage === "uploading" ||
     status.stage === "processing";
+  const dismiss = (direction = 1) => {
+    Animated.timing(slideX, {
+      duration: 160,
+      easing: Easing.out(Easing.cubic),
+      toValue: direction * 420,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) dismissRef.current();
+    });
+  };
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dx) > 10 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderMove: (_event, gesture) => slideX.setValue(gesture.dx),
+        onPanResponderRelease: (_event, gesture) => {
+          if (Math.abs(gesture.dx) >= 72 || Math.abs(gesture.vx) > 0.65) {
+            dismiss(gesture.dx < 0 ? -1 : 1);
+            return;
+          }
+          Animated.timing(slideX, {
+            duration: 140,
+            easing: Easing.out(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.timing(slideX, {
+            duration: 140,
+            easing: Easing.out(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [slideX],
+  );
+  const opacity = slideX.interpolate({
+    inputRange: [-240, 0, 240],
+    outputRange: [0.15, 1, 0.15],
+    extrapolate: "clamp",
+  });
   return (
-    <Pressable
-      accessibilityLabel={`${status.title}. ${status.detail}. Open video uploads.`}
-      onPress={onPress}
-      style={styles.videoTransferBanner}
+    <Animated.View
+      {...responder.panHandlers}
+      style={[
+        styles.videoTransferBanner,
+        { opacity, transform: [{ translateX: slideX }] },
+      ]}
     >
-      <View style={styles.videoTransferMark}>
-        {active ? (
-          <ActivityIndicator color={colors.aqua} size="small" />
-        ) : (
-          <Text style={styles.videoTransferMarkText}>
-            {status.stage === "complete" ? "✓" : "⇅"}
-          </Text>
-        )}
-      </View>
-      <View style={styles.videoTransferCopy}>
-        <View style={styles.videoTransferHeading}>
-          <Text style={styles.videoTransferTitle}>{status.title}</Text>
-          {status.progress !== undefined && (
-            <Text style={styles.videoTransferPercent}>
-              {Math.round(progress * 100)}%
+      <Pressable
+        accessibilityLabel={`${status.title}. ${status.detail}. Open video uploads.`}
+        onPress={onPress}
+        style={styles.videoTransferTap}
+      >
+        <View style={styles.videoTransferMark}>
+          {active ? (
+            <ActivityIndicator color={colors.aqua} size="small" />
+          ) : (
+            <Text style={styles.videoTransferMarkText}>
+              {status.stage === "complete" ? "✓" : "⇅"}
             </Text>
           )}
         </View>
-        <Text numberOfLines={2} style={styles.videoTransferDetail}>
-          {status.detail}
-        </Text>
-        {status.progress !== undefined && (
-          <View style={styles.videoTransferTrack}>
-            <View
-              style={[
-                styles.videoTransferFill,
-                { width: `${progress * 100}%` },
-              ]}
-            />
+        <View style={styles.videoTransferCopy}>
+          <View style={styles.videoTransferHeading}>
+            <Text style={styles.videoTransferTitle}>{status.title}</Text>
+            {status.progress !== undefined && (
+              <Text style={styles.videoTransferPercent}>
+                {Math.round(progress * 100)}%
+              </Text>
+            )}
           </View>
-        )}
-      </View>
-      <Text style={styles.videoTransferOpen}>View ›</Text>
-    </Pressable>
+          <Text numberOfLines={2} style={styles.videoTransferDetail}>
+            {status.detail}
+          </Text>
+          {status.progress !== undefined && (
+            <View style={styles.videoTransferTrack}>
+              <View
+                style={[
+                  styles.videoTransferFill,
+                  { width: `${progress * 100}%` },
+                ]}
+              />
+            </View>
+          )}
+        </View>
+        <Text style={styles.videoTransferOpen}>View</Text>
+        <Pressable
+          accessibilityLabel="Dismiss video import status"
+          hitSlop={4}
+          onPress={(event) => {
+            event.stopPropagation();
+            dismiss();
+          }}
+          style={styles.videoTransferDismiss}
+        >
+          <DunaIcon color={colors.muted} name="close" size={18} />
+        </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -14470,6 +14719,15 @@ function DunaApp() {
       )?.[1];
       if (visionRemote) {
         setVisionRemoteToken(decodeURIComponent(visionRemote));
+        return;
+      }
+      const matchClaimToken = url?.match(
+        /^duna:\/\/join\/match\/([^/?#]+)/,
+      )?.[1];
+      if (matchClaimToken) {
+        void WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/join/match/${encodeURIComponent(decodeURIComponent(matchClaimToken))}`,
+        );
         return;
       }
       if (url?.startsWith("duna://waiver/complete")) {
@@ -14925,7 +15183,11 @@ function DunaApp() {
             </Animated.View>
             {videoTransfer && (
               <VideoTransferBanner
-                onPress={() => setTab("video")}
+                onDismiss={() => setVideoTransfer(undefined)}
+                onPress={() => {
+                  setVideoTransfer(undefined);
+                  setTab("video");
+                }}
                 status={videoTransfer}
               />
             )}
@@ -15173,17 +15435,13 @@ function createStyles() {
     app: { backgroundColor: colors.canvas, flex: 1 },
     animatedScreen: { flex: 1 },
     videoTransferBanner: {
-      alignItems: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.14),
       borderRadius: 18,
       borderWidth: 1,
       bottom: 94,
       elevation: 12,
-      flexDirection: "row",
-      gap: 10,
       left: 16,
-      padding: 12,
       position: "absolute",
       right: 16,
       shadowColor: "#000000",
@@ -15191,6 +15449,14 @@ function createStyles() {
       shadowOpacity: 0.12,
       shadowRadius: 16,
       zIndex: 80,
+    },
+    videoTransferTap: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 64,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
     },
     videoTransferMark: {
       alignItems: "center",
@@ -15215,7 +15481,7 @@ function createStyles() {
     videoTransferTitle: {
       color: colors.bone,
       flex: 1,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: "900",
     },
     videoTransferPercent: {
@@ -15223,7 +15489,7 @@ function createStyles() {
       fontSize: 12,
       fontWeight: "900",
     },
-    videoTransferDetail: { color: colors.muted, fontSize: 12, lineHeight: 14 },
+    videoTransferDetail: { color: colors.muted, fontSize: 13, lineHeight: 17 },
     videoTransferTrack: {
       backgroundColor: rgba(colors.accentRgb, 0.14),
       borderRadius: 2,
@@ -15232,7 +15498,13 @@ function createStyles() {
       overflow: "hidden",
     },
     videoTransferFill: { backgroundColor: colors.aqua, height: 4 },
-    videoTransferOpen: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
+    videoTransferOpen: { color: colors.aqua, fontSize: 14, fontWeight: "900" },
+    videoTransferDismiss: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 48,
+    },
     buttonDisabled: { opacity: 0.45 },
     flex: { flex: 1, minWidth: 0 },
     formError: {

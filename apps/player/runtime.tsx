@@ -21,11 +21,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as Network from "expo-network";
 import { StatusBar } from "expo-status-bar";
-import { VideoView, useVideoPlayer } from "expo-video";
 import { demoOrganization, demoVenues } from "@duna/core/demo";
 import {
   ActivityIndicator,
-  AccessibilityInfo,
   Image,
   Pressable,
   StyleSheet,
@@ -225,8 +223,6 @@ const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaMark = require("./assets/duna-mark.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaWelcomeFilm = require("../../packages/ui/assets/duna-welcome-background-v1.mp4");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaWelcomePoster = require("../../packages/ui/assets/duna-welcome-background-poster-v1.png");
 
 function RuntimeLoadingState() {
@@ -319,33 +315,6 @@ function WelcomeWash() {
 }
 
 function WelcomeBackground() {
-  const [hasFirstFrame, setHasFirstFrame] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState<boolean>();
-  const player = useVideoPlayer(dunaWelcomeFilm, (nextPlayer) => {
-    nextPlayer.loop = true;
-    nextPlayer.muted = true;
-  });
-
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (active) setReduceMotion(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduceMotion,
-    );
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (reduceMotion === false) player.play();
-    else player.pause();
-  }, [player, reduceMotion]);
-
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Image
@@ -353,22 +322,6 @@ function WelcomeBackground() {
         source={dunaWelcomePoster}
         style={StyleSheet.absoluteFill}
       />
-      {reduceMotion === false && (
-        <VideoView
-          allowsVideoFrameAnalysis={false}
-          contentFit="cover"
-          nativeControls={false}
-          onFirstFrameRender={() => setHasFirstFrame(true)}
-          player={player}
-          playsInline
-          style={[
-            StyleSheet.absoluteFill,
-            runtimeStyles.entryVideo,
-            { opacity: hasFirstFrame ? 1 : 0 },
-          ]}
-          surfaceType="textureView"
-        />
-      )}
     </View>
   );
 }
@@ -1072,10 +1025,6 @@ const runtimeStyles = StyleSheet.create({
     minHeight: 50,
   },
   entrySecondaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "500" },
-  entryVideo: {
-    filter: [{ blur: 2 }],
-    transform: [{ scale: 1.025 }],
-  },
   entryWordmark: {
     color: "#FFFFFF",
     fontSize: 24,

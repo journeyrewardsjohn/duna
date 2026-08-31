@@ -61,6 +61,7 @@ describe("tRPC contract surface", () => {
       costMinor: 0,
       currency: "USD" as const,
       recordMatches: true,
+      provisionalParticipants: [{ givenName: "Taylor", familyName: "Guest" }],
       idempotencyKey: key,
     };
     const first = await caller.player.createPickup(input);
