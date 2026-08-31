@@ -89,7 +89,7 @@ export interface DunaCourtCalibration extends CaptureGuidance {
 export interface PreparedVideo {
   readonly fileUri: string;
   readonly fileName: string;
-  readonly mimeType: "video/mp4";
+  readonly mimeType: "video/mp4" | "video/quicktime";
   readonly bytes: number;
   readonly durationSeconds: number;
 }

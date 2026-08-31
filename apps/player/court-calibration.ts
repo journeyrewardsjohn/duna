@@ -259,6 +259,36 @@ export function moveNetTopAnchor(
   };
 }
 
+/**
+ * Moves the complete net tape without changing its perspective or width. This
+ * gives the player one forgiving target when both individual posts are already
+ * aligned but the detected net is vertically or horizontally offset.
+ */
+export function moveNetTopLine(
+  geometry: CourtGeometry,
+  nextCenter: CapturePoint,
+): CourtGeometry {
+  const current = geometry.netTopLine ?? geometry.netLine;
+  const currentCenter = interpolatePoint(current[0], current[1], 0.5);
+  const delta = {
+    x: nextCenter.x - currentCenter.x,
+    y: nextCenter.y - currentCenter.y,
+  };
+  const netTopLine = current.map((anchor) =>
+    point({ x: anchor.x + delta.x, y: anchor.y + delta.y }),
+  ) as unknown as CaptureLine;
+  const antennaPoints = geometry.antennaPoints?.map((anchor) =>
+    point({ x: anchor.x + delta.x, y: anchor.y + delta.y }),
+  ) as CaptureLine | undefined;
+  return {
+    ...geometry,
+    netTopLine,
+    antennaPoints,
+    edgeVisibility: edgeVisibility(geometry.corners, netTopLine),
+    mode: "manual",
+  };
+}
+
 export function moveAntennaAnchor(
   geometry: CourtGeometry,
   index: 0 | 1,

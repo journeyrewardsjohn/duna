@@ -2014,6 +2014,16 @@ const publicRouter = router({
         status: z.enum(["pending", "claimed", "expired", "cancelled"]),
         expiresAt: z.iso.datetime(),
         appDeepLink: z.string(),
+        availablePlayers: z
+          .array(
+            z.object({
+              personId: z.string().uuid(),
+              displayName: z.string(),
+              side: z.enum(["A", "B"]),
+            }),
+          )
+          .max(12)
+          .readonly(),
       }),
     )
     .query(async ({ input, ctx }) => {
@@ -4985,6 +4995,8 @@ const playerRouter = router({
     .input(
       z.object({
         inviteToken: z.string().min(32).max(96),
+        provisionalPersonId: z.string().uuid().optional(),
+        correctedDisplayName: z.string().trim().min(2).max(160).optional(),
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -5006,6 +5018,8 @@ const playerRouter = router({
             return await claimMatchParticipantInvitation({
               actor: ctx.actor!,
               inviteToken: input.inviteToken,
+              provisionalPersonId: input.provisionalPersonId,
+              correctedDisplayName: input.correctedDisplayName,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -5092,24 +5106,55 @@ const playerRouter = router({
     .input(
       z
         .object({
-          teamAIds: z.array(z.string().uuid()).min(1).max(6),
-          teamBIds: z.array(z.string().uuid()).min(1).max(6),
+          teamAIds: z.array(z.string().uuid()).max(6),
+          teamBIds: z.array(z.string().uuid()).max(6),
+          provisionalParticipants: z
+            .array(
+              z.object({
+                side: z.enum(["A", "B"]),
+                givenName: z.string().trim().min(1).max(80),
+                familyName: z.string().trim().min(1).max(80),
+                email: z.string().trim().email().max(320).optional(),
+                phoneE164: z
+                  .string()
+                  .trim()
+                  .regex(/^\+[1-9]\d{7,14}$/)
+                  .optional(),
+              }),
+            )
+            .max(11)
+            .default([]),
           venueId: z.string().uuid().optional(),
           scoringSystem: z.enum(["rally", "sideout"]),
           matchType: z.enum(["competitive", "friendly"]),
           allPlayersAgreedToRecord: z.literal(true),
           serviceOrder: z.object({
-            A: z.array(z.string().uuid()).min(1).max(6),
-            B: z.array(z.string().uuid()).min(1).max(6),
+            A: z.array(z.string().uuid()).max(6),
+            B: z.array(z.string().uuid()).max(6),
           }),
           initialServerPersonId: z.string().uuid(),
           deviceId: z.string().trim().min(8).max(128),
           idempotencyKey: z.string().uuid(),
         })
-        .refine((value) => value.teamAIds.length === value.teamBIds.length, {
-          message: "Both teams must have the same number of players.",
-          path: ["teamBIds"],
-        }),
+        .refine(
+          (value) => {
+            const teamASize =
+              value.teamAIds.length +
+              value.provisionalParticipants.filter(
+                (participant) => participant.side === "A",
+              ).length;
+            const teamBSize =
+              value.teamBIds.length +
+              value.provisionalParticipants.filter(
+                (participant) => participant.side === "B",
+              ).length;
+            return teamASize >= 1 && teamASize === teamBSize;
+          },
+          {
+            message: "Both teams must have the same number of players.",
+            path: ["teamBIds"],
+          },
+        ),
     )
     .output(matchScoringStateSchema)
     .mutation(({ input, ctx }) =>
@@ -5124,6 +5169,7 @@ const playerRouter = router({
               actor: ctx.actor!,
               teamAIds: input.teamAIds,
               teamBIds: input.teamBIds,
+              provisionalParticipants: input.provisionalParticipants,
               venueId: input.venueId,
               scoringSystem: input.scoringSystem,
               matchType: input.matchType,
@@ -5157,22 +5203,17 @@ const playerRouter = router({
           teamBIds: z.array(z.string().uuid()).max(6),
           provisionalParticipants: z
             .array(
-              z
-                .object({
-                  side: z.enum(["A", "B"]),
-                  givenName: z.string().trim().min(1).max(80),
-                  familyName: z.string().trim().min(1).max(80),
-                  email: z.string().trim().email().max(320).optional(),
-                  phoneE164: z
-                    .string()
-                    .trim()
-                    .regex(/^\+[1-9]\d{7,14}$/)
-                    .optional(),
-                })
-                .refine((value) => value.email || value.phoneE164, {
-                  message: "Add an email or mobile number.",
-                  path: ["email"],
-                }),
+              z.object({
+                side: z.enum(["A", "B"]),
+                givenName: z.string().trim().min(1).max(80),
+                familyName: z.string().trim().min(1).max(80),
+                email: z.string().trim().email().max(320).optional(),
+                phoneE164: z
+                  .string()
+                  .trim()
+                  .regex(/^\+[1-9]\d{7,14}$/)
+                  .optional(),
+              }),
             )
             .max(11)
             .default([]),
@@ -6456,6 +6497,15 @@ const playerRouter = router({
           ratingMinimum: z.number().min(1).max(8).optional(),
           ratingMaximum: z.number().min(1).max(8).optional(),
           participantPersonIds: z.array(z.string().uuid()).max(47).default([]),
+          provisionalParticipants: z
+            .array(
+              z.object({
+                givenName: z.string().trim().min(1).max(80),
+                familyName: z.string().trim().min(1).max(80),
+              }),
+            )
+            .max(47)
+            .default([]),
           idempotencyKey: z.string().uuid(),
         })
         .refine(
@@ -6470,7 +6520,9 @@ const playerRouter = router({
           (value) =>
             new Set(value.participantPersonIds).size ===
               value.participantPersonIds.length &&
-            value.participantPersonIds.length < value.capacity,
+            value.participantPersonIds.length +
+              value.provisionalParticipants.length <
+              value.capacity,
           "Added players must be distinct and fit within the match capacity",
         ),
     )
@@ -6508,6 +6560,7 @@ const playerRouter = router({
             ratingMinimum: input.ratingMinimum,
             ratingMaximum: input.ratingMaximum,
             participantPersonIds: input.participantPersonIds,
+            provisionalParticipants: input.provisionalParticipants,
             hostPersonId: ctx.actor!.personId,
             organizationId: ctx.actor!.organizationId,
             requestId: ctx.requestId,

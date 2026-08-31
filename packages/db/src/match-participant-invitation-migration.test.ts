@@ -6,6 +6,12 @@ const migration = readFileSync(
   fileURLToPath(new URL("../drizzle/0063_faulty_shard.sql", import.meta.url)),
   "utf8",
 );
+const destinationOptionalMigration = readFileSync(
+  fileURLToPath(
+    new URL("../drizzle/0102_rare_jack_murdock.sql", import.meta.url),
+  ),
+  "utf8",
+);
 
 describe("match participant invitation migration", () => {
   it("stores a unique match claim token and both contact channels", () => {
@@ -35,5 +41,11 @@ describe("match participant invitation migration", () => {
       'CREATE UNIQUE INDEX "match_participant_invitation_person_unique"',
     );
     expect(migration).toContain('("match_id","provisional_person_id")');
+  });
+
+  it("allows a secure share link when no email or mobile number is known", () => {
+    expect(destinationOptionalMigration).toContain(
+      'DROP CONSTRAINT "match_participant_invitation_destination_present"',
+    );
   });
 });

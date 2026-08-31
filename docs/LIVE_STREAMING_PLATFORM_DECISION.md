@@ -23,12 +23,13 @@ channel. An environment override can temporarily force either provider during
 rollout or an incident. Do not add AWS Elemental MediaConnect or operate a Duna
 SRT relay for the first release.
 
-The native broadcaster now supports both transports. It selects secure SRT for
-cellular/field contribution, where packet recovery matters most, and RTMPS on
-Wi-Fi or Ethernet, where Cloudflare recommends RTMP for its lowest-latency HLS
-path. Every SRT session retains the same provider's RTMPS credentials as an
-automatic fallback. This adaptive policy still requires physical-device,
-thermal, and long-session validation before production activation.
+The native broadcaster supports both transports. Provider policy prefers secure
+SRT whenever the active input exposes it, and every SRT session retains that
+same provider's RTMPS credentials as an automatic connection and dropout
+fallback. Adaptive bitrate handles observed network pressure independently;
+Duna does not pretend the interface label (Wi-Fi versus cellular) is a live
+quality test. This policy still requires physical-device, thermal, and
+long-session validation before production activation.
 
 This gives Duna the important part of Playcam's relay model without taking on a
 24/7 media control plane:

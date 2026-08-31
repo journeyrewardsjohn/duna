@@ -1190,6 +1190,24 @@ export async function signMuxPlayback(input: {
   });
 }
 
+export async function signMuxThumbnail(input: {
+  readonly playbackId: string;
+  readonly durationSeconds?: number;
+}): Promise<string> {
+  if (!isMuxSignedPlaybackConfigured()) {
+    throw new Error("Mux signed-playback credentials are not configured.");
+  }
+  const expirationSeconds = Math.max(
+    VIDEO_PLAYBACK_TOKEN_MINIMUM_SECONDS,
+    (input.durationSeconds ?? 0) + 30 * 60,
+  );
+  return getMuxClient().jwt.signPlaybackId(input.playbackId, {
+    expiration: `${expirationSeconds}s`,
+    type: "thumbnail",
+    params: { time: "1", width: "640" },
+  });
+}
+
 export async function loadMuxVideoMetrics(videoId: string): Promise<
   | {
       readonly views?: number;

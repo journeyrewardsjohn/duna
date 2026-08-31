@@ -145,6 +145,22 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
+function provisionalPickupHandle(input: {
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly id: string;
+}): string {
+  const base = `${input.givenName}-${input.familyName}`
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/(^-|-$)/g, "")
+    .slice(0, 30);
+  return `${base || "player"}-pending-${input.id.replaceAll("-", "").slice(-8)}`.slice(
+    0,
+    48,
+  );
+}
+
 function currency(value: string): Currency {
   const supported: readonly Currency[] = ["USD", "CAD", "AUD", "BRL", "EUR"];
   return supported.includes(value as Currency) ? (value as Currency) : "USD";
@@ -3345,6 +3361,19 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
 
 async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
   const database = getDatabase();
+  const provisionalParticipants = input.provisionalParticipants.map(
+    (participant) => ({
+      givenName: participant.givenName.trim(),
+      familyName: participant.familyName.trim(),
+    }),
+  );
+  if (
+    provisionalParticipants.some(
+      (participant) => !participant.givenName || !participant.familyName,
+    )
+  ) {
+    throw new Error("Every guest needs a first and last name.");
+  }
   const participantPersonIds = [
     ...new Set(
       input.participantPersonIds.filter(
@@ -3354,7 +3383,8 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
   ];
   if (
     participantPersonIds.length !== input.participantPersonIds.length ||
-    participantPersonIds.length + 1 > input.capacity
+    participantPersonIds.length + provisionalParticipants.length + 1 >
+      input.capacity
   ) {
     throw new Error(
       "Added players must be distinct and fit within the hosted match.",
@@ -3382,6 +3412,15 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     input.hostPersonId,
     ...participantPersonIds,
   ]);
+  const provisionalRows = provisionalParticipants.map((participant) => {
+    const id = crypto.randomUUID();
+    return {
+      ...participant,
+      id,
+      displayName: `${participant.givenName} ${participant.familyName}`,
+      handle: provisionalPickupHandle({ ...participant, id }),
+    };
+  });
   const linkedCourtBooking = input.courtBookingId
     ? await database.query.courtBookings.findFirst({
         where: and(
@@ -3476,6 +3515,19 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       costMinor: input.costMinor,
       currency: input.currency,
     }),
+    ...provisionalRows.map((participant) =>
+      database.insert(people).values({
+        id: participant.id,
+        givenName: participant.givenName,
+        familyName: participant.familyName,
+        displayName: participant.displayName,
+        handle: participant.handle,
+        profileClaimStatus: "unclaimed",
+        profileVisibility: "private",
+        status: "active",
+        ageBand: "unknown",
+      }),
+    ),
     database.insert(pickupParticipants).values([
       {
         pickupSessionId: pickupId,
@@ -3485,6 +3537,12 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       ...participantPersonIds.map((personId) => ({
         pickupSessionId: pickupId,
         personId,
+        addedByPersonId: input.hostPersonId,
+        status: "invited" as const,
+      })),
+      ...provisionalRows.map((participant) => ({
+        pickupSessionId: pickupId,
+        personId: participant.id,
         addedByPersonId: input.hostPersonId,
         status: "invited" as const,
       })),
@@ -3545,7 +3603,10 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
     endsAt: endsAt.toISOString(),
     timezone: matchingVenue?.timezone ?? "America/New_York",
     price: { amountMinor: input.costMinor, currency: input.currency },
-    spotsRemaining: Math.max(0, input.capacity - 1),
+    spotsRemaining: Math.max(
+      0,
+      input.capacity - participantPersonIds.length - provisionalRows.length - 1,
+    ),
     capacity: input.capacity,
     attendees: participantProfiles
       .filter((participant) => participant.id === input.hostPersonId)

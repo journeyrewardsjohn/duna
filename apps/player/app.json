@@ -74,7 +74,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Duna lets you select high-resolution volleyball action photos for your profile artwork.",
+          "photosPermission": "Duna lets you choose photos for your profile and videos for your private archive or public profile.",
           "cameraPermission": "Duna uses the camera only when you choose to capture volleyball media."
         }
       ],

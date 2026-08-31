@@ -16,6 +16,11 @@ interface MatchParticipantInvitation {
   readonly status: "pending" | "claimed" | "expired" | "cancelled";
   readonly expiresAt: string;
   readonly appDeepLink: string;
+  readonly availablePlayers: readonly {
+    readonly personId: string;
+    readonly displayName: string;
+    readonly side: "A" | "B";
+  }[];
 }
 
 export function MatchParticipantInvitationPanel({
@@ -29,16 +34,31 @@ export function MatchParticipantInvitationPanel({
 }) {
   const [pending, startTransition] = useTransition();
   const [notice, setNotice] = useState<string>();
-  const [complete, setComplete] = useState(invitation.status === "claimed");
+  const [complete, setComplete] = useState(
+    invitation.status === "claimed" && invitation.availablePlayers.length === 0,
+  );
+  const [selectedPersonId, setSelectedPersonId] = useState(
+    invitation.availablePlayers[0]?.personId ?? "",
+  );
+  const selectedPlayer = invitation.availablePlayers.find(
+    (player) => player.personId === selectedPersonId,
+  );
+  const [correctedDisplayName, setCorrectedDisplayName] = useState("");
   const returnPath = `/join/match/${encodeURIComponent(inviteToken)}`;
   const opponentLabel =
     invitation.opponentNames.join(" & ") || "your opponents";
 
   function claim() {
     setNotice(undefined);
+    if (!selectedPersonId) {
+      setNotice("Choose the guest place that belongs to you.");
+      return;
+    }
     startTransition(async () => {
       const response = await claimMatchParticipantInvitationAction({
         inviteToken,
+        provisionalPersonId: selectedPersonId,
+        correctedDisplayName: correctedDisplayName.trim() || undefined,
         idempotencyKey: crypto.randomUUID(),
       });
       if (!response.ok) {
@@ -63,7 +83,9 @@ export function MatchParticipantInvitationPanel({
       <h1>
         {complete
           ? "This match is yours."
-          : `${invitation.invitedName}, your result is waiting.`}
+          : invitation.availablePlayers.length > 1
+            ? "Choose your place in this match."
+            : `${selectedPlayer?.displayName ?? invitation.invitedName}, your result is waiting.`}
       </h1>
       <p>
         Your match against {opponentLabel} has been reported in Duna. Join now
@@ -113,16 +135,46 @@ export function MatchParticipantInvitationPanel({
         </p>
       )}
       {!complete &&
-        invitation.status === "pending" &&
+        invitation.availablePlayers.length > 0 &&
         (signedIn ? (
-          <button
-            className="duna-button duna-button--primary"
-            disabled={pending}
-            onClick={claim}
-            type="button"
-          >
-            {pending ? "Connecting match…" : "Claim my place in this match"}
-          </button>
+          <div className="match-invite-card__claim-form">
+            <label>
+              <span>Which guest are you?</span>
+              <select
+                onChange={(event) => {
+                  const personId = event.target.value;
+                  setSelectedPersonId(personId);
+                  setCorrectedDisplayName("");
+                }}
+                value={selectedPersonId}
+              >
+                {invitation.availablePlayers.map((player) => (
+                  <option key={player.personId} value={player.personId}>
+                    {player.displayName} · Team {player.side}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Correct your Duna profile name if needed</span>
+              <input
+                autoComplete="name"
+                onChange={(event) =>
+                  setCorrectedDisplayName(event.target.value)
+                }
+                placeholder={selectedPlayer?.displayName}
+                value={correctedDisplayName}
+              />
+            </label>
+            <button
+              className="duna-button duna-button--primary"
+              disabled={pending}
+              onClick={claim}
+              type="button"
+            >
+              {pending ? "Connecting match…" : "Claim my place in this match"}
+            </button>
+          </div>
         ) : (
           <Link
             className="duna-button duna-button--primary"

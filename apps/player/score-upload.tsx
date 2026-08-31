@@ -14,6 +14,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   View,
 } from "react-native";
@@ -47,7 +48,7 @@ type DunaParticipant = {
   readonly person: PersonSummary;
 };
 
-type ProvisionalParticipant = {
+export type ProvisionalParticipant = {
   readonly kind: "provisional";
   readonly id: string;
   readonly givenName: string;
@@ -302,7 +303,7 @@ function SelectedPlaceMap({
   );
 }
 
-function ProvisionalPlayerModal({
+export function ProvisionalPlayerModal({
   onClose,
   onSave,
   opponentNames,
@@ -317,7 +318,9 @@ function ProvisionalPlayerModal({
 }) {
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
-  const [contactKind, setContactKind] = useState<"email" | "phone">("email");
+  const [contactKind, setContactKind] = useState<"email" | "phone" | "link">(
+    "link",
+  );
   const [contact, setContact] = useState("");
   const [error, setError] = useState<string>();
 
@@ -325,7 +328,7 @@ function ProvisionalPlayerModal({
     setGivenName("");
     setFamilyName("");
     setContact("");
-    setContactKind("email");
+    setContactKind("link");
     setError(undefined);
     onClose();
   };
@@ -358,7 +361,9 @@ function ProvisionalPlayerModal({
       familyName: cleanFamilyName,
       ...(contactKind === "email"
         ? { email: cleanContact.toLowerCase() }
-        : { phoneE164: cleanContact }),
+        : contactKind === "phone"
+          ? { phoneE164: cleanContact }
+          : {}),
     });
     close();
   };
@@ -453,7 +458,7 @@ function ProvisionalPlayerModal({
               Send invitation by
             </Text>
             <View style={styles.segmentedRow}>
-              {(["email", "phone"] as const).map((kind) => (
+              {(["link", "email", "phone"] as const).map((kind) => (
                 <Pressable
                   accessibilityRole="radio"
                   accessibilityState={{ checked: contactKind === kind }}
@@ -486,34 +491,40 @@ function ProvisionalPlayerModal({
                       },
                     ]}
                   >
-                    {kind === "email" ? "Email" : "Mobile"}
+                    {kind === "link"
+                      ? "Share link"
+                      : kind === "email"
+                        ? "Email"
+                        : "Mobile"}
                   </Text>
                 </Pressable>
               ))}
             </View>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType={
-                contactKind === "email" ? "email-address" : "phone-pad"
-              }
-              onChangeText={setContact}
-              placeholder={
-                contactKind === "email"
-                  ? "player@example.com"
-                  : "+34 600 000 000"
-              }
-              placeholderTextColor={palette.muted}
-              style={[
-                styles.textInput,
-                {
-                  backgroundColor: palette.depth,
-                  borderColor: rgba(palette.overlayRgb, 0.12),
-                  color: palette.bone,
-                },
-              ]}
-              value={contact}
-            />
+            {contactKind !== "link" && (
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType={
+                  contactKind === "email" ? "email-address" : "phone-pad"
+                }
+                onChangeText={setContact}
+                placeholder={
+                  contactKind === "email"
+                    ? "player@example.com"
+                    : "+34 600 000 000"
+                }
+                placeholderTextColor={palette.muted}
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: palette.depth,
+                    borderColor: rgba(palette.overlayRgb, 0.12),
+                    color: palette.bone,
+                  },
+                ]}
+                value={contact}
+              />
+            )}
             <View
               style={[
                 styles.invitePreview,
@@ -533,7 +544,9 @@ function ProvisionalPlayerModal({
                 now to see your rating and track your progress for free.
               </Text>
               <Text style={[styles.invitePreviewLink, { color: palette.aqua }]}>
-                A unique sign-up link is added automatically.
+                {contactKind === "link"
+                  ? "After saving, you can forward one secure claim link to every guest."
+                  : "A unique sign-up link is added automatically."}
               </Text>
             </View>
             <View
@@ -639,6 +652,7 @@ export function ScoreUploadScreen({
   const [submitted, setSubmitted] = useState<{
     readonly matchId?: string;
     readonly provisionalCount: number;
+    readonly claimShareUrl?: string;
   }>();
 
   const currentStep = steps.indexOf(step);
@@ -798,7 +812,11 @@ export function ScoreUploadScreen({
         idempotencyKey: Crypto.randomUUID(),
       });
       await refresh();
-      setSubmitted({ matchId: result.matchId, provisionalCount });
+      setSubmitted({
+        matchId: result.matchId,
+        provisionalCount,
+        claimShareUrl: result.participantClaims?.shareUrl,
+      });
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => undefined);
@@ -855,7 +873,7 @@ export function ScoreUploadScreen({
         </Text>
         <Text style={[styles.successBody, { color: palette.muted }]}>
           {submitted.provisionalCount > 0
-            ? `${submitted.provisionalCount} unique ${submitted.provisionalCount === 1 ? "invitation is" : "invitations are"} on the way. Sand Rating stays locked until every required player joins Duna and the result is confirmed.`
+            ? `${submitted.provisionalCount} ${submitted.provisionalCount === 1 ? "guest place is" : "guest places are"} ready to claim. The match stays private and Sand Rating stays locked until every guest joins Duna and the result is confirmed.`
             : matchType === "competitive" && teamSize === 2
               ? "The result is waiting for opponent confirmation before Sand Rating can update."
               : "The result has been added to match history."}
@@ -866,12 +884,47 @@ export function ScoreUploadScreen({
           </Text>
         )}
         <View style={styles.successActions}>
+          {submitted.claimShareUrl && (
+            <Pressable
+              onPress={() =>
+                void Share.share({
+                  message:
+                    "Claim your player place in our Duna match. The result stays private and does not affect Sand Rating until every guest joins and the players confirm it.\n" +
+                    submitted.claimShareUrl,
+                  url: submitted.claimShareUrl,
+                })
+              }
+              style={[styles.primaryButton, { backgroundColor: palette.aqua }]}
+            >
+              <Text
+                style={[styles.primaryButtonText, { color: palette.onAccent }]}
+              >
+                Share guest claim link
+              </Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={onComplete}
-            style={[styles.primaryButton, { backgroundColor: palette.aqua }]}
+            style={[
+              submitted.claimShareUrl
+                ? styles.secondaryButton
+                : styles.primaryButton,
+              submitted.claimShareUrl
+                ? { borderColor: palette.aqua }
+                : { backgroundColor: palette.aqua },
+            ]}
           >
             <Text
-              style={[styles.primaryButtonText, { color: palette.onAccent }]}
+              style={[
+                submitted.claimShareUrl
+                  ? styles.secondaryButtonText
+                  : styles.primaryButtonText,
+                {
+                  color: submitted.claimShareUrl
+                    ? palette.aqua
+                    : palette.onAccent,
+                },
+              ]}
             >
               View performance
             </Text>

@@ -104,6 +104,7 @@ import {
   replaceMuxAssetPlaybackPolicy,
   replaceMuxLivePlaybackPolicy,
   signMuxPlayback,
+  signMuxThumbnail,
   signCloudflarePlayback,
   updateCloudflareLiveInputAccess,
   updateCloudflareVideoAccess,
@@ -432,6 +433,7 @@ async function loadPersonSummaries(
 interface VideoQuery {
   readonly where?: SQL;
   readonly limit?: number;
+  readonly includePrivatePosters?: boolean;
 }
 
 async function loadVideoSummaries(
@@ -466,6 +468,57 @@ async function loadVideoSummaries(
   const owners = await loadPersonSummaries(
     rows.map((row) => row.video.ownerPersonId),
   );
+  const videoIds = rows.map((row) => row.video.id);
+  const previewRows = videoIds.length
+    ? await database
+        .select({
+          videoId: visionSessions.videoId,
+          previewJpegBase64: visionSessions.previewJpegBase64,
+        })
+        .from(visionSessions)
+        .where(inArray(visionSessions.videoId, videoIds))
+    : [];
+  const previewByVideo = new Map(
+    previewRows.flatMap((preview) =>
+      preview.videoId && preview.previewJpegBase64
+        ? [
+            [
+              preview.videoId,
+              `data:image/jpeg;base64,${preview.previewJpegBase64}`,
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const privatePosterEntries = input.includePrivatePosters
+    ? await Promise.all(
+        rows.map(async ({ video }) => {
+          const playbackId =
+            video.muxAssetPlaybackPolicy === "signed" &&
+            video.muxAssetPlaybackId
+              ? video.muxAssetPlaybackId
+              : video.muxLivePlaybackPolicy === "signed" &&
+                  video.muxLivePlaybackId
+                ? video.muxLivePlaybackId
+                : undefined;
+          if (!playbackId || !isMuxSignedPlaybackConfigured()) return undefined;
+          const token = await signMuxThumbnail({
+            playbackId,
+            durationSeconds: video.durationSeconds ?? undefined,
+          }).catch(() => undefined);
+          return token
+            ? ([
+                video.id,
+                `https://image.mux.com/${playbackId}/thumbnail.jpg?token=${encodeURIComponent(token)}`,
+              ] as const)
+            : undefined;
+        }),
+      )
+    : [];
+  const privatePosterByVideo = new Map<string, string>();
+  for (const entry of privatePosterEntries) {
+    if (entry) privatePosterByVideo.set(entry[0], entry[1]);
+  }
   const teamIds = rows.flatMap((row) =>
     [row.match?.teamAId, row.match?.teamBId].filter((id): id is string =>
       Boolean(id),
@@ -486,6 +539,19 @@ async function loadVideoSummaries(
     const matchLabel = row.match
       ? `${row.match.teamAId ? (teamNameById.get(row.match.teamAId) ?? "Team A") : "Team A"} vs ${row.match.teamBId ? (teamNameById.get(row.match.teamBId) ?? "Team B") : "Team B"}`
       : undefined;
+    const publicMuxPlaybackId =
+      video.muxAssetPlaybackPolicy !== "signed" && video.muxAssetPlaybackId
+        ? video.muxAssetPlaybackId
+        : video.muxLivePlaybackPolicy !== "signed" && video.muxLivePlaybackId
+          ? video.muxLivePlaybackId
+          : undefined;
+    const posterUrl =
+      video.liveProviderPosterUrl ??
+      (publicMuxPlaybackId
+        ? `https://image.mux.com/${publicMuxPlaybackId}/thumbnail.jpg`
+        : undefined) ??
+      privatePosterByVideo.get(video.id) ??
+      previewByVideo.get(video.id);
     return [
       {
         id: video.id,
@@ -532,6 +598,7 @@ async function loadVideoSummaries(
           video.musicRemovalStatus as VideoSummary["musicRemovalStatus"],
         durationSeconds: video.durationSeconds ?? undefined,
         bytes: video.bytes ?? undefined,
+        posterUrl,
         courtCalibration: normalizeStoredCourtCalibration(
           video.courtCalibration,
         ),
@@ -928,6 +995,7 @@ export async function loadVideoStudio(
               isNull(videos.organizationId),
             ),
         limit: 100,
+        includePrivatePosters: true,
       }),
       loadVideoSummaries({
         where: and(
@@ -981,8 +1049,8 @@ export async function loadVideoStudio(
       cloudflareConfigured: isCloudflareStreamConfigured(),
       muxConfigured: isMuxVideoConfigured(),
       srtIngestAvailable,
-      // The iOS client chooses SRT for field/cellular contribution and RTMPS
-      // for stable Wi-Fi, with RTMPS retained as an automatic SRT fallback.
+      // Provider capability selects SRT contribution. Network telemetry tunes
+      // bitrate, while the native encoder retains RTMPS as its fallback.
       activeClientIngest: srtIngestAvailable ? "srt" : "rtmps",
       youtube,
     },
