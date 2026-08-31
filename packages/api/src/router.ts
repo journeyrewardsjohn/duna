@@ -421,6 +421,7 @@ import {
   finishLiveVideo,
   grantComplimentaryDunaPlus,
   grantVideoAllowance,
+  hydrateLiveVideoSessionReplay,
   loadAdminVideoOverview,
   loadOwnedVideoMetrics,
   loadPublicVideos,
@@ -440,6 +441,11 @@ import {
   updateVideoQuotaPolicy,
   VideoServiceError,
 } from "./video-service";
+import {
+  beginYoutubeChannelConnection,
+  disconnectYoutubeChannel,
+  YoutubeConnectionError,
+} from "./video-youtube-service";
 import { loadPlayerVirtualSessionRecords } from "./virtual-session-service";
 import {
   archiveTrainingPracticePlanInputSchema,
@@ -1277,6 +1283,10 @@ async function runIdempotentMutation<T extends object>(input: {
   readonly request: Readonly<Record<string, unknown>>;
   readonly ctx: ApiContext;
   readonly execute: () => Promise<T>;
+  readonly serializeResult?: (result: T) => Readonly<Record<string, unknown>>;
+  readonly hydrateReplay?: (
+    storedResult: Readonly<Record<string, unknown>>,
+  ) => Promise<T>;
 }): Promise<T> {
   try {
     return (
@@ -1288,6 +1298,8 @@ async function runIdempotentMutation<T extends object>(input: {
         request: input.request,
         now: input.ctx.now,
         execute: input.execute,
+        serializeResult: input.serializeResult,
+        hydrateReplay: input.hydrateReplay,
       })
     ).result;
   } catch (error) {
@@ -1434,6 +1446,15 @@ function throwDomainError(error: unknown): never {
                 error.code === "INVALID_GRANT_WINDOW"
               ? "BAD_REQUEST"
               : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof YoutubeConnectionError) {
+    const code =
+      error.code === "YOUTUBE_CONNECTION_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "YOUTUBE_FORBIDDEN"
+          ? "FORBIDDEN"
+          : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof VisionServiceError) {
@@ -3065,15 +3086,72 @@ const playerRouter = router({
     .output(videoStudioSchema)
     .query(async ({ ctx }) => {
       try {
-        return await loadVideoStudio(
-          ctx.actor!.personId,
-          ctx.now,
-          ctx.actor!.organizationId,
-        );
+        return await loadVideoStudio(ctx.actor!, ctx.now);
       } catch (error) {
         return throwDomainError(error);
       }
     }),
+  beginYoutubeChannelConnection: protectedProcedure
+    .use(requireScope("social:write"))
+    .use(
+      rateLimitMiddleware({
+        id: "video-youtube-connect",
+        capacity: 6,
+        refillPerMinute: 1,
+      }),
+    )
+    .input(
+      z.object({
+        scope: z.enum(["personal", "organization"]).default("personal"),
+        returnUrl: z.url(),
+      }),
+    )
+    .output(
+      z.object({
+        authorizationUrl: z.url(),
+        expiresAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await beginYoutubeChannelConnection({
+          actor: ctx.actor!,
+          scope: input.scope,
+          returnUrl: input.returnUrl,
+          now: ctx.now,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  disconnectYoutubeChannel: protectedProcedure
+    .use(requireScope("social:write"))
+    .input(
+      z.object({
+        connectionId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(z.object({ disconnected: z.literal(true) }))
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.disconnectYoutubeChannel",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await disconnectYoutubeChannel({
+              actor: ctx.actor!,
+              connectionId: input.connectionId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   videoAnalysisReport: protectedProcedure
     .input(z.object({ videoId: z.string().uuid() }))
     .output(videoAnalysisReportSchema)
@@ -3273,6 +3351,7 @@ const playerRouter = router({
       z.object({
         session: visionSessionSchema,
         remoteUrl: z.url(),
+        appUrl: z.url(),
       }),
     )
     .mutation(({ input, ctx }) =>
@@ -3480,6 +3559,8 @@ const playerRouter = router({
         liveVisibility: z.enum(["public", "link-only"]),
         recordingVisibility: z.enum(["public", "private"]),
         hasAudio: z.boolean(),
+        simulcastToDunaYoutube: z.boolean().default(false),
+        youtubeConnectionIds: z.array(z.string().uuid()).max(8).default([]),
         visionLearningConsent: visionLearningConsentInputSchema,
         courtCalibration: courtCalibrationSchema.optional(),
         idempotencyKey: z.string().uuid(),
@@ -3500,6 +3581,37 @@ const playerRouter = router({
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+        // Ingest keys and private share URLs are deliberately excluded from
+        // the durable idempotency record. An authenticated retry re-reads
+        // provider credentials and issues a fresh share URL instead.
+        serializeResult: (result) => ({
+          videoId: result.video.id,
+          maximumDurationSeconds: result.maximumDurationSeconds,
+        }),
+        hydrateReplay: async (storedResult) => {
+          const videoId = storedResult.videoId;
+          const maximumDurationSeconds = storedResult.maximumDurationSeconds;
+          if (
+            typeof videoId !== "string" ||
+            typeof maximumDurationSeconds !== "number" ||
+            !Number.isInteger(maximumDurationSeconds) ||
+            maximumDurationSeconds <= 0
+          ) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "The saved live-stream retry is invalid.",
+            });
+          }
+          try {
+            return await hydrateLiveVideoSessionReplay({
+              actor: ctx.actor!,
+              videoId,
+              maximumDurationSeconds,
             });
           } catch (error) {
             return throwDomainError(error);

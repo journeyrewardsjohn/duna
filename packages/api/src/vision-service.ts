@@ -183,6 +183,7 @@ export async function createVisionSession(input: {
 }): Promise<{
   readonly session: VisionSession;
   readonly remoteUrl: string;
+  readonly appUrl: string;
 }> {
   requireDatabase();
   const database = getDatabase();
@@ -222,9 +223,11 @@ export async function createVisionSession(input: {
     now: input.now,
   });
   const row = await ownedSession(input.actor.personId, id);
+  const encodedToken = encodeURIComponent(token);
   return {
     session: serializeSession(row, input.now),
-    remoteUrl: `${publicWebOrigin()}/vision/remote/${encodeURIComponent(token)}`,
+    remoteUrl: `${publicWebOrigin()}/vision/remote/${encodedToken}`,
+    appUrl: `duna://vision/remote/${encodedToken}`,
   };
 }
 
@@ -359,12 +362,15 @@ export async function appendVisionTimelineEvents(input: {
   await ownedSession(input.actor.personId, input.sessionId);
   if (
     input.events.some(
-      (event) => event.source !== "apple-watch" && event.source !== "iphone",
+      (event) =>
+        event.source !== "apple-watch" &&
+        event.source !== "iphone" &&
+        event.source !== "remote",
     )
   ) {
     throw new VisionServiceError(
       "INVALID_EVENT",
-      "Player devices can append only iPhone or Apple Watch timeline events.",
+      "Player devices can append only iPhone, Apple Watch, or authenticated remote timeline events.",
     );
   }
   const events = input.events.filter(

@@ -471,6 +471,403 @@ export async function presignR2VideoPlayback(input: {
   return { url, expiresAt };
 }
 
+interface CloudflareStreamConfiguration {
+  readonly accountId: string;
+  readonly apiToken: string;
+}
+
+interface CloudflareApiEnvelope<Result> {
+  readonly success?: boolean;
+  readonly result?: Result;
+  readonly errors?: readonly {
+    readonly code?: number;
+    readonly message?: string;
+  }[];
+}
+
+interface CloudflareLiveInputResponse {
+  readonly uid?: string;
+  readonly rtmps?: {
+    readonly url?: string;
+    readonly streamKey?: string;
+  };
+  readonly srt?: {
+    readonly url?: string;
+    readonly streamId?: string;
+    readonly passphrase?: string;
+  };
+  readonly playback?: {
+    readonly hls?: string;
+    readonly dash?: string;
+  };
+  readonly recording?: {
+    readonly requireSignedURLs?: boolean;
+  };
+}
+
+function cloudflareStreamConfiguration():
+  CloudflareStreamConfiguration | undefined {
+  const accountId = (
+    process.env.CLOUDFLARE_ACCOUNT_ID ??
+    process.env.CF_ACCOUNT_ID ??
+    process.env.cloudflare_account_id ??
+    ""
+  ).trim();
+  const apiToken = (process.env.CLOUDFLARE_STREAM_API_TOKEN ?? "").trim();
+  return accountId && apiToken ? { accountId, apiToken } : undefined;
+}
+
+export function isCloudflareStreamConfigured(): boolean {
+  return Boolean(cloudflareStreamConfiguration());
+}
+
+export function isCloudflareSrtIngestEnabled(): boolean {
+  return process.env.CLOUDFLARE_STREAM_SRT_ENABLED?.trim() !== "false";
+}
+
+function cloudflareStreamRecordingRetentionDays(): number | undefined {
+  const value = process.env.CLOUDFLARE_STREAM_RECORDING_RETENTION_DAYS?.trim();
+  if (!value) return undefined;
+  const configured = Number(value);
+  if (!Number.isFinite(configured)) {
+    throw new Error(
+      "CLOUDFLARE_STREAM_RECORDING_RETENTION_DAYS must be a number.",
+    );
+  }
+  return Math.max(30, Math.floor(configured));
+}
+
+function cloudflareStreamAllowedOrigins(): readonly string[] {
+  const configured = String(
+    process.env.CLOUDFLARE_STREAM_ALLOWED_ORIGINS ?? "",
+  );
+  return configured
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function cloudflareResult<Result>(
+  payload: CloudflareApiEnvelope<Result> | Result,
+): Result {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "success" in payload &&
+    (payload as CloudflareApiEnvelope<Result>).success === false
+  ) {
+    const message = (payload as CloudflareApiEnvelope<Result>).errors
+      ?.map((error) => error.message)
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(message || "Cloudflare Stream rejected the request.");
+  }
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "result" in payload &&
+    (payload as CloudflareApiEnvelope<Result>).result !== undefined
+  ) {
+    return (payload as CloudflareApiEnvelope<Result>).result as Result;
+  }
+  return payload as Result;
+}
+
+async function cloudflareStreamRequest<Result>(
+  path: string,
+  init?: RequestInit,
+): Promise<Result> {
+  const configuration = cloudflareStreamConfiguration();
+  if (!configuration) {
+    throw new Error("Cloudflare Stream credentials are not configured.");
+  }
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(configuration.accountId)}/stream${path}`,
+    {
+      ...init,
+      headers: {
+        authorization: `Bearer ${configuration.apiToken}`,
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as
+    CloudflareApiEnvelope<Result> | Result;
+  if (!response.ok) {
+    const envelope = payload as CloudflareApiEnvelope<Result>;
+    const message = envelope.errors
+      ?.map((error) => error.message)
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(
+      message || `Cloudflare Stream request failed (${response.status}).`,
+    );
+  }
+  return cloudflareResult(payload);
+}
+
+export interface CloudflareLiveVideoSession {
+  readonly liveInputId: string;
+  readonly playbackId: string;
+  readonly playbackPolicy: "public" | "signed";
+  readonly playbackHlsUrl: string;
+  readonly rtmps: {
+    readonly url: string;
+    readonly streamKey: string;
+  };
+  readonly srt?: {
+    readonly url: string;
+    readonly streamId: string;
+    readonly passphrase: string;
+  };
+}
+
+export async function createCloudflareLiveVideo(input: {
+  readonly videoId: string;
+  readonly title: string;
+  readonly liveVisibility: "public" | "link-only";
+  readonly recordingVisibility: "public" | "private";
+}): Promise<CloudflareLiveVideoSession> {
+  const playbackPolicy =
+    input.liveVisibility === "link-only" ||
+    input.recordingVisibility === "private"
+      ? ("signed" as const)
+      : ("public" as const);
+  const deleteRecordingAfterDays = cloudflareStreamRecordingRetentionDays();
+  const liveInput = await cloudflareStreamRequest<CloudflareLiveInputResponse>(
+    "/live_inputs",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        enabled: true,
+        meta: { name: input.title, dunaVideoId: input.videoId },
+        preferLowLatency: true,
+        ...(deleteRecordingAfterDays ? { deleteRecordingAfterDays } : {}),
+        recording: {
+          mode: "automatic",
+          requireSignedURLs: playbackPolicy === "signed",
+          allowedOrigins: [...cloudflareStreamAllowedOrigins()],
+          hideLiveViewerCount: false,
+        },
+      }),
+    },
+  );
+  const liveInputId = liveInput.uid?.trim();
+  const rtmpsUrl = liveInput.rtmps?.url?.trim();
+  const rtmpsStreamKey = liveInput.rtmps?.streamKey?.trim();
+  const playbackHlsUrl = liveInput.playback?.hls?.trim();
+  if (!liveInputId || !rtmpsUrl || !rtmpsStreamKey || !playbackHlsUrl) {
+    throw new Error(
+      "Cloudflare Stream did not return complete live-ingest credentials.",
+    );
+  }
+  const srtUrl = liveInput.srt?.url?.trim();
+  const srtStreamId = liveInput.srt?.streamId?.trim();
+  const srtPassphrase = liveInput.srt?.passphrase?.trim();
+  return {
+    liveInputId,
+    playbackId: liveInputId,
+    playbackPolicy,
+    playbackHlsUrl,
+    rtmps: { url: rtmpsUrl, streamKey: rtmpsStreamKey },
+    ...(isCloudflareSrtIngestEnabled() && srtUrl && srtStreamId && srtPassphrase
+      ? {
+          srt: {
+            url: srtUrl,
+            streamId: srtStreamId,
+            passphrase: srtPassphrase,
+          },
+        }
+      : {}),
+  };
+}
+
+export async function loadCloudflareLiveVideo(
+  liveInputId: string,
+): Promise<CloudflareLiveVideoSession> {
+  const liveInput = await cloudflareStreamRequest<CloudflareLiveInputResponse>(
+    `/live_inputs/${encodeURIComponent(liveInputId)}`,
+  );
+  const returnedId = liveInput.uid?.trim();
+  const rtmpsUrl = liveInput.rtmps?.url?.trim();
+  const rtmpsStreamKey = liveInput.rtmps?.streamKey?.trim();
+  const playbackHlsUrl = liveInput.playback?.hls?.trim();
+  if (!returnedId || !rtmpsUrl || !rtmpsStreamKey || !playbackHlsUrl) {
+    throw new Error(
+      "Cloudflare Stream did not return complete live-ingest credentials.",
+    );
+  }
+  const srtUrl = liveInput.srt?.url?.trim();
+  const srtStreamId = liveInput.srt?.streamId?.trim();
+  const srtPassphrase = liveInput.srt?.passphrase?.trim();
+  return {
+    liveInputId: returnedId,
+    playbackId: returnedId,
+    playbackPolicy:
+      liveInput.recording?.requireSignedURLs === true ? "signed" : "public",
+    playbackHlsUrl,
+    rtmps: { url: rtmpsUrl, streamKey: rtmpsStreamKey },
+    ...(isCloudflareSrtIngestEnabled() && srtUrl && srtStreamId && srtPassphrase
+      ? {
+          srt: {
+            url: srtUrl,
+            streamId: srtStreamId,
+            passphrase: srtPassphrase,
+          },
+        }
+      : {}),
+  };
+}
+
+export async function disableCloudflareLiveInput(
+  liveInputId: string,
+): Promise<void> {
+  await cloudflareStreamRequest(
+    `/live_inputs/${encodeURIComponent(liveInputId)}`,
+    { method: "PUT", body: JSON.stringify({ enabled: false }) },
+  );
+}
+
+export async function updateCloudflareLiveInputAccess(input: {
+  readonly liveInputId: string;
+  readonly requireSignedUrls: boolean;
+}): Promise<void> {
+  await cloudflareStreamRequest(
+    `/live_inputs/${encodeURIComponent(input.liveInputId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        recording: { requireSignedURLs: input.requireSignedUrls },
+      }),
+    },
+  );
+}
+
+export async function updateCloudflareVideoAccess(input: {
+  readonly videoId: string;
+  readonly requireSignedUrls: boolean;
+}): Promise<void> {
+  await cloudflareStreamRequest(`/${encodeURIComponent(input.videoId)}`, {
+    method: "POST",
+    body: JSON.stringify({ requireSignedURLs: input.requireSignedUrls }),
+  });
+}
+
+export async function createCloudflareLiveOutput(input: {
+  readonly liveInputId: string;
+  readonly url: string;
+  readonly streamKey: string;
+}): Promise<{ readonly outputId: string }> {
+  const output = await cloudflareStreamRequest<{ readonly uid?: string }>(
+    `/live_inputs/${encodeURIComponent(input.liveInputId)}/outputs`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        enabled: true,
+        url: input.url,
+        streamKey: input.streamKey,
+      }),
+    },
+  );
+  const outputId = output.uid?.trim();
+  if (!outputId) {
+    throw new Error("Cloudflare Stream did not return a simulcast output ID.");
+  }
+  return { outputId };
+}
+
+export async function listCloudflareLiveRecordings(
+  liveInputId: string,
+): Promise<
+  readonly {
+    readonly videoId: string;
+    readonly ready: boolean;
+    readonly createdAt?: string;
+    readonly durationSeconds?: number;
+    readonly playbackHlsUrl?: string;
+    readonly thumbnailUrl?: string;
+  }[]
+> {
+  const videos = await cloudflareStreamRequest<
+    readonly {
+      readonly uid?: string;
+      readonly created?: string;
+      readonly readyToStream?: boolean;
+      readonly duration?: number;
+      readonly playback?: { readonly hls?: string };
+      readonly thumbnail?: string;
+      readonly status?: { readonly state?: string };
+    }[]
+  >(`/live_inputs/${encodeURIComponent(liveInputId)}/videos`);
+  return videos.flatMap((video) => {
+    const videoId = video.uid?.trim();
+    if (!videoId) return [];
+    return [
+      {
+        videoId,
+        ready: video.readyToStream === true || video.status?.state === "ready",
+        createdAt: video.created?.trim() || undefined,
+        durationSeconds:
+          typeof video.duration === "number" && video.duration >= 0
+            ? Math.floor(video.duration)
+            : undefined,
+        playbackHlsUrl: video.playback?.hls?.trim() || undefined,
+        thumbnailUrl: video.thumbnail?.trim() || undefined,
+      },
+    ];
+  });
+}
+
+export async function signCloudflarePlayback(input: {
+  readonly playbackId: string;
+  readonly durationSeconds?: number;
+}): Promise<string> {
+  const lifetimeSeconds = Math.min(
+    24 * 60 * 60,
+    Math.max(
+      VIDEO_PLAYBACK_TOKEN_MINIMUM_SECONDS,
+      (input.durationSeconds ?? 0) + 30 * 60,
+    ),
+  );
+  const signed = await cloudflareStreamRequest<{ readonly token?: string }>(
+    `/${encodeURIComponent(input.playbackId)}/token`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        exp: Math.floor(Date.now() / 1_000) + lifetimeSeconds,
+      }),
+    },
+  );
+  const token = signed.token?.trim();
+  if (!token) {
+    throw new Error("Cloudflare Stream did not return a playback token.");
+  }
+  return token;
+}
+
+export function cloudflareSignedPlaybackUrl(
+  url: string,
+  playbackId: string,
+  token: string,
+): string {
+  const parsed = new URL(url);
+  parsed.pathname = parsed.pathname
+    .split("/")
+    .map((segment) => (segment === playbackId ? token : segment))
+    .join("/");
+  return parsed.toString();
+}
+
+export function cloudflareEmbedUrl(
+  playbackUrl: string,
+  playbackId: string,
+  playbackToken?: string,
+): string {
+  const origin = new URL(playbackUrl).origin;
+  return `${origin}/${playbackToken ?? playbackId}/iframe`;
+}
+
 function muxTokenSecret(): string | undefined {
   return (process.env.MUX_TOKEN_SECRET ?? process.env.MUX_SECRET_KEY)?.trim();
 }
@@ -561,6 +958,12 @@ export function muxDataEnvironmentKey(): string | undefined {
   return process.env.MUX_DATA_ENV_KEY?.trim() || undefined;
 }
 
+export function muxLiveVideoQuality(): "plus" | "premium" {
+  return process.env.MUX_LIVE_VIDEO_QUALITY?.trim().toLowerCase() === "premium"
+    ? "premium"
+    : "plus";
+}
+
 export function buildMuxLiveStreamInput(input: {
   readonly videoId: string;
   readonly title: string;
@@ -596,6 +999,10 @@ export function buildMuxLiveStreamInput(input: {
       },
       new_asset_settings: {
         playback_policies: [recordingPolicy],
+        // Duna customer tier and Mux encoder quality are separate decisions.
+        // Premium Duna routes default to cost-equivalent Mux Plus; Premium
+        // encoding remains an explicit operational choice for marquee events.
+        video_quality: muxLiveVideoQuality(),
         meta: {
           title: input.title,
           external_id: input.videoId,
@@ -615,6 +1022,7 @@ export async function createMuxLiveVideo(input: {
 }): Promise<{
   readonly liveStreamId: string;
   readonly streamKey: string;
+  readonly srtPassphrase: string;
   readonly playbackId: string;
   readonly playbackPolicy: "public" | "signed";
 }> {
@@ -635,12 +1043,18 @@ export async function createMuxLiveVideo(input: {
   const playback = liveStream.playback_ids?.find(
     (candidate) => candidate.policy === playbackPolicy,
   );
-  if (!liveStream.id || !liveStream.stream_key || !playback?.id) {
+  if (
+    !liveStream.id ||
+    !liveStream.stream_key ||
+    !liveStream.srt_passphrase ||
+    !playback?.id
+  ) {
     throw new Error("Mux did not return a complete live-stream session.");
   }
   return {
     liveStreamId: liveStream.id,
     streamKey: liveStream.stream_key,
+    srtPassphrase: liveStream.srt_passphrase,
     playbackId: playback.id,
     playbackPolicy,
   };
@@ -650,6 +1064,39 @@ export async function completeMuxLiveVideo(
   liveStreamId: string,
 ): Promise<void> {
   await getMuxClient().video.liveStreams.complete(liveStreamId);
+}
+
+export async function loadMuxLiveIngest(
+  liveStreamId: string,
+): Promise<{ readonly streamKey: string; readonly srtPassphrase: string }> {
+  const liveStream =
+    await getMuxClient().video.liveStreams.retrieve(liveStreamId);
+  const streamKey = liveStream.stream_key?.trim();
+  const srtPassphrase = liveStream.srt_passphrase?.trim();
+  if (!streamKey || !srtPassphrase) {
+    throw new Error("Mux did not return complete live-stream ingest keys.");
+  }
+  return { streamKey, srtPassphrase };
+}
+
+export async function createMuxLiveOutput(input: {
+  readonly liveInputId: string;
+  readonly url: string;
+  readonly streamKey: string;
+  readonly passthrough: string;
+}): Promise<{ readonly outputId: string }> {
+  const target = await getMuxClient().video.liveStreams.createSimulcastTarget(
+    input.liveInputId,
+    {
+      url: input.url,
+      stream_key: input.streamKey,
+      passthrough: input.passthrough,
+    },
+  );
+  if (!target.id?.trim()) {
+    throw new Error("Mux did not return a simulcast target ID.");
+  }
+  return { outputId: target.id };
 }
 
 function providerResourceMissing(error: unknown): boolean {

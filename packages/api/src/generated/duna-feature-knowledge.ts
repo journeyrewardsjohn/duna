@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "f4d9747839269d55a0752edfae5d28cf4c50031e8697ac80d0031c97180af2a7",
+    "99d8a19e40b3498602f48db70ce6c16eb4b513b56506ed23a90be88182dad550",
   modules: [
     {
       id: "M1",
@@ -158,6 +158,7 @@ export const generatedDunaFeatureKnowledge = {
     "audit",
     "availableSlots",
     "beginVideoUpload",
+    "beginYoutubeChannelConnection",
     "blockCourtTime",
     "cancelAccountDeletion",
     "cancelBooking",
@@ -227,6 +228,7 @@ export const generatedDunaFeatureKnowledge = {
     "deactivatePromoCode",
     "deleteVenueLayoutDraft",
     "demoData",
+    "disconnectYoutubeChannel",
     "discoveryMap",
     "divisionDetail",
     "draftCourtSchedule",

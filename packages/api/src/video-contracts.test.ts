@@ -510,6 +510,31 @@ describe("Duna Video contracts", () => {
       overlayScoreboard: true,
       teamA: "Duna Blue",
       teamB: "Duna Sand",
+      program: {
+        scoreboardVisible: true,
+        score: {
+          setIndex: 0,
+          sets: [{ a: 18, b: 16 }],
+          serving: "A",
+          status: "live",
+        },
+        scoreCommand: {
+          id: crypto.randomUUID(),
+          type: "rally-won",
+          winnerSide: "A",
+          occurredAt: "2026-08-30T18:01:24.000Z",
+        },
+        replayRequest: {
+          id: crypto.randomUUID(),
+          durationSeconds: 10,
+          requestedAt: "2026-08-30T18:01:27.000Z",
+        },
+        sponsor: {
+          id: crypto.randomUUID(),
+          headline: "Presented by Duna",
+          active: true,
+        },
+      },
       corners: [
         { x: 0.08, y: 0.89 },
         { x: 0.92, y: 0.89 },
@@ -520,6 +545,10 @@ describe("Duna Video contracts", () => {
     expect(settings).toMatchObject({
       overlayScoreboard: true,
       cameraHeightMeters: 2.1,
+      program: {
+        scoreboardVisible: true,
+        replayRequest: { durationSeconds: 10 },
+      },
     });
     expect(
       visionSessionSettingsSchema.parse({
@@ -545,6 +574,19 @@ describe("Duna Video contracts", () => {
         corners: partial.corners?.map((corner, index) =>
           index === 0 ? { x: -2, y: corner.y } : corner,
         ),
+      }),
+    ).toThrow();
+    expect(() =>
+      visionSessionSettingsSchema.parse({
+        ...settings,
+        program: {
+          ...settings.program,
+          replayRequest: {
+            id: crypto.randomUUID(),
+            durationSeconds: 16,
+            requestedAt: "2026-08-30T18:01:27.000Z",
+          },
+        },
       }),
     ).toThrow();
   });
@@ -621,6 +663,7 @@ describe("Duna Video contracts", () => {
         insightFeedback: { helpful: 0, notHelpful: 0 },
         calibrationSamples: [],
       },
+      cloudflareConfigured: true,
       muxConfigured: false,
       r2Configured: true,
     });
@@ -824,6 +867,7 @@ describe("Duna Video provider readiness", () => {
       playback_policies: ["public"],
       new_asset_settings: {
         playback_policies: ["signed"],
+        video_quality: "plus",
         meta: { external_id: videoId },
       },
     });

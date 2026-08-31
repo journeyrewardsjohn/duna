@@ -1530,25 +1530,6 @@ export const courtCalibrationSchema = z.object({
   warnings: z.array(z.string().max(240)).max(12).readonly(),
   calibratedAt: z.iso.datetime(),
 });
-export const visionSessionSettingsSchema = z.object({
-  // Upload sessions retain the same calibrated event graph as Duna-recorded
-  // footage, but disclose that the player supplied setup after the fact.
-  captureMode: z.enum(["record", "live", "upload"]).optional(),
-  courtWidthMeters: z.number().positive().max(30),
-  courtLengthMeters: z.number().positive().max(40),
-  netHeightMeters: z.number().positive().max(4),
-  cameraHeightMeters: z.number().positive().max(20).optional(),
-  overlayScoreboard: z.boolean(),
-  teamA: z.string().trim().min(1).max(80),
-  teamB: z.string().trim().min(1).max(80),
-  corners: z.array(capturePointSchema).length(4).readonly().optional(),
-  netLine: captureLineSchema.optional(),
-  netTopLine: captureLineSchema.optional(),
-  antennaPoints: captureLineSchema.optional(),
-  nearLineVisible: z.boolean().optional(),
-  edgeVisibility: captureEdgeVisibilitySchema.optional(),
-  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
-});
 export const visionScoreSnapshotSchema = z
   .object({
     setIndex: z.number().int().nonnegative(),
@@ -1569,6 +1550,54 @@ export const visionScoreSnapshotSchema = z
     message: "The active set must exist in the score snapshot.",
     path: ["setIndex"],
   });
+export const visionProgramStateSchema = z.object({
+  scoreboardVisible: z.boolean(),
+  score: visionScoreSnapshotSchema.optional(),
+  scoreCommand: z
+    .object({
+      id: z.string().uuid(),
+      type: z.literal("rally-won"),
+      winnerSide: z.enum(["A", "B"]),
+      occurredAt: z.iso.datetime(),
+    })
+    .optional(),
+  replayRequest: z
+    .object({
+      id: z.string().uuid(),
+      durationSeconds: z.number().int().min(4).max(15),
+      requestedAt: z.iso.datetime(),
+    })
+    .optional(),
+  sponsor: z
+    .object({
+      id: z.string().uuid(),
+      headline: z.string().trim().min(1).max(80),
+      body: z.string().trim().max(160).optional(),
+      active: z.boolean(),
+    })
+    .optional(),
+});
+export const visionSessionSettingsSchema = z.object({
+  // Upload sessions retain the same calibrated event graph as Duna-recorded
+  // footage, but disclose that the player supplied setup after the fact.
+  captureMode: z.enum(["record", "live", "upload"]).optional(),
+  courtWidthMeters: z.number().positive().max(30),
+  courtLengthMeters: z.number().positive().max(40),
+  netHeightMeters: z.number().positive().max(4),
+  cameraHeightMeters: z.number().positive().max(20).optional(),
+  overlayScoreboard: z.boolean(),
+  teamA: z.string().trim().min(1).max(80),
+  teamB: z.string().trim().min(1).max(80),
+  corners: z.array(capturePointSchema).length(4).readonly().optional(),
+  netLine: captureLineSchema.optional(),
+  netTopLine: captureLineSchema.optional(),
+  antennaPoints: captureLineSchema.optional(),
+  nearLineVisible: z.boolean().optional(),
+  edgeVisibility: captureEdgeVisibilitySchema.optional(),
+  calibrationMode: z.enum(["automatic", "assisted", "manual"]).optional(),
+  /** Producer controls mirrored to the camera and burned into its program feed. */
+  program: visionProgramStateSchema.optional(),
+});
 export const visionTimelineEventSchema = z
   .object({
     id: z.string().uuid(),
@@ -2623,6 +2652,7 @@ export const videoSummarySchema = z.object({
   organizationId: z.string().uuid().optional(),
   owner: personSummarySchema,
   source: videoSourceSchema,
+  liveProvider: z.enum(["cloudflare", "mux"]).optional(),
   category: videoCategorySchema,
   title: z.string(),
   status: videoStatusSchema,
@@ -2704,6 +2734,35 @@ export const videoStudioSchema = z.object({
   liveConfigured: z.boolean(),
   uploadsConfigured: z.boolean(),
   dataEnvironmentKey: z.string().optional(),
+  broadcast: z.object({
+    preferredProvider: z.enum(["cloudflare", "mux"]).optional(),
+    cloudflareConfigured: z.boolean(),
+    muxConfigured: z.boolean(),
+    srtIngestAvailable: z.boolean(),
+    activeClientIngest: z.enum(["rtmps", "srt"]),
+    youtube: z.object({
+      linkingConfigured: z.boolean(),
+      canManageOrganizationConnections: z.boolean(),
+      dunaChannel: z
+        .object({
+          channelId: z.string(),
+          channelTitle: z.string(),
+        })
+        .optional(),
+      connections: z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            channelId: z.string(),
+            channelTitle: z.string(),
+            scope: z.enum(["personal", "organization"]),
+            status: z.enum(["active", "error"]),
+            lastError: z.string().optional(),
+          }),
+        )
+        .readonly(),
+    }),
+  }),
 });
 export const videoAssociationOptionSchema = z.object({
   type: z.enum(["event", "match"]),
@@ -2734,10 +2793,11 @@ export const videoAssociationOptionSchema = z.object({
 });
 export const videoPlaybackSchema = z.object({
   video: videoSummarySchema,
-  provider: z.enum(["mux", "r2"]),
+  provider: z.enum(["cloudflare", "mux", "r2"]),
   playbackId: z.string().optional(),
   playbackToken: z.string().optional(),
   sourceUrl: z.url().optional(),
+  embedUrl: z.url().optional(),
   posterUrl: z.url().optional(),
   dataEnvironmentKey: z.string().optional(),
   viewSessionId: z.string().uuid(),
@@ -2748,8 +2808,35 @@ export const videoPlaybackSchema = z.object({
 });
 export const liveVideoSessionSchema = z.object({
   video: videoSummarySchema,
+  provider: z.enum(["cloudflare", "mux"]),
   streamUrl: z.url(),
   streamKey: z.string().min(8),
+  ingests: z.object({
+    rtmps: z.object({
+      url: z.url(),
+      streamKey: z.string().min(8),
+    }),
+    srt: z
+      .object({
+        url: z.url(),
+        streamId: z.string().min(1),
+        passphrase: z.string().min(10),
+      })
+      .optional(),
+  }),
+  destinations: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        kind: z.enum(["duna-youtube", "connected-youtube"]),
+        channelId: z.string(),
+        channelTitle: z.string(),
+        status: z.enum(["ready", "failed"]),
+        watchUrl: z.url().optional(),
+        error: z.string().optional(),
+      }),
+    )
+    .readonly(),
   maximumDurationSeconds: z.number().int().positive(),
   shareUrl: z.url(),
 });
@@ -2876,6 +2963,7 @@ export const adminVideoOverviewSchema = z.object({
     }),
     calibrationSamples: z.array(visionCalibrationReviewSampleSchema).readonly(),
   }),
+  cloudflareConfigured: z.boolean(),
   muxConfigured: z.boolean(),
   r2Configured: z.boolean(),
 });
@@ -7036,6 +7124,7 @@ export type VideoSummary = z.infer<typeof videoSummarySchema>;
 export type VideoStudio = z.infer<typeof videoStudioSchema>;
 export type VideoUsage = z.infer<typeof videoUsageSchema>;
 export type VideoPlayback = z.infer<typeof videoPlaybackSchema>;
+export type LiveVideoSession = z.infer<typeof liveVideoSessionSchema>;
 export type VideoMetrics = z.infer<typeof videoMetricsSchema>;
 export type VisionSession = z.infer<typeof visionSessionSchema>;
 export type VisionSessionSettings = z.infer<typeof visionSessionSettingsSchema>;

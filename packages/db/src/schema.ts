@@ -4055,6 +4055,20 @@ export const videos = pgTable(
     musicRemovalStatus: varchar("music_removal_status", { length: 24 })
       .notNull()
       .default("not-requested"),
+    // Provider-neutral live fields let new broadcasts prefer Cloudflare while
+    // preserving every existing Mux stream and replay during migration.
+    liveProvider: varchar("live_provider", { length: 24 }),
+    liveProviderInputId: varchar("live_provider_input_id", {
+      length: 128,
+    }).unique(),
+    liveProviderPlaybackId: varchar("live_provider_playback_id", {
+      length: 128,
+    }),
+    liveProviderPlaybackUrl: text("live_provider_playback_url"),
+    liveProviderPlaybackPolicy: varchar("live_provider_playback_policy", {
+      length: 16,
+    }),
+    liveProviderPosterUrl: text("live_provider_poster_url"),
     muxLiveStreamId: varchar("mux_live_stream_id", {
       length: 128,
     }).unique(),
@@ -4174,6 +4188,14 @@ export const videos = pgTable(
       sql`${table.musicRemovalStatus} IN ('not-requested', 'queued', 'processing', 'complete', 'failed', 'provider-required')`,
     ),
     check(
+      "video_live_provider_valid",
+      sql`${table.liveProvider} IS NULL OR ${table.liveProvider} IN ('cloudflare', 'mux')`,
+    ),
+    check(
+      "video_live_provider_playback_policy_valid",
+      sql`${table.liveProviderPlaybackPolicy} IS NULL OR ${table.liveProviderPlaybackPolicy} IN ('public', 'signed')`,
+    ),
+    check(
       "video_duration_nonnegative",
       sql`${table.durationSeconds} IS NULL OR ${table.durationSeconds} >= 0`,
     ),
@@ -4196,6 +4218,137 @@ export const videos = pgTable(
     check(
       "video_vision_learning_consent_pair",
       sql`(${table.visionLearningConsent} = false AND ${table.visionLearningConsentedAt} IS NULL) OR (${table.visionLearningConsent} = true AND ${table.visionLearningConsentedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const youtubeChannelConnections = pgTable(
+  "youtube_channel_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerPersonId: uuid("owner_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    channelId: varchar("channel_id", { length: 128 }).notNull(),
+    channelTitle: text("channel_title").notNull(),
+    encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
+    encryptionIv: varchar("encryption_iv", { length: 128 }).notNull(),
+    encryptionAuthTag: varchar("encryption_auth_tag", {
+      length: 128,
+    }).notNull(),
+    encryptionKeyVersion: integer("encryption_key_version")
+      .notNull()
+      .default(1),
+    scopes: text("scopes")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    lastValidatedAt: timestamp("last_validated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    lastError: text("last_error"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("youtube_channel_connection_person_unique")
+      .on(table.ownerPersonId, table.channelId)
+      .where(sql`${table.organizationId} IS NULL`),
+    uniqueIndex("youtube_channel_connection_organization_unique")
+      .on(table.organizationId, table.channelId)
+      .where(sql`${table.organizationId} IS NOT NULL`),
+    index("youtube_channel_connection_scope_idx").on(
+      table.ownerPersonId,
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "youtube_channel_connection_status_valid",
+      sql`${table.status} IN ('active', 'error', 'revoked')`,
+    ),
+  ],
+);
+
+export const videoProviderOauthStates = pgTable(
+  "video_provider_oauth_states",
+  {
+    stateHash: varchar("state_hash", { length: 64 }).primaryKey(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    provider: varchar("provider", { length: 24 }).notNull(),
+    returnUrl: text("return_url").notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+  },
+  (table) => [
+    index("video_provider_oauth_state_expires_idx").on(table.expiresAt),
+    check(
+      "video_provider_oauth_state_provider_valid",
+      sql`${table.provider} IN ('youtube')`,
+    ),
+  ],
+);
+
+export const videoBroadcastDestinations = pgTable(
+  "video_broadcast_destinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    youtubeConnectionId: uuid("youtube_connection_id").references(
+      () => youtubeChannelConnections.id,
+      { onDelete: "set null" },
+    ),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    channelId: varchar("channel_id", { length: 128 }).notNull(),
+    channelTitle: text("channel_title").notNull(),
+    providerOutputId: varchar("provider_output_id", { length: 128 }),
+    youtubeBroadcastId: varchar("youtube_broadcast_id", { length: 128 }),
+    youtubeStreamId: varchar("youtube_stream_id", { length: 128 }),
+    youtubeWatchUrl: text("youtube_watch_url"),
+    youtubePrivacyStatus: varchar("youtube_privacy_status", { length: 16 }),
+    status: varchar("status", { length: 24 }).notNull().default("provisioning"),
+    failureReason: text("failure_reason"),
+    endedAt: timestamp("ended_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("video_broadcast_destination_channel_unique").on(
+      table.videoId,
+      table.kind,
+      table.channelId,
+    ),
+    index("video_broadcast_destination_video_idx").on(
+      table.videoId,
+      table.status,
+    ),
+    check(
+      "video_broadcast_destination_kind_valid",
+      sql`${table.kind} IN ('duna-youtube', 'connected-youtube')`,
+    ),
+    check(
+      "video_broadcast_destination_status_valid",
+      sql`${table.status} IN ('provisioning', 'ready', 'failed', 'ended')`,
+    ),
+    check(
+      "video_broadcast_destination_privacy_valid",
+      sql`${table.youtubePrivacyStatus} IS NULL OR ${table.youtubePrivacyStatus} IN ('public', 'unlisted')`,
     ),
   ],
 );
@@ -4257,6 +4410,35 @@ export const visionSessions = pgTable(
           readonly net: boolean;
         };
         readonly calibrationMode?: "automatic" | "assisted" | "manual";
+        readonly program?: {
+          readonly scoreboardVisible: boolean;
+          readonly score?: {
+            readonly setIndex: number;
+            readonly sets: readonly {
+              readonly a: number;
+              readonly b: number;
+            }[];
+            readonly serving?: "A" | "B";
+            readonly status: "not-started" | "live" | "complete" | "forfeit";
+          };
+          readonly scoreCommand?: {
+            readonly id: string;
+            readonly type: "rally-won";
+            readonly winnerSide: "A" | "B";
+            readonly occurredAt: string;
+          };
+          readonly replayRequest?: {
+            readonly id: string;
+            readonly durationSeconds: number;
+            readonly requestedAt: string;
+          };
+          readonly sponsor?: {
+            readonly id: string;
+            readonly headline: string;
+            readonly body?: string;
+            readonly active: boolean;
+          };
+        };
       }>()
       .notNull(),
     controlVersion: integer("control_version").notNull().default(1),

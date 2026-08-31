@@ -59,6 +59,8 @@ export * from "./webhooks";
 export * from "./money-service";
 export * from "./weather";
 export * from "./video-providers";
+export * from "./video-youtube-provider";
+export * from "./video-youtube-service";
 export * from "./video-analysis-service";
 export * from "./virtual-session-service";
 export * from "./video-service";

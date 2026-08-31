@@ -6,15 +6,59 @@ import ExpoModulesCore
 import HaishinKit
 import PhotosUI
 import SceneKit
+import SRTHaishinKit
 import UIKit
 import UniformTypeIdentifiers
 import Vision
 
+private struct DunaProgramState: Codable {
+  let teamA: String
+  let teamB: String
+  let scoreA: Int
+  let scoreB: Int
+  let setLabel: String
+  let scoreboardVisible: Bool
+  let sponsorHeadline: String?
+  let sponsorBody: String?
+  let sponsorVisible: Bool
+}
+
 private final class DunaVideoCaptureController: NSObject {
   static let shared = DunaVideoCaptureController()
 
-  private let connection = RTMPConnection()
-  let stream: RTMPStream
+  private var rtmpConnection: RTMPConnection?
+  private var srtConnection: SRTConnection?
+  private(set) var stream: IOStream
+  private var activeTransport = "rtmps"
+  private var fallbackRtmpsUrl: String?
+  private var fallbackRtmpsKey: String?
+  private var fallingBack = false
+  private var srtWasLive = false
+  private let scoreboardScreenObject = ImageScreenObject()
+  private let sponsorScreenObject = ImageScreenObject()
+  private let replayBadgeScreenObject = ImageScreenObject()
+  private var replayScreenObject: AssetScreenObject?
+  private var activeReplayUrls: [URL] = []
+  private var replayRemovalWorkItem: DispatchWorkItem?
+  private var replayRotationWorkItem: DispatchWorkItem?
+  private var lastReplayBufferUrl: URL?
+  private var programState = DunaProgramState(
+    teamA: "Team A",
+    teamB: "Team B",
+    scoreA: 0,
+    scoreB: 0,
+    setLabel: "SET 1",
+    scoreboardVisible: true,
+    sponsorHeadline: nil,
+    sponsorBody: nil,
+    sponsorVisible: false
+  )
+  private var replayRecorder: IOStreamRecorder?
+  private weak var replayRecorderStream: IOStream?
+  private var replayBufferStartedAt: CFAbsoluteTime?
+  private var pendingReplayDuration: Int?
+  private var discardReplayBuffer = false
+  private var restartReplayAfterStreamReplacement = false
   private let motionManager = CMMotionManager()
   let arSession = ARSession()
   private let visionQueue = DispatchQueue(
@@ -43,6 +87,7 @@ private final class DunaVideoCaptureController: NSObject {
   private var usesGroundTracking = false
   private var lidarAvailable = false
   private var latestGroundCorners: [CGPoint]?
+  private var latestGroundCourtHypotheses: [[CGPoint]] = []
   private var latestCameraHeight: Double?
   private var latestHorizonY = 0.16
   private var latestTrackingState = "initializing"
@@ -52,33 +97,32 @@ private final class DunaVideoCaptureController: NSObject {
   private var stableSuggestion: String?
   private var lockedCaptureOrientation: AVCaptureVideoOrientation?
   private var currentDeviceOrientation = "unknown"
+  private var stableCourtCorners: [CGPoint]?
+  private var stableNetTopLine: [CGPoint]?
+  private var courtEvidenceFrames = 0
+  private var netEvidenceFrames = 0
+  private var lastCourtEvidenceAt = CFAbsoluteTimeGetCurrent()
+  private var lastNetEvidenceAt = CFAbsoluteTimeGetCurrent()
+  private var stableCourtProjectionSource = "estimated"
 
   var courtWidthMeters = 8.0
   var courtLengthMeters = 16.0
   var netHeightMeters = 2.43
-  var preferredOrientation = "landscape"
+  var preferredOrientation = "landscape" {
+    didSet {
+      stream.screen.size = programOutputSize()
+      renderProgramState()
+    }
+  }
 
   private override init() {
+    let connection = RTMPConnection()
+    rtmpConnection = connection
     stream = RTMPStream(connection: connection)
     super.init()
-    stream.delegate = self
+    configureStream(stream)
     arSession.delegate = self
-    stream.frameRate = 30
-    stream.videoSettings.bitRate = 5_000_000
-    stream.audioSettings.bitRate = 128_000
-    stream.bitrateStrategy = IOStreamVideoAdaptiveBitRateStrategy(
-      mamimumVideoBitrate: 5_000_000
-    )
-    connection.addEventListener(
-      .rtmpStatus,
-      selector: #selector(handleRTMPStatus(_:)),
-      observer: self
-    )
-    connection.addEventListener(
-      .ioError,
-      selector: #selector(handleRTMPError(_:)),
-      observer: self
-    )
+    observeRTMPConnection(connection)
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(handleOrientationChange),
@@ -95,16 +139,9 @@ private final class DunaVideoCaptureController: NSObject {
   }
 
   deinit {
-    connection.removeEventListener(
-      .rtmpStatus,
-      selector: #selector(handleRTMPStatus(_:)),
-      observer: self
-    )
-    connection.removeEventListener(
-      .ioError,
-      selector: #selector(handleRTMPError(_:)),
-      observer: self
-    )
+    if let rtmpConnection {
+      stopObservingRTMPConnection(rtmpConnection)
+    }
     NotificationCenter.default.removeObserver(self)
     UIDevice.current.endGeneratingDeviceOrientationNotifications()
   }
@@ -121,6 +158,101 @@ private final class DunaVideoCaptureController: NSObject {
     if activeView === view {
       activeView = nil
     }
+  }
+
+  private func observeRTMPConnection(_ connection: RTMPConnection) {
+    connection.addEventListener(
+      .rtmpStatus,
+      selector: #selector(handleRTMPStatus(_:)),
+      observer: self
+    )
+    connection.addEventListener(
+      .ioError,
+      selector: #selector(handleRTMPError(_:)),
+      observer: self
+    )
+  }
+
+  private func stopObservingRTMPConnection(_ connection: RTMPConnection) {
+    connection.removeEventListener(
+      .rtmpStatus,
+      selector: #selector(handleRTMPStatus(_:)),
+      observer: self
+    )
+    connection.removeEventListener(
+      .ioError,
+      selector: #selector(handleRTMPError(_:)),
+      observer: self
+    )
+  }
+
+  private func programOutputSize() -> CGSize {
+    preferredOrientation == "portrait"
+      ? CGSize(width: 720, height: 1280)
+      : CGSize(width: 1280, height: 720)
+  }
+
+  private func configureStream(_ target: IOStream) {
+    target.delegate = self
+    target.frameRate = 30
+    target.videoSettings.bitRate = 5_000_000
+    target.audioSettings.bitRate = 128_000
+    target.bitrateStrategy = IOStreamVideoAdaptiveBitRateStrategy(
+      mamimumVideoBitrate: 5_000_000
+    )
+    target.videoMixerSettings.mode = .offscreen
+    target.screen.size = programOutputSize()
+    target.screen.backgroundColor = UIColor.black.cgColor
+    try? target.screen.addChild(scoreboardScreenObject)
+    try? target.screen.addChild(sponsorScreenObject)
+    try? target.screen.addChild(replayBadgeScreenObject)
+    target.screen.startRunning()
+    renderProgramState()
+  }
+
+  private func replaceStream(_ next: IOStream, transport: String) {
+    let previous = stream
+    previous.screen.removeChild(scoreboardScreenObject)
+    previous.screen.removeChild(sponsorScreenObject)
+    previous.screen.removeChild(replayBadgeScreenObject)
+    if let replayScreenObject {
+      previous.screen.removeChild(replayScreenObject)
+      replayScreenObject.cancelReading()
+      self.replayScreenObject = nil
+    }
+    replayRemovalWorkItem?.cancel()
+    replayRemovalWorkItem = nil
+    for url in activeReplayUrls {
+      try? FileManager.default.removeItem(at: url)
+    }
+    activeReplayUrls = []
+    previous.attachCamera(nil)
+    previous.attachAudio(nil)
+    previous.screen.stopRunning()
+    stream = next
+    activeTransport = transport
+    configureStream(next)
+    activeView?.preview.attachStream(next)
+    if prepared && !usesGroundTracking {
+      attachCaptureDevices(audioEnabled: audioEnabled)
+    }
+  }
+
+  private func makeRTMPStream() -> RTMPStream {
+    if let current = rtmpConnection {
+      stopObservingRTMPConnection(current)
+      current.close()
+    }
+    let connection = RTMPConnection()
+    rtmpConnection = connection
+    observeRTMPConnection(connection)
+    return RTMPStream(connection: connection)
+  }
+
+  private func makeSRTStream() -> SRTStream {
+    let connection = SRTConnection()
+    srtConnection = connection
+    return SRTStream(connection: connection)
   }
 
   func prepare(audioEnabled: Bool) throws {
@@ -162,36 +294,515 @@ private final class DunaVideoCaptureController: NSObject {
     arSession.pause()
     usesGroundTracking = false
     latestGroundCorners = nil
+    latestGroundCourtHypotheses = []
     latestCameraHeight = nil
     smoothedScore = nil
     stableSuggestion = nil
     pendingSuggestion = nil
+    stableCourtCorners = nil
+    stableNetTopLine = nil
+    courtEvidenceFrames = 0
+    netEvidenceFrames = 0
+    stableCourtProjectionSource = "estimated"
     showGroundPreview(false)
     motionManager.stopDeviceMotionUpdates()
     prepared = false
     camera = nil
   }
 
-  func startStream(url: String, key: String, audioEnabled: Bool) throws {
+  func startStream(
+    url: String,
+    key: String,
+    audioEnabled: Bool,
+    transport: String,
+    srtPassphrase: String?,
+    fallbackUrl: String?,
+    fallbackKey: String?
+  ) throws {
     try prepare(audioEnabled: audioEnabled)
+    fallbackRtmpsUrl = fallbackUrl
+    fallbackRtmpsKey = fallbackKey
+    fallingBack = false
+    srtWasLive = false
+    restartReplayAfterStreamReplacement = false
+    if transport == "srt" {
+      if let rtmpConnection {
+        stopObservingRTMPConnection(rtmpConnection)
+        rtmpConnection.close()
+        self.rtmpConnection = nil
+      }
+      replaceStream(makeSRTStream(), transport: "srt")
+    } else {
+      replaceStream(makeRTMPStream(), transport: "rtmps")
+    }
     transitionToCapture(audioEnabled: audioEnabled)
     pendingStreamKey = key
     UIApplication.shared.isIdleTimerDisabled = true
     emitState("connecting")
-    connection.connect(url)
+    if transport == "srt" {
+      guard
+        let passphrase = srtPassphrase,
+        passphrase.count >= 10,
+        let srtUrl = srtConnectionUrl(
+          baseUrl: url,
+          streamId: key,
+          passphrase: passphrase
+        ),
+        let connection = srtConnection,
+        let srtStream = stream as? SRTStream
+      else {
+        throw NSError(
+          domain: "DunaVideoCapture",
+          code: 4,
+          userInfo: [NSLocalizedDescriptionKey: "The secure SRT session is invalid."]
+        )
+      }
+      Task { [weak self, weak connection, weak srtStream] in
+        guard let connection, let srtStream else { return }
+        do {
+          try await connection.open(srtUrl)
+          guard self?.pendingStreamKey == key else { return }
+          srtStream.publish()
+        } catch {
+          DispatchQueue.main.async { [weak self] in
+            self?.fallbackToRTMPS(
+              reason: "SRT could not connect; Duna switched to RTMPS."
+            )
+          }
+        }
+      }
+      return
+    }
+    rtmpConnection?.connect(url)
   }
 
   func stopStream() {
+    discardReplayBuffer = true
+    replayRecorder?.stopRunning()
+    replayBufferStartedAt = nil
+    replayRotationWorkItem?.cancel()
+    replayRotationWorkItem = nil
+    if let lastReplayBufferUrl {
+      try? FileManager.default.removeItem(at: lastReplayBufferUrl)
+      self.lastReplayBufferUrl = nil
+    }
+    replayRemovalWorkItem?.cancel()
+    replayRemovalWorkItem = nil
+    if let replayScreenObject {
+      stream.screen.removeChild(replayScreenObject)
+      replayScreenObject.cancelReading()
+      self.replayScreenObject = nil
+    }
+    for url in activeReplayUrls {
+      try? FileManager.default.removeItem(at: url)
+    }
+    activeReplayUrls = []
     pendingStreamKey = nil
-    stream.close()
-    connection.close()
+    (stream as? RTMPStream)?.close()
+    (stream as? SRTStream)?.close()
+    rtmpConnection?.close()
+    if let srtConnection {
+      Task { await srtConnection.close() }
+    }
+    fallbackRtmpsUrl = nil
+    fallbackRtmpsKey = nil
+    fallingBack = false
+    srtWasLive = false
+    restartReplayAfterStreamReplacement = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = recorder != nil
     emitState("stopped")
   }
 
+  private func srtConnectionUrl(
+    baseUrl: String,
+    streamId: String,
+    passphrase: String
+  ) -> URL? {
+    guard var components = URLComponents(string: baseUrl) else { return nil }
+    var query = components.queryItems ?? []
+    query.removeAll {
+      ["streamid", "passphrase", "latency", "oheadbw", "transtype"]
+        .contains($0.name.lowercased())
+    }
+    query.append(contentsOf: [
+      URLQueryItem(name: "streamid", value: streamId),
+      URLQueryItem(name: "passphrase", value: passphrase),
+      URLQueryItem(name: "latency", value: "500"),
+      URLQueryItem(name: "oheadbw", value: "25"),
+      URLQueryItem(name: "transtype", value: "live")
+    ])
+    components.queryItems = query
+    return components.url
+  }
+
+  private func fallbackToRTMPS(reason: String) {
+    guard
+      !fallingBack,
+      pendingStreamKey != nil,
+      let fallbackRtmpsUrl,
+      let fallbackRtmpsKey
+    else {
+      emitError("The live stream could not connect. Check your connection.")
+      emitState("stopped")
+      return
+    }
+    fallingBack = true
+    if let replayRecorder {
+      restartReplayAfterStreamReplacement = true
+      discardReplayBuffer = true
+      replayRotationWorkItem?.cancel()
+      replayRotationWorkItem = nil
+      replayRecorder.stopRunning()
+    }
+    if let srtConnection {
+      Task { await srtConnection.close() }
+    }
+    replaceStream(makeRTMPStream(), transport: "rtmps")
+    pendingStreamKey = fallbackRtmpsKey
+    transitionToCapture(audioEnabled: audioEnabled)
+    emitError(reason)
+    emitState("connecting")
+    rtmpConnection?.connect(fallbackRtmpsUrl)
+  }
+
+  func updateProgramState(json: String) throws {
+    guard let data = json.data(using: .utf8) else { return }
+    programState = try JSONDecoder().decode(DunaProgramState.self, from: data)
+    renderProgramState()
+  }
+
+  private func drawText(
+    _ text: String,
+    in rect: CGRect,
+    font: UIFont,
+    color: UIColor,
+    alignment: NSTextAlignment = .left
+  ) {
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = alignment
+    paragraph.lineBreakMode = .byTruncatingTail
+    (text as NSString).draw(
+      in: rect,
+      withAttributes: [
+        .font: font,
+        .foregroundColor: color,
+        .paragraphStyle: paragraph
+      ]
+    )
+  }
+
+  private func scoreboardImage() -> CGImage? {
+    let size = CGSize(width: 650, height: 112)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    format.opaque = false
+    return UIGraphicsImageRenderer(size: size, format: format).image { context in
+      let bounds = CGRect(origin: .zero, size: size)
+      UIColor(red: 0.025, green: 0.09, blue: 0.14, alpha: 0.94).setFill()
+      UIBezierPath(roundedRect: bounds, cornerRadius: 18).fill()
+      UIColor(red: 0.15, green: 0.84, blue: 0.79, alpha: 1).setFill()
+      UIBezierPath(
+        roundedRect: CGRect(x: 0, y: 0, width: 12, height: size.height),
+        cornerRadius: 6
+      ).fill()
+      drawText(
+        programState.setLabel.uppercased(),
+        in: CGRect(x: 30, y: 13, width: 86, height: 26),
+        font: .boldSystemFont(ofSize: 18),
+        color: UIColor(red: 0.15, green: 0.84, blue: 0.79, alpha: 1)
+      )
+      drawText(
+        programState.teamA,
+        in: CGRect(x: 126, y: 12, width: 405, height: 38),
+        font: .boldSystemFont(ofSize: 26),
+        color: .white
+      )
+      drawText(
+        programState.teamB,
+        in: CGRect(x: 126, y: 63, width: 405, height: 38),
+        font: .boldSystemFont(ofSize: 26),
+        color: .white
+      )
+      drawText(
+        String(programState.scoreA),
+        in: CGRect(x: 548, y: 6, width: 76, height: 48),
+        font: .monospacedDigitSystemFont(ofSize: 40, weight: .black),
+        color: .white,
+        alignment: .right
+      )
+      drawText(
+        String(programState.scoreB),
+        in: CGRect(x: 548, y: 57, width: 76, height: 48),
+        font: .monospacedDigitSystemFont(ofSize: 40, weight: .black),
+        color: .white,
+        alignment: .right
+      )
+      UIColor(white: 1, alpha: 0.18).setStroke()
+      context.cgContext.setLineWidth(1)
+      context.cgContext.move(to: CGPoint(x: 126, y: 56))
+      context.cgContext.addLine(to: CGPoint(x: 624, y: 56))
+      context.cgContext.strokePath()
+    }.cgImage
+  }
+
+  private func sponsorImage() -> CGImage? {
+    guard let headline = programState.sponsorHeadline else { return nil }
+    let size = CGSize(
+      width: preferredOrientation == "portrait" ? 650 : 820,
+      height: 118
+    )
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    format.opaque = false
+    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      let bounds = CGRect(origin: .zero, size: size)
+      UIColor(red: 0.96, green: 0.91, blue: 0.79, alpha: 0.96).setFill()
+      UIBezierPath(roundedRect: bounds, cornerRadius: 22).fill()
+      drawText(
+        "SPONSOR",
+        in: CGRect(x: 28, y: 19, width: 112, height: 24),
+        font: .boldSystemFont(ofSize: 17),
+        color: UIColor(red: 0.05, green: 0.26, blue: 0.3, alpha: 1)
+      )
+      drawText(
+        headline,
+        in: CGRect(x: 154, y: 15, width: size.width - 182, height: 39),
+        font: .boldSystemFont(ofSize: 30),
+        color: UIColor(red: 0.03, green: 0.09, blue: 0.13, alpha: 1)
+      )
+      if let body = programState.sponsorBody, !body.isEmpty {
+        drawText(
+          body,
+          in: CGRect(x: 154, y: 61, width: size.width - 182, height: 35),
+          font: .systemFont(ofSize: 22, weight: .medium),
+          color: UIColor(red: 0.17, green: 0.23, blue: 0.26, alpha: 1)
+        )
+      }
+    }.cgImage
+  }
+
+  private func replayBadgeImage() -> CGImage? {
+    let size = CGSize(width: 182, height: 58)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    format.opaque = false
+    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      UIColor(red: 0.91, green: 0.31, blue: 0.18, alpha: 0.96).setFill()
+      UIBezierPath(
+        roundedRect: CGRect(origin: .zero, size: size),
+        cornerRadius: 16
+      ).fill()
+      drawText(
+        "↶  REPLAY",
+        in: CGRect(x: 18, y: 13, width: 146, height: 34),
+        font: .boldSystemFont(ofSize: 23),
+        color: .white,
+        alignment: .center
+      )
+    }.cgImage
+  }
+
+  private func renderProgramState() {
+    scoreboardScreenObject.horizontalAlignment = .left
+    scoreboardScreenObject.verticalAlignment = .top
+    scoreboardScreenObject.layoutMargin = UIEdgeInsets(
+      top: 28,
+      left: 28,
+      bottom: 0,
+      right: 0
+    )
+    scoreboardScreenObject.cgImage = scoreboardImage()
+    scoreboardScreenObject.isVisible = programState.scoreboardVisible
+
+    sponsorScreenObject.horizontalAlignment = .center
+    sponsorScreenObject.verticalAlignment = .bottom
+    sponsorScreenObject.layoutMargin = UIEdgeInsets(
+      top: 0,
+      left: 0,
+      bottom: 34,
+      right: 0
+    )
+    sponsorScreenObject.cgImage = sponsorImage()
+    sponsorScreenObject.isVisible =
+      programState.sponsorVisible && programState.sponsorHeadline != nil
+
+    replayBadgeScreenObject.horizontalAlignment = .right
+    replayBadgeScreenObject.verticalAlignment = .top
+    replayBadgeScreenObject.layoutMargin = UIEdgeInsets(
+      top: 28,
+      left: 0,
+      bottom: 0,
+      right: 28
+    )
+    replayBadgeScreenObject.cgImage = replayBadgeImage()
+    replayBadgeScreenObject.isVisible = replayScreenObject != nil
+  }
+
+  private func startReplayBuffer() {
+    guard replayRecorder == nil, pendingStreamKey != nil || recorder != nil else {
+      return
+    }
+    discardReplayBuffer = false
+    let next = IOStreamRecorder()
+    next.delegate = self
+    next.fileName = "duna-replay-\(UUID().uuidString)"
+    next.movieFragmentInterval = 10
+    stream.addObserver(next)
+    replayRecorderStream = stream
+    replayRecorder = next
+    replayBufferStartedAt = CFAbsoluteTimeGetCurrent()
+    restartReplayAfterStreamReplacement = false
+    next.startRunning()
+    let rotation = DispatchWorkItem { [weak self, weak next] in
+      guard
+        let self,
+        let next,
+        self.replayRecorder === next,
+        self.pendingReplayDuration == nil
+      else {
+        return
+      }
+      next.stopRunning()
+    }
+    replayRotationWorkItem?.cancel()
+    replayRotationWorkItem = rotation
+    DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: rotation)
+  }
+
+  func insertReplay(durationSeconds: Int) -> [String: Any] {
+    let duration = min(15, max(4, durationSeconds))
+    let bufferedSeconds = replayBufferStartedAt.map {
+      CFAbsoluteTimeGetCurrent() - $0
+    } ?? 0
+    guard
+      let replayRecorder,
+      replayRecorder.isRunning.value,
+      lastReplayBufferUrl != nil || bufferedSeconds >= Double(duration)
+    else {
+      return ["accepted": false, "durationSeconds": 0]
+    }
+    pendingReplayDuration = duration
+    replayRecorder.stopRunning()
+    return ["accepted": true, "durationSeconds": duration]
+  }
+
+  private func playReplay(sourceUrls: [URL], requestedDuration: Int) {
+    if let replayScreenObject {
+      stream.screen.removeChild(replayScreenObject)
+      replayScreenObject.cancelReading()
+      self.replayScreenObject = nil
+    }
+    replayRemovalWorkItem?.cancel()
+    replayRemovalWorkItem = nil
+    for url in activeReplayUrls {
+      try? FileManager.default.removeItem(at: url)
+    }
+    activeReplayUrls = []
+    let sources: [(track: AVAssetTrack, duration: Double)] = sourceUrls.compactMap {
+      url in
+      let asset = AVURLAsset(url: url)
+      let duration = max(0, CMTimeGetSeconds(asset.duration))
+      guard duration.isFinite,
+        duration > 0,
+        let track = asset.tracks(withMediaType: .video).first
+      else {
+        return nil
+      }
+      return (track, duration)
+    }
+    let totalDuration = sources.reduce(0) { $0 + $1.duration }
+    guard totalDuration >= 1 else {
+      sourceUrls.forEach { try? FileManager.default.removeItem(at: $0) }
+      return
+    }
+    let replayDuration = min(Double(requestedDuration), totalDuration)
+    let composition = AVMutableComposition()
+    guard
+      let track = composition.addMutableTrack(
+        withMediaType: .video,
+        preferredTrackID: kCMPersistentTrackID_Invalid
+      )
+    else {
+      sourceUrls.forEach { try? FileManager.default.removeItem(at: $0) }
+      return
+    }
+    do {
+      var skipSeconds = max(0, totalDuration - replayDuration)
+      var insertedSeconds = 0.0
+      var appliedTransform = false
+      for source in sources where insertedSeconds < replayDuration {
+        if skipSeconds >= source.duration {
+          skipSeconds -= source.duration
+          continue
+        }
+        let startSeconds = skipSeconds
+        skipSeconds = 0
+        let segmentSeconds = min(
+          source.duration - startSeconds,
+          replayDuration - insertedSeconds
+        )
+        guard segmentSeconds > 0 else { continue }
+        try track.insertTimeRange(
+          CMTimeRange(
+            start: CMTime(seconds: startSeconds, preferredTimescale: 600),
+            duration: CMTime(seconds: segmentSeconds, preferredTimescale: 600)
+          ),
+          of: source.track,
+          at: CMTime(seconds: insertedSeconds, preferredTimescale: 600)
+        )
+        if !appliedTransform {
+          track.preferredTransform = source.track.preferredTransform
+          appliedTransform = true
+        }
+        insertedSeconds += segmentSeconds
+      }
+      guard insertedSeconds >= 1 else {
+        sourceUrls.forEach { try? FileManager.default.removeItem(at: $0) }
+        return
+      }
+      let replay = AssetScreenObject()
+      replay.size = programOutputSize()
+      replay.videoGravity = .resizeAspectFill
+      try replay.startReading(composition)
+      stream.screen.removeChild(scoreboardScreenObject)
+      stream.screen.removeChild(sponsorScreenObject)
+      stream.screen.removeChild(replayBadgeScreenObject)
+      try stream.screen.addChild(replay)
+      try stream.screen.addChild(scoreboardScreenObject)
+      try stream.screen.addChild(sponsorScreenObject)
+      try stream.screen.addChild(replayBadgeScreenObject)
+      replayScreenObject = replay
+      activeReplayUrls = sourceUrls
+      renderProgramState()
+      let work = DispatchWorkItem { [weak self] in
+        guard let self else { return }
+        self.stream.screen.removeChild(replay)
+        replay.cancelReading()
+        if self.replayScreenObject === replay {
+          self.replayScreenObject = nil
+          self.activeReplayUrls = []
+        }
+        self.replayBadgeScreenObject.isVisible = false
+        sourceUrls.forEach { try? FileManager.default.removeItem(at: $0) }
+      }
+      replayRemovalWorkItem = work
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + insertedSeconds + 0.15,
+        execute: work
+      )
+    } catch {
+      sourceUrls.forEach { try? FileManager.default.removeItem(at: $0) }
+      emitError("The instant replay could not be inserted.")
+    }
+  }
+
   func startRecording(audioEnabled: Bool) throws {
     try prepare(audioEnabled: audioEnabled)
+    // A prior broadcast may have left the singleton on a closed RTMP or SRT
+    // stream. Local recording needs a fresh mixer even though it does not open
+    // a network connection.
+    replaceStream(makeRTMPStream(), transport: "rtmps")
     transitionToCapture(audioEnabled: audioEnabled)
     guard recorder == nil else {
       throw NSError(
@@ -218,6 +829,7 @@ private final class DunaVideoCaptureController: NSObject {
     recorderWasInterrupted = false
     UIApplication.shared.isIdleTimerDisabled = true
     nextRecorder.startRunning()
+    startReplayBuffer()
   }
 
   func stopRecording(promise: Promise) {
@@ -228,6 +840,15 @@ private final class DunaVideoCaptureController: NSObject {
       )
       return
     }
+    discardReplayBuffer = true
+    replayRotationWorkItem?.cancel()
+    replayRotationWorkItem = nil
+    if let lastReplayBufferUrl {
+      try? FileManager.default.removeItem(at: lastReplayBufferUrl)
+      self.lastReplayBufferUrl = nil
+    }
+    replayRecorder?.stopRunning()
+    replayBufferStartedAt = nil
     recorderWasInterrupted = false
     recordingPromise = promise
     recorder.stopRunning()
@@ -276,6 +897,8 @@ private final class DunaVideoCaptureController: NSObject {
     }
     usesGroundTracking = true
     latestTrackingState = "initializing"
+    latestGroundCorners = nil
+    latestGroundCourtHypotheses = []
     showGroundPreview(true)
     arSession.run(configuration, options: [.resetTracking, .removeExistingAnchors])
   }
@@ -409,9 +1032,11 @@ private final class DunaVideoCaptureController: NSObject {
     switch code {
     case RTMPConnection.Code.connectSuccess.rawValue:
       if let pendingStreamKey {
-        stream.publish(pendingStreamKey)
+        (stream as? RTMPStream)?.publish(pendingStreamKey)
       }
     case RTMPStream.Code.publishStart.rawValue:
+      fallingBack = false
+      startReplayBuffer()
       emitState("live")
     case RTMPConnection.Code.connectFailed.rawValue,
       RTMPConnection.Code.connectRejected.rawValue,
@@ -435,7 +1060,11 @@ private final class DunaVideoCaptureController: NSObject {
 
   private func emitState(_ state: String) {
     DispatchQueue.main.async { [weak self] in
-      self?.activeView?.onStreamState(["state": state])
+      guard let self else { return }
+      self.activeView?.onStreamState([
+        "state": state,
+        "transport": self.activeTransport
+      ])
     }
   }
 
@@ -452,6 +1081,15 @@ private final class DunaVideoCaptureController: NSObject {
     // session is still valid instead of allowing the writer to be torn down
     // under an active recorder. The recorder delegate clears all state.
     guard let recorder, recordingPromise == nil else { return }
+    discardReplayBuffer = true
+    replayRotationWorkItem?.cancel()
+    replayRotationWorkItem = nil
+    if let lastReplayBufferUrl {
+      try? FileManager.default.removeItem(at: lastReplayBufferUrl)
+      self.lastReplayBufferUrl = nil
+    }
+    replayRecorder?.stopRunning()
+    replayBufferStartedAt = nil
     recorderWasInterrupted = true
     recorder.stopRunning()
     emitState("stopped")
@@ -524,6 +1162,58 @@ private final class DunaVideoCaptureController: NSObject {
     analyze(pixelBuffer, orientation: orientation)
   }
 
+  private func elongatedLine(
+    _ observation: VNRectangleObservation
+  ) -> (start: CGPoint, end: CGPoint, length: CGFloat, thickness: CGFloat) {
+    let topLeft = CGPoint(x: observation.topLeft.x, y: 1 - observation.topLeft.y)
+    let topRight = CGPoint(x: observation.topRight.x, y: 1 - observation.topRight.y)
+    let bottomRight = CGPoint(
+      x: observation.bottomRight.x,
+      y: 1 - observation.bottomRight.y
+    )
+    let bottomLeft = CGPoint(
+      x: observation.bottomLeft.x,
+      y: 1 - observation.bottomLeft.y
+    )
+    func midpoint(_ left: CGPoint, _ right: CGPoint) -> CGPoint {
+      CGPoint(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2)
+    }
+    let horizontalStart = midpoint(topLeft, bottomLeft)
+    let horizontalEnd = midpoint(topRight, bottomRight)
+    let verticalStart = midpoint(topLeft, topRight)
+    let verticalEnd = midpoint(bottomLeft, bottomRight)
+    let horizontalLength = hypot(
+      horizontalEnd.x - horizontalStart.x,
+      horizontalEnd.y - horizontalStart.y
+    )
+    let verticalLength = hypot(
+      verticalEnd.x - verticalStart.x,
+      verticalEnd.y - verticalStart.y
+    )
+    if horizontalLength >= verticalLength {
+      return (horizontalStart, horizontalEnd, horizontalLength, verticalLength)
+    }
+    return (verticalStart, verticalEnd, verticalLength, horizontalLength)
+  }
+
+  private func isNetLike(_ observation: VNRectangleObservation) -> Bool {
+    let line = elongatedLine(observation)
+    let centerY = (line.start.y + line.end.y) / 2
+    return line.length >= 0.26 &&
+      line.thickness <= 0.18 &&
+      line.length >= line.thickness * 2.1 &&
+      centerY >= 0.08 && centerY <= 0.9
+  }
+
+  private func netObservationScore(
+    _ observation: VNRectangleObservation
+  ) -> CGFloat {
+    let line = elongatedLine(observation)
+    let centerY = (line.start.y + line.end.y) / 2
+    return line.length * CGFloat(observation.confidence) *
+      (1.05 - abs(centerY - 0.5) * 0.28)
+  }
+
   private func analyze(
     _ pixelBuffer: CVPixelBuffer,
     orientation: CGImagePropertyOrientation
@@ -551,6 +1241,9 @@ private final class DunaVideoCaptureController: NSObject {
     )
     do {
       try handler.perform([rectangleRequest, landmarkRequest, poseRequest])
+      let netCandidate = landmarkRequest.results?
+        .filter(isNetLike)
+        .max { netObservationScore($0) < netObservationScore($1) }
       let rectangle = rectangleRequest.results?
         .filter {
           let box = $0.boundingBox
@@ -560,9 +1253,11 @@ private final class DunaVideoCaptureController: NSObject {
           let leftBox = $0.boundingBox
           let rightBox = $1.boundingBox
           let leftScore = leftBox.width * leftBox.height *
-            CGFloat($0.confidence) * (1.25 - leftBox.midY * 0.35)
+            CGFloat($0.confidence) * (1.25 - leftBox.midY * 0.35) *
+            courtNetCompatibility(court: leftBox, net: netCandidate?.boundingBox)
           let rightScore = rightBox.width * rightBox.height *
-            CGFloat($1.confidence) * (1.25 - rightBox.midY * 0.35)
+            CGFloat($1.confidence) * (1.25 - rightBox.midY * 0.35) *
+            courtNetCompatibility(court: rightBox, net: netCandidate?.boundingBox)
           return leftScore < rightScore
         }
       let pose = poseRequest.results?.first
@@ -578,6 +1273,20 @@ private final class DunaVideoCaptureController: NSObject {
     } catch {
       // A missed Vision frame is normal while the capture pipeline is busy.
     }
+  }
+
+  private func courtNetCompatibility(court: CGRect, net: CGRect?) -> CGFloat {
+    guard let net else { return 0.72 }
+    let horizontalOverlap = max(
+      0,
+      min(court.maxX + 0.08, net.maxX) - max(court.minX - 0.08, net.minX)
+    )
+    let overlapRatio = horizontalOverlap / max(0.01, net.width)
+    let verticalFit = net.midY >= court.minY - 0.12 &&
+      net.midY <= court.maxY + 0.22
+    if overlapRatio >= 0.72 && verticalFit { return 1.7 }
+    if overlapRatio >= 0.4 && verticalFit { return 1.15 }
+    return 0.45
   }
 
   private func visionOrientation() -> CGImagePropertyOrientation {
@@ -615,6 +1324,109 @@ private final class DunaVideoCaptureController: NSObject {
     return Array(result.prefix(8))
   }
 
+  private func stabilizedCourtEvidence(
+    corners: [CGPoint]?,
+    netTopLine: [CGPoint]?
+  ) -> (corners: [CGPoint]?, netTopLine: [CGPoint]?) {
+    let now = CFAbsoluteTimeGetCurrent()
+    func averageDistance(_ left: [CGPoint], _ right: [CGPoint]) -> CGFloat {
+      guard left.count == right.count, !left.isEmpty else { return 1 }
+      return zip(left, right).reduce(CGFloat.zero) { total, pair in
+        total + hypot(pair.0.x - pair.1.x, pair.0.y - pair.1.y)
+      } / CGFloat(left.count)
+    }
+    func smooth(_ previous: [CGPoint], _ next: [CGPoint]) -> [CGPoint] {
+      zip(previous, next).map {
+        CGPoint(
+          x: $0.0.x * 0.68 + $0.1.x * 0.32,
+          y: $0.0.y * 0.68 + $0.1.y * 0.32
+        )
+      }
+    }
+
+    if let corners {
+      if let previous = stableCourtCorners,
+        averageDistance(previous, corners) < 0.09
+      {
+        stableCourtCorners = smooth(previous, corners)
+        courtEvidenceFrames = min(12, courtEvidenceFrames + 1)
+      } else {
+        stableCourtCorners = corners
+        courtEvidenceFrames = 1
+      }
+      lastCourtEvidenceAt = now
+    } else if now - lastCourtEvidenceAt > 1.8 {
+      stableCourtCorners = nil
+      courtEvidenceFrames = 0
+    }
+
+    if let netTopLine {
+      if let previous = stableNetTopLine,
+        averageDistance(previous, netTopLine) < 0.08
+      {
+        stableNetTopLine = smooth(previous, netTopLine)
+        netEvidenceFrames = min(12, netEvidenceFrames + 1)
+      } else {
+        stableNetTopLine = netTopLine
+        netEvidenceFrames = 1
+      }
+      lastNetEvidenceAt = now
+    } else if now - lastNetEvidenceAt > 1.8 {
+      stableNetTopLine = nil
+      netEvidenceFrames = 0
+    }
+
+    return (
+      courtEvidenceFrames >= 3 ? stableCourtCorners : nil,
+      netEvidenceFrames >= 2 ? stableNetTopLine : nil
+    )
+  }
+
+  private func netCourtCompatibility(
+    _ net: [CGPoint],
+    corners: [CGPoint]
+  ) -> Double {
+    guard net.count == 2, corners.count == 4 else { return -.infinity }
+    func midpoint(_ left: CGPoint, _ right: CGPoint) -> CGPoint {
+      CGPoint(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2)
+    }
+    // Corner order is far-left, far-right, near-right, near-left. A beach
+    // volleyball net spans the court width at its longitudinal midpoint.
+    let expectedNet = [
+      midpoint(corners[0], corners[3]),
+      midpoint(corners[1], corners[2])
+    ]
+    let netDx = net[1].x - net[0].x
+    let netDy = net[1].y - net[0].y
+    let expectedDx = expectedNet[1].x - expectedNet[0].x
+    let expectedDy = expectedNet[1].y - expectedNet[0].y
+    let netLength = max(0.001, hypot(netDx, netDy))
+    let expectedLength = max(0.001, hypot(expectedDx, expectedDy))
+    let parallel = abs(netDx * expectedDx + netDy * expectedDy) /
+      (netLength * expectedLength)
+    let netCenter = midpoint(net[0], net[1])
+    let expectedCenter = midpoint(expectedNet[0], expectedNet[1])
+    let centerDistance = hypot(
+      netCenter.x - expectedCenter.x,
+      netCenter.y - expectedCenter.y
+    )
+    let scalePenalty = min(
+      0.45,
+      abs(log(Double(netLength / expectedLength))) * 0.1
+    )
+    let minX = (corners.map(\.x).min() ?? 0) - 0.22
+    let maxX = (corners.map(\.x).max() ?? 1) + 0.22
+    let minY = (corners.map(\.y).min() ?? 0) - 0.34
+    let maxY = (corners.map(\.y).max() ?? 1) + 0.2
+    guard
+      netCenter.x >= minX && netCenter.x <= maxX &&
+      netCenter.y >= minY && netCenter.y <= maxY
+    else {
+      return -.infinity
+    }
+    return Double(parallel) - Double(centerDistance) * 1.35 - scalePenalty
+  }
+
   private func publishGuidance(
     rectangle: VNRectangleObservation?,
     landmarks: [VNRectangleObservation],
@@ -628,7 +1440,7 @@ private final class DunaVideoCaptureController: NSObject {
       warnings.append("Rotate your iPhone to \(preferredOrientation)")
     }
 
-    let visionCorners: [CGPoint]? = rectangle.map {
+    let rawVisionCorners: [CGPoint]? = rectangle.map {
       [
         CGPoint(x: $0.topLeft.x, y: 1 - $0.topLeft.y),
         CGPoint(x: $0.topRight.x, y: 1 - $0.topRight.y),
@@ -643,50 +1455,92 @@ private final class DunaVideoCaptureController: NSObject {
     let courtCandidate = rectangle.map {
       let box = $0.boundingBox
       let aspect = box.width / max(box.height, 0.001)
-      return $0.confidence >= 0.72 &&
-        box.width * box.height >= 0.1 &&
-        box.width >= 0.32 &&
-        aspect >= 0.5 && aspect <= 4.8 &&
-        box.minY < 0.68
+      let farWidth = hypot(
+        $0.topRight.x - $0.topLeft.x,
+        $0.topRight.y - $0.topLeft.y
+      )
+      let nearWidth = hypot(
+        $0.bottomRight.x - $0.bottomLeft.x,
+        $0.bottomRight.y - $0.bottomLeft.y
+      )
+      let perspectiveRatio = max(farWidth, nearWidth) /
+        max(0.01, min(farWidth, nearWidth))
+      return $0.confidence >= 0.6 &&
+        box.width * box.height >= 0.075 &&
+        box.width >= 0.28 &&
+        aspect >= 0.42 && aspect <= 5.4 &&
+        perspectiveRatio <= 4.2 &&
+        box.minY < 0.72
     } ?? false
-    let groundDetected = latestGroundCorners != nil || courtCandidate
+    let groundHypotheses = latestGroundCourtHypotheses.isEmpty
+      ? latestGroundCorners.map { [$0] } ?? []
+      : latestGroundCourtHypotheses
+    let groundDetected = !groundHypotheses.isEmpty || courtCandidate
 
-    let horizontalLandmarks = landmarks.filter {
-      let box = $0.boundingBox
-      return box.width >= 0.38 && box.height <= 0.13 &&
-        box.width >= box.height * 3.2 &&
-        box.midY >= 0.16 && box.midY <= 0.78
+    let netObservation = landmarks
+      .filter(isNetLike)
+      .max { netObservationScore($0) < netObservationScore($1) }
+    let rawNetTopLine: [CGPoint]? = netObservation.map {
+      let line = elongatedLine($0)
+      return [line.start, line.end]
     }
-    let netObservation = horizontalLandmarks.max {
-      let left = $0.boundingBox
-      let right = $1.boundingBox
-      let leftScore = left.width * CGFloat($0.confidence) *
-        (1 - abs(left.midY - 0.5) * 0.35)
-      let rightScore = right.width * CGFloat($1.confidence) *
-        (1 - abs(right.midY - 0.5) * 0.35)
-      return leftScore < rightScore
-    }
-    let netTopLine: [CGPoint]? = netObservation.map {
-      let left = CGPoint(
-        x: ($0.topLeft.x + $0.bottomLeft.x) / 2,
-        y: 1 - ($0.topLeft.y + $0.bottomLeft.y) / 2
-      )
-      let right = CGPoint(
-        x: ($0.topRight.x + $0.bottomRight.x) / 2,
-        y: 1 - ($0.topRight.y + $0.bottomRight.y) / 2
-      )
-      return [left, right]
-    }
-    let netDetected = netTopLine != nil
-    let courtDetected = courtCandidate && netDetected
 
-    // ARKit can correctly find a floor in a living room, car park, or sand but
-    // that is not evidence of a volleyball court. Keep it for horizon and
-    // tripod guidance only. A court candidate and a plausible net are both
-    // required before a projected court is ever emitted to the UI.
-    let projectedCorners = courtDetected
-      ? (visionCorners ?? latestGroundCorners)
-      : nil
+    // Score a physically projected 16×8m court and a Vision-only rectangle
+    // against the same observed net. LiDAR gets a small tie-break because it
+    // supplies real ground scale; it never bypasses the requirement for court
+    // evidence in the image. Multiple ground hypotheses cover baseline,
+    // sideline, and oblique camera placements.
+    var selectedCorners: [CGPoint]?
+    var selectedSource: String?
+    var selectedCompatibility = -Double.infinity
+    var alignmentCorners = latestGroundCorners
+    if let rawNetTopLine {
+      if let bestGround = groundHypotheses.max(by: {
+        netCourtCompatibility(rawNetTopLine, corners: $0) <
+          netCourtCompatibility(rawNetTopLine, corners: $1)
+      }) {
+        alignmentCorners = bestGround
+      }
+      if courtCandidate, let rawVisionCorners {
+        let compatibility = netCourtCompatibility(
+          rawNetTopLine,
+          corners: rawVisionCorners
+        )
+        if compatibility >= 0.18 {
+          selectedCorners = rawVisionCorners
+          selectedSource = "vision"
+          selectedCompatibility = compatibility
+        }
+      }
+      for groundCorners in groundHypotheses {
+        let compatibility = netCourtCompatibility(
+          rawNetTopLine,
+          corners: groundCorners
+        )
+        let minimumCompatibility = lidarAvailable ? 0.1 : 0.15
+        let spatialTieBreak = lidarAvailable ? 0.07 : 0.03
+        if compatibility >= minimumCompatibility &&
+          compatibility + spatialTieBreak > selectedCompatibility
+        {
+          selectedCorners = groundCorners
+          selectedSource = lidarAvailable ? "lidar" : "arkit"
+          selectedCompatibility = compatibility + spatialTieBreak
+        }
+      }
+    }
+    let pairedNetTopLine = selectedCorners == nil ? nil : rawNetTopLine
+    if let selectedSource {
+      stableCourtProjectionSource = selectedSource
+    }
+    let evidence = stabilizedCourtEvidence(
+      corners: selectedCorners,
+      netTopLine: pairedNetTopLine
+    )
+    let visionCorners = evidence.corners
+    let netTopLine = evidence.netTopLine ?? pairedNetTopLine
+    let netDetected = rawNetTopLine != nil || evidence.netTopLine != nil
+    let courtDetected = visionCorners != nil && evidence.netTopLine != nil
+    let projectedCorners: [CGPoint]? = courtDetected ? visionCorners : nil
 
     var antennaPoints: [CGPoint]?
     if let netTopLine {
@@ -735,10 +1589,15 @@ private final class DunaVideoCaptureController: NSObject {
     if !groundDetected {
       score -= 32
       warnings.append("Tilt down slowly so Duna can find the sand")
+    } else if !courtDetected && rawNetTopLine != nil {
+      score -= 12
+      warnings.append(
+        "Net found—pan slowly until the faint NET guide sits on the real net"
+      )
     } else if !courtDetected && !netDetected {
       score -= 30
       warnings.append(
-        "Find the net and both sidelines—Duna is keeping the court guide hidden until it sees real court evidence"
+        "Aim at the net and include both sidelines"
       )
     } else if !courtDetected {
       score -= 9
@@ -849,13 +1708,20 @@ private final class DunaVideoCaptureController: NSObject {
       grade = "poor"
     }
     let timestamp = ISO8601DateFormatter().string(from: Date())
-    let confidence: Double = courtDetected
-      ? (lidarAvailable ? 0.9 : 0.78)
-      : netDetected
-        ? 0.42
-      : groundDetected
-          ? 0.22
-        : 0.18
+    let confidence: Double
+    if courtDetected {
+      switch stableCourtProjectionSource {
+      case "lidar": confidence = 0.9
+      case "arkit": confidence = 0.84
+      default: confidence = 0.78
+      }
+    } else if netDetected {
+      confidence = 0.42
+    } else if groundDetected {
+      confidence = 0.22
+    } else {
+      confidence = 0.18
+    }
     if warnings.isEmpty {
       warnings.append("Court lock ready—fine-tune the net only if needed")
     }
@@ -867,11 +1733,9 @@ private final class DunaVideoCaptureController: NSObject {
       "confidence": confidence,
       "acceptable": score >= 67 && orientationMatches && acceptableGeometry,
       "warnings": stabilizedWarnings,
-      "projectionSource": courtDetected && visionCorners != nil
-        ? "vision"
-        : courtDetected && latestGroundCorners != nil
-          ? (lidarAvailable ? "lidar" : "arkit")
-          : "estimated",
+      "projectionSource": courtDetected
+        ? stableCourtProjectionSource
+        : "estimated",
       "lidarAvailable": lidarAvailable,
       "groundPlaneDetected": groundDetected,
       "courtDetected": courtDetected,
@@ -881,7 +1745,7 @@ private final class DunaVideoCaptureController: NSObject {
       "nearLineVisible": nearLineVisible,
       "partialCourt": partialCourt,
       "calibrationMode": "automatic",
-      "modelVersion": "court-v2-partial-2026-08-05",
+      "modelVersion": "court-v4-spatial-2026-08-30",
       "preferredOrientation": preferredOrientation,
       "deviceOrientation": currentDeviceOrientation,
       "orientationMatches": orientationMatches,
@@ -904,6 +1768,9 @@ private final class DunaVideoCaptureController: NSObject {
         "left": visible(projectedCorners[3]) && visible(projectedCorners[0]),
         "net": netTopLine?.allSatisfy(visible) ?? false
       ]
+    }
+    if let alignmentCorners {
+      payload["alignmentCorners"] = alignmentCorners.map(pointPayload)
     }
     if let netLine {
       payload["netLine"] = netLine.map(pointPayload)
@@ -1015,16 +1882,31 @@ extension DunaVideoCaptureController: ARSessionDelegate {
         let groundY = ground.transform.columns.3.y
         let cameraHeight = max(0, cameraPosition.y - groundY)
         let nearDistance = max(1.5, min(4.5, cameraHeight * 2.2))
-        var nearCenter = cameraPosition + forward * nearDistance
-        nearCenter.y = groundY
-        let farCenter = nearCenter + forward * Float(courtLengthMeters)
-        let halfWidth = Float(courtWidthMeters / 2)
-        let worldCorners = [
-          farCenter - right * halfWidth,
-          farCenter + right * halfWidth,
-          nearCenter + right * halfWidth,
-          nearCenter - right * halfWidth
-        ]
+        let courtLength = Float(courtLengthMeters)
+        let courtWidth = Float(courtWidthMeters)
+        let hypothesisAngles: [Float] = [-70, -45, -25, 0, 25, 45, 70, 90]
+        let worldHypotheses = hypothesisAngles.map { degrees -> [SIMD3<Float>] in
+          let radians = degrees * .pi / 180
+          let lengthAxis = simd_normalize(
+            forward * cos(radians) + right * sin(radians)
+          )
+          let widthAxis = simd_normalize(
+            right * cos(radians) - forward * sin(radians)
+          )
+          let depthFromCamera =
+            abs(simd_dot(lengthAxis, forward)) * courtLength / 2 +
+            abs(simd_dot(widthAxis, forward)) * courtWidth / 2
+          var center = cameraPosition + forward * (nearDistance + depthFromCamera)
+          center.y = groundY
+          let halfLength = courtLength / 2
+          let halfWidth = courtWidth / 2
+          return [
+            center + lengthAxis * halfLength - widthAxis * halfWidth,
+            center + lengthAxis * halfLength + widthAxis * halfWidth,
+            center - lengthAxis * halfLength + widthAxis * halfWidth,
+            center - lengthAxis * halfLength - widthAxis * halfWidth
+          ]
+        }
         DispatchQueue.main.async { [weak self, weak view] in
           guard
             let self,
@@ -1034,27 +1916,60 @@ extension DunaVideoCaptureController: ARSessionDelegate {
           else {
             return
           }
-          let projected = worldCorners.map { point -> CGPoint in
-            let screen = view.arPreview.projectPoint(
-              SCNVector3(point.x, point.y, point.z)
-            )
-            return CGPoint(
-              x: CGFloat(screen.x) / view.bounds.width,
-              y: CGFloat(screen.y) / view.bounds.height
-            )
+          func project(_ worldCorners: [SIMD3<Float>]) -> [CGPoint]? {
+            let projected = worldCorners.map { point -> CGPoint in
+              let screen = view.arPreview.projectPoint(
+                SCNVector3(point.x, point.y, point.z)
+              )
+              return CGPoint(
+                x: CGFloat(screen.x) / view.bounds.width,
+                y: CGFloat(screen.y) / view.bounds.height
+              )
+            }
+            guard projected.allSatisfy({ point in
+              point.x.isFinite && point.y.isFinite &&
+                point.x >= -3 && point.x <= 4 &&
+                point.y >= -3 && point.y <= 4
+            }) else {
+              return nil
+            }
+            return projected
           }
-          if projected.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) {
+          let projectedHypotheses = worldHypotheses.compactMap(project)
+          let projectedBaseline = worldHypotheses.indices.contains(3)
+            ? project(worldHypotheses[3])
+            : nil
+          if !projectedHypotheses.isEmpty {
+            if self.latestGroundCourtHypotheses.count == projectedHypotheses.count {
+              self.latestGroundCourtHypotheses = zip(
+                self.latestGroundCourtHypotheses,
+                projectedHypotheses
+              ).map { previous, next in
+                zip(previous, next).map {
+                  CGPoint(
+                    x: $0.0.x * 0.72 + $0.1.x * 0.28,
+                    y: $0.0.y * 0.72 + $0.1.y * 0.28
+                  )
+                }
+              }
+            } else {
+              self.latestGroundCourtHypotheses = projectedHypotheses
+            }
+            let baseline = projectedBaseline ??
+              self.latestGroundCourtHypotheses[
+                min(3, self.latestGroundCourtHypotheses.count - 1)
+              ]
             if let previous = self.latestGroundCorners,
-              previous.count == projected.count
+              previous.count == baseline.count
             {
-              self.latestGroundCorners = zip(previous, projected).map {
+              self.latestGroundCorners = zip(previous, baseline).map {
                 CGPoint(
                   x: $0.0.x * 0.72 + $0.1.x * 0.28,
                   y: $0.0.y * 0.72 + $0.1.y * 0.28
                 )
               }
             } else {
-              self.latestGroundCorners = projected
+              self.latestGroundCorners = baseline
             }
             self.latestCameraHeight = Double(cameraHeight)
             let pitch = Double(frame.camera.eulerAngles.x)
@@ -1064,6 +1979,7 @@ extension DunaVideoCaptureController: ARSessionDelegate {
       }
     } else {
       latestGroundCorners = nil
+      latestGroundCourtHypotheses = []
       latestCameraHeight = nil
     }
 
@@ -1076,6 +1992,9 @@ extension DunaVideoCaptureController: ARSessionDelegate {
     guard usesGroundTracking else { return }
     usesGroundTracking = false
     latestTrackingState = "unavailable"
+    latestGroundCorners = nil
+    latestGroundCourtHypotheses = []
+    latestCameraHeight = nil
     showGroundPreview(false)
     attachCaptureDevices(audioEnabled: audioEnabled)
     emitError(
@@ -1125,7 +2044,35 @@ extension DunaVideoCaptureController: IOStreamDelegate {
   func stream(
     _ stream: IOStream,
     didChangeReadyState state: IOStream.ReadyState
-  ) {}
+  ) {
+    guard stream === self.stream, activeTransport == "srt" else { return }
+    let becameLive: Bool
+    let becameOpen: Bool
+    switch state {
+    case .publishing:
+      becameLive = true
+      becameOpen = false
+    case .open:
+      becameLive = false
+      becameOpen = true
+    default:
+      becameLive = false
+      becameOpen = false
+    }
+    DispatchQueue.main.async { [weak self, weak stream] in
+      guard let self, let stream, stream === self.stream else { return }
+      if becameLive {
+        self.srtWasLive = true
+        self.fallingBack = false
+        self.startReplayBuffer()
+        self.emitState("live")
+      } else if becameOpen && self.srtWasLive && self.pendingStreamKey != nil {
+        self.fallbackToRTMPS(
+          reason: "The SRT connection dropped; Duna kept the stream moving over RTMPS."
+        )
+      }
+    }
+  }
 
   @available(tvOS 17.0, *)
   func stream(
@@ -1150,6 +2097,25 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     _ recorder: IOStreamRecorder,
     errorOccured error: IOStreamRecorder.Error
   ) {
+    if recorder === replayRecorder {
+      let shouldRestart = restartReplayAfterStreamReplacement ||
+        (!discardReplayBuffer && (pendingStreamKey != nil || self.recorder != nil))
+      replayRotationWorkItem?.cancel()
+      replayRotationWorkItem = nil
+      replayRecorderStream?.removeObserver(recorder)
+      replayRecorder = nil
+      replayRecorderStream = nil
+      replayBufferStartedAt = nil
+      pendingReplayDuration = nil
+      if shouldRestart {
+        DispatchQueue.main.async { [weak self] in
+          self?.discardReplayBuffer = false
+          self?.restartReplayAfterStreamReplacement = false
+          self?.startReplayBuffer()
+        }
+      }
+      return
+    }
     stream.removeObserver(recorder)
     self.recorder = nil
     recorderWasInterrupted = false
@@ -1166,6 +2132,64 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     _ recorder: IOStreamRecorder,
     finishWriting writer: AVAssetWriter
   ) {
+    if recorder === replayRecorder {
+      replayRotationWorkItem?.cancel()
+      replayRotationWorkItem = nil
+      replayRecorderStream?.removeObserver(recorder)
+      replayRecorder = nil
+      replayRecorderStream = nil
+      replayBufferStartedAt = nil
+      let url = writer.outputURL
+      let duration = max(
+        0,
+        CMTimeGetSeconds(AVURLAsset(url: url).duration)
+      )
+      let requestedDuration = pendingReplayDuration
+      pendingReplayDuration = nil
+      let shouldRestart =
+        restartReplayAfterStreamReplacement ||
+        (!discardReplayBuffer && (pendingStreamKey != nil || self.recorder != nil))
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        if self.discardReplayBuffer {
+          try? FileManager.default.removeItem(at: url)
+          if let previous = self.lastReplayBufferUrl {
+            try? FileManager.default.removeItem(at: previous)
+            self.lastReplayBufferUrl = nil
+          }
+        } else if let requestedDuration {
+          var sources: [URL] = []
+          if let previous = self.lastReplayBufferUrl {
+            sources.append(previous)
+            self.lastReplayBufferUrl = nil
+          }
+          if duration > 0 {
+            sources.append(url)
+          } else {
+            try? FileManager.default.removeItem(at: url)
+          }
+          if sources.isEmpty {
+            self.emitError("Replay is warming up. Try again after the next rally.")
+          } else {
+            self.playReplay(
+              sourceUrls: sources,
+              requestedDuration: requestedDuration
+            )
+          }
+        } else {
+          if let previous = self.lastReplayBufferUrl {
+            try? FileManager.default.removeItem(at: previous)
+          }
+          self.lastReplayBufferUrl = url
+        }
+        if shouldRestart {
+          self.discardReplayBuffer = false
+          self.restartReplayAfterStreamReplacement = false
+          self.startReplayBuffer()
+        }
+      }
+      return
+    }
     stream.removeObserver(recorder)
     self.recorder = nil
     lockedCaptureOrientation = nil
@@ -1471,10 +2495,20 @@ public final class DunaVideoCaptureModule: Module {
     }.runOnQueue(.main)
 
     AsyncFunction("startStream") {
-      (streamUrl: String, streamKey: String, audioEnabled: Bool) in
+      (
+        streamUrl: String,
+        streamKey: String,
+        audioEnabled: Bool,
+        transport: String,
+        srtPassphrase: String?,
+        fallbackUrl: String?,
+        fallbackKey: String?
+      ) in
       guard
         let url = URL(string: streamUrl),
-        ["rtmp", "rtmps"].contains(url.scheme?.lowercased() ?? ""),
+        ["rtmp", "rtmps", "srt"].contains(url.scheme?.lowercased() ?? ""),
+        ["srt", "rtmps"].contains(transport),
+        (transport == "srt") == (url.scheme?.lowercased() == "srt"),
         streamKey.count >= 8
       else {
         throw NSError(
@@ -1486,12 +2520,26 @@ public final class DunaVideoCaptureModule: Module {
       try DunaVideoCaptureController.shared.startStream(
         url: streamUrl,
         key: streamKey,
-        audioEnabled: audioEnabled
+        audioEnabled: audioEnabled,
+        transport: transport,
+        srtPassphrase: srtPassphrase,
+        fallbackUrl: fallbackUrl,
+        fallbackKey: fallbackKey
       )
     }.runOnQueue(.main)
 
     AsyncFunction("stopStream") {
       DunaVideoCaptureController.shared.stopStream()
+    }.runOnQueue(.main)
+
+    AsyncFunction("updateProgramState") { (payloadJson: String) in
+      try DunaVideoCaptureController.shared.updateProgramState(json: payloadJson)
+    }.runOnQueue(.main)
+
+    AsyncFunction("insertReplay") { (durationSeconds: Int) in
+      DunaVideoCaptureController.shared.insertReplay(
+        durationSeconds: durationSeconds
+      )
     }.runOnQueue(.main)
 
     AsyncFunction("startRecording") { (audioEnabled: Bool) in

@@ -106,4 +106,41 @@ describe("mutation idempotency", () => {
       }),
     ).resolves.toMatchObject({ result: { published: true } });
   });
+
+  it("can persist a redacted result and securely hydrate a retry", async () => {
+    const store = new MemoryIdempotencyStore();
+    let executions = 0;
+    let storedReplay: Readonly<Record<string, unknown>> | undefined;
+    const invoke = () =>
+      executeIdempotent({
+        key: "4fb79cf6-9f6a-4bb2-b96f-3204bda0da4e",
+        procedure: "player.createLiveVideo",
+        request: { title: "Final" },
+        now: new Date("2026-07-30T12:00:00Z"),
+        store,
+        execute: async () => ({
+          videoId: `video-${++executions}`,
+          streamKey: "provider-secret",
+        }),
+        serializeResult: (result) => ({ videoId: result.videoId }),
+        hydrateReplay: async (stored) => {
+          storedReplay = stored;
+          return {
+            videoId: String(stored.videoId),
+            streamKey: "fresh-provider-secret",
+          };
+        },
+      });
+
+    await expect(invoke()).resolves.toMatchObject({
+      result: { streamKey: "provider-secret" },
+      replayed: false,
+    });
+    await expect(invoke()).resolves.toMatchObject({
+      result: { streamKey: "fresh-provider-secret" },
+      replayed: true,
+    });
+    expect(storedReplay).toEqual({ videoId: "video-1" });
+    expect(executions).toBe(1);
+  });
 });

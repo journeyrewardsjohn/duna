@@ -10854,10 +10854,12 @@ a.play-day__booking {
 }
 
 .duna-video-gallery__stage mux-player,
+.duna-video-gallery__stage > iframe,
 .duna-video-gallery__stage > video {
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #02070b;
+  border: 0;
   object-fit: contain;
 }
 

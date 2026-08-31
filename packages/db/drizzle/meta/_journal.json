@@ -708,6 +708,13 @@
       "when": 1787851670502,
       "tag": "0100_green_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1788125629254,
+      "tag": "0101_strange_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

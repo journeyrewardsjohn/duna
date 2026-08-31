@@ -87,7 +87,6 @@ import {
   usePlayerRuntime,
   type PlayerRuntime,
 } from "./runtime";
-import { PlayerLaunchExperience } from "./launch-experience";
 import {
   clearPendingWatchScoreDraft,
   getPendingWatchScoreDraft,
@@ -95,6 +94,7 @@ import {
   type WatchScoreDraft,
 } from "./watch-scoring";
 import { VideoStudioScreen, type VideoTransferStatus } from "./video-studio";
+import { VisionSecondScreen } from "./vision-second-screen";
 import { HealthScreen } from "./health-screen";
 import { HealthHistorySyncAgent } from "./health-history-sync-agent";
 import { PlayerCalendarSettings } from "./calendar-settings";
@@ -186,8 +186,8 @@ import {
   useSatoshiFonts,
 } from "./satoshi-text";
 
-// Keep the native poster in place until the first React frame contains the
-// bundled launch film. This prevents a white bridge frame on cold starts.
+// Keep the short native poster in place until the first usable React frame.
+// The prior full-screen launch film is intentionally no longer in the path.
 void SplashScreen.preventAutoHideAsync();
 
 // Metro requires static module references so the full Duna mark ships natively.
@@ -14434,6 +14434,7 @@ function DunaApp() {
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
   const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
   const [videoTransfer, setVideoTransfer] = useState<VideoTransferStatus>();
+  const [visionRemoteToken, setVisionRemoteToken] = useState<string>();
   const [discoverIntent, setDiscoverIntent] = useState<{
     readonly key: number;
     readonly kind: DiscoverIntentKind;
@@ -14464,6 +14465,13 @@ function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      const visionRemote = url?.match(
+        /^duna:\/\/vision\/remote\/([^/?#]+)/,
+      )?.[1];
+      if (visionRemote) {
+        setVisionRemoteToken(decodeURIComponent(visionRemote));
+        return;
+      }
       if (url?.startsWith("duna://waiver/complete")) {
         const query = url.split("?")[1] ?? "";
         // The signed-in app keeps the same secure web completion surface in an
@@ -14952,6 +14960,13 @@ function DunaApp() {
               onClose={() => setQuickActionsOpen(false)}
               visible={quickActionsOpen}
             />
+            {visionRemoteToken && (runtime.publicClient ?? runtime.client) && (
+              <VisionSecondScreen
+                client={(runtime.publicClient ?? runtime.client)!}
+                onClose={() => setVisionRemoteToken(undefined)}
+                token={visionRemoteToken}
+              />
+            )}
             <BookingModal
               eventIndex={eventIndex}
               eventOverride={registrationEventOverride}
@@ -15137,7 +15152,6 @@ function DunaApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useSatoshiFonts();
-  const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
   if (!fontsLoaded) return null;
@@ -15148,11 +15162,6 @@ export default function App() {
         <PlayerRuntimeProvider>
           <DunaApp />
         </PlayerRuntimeProvider>
-        {showLaunchExperience && (
-          <PlayerLaunchExperience
-            onComplete={() => setShowLaunchExperience(false)}
-          />
-        )}
       </View>
     </SafeAreaProvider>
   );

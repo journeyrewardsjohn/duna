@@ -820,11 +820,25 @@ export function VideoAdminControls({
         <article className="hq-card">
           <Cloud aria-hidden size={22} />
           <div>
-            <strong>Mux live + playback</strong>
-            <small>RTMPS ingest, secure playback, recordings, and Data</small>
+            <strong>Cloudflare Stream live + simulcast</strong>
+            <small>
+              SRT/RTMPS ingest, secure playback, replay, and YouTube
+            </small>
           </div>
-          <Badge tone={overview.muxConfigured ? "positive" : "warning"}>
-            {overview.muxConfigured ? "configured" : "needs environment"}
+          <Badge tone={overview.cloudflareConfigured ? "positive" : "warning"}>
+            {overview.cloudflareConfigured
+              ? "everyday ready"
+              : "needs environment"}
+          </Badge>
+        </article>
+        <article className="hq-card">
+          <Cloud aria-hidden size={22} />
+          <div>
+            <strong>Mux premium live</strong>
+            <small>Premium playback, stream health, Data, and YouTube</small>
+          </div>
+          <Badge tone={overview.muxConfigured ? "neutral" : "warning"}>
+            {overview.muxConfigured ? "premium ready" : "not configured"}
           </Badge>
         </article>
         <article className="hq-card">
