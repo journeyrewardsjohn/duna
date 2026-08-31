@@ -1,14 +1,24 @@
 "use client";
 
-import type { MatchScoringState } from "@duna/api";
+import type { CommunityCommentSummary, MatchScoringState } from "@duna/api";
 import { Badge, DunaMark, Numeric } from "@duna/ui";
 import { Radio, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { refreshLiveMatchAction } from "@/app/live/[matchId]/actions";
+import { CommunityThread } from "@/components/community-thread";
 
 export function PublicLiveScore({
+  access,
+  comments,
   initialMatch,
 }: {
+  readonly access?: {
+    readonly verified: boolean;
+    readonly paidPremium: boolean;
+    readonly canComment: boolean;
+    readonly reason?: string;
+  };
+  readonly comments: readonly CommunityCommentSummary[];
   readonly initialMatch: MatchScoringState;
 }) {
   const [match, setMatch] = useState(initialMatch);
@@ -106,6 +116,13 @@ export function PublicLiveScore({
         Live view updates automatically. The rating changes only after both
         sides confirm the result.
       </footer>
+      <CommunityThread
+        access={access}
+        comments={comments}
+        returnTo={`/live/${match.matchId}`}
+        subject={{ type: "match", id: match.matchId }}
+        title="Live match conversation"
+      />
     </main>
   );
 }

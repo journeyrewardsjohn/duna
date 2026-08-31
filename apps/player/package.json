@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "export": "expo export --platform all --output-dir dist",
-    "lint": "eslint App.tsx DunaLiveActivity.tsx arrival-location-task.ts booking-management.tsx booking-payment-state.ts booking-share-message.ts booking-share.tsx calendar-settings.tsx components deferred-modal-transition.ts discovery-filters.ts discovery-map.tsx discovery-media.ts discovery-search.ts discovery-search-flow.tsx discovery-travel.ts duna-ai-screen.tsx duna-icon.tsx event-checkout-state.ts event-details.tsx satoshi-text.tsx health-history-sync-agent.tsx health-kit.ts health-screen.tsx health-sync-utils.ts home-v3-data.ts home-v3.tsx index.js liquid-glass-surface.tsx liquid-glass-surface.ios.tsx live-activities.ts live-activity-preference.ts live-activities-prompt.tsx local-tournament.tsx match-host-panel.tsx messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts native-payments.ts organization-experience.tsx player-calendar.tsx player-calendar-sync.tsx player-navigation.ts player-social.tsx policy-review.ts profile-hub.tsx profile-studio.tsx pro-tour.ts recent-match-presentation.ts result-play-icon.tsx runtime.tsx score-upload.tsx score-upload-utils.ts session-arrival-card.tsx tournament-passes.tsx video-offline.ts video-studio.tsx vision-second-screen.tsx watch-scoring.ts",
+    "lint": "eslint App.tsx DunaLiveActivity.tsx arrival-location-task.ts booking-management.tsx booking-payment-state.ts booking-share-message.ts booking-share.tsx calendar-settings.tsx components deferred-modal-transition.ts discovery-filters.ts discovery-map.tsx discovery-media.ts discovery-search.ts discovery-search-flow.tsx discovery-travel.ts duna-ai-screen.tsx duna-icon.tsx event-checkout-state.ts event-details.tsx satoshi-text.tsx health-history-sync-agent.tsx health-kit.ts health-screen.tsx health-sync-utils.ts home-v3-data.ts home-v3.tsx index.js liquid-glass-surface.tsx liquid-glass-surface.ios.tsx live-activities.ts live-activity-preference.ts live-activities-prompt.tsx local-tournament.tsx match-details.tsx match-host-panel.tsx messaging-notifications.ts messaging-outbox.ts messaging-screen.tsx mobile-api.ts native-payments.ts organization-experience.tsx player-calendar.tsx player-calendar-sync.tsx player-navigation.ts player-social.tsx policy-review.ts profile-hub.tsx profile-studio.tsx pro-tour.ts recent-match-presentation.ts result-play-icon.tsx runtime.tsx score-upload.tsx score-upload-utils.ts session-arrival-card.tsx tournament-passes.tsx video-offline.ts video-studio.tsx vision-second-screen.tsx watch-scoring.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -29,6 +29,7 @@
     "@trpc/client": "11.18.0",
     "expo": "~57.0.10",
     "expo-auth-session": "~57.0.6",
+    "expo-audio": "~57.0.4",
     "expo-calendar": "~57.0.1",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.9",

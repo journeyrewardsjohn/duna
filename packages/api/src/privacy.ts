@@ -1,5 +1,6 @@
 import {
   auditLog,
+  communityComments,
   consents,
   formResponses,
   getDatabase,
@@ -16,6 +17,8 @@ import {
   orderItems,
   orders,
   people,
+  playerMatchNotes,
+  playerMatchNoteShares,
   pickupParticipants,
   privacyRequests,
   professionalEventPredictionHistory,
@@ -233,6 +236,9 @@ export async function buildPersonDataExport(input: {
     professionalEventPickHistoryRows,
     professionalMatchPickRows,
     professionalMatchPickHistoryRows,
+    matchJournalRows,
+    matchJournalShareRows,
+    communityCommentRows,
   ] = await Promise.all([
     database.query.people.findFirst({ where: eq(people.id, personId) }),
     database.select().from(ratings).where(eq(ratings.personId, personId)),
@@ -351,6 +357,38 @@ export async function buildPersonDataExport(input: {
       .from(professionalMatchPredictionHistory)
       .where(eq(professionalMatchPredictionHistory.personId, personId))
       .orderBy(desc(professionalMatchPredictionHistory.changedAt)),
+    database
+      .select()
+      .from(playerMatchNotes)
+      .where(eq(playerMatchNotes.personId, personId))
+      .orderBy(desc(playerMatchNotes.createdAt)),
+    database
+      .select({
+        id: playerMatchNoteShares.id,
+        matchId: playerMatchNoteShares.matchId,
+        ownerPersonId: playerMatchNoteShares.ownerPersonId,
+        claimedByPersonId: playerMatchNoteShares.claimedByPersonId,
+        status: playerMatchNoteShares.status,
+        expiresAt: playerMatchNoteShares.expiresAt,
+        claimedAt: playerMatchNoteShares.claimedAt,
+        lastViewedAt: playerMatchNoteShares.lastViewedAt,
+        revokedAt: playerMatchNoteShares.revokedAt,
+        createdAt: playerMatchNoteShares.createdAt,
+        updatedAt: playerMatchNoteShares.updatedAt,
+      })
+      .from(playerMatchNoteShares)
+      .where(
+        or(
+          eq(playerMatchNoteShares.ownerPersonId, personId),
+          eq(playerMatchNoteShares.claimedByPersonId, personId),
+        ),
+      )
+      .orderBy(desc(playerMatchNoteShares.createdAt)),
+    database
+      .select()
+      .from(communityComments)
+      .where(eq(communityComments.authorPersonId, personId))
+      .orderBy(desc(communityComments.createdAt)),
   ]);
   if (!person) throw new Error("Player profile was not found");
 
@@ -422,6 +460,11 @@ export async function buildPersonDataExport(input: {
       matches: professionalMatchPickRows,
       matchHistory: professionalMatchPickHistoryRows,
     },
+    matchJournal: {
+      notes: matchJournalRows,
+      shares: matchJournalShareRows,
+    },
+    communityComments: communityCommentRows,
   };
 }
 
@@ -559,6 +602,15 @@ export async function requestAccountDeletion(input: {
           ),
         ),
       database
+        .update(playerMatchNoteShares)
+        .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
+        .where(
+          or(
+            eq(playerMatchNoteShares.ownerPersonId, input.actor.personId),
+            eq(playerMatchNoteShares.claimedByPersonId, input.actor.personId),
+          ),
+        ),
+      database
         .update(videos)
         .set({
           liveVisibility: "link-only",
@@ -640,6 +692,15 @@ export async function requestAccountDeletion(input: {
             .select({ id: videos.id })
             .from(videos)
             .where(eq(videos.ownerPersonId, input.actor.personId)),
+        ),
+      ),
+    database
+      .update(playerMatchNoteShares)
+      .set({ status: "revoked", revokedAt: input.now, updatedAt: input.now })
+      .where(
+        or(
+          eq(playerMatchNoteShares.ownerPersonId, input.actor.personId),
+          eq(playerMatchNoteShares.claimedByPersonId, input.actor.personId),
         ),
       ),
     database

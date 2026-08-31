@@ -1,6 +1,10 @@
 "use client";
 
-import type { PredictionMarketView, PredictionWallet } from "@duna/api";
+import type {
+  CommunityCommentSummary,
+  PredictionMarketView,
+  PredictionWallet,
+} from "@duna/api";
 import { predictionMarketLiquidityQuote } from "@duna/core";
 import {
   ArrowRight,
@@ -26,6 +30,7 @@ import {
   placeProEventTeamPredictionOrderAction,
   placeProMatchPredictionOrderAction,
 } from "@/app/predictions/actions";
+import { CommunityThread } from "@/components/community-thread";
 import { ViewerPredictionPosition } from "@/components/viewer-prediction-position";
 import {
   buildViewerPredictionSummary,
@@ -1051,11 +1056,21 @@ export function PredictionOrderTicket({
 }
 
 export function PredictionMarketDetail({
+  conversation,
   market,
   returnTo,
   target,
   wallet,
 }: {
+  readonly conversation?: {
+    readonly access?: {
+      readonly verified: boolean;
+      readonly paidPremium: boolean;
+      readonly canComment: boolean;
+      readonly reason?: string;
+    };
+    readonly comments: readonly CommunityCommentSummary[];
+  };
   readonly market: PredictionMarketView;
   readonly returnTo: string;
   readonly target: OrderTarget;
@@ -1091,6 +1106,15 @@ export function PredictionMarketDetail({
         <PredictionMarketRulesPanel market={market} />
         <PredictionMarketCommunity market={market} />
       </div>
+      {conversation ? (
+        <CommunityThread
+          access={conversation.access}
+          comments={conversation.comments}
+          returnTo={returnTo}
+          subject={{ type: "prediction-market", id: market.id }}
+          title="Prediction conversation"
+        />
+      ) : null}
     </div>
   );
 }

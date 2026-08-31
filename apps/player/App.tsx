@@ -14,6 +14,7 @@ import {
   formatVenueTime,
   type EventDivisionSummary,
   type EventSummary,
+  type MatchSummary,
   type PersonSummary,
   googleMapsSearchUrl,
   nativeMapUrl,
@@ -119,6 +120,7 @@ import { ProfileHubScreen } from "./profile-hub";
 import { PlayerArtworkModal, ProfileEditorModal } from "./profile-studio";
 import { ScoreUploadScreen } from "./score-upload";
 import { NativeEventDetails } from "./event-details";
+import { NativeMatchDetails } from "./match-details";
 import { createDeferredModalTransition } from "./deferred-modal-transition";
 import { OrganizationExperienceModal } from "./organization-experience";
 import { LocalTournamentPanel } from "./local-tournament";
@@ -425,6 +427,7 @@ function useReducedMotion() {
     );
     return () => subscription.remove();
   }, []);
+
   return reduced;
 }
 
@@ -1671,12 +1674,14 @@ function HomeScreenV3({
   onAction,
   onOpenBooking,
   onOpenEvent,
+  onOpenMatch,
   onOpenPerformance,
   onOpenSchedule,
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onOpenBooking: (bookingId: string) => void;
   readonly onOpenEvent: (event: EventSummary) => void;
+  readonly onOpenMatch: (match: MatchSummary) => void;
   readonly onOpenPerformance: () => void;
   readonly onOpenSchedule: () => void;
 }) {
@@ -2076,7 +2081,7 @@ function HomeScreenV3({
       weather: recordedWeather,
       delta: `${match.ratingDelta >= 0 ? "+" : ""}${match.ratingDelta.toFixed(2)}`,
       deltaTone: match.ratingDelta > 0 ? "positive" : "neutral",
-      onPress: onOpenPerformance,
+      onPress: () => onOpenMatch(match),
       teams: (
         [
           {
@@ -14672,6 +14677,13 @@ function DunaApp() {
   const [eventDetailIndex, setEventDetailIndex] = useState<number | null>(null);
   const [externalEventDetail, setExternalEventDetail] =
     useState<EventSummary>();
+  const [selectedMatch, setSelectedMatch] = useState<MatchSummary>();
+  const [selectedMatchShareToken, setSelectedMatchShareToken] =
+    useState<string>();
+  const [pendingMatchOpen, setPendingMatchOpen] = useState<{
+    readonly matchId: string;
+    readonly shareToken?: string;
+  }>();
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
   const [courtBookingRequest, setCourtBookingRequest] =
@@ -14753,6 +14765,22 @@ function DunaApp() {
         setVisionRemoteToken(decodeURIComponent(visionRemote));
         return;
       }
+      const matchDetailId =
+        url?.match(/^duna:\/\/matches\/([^/?#]+)/)?.[1] ??
+        url?.match(/^https?:\/\/[^/]+\/matches\/([^/?#]+)/)?.[1];
+      if (matchDetailId && url) {
+        let shareToken: string | undefined;
+        try {
+          shareToken = new URL(url).searchParams.get("notes") ?? undefined;
+        } catch {
+          shareToken = undefined;
+        }
+        setPendingMatchOpen({
+          matchId: decodeURIComponent(matchDetailId),
+          ...(shareToken ? { shareToken } : {}),
+        });
+        return;
+      }
       const matchClaimToken = url?.match(
         /^duna:\/\/join\/match\/([^/?#]+)/,
       )?.[1];
@@ -14814,6 +14842,54 @@ function DunaApp() {
     );
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    if (!pendingMatchOpen) return;
+    const localMatch = (runtime.dashboard?.recentMatches ?? demoMatches).find(
+      (match) => match.id === pendingMatchOpen.matchId,
+    );
+    if (localMatch) {
+      setSelectedMatch(localMatch);
+      setSelectedMatchShareToken(pendingMatchOpen.shareToken);
+      setPendingMatchOpen(undefined);
+      return;
+    }
+    const client = runtime.publicClient ?? runtime.client;
+    if (!client) return;
+    let active = true;
+    const loadMatch = runtime.client
+      ? runtime.client.player.matchById
+          .query({ matchId: pendingMatchOpen.matchId })
+          .catch(() =>
+            client.public.matchDetails.query({
+              matchId: pendingMatchOpen.matchId,
+            }),
+          )
+      : client.public.matchDetails.query({ matchId: pendingMatchOpen.matchId });
+    void loadMatch
+      .then((match) => {
+        if (!active) return;
+        setSelectedMatch(match);
+        setSelectedMatchShareToken(pendingMatchOpen.shareToken);
+      })
+      .catch(() => {
+        if (!active) return;
+        void WebBrowser.openBrowserAsync(
+          `${dunaWebUrl}/matches/${encodeURIComponent(pendingMatchOpen.matchId)}${pendingMatchOpen.shareToken ? `?notes=${encodeURIComponent(pendingMatchOpen.shareToken)}` : ""}`,
+        );
+      })
+      .finally(() => {
+        if (active) setPendingMatchOpen(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    pendingMatchOpen,
+    runtime.client,
+    runtime.dashboard,
+    runtime.publicClient,
+  ]);
 
   useEffect(
     () =>
@@ -14929,6 +15005,25 @@ function DunaApp() {
       setBookingId(decodeURIComponent(bookingPath[1]));
       return;
     }
+    const matchPath = path.match(/^\/(?:app\/)?matches\/([^/?#]+)/);
+    if (matchPath?.[1]) {
+      const matchId = decodeURIComponent(matchPath[1]);
+      const match = (runtime.dashboard?.recentMatches ?? demoMatches).find(
+        (candidate) => candidate.id === matchId,
+      );
+      const query = path.includes("?") ? path.slice(path.indexOf("?")) : "";
+      const shareToken = new URLSearchParams(query).get("notes") ?? undefined;
+      if (match) {
+        setSelectedMatch(match);
+        setSelectedMatchShareToken(shareToken);
+      } else {
+        setPendingMatchOpen({
+          matchId,
+          ...(shareToken ? { shareToken } : {}),
+        });
+      }
+      return;
+    }
     if (/^\/app\/matches(?:\/|$)/.test(path)) {
       setPerformanceReturnTab("home");
       setTab("performance");
@@ -14972,15 +15067,19 @@ function DunaApp() {
     }
   };
   const openAiMatch = (matchId: string, href?: string) => {
-    if (
-      runtime.dashboard?.recentMatches.some((match) => match.id === matchId)
-    ) {
-      setPerformanceReturnTab("home");
-      setTab("performance");
+    const match = (runtime.dashboard?.recentMatches ?? demoMatches).find(
+      (candidate) => candidate.id === matchId,
+    );
+    if (match) {
+      setSelectedMatch(match);
+      setSelectedMatchShareToken(undefined);
       return;
     }
-    if (href) openDunaHref(href);
-    else setTab("discover");
+    if (href) {
+      openDunaHref(href);
+      return;
+    }
+    setPendingMatchOpen({ matchId });
   };
   const selectedBooking = runtime.dashboard?.bookings.find(
     (booking) => booking.id === bookingId,
@@ -15057,6 +15156,10 @@ function DunaApp() {
                   onAction={openHomeAction}
                   onOpenBooking={setBookingId}
                   onOpenEvent={openExternalEventDetail}
+                  onOpenMatch={(match) => {
+                    setSelectedMatch(match);
+                    setSelectedMatchShareToken(undefined);
+                  }}
                   onOpenPerformance={() => {
                     setPerformanceReturnTab("home");
                     setTab("performance");
@@ -15295,6 +15398,18 @@ function DunaApp() {
                 setTab("video");
               }}
               visible={Boolean(selectedEventDetail)}
+            />
+            <NativeMatchDetails
+              client={runtime.client}
+              match={selectedMatch}
+              onClose={() => {
+                setSelectedMatch(undefined);
+                setSelectedMatchShareToken(undefined);
+              }}
+              publicClient={runtime.publicClient}
+              shareToken={selectedMatchShareToken}
+              transcribeVoice={runtime.transcribeMatchJournalVoice}
+              visible={Boolean(selectedMatch)}
             />
             <ProfileEditorModal
               onClose={() => setProfileEditorOpen(false)}

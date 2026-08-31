@@ -1,4 +1,5 @@
 import type {
+  CommunityCommentSummary,
   PredictionMarketView,
   PredictionWallet,
   PublicProMatchDetail,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DunaVideoGallery } from "@/components/duna-video-gallery";
+import { CommunityThread } from "@/components/community-thread";
 import { ProLiveMatchScoreboard } from "@/components/pro-live-match-scoreboard";
 import { PredictionMarketDetail } from "@/components/prediction-market";
 import { SiteFooter } from "@/components/site-footer";
@@ -25,12 +27,23 @@ import { SiteHeader } from "@/components/site-header";
 import { professionalMatchJsonLd, serializeJsonLd } from "@/lib/pro-seo";
 
 export function ProMatchDetail({
+  communityAccess,
+  comments = [],
   detail,
+  predictionComments = [],
   predictionMarket,
   predictionWallet,
   videos = [],
 }: {
+  readonly communityAccess?: {
+    readonly verified: boolean;
+    readonly paidPremium: boolean;
+    readonly canComment: boolean;
+    readonly reason?: string;
+  };
+  readonly comments?: readonly CommunityCommentSummary[];
   readonly detail: PublicProMatchDetail;
+  readonly predictionComments?: readonly CommunityCommentSummary[];
   readonly predictionMarket?: PredictionMarketView;
   readonly predictionWallet?: PredictionWallet;
   readonly videos?: readonly VideoSummary[];
@@ -147,6 +160,10 @@ export function ProMatchDetail({
 
         {predictionMarket && (
           <PredictionMarketDetail
+            conversation={{
+              access: communityAccess,
+              comments: predictionComments,
+            }}
             market={predictionMarket}
             returnTo={match.canonicalPath}
             target={{
@@ -321,6 +338,14 @@ export function ProMatchDetail({
             videos={videos}
           />
         )}
+
+        <CommunityThread
+          access={communityAccess}
+          comments={comments}
+          returnTo={match.canonicalPath}
+          subject={{ type: "match", id: match.id }}
+          title={isLive ? "Live match conversation" : "Match conversation"}
+        />
 
         <nav className="pro-match-source">
           <Link href={`/events/${event.slug}`}>

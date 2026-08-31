@@ -15,6 +15,7 @@ import {
   resolveDunaAiGatewayCredential,
   resolveDunaAiGatewayCredentialSource,
   runDunaAiAgent,
+  summarizeMatchJournalFeedback,
   transcribeDunaAiAudio,
 } from "./duna-ai";
 import { proposeAgentAction } from "./risk";
@@ -74,6 +75,24 @@ describe("Duna AI action classification", () => {
 });
 
 describe("Duna AI context", () => {
+  it("keeps a minor's private match reflection out of the general AI provider flow", async () => {
+    await expect(
+      summarizeMatchJournalFeedback({
+        actor: {
+          personId: "10000000-0000-4000-8000-000000000010",
+          displayName: "Young player",
+          roles: ["player"],
+          scopes: ["matches:read"],
+          ageBand: "teen",
+          isDemo: false,
+        },
+        body: "I should call the short serve earlier next time.",
+        roster: [],
+        now: new Date("2026-08-31T16:00:00.000Z"),
+      }),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
+
   it("finds real overlaps without flagging adjacent sessions", () => {
     expect(
       findScheduleConflicts([

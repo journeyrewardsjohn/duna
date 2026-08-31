@@ -3,6 +3,7 @@ import {
   createApiContextFromRequest,
   createApiContextFromWorkOSSession,
   isWorkOSAuthKitConfigured,
+  loadCommunityAccess,
   transcribeDunaAiAudio,
 } from "@duna/api";
 import { withAuth } from "@workos-inc/authkit-nextjs";
@@ -45,6 +46,33 @@ export async function POST(request: Request) {
         { status: 401 },
       );
     const form = await request.formData();
+    if (form.get("purpose") === "match-journal") {
+      if (context.actor.ageBand !== "adult") {
+        return Response.json(
+          {
+            error:
+              "Typed match notes are available, but voice transcription requires an adult account.",
+          },
+          { status: 403 },
+        );
+      }
+      const access = await loadCommunityAccess({
+        actor: context.actor,
+        now: context.now,
+      });
+      if (!access.verified) {
+        return Response.json(
+          { error: "Verify your Duna account to use voice match notes." },
+          { status: 403 },
+        );
+      }
+      if (!access.paidPremium) {
+        return Response.json(
+          { error: "Player Premium is required for voice match notes." },
+          { status: 403 },
+        );
+      }
+    }
     const audio = form.get("audio");
     if (!(audio instanceof File) || !audio.type.startsWith("audio/"))
       return Response.json(

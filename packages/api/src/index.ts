@@ -34,6 +34,7 @@ export * from "./player-research";
 export * from "./prediction-market";
 export * from "./membership";
 export * from "./match-service";
+export * from "./match-social-service";
 export * from "./messaging-service";
 export * from "./messaging-router";
 export * from "./messaging-notifications";

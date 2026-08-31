@@ -2883,6 +2883,30 @@ export async function loadPublicVideos(input: {
   });
 }
 
+export async function loadMatchVideosForActor(input: {
+  readonly actor: ApiActor;
+  readonly matchId: string;
+}): Promise<readonly VideoSummary[]> {
+  requireDatabase();
+  const publicVisibility = or(
+    and(eq(videos.status, "live"), eq(videos.liveVisibility, "public")),
+    and(
+      inArray(videos.status, [...PUBLIC_VIDEO_STATUSES]),
+      sql`${videos.status} <> 'live'`,
+      eq(videos.recordingVisibility, "public"),
+    ),
+  );
+  return loadVideoSummaries({
+    where: and(
+      eq(videos.matchId, input.matchId),
+      inArray(videos.status, [...PUBLIC_VIDEO_STATUSES]),
+      or(eq(videos.ownerPersonId, input.actor.personId), publicVisibility),
+    ),
+    limit: 50,
+    includePrivatePosters: true,
+  });
+}
+
 async function resolveShareAccess(
   videoId: string,
   token: string | undefined,
