@@ -45,6 +45,8 @@ export interface CaptureGuidance {
   readonly lidarAvailable?: boolean;
   readonly groundPlaneDetected?: boolean;
   readonly courtDetected?: boolean;
+  /** A repeated full-frame grid suggests nearby protective netting or fencing. */
+  readonly foregroundObstructionLikely?: boolean;
   readonly cameraHeightMeters?: number;
   readonly preferredOrientation?: "landscape" | "portrait";
   readonly deviceOrientation?: "landscape" | "portrait" | "unknown";
