@@ -122,5 +122,24 @@ describe("court calibration geometry", () => {
     expect(framed.find((step) => step.id === "ground")?.detail).toContain(
       "LiDAR",
     );
+
+    const obstructed = courtCalibrationChecklist(
+      {
+        acceptable: false,
+        calibratedAt: "2026-09-02T12:00:00.000Z",
+        confidence: 0.22,
+        foregroundObstructionLikely: true,
+        orientationMatches: true,
+        preferredOrientation: "landscape",
+        qualityGrade: "limited",
+        qualityScore: 48,
+        warnings: ["A close grid may be crossing the camera view."],
+      },
+      "landscape",
+    );
+    expect(obstructed.find((step) => step.active)?.id).toBe("clear-view");
+    expect(
+      obstructed.find((step) => step.id === "clear-view")?.detail,
+    ).toContain("close grid");
   });
 });

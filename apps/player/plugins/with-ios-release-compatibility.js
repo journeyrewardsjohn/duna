@@ -2,8 +2,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { withDangerousMod } = require("expo/config-plugins");
 
-const requireStatement =
-  "require File.join(__dir__, '..', 'scripts', 'patch-haishinkit-audio-node')";
+const requireStatements = [
+  "require File.join(__dir__, '..', 'scripts', 'patch-haishinkit-audio-node')",
+  "require File.join(__dir__, '..', 'scripts', 'patch-haishinkit-recorder-safety')",
+];
 const beginMarker = "    # duna-ios-release-compatibility";
 const endMarker = "    # /duna-ios-release-compatibility";
 const reactNativeBundleCommand =
@@ -12,11 +14,11 @@ const safeReactNativeBundleCommand =
   'REACT_NATIVE_XCODE_SCRIPT=\\"$(\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\")\\"\\n\\"$REACT_NATIVE_XCODE_SCRIPT\\"\\n';
 
 /**
- * HaishinKit 1.9.9 predates an upstream AudioNode initializer correction
- * required by optimized builds on current Xcode releases. Apply that exact
- * upstream correction after CocoaPods installs the pinned dependency. Also
- * preserve quoted script paths so local Release builds work from directories
- * containing spaces.
+ * HaishinKit 1.9.x needs an AudioNode initializer correction on current Xcode,
+ * plus recorder shutdown and observer synchronization while Duna carries both
+ * a primary and rolling replay writer. Apply those changes after CocoaPods
+ * installs the pinned dependency. Also preserve quoted script paths so local
+ * Release builds work from directories containing spaces.
  */
 module.exports = function withIosReleaseCompatibility(config) {
   return withDangerousMod(config, [
@@ -28,7 +30,8 @@ module.exports = function withIosReleaseCompatibility(config) {
       );
       let podfile = await fs.promises.readFile(podfilePath, "utf8");
 
-      if (!podfile.includes(requireStatement)) {
+      for (const requireStatement of requireStatements) {
+        if (podfile.includes(requireStatement)) continue;
         const requireAnchor = "require 'json'\n";
         if (!podfile.includes(requireAnchor)) {
           throw new Error(
@@ -41,21 +44,10 @@ module.exports = function withIosReleaseCompatibility(config) {
         );
       }
 
-      if (podfile.includes(beginMarker)) {
-        await fs.promises.writeFile(podfilePath, podfile);
-        return modConfig;
-      }
-
-      const anchor = "    expo_widgets_post_install(installer)\n";
-      if (!podfile.includes(anchor)) {
-        throw new Error(
-          "Duna video capture could not locate the iOS post-install hook.",
-        );
-      }
-
       const releaseCompatibility = [
         beginMarker,
         "    DunaHaishinKitAudioNodePatch.apply!(File.join(__dir__, 'Pods'))",
+        "    DunaHaishinKitRecorderSafetyPatch.apply!(File.join(__dir__, 'Pods'))",
         "",
         "    installer.pods_project.targets.each do |target|",
         "      target.shell_script_build_phases.each do |build_phase|",
@@ -70,7 +62,27 @@ module.exports = function withIosReleaseCompatibility(config) {
         endMarker,
       ].join("\n");
 
-      podfile = podfile.replace(anchor, `${anchor}\n${releaseCompatibility}\n`);
+      if (podfile.includes(beginMarker)) {
+        const blockStart = podfile.indexOf(beginMarker);
+        const blockEnd = podfile.indexOf(endMarker, blockStart);
+        if (blockEnd < blockStart) {
+          throw new Error(
+            "Duna video capture found an incomplete iOS compatibility block.",
+          );
+        }
+        podfile = `${podfile.slice(0, blockStart)}${releaseCompatibility}${podfile.slice(blockEnd + endMarker.length)}`;
+      } else {
+        const anchor = "    expo_widgets_post_install(installer)\n";
+        if (!podfile.includes(anchor)) {
+          throw new Error(
+            "Duna video capture could not locate the iOS post-install hook.",
+          );
+        }
+        podfile = podfile.replace(
+          anchor,
+          `${anchor}\n${releaseCompatibility}\n`,
+        );
+      }
       await fs.promises.writeFile(podfilePath, podfile);
 
       const projectPath = path.join(

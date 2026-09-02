@@ -59,6 +59,7 @@ private final class DunaVideoCaptureController: NSObject {
   private var pendingReplayDuration: Int?
   private var discardReplayBuffer = false
   private var restartReplayAfterStreamReplacement = false
+  private var pendingPrimaryRecorderStop = false
   private let motionManager = CMMotionManager()
   let arSession = ARSession()
   private let visionQueue = DispatchQueue(
@@ -104,6 +105,9 @@ private final class DunaVideoCaptureController: NSObject {
   private var lastCourtEvidenceAt = CFAbsoluteTimeGetCurrent()
   private var lastNetEvidenceAt = CFAbsoluteTimeGetCurrent()
   private var stableCourtProjectionSource = "estimated"
+  private var lastObstructionAnalysisAt = CFAbsoluteTimeGetCurrent() - 2
+  private var foregroundGridEvidenceFrames = 0
+  private var foregroundObstructionLikely = false
 
   var courtWidthMeters = 8.0
   var courtLengthMeters = 16.0
@@ -827,6 +831,7 @@ private final class DunaVideoCaptureController: NSObject {
     stream.addObserver(nextRecorder)
     recorder = nextRecorder
     recorderWasInterrupted = false
+    pendingPrimaryRecorderStop = false
     UIApplication.shared.isIdleTimerDisabled = true
     nextRecorder.startRunning()
     startReplayBuffer()
@@ -840,6 +845,13 @@ private final class DunaVideoCaptureController: NSObject {
       )
       return
     }
+    guard recordingPromise == nil else {
+      promise.reject(
+        "ERR_DUNA_RECORDING",
+        "Duna is already saving this recording."
+      )
+      return
+    }
     discardReplayBuffer = true
     replayRotationWorkItem?.cancel()
     replayRotationWorkItem = nil
@@ -847,11 +859,24 @@ private final class DunaVideoCaptureController: NSObject {
       try? FileManager.default.removeItem(at: lastReplayBufferUrl)
       self.lastReplayBufferUrl = nil
     }
-    replayRecorder?.stopRunning()
     replayBufferStartedAt = nil
     recorderWasInterrupted = false
     recordingPromise = promise
-    recorder.stopRunning()
+    if let replayRecorder {
+      // The pinned recorder uses a blocking AVAssetWriter finalization. Finish
+      // the rolling replay writer first so two writers never tear down against
+      // the same stream at the same time.
+      pendingPrimaryRecorderStop = true
+      replayRecorder.stopRunning()
+    } else {
+      recorder.stopRunning()
+    }
+  }
+
+  private func stopPendingPrimaryRecorder() {
+    guard pendingPrimaryRecorderStop else { return }
+    pendingPrimaryRecorderStop = false
+    recorder?.stopRunning()
   }
 
   private func attachCaptureDevices(audioEnabled: Bool) {
@@ -1088,10 +1113,14 @@ private final class DunaVideoCaptureController: NSObject {
       try? FileManager.default.removeItem(at: lastReplayBufferUrl)
       self.lastReplayBufferUrl = nil
     }
-    replayRecorder?.stopRunning()
     replayBufferStartedAt = nil
     recorderWasInterrupted = true
-    recorder.stopRunning()
+    if let replayRecorder {
+      pendingPrimaryRecorderStop = true
+      replayRecorder.stopRunning()
+    } else {
+      recorder.stopRunning()
+    }
     emitState("stopped")
     emitError(
       "Recording paused because Duna left the foreground. Your saved video is being finalized."
@@ -1214,6 +1243,66 @@ private final class DunaVideoCaptureController: NSObject {
       (1.05 - abs(centerY - 0.5) * 0.28)
   }
 
+  private func foregroundGridLikely(
+    _ observation: VNContoursObservation?
+  ) -> Bool {
+    guard let observation, observation.contourCount >= 16 else { return false }
+    var cells: [CGRect] = []
+    for index in 0..<min(observation.contourCount, 800) {
+      guard let contour = try? observation.contour(at: index) else { continue }
+      let box = contour.normalizedPath.boundingBoxOfPath
+      let area = box.width * box.height
+      let aspect = box.width / max(0.001, box.height)
+      guard
+        box.width >= 0.006, box.width <= 0.18,
+        box.height >= 0.006, box.height <= 0.18,
+        area >= 0.00008, area <= 0.018,
+        aspect >= 0.25, aspect <= 4
+      else {
+        continue
+      }
+      cells.append(box)
+    }
+    guard cells.count >= 16 else { return false }
+
+    let widths = cells.map(\.width).sorted()
+    let heights = cells.map(\.height).sorted()
+    let medianWidth = widths[widths.count / 2]
+    let medianHeight = heights[heights.count / 2]
+    let repeatedCells = cells.filter {
+      $0.width >= medianWidth * 0.42 && $0.width <= medianWidth * 2.4 &&
+        $0.height >= medianHeight * 0.42 && $0.height <= medianHeight * 2.4
+    }
+    guard repeatedCells.count >= 24 else { return false }
+
+    let centersX = repeatedCells.map(\.midX)
+    let centersY = repeatedCells.map(\.midY)
+    let horizontalCoverage = (centersX.max() ?? 0) - (centersX.min() ?? 1)
+    let verticalCoverage = (centersY.max() ?? 0) - (centersY.min() ?? 1)
+    let columns = Set(centersX.map { min(5, max(0, Int($0 * 6))) })
+    let rows = Set(centersY.map { min(5, max(0, Int($0 * 6))) })
+    let columnTolerance = max(0.008, medianWidth * 1.5)
+    let rowTolerance = max(0.008, medianHeight * 1.5)
+    let alignedCells = repeatedCells.filter { cell in
+      let sameColumn = repeatedCells.filter {
+        abs($0.midX - cell.midX) <= columnTolerance
+      }.count
+      let sameRow = repeatedCells.filter {
+        abs($0.midY - cell.midY) <= rowTolerance
+      }.count
+      return sameColumn >= 3 && sameRow >= 4
+    }
+
+    // A regulation net occupies a horizontal band. A nearby protective grid
+    // repeats through most of both axes, which is the signal we can describe
+    // to the player without pretending to know the obstruction's identity.
+    return horizontalCoverage >= 0.72 &&
+      verticalCoverage >= 0.82 &&
+      columns.count >= 5 &&
+      rows.count >= 5 &&
+      alignedCells.count >= 14
+  }
+
   private func analyze(
     _ pixelBuffer: CVPixelBuffer,
     orientation: CGImagePropertyOrientation
@@ -1234,16 +1323,46 @@ private final class DunaVideoCaptureController: NSObject {
     landmarkRequest.minimumSize = 0.05
     landmarkRequest.quadratureTolerance = 24
     let poseRequest = VNDetectHumanBodyPoseRequest()
+    let shouldAnalyzeObstruction =
+      recorder == nil && pendingStreamKey == nil &&
+      now - lastObstructionAnalysisAt >= 1.2
+    let contourRequest: VNDetectContoursRequest? = shouldAnalyzeObstruction
+      ? VNDetectContoursRequest()
+      : nil
+    contourRequest?.contrastAdjustment = 1.6
+    contourRequest?.detectsDarkOnLight = true
+    contourRequest?.maximumImageDimension = 256
     let handler = VNImageRequestHandler(
       cvPixelBuffer: pixelBuffer,
       orientation: orientation,
       options: [:]
     )
     do {
-      try handler.perform([rectangleRequest, landmarkRequest, poseRequest])
-      let netCandidate = landmarkRequest.results?
-        .filter(isNetLike)
-        .max { netObservationScore($0) < netObservationScore($1) }
+      var requests: [VNRequest] = [rectangleRequest, landmarkRequest, poseRequest]
+      if let contourRequest {
+        requests.append(contourRequest)
+      }
+      try handler.perform(requests)
+      if let contourRequest {
+        lastObstructionAnalysisAt = now
+        if foregroundGridLikely(contourRequest.results?.first) {
+          foregroundGridEvidenceFrames = min(3, foregroundGridEvidenceFrames + 1)
+        } else {
+          foregroundGridEvidenceFrames = max(0, foregroundGridEvidenceFrames - 1)
+        }
+        foregroundObstructionLikely = foregroundGridEvidenceFrames >= 2
+        if foregroundObstructionLikely {
+          stableCourtCorners = nil
+          stableNetTopLine = nil
+          courtEvidenceFrames = 0
+          netEvidenceFrames = 0
+        }
+      }
+      let netCandidate = foregroundObstructionLikely
+        ? nil
+        : landmarkRequest.results?
+          .filter(isNetLike)
+          .max { netObservationScore($0) < netObservationScore($1) }
       let rectangle = rectangleRequest.results?
         .filter {
           let box = $0.boundingBox
@@ -1477,9 +1596,11 @@ private final class DunaVideoCaptureController: NSObject {
       : latestGroundCourtHypotheses
     let groundDetected = !groundHypotheses.isEmpty || courtCandidate
 
-    let netObservation = landmarks
-      .filter(isNetLike)
-      .max { netObservationScore($0) < netObservationScore($1) }
+    let netObservation = foregroundObstructionLikely
+      ? nil
+      : landmarks
+        .filter(isNetLike)
+        .max { netObservationScore($0) < netObservationScore($1) }
     let rawNetTopLine: [CGPoint]? = netObservation.map {
       let line = elongatedLine($0)
       return [line.start, line.end]
@@ -1584,6 +1705,13 @@ private final class DunaVideoCaptureController: NSObject {
           y: ($0[1].y + $0[2].y) / 2
         )
       ]
+    }
+
+    if foregroundObstructionLikely {
+      score -= 18
+      warnings.append(
+        "A close grid may be crossing the camera view. Move the lens closer to an opening, or tap Adjust."
+      )
     }
 
     if !groundDetected {
@@ -1739,13 +1867,14 @@ private final class DunaVideoCaptureController: NSObject {
       "lidarAvailable": lidarAvailable,
       "groundPlaneDetected": groundDetected,
       "courtDetected": courtDetected,
+      "foregroundObstructionLikely": foregroundObstructionLikely,
       "netDetected": netDetected,
       "antennaDetected": antennaPoints != nil,
       "visibleCornerCount": visibleCorners,
       "nearLineVisible": nearLineVisible,
       "partialCourt": partialCourt,
       "calibrationMode": "automatic",
-      "modelVersion": "court-v4-spatial-2026-08-30",
+      "modelVersion": "court-v5-obstruction-2026-09-02",
       "preferredOrientation": preferredOrientation,
       "deviceOrientation": currentDeviceOrientation,
       "orientationMatches": orientationMatches,
@@ -2097,6 +2226,15 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     _ recorder: IOStreamRecorder,
     errorOccured error: IOStreamRecorder.Error
   ) {
+    DispatchQueue.main.async { [weak self] in
+      self?.handleRecorderError(recorder, error: error)
+    }
+  }
+
+  private func handleRecorderError(
+    _ recorder: IOStreamRecorder,
+    error: IOStreamRecorder.Error
+  ) {
     if recorder === replayRecorder {
       let shouldRestart = restartReplayAfterStreamReplacement ||
         (!discardReplayBuffer && (pendingStreamKey != nil || self.recorder != nil))
@@ -2107,6 +2245,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
       replayRecorderStream = nil
       replayBufferStartedAt = nil
       pendingReplayDuration = nil
+      stopPendingPrimaryRecorder()
       if shouldRestart {
         DispatchQueue.main.async { [weak self] in
           self?.discardReplayBuffer = false
@@ -2118,6 +2257,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     }
     stream.removeObserver(recorder)
     self.recorder = nil
+    pendingPrimaryRecorderStop = false
     recorderWasInterrupted = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
@@ -2131,6 +2271,15 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
   func recorder(
     _ recorder: IOStreamRecorder,
     finishWriting writer: AVAssetWriter
+  ) {
+    DispatchQueue.main.async { [weak self] in
+      self?.handleRecorderFinish(recorder, writer: writer)
+    }
+  }
+
+  private func handleRecorderFinish(
+    _ recorder: IOStreamRecorder,
+    writer: AVAssetWriter
   ) {
     if recorder === replayRecorder {
       replayRotationWorkItem?.cancel()
@@ -2149,6 +2298,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
       let shouldRestart =
         restartReplayAfterStreamReplacement ||
         (!discardReplayBuffer && (pendingStreamKey != nil || self.recorder != nil))
+      stopPendingPrimaryRecorder()
       DispatchQueue.main.async { [weak self] in
         guard let self else { return }
         if self.discardReplayBuffer {
@@ -2192,6 +2342,7 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     }
     stream.removeObserver(recorder)
     self.recorder = nil
+    pendingPrimaryRecorderStop = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
     let url = writer.outputURL

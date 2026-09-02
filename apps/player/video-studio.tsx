@@ -24,6 +24,7 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
   BackHandler,
   Image,
@@ -3666,6 +3667,14 @@ function CourtCalibrationEditor({
   );
 }
 
+type CaptureNoticeTone = "error" | "info" | "success" | "warning";
+
+interface CaptureNotice {
+  readonly id: number;
+  readonly message: string;
+  readonly tone: CaptureNoticeTone;
+}
+
 function CaptureExperience({
   client,
   form,
@@ -3698,6 +3707,7 @@ function CaptureExperience({
   readonly preferSrt: boolean;
 }) {
   const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isLandscapeViewport = width > height;
   const labels = useMemo(() => teamLabels(form), [form]);
   const matchId =
@@ -3720,7 +3730,7 @@ function CaptureExperience({
   );
   const [calibrationDraft, setCalibrationDraft] = useState<CourtGeometry>();
   const [captureError, setCaptureError] = useState<string>();
-  const [visionNotice, setVisionNotice] = useState<string>();
+  const [captureNotice, setCaptureNotice] = useState<CaptureNotice>();
   const [busy, setBusy] = useState(false);
   const [streamState, setStreamState] = useState<
     "preview" | "connecting" | "live" | "stopped"
@@ -3780,6 +3790,71 @@ function CaptureExperience({
   const remoteReplayCommand = useRef<string | undefined>(undefined);
   const startRef = useRef<() => void>(() => undefined);
   const stopRef = useRef<() => void>(() => undefined);
+  const captureNoticeOpacity = useRef(new Animated.Value(0)).current;
+  const captureNoticeTranslateY = useRef(new Animated.Value(-8)).current;
+  const captureNoticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+
+  const showCaptureNotice = useCallback(
+    (message: string, tone: CaptureNoticeTone = "info") => {
+      if (captureNoticeTimer.current) {
+        clearTimeout(captureNoticeTimer.current);
+      }
+      captureNoticeOpacity.stopAnimation();
+      captureNoticeTranslateY.stopAnimation();
+      captureNoticeOpacity.setValue(0);
+      captureNoticeTranslateY.setValue(-8);
+      setCaptureNotice({ id: Date.now(), message, tone });
+      Animated.parallel([
+        Animated.timing(captureNoticeOpacity, {
+          duration: 180,
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(captureNoticeTranslateY, {
+          duration: 180,
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      captureNoticeTimer.current = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(captureNoticeOpacity, {
+            duration: 400,
+            toValue: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(captureNoticeTranslateY, {
+            duration: 400,
+            toValue: -4,
+            useNativeDriver: true,
+          }),
+        ]).start(({ finished }) => {
+          if (finished) setCaptureNotice(undefined);
+        });
+      }, 1_600);
+    },
+    [captureNoticeOpacity, captureNoticeTranslateY],
+  );
+  const reportCaptureError = useCallback(
+    (message: string) => {
+      setCaptureError(message);
+      showCaptureNotice(message, "error");
+    },
+    [showCaptureNotice],
+  );
+
+  useEffect(
+    () => () => {
+      if (captureNoticeTimer.current) {
+        clearTimeout(captureNoticeTimer.current);
+      }
+      captureNoticeOpacity.stopAnimation();
+      captureNoticeTranslateY.stopAnimation();
+    },
+    [captureNoticeOpacity, captureNoticeTranslateY],
+  );
 
   sessionRef.current = visionSession;
   settingsRef.current = visionSettings;
@@ -3892,11 +3967,12 @@ function CaptureExperience({
         sponsorVisible: sponsor?.active ?? false,
       }),
     ).catch((error: unknown) => {
-      setVisionNotice(
+      showCaptureNotice(
         `Program graphics are unavailable: ${displayError(error)}`,
+        "warning",
       );
     });
-  }, [matchScoring, visionScore, visionSettings]);
+  }, [matchScoring, showCaptureNotice, visionScore, visionSettings]);
 
   useEffect(() => {
     const current = sessionRef.current;
@@ -3946,8 +4022,9 @@ function CaptureExperience({
       })
       .catch((error) => {
         if (active) {
-          setVisionNotice(
+          showCaptureNotice(
             `Remote, Watch tagging, and timed overlays are unavailable: ${displayError(error)}`,
+            "warning",
           );
         }
       });
@@ -3957,11 +4034,13 @@ function CaptureExperience({
       active = false;
     };
     // The capture form is frozen while this screen is mounted.
-  }, [client, matchId, updateSessionState]);
+  }, [client, matchId, showCaptureNotice, updateSessionState]);
 
   useEffect(() => {
     if (!VideoCapture) {
-      setCaptureError("The iOS capture engine is unavailable in this build.");
+      reportCaptureError(
+        "The iOS capture engine is unavailable in this build.",
+      );
       return;
     }
     const capture = VideoCapture;
@@ -3977,15 +4056,18 @@ function CaptureExperience({
           );
         }
         await capture.preparePreview(form.hasAudio);
-        if (active) setPermissionsReady(true);
+        if (active) {
+          setCaptureError(undefined);
+          setPermissionsReady(true);
+        }
       })
       .catch((error) => {
-        if (active) setCaptureError(displayError(error));
+        if (active) reportCaptureError(displayError(error));
       });
     return () => {
       active = false;
     };
-  }, [form.hasAudio]);
+  }, [form.hasAudio, reportCaptureError]);
 
   useEffect(() => {
     if (streamState !== "live" && !recording) return;
@@ -4039,6 +4121,7 @@ function CaptureExperience({
       lidarAvailable: guidance?.lidarAvailable,
       groundPlaneDetected: guidance?.groundPlaneDetected,
       courtDetected: guidance?.courtDetected,
+      foregroundObstructionLikely: guidance?.foregroundObstructionLikely,
       cameraHeightMeters: guidance?.cameraHeightMeters,
       deviceOrientation: guidance?.deviceOrientation,
       orientationMatches: guidance?.orientationMatches,
@@ -4071,7 +4154,7 @@ function CaptureExperience({
       netDetected: hasCourtEvidence && Boolean(geometry.netTopLine),
       antennaDetected: hasCourtEvidence && Boolean(geometry.antennaPoints),
       calibrationMode: geometry.mode,
-      modelVersion: guidance?.modelVersion ?? "court-v4-spatial-2026-08-30",
+      modelVersion: guidance?.modelVersion ?? "court-v5-obstruction-2026-09-02",
     };
   };
 
@@ -4143,15 +4226,17 @@ function CaptureExperience({
           },
         );
       }
-      setVisionNotice(
+      showCaptureNotice(
         nextGeometry.nearLineVisible
           ? "Court and net calibration saved."
           : "Calibration saved with the near line outside the frame.",
+        "success",
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      setVisionNotice(
+      showCaptureNotice(
         `Calibration is saved on this iPhone but remote sync is waiting: ${displayError(error)}`,
+        "warning",
       );
     }
   };
@@ -4168,7 +4253,10 @@ function CaptureExperience({
       });
       updateSessionState(next);
     } catch (error) {
-      setVisionNotice(`Vision status did not sync: ${displayError(error)}`);
+      showCaptureNotice(
+        `Vision status did not sync: ${displayError(error)}`,
+        "warning",
+      );
     }
   };
 
@@ -4177,7 +4265,7 @@ function CaptureExperience({
     if (guidanceRef.current?.orientationMatches === false) {
       const required = form.orientation;
       const actual = guidanceRef.current.deviceOrientation;
-      setCaptureError(
+      reportCaptureError(
         `Rotate your phone to ${required} to start, or restart this recording in ${actual === "unknown" || !actual ? "the phone's current" : actual} mode.`,
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -4230,8 +4318,9 @@ function CaptureExperience({
           (destination) => destination.status === "failed",
         );
         if (failedDestinations.length > 0) {
-          setVisionNotice(
+          showCaptureNotice(
             `Duna is ready. ${failedDestinations.map((destination) => destination.channelTitle).join(", ")} could not connect to YouTube.`,
+            "warning",
           );
         }
         const currentVision = sessionRef.current;
@@ -4277,7 +4366,7 @@ function CaptureExperience({
           idempotencyKey: idempotencyKey(),
         });
       }
-      setCaptureError(displayError(error));
+      reportCaptureError(displayError(error));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -4321,7 +4410,7 @@ function CaptureExperience({
       await updateVisionStatus("ended");
       setReviewing(true);
     } catch (error) {
-      setCaptureError(displayError(error));
+      reportCaptureError(displayError(error));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -4429,8 +4518,9 @@ function CaptureExperience({
           setVisionScore(authoritativeScore);
         } catch (error) {
           remoteMatchScoreCommand.current = undefined;
-          setVisionNotice(
+          showCaptureNotice(
             `Second-screen score received; linked match scoring is waiting to sync: ${displayError(error)}`,
+            "warning",
           );
         }
       }
@@ -4459,14 +4549,15 @@ function CaptureExperience({
             durationSeconds: result?.durationSeconds ?? 0,
           },
         }).catch(() => undefined);
-        setVisionNotice(
+        showCaptureNotice(
           result?.accepted
             ? `Playing the last ${result.durationSeconds} seconds.`
             : "Replay is warming up. Try again after the next rally.",
+          result?.accepted ? "info" : "warning",
         );
       }
     },
-    [appendRemoteProgramEvent, client, matchId],
+    [appendRemoteProgramEvent, client, matchId, showCaptureNotice],
   );
 
   useEffect(() => {
@@ -4580,12 +4671,13 @@ function CaptureExperience({
         scoreRef.current = compact;
         setVisionScore(compact);
       } catch (error) {
-        setVisionNotice(
+        showCaptureNotice(
           `Moment saved to Duna Vision; linked match scoring did not update: ${displayError(error)}`,
+          "warning",
         );
       }
     },
-    [client, matchId],
+    [client, matchId, showCaptureNotice],
   );
 
   useEffect(() => {
@@ -4595,14 +4687,15 @@ function CaptureExperience({
       watchEventChain.current = watchEventChain.current
         .then(() => processWatchEvents(events, sessionId))
         .catch((error) => {
-          setVisionNotice(
+          showCaptureNotice(
             `Watch moments are waiting to sync: ${displayError(error)}`,
+            "warning",
           );
         });
     };
     enqueue(getPendingWatchVisionEvents());
     return subscribeToWatchVisionEvents((event) => enqueue([event]));
-  }, [processWatchEvents, visionSession?.id]);
+  }, [processWatchEvents, showCaptureNotice, visionSession?.id]);
 
   useEffect(() => {
     const current = visionSession;
@@ -4653,9 +4746,15 @@ function CaptureExperience({
     try {
       await appendPhoneEvent("favorite", "Favorite moment");
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setVisionNotice(`Moment saved at ${formatClock(elapsedRef.current)}`);
+      showCaptureNotice(
+        `Moment saved at ${formatClock(elapsedRef.current)}`,
+        "success",
+      );
     } catch (error) {
-      setVisionNotice(`Favorite is waiting to sync: ${displayError(error)}`);
+      showCaptureNotice(
+        `Favorite is waiting to sync: ${displayError(error)}`,
+        "warning",
+      );
     }
   };
 
@@ -4676,13 +4775,17 @@ function CaptureExperience({
           durationSeconds: result.durationSeconds,
         },
       ).catch(() => undefined);
-      setVisionNotice(
+      showCaptureNotice(
         result.accepted
           ? `Playing the last ${result.durationSeconds} seconds.`
           : "Replay is warming up. Try again after the next rally.",
+        result.accepted ? "info" : "warning",
       );
     } catch (error) {
-      setVisionNotice(`Replay is unavailable: ${displayError(error)}`);
+      showCaptureNotice(
+        `Replay is unavailable: ${displayError(error)}`,
+        "error",
+      );
     } finally {
       setReplayBusy(false);
     }
@@ -4824,7 +4927,9 @@ function CaptureExperience({
           courtWidthMeters={visionSettings.courtWidthMeters}
           netHeightMeters={visionSettings.netHeightMeters}
           preferredOrientation={form.orientation}
-          onCaptureError={(event) => setCaptureError(event.nativeEvent.message)}
+          onCaptureError={(event) =>
+            reportCaptureError(event.nativeEvent.message)
+          }
           onGuidance={(event) => {
             const next = event.nativeEvent;
             const detected = geometryFromGuidance(next);
@@ -4861,8 +4966,9 @@ function CaptureExperience({
             const lockedCalibration = calibration();
             activeRef.current = false;
             setRecording(false);
-            setVisionNotice(
+            showCaptureNotice(
               "Your recording was safely finalized after iOS interrupted capture.",
+              "success",
             );
             void appendPhoneEvent(
               "recording-stopped",
@@ -4880,6 +4986,46 @@ function CaptureExperience({
         />
       )}
       <CourtOverlay geometry={courtGeometry} guidance={guidance} />
+      {!!captureNotice && (
+        <Animated.View
+          accessibilityLiveRegion="polite"
+          key={captureNotice.id}
+          pointerEvents="none"
+          style={[
+            styles.captureNoticeHost,
+            {
+              opacity: captureNoticeOpacity,
+              top: insets.top + (isLandscapeViewport ? 64 : 76),
+              transform: [{ translateY: captureNoticeTranslateY }],
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.captureNoticePill,
+              captureNotice.tone === "error" && styles.captureNoticePillError,
+              captureNotice.tone === "success" &&
+                styles.captureNoticePillSuccess,
+              captureNotice.tone === "warning" &&
+                styles.captureNoticePillWarning,
+            ]}
+          >
+            <View
+              style={[
+                styles.captureNoticeDot,
+                captureNotice.tone === "error" && styles.captureNoticeDotError,
+                captureNotice.tone === "success" &&
+                  styles.captureNoticeDotSuccess,
+                captureNotice.tone === "warning" &&
+                  styles.captureNoticeDotWarning,
+              ]}
+            />
+            <Text numberOfLines={2} style={styles.captureNoticeText}>
+              {captureNotice.message}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
       {isActive && previewHidden && (
         <View pointerEvents="none" style={styles.lowPowerOverlay}>
           <View style={styles.lowPowerMark}>
@@ -4975,13 +5121,15 @@ function CaptureExperience({
                   >
                     {guidance?.orientationMatches === false
                       ? `Rotate to ${form.orientation}`
-                      : guidance?.courtDetected
-                        ? "Court locked"
-                        : guidance?.netDetected
-                          ? "Net found · widen the frame"
-                          : guidance?.groundPlaneDetected
-                            ? "Ground mapped · find the net"
-                            : "Map the court"}
+                      : guidance?.foregroundObstructionLikely
+                        ? "View may be obstructed"
+                        : guidance?.courtDetected
+                          ? "Court locked"
+                          : guidance?.netDetected
+                            ? "Net found · widen the frame"
+                            : guidance?.groundPlaneDetected
+                              ? "Ground mapped · find the net"
+                              : "Map the court"}
                   </Text>
                   <Text numberOfLines={2} style={styles.guidanceWarning}>
                     {guidance?.orientationMatches === false
@@ -5042,28 +5190,24 @@ function CaptureExperience({
               )}
             </View>
           )}
-          {!!captureError && (
+          {!!captureError && !permissionsReady && !isActive && (
             <View style={styles.captureError}>
               <Text style={styles.captureErrorText}>{captureError}</Text>
-              {mode === "live" && (
-                <Pressable
-                  onPress={onFallbackToRecord}
-                  style={styles.captureFallbackButton}
-                >
-                  <Text style={styles.captureFallbackButtonText}>
-                    Record with Duna instead
-                  </Text>
-                </Pressable>
-              )}
             </View>
           )}
-          {!!visionNotice && (
-            <View style={styles.visionNotice}>
-              <Text numberOfLines={2} style={styles.visionNoticeText}>
-                {visionNotice}
-              </Text>
-            </View>
-          )}
+          {mode === "live" &&
+            !!captureError &&
+            permissionsReady &&
+            !isActive && (
+              <Pressable
+                onPress={onFallbackToRecord}
+                style={styles.captureFallbackButton}
+              >
+                <Text style={styles.captureFallbackButtonText}>
+                  Record with Duna instead
+                </Text>
+              </Pressable>
+            )}
           {isActive && visionSession && (
             <View style={styles.captureMomentActions}>
               <Pressable
@@ -8332,6 +8476,51 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
   captureRoot: { backgroundColor: "#050708", flex: 1 },
+  captureNoticeHost: {
+    alignItems: "center",
+    left: 16,
+    position: "absolute",
+    right: 16,
+    zIndex: 15,
+  },
+  captureNoticePill: {
+    alignItems: "center",
+    backgroundColor: "rgba(4,10,13,0.94)",
+    borderColor: "rgba(140,236,229,0.42)",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    maxWidth: 540,
+    minHeight: 46,
+    minWidth: 230,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+  },
+  captureNoticePillError: { borderColor: "rgba(248,113,113,0.58)" },
+  captureNoticePillSuccess: { borderColor: "rgba(74,222,128,0.5)" },
+  captureNoticePillWarning: { borderColor: "rgba(233,199,127,0.58)" },
+  captureNoticeDot: {
+    backgroundColor: "#57d8d0",
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
+  captureNoticeDotError: { backgroundColor: "#f87171" },
+  captureNoticeDotSuccess: { backgroundColor: "#4ade80" },
+  captureNoticeDotWarning: { backgroundColor: palette.sand },
+  captureNoticeText: {
+    color: "#ffffff",
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 17,
+    textAlign: "center",
+  },
   orientationLoading: {
     alignItems: "center",
     flex: 1,
@@ -8889,21 +9078,6 @@ const styles = StyleSheet.create({
     color: "#7f1d1d",
     fontSize: 12,
     fontWeight: "900",
-  },
-  visionNotice: {
-    alignSelf: "stretch",
-    backgroundColor: "rgba(19,58,103,0.88)",
-    borderColor: "rgba(140,236,229,0.3)",
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  visionNoticeText: {
-    color: "#ffffff",
-    fontSize: 12,
-    lineHeight: 15,
-    textAlign: "center",
   },
   sharePill: {
     backgroundColor: "rgba(255,255,255,0.92)",

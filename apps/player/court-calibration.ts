@@ -36,7 +36,7 @@ export interface SavedCourtGeometry {
 }
 
 export type CourtCalibrationStepId =
-  "orientation" | "ground" | "net" | "court" | "coverage";
+  "orientation" | "clear-view" | "ground" | "net" | "court" | "coverage";
 
 export interface CourtCalibrationStep {
   readonly id: CourtCalibrationStepId;
@@ -343,6 +343,14 @@ export function courtCalibrationChecklist(
           ? `Rotate the iPhone ${preferredOrientation} before you start.`
           : "Screen and camera orientation are aligned.",
       complete: guidance?.orientationMatches !== false,
+    },
+    {
+      id: "clear-view",
+      label: "Keep the camera view clear",
+      detail: guidance?.foregroundObstructionLikely
+        ? "A close grid may be crossing the view. Move the lens closer to an opening, or use Adjust."
+        : "No nearby grid is interfering with automatic alignment.",
+      complete: guidance?.foregroundObstructionLikely !== true,
     },
     {
       id: "ground",

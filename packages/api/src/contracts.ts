@@ -1651,6 +1651,7 @@ export const courtCalibrationSchema = z.object({
   lidarAvailable: z.boolean().optional(),
   groundPlaneDetected: z.boolean().optional(),
   courtDetected: z.boolean().optional(),
+  foregroundObstructionLikely: z.boolean().optional(),
   cameraHeightMeters: z.number().nonnegative().max(20).optional(),
   preferredOrientation: z.enum(["landscape", "portrait"]).optional(),
   deviceOrientation: z.enum(["landscape", "portrait", "unknown"]).optional(),
