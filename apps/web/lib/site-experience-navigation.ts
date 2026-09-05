@@ -138,6 +138,12 @@ export const watchNavigation: SiteExperienceNavigation = {
           icon: "tour",
         },
         {
+          href: "/avp",
+          label: "AVP",
+          description: "Official events, brackets, and results",
+          icon: "tour",
+        },
+        {
           href: "/pro#players",
           label: "Pro players",
           description: "Profiles, teams, form, and history",

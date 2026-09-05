@@ -32,7 +32,7 @@ const competitionSchema = z.object({
 });
 
 const playerSchema = z.object({
-  PlayerId: z.number().int(),
+  PlayerId: z.number().int().nullish(),
   FirstName: z.string().optional().nullable(),
   LastName: z.string().optional().nullable(),
   Gender: z.string().optional().nullable(),
@@ -72,7 +72,8 @@ const matchSchema = z.object({
         B: z.number().int(),
       }),
     )
-    .default([]),
+    .nullish()
+    .transform((sets) => sets ?? []),
   Winner: z.number().int().optional().nullable(),
   StartTime: z.string().optional().nullable(),
   FinishTime: z.string().optional().nullable(),
@@ -91,6 +92,10 @@ const matchSchema = z.object({
 export type AvpApiEvent = z.infer<typeof eventSchema>;
 export type AvpApiCompetition = z.infer<typeof competitionSchema>;
 export type AvpApiMatch = z.infer<typeof matchSchema>;
+
+export function parseAvpApiMatches(value: unknown): readonly AvpApiMatch[] {
+  return z.array(matchSchema).parse(value);
+}
 
 function dateOnly(value: string): string | undefined {
   const parsed = Date.parse(value);
@@ -127,7 +132,8 @@ function playersForTeam(
   readonly participants: readonly ExternalMatchParticipant[];
 } {
   const players = [team?.Captain, team?.Player].flatMap((player) => {
-    if (!player) return [];
+    if (!player || player.PlayerId === null || player.PlayerId === undefined)
+      return [];
     const name = playerName(player);
     return name
       ? [
@@ -245,8 +251,8 @@ export function parseAvpTournamentSnapshot(input: {
     const competitionById = new Map(
       competitions.map((competition) => [competition.Id, competition]),
     );
-    const fullMatches = z.array(matchSchema).parse(detail.matches);
-    const liveMatches = z.array(matchSchema).parse(detail.liveMatches ?? []);
+    const fullMatches = parseAvpApiMatches(detail.matches);
+    const liveMatches = parseAvpApiMatches(detail.liveMatches ?? []);
     const eventMatches = mergedMatches(fullMatches, liveMatches);
     const startsOn = dateOnly(event.StartDate);
     const endsOn = dateOnly(event.EndDate);

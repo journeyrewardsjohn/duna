@@ -35,6 +35,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/sand?mode=avp",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/sand?mode=elite-stats",
       "schedule": "17 * * * *"
     }

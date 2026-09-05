@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { scrapeHtml } from "./http";
+import { parseAvpApiMatches, type AvpApiMatch } from "./avp-tournaments";
+import { scrapeHtml, scrapeJson } from "./http";
 import { hashValue, normalizePersonName } from "./normalize";
 import {
   SandDataUpstreamError,
@@ -10,7 +11,10 @@ import {
 } from "./types";
 
 const avpLeagueUrl = "https://avp.com/league/";
+const avpLeagueFeedUrl =
+  "https://volleyballapi.web4data.co.uk/api/matches/byevent";
 const defaultAvpGatewayModel = "openai/gpt-5.6-luna";
+const liveAvpMaxAgeMs = 2 * 60 * 1_000;
 
 const standingSchema = z.object({
   rank: z.number().int().nonnegative(),
@@ -40,11 +44,23 @@ const avpMatchSchema = z.object({
     }),
   ),
   winnerSide: z.enum(["A", "B", ""]),
+  playedOn: z.string().optional(),
+  bracketLabel: z.string().optional(),
+  roundLabel: z.string().optional(),
+  timeLabel: z.string().optional(),
+  timezone: z.string().optional(),
+  matchState: z.string().optional(),
+  sourceCompetitionId: z.number().int().optional(),
+  sourceMatchNo: z.number().int().optional(),
 });
 
-const weekSchema = z.object({
-  weekNumber: z.number().int().min(1).max(30),
+const competitionSchema = z.object({
+  key: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  kind: z.enum(["week", "championship", "competition"]),
+  weekNumber: z.number().int().min(1).max(30).nullable(),
   locationLabel: z.string().trim().min(1),
+  genderCategory: z.enum(["coed", "men", "women"]),
   matches: z.array(avpMatchSchema),
 });
 
@@ -52,11 +68,12 @@ const snapshotSchema = z.object({
   season: z.number().int().min(2000).max(2100),
   cityStandings: z.array(standingSchema),
   rosters: z.array(rosterSchema),
-  weeks: z.array(weekSchema),
+  competitions: z.array(competitionSchema),
 });
 
 export type AvpLeagueSnapshot = z.infer<typeof snapshotSchema>;
 export type AvpRoster = z.infer<typeof rosterSchema>;
+export type AvpLeagueCompetition = z.infer<typeof competitionSchema>;
 
 function stripHtml(value: string): string {
   return value
@@ -129,9 +146,7 @@ function rosterFromStanding(
   };
 }
 
-function parseWeekMatches(
-  table: string,
-): AvpLeagueSnapshot["weeks"][number]["matches"] {
+function parseWeekMatches(table: string): AvpLeagueCompetition["matches"] {
   const rows = [...table.matchAll(/<tr([^>]*)>([\s\S]*?)<\/tr>/gi)]
     .map((match) => ({
       attributes: match[1] ?? "",
@@ -144,7 +159,7 @@ function parseWeekMatches(
         stripHtml(row.cells[3] ?? "") &&
         stripHtml(row.cells[0] ?? "").toLowerCase() !== "date",
     );
-  const matches: AvpLeagueSnapshot["weeks"][number]["matches"][number][] = [];
+  const matches: AvpLeagueCompetition["matches"][number][] = [];
   for (let index = 0; index + 1 < rows.length; index += 2) {
     const top = rows[index];
     const bottom = rows[index + 1];
@@ -177,6 +192,62 @@ function parseWeekMatches(
   return matches;
 }
 
+function competitionDescriptor(
+  rawLabel: string,
+  index: number,
+): Omit<AvpLeagueCompetition, "matches"> {
+  const label = stripHtml(rawLabel);
+  const week = label.match(/^Week\s*(\d+)\s*[-–—]\s*(.+)$/i);
+  if (week) {
+    const weekNumber = Number.parseInt(week[1] ?? "", 10);
+    return {
+      key: `week-${weekNumber}`,
+      label,
+      kind: "week",
+      weekNumber,
+      locationLabel: week[2]?.trim() || label,
+      genderCategory: "coed",
+    };
+  }
+  const championship = label.match(
+    /^League\s+(Men(?:'s)?|Women(?:'s)?)\s+Championships?\s*[-–—]\s*(.+)$/i,
+  );
+  if (championship) {
+    const genderCategory = /^women/i.test(championship[1] ?? "")
+      ? ("women" as const)
+      : ("men" as const);
+    return {
+      key: `championship-${genderCategory}`,
+      label,
+      kind: "championship",
+      weekNumber: null,
+      locationLabel: championship[2]?.trim() || label,
+      genderCategory,
+    };
+  }
+  const normalized = normalizePersonName(label).replaceAll(/\s+/g, "-");
+  return {
+    key: normalized || `competition-${index + 1}`,
+    label,
+    kind: /championship/i.test(label) ? "championship" : "competition",
+    weekNumber: null,
+    locationLabel: label,
+    genderCategory: /women/i.test(label)
+      ? "women"
+      : /\bmen/i.test(label)
+        ? "men"
+        : "coed",
+  };
+}
+
+export function parseAvpLeagueEventId(html: string): number | undefined {
+  const value = Number.parseInt(
+    html.match(/\bdata-event-id=["'](\d+)["']/i)?.[1] ?? "",
+    10,
+  );
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 export function parseAvpLeagueHtml(
   html: string,
   fallbackSeason = new Date().getUTCFullYear(),
@@ -198,33 +269,31 @@ export function parseAvpLeagueHtml(
       rosterFromStanding(standing, "men"),
     ),
   ];
-  const headings = [
-    ...html.matchAll(
-      /<h3[^>]*>([\s\S]*?Week\s*(\d+)\s*[-–—]\s*[\s\S]*?)<\/h3>/gi,
-    ),
-  ].map((match) => ({
-    weekNumber: Number.parseInt(match[2] ?? "0", 10),
-    locationLabel: stripHtml(match[1] ?? "").replace(
-      /^\s*Week\s*\d+\s*[-–—]\s*/i,
-      "",
-    ),
-  }));
+  const headings = [...html.matchAll(/<h3([^>]*)>([\s\S]*?)<\/h3>/gi)]
+    .filter((match) => /\bleague__competition-heading\b/i.test(match[1] ?? ""))
+    .map((match) => stripHtml(match[2] ?? ""))
+    .filter((label) => label && !/leaderboard/i.test(label));
   const matchTables = tableBodies(html, "league__match-table");
-  const weeks = headings.map((heading, index) => ({
-    ...heading,
+  const competitions = headings.map((heading, index) => ({
+    ...competitionDescriptor(heading, index),
     matches: parseWeekMatches(matchTables[index] ?? ""),
   }));
   const snapshot = snapshotSchema.safeParse({
     season,
     cityStandings,
     rosters,
-    weeks,
+    competitions,
   });
-  if (!snapshot.success || rosters.length === 0 || weeks.length === 0) {
+  if (
+    !snapshot.success ||
+    rosters.length === 0 ||
+    competitions.length === 0 ||
+    competitions.length !== matchTables.length
+  ) {
     throw new SandDataUpstreamError(
       "avp-league",
       "invalid-response",
-      "The rendered AVP League page did not contain the expected season, roster, and schedule tables.",
+      "The rendered AVP League page did not contain the expected season, roster, and competition tables.",
     );
   }
   return snapshot.data;
@@ -233,7 +302,7 @@ export function parseAvpLeagueHtml(
 const gatewayJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["season", "cityStandings", "rosters", "weeks"],
+  required: ["season", "cityStandings", "rosters", "competitions"],
   properties: {
     season: { type: "integer", minimum: 2000, maximum: 2100 },
     cityStandings: {
@@ -290,15 +359,37 @@ const gatewayJsonSchema = {
         },
       },
     },
-    weeks: {
+    competitions: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["weekNumber", "locationLabel", "matches"],
+        required: [
+          "key",
+          "label",
+          "kind",
+          "weekNumber",
+          "locationLabel",
+          "genderCategory",
+          "matches",
+        ],
         properties: {
-          weekNumber: { type: "integer", minimum: 1, maximum: 30 },
+          key: { type: "string" },
+          label: { type: "string" },
+          kind: {
+            type: "string",
+            enum: ["week", "championship", "competition"],
+          },
+          weekNumber: {
+            type: ["integer", "null"],
+            minimum: 1,
+            maximum: 30,
+          },
           locationLabel: { type: "string" },
+          genderCategory: {
+            type: "string",
+            enum: ["coed", "men", "women"],
+          },
           matches: {
             type: "array",
             items: {
@@ -402,7 +493,7 @@ export async function normalizeAvpSnapshotWithGateway(
               content: [
                 {
                   type: "input_text",
-                  text: "Normalize AVP League standings, seasonal rosters, and weekly match results. Use only the supplied rendered-page evidence. Preserve source surnames exactly; never expand or invent a player's given name. Preserve incomplete and TBD values as empty arrays or strings. Return every supplied week and match.",
+                  text: "Normalize AVP League standings, seasonal rosters, and competition match results. Use only the supplied rendered-page evidence. Preserve source surnames exactly; never expand or invent a player's given name. Preserve incomplete and TBD values as empty arrays or strings. Return every supplied competition, including men's and women's championships, and every match.",
                 },
               ],
             },
@@ -435,7 +526,7 @@ export async function normalizeAvpSnapshotWithGateway(
     const normalized = snapshotSchema.parse(JSON.parse(output));
     if (
       normalized.season !== evidence.season ||
-      normalized.weeks.length < evidence.weeks.length ||
+      normalized.competitions.length < evidence.competitions.length ||
       normalized.rosters.length < evidence.rosters.length
     ) {
       throw new Error("AI Gateway omitted source rows.");
@@ -473,7 +564,140 @@ export function avpExternalPlayerId(input: {
   ].join(":");
 }
 
+function feedText(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function feedTeamName(
+  team: AvpApiMatch["TeamA"] | AvpApiMatch["TeamB"],
+): string {
+  const city = feedText(team?.Name);
+  if (city) return city;
+  const surnames = [team?.Captain?.LastName, team?.Player?.LastName]
+    .flatMap((name) => (feedText(name) ? [feedText(name)!] : []))
+    .join(", ");
+  return surnames || "TBD";
+}
+
+function feedMatchGender(
+  match: AvpApiMatch,
+  competition: Omit<AvpLeagueCompetition, "matches">,
+): "men" | "women" {
+  const gender =
+    feedText(match.TeamA?.Captain?.Gender) ??
+    feedText(match.TeamA?.Player?.Gender) ??
+    feedText(match.TeamB?.Captain?.Gender) ??
+    feedText(match.TeamB?.Player?.Gender);
+  if (gender && /^(f|w|women)$/i.test(gender)) return "women";
+  if (gender && /^(m|men)$/i.test(gender)) return "men";
+  return competition.genderCategory === "women" ? "women" : "men";
+}
+
+function feedSchedule(value: string | null | undefined): {
+  readonly playedOn?: string;
+  readonly timeLabel?: string;
+} {
+  const text = feedText(value);
+  if (!text) return {};
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  return match
+    ? { playedOn: match[1], timeLabel: match[2] }
+    : { playedOn: text.match(/\d{4}-\d{2}-\d{2}/)?.[0] };
+}
+
+function avpDateText(playedOn: string | undefined): string {
+  if (!playedOn) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${playedOn}T12:00:00.000Z`));
+}
+
+function competitionTimezone(location: string): string | undefined {
+  const normalized = location.toLowerCase();
+  if (normalized.includes("chicago") || normalized.includes("dallas")) {
+    return "America/Chicago";
+  }
+  if (normalized.includes("aspen")) return "America/Denver";
+  if (normalized.includes("los angeles") || normalized.includes("las vegas")) {
+    return "America/Los_Angeles";
+  }
+  if (
+    normalized.includes("belmar") ||
+    normalized.includes("miami") ||
+    normalized.includes("new york") ||
+    normalized.includes("east hampton")
+  ) {
+    return "America/New_York";
+  }
+  return undefined;
+}
+
+export function enrichAvpLeagueSnapshotWithFeed(
+  snapshot: AvpLeagueSnapshot,
+  value: unknown,
+): AvpLeagueSnapshot {
+  const matches = parseAvpApiMatches(value);
+  if (matches.length === 0) return snapshot;
+  const grouped = new Map<number, AvpApiMatch[]>();
+  for (const match of matches) {
+    const group = grouped.get(match.CompetitionId) ?? [];
+    group.push(match);
+    grouped.set(match.CompetitionId, group);
+  }
+  const competitions = [...grouped.entries()].map(
+    ([sourceCompetitionId, competitionMatches], index) => {
+      const label = competitionMatches[0]?.CompetitionName ?? "Competition";
+      const descriptor = competitionDescriptor(label, index);
+      const timezone = competitionTimezone(descriptor.locationLabel);
+      return {
+        ...descriptor,
+        matches: competitionMatches
+          .toSorted((a, b) => a.MatchNo - b.MatchNo)
+          .map((match) => {
+            const schedule = feedSchedule(
+              match.MatchSchedule?.ScheduleTime ?? match.StartTime,
+            );
+            return {
+              dateText: avpDateText(schedule.playedOn),
+              venue: feedText(match.MatchSchedule?.CourtName) ?? "",
+              gender: feedMatchGender(match, descriptor),
+              teamA: feedTeamName(match.TeamA),
+              teamB: feedTeamName(match.TeamB),
+              sets: match.Sets.map((set) => ({ a: set.A, b: set.B })),
+              winnerSide:
+                match.Winner === 1
+                  ? ("A" as const)
+                  : match.Winner === 2
+                    ? ("B" as const)
+                    : ("" as const),
+              ...schedule,
+              ...(feedText(match.Bracket)
+                ? { bracketLabel: feedText(match.Bracket) }
+                : {}),
+              ...(feedText(match.Round)
+                ? { roundLabel: feedText(match.Round) }
+                : {}),
+              ...(timezone ? { timezone } : {}),
+              ...(feedText(match.MatchState)
+                ? { matchState: feedText(match.MatchState) }
+                : {}),
+              sourceCompetitionId,
+              sourceMatchNo: match.MatchNo,
+            };
+          }),
+      } satisfies AvpLeagueCompetition;
+    },
+  );
+  return snapshotSchema.parse({ ...snapshot, competitions });
+}
+
 function dateFromAvp(value: string, season: number): string | undefined {
+  const isoDate = value.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
+  if (isoDate) return isoDate;
   const match = value.match(/\b(\d{1,2})\/(\d{1,2})\b/);
   if (!match) return undefined;
   const month = Number.parseInt(match[1] ?? "", 10);
@@ -500,17 +724,101 @@ function rosterKey(gender: "men" | "women", teamName: string): string {
   return `${gender}:${slug(teamName)}`;
 }
 
+function competitionEventName(competition: AvpLeagueCompetition): string {
+  if (competition.kind === "week" && competition.weekNumber) {
+    return `AVP League Week ${competition.weekNumber} — ${competition.locationLabel}`;
+  }
+  return `AVP ${competition.label.replace(/\s*[-–—]\s*/, " — ")}`;
+}
+
+export function avpLeagueEventIdentity(
+  season: number,
+  competition: AvpLeagueCompetition,
+): Pick<
+  ProfessionalEventRecord,
+  "externalEventId" | "name" | "category" | "genderCategory"
+> {
+  return {
+    externalEventId: `avp:${season}:${competition.key}`,
+    name: competitionEventName(competition),
+    category:
+      competition.kind === "championship"
+        ? "AVP League Championship"
+        : "AVP League",
+    genderCategory: competition.genderCategory,
+  };
+}
+
+function cleanAvpRound(value: string | undefined): string | undefined {
+  return (
+    value?.replace(/\bQuaterfinals\b/gi, "Quarterfinals").trim() || undefined
+  );
+}
+
+function competitionRoundLabel(
+  competition: AvpLeagueCompetition,
+  match: AvpLeagueCompetition["matches"][number],
+): string {
+  const fallback =
+    competition.kind === "week" && competition.weekNumber
+      ? `Week ${competition.weekNumber}`
+      : competition.kind === "championship"
+        ? "Championship"
+        : competition.label;
+  return [
+    match.gender === "women" ? "Women" : "Men",
+    cleanAvpRound(match.bracketLabel),
+    cleanAvpRound(match.roundLabel) ?? fallback,
+  ]
+    .filter((part, index, parts) => part && parts.indexOf(part) === index)
+    .join(" · ");
+}
+
 export async function importAvpLeague(
   requestedSeason?: number,
 ): Promise<SourceImportResult> {
-  const { html, engine } = await scrapeHtml("avp-league", avpLeagueUrl, {
-    waitForSelector: "#league-app table",
-    timeoutMs: 90_000,
-    proxy: "auto",
-  });
+  const { html, rawHtml, engine } = await scrapeHtml(
+    "avp-league",
+    avpLeagueUrl,
+    {
+      waitForSelector: "#league-app table",
+      waitAfterSelectorMs: 1_500,
+      timeoutMs: 90_000,
+      proxy: "auto",
+      maxAgeMs: liveAvpMaxAgeMs,
+      includeRawHtml: true,
+    },
+  );
   const deterministic = parseAvpLeagueHtml(html, requestedSeason);
   const normalized = await normalizeAvpSnapshotWithGateway(deterministic);
-  const snapshot = normalized.snapshot;
+  const sourceEventId = parseAvpLeagueEventId(rawHtml ?? html);
+  let snapshot = normalized.snapshot;
+  let structuredFeedUsed = false;
+  let structuredFeedMatches = 0;
+  let structuredFeedFallbackReason: string | undefined;
+  if (sourceEventId) {
+    try {
+      const feed = await scrapeJson<unknown>(
+        "avp-league",
+        `${avpLeagueFeedUrl}/${sourceEventId}?noStats=1`,
+        { timeoutMs: 90_000, maxAgeMs: liveAvpMaxAgeMs },
+      );
+      snapshot = enrichAvpLeagueSnapshotWithFeed(snapshot, feed);
+      structuredFeedUsed = true;
+      structuredFeedMatches = snapshot.competitions.reduce(
+        (total, competition) => total + competition.matches.length,
+        0,
+      );
+    } catch (error) {
+      structuredFeedFallbackReason =
+        error instanceof Error
+          ? error.message
+          : "The official AVP League match feed was unavailable.";
+    }
+  } else {
+    structuredFeedFallbackReason =
+      "The official AVP League page did not expose its event identifier.";
+  }
   const players = new Map<string, ExternalPlayerRecord>();
   const rosterByTeam = new Map<string, AvpRoster>();
   for (const roster of snapshot.rosters) {
@@ -541,19 +849,23 @@ export async function importAvpLeague(
   const today = new Date().toISOString().slice(0, 10);
   const matches: ExternalMatchRecord[] = [];
   const events: ProfessionalEventRecord[] = [];
-  for (const week of snapshot.weeks) {
-    const eventId = `avp:${snapshot.season}:week-${week.weekNumber}`;
-    const eventName = `AVP League Week ${week.weekNumber} — ${week.locationLabel}`;
-    const dates = week.matches
+  for (const competition of snapshot.competitions) {
+    const identity = avpLeagueEventIdentity(snapshot.season, competition);
+    const eventId = identity.externalEventId;
+    const eventName = identity.name;
+    const dates = competition.matches
       .flatMap((match) => {
-        const date = dateFromAvp(match.dateText, snapshot.season);
+        const date = dateFromAvp(
+          match.playedOn ?? match.dateText,
+          snapshot.season,
+        );
         return date ? [date] : [];
       })
       .sort();
     const startsOn = dates[0];
     const endsOn = dates.at(-1);
-    const weekMatches: ExternalMatchRecord[] = [];
-    week.matches.forEach((match, index) => {
+    const competitionMatches: ExternalMatchRecord[] = [];
+    competition.matches.forEach((match, index) => {
       const teamA = rosterByTeam.get(rosterKey(match.gender, match.teamA));
       const teamB = rosterByTeam.get(rosterKey(match.gender, match.teamB));
       const participants = [
@@ -578,7 +890,10 @@ export async function importAvpLeague(
           side: "B" as const,
         })),
       ];
-      const playedOn = dateFromAvp(match.dateText, snapshot.season);
+      const playedOn = dateFromAvp(
+        match.playedOn ?? match.dateText,
+        snapshot.season,
+      );
       const externalMatchId = hashValue(
         [
           eventId,
@@ -589,13 +904,15 @@ export async function importAvpLeague(
           match.dateText,
         ].join("|"),
       );
-      weekMatches.push({
+      competitionMatches.push({
         externalMatchId,
         externalEventId: eventId,
         sourceUrl: avpLeagueUrl,
         title: eventName,
-        roundLabel: `${match.gender === "women" ? "Women" : "Men"} · Week ${week.weekNumber}`,
-        location: [match.venue, week.locationLabel].filter(Boolean).join(" · "),
+        roundLabel: competitionRoundLabel(competition, match),
+        location: [match.venue, competition.locationLabel]
+          .filter(Boolean)
+          .join(" · "),
         genderCategory: match.gender,
         playedAt: playedOn ? `${playedOn}T12:00:00.000Z` : undefined,
         participants,
@@ -607,7 +924,17 @@ export async function importAvpLeague(
         raw: {
           source: "avp-league",
           season: snapshot.season,
-          week: week.weekNumber,
+          ...(competition.weekNumber ? { week: competition.weekNumber } : {}),
+          competitionKey: competition.key,
+          competitionLabel: competition.label,
+          competitionKind: competition.kind,
+          sourceCompetitionId: match.sourceCompetitionId,
+          sourceMatchNo: match.sourceMatchNo,
+          bracket: cleanAvpRound(match.bracketLabel),
+          round: cleanAvpRound(match.roundLabel),
+          matchState: match.matchState,
+          time: match.timeLabel,
+          timezone: match.timezone,
           teamAName: match.teamA,
           teamAExternalId: slug(match.teamA),
           teamBName: match.teamB,
@@ -618,25 +945,34 @@ export async function importAvpLeague(
         },
       });
     });
-    matches.push(...weekMatches);
+    matches.push(...competitionMatches);
+    const competitionTeams = new Set(
+      competition.matches
+        .flatMap((match) => [match.teamA, match.teamB])
+        .filter((team) => team && team.toLowerCase() !== "tbd"),
+    );
     events.push({
       externalEventId: eventId,
       sourceUrl: avpLeagueUrl,
-      name: eventName,
-      location: week.locationLabel,
+      name: identity.name,
+      location: competition.locationLabel,
       countryCode: "USA",
-      category: "AVP League",
-      genderCategory: "coed",
+      category: identity.category,
+      genderCategory: identity.genderCategory,
       startsOn,
       endsOn,
       ...eventStatus(startsOn, endsOn, today),
-      teamCount: snapshot.rosters.length,
-      matchCount: weekMatches.length,
+      teamCount: competitionTeams.size,
+      matchCount: competitionMatches.length,
       raw: {
         source: "avp-league",
         tour: "avp",
         season: snapshot.season,
-        week: week.weekNumber,
+        ...(competition.weekNumber ? { week: competition.weekNumber } : {}),
+        competitionKey: competition.key,
+        competitionLabel: competition.label,
+        competitionKind: competition.kind,
+        genderCategory: competition.genderCategory,
         cityStandings: snapshot.cityStandings,
         rosters: snapshot.rosters,
         gateway: {
@@ -657,8 +993,18 @@ export async function importAvpLeague(
     events,
     checkpoint: {
       season: snapshot.season,
-      weeks: snapshot.weeks.length,
+      weeks: snapshot.competitions.filter(
+        (competition) => competition.kind === "week",
+      ).length,
+      championships: snapshot.competitions.filter(
+        (competition) => competition.kind === "championship",
+      ).length,
+      competitions: snapshot.competitions.length,
+      sourceEventId,
       engine,
+      structuredFeedUsed,
+      structuredFeedMatches,
+      ...(structuredFeedFallbackReason ? { structuredFeedFallbackReason } : {}),
       gatewayUsed: normalized.used,
       gatewayModel: normalized.model,
       ...(normalized.fallbackReason

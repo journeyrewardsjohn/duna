@@ -1,6 +1,13 @@
 import { Firecrawl } from "@mendable/firecrawl-js";
-import { parseAvpLeagueHtml } from "../src/sand-data/avp";
-import { firecrawlScrapeOptions } from "../src/sand-data/http";
+import {
+  enrichAvpLeagueSnapshotWithFeed,
+  parseAvpLeagueEventId,
+  parseAvpLeagueHtml,
+} from "../src/sand-data/avp";
+import {
+  firecrawlScrapeOptions,
+  parseFirecrawlJsonDocument,
+} from "../src/sand-data/http";
 import type { ScraperControl } from "../src/sand-data/scraper-controls";
 import { parseFivbEventIndexHtml } from "../src/sand-data/sources";
 
@@ -54,13 +61,33 @@ const firecrawlAvp = await client.scrape(
   avpUrl,
   firecrawlScrapeOptions(control("avp-league", true), {
     waitForSelector: "#league-app table",
+    waitAfterSelectorMs: 1_500,
     timeoutMs: 90_000,
     proxy: "auto",
+    maxAgeMs: 0,
   }),
 );
 const firecrawlAvpHtml = firecrawlAvp.html ?? firecrawlAvp.rawHtml ?? "";
-const nativeAvp = parseAvpLeagueHtml(nativeAvpHtml);
 const renderedAvp = parseAvpLeagueHtml(firecrawlAvpHtml);
+const avpEventId = parseAvpLeagueEventId(firecrawlAvp.rawHtml ?? nativeAvpHtml);
+const firecrawlAvpFeed = avpEventId
+  ? await client.scrape(
+      `https://volleyballapi.web4data.co.uk/api/matches/byevent/${avpEventId}?noStats=1`,
+      firecrawlScrapeOptions(control("avp-league", true), {
+        timeoutMs: 90_000,
+        proxy: "auto",
+        maxAgeMs: 0,
+      }),
+    )
+  : undefined;
+const enrichedAvp = firecrawlAvpFeed
+  ? enrichAvpLeagueSnapshotWithFeed(
+      renderedAvp,
+      parseFirecrawlJsonDocument(
+        firecrawlAvpFeed.rawHtml ?? firecrawlAvpFeed.html ?? "",
+      ),
+    )
+  : renderedAvp;
 
 const result = {
   fivb12ndr: {
@@ -72,10 +99,18 @@ const result = {
   avpLeague: {
     nativeStatus: nativeAvpResponse.status,
     nativeShell: nativeAvpHtml.includes('id="league-app"'),
-    nativeCityStandings: nativeAvp.cityStandings.length,
+    eventId: avpEventId,
     firecrawlCityStandings: renderedAvp.cityStandings.length,
     firecrawlRosters: renderedAvp.rosters.length,
-    firecrawlWeeks: renderedAvp.weeks.length,
+    firecrawlCompetitions: renderedAvp.competitions.length,
+    structuredCompetitions: enrichedAvp.competitions.length,
+    championships: enrichedAvp.competitions.filter(
+      (competition) => competition.kind === "championship",
+    ).length,
+    matches: enrichedAvp.competitions.reduce(
+      (total, competition) => total + competition.matches.length,
+      0,
+    ),
   },
 };
 
@@ -88,9 +123,13 @@ if (
   !result.fivb12ndr.sameEventIds ||
   !nativeAvpResponse.ok ||
   !result.avpLeague.nativeShell ||
+  !result.avpLeague.eventId ||
   result.avpLeague.firecrawlCityStandings === 0 ||
   result.avpLeague.firecrawlRosters === 0 ||
-  result.avpLeague.firecrawlWeeks === 0
+  result.avpLeague.firecrawlCompetitions === 0 ||
+  result.avpLeague.structuredCompetitions === 0 ||
+  result.avpLeague.championships === 0 ||
+  result.avpLeague.matches === 0
 ) {
   process.exitCode = 1;
 }

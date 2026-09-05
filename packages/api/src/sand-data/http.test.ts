@@ -169,7 +169,9 @@ describe("sand data scrape engine routing", () => {
     };
     const options = firecrawlScrapeOptions(control, {
       waitForSelector: "#league-app table",
+      waitAfterSelectorMs: 1_500,
       timeoutMs: 90_000,
+      maxAgeMs: 120_000,
     });
 
     expect(options.formats).toEqual([
@@ -180,9 +182,10 @@ describe("sand data scrape engine routing", () => {
     ]);
     expect(options.actions).toEqual([
       { type: "wait", selector: "#league-app table" },
+      { type: "wait", milliseconds: 1_500 },
     ]);
     expect(options.waitFor).toBeUndefined();
-    expect(options.maxAge).toBe(3_600_000);
+    expect(options.maxAge).toBe(120_000);
     expect(options.proxy).toBe("auto");
     expect(options.onlyMainContent).toBe(false);
     expect(options.removeBase64Images).toBe(true);
