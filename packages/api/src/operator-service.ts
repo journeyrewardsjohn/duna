@@ -607,6 +607,7 @@ function providerReadiness() {
 
 export function loadDemoOperatorWorkspace(
   organizationId: string,
+  now = new Date(),
 ): OperatorWorkspace {
   if (organizationId !== demoOrganization.id) {
     throw new OperatorServiceError(
@@ -619,17 +620,17 @@ export function loadDemoOperatorWorkspace(
   const ratePlanId = "10000000-0000-4000-8000-000000000102";
   const courtOneId = "10000000-0000-4000-8000-000000000103";
   const courtTwoId = "10000000-0000-4000-8000-000000000104";
-  const nextSession = new Date();
+  const nextSession = new Date(now);
   nextSession.setDate(nextSession.getDate() + 1);
   nextSession.setHours(18, 0, 0, 0);
   const nextSessionEnd = new Date(nextSession.getTime() + 90 * 60_000);
-  const completedSession = new Date();
+  const completedSession = new Date(now);
   completedSession.setDate(completedSession.getDate() - 2);
   completedSession.setHours(17, 30, 0, 0);
   const completedSessionEnd = new Date(
     completedSession.getTime() + 90 * 60_000,
   );
-  const cancelledSession = new Date();
+  const cancelledSession = new Date(now);
   cancelledSession.setDate(cancelledSession.getDate() - 9);
   cancelledSession.setHours(9, 0, 0, 0);
   const cancelledSessionEnd = new Date(
@@ -647,8 +648,8 @@ export function loadDemoOperatorWorkspace(
     elena: "10000000-0000-4000-8000-000000000204",
     noah: "10000000-0000-4000-8000-000000000205",
   } as const;
-  const joinedAt = new Date(Date.now() - 180 * 24 * 60 * 60_000);
-  const purchaseAt = new Date(Date.now() - 21 * 24 * 60 * 60_000);
+  const joinedAt = new Date(now.getTime() - 180 * 24 * 60 * 60_000);
+  const purchaseAt = new Date(now.getTime() - 21 * 24 * 60 * 60_000);
   const peopleWorkspace: OperatorWorkspace["people"] = [
     {
       personId: demoPersonIds.maya,
@@ -774,7 +775,7 @@ export function loadDemoOperatorWorkspace(
         level: "high",
         reasons: ["No upcoming activity", "Plan ended", "45 days quiet"],
         lastActivityAt: new Date(
-          Date.now() - 45 * 24 * 60 * 60_000,
+          now.getTime() - 45 * 24 * 60 * 60_000,
         ).toISOString(),
         daysSinceActivity: 45,
         model: "activity-v1",
@@ -1176,7 +1177,7 @@ export function loadDemoOperatorWorkspace(
       softOverageBps: 5_000,
     },
     communicationUsage: {
-      periodStart: new Date().toISOString().slice(0, 10),
+      periodStart: now.toISOString().slice(0, 10),
       emailContacts: 0,
       emailMessages: 0,
       messagingContacts: 0,
