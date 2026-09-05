@@ -310,6 +310,14 @@ WebSocket feed and REST fallback record freshness, latency, and failure state
 in the same control plane. Complete, decisive, mapped matches still require an
 explicit approval before entering the chronological Duna Sand Rating projection.
 
+AVP professional coverage has two five-minute refreshes: the tournament feed
+and the AVP League page. The League import uses Firecrawl to wait for the
+rendered tables, allows a short post-render settle, and caps live cache age at
+two minutes. It reads the current League event identifier from AVP.com and then
+uses the same structured match feed loaded by that official page to preserve
+championship bracket rounds and outcomes. If that structured request fails, the
+rendered AVP tables remain the evidence-backed fallback.
+
 ## Rating backtests and agent access
 
 Duna HQ's Ratings Lab runs a true chronological backtest across approved

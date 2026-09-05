@@ -1054,7 +1054,7 @@ async function searchDunaKnowledge(input: {
   const canReadPayments = hasScope(input.actor, "payments:read");
   const workspace = canReadSessions
     ? input.actor.isDemo && !process.env.DATABASE_URL
-      ? loadDemoOperatorWorkspace(organizationId)
+      ? loadDemoOperatorWorkspace(organizationId, input.now)
       : await loadOperatorWorkspace(organizationId, input.actor.personId)
     : undefined;
 
@@ -1276,7 +1276,9 @@ async function buildContextSnapshot(input: {
     getRepository().operator.dashboard(input.actor.organizationId),
     canReadOperatingContext
       ? input.actor.isDemo && !process.env.DATABASE_URL
-        ? Promise.resolve(loadDemoOperatorWorkspace(input.actor.organizationId))
+        ? Promise.resolve(
+            loadDemoOperatorWorkspace(input.actor.organizationId, input.now),
+          )
         : loadOperatorWorkspace(
             input.actor.organizationId,
             input.actor.personId,

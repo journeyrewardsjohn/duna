@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseAvpTournamentSnapshot } from "./avp-tournaments";
+import {
+  parseAvpApiMatches,
+  parseAvpTournamentSnapshot,
+} from "./avp-tournaments";
 
 const event = {
   EventId: 52,
@@ -151,5 +154,25 @@ describe("AVP tournament brackets", () => {
       today: "2026-08-15",
     });
     expect(result.events).toEqual([]);
+  });
+
+  it("accepts an official scheduled final before its second team is known", () => {
+    const pendingFinal = {
+      ...match,
+      MatchNo: 5,
+      TeamB: {
+        Captain: { PlayerId: null, LastName: "TBD", Gender: "M" },
+        Player: { PlayerId: null, LastName: "TBD", Gender: "M" },
+      },
+      Sets: null,
+      Winner: null,
+      MatchState: "U",
+    };
+
+    expect(parseAvpApiMatches([pendingFinal])[0]).toMatchObject({
+      MatchNo: 5,
+      Sets: [],
+      TeamB: { Captain: { PlayerId: null } },
+    });
   });
 });

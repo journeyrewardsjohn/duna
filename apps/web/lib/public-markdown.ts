@@ -49,6 +49,17 @@ export const staticPublicPages = [
     sections: [],
   },
   {
+    path: "/avp",
+    title: "Official AVP beach volleyball coverage",
+    description:
+      "Official AVP.com professional events, AVP League championship brackets, schedules, live matches, and results.",
+    sections: [
+      "Coverage is limited to professional events published through AVP.com, including AVP League and Heritage events.",
+      "AVP America, grassroots, and third-party event listings are not included on this page.",
+      "Championship events preserve quarterfinal, semifinal, and final matchups with official set scores and outcomes.",
+    ],
+  },
+  {
     path: "/discover",
     title: "Discover beach volleyball",
     description:

@@ -195,12 +195,15 @@ async function scrapeJsonThroughFirecrawl<T>(
   source: ManagedScraperSource,
   url: string,
   control: ScraperControl,
-  timeoutMs: number | undefined,
+  options: {
+    readonly timeoutMs?: number;
+    readonly maxAgeMs?: number;
+  },
 ): Promise<T> {
   const document = await withRetry(source, control, () =>
     firecrawlClient(source).scrape(
       url,
-      firecrawlScrapeOptions(control, { timeoutMs }),
+      firecrawlScrapeOptions(control, options),
     ),
   );
   const responseError = firecrawlResponseError(document, url);
@@ -218,14 +221,22 @@ const nativeHeaders = {
 export interface HtmlScrapeOptions {
   readonly waitForMs?: number;
   readonly waitForSelector?: string;
+  readonly waitAfterSelectorMs?: number;
   readonly timeoutMs?: number;
   readonly proxy?: ScrapeOptions["proxy"];
+  readonly maxAgeMs?: number;
+  readonly includeRawHtml?: boolean;
 }
 
 export function firecrawlScrapeOptions(
   control: ScraperControl,
   options: HtmlScrapeOptions = {},
 ): ScrapeOptions {
+  const maxAgeMs =
+    options.maxAgeMs ??
+    (control.firecrawlCacheTtlSeconds !== undefined
+      ? control.firecrawlCacheTtlSeconds * 1_000
+      : undefined);
   return {
     formats: firecrawlFormats(control),
     // Parsers consume navigation, table headings, and repeated result rows,
@@ -240,14 +251,22 @@ export function firecrawlScrapeOptions(
       ? {
           actions: [
             { type: "wait" as const, selector: options.waitForSelector },
+            ...(options.waitAfterSelectorMs !== undefined
+              ? [
+                  {
+                    type: "wait" as const,
+                    milliseconds: options.waitAfterSelectorMs,
+                  },
+                ]
+              : []),
           ],
         }
       : options.waitForMs !== undefined
         ? { waitFor: options.waitForMs }
         : {}),
-    ...(control.firecrawlCacheTtlSeconds !== undefined
+    ...(maxAgeMs !== undefined
       ? {
-          maxAge: control.firecrawlCacheTtlSeconds * 1_000,
+          maxAge: maxAgeMs,
           storeInCache: true,
         }
       : {}),
@@ -259,7 +278,7 @@ async function scrapeHtmlThroughFirecrawl(
   url: string,
   control: ScraperControl,
   options: HtmlScrapeOptions,
-): Promise<string> {
+): Promise<{ readonly html: string; readonly rawHtml?: string }> {
   const document = await withRetry(source, control, () =>
     firecrawlClient(source).scrape(
       url,
@@ -279,7 +298,12 @@ async function scrapeHtmlThroughFirecrawl(
       `${source} returned an empty rendered page.`,
     );
   }
-  return html;
+  return {
+    html,
+    ...(options.includeRawHtml && document.rawHtml
+      ? { rawHtml: document.rawHtml }
+      : {}),
+  };
 }
 
 function errorMessage(source: ManagedScraperSource, error: unknown): string {
@@ -290,13 +314,23 @@ export async function scrapeHtml(
   source: ManagedScraperSource,
   url: string,
   options: HtmlScrapeOptions = {},
-): Promise<{ readonly html: string; readonly engine: ScrapeEngine }> {
+): Promise<{
+  readonly html: string;
+  readonly rawHtml?: string;
+  readonly engine: ScrapeEngine;
+}> {
   const control = await assertScraperEnabled(source);
   const engine = resolvedScrapeEngine(source, control);
   if (engine === "firecrawl") {
     try {
+      const document = await scrapeHtmlThroughFirecrawl(
+        source,
+        url,
+        control,
+        options,
+      );
       return {
-        html: await scrapeHtmlThroughFirecrawl(source, url, control, options),
+        ...document,
         engine,
       };
     } catch (error) {
@@ -334,7 +368,7 @@ export async function scrapeHtml(
   } catch (nativeError) {
     if (firecrawlKey()) {
       try {
-        const html = await scrapeHtmlThroughFirecrawl(
+        const document = await scrapeHtmlThroughFirecrawl(
           source,
           url,
           control,
@@ -344,7 +378,7 @@ export async function scrapeHtml(
           control,
           nativeError: errorMessage(source, nativeError),
         }).catch(() => undefined);
-        return { html, engine: "firecrawl" };
+        return { ...document, engine: "firecrawl" };
       } catch (fallbackError) {
         throw new SandDataUpstreamError(
           source,
@@ -369,6 +403,7 @@ export async function scrapeJson<T>(
     readonly body?: unknown;
     readonly headers?: Readonly<Record<string, string>>;
     readonly timeoutMs?: number;
+    readonly maxAgeMs?: number;
   } = {},
 ): Promise<T> {
   const control = await assertScraperEnabled(source);
@@ -379,12 +414,7 @@ export async function scrapeJson<T>(
     resolvedScrapeEngine(source, control) === "firecrawl"
   ) {
     try {
-      return await scrapeJsonThroughFirecrawl<T>(
-        source,
-        url,
-        control,
-        options.timeoutMs,
-      );
+      return await scrapeJsonThroughFirecrawl<T>(source, url, control, options);
     } catch (error) {
       throw new SandDataUpstreamError(
         source,
@@ -433,7 +463,7 @@ export async function scrapeJson<T>(
           source,
           url,
           control,
-          options.timeoutMs,
+          options,
         );
         await recordNativeFallbackSuccess({
           control,

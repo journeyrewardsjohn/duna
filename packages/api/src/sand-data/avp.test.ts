@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { normalizeAvpSnapshotWithGateway, parseAvpLeagueHtml } from "./avp";
+import {
+  avpLeagueEventIdentity,
+  enrichAvpLeagueSnapshotWithFeed,
+  normalizeAvpSnapshotWithGateway,
+  parseAvpLeagueEventId,
+  parseAvpLeagueHtml,
+} from "./avp";
 
 const leaderboard = (rows: string) => `
   <table class="league__leaderboard-table">
@@ -8,11 +14,12 @@ const leaderboard = (rows: string) => `
   </table>`;
 
 const sampleHtml = `
+  <div id="league-app" data-event-id="51"></div>
   <h1>2026 AVP League Season</h1>
   ${leaderboard("<tr><td>1</td><td>Miami Mayhem</td><td>16</td><td>12</td><td>4</td><td>34</td><td>75%</td></tr>")}
   ${leaderboard("<tr><td>1</td><td>Miami Mayhem (Cheng, Kraft)</td><td>8</td><td>5</td><td>3</td><td>14</td><td>62.5%</td></tr>")}
   ${leaderboard("<tr><td>1</td><td>Miami Mayhem (Crabb, Benesh)</td><td>8</td><td>7</td><td>1</td><td>20</td><td>87.5%</td></tr>")}
-  <h3>Week 1 - Belmar, NJ</h3>
+  <h3 class="league__competition-heading">Week 1 - Belmar, NJ</h3>
   <table class="league__match-table">
     <tr><th>Date</th><th>Location</th><th>Gender</th><th>Teams</th><th>Set 1</th><th>Set 2</th><th>Set 3</th></tr>
     <tr class="league__match-row league__match-row--top">
@@ -49,8 +56,10 @@ describe("AVP League rendered-page parsing", () => {
           playerNames: ["Crabb", "Benesh"],
         },
       ],
-      weeks: [
+      competitions: [
         {
+          key: "week-1",
+          kind: "week",
           weekNumber: 1,
           locationLabel: "Belmar, NJ",
           matches: [
@@ -68,6 +77,91 @@ describe("AVP League rendered-page parsing", () => {
         },
       ],
     });
+    expect(parseAvpLeagueEventId(sampleHtml)).toBe(51);
+  });
+
+  it("preserves championship competitions and enriches their bracket rounds", () => {
+    const rendered = `${sampleHtml}
+      <h3 class="league__competition-heading">League Men's Championships - Chicago, IL</h3>
+      <table class="league__match-table">
+        <tr><th>Date</th><th>Location</th><th>Gender</th><th>Teams</th><th>Set 1</th><th>Set 2</th><th>Set 3</th></tr>
+        <tr class="league__match-row league__match-row--top">
+          <td>Sat, 9/5</td><td>Oak Street Beach</td><td>M</td>
+          <td class="league__match-team league__match-team--winner">New York Nitro</td>
+          <td>10</td><td>15</td><td>15</td>
+        </tr>
+        <tr class="league__match-row league__match-row--bottom">
+          <td></td><td></td><td></td><td>Austin Aces</td>
+          <td>15</td><td>8</td><td>12</td>
+        </tr>
+      </table>`;
+    const snapshot = parseAvpLeagueHtml(rendered);
+
+    expect(snapshot.competitions[1]).toMatchObject({
+      key: "championship-men",
+      label: "League Men's Championships - Chicago, IL",
+      kind: "championship",
+      weekNumber: null,
+      locationLabel: "Chicago, IL",
+      genderCategory: "men",
+    });
+    expect(avpLeagueEventIdentity(2026, snapshot.competitions[1]!)).toEqual({
+      externalEventId: "avp:2026:championship-men",
+      name: "AVP League Men's Championships — Chicago, IL",
+      category: "AVP League Championship",
+      genderCategory: "men",
+    });
+
+    const enriched = enrichAvpLeagueSnapshotWithFeed(snapshot, [
+      {
+        EventId: 51,
+        EventName: "2026 AVP League Season",
+        CompetitionId: 162,
+        CompetitionName: "League Men's Championships - Chicago, IL",
+        MatchNo: 1,
+        Bracket: "Championships",
+        Round: "Quaterfinals",
+        TeamA: {
+          Name: "New York Nitro",
+          Captain: { PlayerId: 1, LastName: "Crabb", Gender: "M" },
+          Player: { PlayerId: 2, LastName: "Benesh", Gender: "M" },
+        },
+        TeamB: {
+          Name: "Austin Aces",
+          Captain: { PlayerId: 3, LastName: "Partain", Gender: "M" },
+          Player: { PlayerId: 4, LastName: "Lotman", Gender: "M" },
+        },
+        Sets: [
+          { SetNo: 1, A: 10, B: 15 },
+          { SetNo: 2, A: 15, B: 8 },
+          { SetNo: 3, A: 15, B: 12 },
+        ],
+        Winner: 1,
+        MatchState: "F",
+        MatchSchedule: {
+          ScheduleTime: "2026-09-05T11:00:00",
+          CourtName: "Oak Street Beach",
+          TimeZone: "CST",
+        },
+      },
+    ]);
+
+    expect(enriched.competitions).toEqual([
+      expect.objectContaining({
+        key: "championship-men",
+        matches: [
+          expect.objectContaining({
+            playedOn: "2026-09-05",
+            bracketLabel: "Championships",
+            roundLabel: "Quaterfinals",
+            sourceCompetitionId: 162,
+            sourceMatchNo: 1,
+            timezone: "America/Chicago",
+            winnerSide: "A",
+          }),
+        ],
+      }),
+    ]);
   });
 
   it("uses Vercel AI Gateway Responses with a provider-qualified model", async () => {

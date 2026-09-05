@@ -37,8 +37,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticPublicPages.map((page) => ({
       url: absolutePublicUrl(page.path),
       changeFrequency:
-        page.path === "/pro" ? ("hourly" as const) : ("weekly" as const),
-      priority: page.path === "/" ? 1 : page.path === "/pro" ? 0.9 : 0.6,
+        page.path === "/pro" || page.path === "/avp"
+          ? ("hourly" as const)
+          : ("weekly" as const),
+      priority:
+        page.path === "/"
+          ? 1
+          : page.path === "/pro" || page.path === "/avp"
+            ? 0.9
+            : 0.6,
     })),
     {
       url: absolutePublicUrl("/agents"),
