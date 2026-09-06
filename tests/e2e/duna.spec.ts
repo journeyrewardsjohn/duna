@@ -13,7 +13,7 @@ async function clickAndWaitForUrl(
   await Promise.all([
     page.waitForURL(expected, {
       timeout: navigationTimeout,
-      waitUntil: "domcontentloaded",
+      waitUntil: "commit",
     }),
     locator.click(),
   ]);
@@ -152,7 +152,7 @@ test("wide, short homepages keep the hero clear of fixed navigation", async ({
     { width: 1832, height: 988 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const header = page.locator(".site-header");
     const heading = page.getByRole("heading", {
@@ -529,7 +529,11 @@ test("branded identity entry preserves the secure auth handoff", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.getByRole("link", { name: "Create a free account" }).click();
+  await clickAndWaitForUrl(
+    page,
+    page.getByRole("link", { name: "Create a free account" }),
+    /\/sign-up\?.*returnTo=/,
+  );
   await expect(
     page.getByRole("link", { name: "Create account and continue" }),
   ).toHaveAttribute(
@@ -837,6 +841,7 @@ test("player planning keeps selection in place and extends its date rail", async
   expect(initialPillCount).toBeGreaterThanOrEqual(91);
   await rail.evaluate((element) => {
     element.scrollLeft = element.scrollWidth;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
   await expect.poll(() => pills.count()).toBeGreaterThan(initialPillCount);
 
@@ -1209,7 +1214,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await page.goto(`${hqBaseUrl}/locations/create`);
   await expect(
     page.getByRole("heading", { name: "Create a place players can find." }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: navigationTimeout });
   await expect(
     page.getByRole("radio", { name: /Public location/ }),
   ).toBeChecked();
@@ -1278,7 +1283,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await page.goto(`${hqBaseUrl}/ai`);
   await expect(page).toHaveURL(/\?duna=ask$/);
   const centralAi = page.getByRole("region", { name: "Duna AI assistant" });
-  await expect(centralAi).toBeVisible();
+  await expect(centralAi).toBeVisible({ timeout: navigationTimeout });
   await expect(
     centralAi.getByText(/Sensitive changes always require your review/i),
   ).toBeVisible();

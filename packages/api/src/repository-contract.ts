@@ -278,7 +278,7 @@ export interface PickupInput {
     readonly minimumAttendance: number;
   };
   readonly costMinor: number;
-  readonly currency: "USD";
+  readonly currency: CurrencyCode;
   readonly recordMatches: boolean;
   readonly ratingMinimum?: number;
   readonly ratingMaximum?: number;

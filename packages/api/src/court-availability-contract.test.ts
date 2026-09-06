@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   courtAvailabilitySchema,
   courtCheckoutResultSchema,
+  courtCheckoutStatusSchema,
 } from "./contracts";
 
 function availabilityFixture() {
@@ -111,5 +112,39 @@ describe("native court checkout contract", () => {
 
     expect(result.paymentSheet?.paymentIntentId).toBe("pi_duna");
     expect(result.checkoutUrl).toBeUndefined();
+  });
+
+  it("returns the single match linked to a confirmed court booking", () => {
+    const bookingId = crypto.randomUUID();
+    const matchId = crypto.randomUUID();
+    const match = {
+      id: matchId,
+      slug: `pickup-${matchId}`,
+      title: "Saturday match at The Strand",
+    };
+    const result = courtCheckoutResultSchema.parse({
+      mode: "free",
+      bookingId,
+      bookingStatus: "confirmed",
+      paymentMode: "full",
+      startsAt: "2026-09-05T21:30:00.000Z",
+      endsAt: "2026-09-05T23:00:00.000Z",
+      alternatives: [],
+      participants: [],
+      match,
+    });
+    const status = courtCheckoutStatusSchema.parse({
+      bookingId,
+      bookingStatus: "confirmed",
+      orderStatus: "paid",
+      complete: true,
+      sharePaid: true,
+      awaitingParticipants: false,
+      participants: [],
+      match,
+    });
+
+    expect(result.match).toEqual(match);
+    expect(status.match).toEqual(match);
   });
 });

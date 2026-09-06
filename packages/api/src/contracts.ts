@@ -6791,6 +6791,12 @@ export const courtBookingParticipantSchema = z.object({
   inviteToken: z.string().optional(),
 });
 
+export const courtBookingMatchSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+});
+
 export const courtCheckoutResultSchema = z.object({
   mode: z.enum(["free", "stripe", "unavailable"]),
   bookingId: z.string().uuid().optional(),
@@ -6823,6 +6829,7 @@ export const courtCheckoutResultSchema = z.object({
     .optional(),
   policy: courtCancellationPolicySchema.optional(),
   participants: z.array(courtBookingParticipantSchema).readonly().optional(),
+  match: courtBookingMatchSchema.optional(),
 });
 
 export const courtCheckoutQuoteSchema = z.object({
@@ -6871,6 +6878,7 @@ export const courtCheckoutStatusSchema = z.object({
   totalAmountMinor: z.number().int().nonnegative().optional(),
   paymentMode: z.enum(["full", "split"]).optional(),
   participants: z.array(courtBookingParticipantSchema).readonly().optional(),
+  match: courtBookingMatchSchema.optional(),
 });
 
 export const catalogCheckoutResultSchema = z.object({

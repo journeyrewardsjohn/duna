@@ -2671,6 +2671,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       .select({
         id: pickupParticipants.id,
         pickupSessionId: pickupSessions.id,
+        courtBookingId: pickupSessions.courtBookingId,
         title: pickupSessions.title,
         startsAt: pickupSessions.startsAt,
         endsAt: pickupSessions.endsAt,
@@ -2787,6 +2788,12 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
     ...new Set(pickupRows.map((row) => row.pickupSessionId)),
   ];
   const courtBookingIds = courtRows.map((row) => row.id);
+  const courtBookingById = new Map(courtRows.map((row) => [row.id, row]));
+  const linkedCourtBookingIds = new Set(
+    pickupRows.flatMap((row) =>
+      row.courtBookingId ? [row.courtBookingId] : [],
+    ),
+  );
   const pickupAttributionIds = [
     ...new Set(
       pickupRows.flatMap((row) =>
@@ -3103,6 +3110,9 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
         pickupOccupiedBySession.get(row.pickupSessionId) ?? 0;
       const spotsRemaining = Math.max(0, row.capacity - occupiedCount);
       const isCreator = row.hostPersonId === personId;
+      const linkedCourt = row.courtBookingId
+        ? courtBookingById.get(row.courtBookingId)
+        : undefined;
       const waitlistEnabled = row.smartRules.waitlistEnabled;
       return [
         {
@@ -3179,12 +3189,23 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
                 },
               }
             : {}),
+          ...(linkedCourt
+            ? {
+                court: {
+                  id: linkedCourt.courtId,
+                  name: linkedCourt.courtName,
+                },
+              }
+            : {}),
           status,
           amount: {
             amountMinor:
+              linkedCourt?.orderTotalMinor ??
               row.orderTotalMinor ??
               (row.status === "invited" ? row.costMinor : 0),
-            currency: currency(row.orderCurrency ?? row.currency ?? "USD"),
+            currency: currency(
+              linkedCourt?.orderCurrency ?? row.orderCurrency ?? row.currency,
+            ),
           },
           participantNames: pickupNamesBySession.get(row.pickupSessionId) ?? [
             person.displayName,
@@ -3198,8 +3219,16 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
                 ? ("host" as const)
                 : ("player" as const),
           })),
-          paymentStatus:
-            row.status === "invited" && row.costMinor > 0
+          paymentStatus: linkedCourt
+            ? (linkedCourt.orderTotalMinor ?? 0) === 0
+              ? "free"
+              : linkedCourt.orderStatus === "paid" ||
+                  linkedCourt.orderStatus === "partially-refunded"
+                ? "paid"
+                : linkedCourt.orderStatus === "refunded"
+                  ? "refunded"
+                  : "payment-required"
+            : row.status === "invited" && row.costMinor > 0
               ? "payment-required"
               : (row.orderTotalMinor ?? row.costMinor) === 0
                 ? "free"
@@ -3267,6 +3296,7 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
       ];
     }),
     ...courtRows.flatMap((row): BookingSummary[] => {
+      if (linkedCourtBookingIds.has(row.id)) return [];
       const status = connectedBookingStatus(row.status);
       if (!status) return [];
       return [
@@ -3350,7 +3380,13 @@ async function loadPlayerBookings(personId: string): Promise<BookingSummary[]> {
   );
 }
 
-async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
+export async function createPickup(
+  input: PickupMutationInput,
+  options: {
+    readonly initiallyConfirmedParticipantIds?: readonly string[];
+    readonly participantEligibilityAlreadyVerified?: boolean;
+  } = {},
+): Promise<EventSummary> {
   const database = getDatabase();
   const provisionalParticipants = input.provisionalParticipants.map(
     (participant) => ({
@@ -3372,6 +3408,14 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       ),
     ),
   ];
+  const initiallyConfirmedParticipantIds = new Set(
+    (options.initiallyConfirmedParticipantIds ?? []).filter((personId) =>
+      participantPersonIds.includes(personId),
+    ),
+  );
+  const invitedParticipantPersonIds = participantPersonIds.filter(
+    (personId) => !initiallyConfirmedParticipantIds.has(personId),
+  );
   if (
     participantPersonIds.length !== input.participantPersonIds.length ||
     participantPersonIds.length + provisionalParticipants.length + 1 >
@@ -3381,20 +3425,25 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       "Added players must be distinct and fit within the hosted match.",
     );
   }
-  const eligibleParticipants = participantPersonIds.length
-    ? await database
-        .select({ id: people.id })
-        .from(people)
-        .where(
-          and(
-            inArray(people.id, participantPersonIds),
-            eq(people.status, "active"),
-            eq(people.profileVisibility, "public"),
-            eq(people.isMinor, false),
-          ),
-        )
-    : [];
-  if (eligibleParticipants.length !== participantPersonIds.length) {
+  const eligibleParticipants =
+    participantPersonIds.length &&
+    !options.participantEligibilityAlreadyVerified
+      ? await database
+          .select({ id: people.id })
+          .from(people)
+          .where(
+            and(
+              inArray(people.id, participantPersonIds),
+              eq(people.status, "active"),
+              eq(people.profileVisibility, "public"),
+              eq(people.isMinor, false),
+            ),
+          )
+      : [];
+  if (
+    !options.participantEligibilityAlreadyVerified &&
+    eligibleParticipants.length !== participantPersonIds.length
+  ) {
     throw new Error(
       "Every added player must have an active adult Duna profile.",
     );
@@ -3529,7 +3578,9 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
         pickupSessionId: pickupId,
         personId,
         addedByPersonId: input.hostPersonId,
-        status: "invited" as const,
+        status: initiallyConfirmedParticipantIds.has(personId)
+          ? ("confirmed" as const)
+          : ("invited" as const),
       })),
       ...provisionalRows.map((participant) => ({
         pickupSessionId: pickupId,
@@ -3549,36 +3600,38 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       traceId: input.requestId,
       ipAddress: input.ipAddress,
     }),
+    ...(invitedParticipantPersonIds.length > 0
+      ? [
+          database.insert(messages).values(
+            invitedParticipantPersonIds.flatMap((personId) =>
+              (["in-app", "push"] as const).map((channel) => ({
+                organizationId,
+                senderPersonId: input.hostPersonId,
+                recipientPersonId: personId,
+                channel,
+                kind: "pickup-invitation",
+                subject: `Match invitation · ${input.title}`,
+                body: `You were invited to ${input.title} at ${matchingVenue?.name ?? input.venueName}. Open Duna to accept or decline the place.`,
+                status: "queued",
+                scheduledAt: new Date(),
+              })),
+            ),
+          ),
+        ]
+      : []),
   ]);
   if (participantPersonIds.length > 0) {
-    await Promise.all([
-      database.insert(messages).values(
-        participantPersonIds.flatMap((personId) =>
-          (["in-app", "push"] as const).map((channel) => ({
-            organizationId,
-            senderPersonId: input.hostPersonId,
-            recipientPersonId: personId,
-            channel,
-            kind: "pickup-invitation",
-            subject: `Match invitation · ${input.title}`,
-            body: `You were invited to ${input.title} at ${matchingVenue?.name ?? input.venueName}. Open Duna to accept or decline the place.`,
-            status: "queued",
-            scheduledAt: new Date(),
-          })),
+    await database
+      .update(matchAvailabilityPosts)
+      .set({ status: "matched", updatedAt: new Date() })
+      .where(
+        and(
+          inArray(matchAvailabilityPosts.personId, participantPersonIds),
+          eq(matchAvailabilityPosts.status, "active"),
+          gt(matchAvailabilityPosts.endsAt, startsAt),
+          lt(matchAvailabilityPosts.startsAt, endsAt),
         ),
-      ),
-      database
-        .update(matchAvailabilityPosts)
-        .set({ status: "matched", updatedAt: new Date() })
-        .where(
-          and(
-            inArray(matchAvailabilityPosts.personId, participantPersonIds),
-            eq(matchAvailabilityPosts.status, "active"),
-            gt(matchAvailabilityPosts.endsAt, startsAt),
-            lt(matchAvailabilityPosts.startsAt, endsAt),
-          ),
-        ),
-    ]);
+      );
   }
   return {
     id: pickupId,
@@ -3625,6 +3678,271 @@ async function createPickup(input: PickupMutationInput): Promise<EventSummary> {
       input.costMinor === 0 ? "Free" : "Paid",
     ],
   };
+}
+
+export interface CourtBookingMatchSummary {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+}
+
+export function courtBookingMatchTitle(input: {
+  readonly startsAt: Date;
+  readonly timeZone: string;
+  readonly venueName: string;
+}): string {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: input.timeZone,
+  }).format(input.startsAt);
+  return `${weekday} match at ${input.venueName}`.slice(0, 140);
+}
+
+export function courtBookingMatchFormat(
+  capacity: number,
+): PickupMutationInput["format"] {
+  if (capacity <= 4) return "2s";
+  if (capacity <= 6) return "3s";
+  if (capacity <= 8) return "4s";
+  return "6s";
+}
+
+function provisionalCourtParticipant(displayName: string): {
+  readonly givenName: string;
+  readonly familyName: string;
+} {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return {
+      givenName: parts[0] ?? "Invited",
+      familyName: "Player",
+    };
+  }
+  return {
+    givenName: parts[0]!,
+    familyName: parts.slice(1).join(" "),
+  };
+}
+
+async function syncConfirmedCourtBookingMatchParticipants(input: {
+  readonly bookingId: string;
+  readonly pickupSessionId: string;
+  readonly now: Date;
+}) {
+  const database = getDatabase();
+  const confirmedRows = await database
+    .select({ personId: courtBookingParticipants.personId })
+    .from(courtBookingParticipants)
+    .where(
+      and(
+        eq(courtBookingParticipants.bookingId, input.bookingId),
+        ne(courtBookingParticipants.role, "organizer"),
+        inArray(courtBookingParticipants.status, ["accepted", "paid"]),
+      ),
+    );
+  const confirmedPersonIds = confirmedRows.flatMap((participant) =>
+    participant.personId ? [participant.personId] : [],
+  );
+  if (confirmedPersonIds.length === 0) return;
+  await database
+    .update(pickupParticipants)
+    .set({ status: "confirmed", holdExpiresAt: null, updatedAt: input.now })
+    .where(
+      and(
+        eq(pickupParticipants.pickupSessionId, input.pickupSessionId),
+        inArray(pickupParticipants.personId, confirmedPersonIds),
+        eq(pickupParticipants.status, "invited"),
+      ),
+    );
+}
+
+/**
+ * Materializes the match requested during court checkout exactly once. The
+ * unique courtBookingId on pickup_sessions is the durable idempotency boundary
+ * for webhook retries, client recovery, and split-payment completion.
+ */
+export async function ensureCourtBookingMatch(input: {
+  readonly bookingId: string;
+  readonly hostPersonId?: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<CourtBookingMatchSummary | undefined> {
+  const database = getDatabase();
+  const booking = await database.query.courtBookings.findFirst({
+    where: eq(courtBookings.id, input.bookingId),
+  });
+  if (
+    !booking ||
+    !booking.createMatch ||
+    booking.status !== "confirmed" ||
+    (input.hostPersonId && booking.personId !== input.hostPersonId)
+  ) {
+    return undefined;
+  }
+  const existing = await database.query.pickupSessions.findFirst({
+    where: eq(pickupSessions.courtBookingId, input.bookingId),
+  });
+  if (existing) {
+    await syncConfirmedCourtBookingMatchParticipants({
+      bookingId: booking.id,
+      pickupSessionId: existing.id,
+      now: input.now,
+    });
+    return {
+      id: existing.id,
+      slug: `pickup-${existing.id}`,
+      title: existing.title,
+    };
+  }
+
+  const [venue, court, participantRows] = await Promise.all([
+    database.query.venues.findFirst({ where: eq(venues.id, booking.venueId) }),
+    database.query.courts.findFirst({ where: eq(courts.id, booking.courtId) }),
+    database
+      .select({
+        personId: courtBookingParticipants.personId,
+        invitedName: courtBookingParticipants.invitedName,
+        role: courtBookingParticipants.role,
+        status: courtBookingParticipants.status,
+      })
+      .from(courtBookingParticipants)
+      .where(eq(courtBookingParticipants.bookingId, booking.id)),
+  ]);
+  if (!venue || !court) return undefined;
+
+  const activeInvitees = participantRows.filter(
+    (participant) =>
+      participant.role !== "organizer" &&
+      participant.status !== "cancelled" &&
+      participant.status !== "declined",
+  );
+  const participantPersonIds = [
+    ...new Set(
+      activeInvitees.flatMap((participant) =>
+        participant.personId ? [participant.personId] : [],
+      ),
+    ),
+  ];
+  const initiallyConfirmedParticipantIds = activeInvitees.flatMap(
+    (participant) =>
+      participant.personId && ["accepted", "paid"].includes(participant.status)
+        ? [participant.personId]
+        : [],
+  );
+  const provisionalParticipants = activeInvitees
+    .filter((participant) => !participant.personId)
+    .map((participant) =>
+      provisionalCourtParticipant(
+        participant.invitedName?.trim() || "Invited Player",
+      ),
+    );
+  const capacity = Math.max(
+    4,
+    1 + participantPersonIds.length + provisionalParticipants.length,
+  );
+  const title = courtBookingMatchTitle({
+    startsAt: booking.startsAt,
+    timeZone: venue.timezone,
+    venueName: venue.name,
+  });
+
+  try {
+    const match = await createPickup(
+      {
+        title,
+        startsAt: booking.startsAt.toISOString(),
+        endsAt: booking.endsAt.toISOString(),
+        venueName: venue.name,
+        venueId: venue.id,
+        courtBookingId: booking.id,
+        capacity,
+        format: courtBookingMatchFormat(capacity),
+        matchType: "competitive",
+        genderPreference: "open",
+        note: `${court.name} is reserved for this match.`,
+        visibility: "unlisted",
+        approvalRequired: false,
+        smartRules: {
+          waitlistEnabled: true,
+          allowLateCancellation: false,
+          minimumNoticeMinutes: 60,
+          autoCancelLowAttendance: false,
+          minimumAttendance: 2,
+        },
+        costMinor: 0,
+        currency: currency(booking.currency),
+        recordMatches: true,
+        participantPersonIds,
+        provisionalParticipants,
+        hostPersonId: booking.personId,
+        organizationId: booking.organizationId,
+        requestId: input.requestId,
+        ipAddress: input.ipAddress,
+      },
+      // These people were validated when the booking was created. A player
+      // changing profile visibility while Stripe settles must not strand a
+      // paid reservation without its requested match.
+      {
+        initiallyConfirmedParticipantIds,
+        participantEligibilityAlreadyVerified: true,
+      },
+    );
+    await syncConfirmedCourtBookingMatchParticipants({
+      bookingId: booking.id,
+      pickupSessionId: match.id,
+      now: input.now,
+    });
+    return { id: match.id, slug: match.slug, title: match.title };
+  } catch (error) {
+    // Another webhook or client recovery may have won the unique insert race.
+    const raced = await database.query.pickupSessions.findFirst({
+      where: eq(pickupSessions.courtBookingId, booking.id),
+    });
+    if (raced) {
+      await syncConfirmedCourtBookingMatchParticipants({
+        bookingId: booking.id,
+        pickupSessionId: raced.id,
+        now: input.now,
+      });
+      return {
+        id: raced.id,
+        slug: `pickup-${raced.id}`,
+        title: raced.title,
+      };
+    }
+    throw error;
+  }
+}
+
+export async function ensureCourtBookingMatchForOrder(input: {
+  readonly orderId: string;
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<CourtBookingMatchSummary | undefined> {
+  const database = getDatabase();
+  let booking = await database.query.courtBookings.findFirst({
+    where: eq(courtBookings.orderId, input.orderId),
+  });
+  if (!booking) {
+    const participant = await database.query.courtBookingParticipants.findFirst(
+      {
+        where: eq(courtBookingParticipants.orderId, input.orderId),
+      },
+    );
+    if (participant) {
+      booking = await database.query.courtBookings.findFirst({
+        where: eq(courtBookings.id, participant.bookingId),
+      });
+    }
+  }
+  return booking
+    ? ensureCourtBookingMatch({
+        bookingId: booking.id,
+        requestId: input.requestId,
+        now: input.now,
+      })
+    : undefined;
 }
 
 export const databaseRepository = {

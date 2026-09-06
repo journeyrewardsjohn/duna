@@ -40,18 +40,22 @@ export async function presentThenPollCheckout<T>(input: {
   readonly maxPolls: number;
   readonly delayMs: (attempt: number) => number;
   readonly sleep?: (delayMs: number) => Promise<void>;
+  readonly onPaymentCompleted?: () => void | Promise<void>;
+  readonly onStatus?: (status: T) => void | Promise<void>;
 }): Promise<
   | { readonly cancelled: true }
   | { readonly cancelled: false; readonly status: T }
 > {
   const paymentResult = await input.present();
   if (paymentResult === "cancelled") return { cancelled: true };
+  await input.onPaymentCompleted?.();
 
   const sleep =
     input.sleep ??
     ((delayMs: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
   let status = await input.readStatus();
+  await input.onStatus?.(status);
   for (
     let attempt = 0;
     attempt < input.maxPolls && !input.isComplete(status);
@@ -59,6 +63,7 @@ export async function presentThenPollCheckout<T>(input: {
   ) {
     await sleep(input.delayMs(attempt));
     status = await input.readStatus();
+    await input.onStatus?.(status);
   }
   return { cancelled: false, status };
 }

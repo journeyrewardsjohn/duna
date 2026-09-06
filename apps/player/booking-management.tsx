@@ -960,35 +960,37 @@ export function BookingManagementModal({
 
             {!cancelled && booking.pickup && (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.flex}>
-                    <Text style={styles.sectionEyebrow}>MATCH ROSTER</Text>
-                    <Text style={styles.sectionTitle}>
-                      {booking.pickup.confirmedCount} confirmed ·{" "}
-                      {booking.pickup.spotsRemaining} open
+                {!booking.pickup.isCreator && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <View style={styles.flex}>
+                        <Text style={styles.sectionEyebrow}>MATCH ROSTER</Text>
+                        <Text style={styles.sectionTitle}>
+                          {booking.pickup.confirmedCount} confirmed ·{" "}
+                          {booking.pickup.spotsRemaining} open
+                        </Text>
+                      </View>
+                      {booking.pickup.canAddPlayers && (
+                        <Pressable
+                          onPress={() => setEditing((current) => !current)}
+                          style={styles.smallAction}
+                        >
+                          <Text style={styles.smallActionText}>
+                            {editing ? "Done" : "Add players"}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    <Text style={styles.policy}>
+                      {booking.pickup.capacity} total spots
+                      {booking.pickup.waitlistEnabled
+                        ? " · waitlist enabled"
+                        : " · waitlist off"}
+                      {" · you can invite or cover more players"}
                     </Text>
-                  </View>
-                  {booking.pickup.canAddPlayers && (
-                    <Pressable
-                      onPress={() => setEditing((current) => !current)}
-                      style={styles.smallAction}
-                    >
-                      <Text style={styles.smallActionText}>
-                        {editing ? "Done" : "Add players"}
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-                <Text style={styles.policy}>
-                  {booking.pickup.capacity} total spots
-                  {booking.pickup.waitlistEnabled
-                    ? " · waitlist enabled"
-                    : " · waitlist off"}
-                  {booking.pickup.isCreator
-                    ? " · only you can edit match details"
-                    : " · you can invite or cover more players"}
-                </Text>
-                {booking.sessionId && (
+                  </>
+                )}
+                {booking.pickup.isCreator && booking.sessionId && (
                   <MatchHostPanel
                     client={client}
                     onRosterChanged={() => void onUpdated()}
@@ -1287,119 +1289,121 @@ export function BookingManagementModal({
                     </Pressable>
                   </View>
                 )}
-                {editing && booking.pickup.canAddPlayers && (
-                  <>
-                    <View style={styles.search}>
-                      <Text style={styles.searchIcon}>⌕</Text>
-                      <TextInput
-                        onChangeText={(value) => void search(value)}
-                        placeholder="Search Duna players"
-                        placeholderTextColor="#8a857b"
-                        style={styles.searchInput}
-                        value={query}
-                      />
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.resultRail}
-                    >
-                      {results.map((result) => {
-                        const selected = pickupPlayers.some(
-                          ({ person }) => person.id === result.person.id,
-                        );
-                        return (
-                          <Pressable
-                            accessibilityLabel={`${selected ? "Remove" : "Add"} ${result.person.displayName}`}
-                            disabled={!result.eligible}
-                            key={result.person.id}
-                            onPress={() =>
-                              setPickupPlayers((current) =>
-                                selected
-                                  ? current.filter(
-                                      ({ person }) =>
-                                        person.id !== result.person.id,
-                                    )
-                                  : [...current, result],
-                              )
-                            }
-                            style={[
-                              styles.result,
-                              selected && styles.resultSelected,
-                              !result.eligible && styles.actionDisabled,
-                            ]}
-                          >
-                            <View style={styles.resultAvatar}>
-                              <Text style={styles.avatarText}>
-                                {result.person.initials}
-                              </Text>
-                            </View>
-                            <Text numberOfLines={1} style={styles.resultName}>
-                              {result.person.displayName}
-                            </Text>
-                            <Text style={styles.resultMeta}>
-                              Sand Rating{" "}
-                              {result.person.rating.display.toFixed(2)}
-                            </Text>
-                            <Text style={styles.resultChoice}>
-                              {selected
-                                ? "SELECTED"
-                                : result.eligible
-                                  ? "SELECT"
-                                  : "NOT ELIGIBLE"}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </ScrollView>
-                    {pickupPlayers.length > 0 && (
-                      <>
-                        <Text style={styles.pickupActionHelp}>
-                          {pickupInviteExplanation(
-                            booking.pickup.pricePerPerson.amountMinor > 0,
-                          )}
-                        </Text>
-                        <View style={styles.pickupActions}>
-                          <Pressable
-                            accessibilityLabel={pickupInviteActionLabel(
-                              pickupPlayers.length,
-                            )}
-                            disabled={busy}
-                            onPress={() => void invitePickupSelection()}
-                            style={styles.secondaryPickupAction}
-                          >
-                            <Text style={styles.secondaryPickupActionText}>
-                              {pickupInviteActionLabel(pickupPlayers.length)}
-                            </Text>
-                          </Pressable>
-                          {booking.pickup.pricePerPerson.amountMinor > 0 && (
+                {editing &&
+                  !booking.pickup.isCreator &&
+                  booking.pickup.canAddPlayers && (
+                    <>
+                      <View style={styles.search}>
+                        <Text style={styles.searchIcon}>⌕</Text>
+                        <TextInput
+                          onChangeText={(value) => void search(value)}
+                          placeholder="Search Duna players"
+                          placeholderTextColor="#8a857b"
+                          style={styles.searchInput}
+                          value={query}
+                        />
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.resultRail}
+                      >
+                        {results.map((result) => {
+                          const selected = pickupPlayers.some(
+                            ({ person }) => person.id === result.person.id,
+                          );
+                          return (
                             <Pressable
-                              disabled={
-                                busy ||
-                                pickupPlayers.length >
-                                  booking.pickup.spotsRemaining
-                              }
+                              accessibilityLabel={`${selected ? "Remove" : "Add"} ${result.person.displayName}`}
+                              disabled={!result.eligible}
+                              key={result.person.id}
                               onPress={() =>
-                                void finishPickupCheckout(pickupPlayers)
+                                setPickupPlayers((current) =>
+                                  selected
+                                    ? current.filter(
+                                        ({ person }) =>
+                                          person.id !== result.person.id,
+                                      )
+                                    : [...current, result],
+                                )
                               }
                               style={[
-                                styles.primaryPickupAction,
-                                (busy ||
-                                  pickupPlayers.length >
-                                    booking.pickup.spotsRemaining) &&
-                                  styles.actionDisabled,
+                                styles.result,
+                                selected && styles.resultSelected,
+                                !result.eligible && styles.actionDisabled,
                               ]}
                             >
-                              <Text style={styles.primaryText}>
-                                Pay & confirm {pickupPlayers.length}
+                              <View style={styles.resultAvatar}>
+                                <Text style={styles.avatarText}>
+                                  {result.person.initials}
+                                </Text>
+                              </View>
+                              <Text numberOfLines={1} style={styles.resultName}>
+                                {result.person.displayName}
+                              </Text>
+                              <Text style={styles.resultMeta}>
+                                Sand Rating{" "}
+                                {result.person.rating.display.toFixed(2)}
+                              </Text>
+                              <Text style={styles.resultChoice}>
+                                {selected
+                                  ? "SELECTED"
+                                  : result.eligible
+                                    ? "SELECT"
+                                    : "NOT ELIGIBLE"}
                               </Text>
                             </Pressable>
-                          )}
-                        </View>
-                      </>
-                    )}
-                  </>
-                )}
+                          );
+                        })}
+                      </ScrollView>
+                      {pickupPlayers.length > 0 && (
+                        <>
+                          <Text style={styles.pickupActionHelp}>
+                            {pickupInviteExplanation(
+                              booking.pickup.pricePerPerson.amountMinor > 0,
+                            )}
+                          </Text>
+                          <View style={styles.pickupActions}>
+                            <Pressable
+                              accessibilityLabel={pickupInviteActionLabel(
+                                pickupPlayers.length,
+                              )}
+                              disabled={busy}
+                              onPress={() => void invitePickupSelection()}
+                              style={styles.secondaryPickupAction}
+                            >
+                              <Text style={styles.secondaryPickupActionText}>
+                                {pickupInviteActionLabel(pickupPlayers.length)}
+                              </Text>
+                            </Pressable>
+                            {booking.pickup.pricePerPerson.amountMinor > 0 && (
+                              <Pressable
+                                disabled={
+                                  busy ||
+                                  pickupPlayers.length >
+                                    booking.pickup.spotsRemaining
+                                }
+                                onPress={() =>
+                                  void finishPickupCheckout(pickupPlayers)
+                                }
+                                style={[
+                                  styles.primaryPickupAction,
+                                  (busy ||
+                                    pickupPlayers.length >
+                                      booking.pickup.spotsRemaining) &&
+                                    styles.actionDisabled,
+                                ]}
+                              >
+                                <Text style={styles.primaryText}>
+                                  Pay & confirm {pickupPlayers.length}
+                                </Text>
+                              </Pressable>
+                            )}
+                          </View>
+                        </>
+                      )}
+                    </>
+                  )}
               </View>
             )}
 

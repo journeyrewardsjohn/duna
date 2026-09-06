@@ -108,7 +108,7 @@ import {
   BookingManagementModal,
   type ManagedBooking,
 } from "./booking-management";
-import { MatchHostView } from "./match-host-panel";
+import { MatchHostPanel, MatchHostView } from "./match-host-panel";
 import {
   BookingConfirmationView,
   type BookingReceiptRow,
@@ -183,6 +183,8 @@ import {
   MobilePlacePicker,
   type MobilePlaceSelection,
 } from "./components/mobile-place-picker";
+import { PlayerAvatar } from "./components/player-identity";
+import { ConfirmingReservation } from "./components/confirming-reservation";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
@@ -2983,7 +2985,6 @@ function VenueBookingModal({
   venueId,
   visible,
   onClose,
-  onHostReady,
   onOpenMatch,
 }: {
   readonly initialDate?: string;
@@ -2992,10 +2993,10 @@ function VenueBookingModal({
   readonly venueId?: string;
   readonly visible: boolean;
   readonly onClose: () => void;
-  readonly onHostReady?: (seed: HostedMatchSeed) => void;
   readonly onOpenMatch?: (matchId: string, matchSlug: string) => void;
 }) {
   const { width } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const { client, dashboard, mode, publicClient, refresh } = usePlayerRuntime();
   const courtClient = publicClient ?? client;
   const [todayValue] = useState(() => localDateValue(new Date()));
@@ -3032,6 +3033,7 @@ function VenueBookingModal({
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [lookingPostId, setLookingPostId] = useState<string>();
@@ -3042,7 +3044,11 @@ function VenueBookingModal({
     readonly title: string;
     readonly body: string;
     readonly receipt?: readonly BookingReceiptRow[];
-    readonly hostSeed?: HostedMatchSeed;
+    readonly match?: {
+      readonly id: string;
+      readonly slug: string;
+      readonly title: string;
+    };
   }>();
   const bookingDateScrollRef = useRef<ScrollView>(null);
   const bookingDateScrollX = useRef(0);
@@ -3214,6 +3220,7 @@ function VenueBookingModal({
     if (!visible) {
       dateRailPositioned.current = false;
       setConfirmation(undefined);
+      setConfirming(false);
       return;
     }
     if (dateRailPositioned.current) return;
@@ -3535,6 +3542,7 @@ function VenueBookingModal({
         durationMinutes,
         paymentMode,
         paymentSurface: Platform.OS === "web" ? "hosted" : "native",
+        createMatch: bookingIntent === "host",
         participants: courtCheckoutParticipants(participants),
         expectedPayNowMinor: quote.payNowMinor,
         expectedTotalMinor: quote.totalMinor,
@@ -3548,6 +3556,7 @@ function VenueBookingModal({
         let confirmed = result.mode === "free";
         let sharePaid = result.mode === "free";
         let awaitingParticipants = false;
+        let match = result.match;
         if (result.paymentSheet) {
           const payment = await presentThenPollCheckout({
             present: () =>
@@ -3559,15 +3568,21 @@ function VenueBookingModal({
               client.player.courtCheckoutStatus.query({
                 paymentIntentId: result.paymentSheet!.paymentIntentId,
               }),
-            isComplete: (status) => status.sharePaid,
+            isComplete: (status) =>
+              status.sharePaid &&
+              (bookingIntent !== "host" ||
+                !status.complete ||
+                Boolean(status.match)),
             maxPolls: 8,
             delayMs: (attempt) => (attempt < 3 ? 450 : 900),
+            onPaymentCompleted: () => setConfirming(true),
           });
           if (payment.cancelled) return;
           const { status } = payment;
           confirmed = status.complete;
           sharePaid = status.sharePaid;
           awaitingParticipants = status.awaitingParticipants;
+          match = status.match;
         } else if (result.checkoutUrl) {
           if (Platform.OS !== "web") {
             throw new Error(
@@ -3575,6 +3590,7 @@ function VenueBookingModal({
             );
           }
           await WebBrowser.openBrowserAsync(result.checkoutUrl);
+          setConfirming(true);
           if (result.checkoutSessionId) {
             for (let attempt = 0; attempt < 8; attempt += 1) {
               const status = await client.player.courtCheckoutStatus.query({
@@ -3583,12 +3599,30 @@ function VenueBookingModal({
               confirmed = status.complete;
               sharePaid = status.sharePaid;
               awaitingParticipants = status.awaitingParticipants;
-              if (sharePaid) break;
+              match = status.match;
+              if (
+                sharePaid &&
+                (bookingIntent !== "host" || !confirmed || Boolean(match))
+              ) {
+                break;
+              }
               await new Promise<void>((resolve) =>
                 setTimeout(resolve, attempt < 3 ? 500 : 1_000),
               );
             }
           }
+        }
+        if (
+          bookingIntent === "host" &&
+          confirmed &&
+          result.bookingId &&
+          !match
+        ) {
+          const recovered = await client.player.ensureCourtBookingMatch.mutate({
+            bookingId: result.bookingId,
+            idempotencyKey: Crypto.randomUUID(),
+          });
+          match = recovered.match;
         }
         successHaptic();
         await refresh();
@@ -3608,31 +3642,10 @@ function VenueBookingModal({
           ];
           const paidMinor = result.pricing?.payNowMinor ?? quote.payNowMinor;
           const paidCurrency = result.pricing?.currency ?? quote.currency;
-          /**
-           * Host reservations pay for the court before the match exists, so the
-           * receipt names the next step instead of dropping the host back into
-           * the builder with no acknowledgement that money moved.
-           */
-          const hostSeed: HostedMatchSeed | undefined =
-            bookingIntent === "host" && confirmed && venueId
-              ? {
-                  courtBookingId: result.bookingId,
-                  venueId,
-                  venueName: inventory.venue.name,
-                  startsAt: selectedSlot.startsAt,
-                  endsAt: selectedSlot.endsAt,
-                  localStartsAt: selectedSlot.localStartsAt,
-                  localEndsAt: selectedSlot.localEndsAt,
-                  durationMinutes,
-                  invitedPlayers: selectedDunaPlayers,
-                  courtPaymentMode: paymentMode,
-                  courtPaidMinor: paidMinor,
-                  courtCurrency: paidCurrency,
-                }
-              : undefined;
+          setConfirming(false);
           setConfirmation({
             bookingId: result.bookingId,
-            hostSeed,
+            match,
             details: {
               title: `Court rental · ${selectedSlot.courtName}`,
               startsAt: result.startsAt,
@@ -3645,7 +3658,9 @@ function VenueBookingModal({
                 : {}),
               courtName: selectedSlot.courtName,
               playerNames,
-              detailsUrl: `${dunaWebUrl}/venues/${inventory.venue.id}`,
+              detailsUrl: match
+                ? `${dunaWebUrl}/events/${encodeURIComponent(match.slug)}`
+                : `${dunaWebUrl}/venues/${inventory.venue.id}`,
             },
             receipt: [
               paidMinor === 0
@@ -3675,15 +3690,19 @@ function VenueBookingModal({
                   : "Processing",
             title: awaitingParticipants
               ? "Your court is held."
-              : confirmed
-                ? "Court reserved."
-                : "Payment received.",
+              : match
+                ? "Court + match ready."
+                : confirmed
+                  ? "Court reserved."
+                  : "Payment received.",
             body: awaitingParticipants
               ? "Your share is paid. Invited players have secure links for their shares; the booking confirms when everyone is paid."
-              : hostSeed
-                ? "Your court is paid and confirmed. Name the match next and Duna carries this court, time, and roster over."
+              : match
+                ? "Your reservation created one match. Invitations are sent; track every response or adjust the roster below."
                 : confirmed
-                  ? "Everything you need is below and ready to share."
+                  ? bookingIntent === "host"
+                    ? "Your court is confirmed. Duna is still preparing the match and will keep it in your Plans."
+                    : "Everything you need is below and ready to share."
                   : "Duna is finishing the confirmation and will keep this booking in your Plans.",
           });
         } else {
@@ -3697,8 +3716,10 @@ function VenueBookingModal({
         setError("That court is no longer available. Pick another time.");
       }
     } catch (reason) {
+      setConfirming(false);
       setError(displayError(reason));
     } finally {
+      setConfirming(false);
       setBusy(false);
     }
   }
@@ -3712,29 +3733,44 @@ function VenueBookingModal({
       visible={visible}
     >
       <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
-        {confirmation ? (
+        {confirming ? (
+          <ConfirmingReservation
+            createsMatch={bookingIntent === "host"}
+            palette={colors}
+            reducedMotion={reducedMotion}
+            venueName={inventory?.venue.name}
+          />
+        ) : confirmation ? (
           <BookingConfirmationView
             body={confirmation.body}
             details={confirmation.details}
-            doneLabel={confirmation.hostSeed ? "Not now" : "Done"}
+            doneLabel="Done"
             label={confirmation.label}
             onDone={onClose}
             primaryAction={
-              confirmation.hostSeed
+              confirmation.match
                 ? () => {
-                    const seed = confirmation.hostSeed;
-                    setConfirmation(undefined);
+                    const match = confirmation.match;
                     onClose();
-                    if (seed) onHostReady?.(seed);
+                    if (match) onOpenMatch?.(match.id, match.slug);
                   }
                 : undefined
             }
-            primaryLabel={
-              confirmation.hostSeed ? "Continue to match details" : undefined
-            }
+            primaryLabel={confirmation.match ? "Open match details" : undefined}
             receipt={confirmation.receipt}
             title={confirmation.title}
-          />
+          >
+            {confirmation.match && client ? (
+              <View style={styles.confirmationRoster}>
+                <MatchHostPanel
+                  client={client}
+                  onRosterChanged={() => void refresh()}
+                  palette={colors}
+                  pickupSessionId={confirmation.match.id}
+                />
+              </View>
+            ) : null}
+          </BookingConfirmationView>
         ) : (
           <>
             <ScrollView
@@ -4565,21 +4601,14 @@ function VenueBookingModal({
                         )}
                       </View>
                       <View style={styles.checkoutSection}>
-                        <View style={styles.rowBetween}>
-                          <View>
-                            <Text style={styles.rowTitle}>
-                              {bookingIntent === "host"
-                                ? "Add players to this match"
-                                : "Add players"}
-                            </Text>
-                            <Text style={styles.rowMeta}>
-                              Frequent partners first, then everyone on Duna.
-                            </Text>
-                          </View>
-                          <Pressable onPress={() => setShowPlayerPicker(true)}>
-                            <Text style={styles.linkText}>Choose players</Text>
-                          </Pressable>
-                        </View>
+                        <Text style={styles.rowTitle}>
+                          {bookingIntent === "host"
+                            ? "Build your match roster"
+                            : "Add players"}
+                        </Text>
+                        <Text style={styles.rowMeta}>
+                          Frequent partners first, then everyone on Duna.
+                        </Text>
                         <Pressable
                           accessibilityLabel="Open player picker"
                           onPress={() => setShowPlayerPicker(true)}
@@ -4603,42 +4632,6 @@ function VenueBookingModal({
                           </View>
                           <Text style={styles.chevron}>›</Text>
                         </Pressable>
-                        {selectedDunaPlayers.length > 0 && (
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.bookingPartnerScroll}
-                          >
-                            <View style={styles.bookingPartnerRow}>
-                              {selectedDunaPlayers.map((person) => (
-                                <Pressable
-                                  accessibilityLabel={`Open ${person.displayName}'s profile`}
-                                  accessibilityRole="button"
-                                  key={person.id}
-                                  onPress={() => setProfilePerson(person)}
-                                  style={styles.bookingPartner}
-                                >
-                                  {person.avatarUrl ? (
-                                    <Image
-                                      source={{ uri: person.avatarUrl }}
-                                      style={styles.bookingPartnerImage}
-                                    />
-                                  ) : (
-                                    <Text style={styles.bookingPartnerAvatar}>
-                                      {person.initials}
-                                    </Text>
-                                  )}
-                                  <Text
-                                    numberOfLines={1}
-                                    style={styles.bookingPartnerName}
-                                  >
-                                    {person.displayName.split(" ")[0]}
-                                  </Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          </ScrollView>
-                        )}
                         <Pressable
                           onPress={() => void importContacts()}
                           style={styles.bookingImportContact}
@@ -4677,13 +4670,13 @@ function VenueBookingModal({
                                       added && styles.buttonDisabled,
                                     ]}
                                   >
-                                    <Text style={styles.bookingPartnerAvatar}>
-                                      {added
-                                        ? "✓"
-                                        : (contact.name ?? "C")
-                                            .slice(0, 1)
-                                            .toUpperCase()}
-                                    </Text>
+                                    <PlayerAvatar
+                                      badge={added ? "selected" : "add"}
+                                      displayName={contact.name ?? "Contact"}
+                                      palette={colors}
+                                      selected={added}
+                                      size={54}
+                                    />
                                     <Text
                                       numberOfLines={1}
                                       style={styles.bookingPartnerName}
@@ -4701,7 +4694,7 @@ function VenueBookingModal({
                             onChangeText={setManualName}
                             placeholder="Name"
                             placeholderTextColor={colors.muted}
-                            style={[styles.formInput, styles.formRowInput]}
+                            style={[styles.formInput, styles.bookingGuestInput]}
                             value={manualName}
                           />
                           <TextInput
@@ -4715,7 +4708,7 @@ function VenueBookingModal({
                             placeholder="Email or mobile"
                             placeholderTextColor={colors.muted}
                             returnKeyType="done"
-                            style={[styles.formInput, styles.formRowInput]}
+                            style={[styles.formInput, styles.bookingGuestInput]}
                             value={manualTarget}
                           />
                           <Pressable
@@ -4735,6 +4728,11 @@ function VenueBookingModal({
                         {inviteError && (
                           <Text style={styles.formError}>{inviteError}</Text>
                         )}
+                        {participants.length > 0 && (
+                          <Text style={styles.bookingRosterLabel}>
+                            ROSTER · {participants.length + 1} PLAYERS
+                          </Text>
+                        )}
                         {participants.map((participant, index) => (
                           <View
                             key={
@@ -4744,7 +4742,36 @@ function VenueBookingModal({
                             }
                             style={styles.bookingParticipant}
                           >
-                            <Text style={styles.checkText}>✓</Text>
+                            <Pressable
+                              accessibilityLabel={
+                                participant.person
+                                  ? `Open ${participant.person.displayName}'s profile`
+                                  : undefined
+                              }
+                              accessibilityRole={
+                                participant.person ? "button" : undefined
+                              }
+                              disabled={!participant.person}
+                              onPress={() =>
+                                participant.person &&
+                                setProfilePerson(participant.person)
+                              }
+                              style={styles.bookingPlayerAvatarTarget}
+                            >
+                              <PlayerAvatar
+                                badge="selected"
+                                displayName={
+                                  participant.name ??
+                                  participant.email ??
+                                  participant.phoneE164 ??
+                                  "Player"
+                                }
+                                palette={colors}
+                                person={participant.person}
+                                selected
+                                size={48}
+                              />
+                            </Pressable>
                             <View style={styles.flex}>
                               <Text style={styles.rowTitle}>
                                 {participant.name ??
@@ -4762,6 +4789,8 @@ function VenueBookingModal({
                               </Text>
                             </View>
                             <Pressable
+                              accessibilityLabel={`Remove ${participant.name ?? participant.email ?? participant.phoneE164 ?? "player"}`}
+                              accessibilityRole="button"
                               onPress={() =>
                                 setParticipants((current) =>
                                   current.filter(
@@ -4769,6 +4798,7 @@ function VenueBookingModal({
                                   ),
                                 )
                               }
+                              style={styles.bookingRemovePlayer}
                             >
                               <Text style={styles.closeText}>×</Text>
                             </Pressable>
@@ -7208,7 +7238,6 @@ function DiscoverScreen({
   const theme: ThemeName = "light";
   const [filter, setFilter] = useState("For you");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
-  const [hostSeed, setHostSeed] = useState<HostedMatchSeed>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
   const [showProTour, setShowProTour] = useState(false);
   const [showDiscoveryMap, setShowDiscoveryMap] = useState(false);
@@ -8015,10 +8044,6 @@ function DiscoverScreen({
       />
       <VenueBookingModal
         onClose={() => setBookingVenueId(undefined)}
-        onHostReady={(seed) => {
-          setBookingVenueId(undefined);
-          setTimeout(() => setHostSeed(seed), 280);
-        }}
         onOpenMatch={(matchId, matchSlug) => {
           const eventIndex = events.findIndex((event) => event.id === matchId);
           setBookingVenueId(undefined);
@@ -8034,11 +8059,6 @@ function DiscoverScreen({
         }}
         venueId={bookingVenueId}
         visible={Boolean(bookingVenueId)}
-      />
-      <PickupModal
-        initialCourtBooking={hostSeed}
-        onClose={() => setHostSeed(undefined)}
-        visible={Boolean(hostSeed)}
       />
       <ProTourModal
         initialSlug={selectedProTourSlug}
@@ -13742,18 +13762,13 @@ function PickupModal({
                           key={candidate.postId}
                           style={styles.hostFlowLookingPlayer}
                         >
-                          {candidate.person.avatarUrl ? (
-                            <Image
-                              source={{ uri: candidate.person.avatarUrl }}
-                              style={styles.hostFlowPlayerAvatar}
-                            />
-                          ) : (
-                            <View style={styles.hostFlowPlayerAvatarFallback}>
-                              <Text style={styles.hostFlowPlayerAvatarText}>
-                                {candidate.person.initials}
-                              </Text>
-                            </View>
-                          )}
+                          <PlayerAvatar
+                            badge={selected ? "selected" : "add"}
+                            palette={colors}
+                            person={candidate.person}
+                            selected={selected}
+                            size={52}
+                          />
                           <View style={styles.flex}>
                             <Text style={styles.hostFlowPlayerName}>
                               {candidate.person.displayName}
@@ -13804,19 +13819,11 @@ function PickupModal({
                   <View style={styles.hostFlowRoster}>
                     {[host, ...selectedPlayers].map((player, index) => (
                       <View key={player.id} style={styles.hostFlowPlayerRow}>
-                        {player.avatarUrl ? (
-                          <Image
-                            accessibilityIgnoresInvertColors
-                            source={{ uri: player.avatarUrl }}
-                            style={styles.hostFlowPlayerAvatar}
-                          />
-                        ) : (
-                          <View style={styles.hostFlowPlayerAvatarFallback}>
-                            <Text style={styles.hostFlowPlayerAvatarText}>
-                              {player.initials}
-                            </Text>
-                          </View>
-                        )}
+                        <PlayerAvatar
+                          palette={colors}
+                          person={player}
+                          size={52}
+                        />
                         <View style={styles.flex}>
                           <Text style={styles.hostFlowPlayerName}>
                             {player.displayName}
@@ -13850,11 +13857,11 @@ function PickupModal({
                       const displayName = `${guest.givenName} ${guest.familyName}`;
                       return (
                         <View key={guest.id} style={styles.hostFlowPlayerRow}>
-                          <View style={styles.hostFlowPlayerAvatarFallback}>
-                            <Text style={styles.hostFlowPlayerAvatarText}>
-                              {`${guest.givenName[0] ?? ""}${guest.familyName[0] ?? ""}`.toUpperCase()}
-                            </Text>
-                          </View>
+                          <PlayerAvatar
+                            displayName={displayName}
+                            palette={colors}
+                            size={52}
+                          />
                           <View style={styles.flex}>
                             <Text style={styles.hostFlowPlayerName}>
                               {displayName}
@@ -13900,9 +13907,12 @@ function PickupModal({
                         onPress={() => setShowPlayerPicker(true)}
                         style={styles.hostFlowOpenPlayer}
                       >
-                        <View style={styles.hostFlowOpenPlayerMark}>
-                          <Text style={styles.hostFlowOpenPlayerPlus}>＋</Text>
-                        </View>
+                        <PlayerAvatar
+                          badge="add"
+                          displayName="Available place"
+                          palette={colors}
+                          size={52}
+                        />
                         <Text style={styles.hostFlowOpenPlayerText}>
                           Available place
                         </Text>
@@ -14690,8 +14700,6 @@ function DunaApp() {
     useState<CourtBookingRequest>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
   const [organizationVenueId, setOrganizationVenueId] = useState<string>();
-  const [organizationHostSeed, setOrganizationHostSeed] =
-    useState<HostedMatchSeed>();
   const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const organizationTransitionRef = useRef<
@@ -15440,10 +15448,6 @@ function DunaApp() {
               initialDurationMinutes={courtBookingRequest?.durationMinutes}
               initialIntent={courtBookingRequest?.intent}
               onClose={() => setCourtBookingRequest(undefined)}
-              onHostReady={(seed) => {
-                setCourtBookingRequest(undefined);
-                setTimeout(() => setOrganizationHostSeed(seed), 280);
-              }}
               onOpenMatch={(matchId, matchSlug) => {
                 const index = (runtime.dashboard?.events ?? []).findIndex(
                   (event) => event.id === matchId,
@@ -15495,10 +15499,6 @@ function DunaApp() {
             />
             <VenueBookingModal
               onClose={() => setOrganizationVenueId(undefined)}
-              onHostReady={(seed) => {
-                setOrganizationVenueId(undefined);
-                setTimeout(() => setOrganizationHostSeed(seed), 280);
-              }}
               onOpenMatch={(matchId, matchSlug) => {
                 const index = (runtime.dashboard?.events ?? []).findIndex(
                   (event) => event.id === matchId,
@@ -15518,16 +15518,14 @@ function DunaApp() {
               visible={Boolean(organizationVenueId)}
             />
             <PickupModal
-              initialCourtBooking={organizationHostSeed}
               onClose={() => {
                 setCreateMatchOpen(false);
-                setOrganizationHostSeed(undefined);
               }}
               onReserveCourtVenue={(request) => {
                 setCreateMatchOpen(false);
                 setCourtBookingRequest(request);
               }}
-              visible={Boolean(organizationHostSeed) || createMatchOpen}
+              visible={createMatchOpen}
             />
             <CoachProfileModal
               coach={organizationCoach}
@@ -15578,6 +15576,7 @@ export default function App() {
 
 function createStyles() {
   return StyleSheet.create({
+    confirmationRoster: { alignSelf: "stretch", width: "100%" },
     safe: { backgroundColor: colors.canvas, flex: 1 },
     app: { backgroundColor: colors.canvas, flex: 1 },
     animatedScreen: { flex: 1 },
@@ -16728,17 +16727,22 @@ function createStyles() {
       marginTop: 3,
     },
     bookingImportContact: {
-      alignSelf: "flex-start",
-      marginTop: 12,
-      minHeight: 34,
+      alignItems: "center",
+      alignSelf: "stretch",
+      borderColor: rgba(colors.accentRgb, 0.28),
+      borderRadius: 16,
+      borderWidth: 1,
       justifyContent: "center",
+      marginTop: 12,
+      minHeight: 52,
+      paddingHorizontal: 14,
     },
     bookingManualInvite: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 6,
+      alignItems: "stretch",
+      gap: 9,
       marginTop: 13,
     },
+    bookingGuestInput: { width: "100%" },
     bookingAddButton: {
       alignItems: "center",
       backgroundColor: colors.aqua,
@@ -16746,15 +16750,38 @@ function createStyles() {
       justifyContent: "center",
       minHeight: 46,
       paddingHorizontal: 13,
+      width: "100%",
     },
     bookingParticipant: {
       alignItems: "center",
-      borderTopColor: rgba(colors.overlayRgb, 0.07),
-      borderTopWidth: 1,
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.09),
+      borderRadius: 18,
+      borderWidth: 1,
       flexDirection: "row",
-      gap: 9,
-      marginTop: 10,
-      paddingTop: 10,
+      gap: 11,
+      marginTop: 9,
+      minHeight: 76,
+      padding: 12,
+    },
+    bookingPlayerAvatarTarget: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 50,
+      minWidth: 50,
+    },
+    bookingRemovePlayer: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 48,
+    },
+    bookingRosterLabel: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1,
+      marginTop: 16,
     },
     bookingPolicyScroll: {
       backgroundColor: rgba(colors.overlayRgb, 0.025),

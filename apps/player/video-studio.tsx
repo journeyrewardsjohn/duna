@@ -61,6 +61,7 @@ import {
   MobilePlacePicker,
   type MobilePlaceSelection,
 } from "./components/mobile-place-picker";
+import { PlayerAvatar, PlayerTouchRow } from "./components/player-identity";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
@@ -2315,12 +2316,6 @@ function QuickRecordingMatchSetup({
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const quickPlayerName = (participant: QuickMatchParticipant | undefined) =>
-    participant?.kind === "duna"
-      ? participant.person.displayName
-      : participant
-        ? `${participant.givenName} ${participant.familyName}`
-        : undefined;
   const rosterComplete = players.every(Boolean);
 
   const create = async () => {
@@ -2542,42 +2537,73 @@ function QuickRecordingMatchSetup({
             markers will all share this match timeline.
           </Text>
         </View>
-        <View style={styles.quickMatchTeams}>
-          <View style={styles.quickMatchTeamCard}>
-            <Text style={styles.quickMatchTeamLabel}>YOUR TEAM</Text>
-            <Text style={styles.quickMatchPlayer}>{host.displayName}</Text>
-            <Text style={styles.quickMatchPlayer}>
-              {quickPlayerName(players[0]) ?? "Choose your partner"}
-            </Text>
-          </View>
-          <View style={styles.quickMatchTeamCard}>
-            <Text style={styles.quickMatchTeamLabel}>OPPONENTS</Text>
-            <Text style={styles.quickMatchPlayer}>
-              {quickPlayerName(players[1]) ?? "Choose opponent"}
-            </Text>
-            <Text style={styles.quickMatchPlayer}>
-              {quickPlayerName(players[2]) ?? "Choose opponent"}
-            </Text>
-          </View>
-        </View>
-        {["Partner", "Opponent 1", "Opponent 2"].map((label, index) => (
-          <Pressable
-            key={label}
-            onPress={() => setPickerTarget(index)}
-            style={styles.quickMatchChoose}
-          >
+        <View style={styles.quickMatchRoster}>
+          <Text style={styles.quickMatchTeamLabel}>YOUR TEAM</Text>
+          <View style={styles.quickMatchHostRow}>
+            <PlayerAvatar
+              palette={importedPlayerPalette}
+              person={host}
+              size={54}
+            />
             <View style={styles.flex}>
-              <Text style={styles.quickMatchChooseText}>{label}</Text>
-              <Text style={styles.quickMatchPlayer}>
-                {quickPlayerName(players[index]) ??
-                  "Choose a Duna player or add a guest"}
-              </Text>
+              <Text style={styles.quickMatchHostName}>{host.displayName}</Text>
+              <Text style={styles.quickMatchHostMeta}>Recording host</Text>
             </View>
-            <Text style={styles.textAction}>
-              {players[index] ? "Change" : "Add"}
-            </Text>
-          </Pressable>
-        ))}
+            <View style={styles.quickMatchYouPill}>
+              <Text style={styles.quickMatchYouText}>You</Text>
+            </View>
+          </View>
+          <PlayerTouchRow
+            actionLabel={players[0] ? "Change" : "Add"}
+            detail={
+              players[0]?.kind === "duna"
+                ? players[0].person.homeMarket
+                : players[0]
+                  ? "Guest player"
+                  : "Choose a Duna player or add a guest"
+            }
+            displayName={
+              players[0]?.kind === "provisional"
+                ? `${players[0].givenName} ${players[0].familyName}`
+                : undefined
+            }
+            label="Choose your partner"
+            onPress={() => setPickerTarget(0)}
+            palette={importedPlayerPalette}
+            person={players[0]?.kind === "duna" ? players[0].person : undefined}
+            selected={Boolean(players[0])}
+          />
+
+          <Text style={styles.quickMatchTeamLabel}>OPPONENTS</Text>
+          {[1, 2].map((index) => {
+            const participant = players[index];
+            return (
+              <PlayerTouchRow
+                actionLabel={participant ? "Change" : "Add"}
+                detail={
+                  participant?.kind === "duna"
+                    ? participant.person.homeMarket
+                    : participant
+                      ? "Guest player"
+                      : "Choose a Duna player or add a guest"
+                }
+                displayName={
+                  participant?.kind === "provisional"
+                    ? `${participant.givenName} ${participant.familyName}`
+                    : undefined
+                }
+                key={index}
+                label={`Choose opponent ${index}`}
+                onPress={() => setPickerTarget(index)}
+                palette={importedPlayerPalette}
+                person={
+                  participant?.kind === "duna" ? participant.person : undefined
+                }
+                selected={Boolean(participant)}
+              />
+            );
+          })}
+        </View>
         <View style={styles.quickMatchConsent}>
           <View style={styles.flex}>
             <Text style={styles.quickMatchConsentTitle}>
@@ -8024,36 +8050,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   quickMatchContent: { gap: 20, padding: 20, paddingBottom: 120 },
-  quickMatchTeams: { flexDirection: "row", gap: 10 },
-  quickMatchTeamCard: {
+  quickMatchRoster: { gap: 12 },
+  quickMatchHostRow: {
+    alignItems: "center",
     backgroundColor: palette.depth,
     borderColor: palette.line,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    flex: 1,
-    gap: 7,
-    minHeight: 122,
-    padding: 14,
+    flexDirection: "row",
+    gap: 13,
+    minHeight: 82,
+    padding: 13,
   },
+  quickMatchHostName: { color: palette.ink, fontSize: 16, fontWeight: "800" },
+  quickMatchHostMeta: { color: palette.muted, fontSize: 13, marginTop: 3 },
+  quickMatchYouPill: {
+    alignItems: "center",
+    backgroundColor: palette.aquaSoft,
+    borderRadius: 18,
+    justifyContent: "center",
+    minHeight: 42,
+    minWidth: 70,
+    paddingHorizontal: 13,
+  },
+  quickMatchYouText: { color: palette.aqua, fontSize: 13, fontWeight: "800" },
   quickMatchTeamLabel: {
     color: palette.aqua,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.9,
-  },
-  quickMatchPlayer: { color: palette.ink, fontSize: 14, fontWeight: "800" },
-  quickMatchChoose: {
-    alignItems: "center",
-    borderColor: palette.aqua,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 50,
-  },
-  quickMatchChooseText: {
-    color: palette.aqua,
-    fontSize: 14,
-    fontWeight: "900",
   },
   quickMatchConsent: {
     alignItems: "center",
