@@ -4,6 +4,7 @@ import { scrapeHtml, scrapeJson } from "./http";
 import { hashValue, normalizePersonName } from "./normalize";
 import {
   SandDataUpstreamError,
+  type ExternalMatchParticipant,
   type ExternalMatchRecord,
   type ExternalPlayerRecord,
   type ProfessionalEventRecord,
@@ -31,12 +32,19 @@ const rosterSchema = standingSchema.extend({
   playerNames: z.array(z.string().trim().min(1)).max(6),
 });
 
+const matchPlayerSchema = z.object({
+  externalPersonId: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+});
+
 const avpMatchSchema = z.object({
   dateText: z.string(),
   venue: z.string(),
   gender: z.enum(["men", "women"]),
   teamA: z.string().trim().min(1),
   teamB: z.string().trim().min(1),
+  teamAPlayers: z.array(matchPlayerSchema).max(2).optional(),
+  teamBPlayers: z.array(matchPlayerSchema).max(2).optional(),
   sets: z.array(
     z.object({
       a: z.number().int().nonnegative(),
@@ -580,6 +588,22 @@ function feedTeamName(
   return surnames || "TBD";
 }
 
+function feedTeamPlayers(
+  team: AvpApiMatch["TeamA"] | AvpApiMatch["TeamB"],
+): z.infer<typeof matchPlayerSchema>[] {
+  return [team?.Captain, team?.Player].flatMap((player) => {
+    if (!player || player.PlayerId === null || player.PlayerId === undefined) {
+      return [];
+    }
+    const name = [feedText(player.FirstName), feedText(player.LastName)]
+      .filter(Boolean)
+      .join(" ");
+    return name
+      ? [{ externalPersonId: `avp-player:${player.PlayerId}`, name }]
+      : [];
+  });
+}
+
 function feedMatchGender(
   match: AvpApiMatch,
   competition: Omit<AvpLeagueCompetition, "matches">,
@@ -661,12 +685,16 @@ export function enrichAvpLeagueSnapshotWithFeed(
             const schedule = feedSchedule(
               match.MatchSchedule?.ScheduleTime ?? match.StartTime,
             );
+            const teamAPlayers = feedTeamPlayers(match.TeamA);
+            const teamBPlayers = feedTeamPlayers(match.TeamB);
             return {
               dateText: avpDateText(schedule.playedOn),
               venue: feedText(match.MatchSchedule?.CourtName) ?? "",
               gender: feedMatchGender(match, descriptor),
               teamA: feedTeamName(match.TeamA),
               teamB: feedTeamName(match.TeamB),
+              ...(teamAPlayers.length > 0 ? { teamAPlayers } : {}),
+              ...(teamBPlayers.length > 0 ? { teamBPlayers } : {}),
               sets: match.Sets.map((set) => ({ a: set.A, b: set.B })),
               winnerSide:
                 match.Winner === 1
@@ -748,6 +776,54 @@ function eventStatus(
 
 function rosterKey(gender: "men" | "women", teamName: string): string {
   return `${gender}:${slug(teamName)}`;
+}
+
+export function avpLeagueTeamParticipants(input: {
+  readonly season: number;
+  readonly gender: "men" | "women";
+  readonly teamName: string;
+  readonly side: "A" | "B";
+  readonly matchPlayers?: readonly z.infer<typeof matchPlayerSchema>[];
+  readonly roster?: AvpRoster;
+}): {
+  readonly players: readonly ExternalPlayerRecord[];
+  readonly participants: readonly ExternalMatchParticipant[];
+} {
+  const explicitPlayers = input.matchPlayers ?? [];
+  const identities =
+    explicitPlayers.length > 0
+      ? explicitPlayers
+      : (input.roster?.playerNames ?? []).slice(0, 2).map((name) => ({
+          externalPersonId: avpExternalPlayerId({
+            season: input.season,
+            teamName: input.teamName,
+            gender: input.gender,
+            displayName: name,
+          }),
+          name,
+        }));
+  const players = identities.map((identity) => ({
+    externalPersonId: identity.externalPersonId,
+    displayName: identity.name,
+    genderCategory: input.gender,
+    isProfessional: true,
+    raw: {
+      source: "avp-league",
+      season: input.season,
+      teamName: input.teamName,
+      teamExternalId: slug(input.teamName),
+      gender: input.gender,
+      role: explicitPlayers.length > 0 ? "match-lineup" : "starter",
+    },
+  }));
+  return {
+    players,
+    participants: players.map((player) => ({
+      externalPersonId: player.externalPersonId,
+      name: player.displayName,
+      side: input.side,
+    })),
+  };
 }
 
 function competitionEventName(competition: AvpLeagueCompetition): string {
@@ -899,27 +975,28 @@ export async function importAvpLeague(
     competition.matches.forEach((match, index) => {
       const teamA = rosterByTeam.get(rosterKey(match.gender, match.teamA));
       const teamB = rosterByTeam.get(rosterKey(match.gender, match.teamB));
+      const teamALineup = avpLeagueTeamParticipants({
+        season: snapshot.season,
+        gender: match.gender,
+        teamName: match.teamA,
+        side: "A",
+        matchPlayers: match.teamAPlayers,
+        roster: teamA,
+      });
+      const teamBLineup = avpLeagueTeamParticipants({
+        season: snapshot.season,
+        gender: match.gender,
+        teamName: match.teamB,
+        side: "B",
+        matchPlayers: match.teamBPlayers,
+        roster: teamB,
+      });
+      for (const player of [...teamALineup.players, ...teamBLineup.players]) {
+        players.set(player.externalPersonId, player);
+      }
       const participants = [
-        ...(teamA?.playerNames ?? []).slice(0, 2).map((name) => ({
-          externalPersonId: avpExternalPlayerId({
-            season: snapshot.season,
-            teamName: match.teamA,
-            gender: match.gender,
-            displayName: name,
-          }),
-          name,
-          side: "A" as const,
-        })),
-        ...(teamB?.playerNames ?? []).slice(0, 2).map((name) => ({
-          externalPersonId: avpExternalPlayerId({
-            season: snapshot.season,
-            teamName: match.teamB,
-            gender: match.gender,
-            displayName: name,
-          }),
-          name,
-          side: "B" as const,
-        })),
+        ...teamALineup.participants,
+        ...teamBLineup.participants,
       ];
       const playedOn = dateFromAvp(
         match.playedOn ?? match.dateText,

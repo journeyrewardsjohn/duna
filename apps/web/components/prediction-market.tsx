@@ -36,6 +36,7 @@ import {
   buildViewerPredictionSummary,
   formatPredictionAmount,
 } from "@/lib/prediction-position";
+import { tradablePredictionPriceBps } from "@/lib/prediction-market-pricing";
 
 type OrderTarget =
   | {
@@ -652,7 +653,7 @@ export function PredictionOrderTicket({
   const currentPriceBps =
     side === "yes" ? market.yesPriceBps : market.noPriceBps;
   const liquidityQuote = predictionMarketLiquidityQuote({
-    currentYesPriceBps: market.yesPriceBps,
+    currentYesPriceBps: tradablePredictionPriceBps(market.yesPriceBps),
     side,
     credits,
   });
