@@ -729,6 +729,7 @@ import {
   loadPredictionWallet,
   placePredictionOrder,
   placePredictionSellOrder,
+  predictionMarketLabelsMatchDefinition,
   PredictionMarketError,
   recordManualProMatchResult,
   setPredictionMarketTradingStatus,
@@ -2286,6 +2287,14 @@ const publicRouter = router({
         },
       };
       const storedMarket = await ensurePredictionMarket(definition);
+      if (
+        !predictionMarketLabelsMatchDefinition({
+          market: storedMarket,
+          definition,
+        })
+      ) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
       if (definition.resolvedSide) {
         await settlePredictionMarket({
           marketId: storedMarket.id,
@@ -2368,6 +2377,14 @@ const publicRouter = router({
             },
           };
           const storedMarket = await ensurePredictionMarket(definition);
+          if (
+            !predictionMarketLabelsMatchDefinition({
+              market: storedMarket,
+              definition,
+            })
+          ) {
+            return undefined;
+          }
           if (definition.resolvedSide) {
             await settlePredictionMarket({
               marketId: storedMarket.id,

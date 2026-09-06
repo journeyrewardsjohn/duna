@@ -137,6 +137,46 @@ export interface PredictionMarketRuleDefinition {
   readonly publicNote?: string;
 }
 
+function predictionParticipantLabelKey(label: string): string {
+  const suffixes = new Set(["jr", "sr", "ii", "iii", "iv"]);
+  const names = label.split(/\s*\/\s*/);
+  const tokensByName = names.map((name) => {
+    return (
+      name
+        .normalize("NFKD")
+        .replaceAll(/\p{M}/gu, "")
+        .toLocaleLowerCase("en-US")
+        .match(/[\p{L}\p{N}]+/gu) ?? []
+    );
+  });
+  if (tokensByName.length === 1) return tokensByName[0]?.join("|") ?? "";
+  return tokensByName
+    .map((tokens) => {
+      const last = tokens.at(-1);
+      return last && suffixes.has(last) && tokens.length > 1
+        ? (tokens.at(-2) ?? "")
+        : (last ?? "");
+    })
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+// Participant changes alter the meaning of a market side. Closed market rules
+// stay immutable, so callers must withhold a stale contract instead of
+// displaying or settling it against a different pairing.
+export function predictionMarketLabelsMatchDefinition(input: {
+  readonly market: Pick<PredictionMarketDefinition, "yesLabel" | "noLabel">;
+  readonly definition: Pick<PredictionMarketDefinition, "yesLabel" | "noLabel">;
+}): boolean {
+  return (
+    predictionParticipantLabelKey(input.market.yesLabel) ===
+      predictionParticipantLabelKey(input.definition.yesLabel) &&
+    predictionParticipantLabelKey(input.market.noLabel) ===
+      predictionParticipantLabelKey(input.definition.noLabel)
+  );
+}
+
 export function defaultPredictionMarketRules(
   definition: Pick<
     PredictionMarketDefinition,
@@ -2591,6 +2631,14 @@ export async function loadPredictionDiscovery(input?: {
     selected.map(async (candidate) => {
       try {
         const stored = await ensurePredictionMarket(candidate.definition);
+        if (
+          !predictionMarketLabelsMatchDefinition({
+            market: stored,
+            definition: candidate.definition,
+          })
+        ) {
+          return undefined;
+        }
         const market = await loadPredictionMarket({
           subjectType: candidate.definition.subjectType,
           subjectId: candidate.definition.subjectId,

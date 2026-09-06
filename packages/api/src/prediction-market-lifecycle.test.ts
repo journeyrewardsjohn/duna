@@ -3,9 +3,43 @@ import {
   defaultPredictionMarketRules,
   isDeterminedMatchStatus,
   nextPredictionMarketLocksAt,
+  predictionMarketLabelsMatchDefinition,
 } from "./prediction-market";
 
 describe("prediction market lifecycle", () => {
+  it("accepts reordered full names but rejects a changed partner", () => {
+    expect(
+      predictionMarketLabelsMatchDefinition({
+        market: {
+          yesLabel: "Crabb / Benesh",
+          noLabel: "Schalk / Shaw",
+        },
+        definition: {
+          yesLabel: "Andy Benesh / Taylor Crabb",
+          noLabel: "Chaim Schalk / James Shaw",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      predictionMarketLabelsMatchDefinition({
+        market: {
+          yesLabel: "Crabb / Benesh",
+          noLabel: "Schalk / Brunner",
+        },
+        definition: {
+          yesLabel: "Andy Benesh / Taylor Crabb",
+          noLabel: "Chaim Schalk / James Shaw",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      predictionMarketLabelsMatchDefinition({
+        market: { yesLabel: "New York Nitro", noLabel: "Austin Aces" },
+        definition: { yesLabel: "Miami Nitro", noLabel: "Austin Aces" },
+      }),
+    ).toBe(false);
+  });
+
   it.each(["verified", "complete", "forfeit"])(
     "treats %s as a determined match result",
     (status) => {
