@@ -695,6 +695,32 @@ export function enrichAvpLeagueSnapshotWithFeed(
   return snapshotSchema.parse({ ...snapshot, competitions });
 }
 
+export function addAvpChampionshipRoundFallbacks(
+  snapshot: AvpLeagueSnapshot,
+): AvpLeagueSnapshot {
+  return snapshotSchema.parse({
+    ...snapshot,
+    competitions: snapshot.competitions.map((competition) => {
+      if (
+        competition.kind !== "championship" ||
+        competition.matches.length !== 5
+      ) {
+        return competition;
+      }
+      return {
+        ...competition,
+        matches: competition.matches.map((match, index) => ({
+          ...match,
+          roundLabel:
+            match.roundLabel ??
+            (index < 2 ? "Quarterfinals" : index < 4 ? "Semifinals" : "Finals"),
+          sourceMatchNo: match.sourceMatchNo ?? index + 1,
+        })),
+      };
+    }),
+  });
+}
+
 function dateFromAvp(value: string, season: number): string | undefined {
   const isoDate = value.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
   if (isoDate) return isoDate;
@@ -801,7 +827,11 @@ export async function importAvpLeague(
       const feed = await scrapeJson<unknown>(
         "avp-league",
         `${avpLeagueFeedUrl}/${sourceEventId}?noStats=1`,
-        { timeoutMs: 90_000, maxAgeMs: liveAvpMaxAgeMs },
+        {
+          timeoutMs: 90_000,
+          maxAgeMs: liveAvpMaxAgeMs,
+          preferNative: true,
+        },
       );
       snapshot = enrichAvpLeagueSnapshotWithFeed(snapshot, feed);
       structuredFeedUsed = true;
@@ -819,6 +849,7 @@ export async function importAvpLeague(
     structuredFeedFallbackReason =
       "The official AVP League page did not expose its event identifier.";
   }
+  snapshot = addAvpChampionshipRoundFallbacks(snapshot);
   const players = new Map<string, ExternalPlayerRecord>();
   const rosterByTeam = new Map<string, AvpRoster>();
   for (const roster of snapshot.rosters) {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  addAvpChampionshipRoundFallbacks,
   avpLeagueEventIdentity,
   enrichAvpLeagueSnapshotWithFeed,
   normalizeAvpSnapshotWithGateway,
@@ -161,6 +162,47 @@ describe("AVP League rendered-page parsing", () => {
           }),
         ],
       }),
+    ]);
+  });
+
+  it("keeps a usable five-match championship bracket when the feed falls back", () => {
+    const matches = Array.from({ length: 5 }, (_, index) => ({
+      dateText: index < 3 ? "Sat, 9/5" : "Sun, 9/6",
+      venue: "Oak Street Beach",
+      gender: "men" as const,
+      teamA: `Team ${index * 2 + 1}`,
+      teamB: `Team ${index * 2 + 2}`,
+      sets: [],
+      winnerSide: "" as const,
+    }));
+    const snapshot = addAvpChampionshipRoundFallbacks({
+      season: 2026,
+      cityStandings: [],
+      rosters: [],
+      competitions: [
+        {
+          key: "championship-men",
+          label: "League Men's Championships - Chicago, IL",
+          kind: "championship",
+          weekNumber: null,
+          locationLabel: "Chicago, IL",
+          genderCategory: "men",
+          matches,
+        },
+      ],
+    });
+
+    expect(
+      snapshot.competitions[0]?.matches.map((match) => [
+        match.sourceMatchNo,
+        match.roundLabel,
+      ]),
+    ).toEqual([
+      [1, "Quarterfinals"],
+      [2, "Quarterfinals"],
+      [3, "Semifinals"],
+      [4, "Semifinals"],
+      [5, "Finals"],
     ]);
   });
 

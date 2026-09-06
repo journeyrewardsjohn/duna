@@ -15,6 +15,12 @@ const nextRequestAt = new Map<ManagedScraperSource, number>();
 const requestTimes = new Map<ManagedScraperSource, number[]>();
 let firecrawl: Firecrawl | undefined;
 
+export function resetScrapeRateLimitsForTests(): void {
+  nextRequestAt.clear();
+  requestTimes.clear();
+  firecrawl = undefined;
+}
+
 function firecrawlKey(): string | undefined {
   return (
     process.env.FIRECRAWL_API_KEY?.trim() ||
@@ -404,6 +410,7 @@ export async function scrapeJson<T>(
     readonly headers?: Readonly<Record<string, string>>;
     readonly timeoutMs?: number;
     readonly maxAgeMs?: number;
+    readonly preferNative?: boolean;
   } = {},
 ): Promise<T> {
   const control = await assertScraperEnabled(source);
@@ -411,6 +418,7 @@ export async function scrapeJson<T>(
     options.body === undefined && options.method !== "POST";
   if (
     supportsFirecrawl &&
+    !options.preferNative &&
     resolvedScrapeEngine(source, control) === "firecrawl"
   ) {
     try {
