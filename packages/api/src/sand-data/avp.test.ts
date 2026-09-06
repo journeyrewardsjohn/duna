@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  addAvpChampionshipRoundFallbacks,
   avpLeagueEventIdentity,
+  avpLeagueTeamParticipants,
   enrichAvpLeagueSnapshotWithFeed,
   normalizeAvpSnapshotWithGateway,
   parseAvpLeagueEventId,
@@ -123,8 +125,18 @@ describe("AVP League rendered-page parsing", () => {
         Round: "Quaterfinals",
         TeamA: {
           Name: "New York Nitro",
-          Captain: { PlayerId: 1, LastName: "Crabb", Gender: "M" },
-          Player: { PlayerId: 2, LastName: "Benesh", Gender: "M" },
+          Captain: {
+            PlayerId: 1,
+            FirstName: "Chaim",
+            LastName: "Schalk",
+            Gender: "M",
+          },
+          Player: {
+            PlayerId: 2,
+            FirstName: "James",
+            LastName: "Shaw",
+            Gender: "M",
+          },
         },
         TeamB: {
           Name: "Austin Aces",
@@ -156,11 +168,93 @@ describe("AVP League rendered-page parsing", () => {
             roundLabel: "Quaterfinals",
             sourceCompetitionId: 162,
             sourceMatchNo: 1,
+            teamAPlayers: [
+              { externalPersonId: "avp-player:1", name: "Chaim Schalk" },
+              { externalPersonId: "avp-player:2", name: "James Shaw" },
+            ],
             timezone: "America/Chicago",
             winnerSide: "A",
           }),
         ],
       }),
+    ]);
+  });
+
+  it("prefers the official match lineup over a season-roster pairing", () => {
+    const lineup = avpLeagueTeamParticipants({
+      season: 2026,
+      gender: "men",
+      teamName: "New York Nitro",
+      side: "A",
+      matchPlayers: [
+        { externalPersonId: "avp-player:1018", name: "Chaim Schalk" },
+        { externalPersonId: "avp-player:1952", name: "James Shaw" },
+      ],
+      roster: {
+        rank: 4,
+        teamName: "New York Nitro",
+        matchesPlayed: 10,
+        wins: 5,
+        losses: 5,
+        matchPoints: 16,
+        winPercentage: 50,
+        gender: "men",
+        playerNames: ["Schalk", "Brunner"],
+      },
+    });
+
+    expect(lineup.participants).toEqual([
+      {
+        externalPersonId: "avp-player:1018",
+        name: "Chaim Schalk",
+        side: "A",
+      },
+      {
+        externalPersonId: "avp-player:1952",
+        name: "James Shaw",
+        side: "A",
+      },
+    ]);
+  });
+
+  it("keeps a usable five-match championship bracket when the feed falls back", () => {
+    const matches = Array.from({ length: 5 }, (_, index) => ({
+      dateText: index < 3 ? "Sat, 9/5" : "Sun, 9/6",
+      venue: "Oak Street Beach",
+      gender: "men" as const,
+      teamA: `Team ${index * 2 + 1}`,
+      teamB: `Team ${index * 2 + 2}`,
+      sets: [],
+      winnerSide: "" as const,
+    }));
+    const snapshot = addAvpChampionshipRoundFallbacks({
+      season: 2026,
+      cityStandings: [],
+      rosters: [],
+      competitions: [
+        {
+          key: "championship-men",
+          label: "League Men's Championships - Chicago, IL",
+          kind: "championship",
+          weekNumber: null,
+          locationLabel: "Chicago, IL",
+          genderCategory: "men",
+          matches,
+        },
+      ],
+    });
+
+    expect(
+      snapshot.competitions[0]?.matches.map((match) => [
+        match.sourceMatchNo,
+        match.roundLabel,
+      ]),
+    ).toEqual([
+      [1, "Quarterfinals"],
+      [2, "Quarterfinals"],
+      [3, "Semifinals"],
+      [4, "Semifinals"],
+      [5, "Finals"],
     ]);
   });
 

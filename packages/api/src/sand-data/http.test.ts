@@ -16,8 +16,10 @@ import {
 import {
   firecrawlScrapeOptions,
   parseFirecrawlJsonDocument,
+  resetScrapeRateLimitsForTests,
   resolvedScrapeEngine,
   scrapeHtml,
+  scrapeJson,
   scrapeEngine,
 } from "./http";
 
@@ -40,8 +42,10 @@ describe("sand data scrape engine routing", () => {
   const originalFirecrawlKey = process.env.FIRECRAWL_API_KEY;
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     firecrawlScrapeMock.mockReset();
+    resetScrapeRateLimitsForTests();
     resetAdaptiveTransportLearningForTests();
     if (originalFirecrawlKey === undefined) {
       delete process.env.FIRECRAWL_API_KEY;
@@ -154,6 +158,45 @@ describe("sand data scrape engine routing", () => {
 
     expect(resolvedScrapeEngine("fivb-12ndr", autoFivb)).toBe("native");
     expect(resolvedScrapeEngine("avp-league", renderedAvp)).toBe("firecrawl");
+  });
+
+  it("uses native JSON first for a rendered source when requested", async () => {
+    process.env.FIRECRAWL_API_KEY = "configured-in-production";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [{ MatchNo: 1 }],
+      }),
+    );
+
+    await expect(
+      scrapeJson("avp-league", "https://example.com/feed.json", {
+        preferNative: true,
+      }),
+    ).resolves.toEqual([{ MatchNo: 1 }]);
+    expect(firecrawlScrapeMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Firecrawl when preferred native JSON is unavailable", async () => {
+    vi.useFakeTimers();
+    process.env.FIRECRAWL_API_KEY = "configured-in-production";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404 }),
+    );
+    firecrawlScrapeMock.mockResolvedValue({
+      rawHtml: '<pre>[{"MatchNo":2}]</pre>',
+      metadata: { statusCode: 200 },
+    });
+
+    const request = scrapeJson("avp-league", "https://example.com/feed.json", {
+      preferNative: true,
+    });
+    await vi.runAllTimersAsync();
+
+    await expect(request).resolves.toEqual([{ MatchNo: 2 }]);
+    expect(firecrawlScrapeMock).toHaveBeenCalledOnce();
   });
 
   it("builds a rendered Firecrawl request with valid change tracking", () => {
