@@ -217,6 +217,73 @@ describe("AVP League rendered-page parsing", () => {
     ]);
   });
 
+  it("uses the latest complete official lineup in league standings", () => {
+    const snapshot = {
+      season: 2026,
+      cityStandings: [],
+      rosters: [
+        {
+          rank: 4,
+          teamName: "New York Nitro",
+          matchesPlayed: 11,
+          wins: 5,
+          losses: 6,
+          matchPoints: 16,
+          winPercentage: 45.45,
+          gender: "men" as const,
+          playerNames: ["Schalk", "Brunner"],
+        },
+      ],
+      competitions: [],
+    };
+    const team = (partner: "Brunner" | "Shaw") => ({
+      Name: "New York Nitro",
+      Captain: {
+        PlayerId: 1018,
+        FirstName: "Chaim",
+        LastName: "Schalk",
+        Gender: "M",
+      },
+      Player: {
+        PlayerId: partner === "Shaw" ? 1952 : 1007,
+        FirstName: partner === "Shaw" ? "James" : "Theo",
+        LastName: partner,
+        Gender: "M",
+      },
+    });
+    const opponent = {
+      Name: "Austin Aces",
+      Captain: { PlayerId: 1112, LastName: "Field", Gender: "M" },
+      Player: { PlayerId: 1951, LastName: "Wilcox", Gender: "M" },
+    };
+    const enriched = enrichAvpLeagueSnapshotWithFeed(snapshot, [
+      {
+        EventId: 51,
+        EventName: "2026 AVP League Season",
+        CompetitionId: 162,
+        CompetitionName: "League Men's Championships - Chicago, IL",
+        MatchNo: 1,
+        TeamA: team("Shaw"),
+        TeamB: opponent,
+        Sets: [],
+        MatchSchedule: { ScheduleTime: "2026-09-05T11:00:00" },
+      },
+      {
+        EventId: 51,
+        EventName: "2026 AVP League Season",
+        CompetitionId: 154,
+        CompetitionName: "Week 1 - Belmar, NJ",
+        MatchNo: 4,
+        TeamA: team("Brunner"),
+        TeamB: opponent,
+        Sets: [],
+        MatchSchedule: { ScheduleTime: "2026-05-30T16:00:00" },
+      },
+    ]);
+
+    expect(enriched.rosters[0]?.playerNames).toEqual(["Schalk", "Shaw"]);
+  });
+
   it("keeps a usable five-match championship bracket when the feed falls back", () => {
     const matches = Array.from({ length: 5 }, (_, index) => ({
       dateText: index < 3 ? "Sat, 9/5" : "Sun, 9/6",

@@ -604,6 +604,16 @@ function feedTeamPlayers(
   });
 }
 
+function feedRosterPlayerNames(
+  team: AvpApiMatch["TeamA"] | AvpApiMatch["TeamB"],
+): readonly string[] {
+  const names = [team?.Captain, team?.Player].flatMap((player) => {
+    const name = feedText(player?.LastName);
+    return name ? [name] : [];
+  });
+  return names.length === 2 ? names : [];
+}
+
 function feedMatchGender(
   match: AvpApiMatch,
   competition: Omit<AvpLeagueCompetition, "matches">,
@@ -666,6 +676,10 @@ export function enrichAvpLeagueSnapshotWithFeed(
 ): AvpLeagueSnapshot {
   const matches = parseAvpApiMatches(value);
   if (matches.length === 0) return snapshot;
+  const latestRosterByTeam = new Map<
+    string,
+    { readonly sortKey: string; readonly playerNames: readonly string[] }
+  >();
   const grouped = new Map<number, AvpApiMatch[]>();
   for (const match of matches) {
     const group = grouped.get(match.CompetitionId) ?? [];
@@ -677,6 +691,27 @@ export function enrichAvpLeagueSnapshotWithFeed(
       const label = competitionMatches[0]?.CompetitionName ?? "Competition";
       const descriptor = competitionDescriptor(label, index);
       const timezone = competitionTimezone(descriptor.locationLabel);
+      for (const match of competitionMatches) {
+        const schedule = feedSchedule(
+          match.MatchSchedule?.ScheduleTime ?? match.StartTime,
+        );
+        const gender = feedMatchGender(match, descriptor);
+        const sortKey = [
+          schedule.playedOn ?? "0000-00-00",
+          schedule.timeLabel ?? "00:00",
+          String(sourceCompetitionId).padStart(8, "0"),
+          String(match.MatchNo).padStart(8, "0"),
+        ].join("|");
+        for (const team of [match.TeamA, match.TeamB]) {
+          const playerNames = feedRosterPlayerNames(team);
+          if (playerNames.length !== 2) continue;
+          const key = rosterKey(gender, feedTeamName(team));
+          const current = latestRosterByTeam.get(key);
+          if (!current || current.sortKey <= sortKey) {
+            latestRosterByTeam.set(key, { sortKey, playerNames });
+          }
+        }
+      }
       return {
         ...descriptor,
         matches: competitionMatches
@@ -720,7 +755,15 @@ export function enrichAvpLeagueSnapshotWithFeed(
       } satisfies AvpLeagueCompetition;
     },
   );
-  return snapshotSchema.parse({ ...snapshot, competitions });
+  const rosters = snapshot.rosters.map((roster) => {
+    const latest = latestRosterByTeam.get(
+      rosterKey(roster.gender, roster.teamName),
+    );
+    return latest
+      ? { ...roster, playerNames: [...latest.playerNames] }
+      : roster;
+  });
+  return snapshotSchema.parse({ ...snapshot, rosters, competitions });
 }
 
 export function addAvpChampionshipRoundFallbacks(
