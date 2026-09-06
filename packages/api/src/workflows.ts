@@ -40,6 +40,7 @@ import {
   fulfillPaidCatalogOrder,
   releaseCatalogOrderInventory,
 } from "./catalog-checkout";
+import { ensureCourtBookingMatchForOrder } from "./database-repository";
 import { reconcileTeamEntryPayment } from "./checkout";
 import { reconcilePaidOrderDivisionSelections } from "./event-operations-service";
 import {
@@ -1523,6 +1524,11 @@ async function processStripeWorkflow(
         ${eventPayload.id ?? webhook.providerEventId}::text
       )
     `);
+    await ensureCourtBookingMatchForOrder({
+      orderId: order.id,
+      requestId: eventPayload.id ?? webhook.providerEventId,
+      now: occurredAt,
+    });
     const operatorCollectionId =
       typeof metadata?.dunaCollectionId === "string"
         ? metadata.dunaCollectionId

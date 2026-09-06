@@ -7245,6 +7245,7 @@ export const courtBookings = pgTable(
     fundedAmountMinor: integer("funded_amount_minor").notNull().default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("USD"),
     participantTarget: integer("participant_target").notNull().default(1),
+    createMatch: boolean("create_match").notNull().default(false),
     policySnapshot: jsonb("policy_snapshot")
       .notNull()
       .$type<{

@@ -1,5 +1,6 @@
 import {
   auditLog,
+  courtBookingParticipants,
   getDatabase,
   getTransactionalDatabase,
   matchAvailabilityPosts,
@@ -32,14 +33,17 @@ export interface PickupParticipantSummary {
   readonly personId: string;
   readonly displayName: string;
   readonly avatarUrl?: string;
-  readonly status: "confirmed" | "checked-in";
+  readonly status:
+    "invited" | "pending" | "confirmed" | "checked-in" | "waitlisted";
   readonly isHost: boolean;
+  readonly canReplace: boolean;
 }
 
 export interface PickupManagementSummary {
   readonly pickupSessionId: string;
   readonly status: "active" | "cancelled" | "completed";
   readonly approvalRequired: boolean;
+  readonly isCourtBookingMatch: boolean;
   readonly isHost: boolean;
   readonly isParticipant: boolean;
   readonly canEdit: boolean;
@@ -74,57 +78,72 @@ export async function loadPickupManagement(input: {
   const database = getDatabase();
   const pickup = await pickupOrThrow(input.pickupSessionId);
   const isHost = pickup.hostPersonId === input.actor.personId;
-  const [participantRows, ownRequest, requestRows] = await Promise.all([
-    database
-      .select({
-        id: pickupParticipants.id,
-        holdExpiresAt: pickupParticipants.holdExpiresAt,
-        personId: pickupParticipants.personId,
-        displayName: people.displayName,
-        avatarUrl: people.avatarUrl,
-        status: pickupParticipants.status,
-      })
-      .from(pickupParticipants)
-      .leftJoin(people, eq(pickupParticipants.personId, people.id))
-      .where(
-        and(
-          eq(pickupParticipants.pickupSessionId, pickup.id),
-          inArray(pickupParticipants.status, [
-            "confirmed",
-            "checked-in",
-            "invited",
-            "pending",
-            "waitlisted",
-          ]),
+  const [participantRows, ownRequest, requestRows, courtParticipantRows] =
+    await Promise.all([
+      database
+        .select({
+          id: pickupParticipants.id,
+          holdExpiresAt: pickupParticipants.holdExpiresAt,
+          personId: pickupParticipants.personId,
+          displayName: people.displayName,
+          avatarUrl: people.avatarUrl,
+          status: pickupParticipants.status,
+          orderId: pickupParticipants.orderId,
+        })
+        .from(pickupParticipants)
+        .leftJoin(people, eq(pickupParticipants.personId, people.id))
+        .where(
+          and(
+            eq(pickupParticipants.pickupSessionId, pickup.id),
+            inArray(pickupParticipants.status, [
+              "confirmed",
+              "checked-in",
+              "invited",
+              "pending",
+              "waitlisted",
+            ]),
+          ),
         ),
-      ),
-    database.query.pickupJoinRequests.findFirst({
-      where: and(
-        eq(pickupJoinRequests.pickupSessionId, pickup.id),
-        eq(pickupJoinRequests.personId, input.actor.personId),
-      ),
-    }),
-    isHost
-      ? database
-          .select({
-            id: pickupJoinRequests.id,
-            personId: pickupJoinRequests.personId,
-            displayName: people.displayName,
-            avatarUrl: people.avatarUrl,
-            note: pickupJoinRequests.note,
-            status: pickupJoinRequests.status,
-            createdAt: pickupJoinRequests.createdAt,
-          })
-          .from(pickupJoinRequests)
-          .innerJoin(people, eq(pickupJoinRequests.personId, people.id))
-          .where(
-            and(
-              eq(pickupJoinRequests.pickupSessionId, pickup.id),
-              eq(pickupJoinRequests.status, "requested"),
-            ),
-          )
-      : Promise.resolve([]),
-  ]);
+      database.query.pickupJoinRequests.findFirst({
+        where: and(
+          eq(pickupJoinRequests.pickupSessionId, pickup.id),
+          eq(pickupJoinRequests.personId, input.actor.personId),
+        ),
+      }),
+      isHost
+        ? database
+            .select({
+              id: pickupJoinRequests.id,
+              personId: pickupJoinRequests.personId,
+              displayName: people.displayName,
+              avatarUrl: people.avatarUrl,
+              note: pickupJoinRequests.note,
+              status: pickupJoinRequests.status,
+              createdAt: pickupJoinRequests.createdAt,
+            })
+            .from(pickupJoinRequests)
+            .innerJoin(people, eq(pickupJoinRequests.personId, people.id))
+            .where(
+              and(
+                eq(pickupJoinRequests.pickupSessionId, pickup.id),
+                eq(pickupJoinRequests.status, "requested"),
+              ),
+            )
+        : Promise.resolve([]),
+      pickup.courtBookingId
+        ? database
+            .select({
+              personId: courtBookingParticipants.personId,
+              invitedName: courtBookingParticipants.invitedName,
+              orderId: courtBookingParticipants.orderId,
+              shareAmountMinor: courtBookingParticipants.shareAmountMinor,
+            })
+            .from(courtBookingParticipants)
+            .where(
+              eq(courtBookingParticipants.bookingId, pickup.courtBookingId),
+            )
+        : Promise.resolve([]),
+    ]);
   const activeParticipants = participantRows.filter(
     (row) => row.personId !== pickup.hostPersonId,
   );
@@ -157,6 +176,7 @@ export async function loadPickupManagement(input: {
     pickupSessionId: pickup.id,
     status: pickup.status as PickupManagementSummary["status"],
     approvalRequired: pickup.approvalRequired,
+    isCourtBookingMatch: Boolean(pickup.courtBookingId),
     isHost,
     isParticipant,
     canEdit: isHost && isFutureActive,
@@ -177,20 +197,32 @@ export async function loadPickupManagement(input: {
       (row) => row.status === "invited",
     ).length,
     ownRequestStatus: ownRequest?.status as PickupRequestStatus | undefined,
-    participants: participantRows.flatMap((row) =>
-      row.status === "confirmed" || row.status === "checked-in"
-        ? [
-            {
-              id: row.id,
-              personId: row.personId,
-              displayName: row.displayName ?? "Duna player",
-              avatarUrl: row.avatarUrl ?? undefined,
-              status: row.status,
-              isHost: row.personId === pickup.hostPersonId,
-            },
-          ]
-        : [],
-    ),
+    participants: participantRows.map((row) => {
+      const isParticipantHost = row.personId === pickup.hostPersonId;
+      const linkedCourtParticipant = courtParticipantRows.find(
+        (participant) =>
+          participant.personId === row.personId ||
+          (!participant.personId &&
+            participant.invitedName?.trim() === row.displayName?.trim()),
+      );
+      return {
+        id: row.id,
+        personId: row.personId,
+        displayName: row.displayName ?? "Duna player",
+        avatarUrl: row.avatarUrl ?? undefined,
+        status: row.status as PickupParticipantSummary["status"],
+        isHost: isParticipantHost,
+        canReplace:
+          isHost &&
+          isFutureActive &&
+          !isParticipantHost &&
+          row.status !== "checked-in" &&
+          pickup.costMinor === 0 &&
+          !row.orderId &&
+          !linkedCourtParticipant?.orderId &&
+          (linkedCourtParticipant?.shareAmountMinor ?? 0) === 0,
+      };
+    }),
     requests: requestRows.map((row) => ({
       id: row.id,
       personId: row.personId,
@@ -624,6 +656,237 @@ export async function invitePickupPlayers(input: {
     }
   });
   return { invitedPersonIds, alreadyActivePersonIds };
+}
+
+export async function replacePickupPlayer(input: {
+  readonly actor: ApiActor;
+  readonly pickupSessionId: string;
+  readonly participantId: string;
+  readonly replacementPersonId: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly replacedParticipantId: string;
+  readonly invitedPersonId: string;
+}> {
+  const database = getDatabase();
+  const pickup = await pickupOrThrow(input.pickupSessionId);
+  if (
+    pickup.hostPersonId !== input.actor.personId ||
+    pickup.status !== "active" ||
+    pickup.startsAt <= input.now
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "Only the host can replace a player before this match starts.",
+    );
+  }
+  if (
+    input.replacementPersonId === pickup.hostPersonId ||
+    input.replacementPersonId === input.actor.personId
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "Choose another Duna player for this place.",
+    );
+  }
+
+  const target = await database.query.pickupParticipants.findFirst({
+    where: and(
+      eq(pickupParticipants.id, input.participantId),
+      eq(pickupParticipants.pickupSessionId, pickup.id),
+      ne(pickupParticipants.personId, pickup.hostPersonId),
+      inArray(pickupParticipants.status, [
+        "invited",
+        "pending",
+        "confirmed",
+        "waitlisted",
+      ]),
+    ),
+  });
+  if (!target) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "That roster place is no longer available to replace.",
+    );
+  }
+  const [targetPerson, linkedCourtParticipants] = await Promise.all([
+    database.query.people.findFirst({ where: eq(people.id, target.personId) }),
+    pickup.courtBookingId
+      ? database.query.courtBookingParticipants.findMany({
+          where: eq(courtBookingParticipants.bookingId, pickup.courtBookingId),
+        })
+      : Promise.resolve([]),
+  ]);
+  const courtTarget = linkedCourtParticipants.find(
+    (participant) =>
+      participant.personId === target.personId ||
+      (!participant.personId &&
+        participant.invitedName?.trim() === targetPerson?.displayName.trim()),
+  );
+  if (
+    pickup.costMinor > 0 ||
+    target.orderId ||
+    courtTarget?.orderId ||
+    (courtTarget?.shareAmountMinor ?? 0) > 0
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "A paid player place cannot be replaced automatically. Cancel or refund that payment first.",
+    );
+  }
+
+  const existingReplacement = await database.query.pickupParticipants.findFirst(
+    {
+      where: and(
+        eq(pickupParticipants.pickupSessionId, pickup.id),
+        eq(pickupParticipants.personId, input.replacementPersonId),
+      ),
+    },
+  );
+  if (
+    existingReplacement &&
+    ["invited", "pending", "confirmed", "checked-in", "waitlisted"].includes(
+      existingReplacement.status,
+    )
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "That player is already on this match.",
+    );
+  }
+  await evaluatePickupParticipant({
+    actor: input.actor,
+    pickupSessionId: pickup.id,
+    subjectPersonId: input.replacementPersonId,
+    now: input.now,
+    requireApproval: false,
+    allowAdultPartnerPurchase: true,
+  });
+  const replacement = await database.query.people.findFirst({
+    where: eq(people.id, input.replacementPersonId),
+  });
+  if (!replacement) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "The replacement player could not be found.",
+    );
+  }
+
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    const [cancelledTarget] = await transaction
+      .update(pickupParticipants)
+      .set({ status: "cancelled", holdExpiresAt: null, updatedAt: input.now })
+      .where(
+        and(
+          eq(pickupParticipants.id, target.id),
+          inArray(pickupParticipants.status, [
+            "invited",
+            "pending",
+            "confirmed",
+            "waitlisted",
+          ]),
+        ),
+      )
+      .returning({ id: pickupParticipants.id });
+    if (!cancelledTarget) {
+      throw new CommerceError(
+        "PICKUP_NOT_JOINABLE",
+        "That roster place changed while you were replacing it. Refresh and try again.",
+      );
+    }
+    if (existingReplacement) {
+      await transaction
+        .update(pickupParticipants)
+        .set({
+          status: "invited",
+          addedByPersonId: input.actor.personId,
+          paidByPersonId: null,
+          orderId: null,
+          holdExpiresAt: null,
+          updatedAt: input.now,
+        })
+        .where(eq(pickupParticipants.id, existingReplacement.id));
+    } else {
+      await transaction.insert(pickupParticipants).values({
+        pickupSessionId: pickup.id,
+        personId: replacement.id,
+        addedByPersonId: input.actor.personId,
+        status: "invited",
+      });
+    }
+    if (courtTarget) {
+      await transaction
+        .update(courtBookingParticipants)
+        .set({
+          personId: replacement.id,
+          invitedName: replacement.displayName,
+          invitedEmail: replacement.email,
+          invitedPhoneE164: replacement.phoneE164,
+          inviteToken: crypto.randomUUID(),
+          status: "invited",
+          shareAmountMinor: 0,
+          orderId: null,
+          paidAt: null,
+          acceptedAt: null,
+          updatedAt: input.now,
+        })
+        .where(eq(courtBookingParticipants.id, courtTarget.id));
+    }
+    await transaction.insert(messages).values(
+      (["in-app", "push"] as const).flatMap((channel) => [
+        {
+          organizationId: pickup.organizationId,
+          senderPersonId: input.actor.personId,
+          recipientPersonId: replacement.id,
+          channel,
+          kind: "pickup-invitation",
+          subject: `Match invitation · ${pickup.title}`,
+          body: `You were invited to ${pickup.title} at ${pickup.venueLabel}. Open Duna to accept or decline the place.`,
+          status: "queued" as const,
+          scheduledAt: input.now,
+        },
+        {
+          organizationId: pickup.organizationId,
+          senderPersonId: input.actor.personId,
+          recipientPersonId: target.personId,
+          channel,
+          kind: "pickup-roster-update",
+          subject: `Roster update · ${pickup.title}`,
+          body: `The host changed the roster for ${pickup.title}. Your previous place is no longer assigned to you.`,
+          status: "queued" as const,
+          scheduledAt: input.now,
+        },
+      ]),
+    );
+    await transaction
+      .update(matchAvailabilityPosts)
+      .set({ status: "matched", updatedAt: input.now })
+      .where(
+        and(
+          eq(matchAvailabilityPosts.personId, replacement.id),
+          eq(matchAvailabilityPosts.status, "active"),
+          gt(matchAvailabilityPosts.endsAt, pickup.startsAt),
+          lt(matchAvailabilityPosts.startsAt, pickup.endsAt),
+        ),
+      );
+    await transaction.insert(auditLog).values({
+      organizationId: pickup.organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "pickup.player-replaced",
+      entityType: "pickup-session",
+      entityId: pickup.id,
+      reason: `${target.personId} was replaced by ${replacement.id} before the match.`,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+    });
+  });
+  return {
+    replacedParticipantId: target.id,
+    invitedPersonId: replacement.id,
+  };
 }
 
 export async function cancelPickup(input: {

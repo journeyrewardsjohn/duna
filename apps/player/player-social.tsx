@@ -10,19 +10,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
+import { PlayerAvatar } from "./components/player-identity";
 import type { DunaApiClient } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 import { VideoPlayerModal, type VideoSummary } from "./video-studio";
@@ -116,32 +110,7 @@ function Avatar({
   readonly palette: MobileSocialPalette;
   readonly size?: number;
 }) {
-  const shape = { borderRadius: size / 2, height: size, width: size };
-  return person.avatarUrl ? (
-    <Image
-      accessibilityIgnoresInvertColors
-      source={{ uri: person.avatarUrl }}
-      style={shape}
-    />
-  ) : (
-    <View
-      style={[
-        shape,
-        socialStyles.avatarFallback,
-        { backgroundColor: palette.navy },
-      ]}
-    >
-      <Text
-        style={{
-          color: palette.aqua,
-          fontSize: Math.max(13, size * 0.28),
-          fontWeight: "800",
-        }}
-      >
-        {person.initials}
-      </Text>
-    </View>
-  );
+  return <PlayerAvatar palette={palette} person={person} size={size} />;
 }
 
 const PlayerProfileNavigationContext = createContext<{
@@ -1129,40 +1098,13 @@ export function PlayerPickerModal({
                         cannotAdd && socialStyles.pickerPersonDisabled,
                       ]}
                     >
-                      <View
-                        style={[
-                          socialStyles.pickerPersonAvatar,
-                          isSelected && {
-                            borderColor: palette.aqua,
-                            borderWidth: 3,
-                          },
-                        ]}
-                      >
-                        <Avatar
-                          palette={palette}
-                          person={result.person}
-                          size={58}
-                        />
-                        <View
-                          style={[
-                            socialStyles.pickerPersonAddMark,
-                            {
-                              backgroundColor: isSelected
-                                ? palette.positive
-                                : palette.aqua,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              socialStyles.pickerPersonAddMarkText,
-                              { color: palette.onAccent },
-                            ]}
-                          >
-                            {isSelected ? "✓" : "+"}
-                          </Text>
-                        </View>
-                      </View>
+                      <PlayerAvatar
+                        badge={isSelected ? "selected" : "add"}
+                        palette={palette}
+                        person={result.person}
+                        selected={isSelected}
+                        size={58}
+                      />
                       <Text
                         numberOfLines={1}
                         style={[
@@ -1204,7 +1146,13 @@ export function PlayerPickerModal({
                 accessibilityRole="button"
                 onPress={() => setProfilePerson(result.person)}
               >
-                <Avatar palette={palette} person={result.person} size={54} />
+                <PlayerAvatar
+                  badge={isSelected ? "selected" : undefined}
+                  palette={palette}
+                  person={result.person}
+                  selected={isSelected}
+                  size={54}
+                />
               </Pressable>
               <Pressable
                 accessibilityLabel={`View ${result.person.displayName}'s profile`}

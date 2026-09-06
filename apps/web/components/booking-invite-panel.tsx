@@ -27,6 +27,10 @@ export function BookingInvitePanel({
   const [checkoutSessionId, setCheckoutSessionId] = useState(
     initialCheckoutSessionId,
   );
+  const [isConfirmed, setIsConfirmed] = useState(
+    invite.participant.status === "accepted" ||
+      invite.participant.status === "paid",
+  );
   const [isPending, startTransition] = useTransition();
   const policyRef = useRef<HTMLDivElement>(null);
 
@@ -88,6 +92,7 @@ export function BookingInvitePanel({
         window.location.assign(result.result.checkoutUrl);
         return;
       }
+      setIsConfirmed(true);
       setNotice("You’re in. The organizer can see that you accepted.");
     });
   };
@@ -103,6 +108,7 @@ export function BookingInvitePanel({
   const duration = Math.round(
     (Date.parse(invite.endsAt) - Date.parse(invite.startsAt)) / 60_000,
   );
+  const hostFunded = invite.participant.shareAmountMinor === 0;
 
   return (
     <div className="booking-invite-panel">
@@ -110,7 +116,9 @@ export function BookingInvitePanel({
         <span className="page-eyebrow">Court invitation</span>
         <h1>{invite.organizerName} invited you to play.</h1>
         <p>
-          Your place is held while every player accepts and funds their share.
+          {hostFunded
+            ? "The court is reserved and paid. Confirm your place so the organizer can see who is in."
+            : "Your place is held while every player accepts and funds their share."}
         </p>
       </header>
 
@@ -133,12 +141,14 @@ export function BookingInvitePanel({
         <div>
           <CreditCard aria-hidden size={20} />
           <span>
-            <small>Your share</small>
+            <small>{hostFunded ? "Paid by host" : "Your share"}</small>
             <strong>
-              {formatMoney(
-                invite.participant.shareAmountMinor,
-                invite.currency,
-              )}
+              {hostFunded
+                ? "No payment due"
+                : formatMoney(
+                    invite.participant.shareAmountMinor,
+                    invite.currency,
+                  )}
             </strong>
           </span>
         </div>
@@ -200,15 +210,21 @@ export function BookingInvitePanel({
       <button
         type="button"
         className="primary-action booking-review-submit"
-        disabled={!invite.available || !accepted || isPending}
+        disabled={!invite.available || !accepted || isPending || isConfirmed}
         onClick={submit}
       >
         <Check aria-hidden size={17} />
-        {isPending
-          ? "Opening secure checkout…"
-          : invite.available
-            ? `Pay ${formatMoney(invite.participant.shareAmountMinor, invite.currency)}`
-            : "This invitation is no longer payable"}
+        {isConfirmed
+          ? "Invitation accepted"
+          : isPending
+            ? hostFunded
+              ? "Confirming your place…"
+              : "Opening secure checkout…"
+            : invite.available
+              ? hostFunded
+                ? "Accept invitation"
+                : `Pay ${formatMoney(invite.participant.shareAmountMinor, invite.currency)}`
+              : "This invitation is no longer available"}
       </button>
     </div>
   );

@@ -45,6 +45,7 @@ export async function startCourtCheckoutAction(input: {
       localStartsAt: input.localStartsAt,
       durationMinutes: input.durationMinutes,
       paymentMode: input.paymentMode,
+      createMatch: input.checkoutIntent === "host",
       participants: [...input.participants],
       expectedPayNowMinor: input.expectedPayNowMinor,
       expectedTotalMinor: input.expectedTotalMinor,

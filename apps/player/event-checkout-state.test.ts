@@ -109,6 +109,36 @@ describe("event checkout state", () => {
     expect(calls).toEqual(["present", "status", "wait", "status"]);
   });
 
+  it("announces confirmation before the first network status read", async () => {
+    const calls: string[] = [];
+    await presentThenPollCheckout({
+      present: async () => {
+        calls.push("payment-sheet");
+        return "completed";
+      },
+      onPaymentCompleted: () => {
+        calls.push("confirming-screen");
+      },
+      readStatus: async () => {
+        calls.push("status-read");
+        return { complete: true };
+      },
+      onStatus: () => {
+        calls.push("status-received");
+      },
+      isComplete: (status) => status.complete,
+      maxPolls: 1,
+      delayMs: () => 0,
+    });
+
+    expect(calls).toEqual([
+      "payment-sheet",
+      "confirming-screen",
+      "status-read",
+      "status-received",
+    ]);
+  });
+
   it("does not read checkout status when payment is cancelled", async () => {
     let statusRead = false;
     const result = await presentThenPollCheckout({

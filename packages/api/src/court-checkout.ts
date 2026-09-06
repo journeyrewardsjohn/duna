@@ -8,6 +8,7 @@ import {
   courtRatePlanAssignments,
   courts,
   getDatabase,
+  getTransactionalDatabase,
   memberships,
   membershipTiers,
   organizationMemberships,
@@ -47,6 +48,7 @@ import { stableHash } from "./canonical";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { assertSubjectAuthority, createCourtHold } from "./commerce";
 import type { ApiActor } from "./context";
+import { ensureCourtBookingMatch } from "./database-repository";
 import { hasActiveDunaPlusMembership } from "./membership";
 import { loadOrganizationCommissionPolicy } from "./organization-billing";
 import {
@@ -1454,6 +1456,7 @@ export async function startCourtCheckout(input: {
   readonly durationMinutes: number;
   readonly paymentMode: "full" | "split";
   readonly paymentSurface: "hosted" | "native";
+  readonly createMatch?: boolean;
   readonly participants: readonly CourtBookingInviteInput[];
   readonly expectedPayNowMinor: number;
   readonly expectedTotalMinor: number;
@@ -1542,7 +1545,10 @@ export async function startCourtCheckout(input: {
             id: people.id,
             displayName: people.displayName,
             email: people.email,
+            isMinor: people.isMinor,
             phoneE164: people.phoneE164,
+            profileVisibility: people.profileVisibility,
+            status: people.status,
           })
           .from(people)
           .where(inArray(people.id, personIds))
@@ -1551,6 +1557,20 @@ export async function startCourtCheckout(input: {
     throw new CourtCheckoutError(
       "PARTICIPANT_NOT_FOUND",
       "One or more selected Duna players could not be found.",
+    );
+  }
+  if (
+    input.createMatch &&
+    invitedPersonRows.some(
+      (person) =>
+        person.status !== "active" ||
+        person.profileVisibility !== "public" ||
+        person.isMinor,
+    )
+  ) {
+    throw new CourtCheckoutError(
+      "PARTICIPANT_NOT_FOUND",
+      "Every selected match player must have an active adult Duna profile.",
     );
   }
   const quote = await priceCourtCheckout({
@@ -1721,6 +1741,7 @@ export async function startCourtCheckout(input: {
           fundedAmountMinor: 0,
           currency: priced.currency,
           participantTarget: 1,
+          createMatch: Boolean(input.createMatch),
           policySnapshot: policy,
           holdExpiresAt: null,
           updatedAt: input.now,
@@ -1749,6 +1770,13 @@ export async function startCourtCheckout(input: {
       currency: priced.currency,
       applicationOrigin: new URL(input.successUrl).origin,
     });
+    const match = await ensureCourtBookingMatch({
+      bookingId: hold.bookingId,
+      hostPersonId: subjectPersonId,
+      requestId: input.requestId,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    });
     return {
       mode: "free",
       bookingId: hold.bookingId,
@@ -1760,6 +1788,7 @@ export async function startCourtCheckout(input: {
       pricing: { ...pricing, payNowMinor: 0 },
       policy,
       participants: participantOutput,
+      match,
     };
   }
 
@@ -1929,6 +1958,7 @@ export async function startCourtCheckout(input: {
         fundedAmountMinor: 0,
         currency: priced.currency,
         participantTarget: input.paymentMode === "split" ? participantCount : 1,
+        createMatch: Boolean(input.createMatch),
         policySnapshot: policy,
         updatedAt: input.now,
       })
@@ -2212,6 +2242,25 @@ export async function resumeCourtBookingCheckout(input: {
   };
 }
 
+export function canAcceptCourtBookingInvite(input: {
+  readonly bookingStatus: string;
+  readonly paymentMode: "full" | "split";
+  readonly participantStatus: string;
+  readonly shareAmountMinor: number;
+  readonly holdExpiresAt: Date | null;
+  readonly now: Date;
+}): boolean {
+  if (input.participantStatus !== "invited") return false;
+  if (input.bookingStatus === "confirmed" && input.shareAmountMinor === 0) {
+    return true;
+  }
+  return (
+    input.paymentMode === "split" &&
+    input.bookingStatus === "held" &&
+    Boolean(input.holdExpiresAt && input.holdExpiresAt > input.now)
+  );
+}
+
 export async function startParticipantShareCheckout(input: {
   readonly actor: ApiActor;
   readonly inviteToken: string;
@@ -2246,14 +2295,18 @@ export async function startParticipantShareCheckout(input: {
   });
   if (
     !booking ||
-    booking.paymentMode !== "split" ||
-    booking.status !== "held" ||
-    !booking.holdExpiresAt ||
-    booking.holdExpiresAt <= input.now
+    !canAcceptCourtBookingInvite({
+      bookingStatus: booking.status,
+      paymentMode: booking.paymentMode === "split" ? "split" : "full",
+      participantStatus: participant.status,
+      shareAmountMinor: participant.shareAmountMinor,
+      holdExpiresAt: booking.holdExpiresAt,
+      now: input.now,
+    })
   ) {
     throw new CourtCheckoutError(
       "CHECKOUT_UNAVAILABLE",
-      "This shared booking is no longer awaiting payment.",
+      "This court invitation is no longer available to accept.",
     );
   }
   const actorPerson = await database.query.people.findFirst({
@@ -2294,10 +2347,133 @@ export async function startParticipantShareCheckout(input: {
   ) {
     throw new CourtCheckoutError(
       "POLICY_ACCEPTANCE_REQUIRED",
-      "Read and accept the venue cancellation policy before paying your share.",
+      "Read and accept the venue cancellation policy before confirming your place.",
     );
   }
   const resource = await checkoutResource(booking.courtId);
+  const shareAmountMinor = participant.shareAmountMinor;
+  if (shareAmountMinor <= 0) {
+    const linkedPickup = await database.query.pickupSessions.findFirst({
+      where: eq(pickupSessions.courtBookingId, booking.id),
+    });
+    const linkedRoster = linkedPickup
+      ? await database
+          .select({
+            id: pickupParticipants.id,
+            personId: pickupParticipants.personId,
+            displayName: people.displayName,
+          })
+          .from(pickupParticipants)
+          .innerJoin(people, eq(pickupParticipants.personId, people.id))
+          .where(eq(pickupParticipants.pickupSessionId, linkedPickup.id))
+      : [];
+    const confirmedPersonId = participant.personId ?? input.actor.personId;
+    const linkedParticipant = linkedRoster.find((row) =>
+      participant.personId
+        ? row.personId === participant.personId
+        : row.displayName.trim() === participant.invitedName?.trim(),
+    );
+    const existingConfirmedPerson = linkedRoster.find(
+      (row) => row.personId === confirmedPersonId,
+    );
+    const policyHash = stableHash(policy.markdown);
+
+    await getTransactionalDatabase().transaction(async (transaction) => {
+      const [acceptedParticipant] = await transaction
+        .update(courtBookingParticipants)
+        .set({
+          personId: confirmedPersonId,
+          status: "accepted",
+          acceptedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(courtBookingParticipants.id, participant.id),
+            eq(courtBookingParticipants.status, "invited"),
+          ),
+        )
+        .returning({ id: courtBookingParticipants.id });
+      if (!acceptedParticipant) {
+        throw new CourtCheckoutError(
+          "CHECKOUT_UNAVAILABLE",
+          "This court invitation has already been handled.",
+        );
+      }
+      if (linkedParticipant) {
+        if (
+          existingConfirmedPerson &&
+          existingConfirmedPerson.id !== linkedParticipant.id
+        ) {
+          await transaction
+            .update(pickupParticipants)
+            .set({ status: "cancelled", updatedAt: input.now })
+            .where(eq(pickupParticipants.id, linkedParticipant.id));
+          await transaction
+            .update(pickupParticipants)
+            .set({ status: "confirmed", updatedAt: input.now })
+            .where(eq(pickupParticipants.id, existingConfirmedPerson.id));
+        } else {
+          await transaction
+            .update(pickupParticipants)
+            .set({
+              personId: confirmedPersonId,
+              status: "confirmed",
+              holdExpiresAt: null,
+              updatedAt: input.now,
+            })
+            .where(eq(pickupParticipants.id, linkedParticipant.id));
+        }
+      }
+      await transaction.insert(bookingPolicyAcceptances).values({
+        acceptanceKey: stableHash({
+          bookingId: booking.id,
+          subjectPersonId: confirmedPersonId,
+          acceptedByPersonId: input.actor.personId,
+          policyHash,
+        }),
+        bookingId: booking.id,
+        subjectPersonId: confirmedPersonId,
+        acceptedByPersonId: input.actor.personId,
+        policyTitle: policy.title,
+        documentText: policy.markdown,
+        documentTextHash: policyHash,
+        fullScrollConfirmed: input.policyFullScrollConfirmed,
+        ipAddress: input.ipAddress,
+        acceptedAt: input.now,
+        createdAt: input.now,
+      });
+      await transaction.insert(auditLog).values({
+        organizationId: booking.organizationId,
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "court-booking.invitation-accepted",
+        entityType: "court-booking",
+        entityId: booking.id,
+        reason: "An invited player accepted a court place with no payment due.",
+        traceId: input.requestId,
+        ipAddress: input.ipAddress,
+      });
+    });
+    return {
+      mode: "free",
+      bookingId: booking.id,
+      bookingStatus: booking.status === "confirmed" ? "confirmed" : "held",
+      paymentMode: booking.paymentMode === "split" ? "split" : "full",
+      startsAt: booking.startsAt.toISOString(),
+      endsAt: booking.endsAt.toISOString(),
+      alternatives: [],
+      pricing: {
+        subtotalMinor: 0,
+        feeTotalMinor: 0,
+        totalMinor: booking.totalAmountMinor,
+        payNowMinor: 0,
+        currency: currencyCode(booking.currency) ?? "USD",
+        rateUnitMinutes: resource.rateUnitMinutes,
+      },
+      policy,
+    };
+  }
   if (
     !resource.stripeChargesEnabled ||
     !resource.stripeAccountId ||
@@ -2327,36 +2503,6 @@ export async function startParticipantShareCheckout(input: {
         where: eq(orders.id, organizerParticipant.orderId),
       })
     : undefined;
-  const shareAmountMinor = participant.shareAmountMinor;
-  if (shareAmountMinor <= 0) {
-    await database
-      .update(courtBookingParticipants)
-      .set({
-        personId: participant.personId ?? input.actor.personId,
-        status: "accepted",
-        acceptedAt: input.now,
-        updatedAt: input.now,
-      })
-      .where(eq(courtBookingParticipants.id, participant.id));
-    return {
-      mode: "free",
-      bookingId: booking.id,
-      bookingStatus: "held",
-      paymentMode: "split",
-      startsAt: booking.startsAt.toISOString(),
-      endsAt: booking.endsAt.toISOString(),
-      alternatives: [],
-      pricing: {
-        subtotalMinor: 0,
-        feeTotalMinor: 0,
-        totalMinor: booking.totalAmountMinor,
-        payNowMinor: 0,
-        currency: currencyCode(booking.currency) ?? "USD",
-        rateUnitMinutes: resource.rateUnitMinutes,
-      },
-      policy,
-    };
-  }
   const subtotalMinor =
     organizerOrder && organizerOrder.totalMinor > 0
       ? Math.min(
@@ -2672,10 +2818,14 @@ export async function loadCourtBookingInvite(inviteToken: string) {
     },
     policy: normalizeCourtCancellationPolicy(booking.policySnapshot),
     currency: currencyCode(booking.currency) ?? "USD",
-    available:
-      booking.status === "held" &&
-      Boolean(booking.holdExpiresAt && booking.holdExpiresAt > new Date()) &&
-      !["paid", "cancelled", "declined"].includes(participant.status),
+    available: canAcceptCourtBookingInvite({
+      bookingStatus: booking.status,
+      paymentMode: booking.paymentMode === "split" ? "split" : "full",
+      participantStatus: participant.status,
+      shareAmountMinor: participant.shareAmountMinor,
+      holdExpiresAt: booking.holdExpiresAt,
+      now: new Date(),
+    }),
   };
 }
 
@@ -2731,6 +2881,9 @@ export async function getCourtCheckoutStatus(input: {
     .leftJoin(people, eq(courtBookingParticipants.personId, people.id))
     .where(eq(courtBookingParticipants.bookingId, booking.id))
     .orderBy(asc(courtBookingParticipants.createdAt));
+  const match = await database.query.pickupSessions.findFirst({
+    where: eq(pickupSessions.courtBookingId, booking.id),
+  });
   const sharePaid = order.status === "paid";
   return {
     bookingId: booking.id,
@@ -2759,5 +2912,12 @@ export async function getCourtCheckoutStatus(input: {
         | "cancelled",
       shareAmountMinor: participant.shareAmountMinor,
     })),
+    match: match
+      ? {
+          id: match.id,
+          slug: `pickup-${match.id}`,
+          title: match.title,
+        }
+      : undefined,
   };
 }

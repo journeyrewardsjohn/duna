@@ -276,8 +276,15 @@ export function CourtBookingPanel({
       }
       if (response.status.complete) {
         if (initialCheckoutIntent === "host") {
+          if (!response.status.match) {
+            setNotice(
+              "Payment received. Creating your match and sending invitations…",
+            );
+            timer = setTimeout(check, 1_500);
+            return;
+          }
           window.location.replace(
-            `/app/pickup/new?courtBookingId=${encodeURIComponent(response.status.bookingId)}`,
+            `/events/${encodeURIComponent(response.status.match.slug)}`,
           );
           return;
         }

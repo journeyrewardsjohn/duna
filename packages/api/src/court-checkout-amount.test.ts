@@ -3,6 +3,7 @@ import { courtCheckoutQuoteSchema } from "./contracts";
 import {
   CourtCheckoutError,
   assertConfirmedCourtAmount,
+  canAcceptCourtBookingInvite,
   dedupeCourtBookingInvites,
   type CourtCheckoutPricing,
 } from "./court-checkout";
@@ -108,6 +109,59 @@ describe("court booking invite de-duplication", () => {
       undefined,
     ]);
     expect(invited).toHaveLength(3);
+  });
+});
+
+describe("court booking invitation availability", () => {
+  const now = new Date("2026-09-06T12:00:00.000Z");
+
+  it("lets an invited player accept a confirmed place paid by the host", () => {
+    expect(
+      canAcceptCourtBookingInvite({
+        bookingStatus: "confirmed",
+        paymentMode: "full",
+        participantStatus: "invited",
+        shareAmountMinor: 0,
+        holdExpiresAt: null,
+        now,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps funded split invitations bounded by the live court hold", () => {
+    expect(
+      canAcceptCourtBookingInvite({
+        bookingStatus: "held",
+        paymentMode: "split",
+        participantStatus: "invited",
+        shareAmountMinor: 1_500,
+        holdExpiresAt: new Date("2026-09-06T12:30:00.000Z"),
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      canAcceptCourtBookingInvite({
+        bookingStatus: "held",
+        paymentMode: "split",
+        participantStatus: "invited",
+        shareAmountMinor: 1_500,
+        holdExpiresAt: new Date("2026-09-06T11:59:59.000Z"),
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not reopen an invitation that was already handled", () => {
+    expect(
+      canAcceptCourtBookingInvite({
+        bookingStatus: "confirmed",
+        paymentMode: "full",
+        participantStatus: "accepted",
+        shareAmountMinor: 0,
+        holdExpiresAt: null,
+        now,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -60,6 +60,7 @@ import {
   audienceSummarySchema,
   transactionSummarySchema,
   courtAvailabilitySchema,
+  courtBookingMatchSchema,
   courtBookingInviteSummarySchema,
   courtBookingInventorySchema,
   courtCheckoutQuoteSchema,
@@ -210,7 +211,10 @@ import {
   loadMatchAvailabilityCandidates,
   loadOwnMatchAvailability,
 } from "./match-availability-service";
-import { loadPublicImportedMatchSummary } from "./database-repository";
+import {
+  ensureCourtBookingMatch,
+  loadPublicImportedMatchSummary,
+} from "./database-repository";
 import { loadDiscoveryMap } from "./discovery-service";
 import {
   createOperatorTerminalConnectionToken,
@@ -284,6 +288,7 @@ import {
   invitePickupPlayers,
   leavePickup,
   loadPickupManagement,
+  replacePickupPlayer,
   requestPickupJoin,
   reviewPickupJoinRequest,
   updatePickup,
@@ -1175,6 +1180,7 @@ const pickupManagementSchema = z.object({
   pickupSessionId: z.string().uuid(),
   status: z.enum(["active", "cancelled", "completed"]),
   approvalRequired: z.boolean(),
+  isCourtBookingMatch: z.boolean(),
   isHost: z.boolean(),
   isParticipant: z.boolean(),
   canEdit: z.boolean(),
@@ -1194,8 +1200,15 @@ const pickupManagementSchema = z.object({
         personId: z.string().uuid(),
         displayName: z.string(),
         avatarUrl: z.string().optional(),
-        status: z.enum(["confirmed", "checked-in"]),
+        status: z.enum([
+          "invited",
+          "pending",
+          "confirmed",
+          "checked-in",
+          "waitlisted",
+        ]),
         isHost: z.boolean(),
+        canReplace: z.boolean(),
       }),
     )
     .readonly(),
@@ -6915,6 +6928,51 @@ const playerRouter = router({
         },
       }),
     ),
+  replacePickupPlayer: adultProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "pickup-player-replace",
+        capacity: 12,
+        refillPerMinute: 6,
+      }),
+    )
+    .input(
+      z.object({
+        pickupSessionId: z.string().uuid(),
+        participantId: z.string().uuid(),
+        replacementPersonId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        replacedParticipantId: z.string().uuid(),
+        invitedPersonId: z.string().uuid(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.replacePickupPlayer",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await replacePickupPlayer({
+              actor: ctx.actor!,
+              pickupSessionId: input.pickupSessionId,
+              participantId: input.participantId,
+              replacementPersonId: input.replacementPersonId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   requestPickupJoin: protectedProcedure
     .use(
       rateLimitMiddleware({
@@ -7218,6 +7276,7 @@ const playerRouter = router({
         durationMinutes: z.number().int().min(15).max(480),
         paymentMode: z.enum(["full", "split"]).default("full"),
         paymentSurface: z.enum(["hosted", "native"]).default("hosted"),
+        createMatch: z.boolean().default(false),
         participants: courtCheckoutParticipantsSchema,
         expectedPayNowMinor: z.number().int().nonnegative(),
         expectedTotalMinor: z.number().int().nonnegative(),
@@ -7245,6 +7304,7 @@ const playerRouter = router({
               durationMinutes: input.durationMinutes,
               paymentMode: input.paymentMode,
               paymentSurface: input.paymentSurface,
+              createMatch: input.createMatch,
               participants: input.participants,
               expectedPayNowMinor: input.expectedPayNowMinor,
               expectedTotalMinor: input.expectedTotalMinor,
@@ -7326,6 +7386,41 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
+  ensureCourtBookingMatch: adultProcedure
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        ready: z.boolean(),
+        match: courtBookingMatchSchema.optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.ensureCourtBookingMatch",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            const match = await ensureCourtBookingMatch({
+              bookingId: input.bookingId,
+              hostPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+            return { ready: Boolean(match), match };
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createAvailabilityAlert: protectedProcedure
     .use(
       rateLimitMiddleware({
