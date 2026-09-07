@@ -106,7 +106,7 @@ export default async function VideoStudioIndexPage() {
   ).length;
 
   return (
-    <main className={styles.page} data-zone="athletic">
+    <main className={styles.page} data-player-page="video" data-zone="athletic">
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <span>Duna Vision</span>

@@ -44097,6 +44097,11 @@ button.selected > .choice-radio {
     display: none;
   }
 
+  .player-shell[data-zone="athletic"]:has([data-player-page="video"])
+    .duna-action-center {
+    display: none;
+  }
+
   .player-shell[data-zone="athletic"] .player-topbar {
     height: 60px;
     padding: 0 0.75rem;
