@@ -931,7 +931,7 @@ export function ProEventDetail({
   );
 
   return (
-    <main className="pro-event-page" data-zone="athletic">
+    <main className="pro-event-page" data-zone="editorial">
       <SiteHeader />
       <script
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}

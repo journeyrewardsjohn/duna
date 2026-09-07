@@ -62,6 +62,17 @@
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
+  --duna-content-outer: 96rem;
+  --duna-content-main: 90rem;
+  --duna-content-public: 76rem;
+  --duna-page-gutter: clamp(1rem, 3.2vw, 3rem);
+  --duna-page-block: clamp(1.5rem, 4vw, 3.75rem);
+  --duna-section-gap: clamp(1rem, 2vw, 1.75rem);
+  --duna-type-detail: clamp(2.75rem, 4.6vw, 4.625rem);
+  --duna-type-page: clamp(2.4rem, 4.2vw, 4rem);
+  --duna-type-section: clamp(2rem, 3.4vw, 3.25rem);
+  --duna-type-title: clamp(1.25rem, 2vw, 1.75rem);
+  --duna-control-height: 3rem;
   --ground: #f6f5f1;
   --ground-warm: #efe6d3;
   --ground-cool: #b5ccd3;

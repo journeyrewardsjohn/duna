@@ -16,9 +16,9 @@
   gap: clamp(1.25rem, 3vw, 2.5rem);
   grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr);
   margin: 0 auto;
-  max-width: 1480px;
-  padding: clamp(4.5rem, 8vw, 8rem) clamp(1rem, 4vw, 4rem)
-    clamp(2.5rem, 6vw, 5rem);
+  max-width: var(--duna-web-content-max);
+  padding: clamp(3rem, 6vw, 5.5rem) var(--duna-page-gutter)
+    clamp(2.5rem, 5vw, 4rem);
 }
 
 .heroCopy {
@@ -34,9 +34,9 @@
 }
 
 .heroCopy h1 {
-  font-size: clamp(3.2rem, 8vw, 7.8rem);
+  font-size: var(--duna-type-detail);
   letter-spacing: -0.03em;
-  line-height: 0.86;
+  line-height: 0.94;
   margin: 0;
   max-width: 12ch;
 }
@@ -151,8 +151,8 @@
   display: grid;
   gap: clamp(3rem, 7vw, 6rem);
   margin: 0 auto;
-  max-width: 1480px;
-  padding: 0 clamp(1rem, 4vw, 4rem) clamp(5rem, 9vw, 9rem);
+  max-width: var(--duna-web-content-max);
+  padding: 0 var(--duna-page-gutter) clamp(5rem, 9vw, 9rem);
 }
 
 .sourceNote {
@@ -334,11 +334,11 @@
 
 @media (max-width: 760px) {
   .hero {
-    padding-top: 6.5rem;
+    padding-top: 2.5rem;
   }
 
   .heroCopy h1 {
-    font-size: clamp(3rem, 17vw, 5.2rem);
+    font-size: clamp(2.75rem, 13vw, 3.8rem);
   }
 
   .sourceNote {
