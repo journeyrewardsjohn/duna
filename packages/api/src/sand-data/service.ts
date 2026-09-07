@@ -8698,7 +8698,10 @@ export function professionalMatchPredictionClosed(input: {
 }
 
 function roundImportance(roundLabel: string): number {
-  return bracketRound(roundLabel)?.order ?? (poolName(roundLabel) ? 0 : -1);
+  return (
+    professionalBracketRound(roundLabel)?.order ??
+    (poolName(roundLabel) ? 0 : -1)
+  );
 }
 
 function cleanRoundLabel(roundLabel: string): string {
@@ -8755,7 +8758,7 @@ function poolName(roundLabel: string): string | undefined {
   return match?.[1] ? `Pool ${match[1].toUpperCase()}` : undefined;
 }
 
-function bracketRound(roundLabel: string):
+export function professionalBracketRound(roundLabel: string):
   | {
       readonly key: string;
       readonly label: string;
@@ -8767,13 +8770,10 @@ function bracketRound(roundLabel: string):
   if (/(?:final\s*(?:3rd|third)|bronze|third[\s-]*place)/i.test(normalized)) {
     return { key: "bronze", label: "Third place", order: 7 };
   }
-  if (/(?:final\s*(?:1st|first)|gold|championship|^final$)/i.test(normalized)) {
-    return { key: "final", label: "Final", order: 6 };
-  }
   if (/(?:semi|1\/2)/i.test(normalized)) {
     return { key: "semifinals", label: "Semifinals", order: 5 };
   }
-  if (/(?:quarter|1\/4)/i.test(normalized)) {
+  if (/(?:quarter|quater|1\/4)/i.test(normalized)) {
     return { key: "quarterfinals", label: "Quarterfinals", order: 4 };
   }
   if (/(?:round\s*of\s*16|\br16\b|1\/8)/i.test(normalized)) {
@@ -8781,6 +8781,16 @@ function bracketRound(roundLabel: string):
   }
   if (/(?:round\s*of\s*32|\br32\b|1\/16)/i.test(normalized)) {
     return { key: "round-of-32", label: "Round of 32", order: 2 };
+  }
+  // AVP uses "Championships" as the bracket name for every elimination
+  // round. Only a singular championship/final label identifies the title
+  // match; the plural bracket name must not turn its quarterfinals into finals.
+  if (
+    /(?:final\s*(?:1st|first)|\bgold\b|\bchampionship(?:\s+(?:final|match))?\b|\bfinals?\b)/i.test(
+      normalized,
+    )
+  ) {
+    return { key: "final", label: "Final", order: 6 };
   }
   if (/(?:qualification|qualifier|lucky loser)/i.test(normalized)) {
     return { key: slugSegment(roundLabel), label: roundLabel, order: 1 };
@@ -8792,6 +8802,37 @@ function bracketRound(roundLabel: string):
     return { key: slugSegment(roundLabel), label: roundLabel, order: 0 };
   }
   return undefined;
+}
+
+export function professionalEventTitleMatch<
+  TMatch extends { readonly roundLabel: string },
+>(matches: readonly TMatch[]): TMatch | undefined {
+  return matches.find(
+    (match) => professionalBracketRound(match.roundLabel)?.key === "final",
+  );
+}
+
+export function professionalEventWinnerEntries<
+  TEntry extends {
+    readonly list: string;
+    readonly entryTag?: string;
+  },
+>(entries: readonly TEntry[], genderCategory: string): readonly TEntry[] {
+  const primary = entries.filter(
+    (entry) => entry.list === "main-draw" || entry.list === "league",
+  );
+  const eligible =
+    primary.length > 0
+      ? primary
+      : entries.filter((entry) => entry.list === "qualification");
+  const eventGender = normalizedProGender(genderCategory);
+  if (eventGender !== "mens" && eventGender !== "womens") return eligible;
+  const division = eligible.filter(
+    (entry) =>
+      entry.entryTag !== undefined &&
+      normalizedProGender(entry.entryTag) === eventGender,
+  );
+  return division.length > 0 ? division : eligible;
 }
 
 function isKnownProfessionalTeam(team: ProTeam): boolean {
@@ -8928,7 +8969,7 @@ function liveStandingRows(matches: readonly PublicProMatch[]) {
       row.lostAtStage = Math.max(row.lostAtStage, stage);
     }
   }
-  const podium = podiumFromMatches(matches);
+  const podium = professionalEventPodium(matches);
   const medalByKey = new Map<string, 1 | 2 | 3>();
   if (podium.champion) medalByKey.set(podium.champion.key, 1);
   if (podium.runnerUp) medalByKey.set(podium.runnerUp.key, 2);
@@ -8975,20 +9016,25 @@ function liveStandingRows(matches: readonly PublicProMatch[]) {
     });
 }
 
-function podiumFromMatches(matches: readonly PublicProMatch[]) {
-  const final = matches.find(
-    (match) => bracketRound(match.roundLabel)?.key === "final",
-  );
+export function professionalEventPodium<TTeam>(
+  matches: readonly {
+    readonly roundLabel: string;
+    readonly teamA: TTeam;
+    readonly teamB: TTeam;
+    readonly winnerSide?: "A" | "B";
+  }[],
+) {
+  const final = professionalEventTitleMatch(matches);
   const bronze = matches.find(
-    (match) => bracketRound(match.roundLabel)?.key === "bronze",
+    (match) => professionalBracketRound(match.roundLabel)?.key === "bronze",
   );
-  const winner = (match: PublicProMatch | undefined) =>
+  const winner = (match: (typeof matches)[number] | undefined) =>
     match?.winnerSide === "A"
       ? match.teamA
       : match?.winnerSide === "B"
         ? match.teamB
         : undefined;
-  const loser = (match: PublicProMatch | undefined) =>
+  const loser = (match: (typeof matches)[number] | undefined) =>
     match?.winnerSide === "A"
       ? match.teamB
       : match?.winnerSide === "B"
@@ -9417,13 +9463,10 @@ export async function loadPublicProEvent(
       };
     },
   );
-  const primaryWinnerEntries = publicTeamEntries.filter(
-    (entry) => entry.list === "main-draw" || entry.list === "league",
+  const winnerEntries = professionalEventWinnerEntries(
+    publicTeamEntries,
+    event.genderCategory,
   );
-  const winnerEntries =
-    primaryWinnerEntries.length > 0
-      ? primaryWinnerEntries
-      : publicTeamEntries.filter((entry) => entry.list === "qualification");
   const matchIds = basePublicMatches.map((match) => match.id);
   const [
     eventPredictionCounts,
@@ -9753,7 +9796,7 @@ export async function loadPublicProEvent(
       poolMap.set(pool, [...(poolMap.get(pool) ?? []), match]);
       continue;
     }
-    const round = bracketRound(match.roundLabel);
+    const round = professionalBracketRound(match.roundLabel);
     if (!round) continue;
     const existing = bracketMap.get(round.key);
     if (existing) existing.matches.push(match);
@@ -9816,7 +9859,7 @@ export async function loadPublicProEvent(
           status: sibling.status,
         }
       : undefined,
-    podium: podiumFromMatches(publicMatches),
+    podium: professionalEventPodium(publicMatches),
     pools: [...poolMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, poolMatches]) => ({
@@ -9871,14 +9914,10 @@ export async function saveProfessionalEventPrediction(input: {
       "Tournament winner picks are closed after the event is complete.",
     );
   }
-  const entries = rawProfessionalTeamEntries(event.rawPayload);
-  const primary = entries.filter(
-    (entry) => entry.list === "main-draw" || entry.list === "league",
+  const eligible = professionalEventWinnerEntries(
+    rawProfessionalTeamEntries(event.rawPayload),
+    event.genderCategory,
   );
-  const eligible =
-    primary.length > 0
-      ? primary
-      : entries.filter((entry) => entry.list === "qualification");
   const team = eligible.find(
     (entry) => entry.externalTeamId === input.externalTeamId,
   );

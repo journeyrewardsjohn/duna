@@ -693,6 +693,7 @@ import {
   loadPublicProCoverage,
   loadPublicWorldRankingPlayer,
   loadPublicWorldRankings,
+  professionalEventTitleMatch,
   loadProfessionalEventMediaUploadContext,
   loadPlayerMergePreview,
   loadSandDataOverview,
@@ -2433,6 +2434,13 @@ const publicRouter = router({
       const fallbackPercentage =
         100 / Math.max(1, event.winnerPrediction.entries.length);
       const champion = event.podium.champion;
+      const titleMatch = professionalEventTitleMatch(event.matches);
+      const championLeagueTeamName =
+        titleMatch?.winnerSide === "A"
+          ? titleMatch.leagueTeamAName
+          : titleMatch?.winnerSide === "B"
+            ? titleMatch.leagueTeamBName
+            : undefined;
       const normalizedRoster = (
         players: readonly { readonly name: string }[],
       ) =>
@@ -2441,11 +2449,18 @@ const publicRouter = router({
           .sort()
           .join("|");
       const championEntry = champion
-        ? event.teamEntries.find(
+        ? event.winnerPrediction.entries.find(
             (entry) =>
+              (championLeagueTeamName !== undefined &&
+                entry.label.trim().toLocaleLowerCase() ===
+                  championLeagueTeamName.trim().toLocaleLowerCase()) ||
               entry.label === champion.label ||
-              normalizedRoster(entry.players) ===
-                normalizedRoster(champion.players),
+              normalizedRoster(
+                event.teamEntries.find(
+                  (candidate) =>
+                    candidate.externalTeamId === entry.externalTeamId,
+                )?.players ?? [],
+              ) === normalizedRoster(champion.players),
           )
         : undefined;
       return Promise.all(
