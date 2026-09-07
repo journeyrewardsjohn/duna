@@ -14,6 +14,7 @@ import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import type { ApiActor } from "./context";
 import { CommerceError, evaluatePickupParticipant } from "./commerce";
+import { resolveCourtParticipantForPickup } from "./court-booking-roster-link";
 
 export type PickupRequestStatus =
   "requested" | "approved" | "rejected" | "cancelled" | "expired";
@@ -85,6 +86,8 @@ export async function loadPickupManagement(input: {
           id: pickupParticipants.id,
           holdExpiresAt: pickupParticipants.holdExpiresAt,
           personId: pickupParticipants.personId,
+          courtBookingParticipantId:
+            pickupParticipants.courtBookingParticipantId,
           displayName: people.displayName,
           avatarUrl: people.avatarUrl,
           status: pickupParticipants.status,
@@ -133,6 +136,7 @@ export async function loadPickupManagement(input: {
       pickup.courtBookingId
         ? database
             .select({
+              id: courtBookingParticipants.id,
               personId: courtBookingParticipants.personId,
               invitedName: courtBookingParticipants.invitedName,
               orderId: courtBookingParticipants.orderId,
@@ -199,12 +203,14 @@ export async function loadPickupManagement(input: {
     ownRequestStatus: ownRequest?.status as PickupRequestStatus | undefined,
     participants: participantRows.map((row) => {
       const isParticipantHost = row.personId === pickup.hostPersonId;
-      const linkedCourtParticipant = courtParticipantRows.find(
-        (participant) =>
-          participant.personId === row.personId ||
-          (!participant.personId &&
-            participant.invitedName?.trim() === row.displayName?.trim()),
-      );
+      const courtParticipantResolution = resolveCourtParticipantForPickup({
+        pickupParticipant: row,
+        courtParticipants: courtParticipantRows,
+      });
+      const linkedCourtParticipant =
+        courtParticipantResolution.kind === "matched"
+          ? courtParticipantResolution.value
+          : undefined;
       return {
         id: row.id,
         personId: row.personId,
@@ -219,6 +225,7 @@ export async function loadPickupManagement(input: {
           row.status !== "checked-in" &&
           pickup.costMinor === 0 &&
           !row.orderId &&
+          courtParticipantResolution.kind !== "ambiguous" &&
           !linkedCourtParticipant?.orderId &&
           (linkedCourtParticipant?.shareAmountMinor ?? 0) === 0,
       };
@@ -719,12 +726,24 @@ export async function replacePickupPlayer(input: {
         })
       : Promise.resolve([]),
   ]);
-  const courtTarget = linkedCourtParticipants.find(
-    (participant) =>
-      participant.personId === target.personId ||
-      (!participant.personId &&
-        participant.invitedName?.trim() === targetPerson?.displayName.trim()),
-  );
+  const courtTargetResolution = resolveCourtParticipantForPickup({
+    pickupParticipant: {
+      courtBookingParticipantId: target.courtBookingParticipantId,
+      personId: target.personId,
+      displayName: targetPerson?.displayName ?? null,
+    },
+    courtParticipants: linkedCourtParticipants,
+  });
+  if (courtTargetResolution.kind === "ambiguous") {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "This older reservation has two matching guest names, so Duna cannot safely choose a place to replace. Ask the guest to accept first, then try again.",
+    );
+  }
+  const courtTarget =
+    courtTargetResolution.kind === "matched"
+      ? courtTargetResolution.value
+      : undefined;
   if (
     pickup.costMinor > 0 ||
     target.orderId ||
@@ -756,6 +775,15 @@ export async function replacePickupPlayer(input: {
       "That player is already on this match.",
     );
   }
+  if (
+    existingReplacement?.courtBookingParticipantId &&
+    existingReplacement.courtBookingParticipantId !== courtTarget?.id
+  ) {
+    throw new CommerceError(
+      "PICKUP_NOT_JOINABLE",
+      "That player is still linked to another reserved place on this match. Refresh the roster before replacing anyone.",
+    );
+  }
   await evaluatePickupParticipant({
     actor: input.actor,
     pickupSessionId: pickup.id,
@@ -777,7 +805,12 @@ export async function replacePickupPlayer(input: {
   await getTransactionalDatabase().transaction(async (transaction) => {
     const [cancelledTarget] = await transaction
       .update(pickupParticipants)
-      .set({ status: "cancelled", holdExpiresAt: null, updatedAt: input.now })
+      .set({
+        status: "cancelled",
+        courtBookingParticipantId: courtTarget ? null : undefined,
+        holdExpiresAt: null,
+        updatedAt: input.now,
+      })
       .where(
         and(
           eq(pickupParticipants.id, target.id),
@@ -804,6 +837,7 @@ export async function replacePickupPlayer(input: {
           addedByPersonId: input.actor.personId,
           paidByPersonId: null,
           orderId: null,
+          courtBookingParticipantId: courtTarget?.id ?? null,
           holdExpiresAt: null,
           updatedAt: input.now,
         })
@@ -812,6 +846,7 @@ export async function replacePickupPlayer(input: {
       await transaction.insert(pickupParticipants).values({
         pickupSessionId: pickup.id,
         personId: replacement.id,
+        courtBookingParticipantId: courtTarget?.id,
         addedByPersonId: input.actor.personId,
         status: "invited",
       });

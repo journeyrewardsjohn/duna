@@ -3385,6 +3385,9 @@ export async function createPickup(
   options: {
     readonly initiallyConfirmedParticipantIds?: readonly string[];
     readonly participantEligibilityAlreadyVerified?: boolean;
+    readonly courtBookingParticipantIdsByPerson?: Readonly<
+      Record<string, string>
+    >;
   } = {},
 ): Promise<EventSummary> {
   const database = getDatabase();
@@ -3392,6 +3395,7 @@ export async function createPickup(
     (participant) => ({
       givenName: participant.givenName.trim(),
       familyName: participant.familyName.trim(),
+      courtBookingParticipantId: participant.courtBookingParticipantId,
     }),
   );
   if (
@@ -3474,6 +3478,63 @@ export async function createPickup(
     throw new Error(
       "Choose a confirmed court reservation that belongs to your Duna account.",
     );
+  }
+  const courtBookingParticipantLinks = [
+    ...participantPersonIds.flatMap((personId) => {
+      const courtBookingParticipantId =
+        options.courtBookingParticipantIdsByPerson?.[personId];
+      return courtBookingParticipantId
+        ? [{ courtBookingParticipantId, personId }]
+        : [];
+    }),
+    ...provisionalParticipants.flatMap((participant) =>
+      participant.courtBookingParticipantId
+        ? [
+            {
+              courtBookingParticipantId: participant.courtBookingParticipantId,
+              personId: null,
+            },
+          ]
+        : [],
+    ),
+  ];
+  if (courtBookingParticipantLinks.length > 0) {
+    if (!linkedCourtBooking) {
+      throw new Error(
+        "Reservation roster links require a confirmed linked court booking.",
+      );
+    }
+    const linkedParticipantRows = await database
+      .select({
+        id: courtBookingParticipants.id,
+        personId: courtBookingParticipants.personId,
+      })
+      .from(courtBookingParticipants)
+      .where(
+        and(
+          eq(courtBookingParticipants.bookingId, linkedCourtBooking.id),
+          inArray(
+            courtBookingParticipants.id,
+            courtBookingParticipantLinks.map(
+              (participant) => participant.courtBookingParticipantId,
+            ),
+          ),
+        ),
+      );
+    const linksAreValid = courtBookingParticipantLinks.every((link) => {
+      const row = linkedParticipantRows.find(
+        (candidate) => candidate.id === link.courtBookingParticipantId,
+      );
+      return row && row.personId === link.personId;
+    });
+    if (
+      !linksAreValid ||
+      linkedParticipantRows.length !== courtBookingParticipantLinks.length
+    ) {
+      throw new Error(
+        "The linked court roster changed while the match was being created.",
+      );
+    }
   }
   if (input.costMinor > 0 && !linkedCourtBooking) {
     throw new Error(
@@ -3577,6 +3638,8 @@ export async function createPickup(
       ...participantPersonIds.map((personId) => ({
         pickupSessionId: pickupId,
         personId,
+        courtBookingParticipantId:
+          options.courtBookingParticipantIdsByPerson?.[personId],
         addedByPersonId: input.hostPersonId,
         status: initiallyConfirmedParticipantIds.has(personId)
           ? ("confirmed" as const)
@@ -3585,6 +3648,7 @@ export async function createPickup(
       ...provisionalRows.map((participant) => ({
         pickupSessionId: pickupId,
         personId: participant.id,
+        courtBookingParticipantId: participant.courtBookingParticipantId,
         addedByPersonId: input.hostPersonId,
         status: "invited" as const,
       })),
@@ -3801,6 +3865,7 @@ export async function ensureCourtBookingMatch(input: {
     database.query.courts.findFirst({ where: eq(courts.id, booking.courtId) }),
     database
       .select({
+        id: courtBookingParticipants.id,
         personId: courtBookingParticipants.personId,
         invitedName: courtBookingParticipants.invitedName,
         role: courtBookingParticipants.role,
@@ -3832,11 +3897,19 @@ export async function ensureCourtBookingMatch(input: {
   );
   const provisionalParticipants = activeInvitees
     .filter((participant) => !participant.personId)
-    .map((participant) =>
-      provisionalCourtParticipant(
+    .map((participant) => ({
+      ...provisionalCourtParticipant(
         participant.invitedName?.trim() || "Invited Player",
       ),
-    );
+      courtBookingParticipantId: participant.id,
+    }));
+  const courtBookingParticipantIdsByPerson = Object.fromEntries(
+    activeInvitees.flatMap((participant) =>
+      participant.personId
+        ? [[participant.personId, participant.id] as const]
+        : [],
+    ),
+  );
   const capacity = Math.max(
     4,
     1 + participantPersonIds.length + provisionalParticipants.length,
@@ -3886,6 +3959,7 @@ export async function ensureCourtBookingMatch(input: {
       {
         initiallyConfirmedParticipantIds,
         participantEligibilityAlreadyVerified: true,
+        courtBookingParticipantIdsByPerson,
       },
     );
     await syncConfirmedCourtBookingMatchParticipants({

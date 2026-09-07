@@ -10653,6 +10653,10 @@ export const pickupParticipants = pgTable(
     personId: uuid("person_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    courtBookingParticipantId: uuid("court_booking_participant_id").references(
+      () => courtBookingParticipants.id,
+      { onDelete: "set null" },
+    ),
     addedByPersonId: uuid("added_by_person_id").references(() => people.id, {
       onDelete: "set null",
     }),
@@ -10673,6 +10677,9 @@ export const pickupParticipants = pgTable(
       table.pickupSessionId,
       table.personId,
     ),
+    uniqueIndex("pickup_participant_court_booking_participant_unique")
+      .on(table.courtBookingParticipantId)
+      .where(sql`${table.courtBookingParticipantId} IS NOT NULL`),
     index("pickup_participant_order_idx")
       .on(table.orderId)
       .where(sql`${table.orderId} IS NOT NULL`),

@@ -36,7 +36,18 @@ import {
   type CurrencyCode,
 } from "@duna/pricing";
 import { solveAvailableSlots } from "@duna/scheduling";
-import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import type {
   CourtAvailability,
   CourtBookingInventory,
@@ -45,6 +56,7 @@ import type {
   CourtCheckoutStatus,
 } from "./contracts";
 import { stableHash } from "./canonical";
+import { resolvePickupParticipantForCourtParticipant } from "./court-booking-roster-link";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { assertSubjectAuthority, createCourtHold } from "./commerce";
 import type { ApiActor } from "./context";
@@ -2361,6 +2373,8 @@ export async function startParticipantShareCheckout(input: {
           .select({
             id: pickupParticipants.id,
             personId: pickupParticipants.personId,
+            courtBookingParticipantId:
+              pickupParticipants.courtBookingParticipantId,
             displayName: people.displayName,
           })
           .from(pickupParticipants)
@@ -2368,14 +2382,19 @@ export async function startParticipantShareCheckout(input: {
           .where(eq(pickupParticipants.pickupSessionId, linkedPickup.id))
       : [];
     const confirmedPersonId = participant.personId ?? input.actor.personId;
-    const linkedParticipant = linkedRoster.find((row) =>
-      participant.personId
-        ? row.personId === participant.personId
-        : row.displayName.trim() === participant.invitedName?.trim(),
-    );
+    const linkedParticipant = resolvePickupParticipantForCourtParticipant({
+      courtParticipant: participant,
+      pickupParticipants: linkedRoster,
+    });
     const existingConfirmedPerson = linkedRoster.find(
       (row) => row.personId === confirmedPersonId,
     );
+    if (linkedPickup && !linkedParticipant && !existingConfirmedPerson) {
+      throw new CourtCheckoutError(
+        "CHECKOUT_UNAVAILABLE",
+        "This match roster changed while the invitation was open. Ask the host to resend or replace this place.",
+      );
+    }
     const policyHash = stableHash(policy.markdown);
 
     await getTransactionalDatabase().transaction(async (transaction) => {
@@ -2405,24 +2424,87 @@ export async function startParticipantShareCheckout(input: {
           existingConfirmedPerson &&
           existingConfirmedPerson.id !== linkedParticipant.id
         ) {
-          await transaction
+          const [cancelledLinkedParticipant] = await transaction
             .update(pickupParticipants)
-            .set({ status: "cancelled", updatedAt: input.now })
-            .where(eq(pickupParticipants.id, linkedParticipant.id));
-          await transaction
+            .set({
+              status: "cancelled",
+              courtBookingParticipantId: null,
+              updatedAt: input.now,
+            })
+            .where(
+              and(
+                eq(pickupParticipants.id, linkedParticipant.id),
+                or(
+                  isNull(pickupParticipants.courtBookingParticipantId),
+                  eq(
+                    pickupParticipants.courtBookingParticipantId,
+                    participant.id,
+                  ),
+                ),
+              ),
+            )
+            .returning({ id: pickupParticipants.id });
+          if (!cancelledLinkedParticipant) {
+            throw new CourtCheckoutError(
+              "CHECKOUT_UNAVAILABLE",
+              "The match roster changed while this place was being confirmed. Try again.",
+            );
+          }
+          const [confirmedExistingParticipant] = await transaction
             .update(pickupParticipants)
-            .set({ status: "confirmed", updatedAt: input.now })
-            .where(eq(pickupParticipants.id, existingConfirmedPerson.id));
+            .set({
+              courtBookingParticipantId: participant.id,
+              status: "confirmed",
+              updatedAt: input.now,
+            })
+            .where(
+              and(
+                eq(pickupParticipants.id, existingConfirmedPerson.id),
+                or(
+                  isNull(pickupParticipants.courtBookingParticipantId),
+                  eq(
+                    pickupParticipants.courtBookingParticipantId,
+                    participant.id,
+                  ),
+                ),
+              ),
+            )
+            .returning({ id: pickupParticipants.id });
+          if (!confirmedExistingParticipant) {
+            throw new CourtCheckoutError(
+              "CHECKOUT_UNAVAILABLE",
+              "The match roster changed while this place was being confirmed. Try again.",
+            );
+          }
         } else {
-          await transaction
+          const [confirmedLinkedParticipant] = await transaction
             .update(pickupParticipants)
             .set({
               personId: confirmedPersonId,
+              courtBookingParticipantId: participant.id,
               status: "confirmed",
               holdExpiresAt: null,
               updatedAt: input.now,
             })
-            .where(eq(pickupParticipants.id, linkedParticipant.id));
+            .where(
+              and(
+                eq(pickupParticipants.id, linkedParticipant.id),
+                or(
+                  isNull(pickupParticipants.courtBookingParticipantId),
+                  eq(
+                    pickupParticipants.courtBookingParticipantId,
+                    participant.id,
+                  ),
+                ),
+              ),
+            )
+            .returning({ id: pickupParticipants.id });
+          if (!confirmedLinkedParticipant) {
+            throw new CourtCheckoutError(
+              "CHECKOUT_UNAVAILABLE",
+              "The match roster changed while this place was being confirmed. Try again.",
+            );
+          }
         }
       }
       await transaction.insert(bookingPolicyAcceptances).values({
