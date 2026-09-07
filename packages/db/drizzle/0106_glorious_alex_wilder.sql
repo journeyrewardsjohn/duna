@@ -1,0 +1,3 @@
+ALTER TABLE "pickup_participants" ADD COLUMN "court_booking_participant_id" uuid;--> statement-breakpoint
+ALTER TABLE "pickup_participants" ADD CONSTRAINT "pickup_participants_court_booking_participant_id_court_booking_participants_id_fk" FOREIGN KEY ("court_booking_participant_id") REFERENCES "public"."court_booking_participants"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "pickup_participant_court_booking_participant_unique" ON "pickup_participants" USING btree ("court_booking_participant_id") WHERE "pickup_participants"."court_booking_participant_id" IS NOT NULL;

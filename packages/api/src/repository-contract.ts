@@ -290,6 +290,8 @@ export interface PickupMutationInput extends PickupInput {
   readonly provisionalParticipants: readonly {
     readonly givenName: string;
     readonly familyName: string;
+    /** Internal durable link used when a court reservation creates a match. */
+    readonly courtBookingParticipantId?: string;
   }[];
   readonly organizationId?: string;
   readonly requestId: string;

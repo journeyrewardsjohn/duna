@@ -743,6 +743,13 @@
       "when": 1788658676281,
       "tag": "0105_absurd_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1788739245247,
+      "tag": "0106_glorious_alex_wilder",
+      "breakpoints": true
     }
   ]
 }
