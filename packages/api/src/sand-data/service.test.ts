@@ -9,9 +9,12 @@ import {
   parseAvpLeagueEventPayload,
   parsePlayerSourceProfile,
   preferredProfessionalEventCardMedia,
+  professionalBracketRound,
   professionalEventLifecycle,
   professionalEventCurrentRound,
+  professionalEventPodium,
   professionalEventSlug,
+  professionalEventWinnerEntries,
   professionalMatchCanonicalPath,
   professionalMatchScheduledAt,
   professionalMatchPredictionClosed,
@@ -749,9 +752,80 @@ describe("professional live match timing", () => {
       ),
     ).toBe("Pool B");
   });
+
+  it("keeps AVP championship quarterfinals and semifinals out of the final", () => {
+    expect(
+      [
+        "Men · Championships · Quaterfinals",
+        "Men · Championships · Semifinals",
+        "Men · Championship Final · Finals",
+      ].map((roundLabel) => professionalBracketRound(roundLabel)?.label),
+    ).toEqual(["Quarterfinals", "Semifinals", "Final"]);
+  });
+
+  it("derives the AVP champion from the title match instead of the first quarterfinal", () => {
+    const team = (label: string) => ({ label });
+    const podium = professionalEventPodium([
+      {
+        roundLabel: "Men · Championships · Quarterfinals",
+        teamA: team("Chaim Schalk / James Shaw"),
+        teamB: team("Troy Field / Ryan Wilcox"),
+        winnerSide: "A" as const,
+      },
+      {
+        roundLabel: "Men · Championships · Quarterfinals",
+        teamA: team("Chase Budinger / Miles Evans"),
+        teamB: team("Hagen Smith / Logan Webber"),
+        winnerSide: "A" as const,
+      },
+      {
+        roundLabel: "Men · Championships · Semifinals",
+        teamA: team("Andy Benesh / Taylor Crabb"),
+        teamB: team("Chaim Schalk / James Shaw"),
+        winnerSide: "B" as const,
+      },
+      {
+        roundLabel: "Men · Championships · Semifinals",
+        teamA: team("Chase Budinger / Miles Evans"),
+        teamB: team("Trevor Crabb / Phil Dalhausser"),
+        winnerSide: "B" as const,
+      },
+      {
+        roundLabel: "Men · Championship Final · Finals",
+        teamA: team("Chaim Schalk / James Shaw"),
+        teamB: team("Trevor Crabb / Phil Dalhausser"),
+        winnerSide: "B" as const,
+      },
+    ]);
+
+    expect(podium).toEqual({
+      champion: team("Trevor Crabb / Phil Dalhausser"),
+      runnerUp: team("Chaim Schalk / James Shaw"),
+      thirdPlace: undefined,
+    });
+  });
 });
 
 describe("professional event division details", () => {
+  it("keeps AVP championship winner options in the event's division", () => {
+    const entries = [
+      { list: "league", entryTag: "women", label: "Austin Aces women" },
+      {
+        list: "league",
+        entryTag: "men",
+        label: "Palm Beach Passion men",
+      },
+      { list: "league", entryTag: "women", label: "Miami Mayhem women" },
+      { list: "league", entryTag: "men", label: "New York Nitro men" },
+    ];
+
+    expect(
+      professionalEventWinnerEntries(entries, "men").map(
+        (entry) => entry.label,
+      ),
+    ).toEqual(["Palm Beach Passion men", "New York Nitro men"]);
+  });
+
   it("prefers an official poster over a featured fallback for event cards", () => {
     expect(
       preferredProfessionalEventCardMedia([
