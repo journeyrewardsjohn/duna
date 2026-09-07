@@ -1,3 +1,5 @@
+"use client";
+
 import styles from "./profile-avatar-stack.module.css";
 
 export interface ProfileAvatarPerson {
@@ -27,11 +29,17 @@ export function ProfileAvatar({
       className={classes(styles.avatar, styles[size], className)}
       title={person.displayName}
     >
+      <span>{person.initials}</span>
       {person.avatarUrl ? (
-        <img alt="" loading="lazy" src={person.avatarUrl} />
-      ) : (
-        <span>{person.initials}</span>
-      )}
+        <img
+          alt=""
+          loading="lazy"
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+          src={person.avatarUrl}
+        />
+      ) : null}
     </span>
   );
 }

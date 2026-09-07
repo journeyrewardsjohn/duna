@@ -8,11 +8,11 @@ import {
   type DiscoveryMapItem,
   type DiscoverySearchCriteria,
 } from "@duna/api/discovery-search";
-import { ArrowLeft, Map, Search } from "lucide-react";
-import Link from "next/link";
+import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { discoveryCriteriaToQuery } from "@/lib/discovery-query";
 import { DiscoveryCard } from "./discovery-card";
+import { DiscoveryPageHeader } from "./discovery-page-header";
 
 const focusOptions = [
   { value: "all", label: "All" },
@@ -81,27 +81,19 @@ export function DiscoveryResults({
   }, [activeFocus, query, result.items]);
   const serialized = discoveryCriteriaToQuery(initialCriteria);
   return (
-    <main className="discover-v2-results-page discover-public">
-      <header>
-        <Link href="/discover">
-          <ArrowLeft aria-hidden size={17} /> Edit search
-        </Link>
-        <div>
-          <span>PUBLIC DISCOVERY</span>
-          <h1>Find exactly your kind of play.</h1>
-          <p>
-            {initialCriteria.location.label} ·{" "}
-            {discoveryWhenLabel(initialCriteria.when)} ·{" "}
-            {discoveryWhatLabel(initialCriteria.what)}
-          </p>
-        </div>
-        <Link
-          className="discover-v2-map-button"
-          href={`/discover/map?${serialized}`}
-        >
-          <Map aria-hidden size={17} /> Map
-        </Link>
-      </header>
+    <main
+      className="discover-v2-results-page discover-public"
+      data-zone="editorial"
+    >
+      <DiscoveryPageHeader
+        locationLabel={initialCriteria.location.label}
+        resultSummary={discoveryResultSummary(result)}
+        title="Find your game."
+        view="list"
+        viewHref={`/discover/map?${serialized}`}
+        whatLabel={discoveryWhatLabel(initialCriteria.what)}
+        whenLabel={discoveryWhenLabel(initialCriteria.when)}
+      />
       <label className="discover-results-search">
         <Search aria-hidden size={18} />
         <input

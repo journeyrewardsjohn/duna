@@ -22,6 +22,7 @@ import { type ReactNode, useState } from "react";
 import { DunaActionCenter } from "./duna-action-center";
 import { PlayerAccountMenu } from "./player-account-menu";
 import { PlayerOrganizationSwitcher } from "./player-organization-switcher";
+import { ProfileAvatar } from "./profile-avatar-stack";
 
 const navigation = [
   { label: "Home", href: "/app", icon: House },
@@ -33,6 +34,10 @@ const navigation = [
   { label: "Health", href: "/app/health", icon: HeartPulse },
   { label: "Wallet", href: "/app/wallet", icon: WalletCards },
 ] as const;
+
+const mobileNavigation = navigation.filter(({ label }) =>
+  ["Home", "Discover", "Play", "Matches", "Video"].includes(label),
+);
 
 export function PlayerShell({
   authConfigured,
@@ -75,6 +80,7 @@ export function PlayerShell({
                   className={active ? "active" : undefined}
                   href={href}
                   key={href}
+                  title={label}
                 >
                   <Icon
                     aria-hidden
@@ -98,7 +104,11 @@ export function PlayerShell({
             <Link href="/app/settings">View plan</Link>
           </div>
           <Link className="player-sidebar__profile" href="/app/profile">
-            <span className="avatar">{player.initials}</span>
+            <ProfileAvatar
+              className="player-shell__avatar"
+              person={player}
+              size="md"
+            />
             <span>
               <strong>{player.displayName}</strong>
               <small>@{player.handle}</small>
@@ -141,7 +151,11 @@ export function PlayerShell({
                 configured={authConfigured}
                 trigger={
                   <>
-                    <span className="avatar">{player.initials}</span>
+                    <ProfileAvatar
+                      className="player-shell__avatar"
+                      person={player}
+                      size="sm"
+                    />
                     <Numeric tier="chip">
                       {player.rating.display.toFixed(2)}
                     </Numeric>
@@ -178,7 +192,11 @@ export function PlayerShell({
               <span>Record a match</span>
             </Link>
             <Link href="/app/settings" onClick={() => setMobileMenuOpen(false)}>
-              <span className="avatar">{player.initials}</span>
+              <ProfileAvatar
+                className="player-shell__avatar"
+                person={player}
+                size="sm"
+              />
               <span>Account + settings</span>
             </Link>
           </nav>
@@ -192,7 +210,7 @@ export function PlayerShell({
             aria-label="Mobile player navigation"
             className="player-bottom-nav"
           >
-            {navigation.slice(0, 5).map(({ label, href, icon: Icon }) => {
+            {mobileNavigation.map(({ label, href, icon: Icon }) => {
               const active =
                 href === "/app" ? pathname === href : pathname.startsWith(href);
               return (

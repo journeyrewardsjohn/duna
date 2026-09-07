@@ -1,6 +1,5 @@
-import { ArrowLeft, ListFilter } from "lucide-react";
-import Link from "next/link";
 import type { Metadata } from "next";
+import { DiscoveryPageHeader } from "@/components/discovery-page-header";
 import { DiscoveryMap } from "@/components/discovery-map";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -39,27 +38,19 @@ export default async function DiscoveryMapPage({
   return (
     <>
       <SiteHeader />
-      <main className="discover-v2-map-page discover-public discover-map-results">
-        <header>
-          <Link href="/discover">
-            <ArrowLeft aria-hidden size={17} /> Edit search
-          </Link>
-          <div>
-            <span>MAP + RESULTS</span>
-            <h1>{criteria.location.label}</h1>
-            <p>
-              {discoveryWhenLabel(criteria.when)} ·{" "}
-              {discoveryWhatLabel(criteria.what)} ·{" "}
-              {discoveryResultSummary(result)}
-            </p>
-          </div>
-          <Link
-            className="discover-v2-map-button"
-            href={`/discover/results?${serialized}`}
-          >
-            <ListFilter aria-hidden size={17} /> List
-          </Link>
-        </header>
+      <main
+        className="discover-v2-map-page discover-public discover-map-results"
+        data-zone="editorial"
+      >
+        <DiscoveryPageHeader
+          locationLabel={criteria.location.label}
+          resultSummary={discoveryResultSummary(result)}
+          title="Explore beach volleyball."
+          view="map"
+          viewHref={`/discover/results?${serialized}`}
+          whatLabel={discoveryWhatLabel(criteria.what)}
+          whenLabel={discoveryWhenLabel(criteria.when)}
+        />
         <DiscoveryMap
           full
           items={result.items}

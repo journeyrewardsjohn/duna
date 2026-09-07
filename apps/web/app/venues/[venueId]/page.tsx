@@ -109,7 +109,10 @@ export default async function PublicVenuePage({
         type="application/ld+json"
       />
       {inventory ? (
-        <main className="standard-page court-booking-page public-venue-page">
+        <main
+          className="standard-page court-booking-page public-venue-page"
+          data-zone="editorial"
+        >
           <CourtBookingPanel
             authenticationHref={authenticationHref}
             bookingSubjects={[]}
@@ -123,7 +126,10 @@ export default async function PublicVenuePage({
           )}
         </main>
       ) : (
-        <main className="standard-page public-venue-page public-venue-summary">
+        <main
+          className="standard-page public-venue-page public-venue-summary"
+          data-zone="editorial"
+        >
           <header
             className="public-venue-summary__hero"
             style={

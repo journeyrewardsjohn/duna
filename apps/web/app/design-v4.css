@@ -573,11 +573,11 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 
 .editorial-hero {
   display: flex;
-  min-height: 610px;
+  min-height: 540px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: clamp(7rem, 12vw, 10rem) 24px clamp(5rem, 9vw, 7rem);
+  padding: clamp(5rem, 9vw, 7.5rem) 24px clamp(4rem, 7vw, 5.5rem);
   background: var(--duna-web-grad-hero);
   color: var(--duna-web-charcoal);
   text-align: center;
@@ -596,7 +596,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   max-width: 11ch;
   margin: 28px auto 0;
   color: var(--duna-web-charcoal);
-  font-size: clamp(4.25rem, 9vw, 7.25rem);
+  font-size: clamp(3.75rem, 6vw, 5.75rem);
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 0.98;
@@ -655,7 +655,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   text-align: center;
 }
 
-/* Sand Rating and rankings use the sky family without changing their content. */
+/* Sand Rating uses the sky family; rankings keeps its live-intelligence field. */
 .rating-methodology-page,
 .rankings-page {
   background: var(--duna-web-snow);
@@ -664,8 +664,10 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 
 .rating-methodology-hero,
 .rankings-hero {
-  min-height: 640px;
-  padding-top: clamp(6rem, 12vw, 10rem);
+  min-height: 560px;
+  min-width: 0;
+  overflow: clip;
+  padding-top: clamp(4.75rem, 8vw, 7rem);
   border-radius: 0 0 var(--duna-web-radius-band) var(--duna-web-radius-band);
   background: var(--duna-web-grad-sky);
   color: var(--duna-web-navy);
@@ -674,10 +676,14 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 .rating-methodology-hero h1,
 .rankings-hero h1 {
   color: var(--duna-web-navy);
-  font-size: clamp(4rem, 8vw, 7.25rem);
+  font-size: clamp(3.75rem, 6vw, 5.75rem);
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 0.98;
+}
+
+.rankings-hero.rankings-v2__hero h1 {
+  color: var(--duna-web-white);
 }
 
 .rating-methodology-hero p,
@@ -687,11 +693,13 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 
 .rating-methodology-hero__score {
   border-left-color: var(--duna-web-sky-border);
+  min-width: 0;
 }
 
 .rating-methodology-hero__score .duna-numeric {
   color: var(--duna-web-navy);
   font-family: var(--font-display);
+  font-size: clamp(4rem, 9vw, 8rem);
   font-weight: 900;
 }
 
@@ -889,5 +897,620 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   main[data-zone="editorial"] *::before,
   main[data-zone="editorial"] *::after {
     scroll-behavior: auto !important;
+  }
+}
+
+/* Shared public chrome and detail-page density. Campaign pages keep their
+ * expressive display scale; task and detail pages use the compact roles below. */
+.site-header {
+  position: sticky;
+  z-index: 100;
+  top: 0;
+  right: auto;
+  left: auto;
+  height: var(--duna-web-nav-height);
+  padding: 0;
+  border-bottom: 1px solid var(--duna-web-hairline);
+  background: var(--duna-web-grad-nav);
+}
+
+.site-header .site-header__inner {
+  width: min(100%, calc(var(--duna-web-content-max) + 48px));
+  max-width: none;
+  min-height: var(--duna-web-nav-height);
+  margin-inline: auto;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.site-header .site-header__brand {
+  min-height: 0;
+}
+
+.site-header .site-header__brand .duna-mark__logo {
+  height: 30px;
+  transform: none;
+}
+
+.site-header .site-header__nav {
+  gap: 4px;
+  justify-self: center;
+}
+
+.site-header :is(.club-feature-menu > summary, .site-header__nav > a) {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: var(--duna-web-charcoal);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.site-header .site-header__actions {
+  gap: 10px;
+}
+
+.site-header :is(.theme-toggle, .site-header__operator, .site-header__enter) {
+  min-height: 44px;
+  border-color: var(--duna-web-border);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.site-header .theme-toggle,
+.site-header .site-header__operator {
+  background: color-mix(in srgb, var(--duna-web-white) 70%, transparent);
+}
+
+.site-header .site-header__operator {
+  padding-inline: 14px 8px;
+}
+
+.site-header .site-header__enter {
+  background: var(--duna-web-charcoal);
+  color: var(--duna-web-white);
+}
+
+.site-header .site-header__enter:hover {
+  background: var(--duna-web-charcoal-press);
+}
+
+.pro-tour-page .pro-tour-hero {
+  min-height: clamp(32rem, 66vh, 40rem);
+  padding-top: clamp(5rem, 9vw, 7.5rem);
+  padding-bottom: clamp(4rem, 7vw, 6rem);
+}
+
+.pro-tour-page .pro-tour-hero h1 {
+  font-size: clamp(3.5rem, 5.6vw, 5.25rem);
+  line-height: 0.98;
+}
+
+.pro-event-page {
+  background:
+    radial-gradient(
+      circle at 82% 5%,
+      rgb(211 227 240 / 58%),
+      transparent 28rem
+    ),
+    var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+}
+
+.pro-event-page .pro-event-hero {
+  gap: clamp(2rem, 5vw, 5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem);
+  padding: clamp(2.75rem, 5vw, 5rem)
+    max(24px, calc((100vw - var(--duna-web-content-max)) / 2));
+  border-bottom-color: var(--duna-web-hairline);
+  background: var(--duna-web-grad-hero);
+}
+
+.pro-event-page .pro-back-link {
+  min-height: 44px;
+  margin-bottom: 1.35rem;
+  color: var(--duna-web-grey-600);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.pro-event-page .pro-event-hero h1 {
+  max-width: 15ch;
+  margin: 0.9rem 0 1.2rem;
+  color: var(--duna-web-charcoal);
+  font-size: var(--duna-type-detail);
+  font-weight: 900;
+  line-height: 0.96;
+}
+
+.pro-event-page .pro-event-hero__facts {
+  color: var(--duna-web-grey-600);
+  font-size: 0.9rem;
+  gap: 0.8rem 1.25rem;
+}
+
+.pro-event-page .pro-event-hero__result {
+  max-width: 46rem;
+  margin-top: 1.15rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--duna-web-radius-item);
+  background: linear-gradient(
+    135deg,
+    rgb(214 177 67 / 18%),
+    rgb(211 227 240 / 46%)
+  );
+}
+
+.pro-event-page .pro-event-hero__result strong {
+  font-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  line-height: 1.08;
+}
+
+.pro-event-page .pro-event-hero__actions {
+  margin-top: 1.25rem;
+}
+
+.pro-event-page .pro-event-hero__actions a {
+  min-height: 44px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.86rem;
+}
+
+.pro-event-page .pro-event-hero__scorecard {
+  min-height: 210px;
+  padding: 1.25rem;
+  border-radius: var(--duna-web-radius-card);
+  background: var(--duna-web-navy);
+}
+
+.pro-event-page .pro-event-hero__scorecard > strong {
+  font-size: clamp(2.8rem, 4vw, 3.5rem);
+}
+
+.pro-event-page .pro-event-content {
+  max-width: calc(var(--duna-web-content-max) + 40px);
+  padding: clamp(2.25rem, 4.5vw, 4.25rem) 20px;
+}
+
+.pro-event-page .pro-event-section {
+  border-color: var(--duna-web-hairline);
+  border-radius: var(--duna-web-radius-card);
+  background: var(--duna-web-white);
+  box-shadow: var(--duna-web-shadow-card);
+}
+
+.pro-event-page .pro-event-section > header h2 {
+  font-size: var(--duna-type-section);
+  line-height: 0.98;
+}
+
+.public-venue-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(1.5rem, 3vw, 2.75rem) 0 clamp(4rem, 7vw, 6.5rem);
+  background:
+    radial-gradient(
+      circle at 86% 0%,
+      rgb(211 227 240 / 56%),
+      transparent 30rem
+    ),
+    var(--duna-web-snow);
+}
+
+.public-venue-page .court-booking-hero,
+.public-venue-page .venue-booking-tabs,
+.public-venue-page .venue-booking-shell,
+.public-venue-page > .venue-layout-viewer {
+  width: min(
+    calc(100% - var(--duna-page-gutter) - var(--duna-page-gutter)),
+    var(--duna-web-content-max)
+  );
+  max-width: none;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.public-venue-page .court-booking-hero {
+  align-items: end;
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: clamp(18rem, 23vw, 22rem);
+  margin-bottom: 0;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  border-radius: var(--duna-web-radius-media);
+  background-color: var(--duna-web-navy);
+}
+
+.public-venue-page .court-booking-hero__copy {
+  max-width: 50rem;
+}
+
+.public-venue-page .court-booking-hero__back {
+  min-height: 44px;
+  margin-bottom: clamp(1.5rem, 4vw, 3rem);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.public-venue-page .court-booking-hero h1 {
+  max-width: 13ch;
+  margin: 0.55rem 0 0.8rem;
+  font-size: var(--duna-type-detail);
+  font-weight: 900;
+  line-height: 0.96;
+}
+
+.public-venue-page .court-booking-hero p {
+  font-size: 0.9rem;
+}
+
+.public-venue-page .court-booking-hero__mark {
+  min-width: 10.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--duna-web-radius-item);
+  background: rgb(255 255 255 / 90%);
+}
+
+.public-venue-page .venue-booking-tabs {
+  gap: clamp(1.25rem, 4vw, 3rem);
+  min-height: 62px;
+  padding: 0;
+  border-bottom-color: var(--duna-web-hairline);
+}
+
+.public-venue-page .venue-booking-tabs > * {
+  min-height: 48px;
+  padding: 1.05rem 0 0.95rem;
+  color: var(--duna-web-grey-600);
+  font-size: 0.88rem;
+}
+
+.public-venue-page .venue-booking-tabs [aria-current="page"] {
+  color: var(--duna-web-charcoal);
+}
+
+.public-venue-page .venue-booking-shell {
+  padding: clamp(2.5rem, 5vw, 4.5rem) 0 2rem;
+}
+
+.public-venue-page .venue-booking-heading {
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.public-venue-page .venue-booking-heading h2 {
+  max-width: 18ch;
+  font-size: var(--duna-type-section);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.public-venue-page .venue-booking-heading .duna-badge {
+  min-height: 36px;
+  padding-inline: 0.8rem;
+  white-space: nowrap;
+}
+
+.public-venue-summary__hero,
+.public-venue-summary__body {
+  width: min(
+    calc(100% - var(--duna-page-gutter) - var(--duna-page-gutter)),
+    var(--duna-web-content-max)
+  );
+  margin-inline: auto;
+}
+
+.public-venue-summary__hero h1 {
+  max-width: 14ch;
+  font-size: var(--duna-type-detail);
+  line-height: 0.96;
+}
+
+.discover-v2-map-page.discover-public,
+.discover-v2-results-page.discover-public {
+  --discover-sheet-width: clamp(22.5rem, 38%, 32.5rem);
+  width: min(100%, var(--duna-content-outer));
+  margin-inline: auto;
+  padding: clamp(1.5rem, 3.5vw, 3rem) var(--duna-page-gutter)
+    clamp(2.5rem, 5vw, 4.5rem);
+  background: var(--duna-web-snow);
+  color: var(--duna-web-charcoal);
+}
+
+.discover-v2-map-page > .discover-results-header,
+.discover-v2-results-page > .discover-results-header {
+  align-items: end;
+  display: grid;
+  gap: 1.5rem 2.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.discover-results-header__copy > span {
+  display: block;
+  color: var(--duna-web-gold-ink);
+  font-family: var(--duna-web-font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.discover-v2-map-page > .discover-results-header h1,
+.discover-v2-results-page > .discover-results-header h1 {
+  max-width: 18ch;
+  margin: 0.5rem 0 0;
+  color: var(--duna-web-navy);
+  font-size: var(--duna-type-page);
+  font-weight: 900;
+  line-height: 0.98;
+}
+
+.discover-results-header__copy > p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: none;
+  margin: 0.85rem 0 0;
+  color: var(--duna-web-grey-600);
+}
+
+.discover-results-header__copy > p > * {
+  min-height: 32px;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--duna-web-hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--duna-web-white) 76%, transparent);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.discover-results-header__copy > p > strong {
+  color: var(--duna-web-charcoal);
+}
+
+.discover-results-header > nav {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.discover-results-header > nav > a {
+  position: static;
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 1rem;
+  border: 1px solid var(--duna-web-border);
+  border-radius: 999px;
+  background: var(--duna-web-white);
+  color: var(--duna-web-navy);
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-decoration: none;
+  backdrop-filter: none;
+}
+
+.discover-results-header > nav > .discover-v2-map-button {
+  border-color: var(--duna-web-navy);
+  background: var(--duna-web-navy);
+  color: #fff;
+}
+
+.discover-map-results .discover-v2-map--full {
+  min-height: min(72vh, 760px);
+  border-radius: var(--duna-web-radius-media);
+  box-shadow: var(--duna-web-shadow-card);
+}
+
+@media (min-width: 981px) {
+  .discover-map-results,
+  .discover-v2-results-page {
+    padding-top: clamp(1.5rem, 3.5vw, 3rem);
+  }
+
+  .discover-map-results .discover-v2-sheet,
+  .discover-map-results .discover-v2-sheet.is-peek,
+  .discover-map-results .discover-v2-sheet.is-half,
+  .discover-map-results .discover-v2-sheet.is-full,
+  .discover-map-results .discover-v2-sheet.is-expanded {
+    width: var(--discover-sheet-width);
+  }
+
+  .discover-map-results .discover-v2-map__locate {
+    right: calc(var(--discover-sheet-width) + 16px);
+  }
+
+  .discover-map-results .discover-v2-map__search-area {
+    left: calc((100% - var(--discover-sheet-width)) / 2);
+  }
+
+  .discover-map-results .discover-v2-map__filters {
+    max-width: calc(100% - var(--discover-sheet-width) - 36px);
+  }
+
+  .discover-map-results .discover-v2-map__loading,
+  .discover-map-results .discover-v2-map__fallback {
+    right: var(--discover-sheet-width);
+  }
+}
+
+@media (max-width: 1180px) {
+  .site-header {
+    height: 70px;
+  }
+
+  .site-header .site-header__inner {
+    min-height: 70px;
+  }
+
+  .pro-event-page .pro-event-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  }
+}
+
+@media (min-width: 981px) and (max-width: 1180px) {
+  .discover-map-results .discover-v2-map__filters {
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .discover-map-results .discover-v2-map__filters > svg {
+    margin-left: 4px;
+  }
+
+  .discover-map-results .discover-v2-map__filters button {
+    padding-inline: 9px;
+  }
+}
+
+@media (max-width: 960px) {
+  .pro-event-page .pro-event-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-event-page .pro-event-hero__visual {
+    width: 100%;
+  }
+
+  .pro-event-page .pro-event-hero__scorecard {
+    min-height: 10.5rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-header {
+    height: 64px;
+    padding: 0;
+  }
+
+  .site-header .site-header__inner {
+    min-height: 64px;
+    padding: 0 16px;
+  }
+
+  .site-header .site-header__brand .duna-mark__logo {
+    height: 27px;
+  }
+
+  .site-header .site-header__menu {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--duna-web-border);
+    background: color-mix(in srgb, var(--duna-web-white) 76%, transparent);
+  }
+
+  .pro-event-page .pro-event-hero {
+    gap: 1.75rem;
+    padding: 1.5rem 1rem 2.25rem;
+  }
+
+  .pro-event-page .pro-event-hero h1 {
+    max-width: none;
+    font-size: clamp(2.65rem, 12vw, 3.45rem);
+  }
+
+  .pro-event-page .pro-event-hero__result {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pro-event-page .pro-event-hero__result a {
+    grid-column: 2;
+  }
+
+  .public-venue-page {
+    padding-top: 1rem;
+  }
+
+  .public-venue-page .court-booking-hero,
+  .public-venue-page .venue-booking-tabs,
+  .public-venue-page .venue-booking-shell,
+  .public-venue-page > .venue-layout-viewer {
+    width: calc(100% - 2rem);
+  }
+
+  .public-venue-page .court-booking-hero {
+    grid-template-columns: 1fr;
+    min-height: 22rem;
+    padding: 1.25rem;
+    border-radius: var(--duna-web-radius-card);
+  }
+
+  .public-venue-page .court-booking-hero__back {
+    margin-bottom: 1.75rem;
+  }
+
+  .public-venue-page .court-booking-hero h1 {
+    max-width: none;
+    font-size: clamp(2.75rem, 13vw, 3.8rem);
+  }
+
+  .public-venue-page .court-booking-hero__mark {
+    display: inline-grid;
+    width: auto;
+    justify-self: start;
+    min-width: 9rem;
+  }
+
+  .public-venue-page .venue-booking-tabs {
+    gap: 1.35rem;
+    overflow-x: auto;
+  }
+
+  .public-venue-page .venue-booking-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .discover-v2-map-page.discover-public,
+  .discover-v2-results-page.discover-public {
+    padding: 1.25rem 0.75rem 2.5rem;
+  }
+
+  .discover-v2-map-page > .discover-results-header,
+  .discover-v2-results-page > .discover-results-header {
+    align-items: start;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+    padding-right: 0;
+  }
+
+  .discover-v2-map-page > .discover-results-header h1,
+  .discover-v2-results-page > .discover-results-header h1 {
+    font-size: clamp(2.5rem, 11vw, 3.4rem);
+  }
+
+  .discover-v2-map-page
+    > .discover-results-header
+    .discover-results-header__copy
+    > p,
+  .discover-v2-results-page
+    > .discover-results-header
+    .discover-results-header__copy
+    > p {
+    display: flex;
+  }
+
+  .discover-results-header > nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .discover-results-header > nav > a {
+    min-width: 0;
+    padding-inline: 0.75rem;
+  }
+
+  .discover-map-results .discover-v2-map--full {
+    min-height: calc(100dvh - 22rem);
+    border-radius: var(--duna-web-radius-card);
   }
 }

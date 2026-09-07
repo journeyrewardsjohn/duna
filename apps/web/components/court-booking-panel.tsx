@@ -102,6 +102,16 @@ function instantTime(instant: string, timezone: string) {
   }).format(new Date(instant));
 }
 
+function timeZoneLabel(timeZone: string) {
+  const abbreviation = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "short",
+  })
+    .formatToParts(new Date())
+    .find((part) => part.type === "timeZoneName")?.value;
+  return abbreviation ? `Local time · ${abbreviation}` : "Local time";
+}
+
 export function CourtBookingPanel({
   bookingSubjects,
   inventory,
@@ -495,6 +505,28 @@ export function CourtBookingPanel({
   const hostAuthenticationHref = `/sign-in?returnTo=${encodeURIComponent(
     hostReturnHref,
   )}`;
+  const venueDiscoveryQuery = new URLSearchParams({
+    where:
+      inventory.venue.latitude !== undefined &&
+      inventory.venue.longitude !== undefined
+        ? "place"
+        : "anywhere",
+    when: "flexible",
+  });
+  if (
+    inventory.venue.latitude !== undefined &&
+    inventory.venue.longitude !== undefined
+  ) {
+    venueDiscoveryQuery.set(
+      "location",
+      `${inventory.venue.city}, ${inventory.venue.region}`,
+    );
+    venueDiscoveryQuery.set("lat", String(inventory.venue.latitude));
+    venueDiscoveryQuery.set("lng", String(inventory.venue.longitude));
+    if (inventory.venue.address) {
+      venueDiscoveryQuery.set("address", inventory.venue.address);
+    }
+  }
 
   const createAlert = () => {
     startTransition(async () => {
@@ -594,6 +626,7 @@ export function CourtBookingPanel({
     <>
       <header
         className="court-booking-hero court-booking-hero--visual"
+        id="venue-overview"
         style={
           inventory.venue.heroImageTreatmentUrl || inventory.venue.heroImageUrl
             ? {
@@ -602,8 +635,8 @@ export function CourtBookingPanel({
             : undefined
         }
       >
-        <div>
-          <Link href={backHref}>
+        <div className="court-booking-hero__copy">
+          <Link className="court-booking-hero__back" href={backHref}>
             <ArrowLeft aria-hidden size={15} /> Back to discover
           </Link>
           <span className="page-eyebrow">Venue booking</span>
@@ -626,19 +659,27 @@ export function CourtBookingPanel({
       </header>
 
       <nav className="venue-booking-tabs" aria-label="Venue">
-        <span>Home</span>
-        <strong>Book</strong>
-        <Link href="/discover?kind=pickup">Open matches</Link>
-        <Link href="/discover">Events</Link>
+        <a href="#venue-overview">Overview</a>
+        <strong aria-current="page">Book a court</strong>
+        <Link
+          href={`/discover/results?${venueDiscoveryQuery.toString()}&what=matches&focus=matches`}
+        >
+          Open matches
+        </Link>
+        <Link
+          href={`/discover/results?${venueDiscoveryQuery.toString()}&what=events&focus=events`}
+        >
+          Nearby events
+        </Link>
       </nav>
 
-      <section className="venue-booking-shell">
+      <section className="venue-booking-shell" id="book-a-court">
         <header className="venue-booking-heading">
           <div>
             <span className="page-eyebrow">Find your court</span>
             <h2>Pick a day, a length, and an open start.</h2>
           </div>
-          <Badge>{inventory.venue.timezone}</Badge>
+          <Badge>{timeZoneLabel(inventory.venue.timezone)}</Badge>
         </header>
 
         <CalendarDatePicker
