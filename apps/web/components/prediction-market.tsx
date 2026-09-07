@@ -523,7 +523,7 @@ export function PredictionMarketLifecycle({
         {!compact && <small>{detail}</small>}
       </div>
       {statusTime && !compact && (
-        <time dateTime={statusTime}>
+        <time dateTime={statusTime} suppressHydrationWarning>
           {new Intl.DateTimeFormat("en-US", {
             month: "short",
             day: "numeric",
