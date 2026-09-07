@@ -19,6 +19,7 @@ import { DunaIcon, type DunaIconName } from "./duna-icon";
 import { SatoshiText as Text } from "./satoshi-text";
 import { dunaWebUrl } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
+import { ProfileVideoSection } from "./video-studio";
 import {
   defaultVideoNetworkPreferences,
   loadVideoNetworkPreferences,
@@ -760,6 +761,7 @@ export function ProfileHubScreen({
   readonly onEditProfile: () => void;
   readonly onOrganization: (organizationSlug: string) => void;
 }) {
+  const runtime = usePlayerRuntime();
   const {
     dashboard,
     mode,
@@ -768,7 +770,7 @@ export function ProfileHubScreen({
     settings,
     signOut,
     wallet,
-  } = usePlayerRuntime();
+  } = runtime;
   const player = dashboard?.player ?? demoPlayer;
   const [profileOpen, setProfileOpen] = useState(false);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
@@ -921,6 +923,11 @@ export function ProfileHubScreen({
             </Pressable>
           ))}
         </View>
+
+        <ProfileVideoSection
+          onOpenLibrary={() => onDestination("video")}
+          runtime={runtime}
+        />
 
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>Organizations</Text>

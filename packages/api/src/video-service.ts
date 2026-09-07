@@ -17,10 +17,12 @@ import {
   getDatabase,
   getTransactionalDatabase,
   matches,
+  messages,
   organizationMemberships,
   organizations,
   paymentFundSchedules,
   people,
+  playerVideoNotes,
   ratings,
   registrations,
   sessions,
@@ -29,6 +31,7 @@ import {
   venues,
   videoAllowanceGrants,
   videoBroadcastDestinations,
+  videoParticipants,
   videoQuotaPolicies,
   videoInsightFeedback,
   videoShareLinks,
@@ -94,6 +97,7 @@ import {
   isR2VideoConfigured,
   loadCloudflareLiveVideo,
   loadMuxLiveIngest,
+  loadMuxVideoAsset,
   loadMuxVideoMetrics,
   muxDataEnvironmentKey,
   listR2VideoUploadParts,
@@ -116,6 +120,7 @@ import {
   provisionYoutubeBroadcastDestinations,
 } from "./video-youtube-service";
 import { loadVisionPlayback } from "./vision-service";
+import { canonicalPublicWebUrl } from "./public-web-url";
 
 const DEFAULT_MONTHLY_LIVE_SAFETY_CEILING_SECONDS = 8 * 60 * 60;
 const DEFAULT_MONTHLY_UPLOAD_SAFETY_CEILING_SECONDS = 30 * 60 * 60;
@@ -284,16 +289,11 @@ function shareToken(): string {
   return `${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "")}`;
 }
 
-function publicWebOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_DUNA_WEB_URL ??
-    process.env.DUNA_WEB_URL ??
-    "https://duna-web.vercel.app"
-  ).replace(/\/+$/, "");
-}
-
-function videoShareUrl(videoId: string, token: string): string {
-  return `${publicWebOrigin()}/watch/${videoId}?token=${encodeURIComponent(token)}`;
+export function videoShareUrl(videoId: string, token: string): string {
+  return canonicalPublicWebUrl(
+    `/watch/${videoId}?token=${encodeURIComponent(token)}`,
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL ?? process.env.DUNA_WEB_URL,
+  );
 }
 
 function monthBounds(now: Date): { startsAt: Date; endsAt: Date } {
@@ -983,34 +983,74 @@ export async function loadVideoStudio(
   requireDatabase();
   const personId = actor.personId;
   const organizationId = actor.organizationId;
-  const [entitlement, usage, ownVideos, liveNow, organization, youtube] =
-    await Promise.all([
-      getDunaPlusEntitlement(personId, now),
-      loadVideoUsage(personId, now, organizationId),
-      loadVideoSummaries({
-        where: organizationId
-          ? eq(videos.organizationId, organizationId)
-          : and(
+  const [
+    entitlement,
+    usage,
+    ownVideos,
+    liveNow,
+    organization,
+    youtube,
+    invitationRows,
+  ] = await Promise.all([
+    getDunaPlusEntitlement(personId, now),
+    loadVideoUsage(personId, now, organizationId),
+    loadVideoSummaries({
+      where: organizationId
+        ? eq(videos.organizationId, organizationId)
+        : or(
+            and(
               eq(videos.ownerPersonId, personId),
               isNull(videos.organizationId),
             ),
-        limit: 100,
-        includePrivatePosters: true,
-      }),
-      loadVideoSummaries({
-        where: and(
-          eq(videos.status, "live"),
-          eq(videos.liveVisibility, "public"),
+            sql`exists (
+                select 1 from ${videoParticipants}
+                where ${videoParticipants.videoId} = ${videos.id}
+                  and ${videoParticipants.personId} = ${personId}::uuid
+                  and ${videoParticipants.profileStatus} in ('included', 'hidden')
+              )`,
+          ),
+      limit: 100,
+      includePrivatePosters: true,
+    }),
+    loadVideoSummaries({
+      where: and(
+        eq(videos.status, "live"),
+        eq(videos.liveVisibility, "public"),
+      ),
+      limit: 30,
+    }),
+    organizationId
+      ? getDatabase().query.organizations.findFirst({
+          where: eq(organizations.id, organizationId),
+        })
+      : Promise.resolve(undefined),
+    loadYoutubeBroadcastOptions(actor),
+    getDatabase()
+      .select()
+      .from(videoParticipants)
+      .where(
+        and(
+          eq(videoParticipants.personId, personId),
+          eq(videoParticipants.profileStatus, "pending"),
         ),
-        limit: 30,
-      }),
-      organizationId
-        ? getDatabase().query.organizations.findFirst({
-            where: eq(organizations.id, organizationId),
-          })
-        : Promise.resolve(undefined),
-      loadYoutubeBroadcastOptions(actor),
-    ]);
+      )
+      .orderBy(desc(videoParticipants.createdAt))
+      .limit(50),
+  ]);
+  const invitationVideos =
+    invitationRows.length === 0
+      ? []
+      : await loadVideoSummaries({
+          where: inArray(
+            videos.id,
+            invitationRows.map((row) => row.videoId),
+          ),
+          limit: invitationRows.length,
+          includePrivatePosters: true,
+        });
+  const invitationByVideoId = new Map(
+    invitationRows.map((row) => [row.videoId, row] as const),
+  );
   const organizationPlan = organization
     ? resolveOrganizationCommissionPolicy(organization).effectivePlan
     : undefined;
@@ -1041,6 +1081,20 @@ export async function loadVideoStudio(
     usage,
     videos: ownVideos,
     liveNow,
+    profileInvitations: invitationVideos.flatMap((video) => {
+      const invitation = invitationByVideoId.get(video.id);
+      return invitation
+        ? [
+            {
+              video,
+              status: invitation.profileStatus as
+                "pending" | "included" | "hidden",
+              notifiedAt: invitation.notifiedAt?.toISOString(),
+              decidedAt: invitation.decidedAt?.toISOString(),
+            },
+          ]
+        : [];
+    }),
     liveConfigured,
     uploadsConfigured: isR2VideoConfigured(),
     dataEnvironmentKey: muxDataEnvironmentKey(),
@@ -1414,6 +1468,73 @@ async function createStoredShareLink(input: {
   return { token, url: videoShareUrl(input.videoId, token) };
 }
 
+async function linkMatchPlayersToVideo(input: {
+  readonly videoId: string;
+  readonly matchId?: string;
+  readonly ownerPersonId: string;
+  readonly ownerDisplayName: string;
+  readonly title: string;
+  readonly now: Date;
+}): Promise<void> {
+  if (!input.matchId) return;
+  const database = getDatabase();
+  const match = await database.query.matches.findFirst({
+    columns: { teamAId: true, teamBId: true },
+    where: eq(matches.id, input.matchId),
+  });
+  const teamIds = [match?.teamAId, match?.teamBId].filter((id): id is string =>
+    Boolean(id),
+  );
+  if (teamIds.length === 0) return;
+  const linkedPeople = await database
+    .select({ personId: teamMembers.personId })
+    .from(teamMembers)
+    .innerJoin(people, eq(teamMembers.personId, people.id))
+    .where(
+      and(
+        inArray(teamMembers.teamId, teamIds),
+        eq(people.status, "active"),
+        eq(people.profileClaimStatus, "claimed"),
+        sql`${teamMembers.personId} <> ${input.ownerPersonId}::uuid`,
+      ),
+    );
+  const personIds = [...new Set(linkedPeople.map((row) => row.personId))];
+  if (personIds.length === 0) return;
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    const inserted = await transaction
+      .insert(videoParticipants)
+      .values(
+        personIds.map((personId) => ({
+          videoId: input.videoId,
+          personId,
+          profileStatus: "pending",
+          notifiedAt: input.now,
+          createdAt: input.now,
+          updatedAt: input.now,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ personId: videoParticipants.personId });
+    if (inserted.length === 0) return;
+    await transaction.insert(messages).values(
+      inserted.flatMap(({ personId }) =>
+        (["in-app", "push"] as const).map((channel) => ({
+          senderPersonId: input.ownerPersonId,
+          recipientPersonId: personId,
+          channel,
+          kind: "video-profile-invitation",
+          subject: `${input.ownerDisplayName} recorded your match`,
+          body: `Review “${input.title}” in Duna Videos, then choose whether it may appear on your profile.`,
+          status: "queued",
+          scheduledAt: input.now,
+          createdAt: input.now,
+          updatedAt: input.now,
+        })),
+      ),
+    );
+  });
+}
+
 export async function createLiveVideo(input: {
   readonly actor: ApiActor;
   readonly title: string;
@@ -1568,6 +1689,19 @@ export async function createLiveVideo(input: {
           now: input.now,
         }),
       ]);
+      await linkMatchPlayersToVideo({
+        videoId,
+        matchId: association.matchId,
+        ownerPersonId: input.actor.personId,
+        ownerDisplayName: input.actor.displayName,
+        title: input.title,
+        now: input.now,
+      }).catch((error) =>
+        console.error("Duna video player linking failed", {
+          error,
+          videoId,
+        }),
+      );
       await recordAudit({
         actorPersonId: input.actor.personId,
         organizationId: input.actor.organizationId,
@@ -1632,6 +1766,16 @@ export async function createLiveVideo(input: {
         now: input.now,
       }),
     ]);
+    await linkMatchPlayersToVideo({
+      videoId,
+      matchId: association.matchId,
+      ownerPersonId: input.actor.personId,
+      ownerDisplayName: input.actor.displayName,
+      title: input.title,
+      now: input.now,
+    }).catch((error) =>
+      console.error("Duna video player linking failed", { error, videoId }),
+    );
     await recordAudit({
       actorPersonId: input.actor.personId,
       organizationId: input.actor.organizationId,
@@ -1909,9 +2053,12 @@ export async function finishLiveVideo(input: {
     getDatabase()
       .update(videos)
       .set({
-        status: "processing",
-        endedAt: input.now,
-        durationSeconds,
+        // Provider webhooks can finish between the initial read and this
+        // write. Preserve that authoritative ready state and duration instead
+        // of letting a late phone stop overwrite a playable asset.
+        status: sql`case when ${videos.status} = 'ready' then 'ready' else 'processing' end`,
+        endedAt: sql`coalesce(${videos.endedAt}, ${input.now})`,
+        durationSeconds: sql`case when ${videos.status} = 'ready' and ${videos.durationSeconds} is not null then ${videos.durationSeconds} else ${durationSeconds ?? null} end`,
         updatedAt: input.now,
       })
       .where(eq(videos.id, video.id)),
@@ -2133,6 +2280,133 @@ export async function updateVideoPrivacy(input: {
   return loadVideoSummary(video.id);
 }
 
+export async function updateVideoParticipantProfile(input: {
+  readonly actor: ApiActor;
+  readonly videoId: string;
+  readonly status: "included" | "hidden";
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{
+  readonly videoId: string;
+  readonly status: "included" | "hidden";
+}> {
+  requireDatabase();
+  const participant = await getDatabase().query.videoParticipants.findFirst({
+    where: and(
+      eq(videoParticipants.videoId, input.videoId),
+      eq(videoParticipants.personId, input.actor.personId),
+    ),
+  });
+  if (!participant) {
+    throw new VideoServiceError(
+      "PLAYBACK_FORBIDDEN",
+      "This video is not linked to your player profile.",
+    );
+  }
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .update(videoParticipants)
+      .set({
+        profileStatus: input.status,
+        decidedAt: input.now,
+        updatedAt: input.now,
+      })
+      .where(eq(videoParticipants.id, participant.id));
+    await transaction.insert(auditLog).values({
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "video.profile-participation-decided",
+      entityType: "video",
+      entityId: input.videoId,
+      reason:
+        input.status === "included"
+          ? "Linked player chose to include the recording on their profile when the recorder makes it public."
+          : "Linked player chose to keep the recording off their profile.",
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+  });
+  return { videoId: input.videoId, status: input.status };
+}
+
+async function assertVideoNoteAccess(
+  personId: string,
+  videoId: string,
+): Promise<{ readonly owner: boolean; readonly linkedPlayer: boolean }> {
+  const video = await getDatabase().query.videos.findFirst({
+    columns: { ownerPersonId: true, status: true },
+    where: eq(videos.id, videoId),
+  });
+  if (!video || video.status === "deleted") {
+    throw new VideoServiceError("VIDEO_NOT_FOUND", "Video not found.");
+  }
+  const owner = video.ownerPersonId === personId;
+  const linkedPlayer = owner
+    ? false
+    : Boolean(
+        await getDatabase().query.videoParticipants.findFirst({
+          columns: { id: true },
+          where: and(
+            eq(videoParticipants.videoId, videoId),
+            eq(videoParticipants.personId, personId),
+          ),
+        }),
+      );
+  if (!owner && !linkedPlayer) {
+    throw new VideoServiceError(
+      "PLAYBACK_FORBIDDEN",
+      "Private video notes are available only to the recorder and linked players.",
+    );
+  }
+  return { owner, linkedPlayer };
+}
+
+export async function saveVideoPrivateNote(input: {
+  readonly actor: ApiActor;
+  readonly videoId: string;
+  readonly body: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<{ readonly body: string; readonly updatedAt: string }> {
+  requireDatabase();
+  await assertVideoNoteAccess(input.actor.personId, input.videoId);
+  const body = input.body.trim();
+  const saved = await getDatabase()
+    .insert(playerVideoNotes)
+    .values({
+      videoId: input.videoId,
+      personId: input.actor.personId,
+      body,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoUpdate({
+      target: [playerVideoNotes.videoId, playerVideoNotes.personId],
+      set: { body, updatedAt: input.now },
+    })
+    .returning({
+      body: playerVideoNotes.body,
+      updatedAt: playerVideoNotes.updatedAt,
+    });
+  await recordAudit({
+    actorPersonId: input.actor.personId,
+    action: "video.private-note-saved",
+    entityType: "video",
+    entityId: input.videoId,
+    reason: "Player saved a private note alongside the recording.",
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+  return {
+    body: saved[0]!.body,
+    updatedAt: saved[0]!.updatedAt.toISOString(),
+  };
+}
+
 export async function createVideoShareLink(input: {
   readonly actor: ApiActor;
   readonly videoId: string;
@@ -2347,6 +2621,16 @@ export async function beginVideoUpload(input: {
         now: input.now,
       }),
     ]);
+    await linkMatchPlayersToVideo({
+      videoId,
+      matchId: association.matchId,
+      ownerPersonId: input.actor.personId,
+      ownerDisplayName: input.actor.displayName,
+      title: input.title,
+      now: input.now,
+    }).catch((error) =>
+      console.error("Duna video player linking failed", { error, videoId }),
+    );
     return {
       videoId,
       uploadId: upload.uploadId,
@@ -2876,8 +3160,20 @@ export async function loadPublicVideos(input: {
       visibility,
       input.eventId ? eq(videos.eventId, input.eventId) : undefined,
       input.matchId ? eq(videos.matchId, input.matchId) : undefined,
-      ownerId ? eq(videos.ownerPersonId, ownerId) : undefined,
-      ownerId ? eq(videos.publishedToProfile, true) : undefined,
+      ownerId
+        ? or(
+            and(
+              eq(videos.ownerPersonId, ownerId),
+              eq(videos.publishedToProfile, true),
+            ),
+            sql`exists (
+              select 1 from ${videoParticipants}
+              where ${videoParticipants.videoId} = ${videos.id}
+                and ${videoParticipants.personId} = ${ownerId}::uuid
+                and ${videoParticipants.profileStatus} = 'included'
+            )`,
+          )
+        : undefined,
     ),
     limit: 50,
   });
@@ -2900,7 +3196,15 @@ export async function loadMatchVideosForActor(input: {
     where: and(
       eq(videos.matchId, input.matchId),
       inArray(videos.status, [...PUBLIC_VIDEO_STATUSES]),
-      or(eq(videos.ownerPersonId, input.actor.personId), publicVisibility),
+      or(
+        eq(videos.ownerPersonId, input.actor.personId),
+        publicVisibility,
+        sql`exists (
+          select 1 from ${videoParticipants}
+          where ${videoParticipants.videoId} = ${videos.id}
+            and ${videoParticipants.personId} = ${input.actor.personId}::uuid
+        )`,
+      ),
     ),
     limit: 50,
     includePrivatePosters: true,
@@ -2992,6 +3296,53 @@ async function reconcileCloudflareRecording(
   }
 }
 
+async function reconcileMuxRecording(
+  video: typeof videos.$inferSelect,
+  now: Date,
+): Promise<typeof videos.$inferSelect> {
+  if (
+    video.source !== "live" ||
+    (video.liveProvider !== "mux" && !video.muxLiveStreamId) ||
+    !video.muxAssetId ||
+    (video.status !== "processing" && video.status !== "ended")
+  ) {
+    return video;
+  }
+  try {
+    const asset = await loadMuxVideoAsset(video.muxAssetId);
+    if (asset.status !== "ready") return video;
+    const playbackId = asset.playbackId ?? video.muxAssetPlaybackId;
+    const playbackPolicy = asset.playbackPolicy ?? video.muxAssetPlaybackPolicy;
+    if (!playbackId) return video;
+    await getDatabase()
+      .update(videos)
+      .set({
+        status: "ready",
+        muxAssetPlaybackId: playbackId,
+        muxAssetPlaybackPolicy: playbackPolicy,
+        durationSeconds: asset.durationSeconds ?? video.durationSeconds,
+        readyAt: video.readyAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(videos.id, video.id));
+    return {
+      ...video,
+      status: "ready",
+      muxAssetPlaybackId: playbackId,
+      muxAssetPlaybackPolicy: playbackPolicy,
+      durationSeconds: asset.durationSeconds ?? video.durationSeconds,
+      readyAt: video.readyAt ?? now,
+      updatedAt: now,
+    };
+  } catch (error) {
+    console.error("Duna Mux recording reconciliation failed", {
+      error,
+      videoId: video.id,
+    });
+    return video;
+  }
+}
+
 export async function loadVideoPlayback(input: {
   readonly videoId: string;
   readonly accessToken?: string;
@@ -3013,11 +3364,25 @@ export async function loadVideoPlayback(input: {
   ) {
     throw new VideoServiceError("VIDEO_NOT_FOUND", "Video not found.");
   }
-  const video = await reconcileCloudflareRecording(storedVideo, input.now);
+  const video = await reconcileMuxRecording(
+    await reconcileCloudflareRecording(storedVideo, input.now),
+    input.now,
+  );
   const isOwner = input.actor?.personId === video.ownerPersonId;
-  const shareLinkId = isOwner
-    ? undefined
-    : await resolveShareAccess(video.id, input.accessToken, input.now);
+  const linkedParticipant = input.actor
+    ? await database.query.videoParticipants.findFirst({
+        columns: { id: true },
+        where: and(
+          eq(videoParticipants.videoId, video.id),
+          eq(videoParticipants.personId, input.actor.personId),
+        ),
+      })
+    : undefined;
+  const isLinkedPlayer = Boolean(linkedParticipant);
+  const shareLinkId =
+    isOwner || isLinkedPlayer
+      ? undefined
+      : await resolveShareAccess(video.id, input.accessToken, input.now);
   const livePlayback =
     video.status === "live" ||
     (video.source === "live" &&
@@ -3029,7 +3394,7 @@ export async function loadVideoPlayback(input: {
     : video.recordingVisibility === "public"
       ? "public"
       : "link-only";
-  if (!isOwner && visibility !== "public" && !shareLinkId) {
+  if (!isOwner && !isLinkedPlayer && visibility !== "public" && !shareLinkId) {
     throw new VideoServiceError(
       "PLAYBACK_FORBIDDEN",
       "This private video requires its share link.",
@@ -3119,23 +3484,32 @@ export async function loadVideoPlayback(input: {
     startedAt: input.now,
     lastHeartbeatAt: input.now,
   });
-  const [summary, vision, scoring, healthOverlay] = await Promise.all([
-    loadVideoSummary(video.id),
-    loadVisionPlayback(video.id),
-    video.matchId
-      ? loadPublicMatchScoringState(video.matchId).catch(() => undefined)
-      : Promise.resolve(undefined),
-    loadHealthVideoOverlay({
-      ownerPersonId: video.ownerPersonId,
-      actor: input.actor,
-      startedAt: video.startedAt,
-      endedAt: video.endedAt,
-      durationSeconds: video.durationSeconds,
-      requestId: input.requestId,
-      ipAddress: input.ipAddress,
-      now: input.now,
-    }).catch(() => undefined),
-  ]);
+  const [summary, vision, scoring, healthOverlay, privateNote] =
+    await Promise.all([
+      loadVideoSummary(video.id),
+      loadVisionPlayback(video.id),
+      video.matchId
+        ? loadPublicMatchScoringState(video.matchId).catch(() => undefined)
+        : Promise.resolve(undefined),
+      loadHealthVideoOverlay({
+        ownerPersonId: video.ownerPersonId,
+        actor: input.actor,
+        startedAt: video.startedAt,
+        endedAt: video.endedAt,
+        durationSeconds: video.durationSeconds,
+        requestId: input.requestId,
+        ipAddress: input.ipAddress,
+        now: input.now,
+      }).catch(() => undefined),
+      input.actor && (isOwner || isLinkedPlayer)
+        ? database.query.playerVideoNotes.findFirst({
+            where: and(
+              eq(playerVideoNotes.videoId, video.id),
+              eq(playerVideoNotes.personId, input.actor.personId),
+            ),
+          })
+        : Promise.resolve(undefined),
+    ]);
   return {
     video: summary,
     provider,
@@ -3147,6 +3521,14 @@ export async function loadVideoPlayback(input: {
     dataEnvironmentKey: muxDataEnvironmentKey(),
     viewSessionId,
     isOwner,
+    isLinkedPlayer,
+    canEditPrivateNote: Boolean(input.actor && (isOwner || isLinkedPlayer)),
+    privateNote: privateNote
+      ? {
+          body: privateNote.body,
+          updatedAt: privateNote.updatedAt.toISOString(),
+        }
+      : undefined,
     vision,
     liveScore: scoring
       ? {
@@ -4043,9 +4425,9 @@ export async function handleMuxVideoWebhook(
       await database
         .update(videos)
         .set({
-          status: "processing",
+          status: sql`case when ${videos.status} = 'ready' or ${videos.readyAt} is not null then 'ready' else 'processing' end`,
           endedAt: sql`coalesce(${videos.endedAt}, ${occurredAt})`,
-          durationSeconds: sql`coalesce(${videos.durationSeconds}, greatest(0, extract(epoch from (${occurredAt} - ${videos.startedAt}))::int))`,
+          durationSeconds: sql`case when ${videos.status} = 'ready' and ${videos.durationSeconds} is not null then ${videos.durationSeconds} else coalesce(${videos.durationSeconds}, greatest(0, extract(epoch from (${occurredAt} - ${videos.startedAt}))::int) end`,
           updatedAt: now,
         })
         .where(eq(videos.muxLiveStreamId, event.data.id));
@@ -4060,7 +4442,9 @@ export async function handleMuxVideoWebhook(
         await database
           .update(videos)
           .set({
-            status: "ready",
+            status: event.data.live_stream_id
+              ? sql`case when ${videos.endedAt} is null then ${videos.status} else 'ready' end`
+              : "ready",
             muxAssetId: event.data.id,
             muxAssetPlaybackId: playback?.id,
             muxAssetPlaybackPolicy: playback?.policy,
@@ -4073,6 +4457,31 @@ export async function handleMuxVideoWebhook(
           })
           .where(lookup);
       }
+    } else if (
+      event.type === "video.asset.live_stream_completed" &&
+      event.data.id
+    ) {
+      const playback = event.data.playback_ids?.[0];
+      const lookup = event.data.passthrough
+        ? eq(videos.id, event.data.passthrough)
+        : event.data.live_stream_id
+          ? eq(videos.muxLiveStreamId, event.data.live_stream_id)
+          : eq(videos.muxAssetId, event.data.id);
+      await database
+        .update(videos)
+        .set({
+          status: "ready",
+          muxAssetId: event.data.id,
+          muxAssetPlaybackId: playback?.id,
+          muxAssetPlaybackPolicy: playback?.policy,
+          durationSeconds:
+            event.data.duration === undefined
+              ? undefined
+              : Math.max(0, Math.round(event.data.duration)),
+          readyAt: occurredAt,
+          updatedAt: now,
+        })
+        .where(lookup);
     } else if (event.type === "video.asset.errored" && event.data.id) {
       const lookup = event.data.passthrough
         ? eq(videos.id, event.data.passthrough)

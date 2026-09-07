@@ -2873,6 +2873,16 @@ export const videoStudioSchema = z.object({
   usage: videoUsageSchema,
   videos: z.array(videoSummarySchema).readonly(),
   liveNow: z.array(videoSummarySchema).readonly(),
+  profileInvitations: z
+    .array(
+      z.object({
+        video: videoSummarySchema,
+        status: z.enum(["pending", "included", "hidden"]),
+        notifiedAt: z.iso.datetime().optional(),
+        decidedAt: z.iso.datetime().optional(),
+      }),
+    )
+    .readonly(),
   liveConfigured: z.boolean(),
   uploadsConfigured: z.boolean(),
   dataEnvironmentKey: z.string().optional(),
@@ -2944,6 +2954,14 @@ export const videoPlaybackSchema = z.object({
   dataEnvironmentKey: z.string().optional(),
   viewSessionId: z.string().uuid(),
   isOwner: z.boolean(),
+  isLinkedPlayer: z.boolean(),
+  canEditPrivateNote: z.boolean(),
+  privateNote: z
+    .object({
+      body: z.string(),
+      updatedAt: z.iso.datetime(),
+    })
+    .optional(),
   vision: visionPlaybackSchema.optional(),
   liveScore: visionScoreSnapshotSchema.optional(),
   healthOverlay: healthVideoOverlaySchema.optional(),

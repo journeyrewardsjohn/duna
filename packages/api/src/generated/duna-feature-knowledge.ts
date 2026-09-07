@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "90f3c22e74021eee7fc3895aac52914277cc57642a36a78a5b673b2cd1e694ac",
+    "c1ff74af340131844d52ba936488a4b6bf1cddd00a96df416485ab3283c89660",
   modules: [
     {
       id: "M1",
@@ -428,6 +428,7 @@ export const generatedDunaFeatureKnowledge = {
     "saveProfessionalWatchOption",
     "saveVenueLayout",
     "saveVenueLayoutEventSettings",
+    "saveVideoPrivateNote",
     "scanDunaMember",
     "scanPlayerRegistration",
     "scanTicket",
@@ -501,6 +502,7 @@ export const generatedDunaFeatureKnowledge = {
     "updateTrainingPracticePlan",
     "updateTrainingProgramEvent",
     "updateVenueProfile",
+    "updateVideoParticipantProfile",
     "updateVideoPrivacy",
     "updateVideoQuotaPolicy",
     "updateVisionPreview",

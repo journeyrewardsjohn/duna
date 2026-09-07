@@ -4394,6 +4394,87 @@ export const videos = pgTable(
   ],
 );
 
+// A recorder may film a match without playing in it. Linked Duna players get
+// a private review relationship to the video and decide independently whether
+// it may appear on their own profile; the recorder's visibility remains the
+// outer privacy boundary.
+export const videoParticipants = pgTable(
+  "video_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    profileStatus: varchar("profile_status", { length: 16 })
+      .notNull()
+      .default("pending"),
+    notifiedAt: timestamp("notified_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    decidedAt: timestamp("decided_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("video_participant_video_person_unique").on(
+      table.videoId,
+      table.personId,
+    ),
+    index("video_participant_person_status_idx").on(
+      table.personId,
+      table.profileStatus,
+      table.createdAt,
+    ),
+    check(
+      "video_participant_profile_status_valid",
+      sql`${table.profileStatus} IN ('pending', 'included', 'hidden')`,
+    ),
+    check(
+      "video_participant_decision_pair",
+      sql`(${table.profileStatus} = 'pending' AND ${table.decidedAt} IS NULL) OR (${table.profileStatus} <> 'pending' AND ${table.decidedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// Video notes are a player's private learning record. Ownership or a linked
+// player relationship grants access; public video viewers never receive them.
+export const playerVideoNotes = pgTable(
+  "player_video_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("player_video_note_video_person_unique").on(
+      table.videoId,
+      table.personId,
+    ),
+    index("player_video_note_person_activity_idx").on(
+      table.personId,
+      table.updatedAt,
+    ),
+    check(
+      "player_video_note_body_valid",
+      sql`char_length(${table.body}) BETWEEN 1 AND 5000`,
+    ),
+  ],
+);
+
 export const youtubeChannelConnections = pgTable(
   "youtube_channel_connections",
   {

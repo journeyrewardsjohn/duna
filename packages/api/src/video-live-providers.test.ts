@@ -8,7 +8,7 @@ import {
   isCloudflareStreamConfigured,
   muxLiveVideoQuality,
 } from "./video-providers";
-import { preferredLiveVideoProvider } from "./video-service";
+import { preferredLiveVideoProvider, videoShareUrl } from "./video-service";
 import {
   buildYoutubeAuthorizationUrl,
   createYoutubeLiveDestination,
@@ -42,6 +42,14 @@ function configureYoutube() {
 }
 
 describe("live provider routing", () => {
+  it("never exposes an internal Vercel hostname in a video share link", () => {
+    vi.stubEnv("NEXT_PUBLIC_DUNA_WEB_URL", "https://duna-web.vercel.app");
+    const videoId = crypto.randomUUID();
+    expect(videoShareUrl(videoId, "share-token")).toBe(
+      `https://duna.coach/watch/${videoId}?token=share-token`,
+    );
+  });
+
   it("does not mistake a generic Cloudflare or R2 token for Stream access", () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account-123");
     vi.stubEnv("CF_TOKEN_VALUE", "generic-account-token");

@@ -491,6 +491,8 @@ describe("Duna Video contracts", () => {
       playbackToken: "signed-token",
       viewSessionId: crypto.randomUUID(),
       isOwner: false,
+      isLinkedPlayer: false,
+      canEditPrivateNote: false,
     };
     expect(videoPlaybackSchema.parse(base)).toMatchObject({
       provider: "mux",

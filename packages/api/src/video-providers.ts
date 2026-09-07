@@ -1079,6 +1079,28 @@ export async function loadMuxLiveIngest(
   return { streamKey, srtPassphrase };
 }
 
+export async function loadMuxVideoAsset(assetId: string): Promise<{
+  readonly status?: string;
+  readonly durationSeconds?: number;
+  readonly playbackId?: string;
+  readonly playbackPolicy?: "public" | "signed";
+}> {
+  const asset = await getMuxClient().video.assets.retrieve(assetId);
+  const playback = asset.playback_ids?.[0];
+  return {
+    status: asset.status,
+    durationSeconds:
+      typeof asset.duration === "number"
+        ? Math.max(0, Math.round(asset.duration))
+        : undefined,
+    playbackId: playback?.id,
+    playbackPolicy:
+      playback?.policy === "public" || playback?.policy === "signed"
+        ? playback.policy
+        : undefined,
+  };
+}
+
 export async function createMuxLiveOutput(input: {
   readonly liveInputId: string;
   readonly url: string;

@@ -37,6 +37,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var lastRallyElapsedSeconds: Int?
 
   private var recordingStartedAt: Date?
+  private var latestLocalScoreAt: Date?
   private var lastRallyEventID: String?
   private var pointHistory: [WatchPointHistory] = []
   private var setsToWin = 2
@@ -235,6 +236,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     lastRallyEventID = nil
     lastRallyElapsedSeconds = nil
     lastRallyLabel = "No rally marked yet"
+    latestLocalScoreAt = nil
   }
 
   func elapsedSeconds(at date: Date = Date()) -> Int {
@@ -271,6 +273,9 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   ) {
     guard let sessionID else { return }
     let now = Date()
+    if eventType == "rally-won" || eventType == "undo" || eventType == "set-ended" {
+      latestLocalScoreAt = now
+    }
     var payload: [String: Any] = [
       "type": "duna.visionEvent",
       "eventId": eventID,
@@ -468,6 +473,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       lastRallyLabel = "No rally marked yet"
       videoID = nil
       matchID = nil
+      latestLocalScoreAt = nil
     }
     if type == "duna.matchContext" {
       sessionID = nil
@@ -487,7 +493,19 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     if let startedAt = applicationContext["recordingStartedAt"] as? String {
       recordingStartedAt = parseDate(startedAt)
     }
-    if let score = applicationContext["score"] as? [String: Any],
+    let incomingScoreAt = parseDate(
+      applicationContext["scoreUpdatedAt"] as? String
+    )
+    let shouldApplyIncomingScore: Bool
+    if isNewSession || latestLocalScoreAt == nil {
+      shouldApplyIncomingScore = true
+    } else if let incomingScoreAt, let latestLocalScoreAt {
+      shouldApplyIncomingScore = incomingScoreAt >= latestLocalScoreAt
+    } else {
+      shouldApplyIncomingScore = false
+    }
+    if shouldApplyIncomingScore,
+      let score = applicationContext["score"] as? [String: Any],
       let rows = score["sets"] as? [[String: Any]]
     {
       let next = rows.compactMap { row -> WatchSetScore? in
@@ -498,6 +516,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
       }
       if !next.isEmpty { sets = next }
       serving = score["serving"] as? String ?? serving
+      latestLocalScoreAt = incomingScoreAt ?? latestLocalScoreAt
     }
     if let format = applicationContext["format"] as? [String: Any] {
       setsToWin = format["setsToWin"] as? Int ?? setsToWin
