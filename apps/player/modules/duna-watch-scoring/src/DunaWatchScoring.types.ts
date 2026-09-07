@@ -69,6 +69,9 @@ export type WatchVisionContext = {
   readonly recordingStartedAt?: string;
   readonly status: "setup" | "ready" | "recording" | "ended";
   readonly score?: WatchScoreSnapshot;
+  /** Wall-clock authority for score snapshots. The Watch ignores an older
+   * phone snapshot after a newer local tap. */
+  readonly scoreUpdatedAt?: string;
   readonly format?: WatchMatchFormat;
 };
 

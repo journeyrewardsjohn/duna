@@ -34,6 +34,9 @@ private final class DunaVideoCaptureController: NSObject {
   private var fallbackRtmpsKey: String?
   private var fallingBack = false
   private var srtWasLive = false
+  private var rtmpReconnectAttempt = 0
+  private var rtmpReconnectWorkItem: DispatchWorkItem?
+  private let maximumRTMPReconnectAttempts = 3
   private let scoreboardScreenObject = ImageScreenObject()
   private let sponsorScreenObject = ImageScreenObject()
   private let replayBadgeScreenObject = ImageScreenObject()
@@ -324,10 +327,13 @@ private final class DunaVideoCaptureController: NSObject {
     fallbackKey: String?
   ) throws {
     try prepare(audioEnabled: audioEnabled)
-    fallbackRtmpsUrl = fallbackUrl
-    fallbackRtmpsKey = fallbackKey
+    fallbackRtmpsUrl = transport == "rtmps" ? url : fallbackUrl
+    fallbackRtmpsKey = transport == "rtmps" ? key : fallbackKey
     fallingBack = false
     srtWasLive = false
+    rtmpReconnectWorkItem?.cancel()
+    rtmpReconnectWorkItem = nil
+    rtmpReconnectAttempt = 0
     restartReplayAfterStreamReplacement = false
     if transport == "srt" {
       if let rtmpConnection {
@@ -381,6 +387,9 @@ private final class DunaVideoCaptureController: NSObject {
   }
 
   func stopStream() {
+    rtmpReconnectWorkItem?.cancel()
+    rtmpReconnectWorkItem = nil
+    rtmpReconnectAttempt = 0
     discardReplayBuffer = true
     replayRecorder?.stopRunning()
     replayBufferStartedAt = nil
@@ -452,6 +461,9 @@ private final class DunaVideoCaptureController: NSObject {
       return
     }
     fallingBack = true
+    rtmpReconnectWorkItem?.cancel()
+    rtmpReconnectWorkItem = nil
+    rtmpReconnectAttempt = 0
     if let replayRecorder {
       restartReplayAfterStreamReplacement = true
       discardReplayBuffer = true
@@ -468,6 +480,56 @@ private final class DunaVideoCaptureController: NSObject {
     emitError(reason)
     emitState("connecting")
     rtmpConnection?.connect(fallbackRtmpsUrl)
+  }
+
+  private func scheduleRTMPReconnect() {
+    guard Thread.isMainThread else {
+      DispatchQueue.main.async { [weak self] in
+        self?.scheduleRTMPReconnect()
+      }
+      return
+    }
+    guard
+      activeTransport == "rtmps",
+      pendingStreamKey != nil,
+      let fallbackRtmpsUrl,
+      let fallbackRtmpsKey
+    else {
+      return
+    }
+    guard rtmpReconnectWorkItem == nil else { return }
+    guard rtmpReconnectAttempt < maximumRTMPReconnectAttempts else {
+      emitError(
+        "The live stream stopped after repeated connection failures. Your available replay will still be saved."
+      )
+      stopStream()
+      return
+    }
+    rtmpReconnectAttempt += 1
+    let attempt = rtmpReconnectAttempt
+    let delay = min(pow(2.0, Double(attempt - 1)), 4.0)
+    emitError(
+      "The live stream connection was interrupted. Duna is reconnecting (\(attempt)/\(maximumRTMPReconnectAttempts))."
+    )
+    emitState("connecting")
+    if let replayRecorder {
+      restartReplayAfterStreamReplacement = true
+      discardReplayBuffer = true
+      replayRotationWorkItem?.cancel()
+      replayRotationWorkItem = nil
+      replayRecorder.stopRunning()
+    }
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.rtmpReconnectWorkItem = nil
+      guard self.pendingStreamKey != nil else { return }
+      self.replaceStream(self.makeRTMPStream(), transport: "rtmps")
+      self.pendingStreamKey = fallbackRtmpsKey
+      self.transitionToCapture(audioEnabled: self.audioEnabled)
+      self.rtmpConnection?.connect(fallbackRtmpsUrl)
+    }
+    rtmpReconnectWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
   }
 
   func updateProgramState(json: String) throws {
@@ -1061,17 +1123,23 @@ private final class DunaVideoCaptureController: NSObject {
       }
     case RTMPStream.Code.publishStart.rawValue:
       fallingBack = false
+      rtmpReconnectWorkItem?.cancel()
+      rtmpReconnectWorkItem = nil
+      rtmpReconnectAttempt = 0
       startReplayBuffer()
       emitState("live")
+    case RTMPConnection.Code.connectRejected.rawValue,
+      RTMPStream.Code.publishBadName.rawValue:
+      DispatchQueue.main.async { [weak self] in
+        self?.emitError("The live stream could not connect. Check your connection.")
+        self?.stopStream()
+      }
     case RTMPConnection.Code.connectFailed.rawValue,
-      RTMPConnection.Code.connectRejected.rawValue,
-      RTMPStream.Code.publishBadName.rawValue,
       RTMPStream.Code.failed.rawValue:
-      emitError("The live stream could not connect. Check your connection.")
-      emitState("stopped")
+      scheduleRTMPReconnect()
     case RTMPConnection.Code.connectClosed.rawValue:
       if pendingStreamKey != nil {
-        emitError("The live stream connection closed.")
+        scheduleRTMPReconnect()
       }
     default:
       break
@@ -1080,7 +1148,7 @@ private final class DunaVideoCaptureController: NSObject {
 
   @objc
   private func handleRTMPError(_ notification: Notification) {
-    emitError("The live stream encountered a network error.")
+    scheduleRTMPReconnect()
   }
 
   private func emitState(_ state: String) {

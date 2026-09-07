@@ -9,6 +9,7 @@ import {
   matchHistoryDisputes,
   matchParticipantInvitations,
   matches,
+  messages,
   organizationMemberships,
   organizationParticipants,
   people,
@@ -21,6 +22,8 @@ import {
   teamMembers,
   teams,
   venues,
+  videoParticipants,
+  videos,
   worldRankings,
 } from "@duna/db";
 import {
@@ -931,7 +934,8 @@ export async function startSelfReportedMatch(input: {
     readonly A: readonly string[];
     readonly B: readonly string[];
   }>;
-  readonly initialServerPersonId: string;
+  readonly initialServerPersonId?: string;
+  readonly initialServerSide: "A" | "B";
   readonly deviceId: string;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -995,12 +999,6 @@ export async function startSelfReportedMatch(input: {
       "A player can appear only once in a match.",
     );
   }
-  if (!participantIds.includes(input.actor.personId)) {
-    throw new MatchServiceError(
-      "PARTICIPANT_REQUIRED",
-      "The person recording a self-reported match must be one of its players.",
-    );
-  }
   for (const participant of provisionalParticipants) {
     if (!participant.email && !participant.phoneE164) continue;
     const existing = participant.email
@@ -1049,12 +1047,15 @@ export async function startSelfReportedMatch(input: {
     left.length === right.length &&
     left.every((personId) => right.includes(personId)) &&
     new Set(left).size === left.length;
+  const explicitInitialServerIsValid = input.initialServerPersonId
+    ? [input.serviceOrder.A[0], input.serviceOrder.B[0]].includes(
+        input.initialServerPersonId,
+      )
+    : true;
   if (
     !samePlayers(input.serviceOrder.A, input.teamAIds) ||
     !samePlayers(input.serviceOrder.B, input.teamBIds) ||
-    ![input.serviceOrder.A[0], input.serviceOrder.B[0]].includes(
-      input.initialServerPersonId,
-    )
+    !explicitInitialServerIsValid
   ) {
     throw new MatchServiceError(
       "PARTICIPANT_REQUIRED",
@@ -1103,14 +1104,25 @@ export async function startSelfReportedMatch(input: {
   const matchId = crypto.randomUUID();
   const teamAId = crypto.randomUUID();
   const teamBId = crypto.randomUUID();
-  const initialServer = input.teamAIds.includes(input.initialServerPersonId)
-    ? "A"
-    : "B";
+  const initialServer = input.initialServerPersonId
+    ? input.teamAIds.includes(input.initialServerPersonId)
+      ? "A"
+      : "B"
+    : input.initialServerSide;
+  const initialServerPersonId =
+    input.initialServerPersonId ??
+    (initialServer === "A" ? teamAAllIds[0] : teamBAllIds[0]);
+  if (!initialServerPersonId) {
+    throw new MatchServiceError(
+      "PARTICIPANT_REQUIRED",
+      "Choose at least one player for the starting side.",
+    );
+  }
   const startEvent: ScoreEvent = {
     id: crypto.randomUUID(),
     type: "match-started",
     initialServer,
-    initialServerPersonId: input.initialServerPersonId,
+    initialServerPersonId,
     occurredAt: input.now.toISOString(),
   };
   const format = {
@@ -1119,6 +1131,9 @@ export async function startSelfReportedMatch(input: {
     teamSize: teamASize,
     matchType: input.matchType,
     recordingMode: "live",
+    recorderRole: participantIds.includes(input.actor.personId)
+      ? "player"
+      : "spectator",
     allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
     serviceOrder: {
       A: [...input.serviceOrder.A, ...provisionalA.map(({ id }) => id)],
@@ -1247,8 +1262,10 @@ export async function startSelfReportedMatch(input: {
       }),
       reason:
         provisionalRows.length > 0
-          ? "Participant started live scoring with named guest places; rating stays locked until every guest claims a Duna identity."
-          : "Participant started optional live scoring after every player agreed to record the match.",
+          ? "Recorder started live scoring with named guest places; rating stays locked until every guest claims a Duna identity."
+          : participantIds.includes(input.actor.personId)
+            ? "Player started optional live scoring after every player agreed to record the match."
+            : "Spectator started an authorized recording and live scoring timeline after every player agreed to be recorded.",
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
@@ -1364,12 +1381,6 @@ export async function recordCompletedMatch(input: {
     throw new MatchServiceError(
       "PARTICIPANT_DUPLICATE",
       "A player can appear only once in a match.",
-    );
-  }
-  if (!participantIds.includes(input.actor.personId)) {
-    throw new MatchServiceError(
-      "PARTICIPANT_REQUIRED",
-      "The person recording a match must be one of its players.",
     );
   }
   for (const participant of provisionalParticipants) {
@@ -2028,6 +2039,58 @@ export async function claimMatchParticipantInvitation(input: {
         updatedAt: input.now,
       })
       .where(eq(teams.id, teamId));
+    const linkedVideos = await transaction
+      .select({
+        id: videos.id,
+        ownerPersonId: videos.ownerPersonId,
+        title: videos.title,
+      })
+      .from(videos)
+      .where(
+        and(
+          eq(videos.matchId, invitation.matchId),
+          ne(videos.ownerPersonId, input.actor.personId),
+          ne(videos.status, "deleted"),
+        ),
+      );
+    if (linkedVideos.length > 0) {
+      const linked = await transaction
+        .insert(videoParticipants)
+        .values(
+          linkedVideos.map((video) => ({
+            videoId: video.id,
+            personId: input.actor.personId,
+            profileStatus: "pending",
+            notifiedAt: input.now,
+            createdAt: input.now,
+            updatedAt: input.now,
+          })),
+        )
+        .onConflictDoNothing()
+        .returning({ videoId: videoParticipants.videoId });
+      const linkedIds = new Set(linked.map((row) => row.videoId));
+      const newlyLinkedVideos = linkedVideos.filter((video) =>
+        linkedIds.has(video.id),
+      );
+      if (newlyLinkedVideos.length > 0) {
+        await transaction.insert(messages).values(
+          newlyLinkedVideos.flatMap((video) =>
+            (["in-app", "push"] as const).map((channel) => ({
+              senderPersonId: video.ownerPersonId,
+              recipientPersonId: input.actor.personId,
+              channel,
+              kind: "video-profile-invitation",
+              subject: "Your match recording is ready to review",
+              body: `Review “${video.title}” in Duna Videos, then choose whether it may appear on your profile.`,
+              status: "queued",
+              scheduledAt: input.now,
+              createdAt: input.now,
+              updatedAt: input.now,
+            })),
+          ),
+        );
+      }
+    }
     await transaction.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",

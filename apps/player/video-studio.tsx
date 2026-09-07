@@ -1,4 +1,3 @@
-import muxReactNativeVideo from "@mux/mux-data-react-native-video";
 import { MEMBERSHIP_PLANS, type PersonSummary } from "@duna/core";
 import {
   mobileControl,
@@ -12,15 +11,9 @@ import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { VideoView, useVideoPlayer, type VideoSource } from "expo-video";
 import * as WebBrowser from "expo-web-browser";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,7 +35,6 @@ import {
   View,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import Video from "react-native-video";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -2306,9 +2298,12 @@ function QuickRecordingMatchSetup({
   readonly onCreated: (association: VideoAssociation) => void;
   readonly venue?: VenueSelection;
 }) {
+  const [recorderRole, setRecorderRole] = useState<"player" | "spectator">(
+    "player",
+  );
   const [players, setPlayers] = useState<
     readonly (QuickMatchParticipant | undefined)[]
-  >([undefined, undefined, undefined]);
+  >([undefined, undefined, undefined, undefined]);
   const [pickerTarget, setPickerTarget] = useState<number>();
   const [guestTarget, setGuestTarget] = useState<number>();
   const [guestGivenName, setGuestGivenName] = useState("");
@@ -2316,11 +2311,32 @@ function QuickRecordingMatchSetup({
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const rosterComplete = players.every(Boolean);
+  const requiredPlayerCount = recorderRole === "player" ? 3 : 4;
+  const activePlayers = players.slice(0, requiredPlayerCount);
+  const rosterComplete = activePlayers.every(Boolean);
+
+  const participantSide = (index: number): "A" | "B" =>
+    recorderRole === "player"
+      ? index === 0
+        ? "A"
+        : "B"
+      : index < 2
+        ? "A"
+        : "B";
+  const participantLabel = (index: number): string => {
+    if (recorderRole === "player") {
+      return index === 0 ? "Choose your partner" : `Choose opponent ${index}`;
+    }
+    const side = participantSide(index);
+    return `Choose Team ${side} player ${side === "A" ? index + 1 : index - 1}`;
+  };
 
   const create = async () => {
-    const [partner, opponentA, opponentB] = players;
-    if (!partner || !opponentA || !opponentB || !consent || busy) return;
+    const selected = activePlayers.filter(
+      (participant): participant is QuickMatchParticipant =>
+        Boolean(participant),
+    );
+    if (selected.length !== requiredPlayerCount || !consent || busy) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -2329,29 +2345,36 @@ function QuickRecordingMatchSetup({
         deviceId = `video-${Crypto.randomUUID()}`;
         await AsyncStorage.setItem(videoMatchDeviceKey, deviceId);
       }
+      const selectedWithSides = selected.map((participant, index) => ({
+        participant,
+        side: participantSide(index),
+      }));
       const teamAIds = [
-        host.id,
-        ...(partner.kind === "duna" ? [partner.person.id] : []),
+        ...(recorderRole === "player" ? [host.id] : []),
+        ...selectedWithSides.flatMap(({ participant, side }) =>
+          side === "A" && participant.kind === "duna"
+            ? [participant.person.id]
+            : [],
+        ),
       ];
-      const teamBIds = [opponentA, opponentB].flatMap((participant) =>
-        participant.kind === "duna" ? [participant.person.id] : [],
-      );
-      const provisionalParticipants = [
-        { participant: partner, side: "A" as const },
-        { participant: opponentA, side: "B" as const },
-        { participant: opponentB, side: "B" as const },
-      ].flatMap(({ participant, side }) =>
-        participant.kind === "provisional"
-          ? [
-              {
-                side,
-                givenName: participant.givenName,
-                familyName: participant.familyName,
-                email: participant.email,
-                phoneE164: participant.phoneE164,
-              },
-            ]
+      const teamBIds = selectedWithSides.flatMap(({ participant, side }) =>
+        side === "B" && participant.kind === "duna"
+          ? [participant.person.id]
           : [],
+      );
+      const provisionalParticipants = selectedWithSides.flatMap(
+        ({ participant, side }) =>
+          participant.kind === "provisional"
+            ? [
+                {
+                  side,
+                  givenName: participant.givenName,
+                  familyName: participant.familyName,
+                  email: participant.email,
+                  phoneE164: participant.phoneE164,
+                },
+              ]
+            : [],
       );
       const scoring = await client.player.startMatch.mutate({
         teamAIds,
@@ -2362,7 +2385,8 @@ function QuickRecordingMatchSetup({
         matchType: "competitive",
         allPlayersAgreedToRecord: true,
         serviceOrder: { A: teamAIds, B: teamBIds },
-        initialServerPersonId: host.id,
+        initialServerPersonId: teamAIds[0],
+        initialServerSide: "A",
         deviceId,
         idempotencyKey: idempotencyKey(),
       });
@@ -2439,11 +2463,7 @@ function QuickRecordingMatchSetup({
             ? [players[pickerTarget].person]
             : []
         }
-        title={
-          pickerTarget === 0
-            ? "Choose your partner"
-            : `Choose opponent ${pickerTarget}`
-        }
+        title={participantLabel(pickerTarget)}
         visible
       />
     );
@@ -2537,8 +2557,59 @@ function QuickRecordingMatchSetup({
             markers will all share this match timeline.
           </Text>
         </View>
+        <View style={styles.recorderRoleSection}>
+          <Text style={styles.quickMatchTeamLabel}>WHO IS RECORDING?</Text>
+          <View style={styles.recorderRoleRow}>
+            {(
+              [
+                {
+                  key: "player",
+                  title: "I’m playing",
+                  body: "Put me on Team A",
+                },
+                {
+                  key: "spectator",
+                  title: "I’m filming",
+                  body: "I’m not in the match",
+                },
+              ] as const
+            ).map((choice) => {
+              const selected = recorderRole === choice.key;
+              return (
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  key={choice.key}
+                  onPress={() => {
+                    if (choice.key === recorderRole) return;
+                    setRecorderRole(choice.key);
+                    setPlayers([undefined, undefined, undefined, undefined]);
+                    setConsent(false);
+                  }}
+                  style={[
+                    styles.recorderRoleChoice,
+                    selected && styles.recorderRoleChoiceSelected,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.recorderRoleRadio,
+                      selected && styles.recorderRoleRadioSelected,
+                    ]}
+                  >
+                    {selected && <View style={styles.recorderRoleRadioCore} />}
+                  </View>
+                  <Text style={styles.recorderRoleTitle}>{choice.title}</Text>
+                  <Text style={styles.recorderRoleBody}>{choice.body}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
         <View style={styles.quickMatchRoster}>
-          <Text style={styles.quickMatchTeamLabel}>YOUR TEAM</Text>
+          <Text style={styles.quickMatchTeamLabel}>
+            {recorderRole === "player" ? "YOUR TEAM" : "RECORDER"}
+          </Text>
           <View style={styles.quickMatchHostRow}>
             <PlayerAvatar
               palette={importedPlayerPalette}
@@ -2547,35 +2618,20 @@ function QuickRecordingMatchSetup({
             />
             <View style={styles.flex}>
               <Text style={styles.quickMatchHostName}>{host.displayName}</Text>
-              <Text style={styles.quickMatchHostMeta}>Recording host</Text>
+              <Text style={styles.quickMatchHostMeta}>
+                {recorderRole === "player"
+                  ? "Recorder · Team A"
+                  : "Filming this match · not in the roster"}
+              </Text>
             </View>
             <View style={styles.quickMatchYouPill}>
               <Text style={styles.quickMatchYouText}>You</Text>
             </View>
           </View>
-          <PlayerTouchRow
-            actionLabel={players[0] ? "Change" : "Add"}
-            detail={
-              players[0]?.kind === "duna"
-                ? players[0].person.homeMarket
-                : players[0]
-                  ? "Guest player"
-                  : "Choose a Duna player or add a guest"
-            }
-            displayName={
-              players[0]?.kind === "provisional"
-                ? `${players[0].givenName} ${players[0].familyName}`
-                : undefined
-            }
-            label="Choose your partner"
-            onPress={() => setPickerTarget(0)}
-            palette={importedPlayerPalette}
-            person={players[0]?.kind === "duna" ? players[0].person : undefined}
-            selected={Boolean(players[0])}
-          />
-
-          <Text style={styles.quickMatchTeamLabel}>OPPONENTS</Text>
-          {[1, 2].map((index) => {
+          {recorderRole === "spectator" && (
+            <Text style={styles.quickMatchTeamLabel}>TEAM A</Text>
+          )}
+          {(recorderRole === "player" ? [0] : [0, 1]).map((index) => {
             const participant = players[index];
             return (
               <PlayerTouchRow
@@ -2593,7 +2649,38 @@ function QuickRecordingMatchSetup({
                     : undefined
                 }
                 key={index}
-                label={`Choose opponent ${index}`}
+                label={participantLabel(index)}
+                onPress={() => setPickerTarget(index)}
+                palette={importedPlayerPalette}
+                person={
+                  participant?.kind === "duna" ? participant.person : undefined
+                }
+                selected={Boolean(participant)}
+              />
+            );
+          })}
+          <Text style={styles.quickMatchTeamLabel}>
+            {recorderRole === "player" ? "OPPONENTS" : "TEAM B"}
+          </Text>
+          {(recorderRole === "player" ? [1, 2] : [2, 3]).map((index) => {
+            const participant = players[index];
+            return (
+              <PlayerTouchRow
+                actionLabel={participant ? "Change" : "Add"}
+                detail={
+                  participant?.kind === "duna"
+                    ? participant.person.homeMarket
+                    : participant
+                      ? "Guest player"
+                      : "Choose a Duna player or add a guest"
+                }
+                displayName={
+                  participant?.kind === "provisional"
+                    ? `${participant.givenName} ${participant.familyName}`
+                    : undefined
+                }
+                key={index}
+                label={participantLabel(index)}
                 onPress={() => setPickerTarget(index)}
                 palette={importedPlayerPalette}
                 person={
@@ -2610,7 +2697,9 @@ function QuickRecordingMatchSetup({
               Everyone agreed to be recorded
             </Text>
             <Text style={styles.quickMatchConsentBody}>
-              Confirm with all four players before creating this recorded match.
+              Confirm with all four players. Linked Duna players will be
+              notified and will choose whether this video appears on their
+              profile.
             </Text>
           </View>
           <Switch onValueChange={setConsent} value={consent} />
@@ -2629,7 +2718,9 @@ function QuickRecordingMatchSetup({
           {busy ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.primaryButtonText}>Create + link match</Text>
+            <Text style={styles.primaryButtonText}>
+              Create match + continue
+            </Text>
           )}
         </Pressable>
       </View>
@@ -3797,14 +3888,18 @@ function CaptureExperience({
   const [previewHidden, setPreviewHidden] = useState(false);
   const [replayBusy, setReplayBusy] = useState(false);
   const activeRef = useRef(false);
+  const expectedStreamStopRef = useRef(false);
+  const finalizingInterruptedStreamRef = useRef(false);
   const busyRef = useRef(false);
   const permissionRef = useRef(false);
   const sessionRef = useRef<VisionSession | undefined>(undefined);
+  const liveSessionRef = useRef<LiveVideoSession | undefined>(undefined);
   const settingsRef = useRef(visionSettings);
   const geometryRef = useRef(courtGeometry);
   const guidanceRef = useRef<CaptureGuidance | undefined>(undefined);
   const manualCalibrationRef = useRef(false);
   const scoreRef = useRef<VisionScore>(initialScore);
+  const scoreUpdatedAtRef = useRef<string | undefined>(undefined);
   const elapsedRef = useRef(0);
   const captureStartedAtMs = useRef<number | undefined>(undefined);
   const previewUploadBusy = useRef(false);
@@ -3948,7 +4043,10 @@ function CaptureExperience({
     settingsRef.current = next.settings;
     setVisionSession(next);
     setVisionSettings(next.settings);
-    if (next.settings.program?.score) {
+    if (
+      next.settings.program?.score &&
+      !(activeRef.current && scoreUpdatedAtRef.current)
+    ) {
       scoreRef.current = next.settings.program.score;
       setVisionScore(next.settings.program.score);
     }
@@ -3970,7 +4068,10 @@ function CaptureExperience({
 
   useEffect(() => {
     if (!VideoCapture) return;
-    const score = matchScoring ? compactScore(matchScoring.score) : visionScore;
+    const score =
+      activeRef.current || !matchScoring
+        ? visionScore
+        : compactScore(matchScoring.score);
     const currentSet = score.sets[
       Math.min(score.setIndex, score.sets.length - 1)
     ] ?? {
@@ -4112,6 +4213,10 @@ function CaptureExperience({
         const next = await client.player.matchScoringState.query({ matchId });
         if (!active) return;
         setMatchScoring(next);
+        // Once capture is active, Watch or second-screen actions own score
+        // recency. A lagging match projection may update format/authority, but
+        // it must not repaint an older score back onto the phone and Watch.
+        if (activeRef.current && scoreUpdatedAtRef.current) return;
         const compact = compactScore(next.score);
         scoreRef.current = compact;
         setVisionScore(compact);
@@ -4303,6 +4408,7 @@ function CaptureExperience({
     setCaptureError(undefined);
     let createdSession: LiveVideoSession | undefined;
     try {
+      expectedStreamStopRef.current = false;
       if (!sessionRef.current) await visionCreation.current;
       setElapsedSeconds(0);
       let startedAt: Date;
@@ -4339,6 +4445,7 @@ function CaptureExperience({
           idempotencyKey: idempotencyKey(),
         });
         createdSession = created;
+        liveSessionRef.current = created;
         setSession(created);
         const failedDestinations = created.destinations.filter(
           (destination) => destination.status === "failed",
@@ -4379,6 +4486,7 @@ function CaptureExperience({
         activeRef.current = true;
       }
       captureStartedAtMs.current = startedAt.getTime();
+      scoreUpdatedAtRef.current ??= startedAt.toISOString();
       await updateVisionStatus("recording");
       await appendPhoneEvent(
         "recording-started",
@@ -4420,11 +4528,13 @@ function CaptureExperience({
         onRecorded(video, lockedCalibration, sessionRef.current?.id);
         return;
       }
+      expectedStreamStopRef.current = true;
       await VideoCapture.stopStream();
       activeRef.current = false;
-      if (session) {
+      const currentLiveSession = liveSessionRef.current;
+      if (currentLiveSession) {
         await client.player.finishLiveVideo.mutate({
-          videoId: session.video.id,
+          videoId: currentLiveSession.video.id,
           idempotencyKey: idempotencyKey(),
         });
       }
@@ -4440,6 +4550,47 @@ function CaptureExperience({
     } finally {
       busyRef.current = false;
       setBusy(false);
+    }
+  };
+
+  const finalizeInterruptedLiveStream = async () => {
+    if (
+      mode !== "live" ||
+      expectedStreamStopRef.current ||
+      finalizingInterruptedStreamRef.current
+    ) {
+      return;
+    }
+    finalizingInterruptedStreamRef.current = true;
+    activeRef.current = false;
+    setRecording(false);
+    const stoppedAt = new Date();
+    showCaptureNotice(
+      "The broadcast connection ended. Duna is closing the stream and preserving the available replay.",
+      "warning",
+    );
+    try {
+      const currentLiveSession = liveSessionRef.current;
+      if (currentLiveSession) {
+        await client.player.finishLiveVideo.mutate({
+          videoId: currentLiveSession.video.id,
+          idempotencyKey: idempotencyKey(),
+        });
+      }
+      await appendPhoneEvent(
+        "recording-stopped",
+        "Duna Vision stream ended after the contribution connection was lost",
+        stoppedAt,
+        { reason: "contribution-connection-lost" },
+      );
+      await updateVisionStatus("ended");
+      setReviewing(true);
+    } catch (error) {
+      reportCaptureError(
+        `The stream ended and its replay is still reconciling: ${displayError(error)}`,
+      );
+    } finally {
+      finalizingInterruptedStreamRef.current = false;
     }
   };
 
@@ -4492,6 +4643,7 @@ function CaptureExperience({
       const scoreCommand = next.settings.program?.scoreCommand;
       if (scoreCommand && remoteScoreCommand.current !== scoreCommand.id) {
         remoteScoreCommand.current = scoreCommand.id;
+        scoreUpdatedAtRef.current = scoreCommand.occurredAt;
         const score = next.settings.program?.score;
         if (score) {
           scoreRef.current = score;
@@ -4649,15 +4801,17 @@ function CaptureExperience({
         sessionId,
         events: timeline,
       });
-      const latest = applicable.at(-1)?.score;
+      const latest = applicable.at(-1);
       if (latest) {
-        const compact = compactScore(latest);
+        scoreUpdatedAtRef.current = latest.occurredAt;
+        const compact = compactScore(latest.score);
         scoreRef.current = compact;
         setVisionScore(compact);
       }
-      acknowledgeWatchVisionEvents(applicable.map((event) => event.eventId));
-
-      if (!matchId) return;
+      if (!matchId) {
+        acknowledgeWatchVisionEvents(applicable.map((event) => event.eventId));
+        return;
+      }
       const scoreEvents: MatchScoreEvent[] = [];
       for (const event of applicable) {
         if (event.eventType === "rally-won" && event.winnerSide) {
@@ -4677,7 +4831,10 @@ function CaptureExperience({
           });
         }
       }
-      if (scoreEvents.length === 0) return;
+      if (scoreEvents.length === 0) {
+        acknowledgeWatchVisionEvents(applicable.map((event) => event.eventId));
+        return;
+      }
       try {
         const current = await client.player.matchScoringState.query({
           matchId,
@@ -4696,11 +4853,15 @@ function CaptureExperience({
         const compact = compactScore(result.scoring.score);
         scoreRef.current = compact;
         setVisionScore(compact);
+        acknowledgeWatchVisionEvents(applicable.map((event) => event.eventId));
       } catch (error) {
         showCaptureNotice(
           `Moment saved to Duna Vision; linked match scoring did not update: ${displayError(error)}`,
           "warning",
         );
+        // Keep native pending events until both the Vision timeline and linked
+        // match accept them. Retrying the same event IDs is idempotent.
+        throw error;
       }
     },
     [client, matchId, showCaptureNotice],
@@ -4709,18 +4870,44 @@ function CaptureExperience({
   useEffect(() => {
     const sessionId = visionSession?.id;
     if (!sessionId) return;
+    const queued = new Set<string>();
+    const completed = new Set<string>();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const enqueue = (events: readonly WatchVisionEvent[]) => {
+      const unique = events.filter(
+        (event) => !queued.has(event.eventId) && !completed.has(event.eventId),
+      );
+      if (unique.length === 0) return;
+      unique.forEach((event) => queued.add(event.eventId));
       watchEventChain.current = watchEventChain.current
-        .then(() => processWatchEvents(events, sessionId))
+        .then(() => processWatchEvents(unique, sessionId))
+        .then(() => {
+          unique.forEach((event) => {
+            queued.delete(event.eventId);
+            completed.add(event.eventId);
+          });
+        })
         .catch((error) => {
+          unique.forEach((event) => queued.delete(event.eventId));
           showCaptureNotice(
             `Watch moments are waiting to sync: ${displayError(error)}`,
             "warning",
           );
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(
+            () => enqueue(getPendingWatchVisionEvents()),
+            2_500,
+          );
         });
     };
     enqueue(getPendingWatchVisionEvents());
-    return subscribeToWatchVisionEvents((event) => enqueue([event]));
+    const unsubscribe = subscribeToWatchVisionEvents((event) =>
+      enqueue([event]),
+    );
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      unsubscribe();
+    };
   }, [processWatchEvents, showCaptureNotice, visionSession?.id]);
 
   useEffect(() => {
@@ -4736,6 +4923,7 @@ function CaptureExperience({
       recordingStartedAt: current.recordingStartedAt,
       status: current.status,
       score: visionScore,
+      scoreUpdatedAt: scoreUpdatedAtRef.current,
       format: matchScoring
         ? {
             setsToWin: matchScoring.format.setsToWin,
@@ -4975,15 +5163,21 @@ function CaptureExperience({
           }
           onStreamState={(event) => {
             const next = event.nativeEvent.state;
+            const wasActive = activeRef.current;
             setStreamState(next);
             if (event.nativeEvent.transport) {
               setStreamTransport(event.nativeEvent.transport);
             }
-            if (next === "connecting" || next === "live")
+            if (next === "connecting" || next === "live") {
               activeRef.current = true;
+              if (next === "live") setCaptureError(undefined);
+            }
             if (next === "stopped") {
               activeRef.current = false;
               setRecording(false);
+              if (wasActive && !expectedStreamStopRef.current) {
+                void finalizeInterruptedLiveStream();
+              }
             }
           }}
           onRecordingFinalized={(event) => {
@@ -5415,8 +5609,107 @@ function CaptureExperience({
   );
 }
 
-type VideoComponentProps = ComponentProps<typeof Video>;
-const MuxVideo = muxReactNativeVideo<VideoComponentProps>(Video);
+function StableVideoSurface({
+  onCompleted,
+  onProgress,
+  posterUrl,
+  uri,
+}: {
+  readonly uri: string;
+  readonly posterUrl?: string;
+  readonly onProgress: (seconds: number) => void;
+  readonly onCompleted: (seconds: number) => void;
+}) {
+  const source = useMemo<VideoSource>(
+    () => ({
+      uri,
+      contentType: uri.includes(".m3u8") ? "hls" : "auto",
+      metadata: { title: "Duna video" },
+    }),
+    [uri],
+  );
+  const [firstFrame, setFirstFrame] = useState(false);
+  const [playerError, setPlayerError] = useState<string>();
+  const player = useVideoPlayer(source, (next) => {
+    next.audioMixingMode = "doNotMix";
+    next.timeUpdateEventInterval = 1;
+    next.play();
+  });
+
+  useEffect(() => {
+    setFirstFrame(false);
+    setPlayerError(undefined);
+    const status = player.addListener("statusChange", (event) => {
+      if (event.status === "error") {
+        setPlayerError(
+          event.error?.message ?? "This recording could not be opened.",
+        );
+      }
+    });
+    const progress = player.addListener("timeUpdate", (event) =>
+      onProgress(event.currentTime),
+    );
+    const completed = player.addListener("playToEnd", () =>
+      onCompleted(player.duration),
+    );
+    return () => {
+      status.remove();
+      progress.remove();
+      completed.remove();
+      player.pause();
+    };
+  }, [onCompleted, onProgress, player]);
+
+  const retry = async () => {
+    setPlayerError(undefined);
+    setFirstFrame(false);
+    try {
+      await player.replaceAsync(source);
+      player.play();
+    } catch (reason) {
+      setPlayerError(displayError(reason));
+    }
+  };
+
+  return (
+    <View style={styles.playerSurface}>
+      <VideoView
+        allowsVideoFrameAnalysis={false}
+        contentFit="contain"
+        nativeControls
+        onFirstFrameRender={() => setFirstFrame(true)}
+        player={player}
+        style={styles.player}
+      />
+      {!firstFrame && posterUrl && !playerError && (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <Image
+            resizeMode="contain"
+            source={{ uri: posterUrl }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      )}
+      {!firstFrame && !playerError && (
+        <ActivityIndicator
+          color={palette.sand}
+          pointerEvents="none"
+          size="large"
+          style={styles.playerLoading}
+        />
+      )}
+      {!!playerError && (
+        <View style={styles.playerFailure}>
+          <Text style={styles.playerFailureTitle}>Video paused safely</Text>
+          <Text style={styles.playerFailureBody}>{playerError}</Text>
+          <Pressable onPress={() => void retry()} style={styles.playerRetry}>
+            <Text style={styles.playerRetryText}>Try again</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
   if (!report?.run) return "READY FOR EVIDENCE";
@@ -5948,6 +6241,10 @@ export function VideoPlayerModal({
   const [playback, setPlayback] = useState<VideoPlayback>();
   const [error, setError] = useState<string>();
   const [playbackSeconds, setPlaybackSeconds] = useState(0);
+  const [privateNote, setPrivateNote] = useState("");
+  const [noteSavedAt, setNoteSavedAt] = useState<string>();
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteNotice, setNoteNotice] = useState<string>();
   const lastHeartbeat = useRef(0);
   const fallbackTeams = matchLabelTeams(video.match?.label);
 
@@ -5956,7 +6253,11 @@ export function VideoPlayerModal({
     void client.public.videoPlayback
       .query({ videoId: video.id, platform: "ios" })
       .then((result) => {
-        if (active) setPlayback(result);
+        if (active) {
+          setPlayback(result);
+          setPrivateNote(result.privateNote?.body ?? "");
+          setNoteSavedAt(result.privateNote?.updatedAt);
+        }
       })
       .catch((reason) => {
         if (active) setError(displayError(reason));
@@ -6014,20 +6315,17 @@ export function VideoPlayerModal({
       ? `https://stream.mux.com/${playback.playbackId}.m3u8${playback.playbackToken ? `?token=${encodeURIComponent(playback.playbackToken)}` : ""}`
       : playback.sourceUrl
     : undefined;
-  const commonProps: VideoComponentProps | undefined = uri
-    ? {
-        controls: true,
-        onEnd: () => heartbeat(video.durationSeconds ?? 0, true),
-        onProgress: (progress) => {
-          setPlaybackSeconds(progress.currentTime);
-          heartbeat(progress.currentTime);
-        },
-        poster: playback?.posterUrl,
-        resizeMode: "contain",
-        source: { uri },
-        style: styles.player,
-      }
-    : undefined;
+  const handlePlaybackProgress = useCallback(
+    (seconds: number) => {
+      setPlaybackSeconds(seconds);
+      heartbeat(seconds);
+    },
+    [heartbeat],
+  );
+  const handlePlaybackCompleted = useCallback(
+    (seconds: number) => heartbeat(seconds || video.durationSeconds || 0, true),
+    [heartbeat, video.durationSeconds],
+  );
   const playbackScore = playback
     ? scoreAtTime(playback, playbackSeconds)
     : undefined;
@@ -6037,6 +6335,28 @@ export function VideoPlayerModal({
     : false;
   const playbackHeartRate = heartRateAtTime(playback, playbackSeconds);
   const portrait = video.courtCalibration?.preferredOrientation === "portrait";
+
+  const savePrivateNote = async () => {
+    const body = privateNote.trim();
+    if (!body || savingNote) return;
+    setSavingNote(true);
+    setNoteNotice(undefined);
+    try {
+      const saved = await client.player.saveVideoPrivateNote.mutate({
+        videoId: video.id,
+        body,
+        idempotencyKey: idempotencyKey(),
+      });
+      setPrivateNote(saved.body);
+      setNoteSavedAt(saved.updatedAt);
+      setNoteNotice("Private note saved");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (reason) {
+      setNoteNotice(displayError(reason));
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible>
@@ -6055,28 +6375,14 @@ export function VideoPlayerModal({
         >
           {!uri && !error && <ActivityIndicator color="#d4b77c" size="large" />}
           {!!error && <Text style={styles.playerError}>{error}</Text>}
-          {commonProps &&
-            (playback?.dataEnvironmentKey ? (
-              <MuxVideo
-                {...commonProps}
-                muxOptions={{
-                  application_name: "Duna Player",
-                  application_version: "1.1.0",
-                  data: {
-                    env_key: playback.dataEnvironmentKey,
-                    player_name: "Duna iOS",
-                    player_software_version: "6.19.2",
-                    video_id: video.id,
-                    video_title: video.title,
-                    video_series: video.event?.title,
-                    video_stream_type:
-                      video.status === "live" ? "live" : "on-demand",
-                  },
-                }}
-              />
-            ) : (
-              <Video {...commonProps} />
-            ))}
+          {uri && (
+            <StableVideoSurface
+              onCompleted={handlePlaybackCompleted}
+              onProgress={handlePlaybackProgress}
+              posterUrl={playback?.posterUrl}
+              uri={uri}
+            />
+          )}
           {playback && playbackScoreboardEnabled && playbackScore && (
             <VisionScoreboard
               score={playbackScore}
@@ -6148,6 +6454,56 @@ export function VideoPlayerModal({
               </View>
             </View>
           )}
+          {playback?.canEditPrivateNote && (
+            <View style={styles.videoNoteCard}>
+              <View style={styles.videoNoteHeading}>
+                <View style={styles.flex}>
+                  <Text style={styles.videoNoteEyebrow}>
+                    PRIVATE FILM NOTES
+                  </Text>
+                  <Text style={styles.videoNoteTitle}>
+                    What did you notice?
+                  </Text>
+                </View>
+                <DunaIcon color={palette.aqua} name="lock" size={20} />
+              </View>
+              <Text style={styles.videoNoteBody}>
+                Save cues, tendencies, and moments to revisit. Only you can see
+                this note—even when the recording is shared.
+              </Text>
+              <TextInput
+                multiline
+                onChangeText={setPrivateNote}
+                placeholder="Example: stay patient in transition; review the block touch at 8:42…"
+                placeholderTextColor="#8D969D"
+                style={styles.videoNoteInput}
+                textAlignVertical="top"
+                value={privateNote}
+              />
+              <View style={styles.videoNoteFooter}>
+                <Text style={styles.videoNoteStatus}>
+                  {noteNotice ??
+                    (noteSavedAt
+                      ? `Saved ${new Date(noteSavedAt).toLocaleDateString()}`
+                      : "Not saved yet")}
+                </Text>
+                <Pressable
+                  disabled={!privateNote.trim() || savingNote}
+                  onPress={() => void savePrivateNote()}
+                  style={[
+                    styles.videoNoteSave,
+                    (!privateNote.trim() || savingNote) && styles.disabled,
+                  ]}
+                >
+                  {savingNote ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={styles.videoNoteSaveText}>Save note</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          )}
           {playback?.isOwner && (
             <VisionAnalysisCard
               client={client}
@@ -6216,14 +6572,257 @@ function VideoCard({
           <Text style={styles.videoPrivacy}>
             {video.recordingVisibility === "public" ? "Public" : "Private"} ·{" "}
             {video.source === "live"
-              ? "Mux"
+              ? video.liveProvider === "cloudflare"
+                ? "Cloudflare Stream"
+                : "Mux"
               : video.source === "upload"
-                ? "Imported · calibration unavailable"
+                ? "Duna Cloud"
                 : "Duna archive"}
           </Text>
         )}
       </View>
     </Pressable>
+  );
+}
+
+export function ProfileVideoSection({
+  onOpenLibrary,
+  runtime,
+}: {
+  readonly onOpenLibrary: () => void;
+  readonly runtime: PlayerRuntime;
+}) {
+  const client = runtime.client;
+  const [studio, setStudio] = useState<VideoStudioData>();
+  const [metrics, setMetrics] = useState<readonly VideoMetric[]>([]);
+  const [loading, setLoading] = useState(Boolean(client));
+  const [error, setError] = useState<string>();
+  const [decisionVideoId, setDecisionVideoId] = useState<string>();
+  const [selectedVideo, setSelectedVideo] = useState<VideoSummary>();
+
+  const load = useCallback(async () => {
+    if (!client) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [nextStudio, nextMetrics] = await Promise.all([
+        client.player.videoStudio.query(),
+        client.player.videoMetrics.query(),
+      ]);
+      setStudio(nextStudio);
+      setMetrics(nextMetrics);
+      setError(undefined);
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const decide = async (videoId: string, status: "included" | "hidden") => {
+    if (!client || decisionVideoId) return;
+    setDecisionVideoId(videoId);
+    try {
+      await client.player.updateVideoParticipantProfile.mutate({
+        videoId,
+        status,
+        idempotencyKey: idempotencyKey(),
+      });
+      await load();
+    } catch (reason) {
+      setError(displayError(reason));
+    } finally {
+      setDecisionVideoId(undefined);
+    }
+  };
+
+  const entitlement = studio?.entitlement ?? runtime.settings?.dunaPlus;
+  const plan = MEMBERSHIP_PLANS[entitlement?.plan ?? "free"];
+  const liveUsed = studio?.usage.live.usedSeconds ?? 0;
+  const liveLimit = studio?.usage.live.limitSeconds ?? plan.monthlyLiveSeconds;
+  const uploadUsed = studio?.usage.uploads.usedSeconds ?? 0;
+  const uploadLimit =
+    studio?.usage.uploads.limitSeconds ?? plan.monthlyUploadSeconds;
+  const metricByVideo = new Map(
+    metrics.map((metric) => [metric.video.id, metric]),
+  );
+
+  return (
+    <View style={styles.profileVideoSection}>
+      <View style={styles.profileVideoHeading}>
+        <View style={styles.flex}>
+          <Text style={styles.eyebrow}>YOUR FILM ROOM</Text>
+          <Text style={styles.profileVideoTitle}>Videos</Text>
+          <Text style={styles.profileVideoBody}>
+            Your recordings, linked match film, private notes, and monthly
+            allowance live here.
+          </Text>
+        </View>
+        <Pressable onPress={onOpenLibrary} style={styles.profileVideoOpen}>
+          <Text style={styles.profileVideoOpenText}>Record + upload</Text>
+        </Pressable>
+      </View>
+
+      {loading && <ActivityIndicator color={palette.aqua} />}
+      {!!error && (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable onPress={() => void load()}>
+            <Text style={styles.textAction}>Try again</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {(studio?.profileInvitations.length ?? 0) > 0 && (
+        <View style={styles.profileVideoInvitations}>
+          <Text style={styles.profileVideoInvitationEyebrow}>
+            MATCH FILM WAITING FOR YOU
+          </Text>
+          {studio?.profileInvitations.map((invitation) => (
+            <View
+              key={invitation.video.id}
+              style={styles.profileVideoInvitation}
+            >
+              <Pressable
+                onPress={() => setSelectedVideo(invitation.video)}
+                style={styles.profileVideoInvitationMain}
+              >
+                {invitation.video.posterUrl ? (
+                  <Image
+                    source={{ uri: invitation.video.posterUrl }}
+                    style={styles.profileVideoInvitationThumb}
+                  />
+                ) : (
+                  <View style={styles.profileVideoInvitationThumbFallback}>
+                    <DunaIcon color={palette.aqua} name="video" size={22} />
+                  </View>
+                )}
+                <View style={styles.flex}>
+                  <Text
+                    numberOfLines={2}
+                    style={styles.profileVideoInvitationTitle}
+                  >
+                    {invitation.video.title}
+                  </Text>
+                  <Text style={styles.profileVideoInvitationMeta}>
+                    Recorded by {invitation.video.owner.displayName}
+                  </Text>
+                </View>
+              </Pressable>
+              <Text style={styles.profileVideoInvitationBody}>
+                You can always review this privately. Choose whether it may also
+                appear on your profile if the recorder publishes it.
+              </Text>
+              <View style={styles.profileVideoDecisionRow}>
+                <Pressable
+                  disabled={Boolean(decisionVideoId)}
+                  onPress={() => void decide(invitation.video.id, "hidden")}
+                  style={styles.profileVideoDecisionSecondary}
+                >
+                  <Text style={styles.profileVideoDecisionSecondaryText}>
+                    Keep off profile
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={Boolean(decisionVideoId)}
+                  onPress={() => void decide(invitation.video.id, "included")}
+                  style={styles.profileVideoDecisionPrimary}
+                >
+                  {decisionVideoId === invitation.video.id ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={styles.profileVideoDecisionPrimaryText}>
+                      Add to profile
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {studio && (
+        <View style={styles.profileVideoUsage}>
+          <View style={styles.profileVideoUsageTop}>
+            <Text style={styles.profileVideoUsageTitle}>This month</Text>
+            <Text style={styles.usagePlan}>{studio.quotaScope.label}</Text>
+          </View>
+          {(
+            [
+              {
+                label: "Live",
+                used: liveUsed,
+                limit: liveLimit,
+                sand: false,
+              },
+              {
+                label: "Uploads",
+                used: uploadUsed,
+                limit: uploadLimit,
+                sand: true,
+              },
+            ] as const
+          ).map((usage) => (
+            <View key={usage.label} style={styles.profileVideoUsageRow}>
+              <View style={styles.usageLabels}>
+                <Text style={styles.usageTitle}>{usage.label}</Text>
+                <Text style={styles.usageValue}>
+                  {formatDuration(usage.used)} of {formatDuration(usage.limit)}
+                </Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    usage.sand ? styles.progressFillSand : styles.progressFill,
+                    {
+                      width: `${Math.min(1, usage.used / Math.max(1, usage.limit)) * 100}%`,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.profileVideoArchiveHeading}>
+        <Text style={styles.sectionTitle}>Your archive</Text>
+        <Text style={styles.countBadge}>{studio?.videos.length ?? 0}</Text>
+      </View>
+      {studio?.videos.map((video) => (
+        <VideoCard
+          key={video.id}
+          metric={metricByVideo.get(video.id)}
+          onPress={() => setSelectedVideo(video)}
+          video={video}
+        />
+      ))}
+      {!loading && (studio?.videos.length ?? 0) === 0 && (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Your film room is ready.</Text>
+          <Text style={styles.emptyBody}>
+            Record, livestream, or upload a match. Every video starts with the
+            visibility you choose.
+          </Text>
+        </View>
+      )}
+
+      {selectedVideo && client && (
+        <VideoPlayerModal
+          client={client}
+          metric={metricByVideo.get(selectedVideo.id)}
+          onClose={() => setSelectedVideo(undefined)}
+          video={selectedVideo}
+        />
+      )}
+    </View>
   );
 }
 
@@ -8050,6 +8649,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   quickMatchContent: { gap: 20, padding: 20, paddingBottom: 120 },
+  recorderRoleSection: { gap: 10 },
+  recorderRoleRow: { flexDirection: "row", gap: 10 },
+  recorderRoleChoice: {
+    backgroundColor: palette.depth,
+    borderColor: palette.line,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    flex: 1,
+    gap: 4,
+    minHeight: 116,
+    padding: 14,
+  },
+  recorderRoleChoiceSelected: {
+    backgroundColor: palette.aquaSoft,
+    borderColor: palette.aqua,
+  },
+  recorderRoleRadio: {
+    alignItems: "center",
+    borderColor: palette.muted,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    height: 20,
+    justifyContent: "center",
+    marginBottom: 5,
+    width: 20,
+  },
+  recorderRoleRadioSelected: { borderColor: palette.aqua },
+  recorderRoleRadioCore: {
+    backgroundColor: palette.aqua,
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
+  recorderRoleTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
+  recorderRoleBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
   quickMatchRoster: { gap: 12 },
   quickMatchHostRow: {
     alignItems: "center",
@@ -9355,6 +9989,132 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
   },
+  profileVideoSection: {
+    backgroundColor: "#ffffff",
+    borderColor: palette.line,
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 15,
+    padding: 16,
+  },
+  profileVideoHeading: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+  },
+  profileVideoTitle: {
+    color: palette.ink,
+    fontSize: 27,
+    fontWeight: "900",
+    letterSpacing: -0.6,
+  },
+  profileVideoBody: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  profileVideoOpen: {
+    alignItems: "center",
+    backgroundColor: palette.navy,
+    borderRadius: 15,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  profileVideoOpenText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+  profileVideoInvitations: { gap: 10 },
+  profileVideoInvitationEyebrow: {
+    color: palette.positive,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+  },
+  profileVideoInvitation: {
+    backgroundColor: "#eef7f4",
+    borderColor: "#c8e4db",
+    borderRadius: 19,
+    borderWidth: 1,
+    gap: 11,
+    padding: 13,
+  },
+  profileVideoInvitationMain: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 11,
+    minHeight: 58,
+  },
+  profileVideoInvitationThumb: { borderRadius: 12, height: 58, width: 88 },
+  profileVideoInvitationThumbFallback: {
+    alignItems: "center",
+    backgroundColor: "#dceee9",
+    borderRadius: 12,
+    height: 58,
+    justifyContent: "center",
+    width: 88,
+  },
+  profileVideoInvitationTitle: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  profileVideoInvitationMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  profileVideoInvitationBody: {
+    color: "#48645a",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  profileVideoDecisionRow: { flexDirection: "row", gap: 9 },
+  profileVideoDecisionSecondary: {
+    alignItems: "center",
+    borderColor: palette.aqua,
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 10,
+  },
+  profileVideoDecisionSecondaryText: {
+    color: palette.aqua,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  profileVideoDecisionPrimary: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 10,
+  },
+  profileVideoDecisionPrimaryText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  profileVideoUsage: {
+    backgroundColor: palette.depth,
+    borderRadius: 18,
+    gap: 13,
+    padding: 14,
+  },
+  profileVideoUsageTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  profileVideoUsageTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  profileVideoUsageRow: { gap: 6 },
+  profileVideoArchiveHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   playerModal: { backgroundColor: "#06090b", flex: 1 },
   modalHeaderDark: {
     alignItems: "center",
@@ -9388,7 +10148,45 @@ const styles = StyleSheet.create({
     maxHeight: "58%",
     width: "72%",
   },
+  playerSurface: { height: "100%", width: "100%" },
   player: { height: "100%", width: "100%" },
+  playerLoading: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  playerFailure: {
+    alignItems: "center",
+    backgroundColor: "rgba(5,10,12,0.96)",
+    bottom: 0,
+    gap: 9,
+    justifyContent: "center",
+    left: 0,
+    padding: 24,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  playerFailureTitle: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
+  playerFailureBody: {
+    color: "#b8c0c0",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  playerRetry: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 16,
+    justifyContent: "center",
+    marginTop: 4,
+    minHeight: 48,
+    minWidth: 128,
+    paddingHorizontal: 18,
+  },
+  playerRetryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
   playerError: { color: "#f27878", padding: 20, textAlign: "center" },
   playerDetailsScroll: { flex: 1 },
   playerInfo: { gap: 12, padding: 20 },
@@ -9442,6 +10240,51 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
+  videoNoteCard: {
+    backgroundColor: "#0e191c",
+    borderColor: "rgba(82,215,205,0.25)",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 11,
+    padding: 16,
+  },
+  videoNoteHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
+  videoNoteEyebrow: {
+    color: palette.aqua,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  videoNoteTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
+  videoNoteBody: { color: "#aab8b8", fontSize: 12, lineHeight: 17 },
+  videoNoteInput: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    borderWidth: 1,
+    color: "#ffffff",
+    fontSize: 14,
+    lineHeight: 20,
+    minHeight: 112,
+    padding: 14,
+  },
+  videoNoteFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  videoNoteStatus: { color: "#8fa3a3", flex: 1, fontSize: 12 },
+  videoNoteSave: {
+    alignItems: "center",
+    backgroundColor: palette.aqua,
+    borderRadius: 14,
+    justifyContent: "center",
+    minHeight: 48,
+    minWidth: 112,
+    paddingHorizontal: 16,
+  },
+  videoNoteSaveText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   visionAnalysisCard: {
     backgroundColor: "#10191b",
     borderColor: "rgba(212,183,124,0.28)",

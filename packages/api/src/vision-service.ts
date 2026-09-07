@@ -16,6 +16,7 @@ import type {
   VisionTimelineEvent,
 } from "./contracts";
 import { requestVideoAnalysis } from "./video-analysis-service";
+import { canonicalPublicWebUrl } from "./public-web-url";
 
 const REMOTE_SESSION_SECONDS = 12 * 60 * 60;
 
@@ -51,14 +52,6 @@ function tokenHash(token: string): string {
 
 function remoteToken(): string {
   return `${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "")}`;
-}
-
-function publicWebOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_DUNA_WEB_URL ??
-    process.env.DUNA_WEB_URL ??
-    "https://duna-web.vercel.app"
-  ).replace(/\/+$/, "");
 }
 
 type VisionSessionRow = typeof visionSessions.$inferSelect;
@@ -226,7 +219,10 @@ export async function createVisionSession(input: {
   const encodedToken = encodeURIComponent(token);
   return {
     session: serializeSession(row, input.now),
-    remoteUrl: `${publicWebOrigin()}/vision/remote/${encodedToken}`,
+    remoteUrl: canonicalPublicWebUrl(
+      `/vision/remote/${encodedToken}`,
+      process.env.NEXT_PUBLIC_DUNA_WEB_URL ?? process.env.DUNA_WEB_URL,
+    ),
     appUrl: `duna://vision/remote/${encodedToken}`,
   };
 }

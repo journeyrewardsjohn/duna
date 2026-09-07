@@ -4,6 +4,7 @@ import WatchConnectivity
 
 private let scoreDraftDefaultsKey = "duna.pendingWatchScoreDraft"
 private let visionEventsDefaultsKey = "duna.pendingWatchVisionEvents"
+private let seenVisionEventIDsDefaultsKey = "duna.seenWatchVisionEventIDs.v1"
 private let cameraPreviewNotification = Notification.Name(
   "co.duna.watch.camera-preview"
 )
@@ -15,6 +16,9 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
   var onVisionEvent: ((String) -> Void)?
 
   private var currentContext: [String: Any] = [:]
+  private let visionStorageQueue = DispatchQueue(
+    label: "co.duna.watch.vision-event-storage"
+  )
 
   private override init() {
     super.init()
@@ -65,7 +69,9 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
   }
 
   func pendingVisionEvents() -> String? {
-    UserDefaults.standard.string(forKey: visionEventsDefaultsKey)
+    visionStorageQueue.sync {
+      UserDefaults.standard.string(forKey: visionEventsDefaultsKey)
+    }
   }
 
   func acknowledgeVisionEvents(eventIdsJson: String) {
@@ -75,12 +81,14 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
     else {
       return
     }
-    let acknowledged = Set(ids)
-    let remaining = storedVisionEvents().filter { payload in
-      guard let eventID = payload["eventId"] as? String else { return false }
-      return !acknowledged.contains(eventID)
+    visionStorageQueue.sync {
+      let acknowledged = Set(ids)
+      let remaining = storedVisionEvents().filter { payload in
+        guard let eventID = payload["eventId"] as? String else { return false }
+        return !acknowledged.contains(eventID)
+      }
+      storeVisionEvents(remaining)
     }
-    storeVisionEvents(remaining)
   }
 
   private func publishContext() -> Bool {
@@ -163,13 +171,9 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
         message: "iPhone does not recognize this action"
       )
     }
-    var events = storedVisionEvents()
-    let eventID = payload["eventId"] as? String
-    if !events.contains(where: { $0["eventId"] as? String == eventID }) {
-      events.append(payload)
-      storeVisionEvents(Array(events.suffix(500)))
-    }
     guard
+      let eventID = payload["eventId"] as? String,
+      !eventID.isEmpty,
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else {
@@ -177,6 +181,37 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
         for: payload,
         accepted: false,
         message: "iPhone could not save the match action"
+      )
+    }
+    let isFirstDelivery = visionStorageQueue.sync {
+      var seenEventIDs =
+        UserDefaults.standard.stringArray(
+          forKey: seenVisionEventIDsDefaultsKey
+        ) ?? []
+      var events = storedVisionEvents()
+      if seenEventIDs.contains(eventID) || events.contains(where: {
+        $0["eventId"] as? String == eventID
+      }) {
+        return false
+      }
+      // Record the id independently from the pending queue. A Watch action can
+      // arrive through both the immediate message and background fallback; an
+      // acknowledgement removes pending work but must never make that action
+      // eligible to run a second time.
+      events.append(payload)
+      storeVisionEvents(Array(events.suffix(500)))
+      seenEventIDs.append(eventID)
+      UserDefaults.standard.set(
+        Array(seenEventIDs.suffix(2_000)),
+        forKey: seenVisionEventIDsDefaultsKey
+      )
+      return true
+    }
+    guard isFirstDelivery else {
+      return receipt(
+        for: payload,
+        accepted: true,
+        message: "iPhone already received this action"
       )
     }
     DispatchQueue.main.async { [weak self] in

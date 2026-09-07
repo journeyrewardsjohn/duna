@@ -151,9 +151,6 @@ importers:
       '@expo/ui':
         specifier: ~57.0.9
         version: 57.0.9(@babel/core@7.29.7(supports-color@8.1.1))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(expo@57.0.10)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
-      '@mux/mux-data-react-native-video':
-        specifier: 0.19.20
-        version: 0.19.20(react-native-video@6.19.2(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3))(react@19.2.3)
       '@react-native-async-storage/async-storage':
         specifier: ^2.2.0
         version: 2.2.0(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))
@@ -262,9 +259,6 @@ importers:
       react-native-svg:
         specifier: 15.15.4
         version: 15.15.4(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
-      react-native-video:
-        specifier: 6.19.2
-        version: 6.19.2(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
     devDependencies:
       '@types/react':
         specifier: ^19.2.17
@@ -2510,12 +2504,6 @@ packages:
 
   '@mux/mux-data-google-ima@0.3.17':
     resolution: {integrity: sha512-4wpH6dYybyZhqLn9qGn/+67Z8MZnQRAdqTFEEZw2bx61M9q01uPYYHxd8qwOnYtUGEeafsdTwVHVxKHGD3oc1A==}
-
-  '@mux/mux-data-react-native-video@0.19.20':
-    resolution: {integrity: sha512-FtE16AV9ju8Dwcw+IfmHuuFNIiUfsBnRtX4vVynLtMQLUiBYLLkVlI5kVjHLJBYk2cCjxcU/q4dA2Zcnt3Bhsw==}
-    peerDependencies:
-      react: ^18.1.0
-      react-native-video: ^6.9.0
 
   '@mux/mux-node@14.1.1':
     resolution: {integrity: sha512-Am79fhXU6A15zef1y+2UKfbIQ/UMGiVOjKKV3fOAqR8IS0A4HbL6WLDs0rNlMRHrefvASAftM2NWwLLBU3Peaw==}
@@ -6594,9 +6582,6 @@ packages:
   multitars@1.0.0:
     resolution: {integrity: sha512-H/J4fMLedtudftaYMOg7ajzLYgT3/rwbWVJbqr/iUgB8DQztn38ys5HOqI1CzSxx8QhXXwOOnnBvd4v3jG5+Mg==}
 
-  mux-embed@5.18.0:
-    resolution: {integrity: sha512-y/iRQIUIyRUL+5zUHynrMMMpRlWVXfEFvSwTx7h//qIguQ4BQdQtc3qhKEdGaSikTeVuDeVC5IwP4aDuHUpjIA==}
-
   mux-embed@5.18.1:
     resolution: {integrity: sha512-ePsHjiEKY+FgrSBiMmaF+LOtTQSSBWv/1zqpREQFN96JE93xlsArT/MEi30yKOE06MgjOlL70YI750molu3y7g==}
 
@@ -7151,12 +7136,6 @@ packages:
   react-native-url-polyfill@3.0.0:
     resolution: {integrity: sha512-aA5CiuUCUb/lbrliVCJ6lZ17/RpNJzvTO/C7gC/YmDQhTUoRD5q5HlJfwLWcxz4VgAhHwXKzhxH+wUN24tAdqg==}
     peerDependencies:
-      react-native: '*'
-
-  react-native-video@6.19.2:
-    resolution: {integrity: sha512-gh5dBMGSHywKr8+p4azRXrFQgT+QTmS1tI4sz6kVRjSENORfsrGGLQzmyo/7S9m+ZOTLWQJ3h8ONaXxR4F2Fcw==}
-    peerDependencies:
-      react: '*'
       react-native: '*'
 
   react-native-web@0.21.2:
@@ -10354,12 +10333,6 @@ snapshots:
   '@mux/mux-data-google-ima@0.3.17':
     dependencies:
       mux-embed: 5.18.1
-
-  '@mux/mux-data-react-native-video@0.19.20(react-native-video@6.19.2(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3))(react@19.2.3)':
-    dependencies:
-      mux-embed: 5.18.0
-      react: 19.2.3
-      react-native-video: 6.19.2(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
 
   '@mux/mux-node@14.1.1': {}
 
@@ -15808,8 +15781,6 @@ snapshots:
 
   multitars@1.0.0: {}
 
-  mux-embed@5.18.0: {}
-
   mux-embed@5.18.1: {}
 
   nanoid@3.3.16: {}
@@ -16375,11 +16346,6 @@ snapshots:
     dependencies:
       react-native: 0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1)
       whatwg-url-without-unicode: 8.0.0-3
-
-  react-native-video@6.19.2(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3):
-    dependencies:
-      react: 19.2.3
-      react-native: 0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.3)(supports-color@8.1.1)
 
   react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:

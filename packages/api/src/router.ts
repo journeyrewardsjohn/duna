@@ -456,11 +456,13 @@ import {
   recordVideoViewHeartbeat,
   resumeVideoUpload,
   requestVideoMusicRemoval,
+  saveVideoPrivateNote,
   revokeVideoVisionLearningConsent,
   reviewVisionCalibrationSample,
   revokeComplimentaryDunaPlus,
   revokeVideoAllowance,
   searchVideoAssociations,
+  updateVideoParticipantProfile,
   updateVideoPrivacy,
   updateVideoQuotaPolicy,
   VideoServiceError,
@@ -4008,6 +4010,78 @@ const playerRouter = router({
         },
       }),
     ),
+  updateVideoParticipantProfile: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        status: z.enum(["included", "hidden"]),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        videoId: z.string().uuid(),
+        status: z.enum(["included", "hidden"]),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.updateVideoParticipantProfile",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await updateVideoParticipantProfile({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              status: input.status,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  saveVideoPrivateNote: protectedProcedure
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+        body: z.string().trim().min(1).max(5_000),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(
+      z.object({
+        body: z.string(),
+        updatedAt: z.iso.datetime(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.saveVideoPrivateNote",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await saveVideoPrivateNote({
+              actor: ctx.actor!,
+              videoId: input.videoId,
+              body: input.body,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   createVideoShareLink: protectedProcedure
     .input(
       z.object({
@@ -5450,7 +5524,8 @@ const playerRouter = router({
             A: z.array(z.string().uuid()).max(6),
             B: z.array(z.string().uuid()).max(6),
           }),
-          initialServerPersonId: z.string().uuid(),
+          initialServerPersonId: z.string().uuid().optional(),
+          initialServerSide: z.enum(["A", "B"]).default("A"),
           deviceId: z.string().trim().min(8).max(128),
           idempotencyKey: z.string().uuid(),
         })
@@ -5494,6 +5569,7 @@ const playerRouter = router({
               allPlayersAgreedToRecord: input.allPlayersAgreedToRecord,
               serviceOrder: input.serviceOrder,
               initialServerPersonId: input.initialServerPersonId,
+              initialServerSide: input.initialServerSide,
               deviceId: input.deviceId,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
