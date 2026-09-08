@@ -23,7 +23,7 @@ async function continueToStripe(formData: FormData) {
   const plan = String(formData.get("plan") ?? "") as PaidOrganizationPlanId;
   const idempotencyKey = String(formData.get("checkoutId") ?? "");
   const interval = formData.get("interval") === "year" ? "year" : "month";
-  if (!paidPlans.has(plan)) redirect("/");
+  if (!paidPlans.has(plan)) redirect("/setup");
   const caller = await getServerCaller();
   const checkout = await caller.operator.startPlanCheckout({
     plan,
@@ -52,9 +52,9 @@ export default async function CompleteOnboardingPage({
   }>;
 }) {
   const query = await searchParams;
-  if (query.billing === "success") redirect("/");
+  if (query.billing === "success") redirect("/setup");
   const plan = query.plan as PaidOrganizationPlanId;
-  if (!paidPlans.has(plan) || !query.checkoutId) redirect("/");
+  if (!paidPlans.has(plan) || !query.checkoutId) redirect("/setup");
   const definition = ORGANIZATION_PLANS[plan];
   const checkoutId =
     query.billing === "cancelled" ? randomUUID() : query.checkoutId;

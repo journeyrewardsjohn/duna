@@ -43,6 +43,7 @@ export * from "./messaging-wakeups";
 export * from "./operator-service";
 export * from "./organization-onboarding";
 export * from "./organization-billing";
+export * from "./organization-setup";
 export * from "./privacy";
 export * from "./risk";
 export * from "./sand-data/service";

@@ -238,6 +238,68 @@ describe("Duna AI context", () => {
     );
   });
 
+  it("returns immediate, workspace-grounded organization setup guidance", async () => {
+    const response = await runDunaAiAgent({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000001",
+        displayName: "Coach Taylor",
+        roles: ["coach"],
+        scopes: ["sessions:read", "members:read", "payments:read"],
+        ageBand: "adult",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        isDemo: true,
+      },
+      message: "Help me finish setting up this organization. What is missing?",
+      surface: "hq",
+      page: "/setup",
+      requestId: "hq-setup-ai-test",
+      now: new Date("2026-09-08T14:00:00.000Z"),
+    });
+
+    expect(response.reply).toMatch(/completed \d of 6 essential setup steps/i);
+    expect(response.toolsUsed).toContain("operator.workspace.setup-readiness");
+    expect(response.cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "link",
+          href: expect.stringMatching(/^\//),
+        }),
+      ]),
+    );
+  });
+
+  it("keeps proactive setup guidance focused on the readiness checklist", async () => {
+    const response = await getDunaAiSuggestions({
+      actor: {
+        personId: "10000000-0000-4000-8000-000000000001",
+        displayName: "Coach Taylor",
+        roles: ["coach"],
+        scopes: ["*"],
+        ageBand: "adult",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        isDemo: true,
+      },
+      surface: "hq",
+      page: "/setup",
+      now: new Date("2026-09-08T14:00:00.000Z"),
+    });
+
+    expect(response.reply).toMatch(/completed \d of 6 essential setup steps/i);
+    expect(response.cards).toHaveLength(1);
+    expect(response.cards[0]).toEqual(
+      expect.objectContaining({
+        kind: "link",
+        href: expect.stringMatching(/^\//),
+      }),
+    );
+    expect(response.suggestions).toEqual(
+      expect.arrayContaining([
+        "What is missing from our organization setup?",
+        "Which setup steps are already complete?",
+      ]),
+    );
+  });
+
   it("ranks discovery against the user's request", () => {
     const items = [
       {

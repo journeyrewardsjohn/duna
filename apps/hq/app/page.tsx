@@ -22,6 +22,7 @@ export default async function HqPage() {
         dashboard={dashboard}
         matches={matches}
         members={members}
+        workspace={workspace}
       />
     </OperatorShell>
   );

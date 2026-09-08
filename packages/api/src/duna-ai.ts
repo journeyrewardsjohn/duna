@@ -25,6 +25,10 @@ import {
   loadDemoOperatorWorkspace,
   loadOperatorWorkspace,
 } from "./operator-service";
+import {
+  getOrganizationSetupReadiness,
+  type OrganizationSetupReadiness,
+} from "./organization-setup";
 import { venueWallTimeToUtc } from "./court-checkout";
 import { cancelPlayerBooking } from "./player-bookings";
 import { getRepository } from "./repository";
@@ -355,6 +359,7 @@ interface ContextSnapshot {
     readonly palette: Readonly<Record<string, string | number | undefined>>;
     readonly knowledgeRevision: string;
     readonly approvedKnowledge: readonly string[];
+    readonly setup: OrganizationSetupReadiness;
   };
   readonly calendarEntries: readonly DunaAiCalendarEntry[];
   readonly operatingContext?: OrganizationOperatingContext;
@@ -532,6 +537,8 @@ function formatMoney(item: DiscoveryMapItem): string | undefined {
 
 function pageIntent(surface: DunaAiSurface, pathname: string): string {
   const value = pathname.toLowerCase();
+  if (/setup|onboarding|settings/.test(value))
+    return "setting up the organization";
   if (/discover|map|venue/.test(value)) return "discovering places to play";
   if (/event/.test(value))
     return surface === "player" ? "evaluating an event" : "operating an event";
@@ -1361,6 +1368,7 @@ async function buildContextSnapshot(input: {
           palette: workspace.theme.palette,
           knowledgeRevision: workspace.brandKnowledge.contextRevision,
           approvedKnowledge: workspace.brandKnowledge.contextPreview,
+          setup: getOrganizationSetupReadiness(workspace),
         }
       : undefined,
     calendarEntries,
@@ -1483,6 +1491,23 @@ function contextCards(
 ): DunaAiCard[] {
   const cards: DunaAiCard[] = [];
   const operations = snapshot.operatingContext;
+  const setup = snapshot.organization?.setup;
+  if (
+    setup &&
+    isOrganizationSetupRequest(message, snapshot.localContext.pathname)
+  ) {
+    const nextStep = setup.nextStep;
+    cards.push({
+      kind: "link",
+      title: nextStep?.label ?? "Organization setup is complete",
+      detail:
+        nextStep?.detail ??
+        "Every essential setup step is complete. Review the checklist whenever the organization changes.",
+      href: nextStep?.href ?? "/setup",
+      tone: nextStep ? "warning" : "positive",
+    });
+    return cards;
+  }
   if (snapshot.discovery.length > 0) {
     const mapped = snapshot.discovery.filter(
       (
@@ -1637,6 +1662,16 @@ function defaultLinkCards(
 ): DunaAiCard[] {
   const value = message.toLowerCase();
   if (surface !== "player") {
+    if (isOrganizationSetupRequest(message, ""))
+      return [
+        {
+          kind: "link",
+          title: "Organization setup",
+          detail:
+            "See every essential step, what is complete, and what comes next.",
+          href: "/setup",
+        },
+      ];
     if (/availability|coach|team/.test(value))
       return [
         {
@@ -2224,12 +2259,66 @@ function proposalCard(
   };
 }
 
+function isOrganizationSetupRequest(
+  message: string,
+  pathname: string,
+): boolean {
+  return (
+    /(^|\/)(setup|onboarding)(\/|$)/i.test(pathname) ||
+    /\b(set\s?up|setup|onboard|onboarding|get started|ready to launch|finish.*organization|what is missing)\b/i.test(
+      message,
+    )
+  );
+}
+
+function organizationSetupReply(snapshot: ContextSnapshot): string {
+  const organization = snapshot.organization;
+  const setup = organization?.setup;
+  if (!organization || !setup)
+    return "Choose an organization so I can check its setup and guide you from live workspace facts.";
+  if (setup.complete)
+    return `${organization.name} has completed all ${setup.totalCount} essential setup steps. You can review the checklist at any time; nothing needs to be changed just to keep operating.`;
+
+  const nextStep = setup.nextStep;
+  const remaining = setup.steps.filter((step) => !step.complete);
+  const after = remaining
+    .slice(1, 3)
+    .map((step) => step.label)
+    .join("; then ");
+  return `${organization.name} has completed ${setup.completedCount} of ${setup.totalCount} essential setup steps. Start with ${nextStep?.label.toLowerCase() ?? "the first incomplete step"}: ${nextStep?.detail ?? "Open the setup checklist for the next action."}${after ? ` After that: ${after}.` : ""} I will keep financial and player-facing changes behind their normal review and confirmation.`;
+}
+
 function suggestionsFor(
   snapshot: ContextSnapshot,
   surface: DunaAiSurface,
 ): string[] {
   const suggestions: string[] = [];
   const operations = snapshot.operatingContext;
+  const setup = snapshot.organization?.setup;
+  const setupPage = isOrganizationSetupRequest(
+    "",
+    snapshot.localContext.pathname,
+  );
+  if (surface !== "player" && setup) {
+    if (!setup.complete) {
+      suggestions.push("What is missing from our organization setup?");
+      if (setupPage) {
+        suggestions.push(
+          setup.nextStep
+            ? `Guide me through ${setup.nextStep.label.toLowerCase()}`
+            : "Guide me through the next setup step",
+          "Which setup steps are already complete?",
+          "What can I safely leave until later?",
+        );
+      }
+    } else if (setupPage) {
+      suggestions.push(
+        "Review our setup for anything that changed",
+        "What should a new teammate learn first?",
+      );
+    }
+    if (setupPage) return [...new Set(suggestions)].slice(0, 4);
+  }
   const opportunity = operations?.eventOpportunities.find(
     (event) => event.openSpots > 0 && event.fillRateBps <= 6_000,
   );
@@ -2302,13 +2391,19 @@ export async function getDunaAiSuggestions(input: {
     ...input,
     message: attentionMessage,
   });
+  const setupPage = isOrganizationSetupRequest(
+    "",
+    snapshot.localContext.pathname,
+  );
   const cards = contextCards(snapshot, attentionMessage).slice(0, 5);
   const fallback = {
-    reply: snapshot.operatingContext
-      ? "I compared near-term registrations, reach, price, schedule conflicts, and coach coverage. These are the strongest questions to work through now."
-      : cards.length > 0
-        ? "I checked this page against your upcoming schedule and live Duna context. Here’s what is most relevant right now."
-        : `I’m ready on this page, with ${snapshot.pageIntent} in mind.`,
+    reply: setupPage
+      ? organizationSetupReply(snapshot)
+      : snapshot.operatingContext
+        ? "I compared near-term registrations, reach, price, schedule conflicts, and coach coverage. These are the strongest questions to work through now."
+        : cards.length > 0
+          ? "I checked this page against your upcoming schedule and live Duna context. Here’s what is most relevant right now."
+          : `I’m ready on this page, with ${snapshot.pageIntent} in mind.`,
     cards,
     suggestions: suggestionsFor(snapshot, input.surface),
     toolsUsed: [
@@ -2324,7 +2419,7 @@ export async function getDunaAiSuggestions(input: {
     researchUsed: false,
   } satisfies DunaAiResponse;
   const runtime = dunaAiRuntime(input.requestOidcToken);
-  if (!runtime || input.surface === "player") return fallback;
+  if (setupPage || !runtime || input.surface === "player") return fallback;
   const agent = new Agent({
     name: "Duna Opportunity Scout",
     model: resolveDunaAiCopilotModel(),
@@ -2736,6 +2831,15 @@ export async function runDunaAiAgent(input: {
     }
   }
 
+  if (
+    input.surface === "hq" &&
+    !intent &&
+    isOrganizationSetupRequest(input.message, snapshot.localContext.pathname)
+  ) {
+    toolsUsed.add("operator.workspace.setup-readiness");
+    return deterministicResponse(organizationSetupReply(snapshot));
+  }
+
   const runtime = dunaAiRuntime(input.requestOidcToken);
   const unavailableReply = providerUnavailableReply({
     attachments: input.attachments,
@@ -2889,6 +2993,7 @@ export async function runDunaAiAgent(input: {
       `It is ${input.now.toISOString()}. The actor is ${input.actor.displayName}; treat identity, role, age band, active organization, page, and local timezone as first-class context.`,
       "Use get_current_duna_context before making claims about Duna state. Never invent permissions, records, availability, pricing, weather, conflicts, performance, or action outcomes.",
       "For coaches and club directors, reason across the full operating context: event registrations, impressions, conversion, current price, active marketing, campaign performance, coach availability and workload, unassigned sessions, courts, and resource conflicts. Name the exact evidence behind a recommendation.",
+      "When the user asks about organization setup, use the structured organization.setup checklist as the source of truth. State what is confirmed complete, recommend the first incomplete setup step, and link operational suggestions only after answering the setup question. Do not treat a busy schedule or a growth opportunity as proof that setup is complete.",
       "When an event needs help, distinguish a reach problem, conversion problem, timing or schedule problem, capacity issue, and possible price issue. Low fill alone never proves price is wrong. Recommend a price review only when the supplied evidence supports investigating it, and require governed approval for any change.",
       "Proactively identify where marketing could help, where a court or coach conflict needs resolution, and where available coaching capacity could cover work. Ask a focused follow-up question when the requested outcome, audience, budget, price, coach, or exact session is ambiguous.",
       "Use search_duna_knowledge when a question names or implies a specific person, coach, session, event, venue, product, transaction, or other Duna record that is not fully present in the current context. Search again with a narrower query when the first result is ambiguous.",

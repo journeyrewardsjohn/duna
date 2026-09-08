@@ -47,6 +47,12 @@ const moduleCopy: Record<
     readonly description: string;
   }
 > = {
+  setup: {
+    eyebrow: "Organization readiness",
+    title: "Get started",
+    description:
+      "The essential steps that connect your business, people, places, brand, payments, and first offering.",
+  },
   calendar: {
     eyebrow: "Sessions + facilities",
     title: "Calendar",

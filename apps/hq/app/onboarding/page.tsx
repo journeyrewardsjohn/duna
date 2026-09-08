@@ -114,7 +114,7 @@ async function createWorkspace(formData: FormData) {
   await switchToOrganization(organization.id, {
     returnTo:
       plan === "coach"
-        ? "/"
+        ? "/setup"
         : `/onboarding/complete?plan=${plan}&interval=${interval}&checkoutId=${crypto.randomUUID()}`,
   });
 }
@@ -196,12 +196,12 @@ export default async function OrganizationOnboardingPage({
           <h1>
             {createOnly
               ? "Create a new organization."
-              : "Bring your business into Duna."}
+              : "Start your Duna workspace."}
           </h1>
           <p>
             {createOnly
               ? "Start a separate business without mixing members, money, or settings with your current organization."
-              : "Choose an existing workspace or start a separate business with the plan that fits today. One administrator can manage multiple organizations without mixing members, money, or settings."}
+              : "Choose an existing workspace or create one in a few clear decisions. After this, Duna guides you through the venue, people, brand, payments, and first offering."}
           </p>
         </div>
 
@@ -240,10 +240,10 @@ export default async function OrganizationOnboardingPage({
                 </span>
                 <div>
                   <span className="hq-eyebrow">Create a workspace</span>
-                  <h2>What are you building?</h2>
+                  <h2>Tell us about the organization.</h2>
                   <p>
-                    Every workspace has its own customers, payments, staff, and
-                    plan. You can add another organization later.
+                    Start with its name and volleyball format. Every workspace
+                    keeps customers, payments, staff, and settings separate.
                   </p>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default async function OrganizationOnboardingPage({
               <fieldset className="workspace-plan-picker">
                 <legend>
                   <span className="hq-eyebrow">Plans + pricing</span>
-                  <strong>Choose the plan that fits today.</strong>
+                  <strong>Choose how you want to start.</strong>
                   <small>
                     Every plan includes the complete Duna HQ platform. Upgrade
                     only when the lower transaction fee saves your organization

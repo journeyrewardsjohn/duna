@@ -1,6 +1,7 @@
 "use client";
 
-import type { OperatorWorkspace, WaiverWorkspace } from "@duna/api";
+import { type OperatorWorkspace, type WaiverWorkspace } from "@duna/api";
+import { getOrganizationSetupReadiness } from "@duna/api/organization-setup";
 import {
   ORGANIZATION_PLAN_IDS,
   ORGANIZATION_PLANS,
@@ -248,9 +249,8 @@ export function SettingsCenter({
   );
   const paymentsReady = organization.stripeChargesEnabled;
   const profileReady = Boolean(organization.name && organization.timezone);
-  const readiness = [profileReady, themeReady, addressReady, paymentsReady];
-  const completedCount = readiness.filter(Boolean).length;
-  const completion = Math.round((completedCount / readiness.length) * 100);
+  const setupReadiness = getOrganizationSetupReadiness(workspace);
+  const completion = setupReadiness.completionPercent;
   const timeZoneOptions = useMemo(
     () =>
       commonTimeZones.includes(
@@ -260,40 +260,7 @@ export function SettingsCenter({
         : ([organization.timezone, ...commonTimeZones] as readonly string[]),
     [organization.timezone],
   );
-  const nextStep = !profileReady
-    ? {
-        label: "Confirm your business details",
-        detail:
-          "Set the name and time zone Duna should use across schedules and customer receipts.",
-        section: "business" as const,
-      }
-    : !themeReady
-      ? {
-          label: "Publish your player-facing brand",
-          detail:
-            "Add a logo, a short story, and a simple visual system before sharing your storefront.",
-          section: "brand" as const,
-        }
-      : !addressReady
-        ? {
-            label: "Add your legal business address",
-            detail:
-              "Duna needs a complete address before tax settings can be prepared safely.",
-            section: "money" as const,
-          }
-        : !paymentsReady
-          ? {
-              label: "Finish secure payment setup",
-              detail:
-                "Connect the business so customer payments can settle directly to it.",
-              section: "money" as const,
-            }
-          : {
-              label: "Your essentials are ready",
-              detail:
-                "Keep locations, team access, and account preferences current as the business grows.",
-              section: "operations" as const,
-            };
+  const nextStep = setupReadiness.nextStep;
 
   const paymentStatus = paymentsReady
     ? "Ready"
@@ -354,27 +321,25 @@ export function SettingsCenter({
               </div>
               <div>
                 <span className="hq-eyebrow">Recommended next step</span>
-                <h2>{nextStep.label}</h2>
-                <p>{nextStep.detail}</p>
-                <button
+                <h2>{nextStep?.label ?? "Your essential setup is complete"}</h2>
+                <p>
+                  {nextStep?.detail ??
+                    "Keep locations, team access, and account preferences current as the organization grows."}
+                </p>
+                <Link
                   className="hq-button hq-button--primary"
-                  onClick={() => setSection(nextStep.section)}
-                  type="button"
+                  href={nextStep?.href ?? "/setup"}
                 >
-                  Continue setup <ArrowRight aria-hidden size={16} />
-                </button>
+                  {nextStep?.actionLabel ?? "Review setup"}{" "}
+                  <ArrowRight aria-hidden size={16} />
+                </Link>
               </div>
               <ul>
-                <StatusLine complete={profileReady}>
-                  Business details
-                </StatusLine>
-                <StatusLine complete={themeReady}>
-                  Published Theme Kit
-                </StatusLine>
-                <StatusLine complete={addressReady}>Legal address</StatusLine>
-                <StatusLine complete={paymentsReady}>
-                  Online payments
-                </StatusLine>
+                {setupReadiness.steps.map((step) => (
+                  <StatusLine complete={step.complete} key={step.id}>
+                    {step.label}
+                  </StatusLine>
+                ))}
               </ul>
             </section>
 
