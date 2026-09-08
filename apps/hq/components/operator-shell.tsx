@@ -2,7 +2,7 @@ import type { OrganizationSummary } from "@duna/core";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { DunaActionTrigger, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { Bell, Menu, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { loadWorkspaceOptions } from "@/lib/workspace-options";
@@ -16,6 +16,13 @@ import {
 import { AuthControls } from "./auth-controls";
 import { DunaActionCenter } from "./duna-action-center";
 import { OrganizationSwitcher } from "./organization-switcher";
+
+const mobilePrimaryModules = [
+  "overview",
+  "setup",
+  "calendar",
+  "members",
+] as const;
 
 export async function OperatorShell({
   active,
@@ -62,7 +69,16 @@ export async function OperatorShell({
                 {startsGroup && (
                   <span className="hq-sidebar__section">{item.group}</span>
                 )}
-                <div className="hq-sidebar__module">
+                <div
+                  className="hq-sidebar__module"
+                  data-mobile-primary={
+                    (mobilePrimaryModules as readonly string[]).includes(
+                      item.slug,
+                    )
+                      ? "true"
+                      : undefined
+                  }
+                >
                   <Link
                     className={active === item.slug ? "active" : undefined}
                     href={item.slug === "overview" ? "/" : `/${item.slug}`}
@@ -97,6 +113,44 @@ export async function OperatorShell({
               </Fragment>
             );
           })}
+          <details
+            className={`hq-mobile-navigation-more${
+              (mobilePrimaryModules as readonly string[]).includes(active)
+                ? ""
+                : " has-active-module"
+            }`}
+          >
+            <summary>
+              <Menu aria-hidden size={18} />
+              <span>More</span>
+            </summary>
+            <div>
+              <header>
+                <strong>All HQ tools</strong>
+                <small>Choose where you want to work.</small>
+              </header>
+              {navigableModules
+                .filter(
+                  (item) =>
+                    !(mobilePrimaryModules as readonly string[]).includes(
+                      item.slug,
+                    ),
+                )
+                .map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      className={active === item.slug ? "active" : undefined}
+                      href={item.slug === "overview" ? "/" : `/${item.slug}`}
+                      key={item.slug}
+                    >
+                      <Icon aria-hidden size={18} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+            </div>
+          </details>
         </nav>
         <div className="hq-sidebar__meta">
           <Link aria-label="Open Duna Admin" href="/admin" title="Duna Admin">

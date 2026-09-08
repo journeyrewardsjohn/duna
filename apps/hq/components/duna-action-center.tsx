@@ -37,9 +37,9 @@ const quickActions = [
 ] as const;
 
 const starters = [
+  "What is missing from our organization setup?",
   "Show me what needs attention today",
   "How is the business performing?",
-  "Help me plan next week around coaches and courts",
 ] as const;
 
 export function DunaActionCenter() {

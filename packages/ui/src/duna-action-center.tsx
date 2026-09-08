@@ -370,7 +370,9 @@ export function DunaActionCenter({
       role: "assistant",
       body:
         surface === "hq"
-          ? "I’m Duna AI. Ask about this page or your organization. I’ll show the exact change before consequential work."
+          ? pathname.startsWith("/setup")
+            ? "I’m Duna AI. I can check this organization’s setup, explain what is missing, and guide you one step at a time."
+            : "I’m Duna AI. Ask about this page or your organization. I’ll show the exact change before consequential work."
           : "I’m Duna AI. Ask about this page, your schedule, ratings, or where to play next.",
     },
   ]);
@@ -476,13 +478,18 @@ export function DunaActionCenter({
         };
         if (result.suggestions?.length) setSuggestions(result.suggestions);
         if (result.cards?.length)
-          setMessages([
-            {
-              role: "assistant",
-              body: result.reply ?? "Here’s what looks relevant right now.",
-              cards: result.cards,
-            },
-          ]);
+          setMessages((current) =>
+            current.some(({ role }) => role === "user")
+              ? current
+              : [
+                  {
+                    role: "assistant",
+                    body:
+                      result.reply ?? "Here’s what looks relevant right now.",
+                    cards: result.cards,
+                  },
+                ],
+          );
       } catch {
         // The product-specific starters remain useful without a proactive read.
       }

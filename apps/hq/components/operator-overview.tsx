@@ -1,13 +1,20 @@
-import type { OperatorDashboard, OperatorScorableMatch } from "@duna/api";
+import {
+  getOrganizationSetupReadiness,
+  type OperatorDashboard,
+  type OperatorScorableMatch,
+  type OperatorWorkspace,
+} from "@duna/api";
 import { formatMoney, formatVenueTime, type PersonSummary } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, DunaActionTrigger, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   CalendarPlus,
   Check,
   ChevronRight,
+  ClipboardCheck,
   CreditCard,
   ExternalLink,
+  Sparkles,
   TrendingUp,
   UsersRound,
 } from "lucide-react";
@@ -55,7 +62,8 @@ function quickActionDestination(label: string): string {
   if (label === "Send update") return "/messages";
   if (label === "Reconcile") return "/payments";
   if (label === "Run check-in") return "/events";
-  if (label === "Create event") return "/events";
+  if (label === "Create event") return "/events/create";
+  if (label === "Create product") return "/products/create";
   return "/calendar";
 }
 
@@ -63,10 +71,12 @@ export function OperatorOverview({
   dashboard,
   matches,
   members,
+  workspace,
 }: {
   readonly dashboard: OperatorDashboard;
   readonly matches: readonly OperatorScorableMatch[];
   readonly members: readonly PersonSummary[];
+  readonly workspace: OperatorWorkspace;
 }) {
   const today = new Intl.DateTimeFormat("en-US", {
     dateStyle: "full",
@@ -86,6 +96,8 @@ export function OperatorOverview({
         metric.label !== "Payments" ||
         dashboard.organization.stripeStatus !== "connected",
     );
+  const setup = getOrganizationSetupReadiness(workspace);
+  const nextSetupStep = setup.nextStep;
 
   return (
     <main className="hq-page hq-overview-page">
@@ -97,13 +109,52 @@ export function OperatorOverview({
         </div>
         <div>
           <Link className="hq-button hq-button--secondary" href="/calendar">
-            <CalendarPlus aria-hidden size={17} /> Calendar
+            <CalendarPlus aria-hidden size={17} /> Schedule
           </Link>
-          <Link className="hq-button hq-button--primary" href="/events">
-            Create <ChevronRight aria-hidden size={17} />
+          <Link className="hq-button hq-button--primary" href="/events/create">
+            Create event <ChevronRight aria-hidden size={17} />
           </Link>
         </div>
       </header>
+
+      <section className="hq-setup-strip" data-complete={setup.complete}>
+        <span className="hq-setup-strip__icon">
+          {setup.complete ? (
+            <Check aria-hidden size={19} />
+          ) : (
+            <ClipboardCheck aria-hidden size={19} />
+          )}
+        </span>
+        <div className="hq-setup-strip__copy">
+          <span className="hq-eyebrow">Organization setup</span>
+          <strong>
+            {nextSetupStep?.label ?? "Your essential setup is complete."}
+          </strong>
+          <small>
+            {nextSetupStep?.detail ??
+              "Review the checklist whenever the organization changes."}
+          </small>
+        </div>
+        <div className="hq-setup-strip__progress">
+          <span>
+            {setup.completedCount} of {setup.totalCount}
+          </span>
+          <progress
+            aria-label={`${setup.completedCount} of ${setup.totalCount} setup steps complete`}
+            max={setup.totalCount}
+            value={setup.completedCount}
+          />
+        </div>
+        <Link className="hq-button hq-button--secondary" href="/setup">
+          {setup.complete ? "Review setup" : "Continue setup"}
+          <ArrowRight aria-hidden size={16} />
+        </Link>
+        {!setup.complete && (
+          <DunaActionTrigger className="hq-setup-strip__ai" panel="chat">
+            <Sparkles aria-hidden size={15} /> Ask Duna
+          </DunaActionTrigger>
+        )}
+      </section>
 
       <div className="hq-overview-layout">
         <div className="hq-overview-main">

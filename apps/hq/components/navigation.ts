@@ -40,14 +40,20 @@ import type { LucideIcon } from "lucide-react";
 export const operatorModules = [
   {
     slug: "overview",
-    label: "Overview",
+    label: "Home",
     icon: LayoutDashboard,
     group: "Today",
   },
-  { slug: "calendar", label: "Calendar", icon: CalendarDays, group: "Today" },
+  {
+    slug: "setup",
+    label: "Get started",
+    icon: ClipboardCheck,
+    group: "Today",
+  },
+  { slug: "calendar", label: "Schedule", icon: CalendarDays, group: "Today" },
   { slug: "locations", label: "Venues", icon: MapPinned, group: "Run" },
   { slug: "members", label: "People", icon: UsersRound, group: "Run" },
-  { slug: "team", label: "Team", icon: UserRoundSearch, group: "Run" },
+  { slug: "team", label: "Staff", icon: UserRoundSearch, group: "Run" },
   { slug: "training", label: "Training", icon: Dumbbell, group: "Run" },
   { slug: "products", label: "Products", icon: ShoppingBag, group: "Run" },
   { slug: "events", label: "Events", icon: Trophy, group: "Run" },
