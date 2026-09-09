@@ -37,6 +37,11 @@ private final class DunaVideoCaptureController: NSObject {
   private var rtmpReconnectAttempt = 0
   private var rtmpReconnectWorkItem: DispatchWorkItem?
   private let maximumRTMPReconnectAttempts = 3
+  private let maximumCameraAttachAttempts = 3
+  private let cameraAttachSettleDelay = 0.28
+  private let cameraReadyTimeout = 3.0
+  private let cameraStallTimeout = 3.5
+  private let foregroundRecoveryWindow = 20.0
   private let scoreboardScreenObject = ImageScreenObject()
   private let sponsorScreenObject = ImageScreenObject()
   private let replayBadgeScreenObject = ImageScreenObject()
@@ -82,6 +87,25 @@ private final class DunaVideoCaptureController: NSObject {
   private var prepared = false
   var audioEnabled = true
   private var pendingStreamKey: String?
+  private var pendingStreamUrl: String?
+  private var pendingSrtPassphrase: String?
+  private var pendingCameraReadyAction: (() -> Void)?
+  private var pendingCameraFailureAction: ((String) -> Void)?
+  private var cameraReadyTimeoutWorkItem: DispatchWorkItem?
+  private var cameraWatchdogWorkItem: DispatchWorkItem?
+  private var cameraAttachAttempt = 0
+  private var cameraFrameReady = false
+  private var lastCameraFrameAt: CFAbsoluteTime?
+  private var lastBlackFrameCheckAt = CFAbsoluteTimeGetCurrent()
+  private var blackFrameEvidence = 0
+  private var foregroundInterruptionStartedAt: Date?
+  private var contributionSuspendedForForeground = false
+  private var liveCameraRecoveryInFlight = false
+  private var captureStartPromise: Promise?
+  private var lastCaptureHealthState = "preview"
+  private var originalScreenBrightness: CGFloat?
+  private var batteryWarningActive = false
+  private var lastReportedBatteryPercent: Int?
   private var lastPreviewAt = CFAbsoluteTimeGetCurrent()
   private var lastARAt = CFAbsoluteTimeGetCurrent()
   private var recorder: IOStreamRecorder?
@@ -142,6 +166,25 @@ private final class DunaVideoCaptureController: NSObject {
       name: UIApplication.willResignActiveNotification,
       object: nil
     )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleApplicationDidBecomeActive),
+      name: UIApplication.didBecomeActiveNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleBatteryStatusChange),
+      name: UIDevice.batteryLevelDidChangeNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleBatteryStatusChange),
+      name: UIDevice.batteryStateDidChangeNotification,
+      object: nil
+    )
+    UIDevice.current.isBatteryMonitoringEnabled = true
     UIDevice.current.beginGeneratingDeviceOrientationNotifications()
   }
 
@@ -150,6 +193,8 @@ private final class DunaVideoCaptureController: NSObject {
       stopObservingRTMPConnection(rtmpConnection)
     }
     NotificationCenter.default.removeObserver(self)
+    restoreScreenBrightness()
+    UIDevice.current.isBatteryMonitoringEnabled = false
     UIDevice.current.endGeneratingDeviceOrientationNotifications()
   }
 
@@ -240,9 +285,6 @@ private final class DunaVideoCaptureController: NSObject {
     activeTransport = transport
     configureStream(next)
     activeView?.preview.attachStream(next)
-    if prepared && !usesGroundTracking {
-      attachCaptureDevices(audioEnabled: audioEnabled)
-    }
   }
 
   private func makeRTMPStream() -> RTMPStream {
@@ -296,6 +338,15 @@ private final class DunaVideoCaptureController: NSObject {
 
   func releasePreview() {
     guard pendingStreamKey == nil, recorder == nil else { return }
+    if captureStartPromise != nil {
+      captureStartPromise?.reject(
+        "ERR_DUNA_CAMERA_CANCELLED",
+        "Camera startup was cancelled."
+      )
+      captureStartPromise = nil
+    }
+    cancelCameraReadiness()
+    stopCameraWatchdog()
     stream.attachCamera(nil)
     stream.attachAudio(nil)
     arSession.pause()
@@ -315,6 +366,12 @@ private final class DunaVideoCaptureController: NSObject {
     motionManager.stopDeviceMotionUpdates()
     prepared = false
     camera = nil
+    cameraFrameReady = false
+    lastCameraFrameAt = nil
+    blackFrameEvidence = 0
+    setPreviewDimmed(false)
+    stopBatteryMonitoringForCapture()
+    emitCaptureHealth(state: "stopped", cameraActive: false)
   }
 
   func startStream(
@@ -324,11 +381,22 @@ private final class DunaVideoCaptureController: NSObject {
     transport: String,
     srtPassphrase: String?,
     fallbackUrl: String?,
-    fallbackKey: String?
+    fallbackKey: String?,
+    promise: Promise
   ) throws {
+    guard captureStartPromise == nil else {
+      throw NSError(
+        domain: "DunaVideoCapture",
+        code: 5,
+        userInfo: [NSLocalizedDescriptionKey: "Duna is already starting the camera."]
+      )
+    }
     try prepare(audioEnabled: audioEnabled)
+    captureStartPromise = promise
     fallbackRtmpsUrl = transport == "rtmps" ? url : fallbackUrl
     fallbackRtmpsKey = transport == "rtmps" ? key : fallbackKey
+    pendingStreamUrl = url
+    pendingSrtPassphrase = srtPassphrase
     fallingBack = false
     srtWasLive = false
     rtmpReconnectWorkItem?.cancel()
@@ -345,48 +413,33 @@ private final class DunaVideoCaptureController: NSObject {
     } else {
       replaceStream(makeRTMPStream(), transport: "rtmps")
     }
-    transitionToCapture(audioEnabled: audioEnabled)
     pendingStreamKey = key
     UIApplication.shared.isIdleTimerDisabled = true
     emitState("connecting")
-    if transport == "srt" {
-      guard
-        let passphrase = srtPassphrase,
-        passphrase.count >= 10,
-        let srtUrl = srtConnectionUrl(
-          baseUrl: url,
-          streamId: key,
-          passphrase: passphrase
-        ),
-        let connection = srtConnection,
-        let srtStream = stream as? SRTStream
-      else {
-        throw NSError(
-          domain: "DunaVideoCapture",
-          code: 4,
-          userInfo: [NSLocalizedDescriptionKey: "The secure SRT session is invalid."]
-        )
+    startBatteryMonitoringForCapture()
+    beginCameraHandoff(
+      reason: "Starting camera",
+      onReady: { [weak self] in
+        guard let self else { return }
+        self.resolveCaptureStart()
+        self.startContributionTransport()
+      },
+      onFailure: { [weak self] message in
+        self?.failCaptureStart(message)
       }
-      Task { [weak self, weak connection, weak srtStream] in
-        guard let connection, let srtStream else { return }
-        do {
-          try await connection.open(srtUrl)
-          guard self?.pendingStreamKey == key else { return }
-          srtStream.publish()
-        } catch {
-          DispatchQueue.main.async { [weak self] in
-            self?.fallbackToRTMPS(
-              reason: "SRT could not connect; Duna switched to RTMPS."
-            )
-          }
-        }
-      }
-      return
-    }
-    rtmpConnection?.connect(url)
+    )
   }
 
   func stopStream() {
+    if captureStartPromise != nil {
+      captureStartPromise?.reject(
+        "ERR_DUNA_CAMERA_CANCELLED",
+        "Live stream startup was cancelled."
+      )
+      captureStartPromise = nil
+    }
+    cancelCameraReadiness()
+    stopCameraWatchdog()
     rtmpReconnectWorkItem?.cancel()
     rtmpReconnectWorkItem = nil
     rtmpReconnectAttempt = 0
@@ -411,6 +464,8 @@ private final class DunaVideoCaptureController: NSObject {
     }
     activeReplayUrls = []
     pendingStreamKey = nil
+    pendingStreamUrl = nil
+    pendingSrtPassphrase = nil
     (stream as? RTMPStream)?.close()
     (stream as? SRTStream)?.close()
     rtmpConnection?.close()
@@ -422,8 +477,17 @@ private final class DunaVideoCaptureController: NSObject {
     fallingBack = false
     srtWasLive = false
     restartReplayAfterStreamReplacement = false
+    contributionSuspendedForForeground = false
+    liveCameraRecoveryInFlight = false
+    foregroundInterruptionStartedAt = nil
+    cameraFrameReady = false
+    lastCameraFrameAt = nil
+    blackFrameEvidence = 0
     lockedCaptureOrientation = nil
+    setPreviewDimmed(false)
+    stopBatteryMonitoringForCapture()
     UIApplication.shared.isIdleTimerDisabled = recorder != nil
+    emitCaptureHealth(state: "stopped", cameraActive: false)
     emitState("stopped")
   }
 
@@ -476,10 +540,19 @@ private final class DunaVideoCaptureController: NSObject {
     }
     replaceStream(makeRTMPStream(), transport: "rtmps")
     pendingStreamKey = fallbackRtmpsKey
-    transitionToCapture(audioEnabled: audioEnabled)
+    pendingStreamUrl = fallbackRtmpsUrl
+    pendingSrtPassphrase = nil
     emitError(reason)
     emitState("connecting")
-    rtmpConnection?.connect(fallbackRtmpsUrl)
+    beginCameraHandoff(
+      reason: "Switching the camera to RTMPS",
+      onReady: { [weak self] in
+        self?.rtmpConnection?.connect(fallbackRtmpsUrl)
+      },
+      onFailure: { [weak self] message in
+        self?.failActiveCapture(message)
+      }
+    )
   }
 
   private func scheduleRTMPReconnect() {
@@ -492,6 +565,7 @@ private final class DunaVideoCaptureController: NSObject {
     guard
       activeTransport == "rtmps",
       pendingStreamKey != nil,
+      !contributionSuspendedForForeground,
       let fallbackRtmpsUrl,
       let fallbackRtmpsKey
     else {
@@ -525,8 +599,17 @@ private final class DunaVideoCaptureController: NSObject {
       guard self.pendingStreamKey != nil else { return }
       self.replaceStream(self.makeRTMPStream(), transport: "rtmps")
       self.pendingStreamKey = fallbackRtmpsKey
-      self.transitionToCapture(audioEnabled: self.audioEnabled)
-      self.rtmpConnection?.connect(fallbackRtmpsUrl)
+      self.pendingStreamUrl = fallbackRtmpsUrl
+      self.pendingSrtPassphrase = nil
+      self.beginCameraHandoff(
+        reason: "Restoring the camera connection",
+        onReady: { [weak self] in
+          self?.rtmpConnection?.connect(fallbackRtmpsUrl)
+        },
+        onFailure: { [weak self] message in
+          self?.failActiveCapture(message)
+        }
+      )
     }
     rtmpReconnectWorkItem = workItem
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
@@ -863,13 +946,47 @@ private final class DunaVideoCaptureController: NSObject {
     }
   }
 
-  func startRecording(audioEnabled: Bool) throws {
+  func startRecording(audioEnabled: Bool, promise: Promise) throws {
+    guard captureStartPromise == nil else {
+      throw NSError(
+        domain: "DunaVideoCapture",
+        code: 5,
+        userInfo: [NSLocalizedDescriptionKey: "Duna is already starting the camera."]
+      )
+    }
+    guard recorder == nil else {
+      throw NSError(
+        domain: "DunaVideoCapture",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "A recording is already running."]
+      )
+    }
     try prepare(audioEnabled: audioEnabled)
+    captureStartPromise = promise
     // A prior broadcast may have left the singleton on a closed RTMP or SRT
     // stream. Local recording needs a fresh mixer even though it does not open
     // a network connection.
     replaceStream(makeRTMPStream(), transport: "rtmps")
-    transitionToCapture(audioEnabled: audioEnabled)
+    UIApplication.shared.isIdleTimerDisabled = true
+    startBatteryMonitoringForCapture()
+    beginCameraHandoff(
+      reason: "Starting camera",
+      onReady: { [weak self] in
+        guard let self else { return }
+        do {
+          try self.startPrimaryRecorder()
+          self.resolveCaptureStart()
+        } catch {
+          self.failCaptureStart(error.localizedDescription)
+        }
+      },
+      onFailure: { [weak self] message in
+        self?.failCaptureStart(message)
+      }
+    )
+  }
+
+  private func startPrimaryRecorder() throws {
     guard recorder == nil else {
       throw NSError(
         domain: "DunaVideoCapture",
@@ -894,9 +1011,9 @@ private final class DunaVideoCaptureController: NSObject {
     recorder = nextRecorder
     recorderWasInterrupted = false
     pendingPrimaryRecorderStop = false
-    UIApplication.shared.isIdleTimerDisabled = true
     nextRecorder.startRunning()
     startReplayBuffer()
+    startCameraWatchdog()
   }
 
   func stopRecording(promise: Promise) {
@@ -990,15 +1107,235 @@ private final class DunaVideoCaptureController: NSObject {
     arSession.run(configuration, options: [.resetTracking, .removeExistingAnchors])
   }
 
-  private func transitionToCapture(audioEnabled: Bool) {
+  private func beginCameraHandoff(
+    reason: String,
+    onReady: @escaping () -> Void,
+    onFailure: @escaping (String) -> Void
+  ) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    cancelCameraReadiness()
+    stopCameraWatchdog()
+    pendingCameraReadyAction = onReady
+    pendingCameraFailureAction = onFailure
+    cameraAttachAttempt = 0
+    cameraFrameReady = false
+    lastCameraFrameAt = nil
+    blackFrameEvidence = 0
     if usesGroundTracking {
       arSession.pause()
       usesGroundTracking = false
       showGroundPreview(false)
-      attachCaptureDevices(audioEnabled: audioEnabled)
     }
     lockedCaptureOrientation = currentVideoOrientation()
     applyVideoOrientation(lockedCaptureOrientation ?? .portrait)
+    emitCaptureHealth(
+      state: lastCaptureHealthState == "interrupted" ? "recovering" : "preparing",
+      cameraActive: false,
+      message: reason
+    )
+    attemptCameraAttachment()
+  }
+
+  private func attemptCameraAttachment() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard pendingCameraReadyAction != nil else { return }
+    guard UIApplication.shared.applicationState == .active else {
+      pendingCameraFailureAction?(
+        "Duna needs to remain open while the camera starts. Reopen the app and try again."
+      )
+      cancelCameraReadiness()
+      return
+    }
+    cameraAttachAttempt += 1
+    let expectedStream = stream
+    // HaishinKit attaches and detaches on its capture queue. Explicitly detach,
+    // allow that operation to settle, then attach to the current mixer. This
+    // prevents a late detach from the AR preview's old stream from winning the
+    // race and leaving a healthy network connection publishing black frames.
+    expectedStream.attachCamera(nil)
+    expectedStream.attachAudio(nil)
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + cameraAttachSettleDelay
+    ) { [weak self, weak expectedStream] in
+      guard
+        let self,
+        let expectedStream,
+        expectedStream === self.stream,
+        self.pendingCameraReadyAction != nil
+      else { return }
+      self.attachCaptureDevices(audioEnabled: self.audioEnabled)
+      let timeout = DispatchWorkItem { [weak self, weak expectedStream] in
+        guard
+          let self,
+          let expectedStream,
+          expectedStream === self.stream,
+          !self.cameraFrameReady,
+          self.pendingCameraReadyAction != nil
+        else { return }
+        if self.cameraAttachAttempt < self.maximumCameraAttachAttempts {
+          self.emitCaptureHealth(
+            state: "recovering",
+            cameraActive: false,
+            message: "Camera did not start. Duna is reconnecting it."
+          )
+          self.attemptCameraAttachment()
+        } else {
+          let message =
+            "The camera did not deliver video, so Duna did not start a black recording. Check camera access, reopen Duna, and try again."
+          let failure = self.pendingCameraFailureAction
+          self.cancelCameraReadiness()
+          failure?(message)
+        }
+      }
+      self.cameraReadyTimeoutWorkItem?.cancel()
+      self.cameraReadyTimeoutWorkItem = timeout
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + self.cameraReadyTimeout,
+        execute: timeout
+      )
+    }
+  }
+
+  private func receiveCameraFrame(_ sampleBuffer: CMSampleBuffer) {
+    let now = CFAbsoluteTimeGetCurrent()
+    lastCameraFrameAt = now
+    if !cameraFrameReady {
+      cameraFrameReady = true
+      cameraReadyTimeoutWorkItem?.cancel()
+      cameraReadyTimeoutWorkItem = nil
+      let ready = pendingCameraReadyAction
+      pendingCameraReadyAction = nil
+      pendingCameraFailureAction = nil
+      emitCaptureHealth(state: "active", cameraActive: true)
+      startCameraWatchdog()
+      ready?()
+    }
+
+    guard now - lastBlackFrameCheckAt >= 0.5 else { return }
+    lastBlackFrameCheckAt = now
+    if isEffectivelyBlack(sampleBuffer) {
+      blackFrameEvidence += 1
+      if blackFrameEvidence == 6 {
+        emitCaptureHealth(
+          state: "obscured",
+          cameraActive: true,
+          message: "The camera image is dark or covered. Check the lens before continuing."
+        )
+      }
+    } else {
+      let wasObscured = blackFrameEvidence >= 6
+      blackFrameEvidence = 0
+      if wasObscured {
+        emitCaptureHealth(state: "active", cameraActive: true)
+      }
+    }
+  }
+
+  private func isEffectivelyBlack(_ sampleBuffer: CMSampleBuffer) -> Bool {
+    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+      return false
+    }
+    CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+    defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+    let planar = CVPixelBufferIsPlanar(pixelBuffer)
+    let plane = 0
+    guard let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, plane) ??
+      CVPixelBufferGetBaseAddress(pixelBuffer)
+    else { return false }
+    let width = planar
+      ? CVPixelBufferGetWidthOfPlane(pixelBuffer, plane)
+      : CVPixelBufferGetWidth(pixelBuffer)
+    let height = planar
+      ? CVPixelBufferGetHeightOfPlane(pixelBuffer, plane)
+      : CVPixelBufferGetHeight(pixelBuffer)
+    let bytesPerRow = planar
+      ? CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, plane)
+      : CVPixelBufferGetBytesPerRow(pixelBuffer)
+    guard width > 0, height > 0 else { return false }
+    let bytes = base.assumingMemoryBound(to: UInt8.self)
+    var sum = 0
+    var maximum = 0
+    var samples = 0
+    let pixelStride = planar ? 1 : max(1, bytesPerRow / width)
+    let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+    for y in stride(from: 0, to: height, by: max(1, height / 24)) {
+      for x in stride(from: 0, to: width, by: max(1, width / 24)) {
+        let offset = y * bytesPerRow + x * pixelStride
+        let value: Int
+        if planar || pixelStride < 3 {
+          value = Int(bytes[offset])
+        } else if pixelFormat == kCVPixelFormatType_32ARGB && pixelStride >= 4 {
+          value = (
+            Int(bytes[offset + 1]) +
+              Int(bytes[offset + 2]) +
+              Int(bytes[offset + 3])
+          ) / 3
+        } else {
+          // Camera preview is normally bi-planar YUV. This fallback covers
+          // BGRA/RGBA buffers while deliberately ignoring the alpha byte.
+          value = (
+            Int(bytes[offset]) +
+              Int(bytes[offset + 1]) +
+              Int(bytes[offset + 2])
+          ) / 3
+        }
+        sum += value
+        maximum = max(maximum, value)
+        samples += 1
+      }
+    }
+    guard samples > 0 else { return false }
+    return sum / samples < 12 && maximum < 28
+  }
+
+  private func cancelCameraReadiness() {
+    cameraReadyTimeoutWorkItem?.cancel()
+    cameraReadyTimeoutWorkItem = nil
+    pendingCameraReadyAction = nil
+    pendingCameraFailureAction = nil
+  }
+
+  private func startCameraWatchdog() {
+    stopCameraWatchdog()
+    let work = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.cameraWatchdogWorkItem = nil
+      guard self.pendingStreamKey != nil || self.recorder != nil else { return }
+      guard UIApplication.shared.applicationState == .active else { return }
+      let age = CFAbsoluteTimeGetCurrent() - (self.lastCameraFrameAt ?? 0)
+      if age > self.cameraStallTimeout {
+        self.recoverFromCameraStall()
+      } else {
+        self.startCameraWatchdog()
+      }
+    }
+    cameraWatchdogWorkItem = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+  }
+
+  private func stopCameraWatchdog() {
+    cameraWatchdogWorkItem?.cancel()
+    cameraWatchdogWorkItem = nil
+  }
+
+  private func recoverFromCameraStall() {
+    guard pendingCameraReadyAction == nil else { return }
+    emitCaptureHealth(
+      state: "recovering",
+      cameraActive: false,
+      message: "Camera video stopped. Duna paused the broadcast while reconnecting it."
+    )
+    if recorder != nil {
+      finalizeRecordingForInterruption(
+        "Camera video stopped. Duna safely ended and saved the recording."
+      )
+      return
+    }
+    guard pendingStreamKey != nil else { return }
+    suspendContributionTransport()
+    contributionSuspendedForForeground = true
+    foregroundInterruptionStartedAt = Date()
+    recoverLiveCamera(reason: "Restoring camera video")
   }
 
   private func showGroundPreview(_ enabled: Bool) {
@@ -1107,6 +1444,121 @@ private final class DunaVideoCaptureController: NSObject {
     activeView?.preview.videoOrientation = orientation
   }
 
+  private func startContributionTransport() {
+    guard
+      cameraFrameReady,
+      let key = pendingStreamKey,
+      let url = pendingStreamUrl
+    else {
+      failActiveCapture("Duna could not verify the camera before going live.")
+      return
+    }
+    if activeTransport == "srt" {
+      guard
+        let passphrase = pendingSrtPassphrase,
+        passphrase.count >= 10,
+        let srtUrl = srtConnectionUrl(
+          baseUrl: url,
+          streamId: key,
+          passphrase: passphrase
+        ),
+        let connection = srtConnection,
+        let srtStream = stream as? SRTStream
+      else {
+        fallbackToRTMPS(reason: "SRT was unavailable; Duna switched to RTMPS.")
+        return
+      }
+      Task { [weak self, weak connection, weak srtStream] in
+        guard let connection, let srtStream else { return }
+        do {
+          try await connection.open(srtUrl)
+          guard self?.pendingStreamKey == key, self?.cameraFrameReady == true else {
+            return
+          }
+          srtStream.publish()
+        } catch {
+          DispatchQueue.main.async { [weak self] in
+            self?.fallbackToRTMPS(
+              reason: "SRT could not connect; Duna switched to RTMPS."
+            )
+          }
+        }
+      }
+    } else {
+      rtmpConnection?.connect(url)
+    }
+  }
+
+  private func suspendContributionTransport() {
+    rtmpReconnectWorkItem?.cancel()
+    rtmpReconnectWorkItem = nil
+    (stream as? RTMPStream)?.close()
+    (stream as? SRTStream)?.close()
+    rtmpConnection?.close()
+    if let srtConnection {
+      Task { await srtConnection.close() }
+    }
+  }
+
+  private func recoverLiveCamera(reason: String) {
+    guard !liveCameraRecoveryInFlight else { return }
+    guard
+      pendingStreamKey != nil,
+      let fallbackRtmpsUrl,
+      let fallbackRtmpsKey
+    else {
+      failActiveCapture("The live stream could not recover its camera session.")
+      return
+    }
+    liveCameraRecoveryInFlight = true
+    replaceStream(makeRTMPStream(), transport: "rtmps")
+    pendingStreamKey = fallbackRtmpsKey
+    pendingStreamUrl = fallbackRtmpsUrl
+    pendingSrtPassphrase = nil
+    emitState("connecting")
+    beginCameraHandoff(
+      reason: reason,
+      onReady: { [weak self] in
+        guard let self else { return }
+        self.liveCameraRecoveryInFlight = false
+        self.contributionSuspendedForForeground = false
+        self.foregroundInterruptionStartedAt = nil
+        self.startContributionTransport()
+      },
+      onFailure: { [weak self] message in
+        guard let self else { return }
+        self.liveCameraRecoveryInFlight = false
+        self.failActiveCapture(message)
+      }
+    )
+  }
+
+  private func resolveCaptureStart() {
+    captureStartPromise?.resolve(nil)
+    captureStartPromise = nil
+  }
+
+  private func failCaptureStart(_ message: String) {
+    captureStartPromise?.reject("ERR_DUNA_CAMERA", message)
+    captureStartPromise = nil
+    emitError(message)
+    emitCaptureHealth(state: "failed", cameraActive: false, message: message)
+    if pendingStreamKey != nil {
+      stopStream()
+    } else {
+      stopCameraWatchdog()
+      setPreviewDimmed(false)
+      stopBatteryMonitoringForCapture()
+      UIApplication.shared.isIdleTimerDisabled = false
+    }
+  }
+
+  private func failActiveCapture(_ message: String) {
+    emitError(message)
+    emitCaptureHealth(state: "failed", cameraActive: false, message: message)
+    stopStream()
+  }
+
   @objc
   private func handleRTMPStatus(_ notification: Notification) {
     let event = Event.from(notification)
@@ -1127,6 +1579,7 @@ private final class DunaVideoCaptureController: NSObject {
       rtmpReconnectWorkItem = nil
       rtmpReconnectAttempt = 0
       startReplayBuffer()
+      emitCaptureHealth(state: "active", cameraActive: cameraFrameReady)
       emitState("live")
     case RTMPConnection.Code.connectRejected.rawValue,
       RTMPStream.Code.publishBadName.rawValue:
@@ -1161,6 +1614,29 @@ private final class DunaVideoCaptureController: NSObject {
     }
   }
 
+  private func emitCaptureHealth(
+    state: String,
+    cameraActive: Bool,
+    message: String? = nil
+  ) {
+    lastCaptureHealthState = state
+    var payload: [String: Any] = [
+      "state": state,
+      "cameraActive": cameraActive,
+      "batteryPercent": currentBatteryPercent(),
+      "batteryCharging": isBatteryCharging(),
+    ]
+    if let message { payload["message"] = message }
+    DispatchQueue.main.async { [weak self] in
+      self?.activeView?.onCaptureHealth(payload)
+      NotificationCenter.default.post(
+        name: Notification.Name("co.duna.watch.capture-status"),
+        object: nil,
+        userInfo: payload
+      )
+    }
+  }
+
   private func emitError(_ message: String) {
     DispatchQueue.main.async { [weak self] in
       self?.activeView?.onCaptureError(["message": message])
@@ -1173,6 +1649,39 @@ private final class DunaVideoCaptureController: NSObject {
     // Control Center, or an app switch. Finish the movie while the capture
     // session is still valid instead of allowing the writer to be torn down
     // under an active recorder. The recorder delegate clears all state.
+    if pendingStreamKey != nil {
+      if captureStartPromise != nil {
+        failCaptureStart(
+          "Duna left the screen before the camera was ready, so the live stream did not start."
+        )
+        return
+      }
+      foregroundInterruptionStartedAt = Date()
+      contributionSuspendedForForeground = true
+      cancelCameraReadiness()
+      stopCameraWatchdog()
+      suspendContributionTransport()
+      cameraFrameReady = false
+      emitState("connecting")
+      emitCaptureHealth(
+        state: "interrupted",
+        cameraActive: false,
+        message: "The iPhone was locked or Duna left the screen. Reopen Duna to restore the camera."
+      )
+      return
+    }
+    if captureStartPromise != nil {
+      failCaptureStart(
+        "Duna left the screen before the camera was ready, so recording did not start."
+      )
+      return
+    }
+    finalizeRecordingForInterruption(
+      "Recording paused because Duna left the foreground. Your saved video is being finalized."
+    )
+  }
+
+  private func finalizeRecordingForInterruption(_ message: String) {
     guard let recorder, recordingPromise == nil else { return }
     discardReplayBuffer = true
     replayRotationWorkItem?.cancel()
@@ -1190,9 +1699,99 @@ private final class DunaVideoCaptureController: NSObject {
       recorder.stopRunning()
     }
     emitState("stopped")
-    emitError(
-      "Recording paused because Duna left the foreground. Your saved video is being finalized."
+    emitCaptureHealth(
+      state: "interrupted",
+      cameraActive: false,
+      message: message
     )
+    emitError(message)
+  }
+
+  @objc
+  private func handleApplicationDidBecomeActive() {
+    guard contributionSuspendedForForeground, pendingStreamKey != nil else {
+      return
+    }
+    guard
+      let startedAt = foregroundInterruptionStartedAt,
+      Date().timeIntervalSince(startedAt) <= foregroundRecoveryWindow
+    else {
+      failActiveCapture(
+        "The camera was unavailable too long, so Duna safely ended the live stream."
+      )
+      return
+    }
+    recoverLiveCamera(reason: "Reconnecting camera after interruption")
+  }
+
+  func setPreviewDimmed(_ dimmed: Bool) {
+    if dimmed {
+      if originalScreenBrightness == nil {
+        originalScreenBrightness = UIScreen.main.brightness
+      }
+      UIScreen.main.brightness = min(UIScreen.main.brightness, 0.05)
+    } else {
+      restoreScreenBrightness()
+    }
+  }
+
+  private func restoreScreenBrightness() {
+    if let originalScreenBrightness {
+      UIScreen.main.brightness = originalScreenBrightness
+    }
+    originalScreenBrightness = nil
+  }
+
+  private func startBatteryMonitoringForCapture() {
+    batteryWarningActive = false
+    handleBatteryStatusChange()
+  }
+
+  private func stopBatteryMonitoringForCapture() {
+    batteryWarningActive = false
+    lastReportedBatteryPercent = nil
+  }
+
+  private func currentBatteryPercent() -> Int {
+    let level = UIDevice.current.batteryLevel
+    return level < 0 ? -1 : Int((level * 100).rounded())
+  }
+
+  private func isBatteryCharging() -> Bool {
+    let state = UIDevice.current.batteryState
+    return state == .charging || state == .full
+  }
+
+  @objc
+  private func handleBatteryStatusChange() {
+    guard pendingStreamKey != nil || recorder != nil || captureStartPromise != nil else {
+      return
+    }
+    let percent = currentBatteryPercent()
+    let charging = isBatteryCharging()
+    let critical = percent >= 0 && percent <= 3 && !charging
+    let changed = lastReportedBatteryPercent != percent
+    lastReportedBatteryPercent = percent
+    if critical && !batteryWarningActive {
+      batteryWarningActive = true
+      emitCaptureHealth(
+        state: lastCaptureHealthState,
+        cameraActive: cameraFrameReady,
+        message: "iPhone battery is at \(percent)%. Connect power now to protect this video."
+      )
+    } else if batteryWarningActive && !critical {
+      batteryWarningActive = false
+      emitCaptureHealth(
+        state: lastCaptureHealthState,
+        cameraActive: cameraFrameReady,
+        message: charging ? "iPhone power connected." : nil
+      )
+    } else if changed {
+      emitCaptureHealth(
+        state: lastCaptureHealthState,
+        cameraActive: cameraFrameReady
+      )
+    }
   }
 
   private func reserveVisionWork() -> Bool {
@@ -2213,7 +2812,11 @@ extension DunaVideoCaptureController: IOStreamDelegate {
     track: UInt8,
     didInput buffer: CMSampleBuffer
   ) {
-    guard track == 0 else { return }
+    guard track == 0, stream === self.stream else { return }
+    DispatchQueue.main.async { [weak self, weak stream] in
+      guard let self, let stream, stream === self.stream else { return }
+      self.receiveCameraFrame(buffer)
+    }
     scheduleAnalysis(buffer, orientation: visionOrientation())
   }
 
@@ -2262,6 +2865,10 @@ extension DunaVideoCaptureController: IOStreamDelegate {
         self.srtWasLive = true
         self.fallingBack = false
         self.startReplayBuffer()
+        self.emitCaptureHealth(
+          state: "active",
+          cameraActive: self.cameraFrameReady
+        )
         self.emitState("live")
       } else if becameOpen && self.srtWasLive && self.pendingStreamKey != nil {
         self.fallbackToRTMPS(
@@ -2277,7 +2884,23 @@ extension DunaVideoCaptureController: IOStreamDelegate {
     sessionWasInterrupted session: AVCaptureSession,
     reason: AVCaptureSession.InterruptionReason?
   ) {
-    emitError("Camera capture was interrupted.")
+    DispatchQueue.main.async { [weak self, weak stream] in
+      guard let self, let stream, stream === self.stream else { return }
+      if self.pendingStreamKey != nil {
+        self.foregroundInterruptionStartedAt = Date()
+        self.contributionSuspendedForForeground = true
+        self.suspendContributionTransport()
+        self.emitCaptureHealth(
+          state: "interrupted",
+          cameraActive: false,
+          message: "Camera capture was interrupted. Duna paused the stream until video returns."
+        )
+      } else {
+        self.finalizeRecordingForInterruption(
+          "Camera capture was interrupted. Duna safely ended and saved the recording."
+        )
+      }
+    }
   }
 
   @available(tvOS 17.0, *)
@@ -2285,7 +2908,17 @@ extension DunaVideoCaptureController: IOStreamDelegate {
     _ stream: IOStream,
     sessionInterruptionEnded session: AVCaptureSession
   ) {
-    emitState("preview")
+    DispatchQueue.main.async { [weak self, weak stream] in
+      guard
+        let self,
+        let stream,
+        stream === self.stream,
+        self.pendingStreamKey != nil,
+        self.contributionSuspendedForForeground,
+        UIApplication.shared.applicationState == .active
+      else { return }
+      self.recoverLiveCamera(reason: "Restoring camera after interruption")
+    }
   }
 }
 
@@ -2329,6 +2962,12 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     recorderWasInterrupted = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
+    stopCameraWatchdog()
+    if pendingStreamKey == nil {
+      setPreviewDimmed(false)
+      stopBatteryMonitoringForCapture()
+      emitCaptureHealth(state: "stopped", cameraActive: false)
+    }
     recordingPromise?.reject(
       "ERR_DUNA_RECORDING",
       "The local video could not be saved."
@@ -2413,6 +3052,12 @@ extension DunaVideoCaptureController: IOStreamRecorderDelegate {
     pendingPrimaryRecorderStop = false
     lockedCaptureOrientation = nil
     UIApplication.shared.isIdleTimerDisabled = pendingStreamKey != nil
+    stopCameraWatchdog()
+    if pendingStreamKey == nil {
+      setPreviewDimmed(false)
+      stopBatteryMonitoringForCapture()
+      emitCaptureHealth(state: "stopped", cameraActive: false)
+    }
     let url = writer.outputURL
     let asset = AVURLAsset(url: url)
     let duration = max(1, Int(CMTimeGetSeconds(asset.duration).rounded()))
@@ -2445,6 +3090,7 @@ public final class DunaVideoCaptureView: ExpoView {
   let onGuidance = ExpoModulesCore.EventDispatcher()
   let onStreamState = ExpoModulesCore.EventDispatcher()
   let onCaptureError = ExpoModulesCore.EventDispatcher()
+  let onCaptureHealth = ExpoModulesCore.EventDispatcher()
   let onPreview = ExpoModulesCore.EventDispatcher()
   let onRecordingFinalized = ExpoModulesCore.EventDispatcher()
 
@@ -2760,7 +3406,8 @@ public final class DunaVideoCaptureModule: Module {
         transport: String,
         srtPassphrase: String?,
         fallbackUrl: String?,
-        fallbackKey: String?
+        fallbackKey: String?,
+        promise: Promise
       ) in
       guard
         let url = URL(string: streamUrl),
@@ -2782,7 +3429,8 @@ public final class DunaVideoCaptureModule: Module {
         transport: transport,
         srtPassphrase: srtPassphrase,
         fallbackUrl: fallbackUrl,
-        fallbackKey: fallbackKey
+        fallbackKey: fallbackKey,
+        promise: promise
       )
     }.runOnQueue(.main)
 
@@ -2800,9 +3448,10 @@ public final class DunaVideoCaptureModule: Module {
       )
     }.runOnQueue(.main)
 
-    AsyncFunction("startRecording") { (audioEnabled: Bool) in
+    AsyncFunction("startRecording") { (audioEnabled: Bool, promise: Promise) in
       try DunaVideoCaptureController.shared.startRecording(
-        audioEnabled: audioEnabled
+        audioEnabled: audioEnabled,
+        promise: promise
       )
     }.runOnQueue(.main)
 
@@ -2847,11 +3496,16 @@ public final class DunaVideoCaptureModule: Module {
       DunaVideoCaptureController.shared.releasePreview()
     }
 
+    Function("setPreviewDimmed") { (dimmed: Bool) in
+      DunaVideoCaptureController.shared.setPreviewDimmed(dimmed)
+    }
+
     View(DunaVideoCaptureView.self) {
       Events(
         "onGuidance",
         "onStreamState",
         "onCaptureError",
+        "onCaptureHealth",
         "onPreview",
         "onRecordingFinalized"
       )

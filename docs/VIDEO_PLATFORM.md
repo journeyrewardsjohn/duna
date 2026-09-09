@@ -38,6 +38,10 @@ continues to work on supported browsers and inside the app.
    ingest if SRT cannot connect or drops. Adaptive bitrate responds to observed
    network pressure independently; the network interface name is not treated
    as a quality test. Physical-device validation remains an activation gate.
+   The client does not connect or report the contribution as live until the
+   newly attached camera produces a real frame. Camera attachment is serialized
+   across stream replacements so a late detach from an old transport cannot
+   black out its replacement.
 5. Authenticated Cloudflare live notifications move the stream from draft to
    live and processing. Playback lazily reconciles the ready recording video ID
    because the recording is a separate Cloudflare resource.
@@ -499,7 +503,12 @@ models.
 8. On physical iPhone and Watch hardware, validate all four gestures, offline
    event recovery, favorite timestamps, score overlay timing, live score
    authority, QR expiry/revocation, remote version conflicts, camera preview,
-   and remote start/stop.
+   and remote start/stop. Run the complete capture sequence: start, confirm
+   moving camera video, score from Watch, dim the iPhone display, briefly lock
+   and reopen the phone, recover moving video, stop, and play the resulting
+   asset. Confirm dimming never detaches capture, prolonged backgrounding ends
+   safely, Watch scoring stops with the session, and an unplugged iPhone at 3%
+   battery or lower warns both devices to connect power.
 9. Promote Production to `DUNA_LIVE_PROVIDER=auto` only after both provider
    matrices and the device gates pass. Verify Premium+, Premium, Scale, Club,
    and Free accounts resolve to the intended provider before activation.

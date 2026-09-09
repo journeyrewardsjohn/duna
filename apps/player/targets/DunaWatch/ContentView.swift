@@ -48,6 +48,32 @@ struct ContentView: View {
             .transition(.scale.combined(with: .opacity))
         }
       }
+      .overlay(alignment: .top) {
+        if scoring.captureDeviceBatteryCritical {
+          Label(
+            "IPHONE \(scoring.captureDeviceBatteryPercent)% · CONNECT POWER",
+            systemImage: "battery.0percent"
+          )
+          .font(.system(size: compact ? 9 : 10, weight: .black, design: .rounded))
+          .foregroundStyle(.white)
+          .padding(.horizontal, 9)
+          .padding(.vertical, 5)
+          .background(Color.red.opacity(0.95), in: Capsule())
+          .padding(.top, 3)
+        } else if scoring.captureHealthState == "interrupted" ||
+          scoring.captureHealthState == "recovering" ||
+          scoring.captureHealthState == "failed"
+        {
+          Text(scoring.captureAlertMessage ?? "CHECK IPHONE CAMERA")
+            .font(.system(size: compact ? 9 : 10, weight: .black, design: .rounded))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(dunaOrange.opacity(0.95), in: Capsule())
+            .padding(.top, 3)
+        }
+      }
     }
     .ignoresSafeArea()
     .sheet(isPresented: $showCamera) {

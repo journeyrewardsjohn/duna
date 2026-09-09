@@ -35,6 +35,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   @Published var sideChangeDue = false
   @Published var lastRallyLabel = "No rally marked yet"
   @Published var lastRallyElapsedSeconds: Int?
+  @Published var captureHealthState = "preview"
+  @Published var cameraActive = false
+  @Published var captureAlertMessage: String?
+  @Published var captureDeviceBatteryPercent = -1
+  @Published var captureDeviceCharging = false
 
   private var recordingStartedAt: Date?
   private var latestLocalScoreAt: Date?
@@ -72,6 +77,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     currentSetComplete && !matchComplete && sets.count < maximumSets
   }
   var isVisionActive: Bool { sessionID != nil && sessionStatus != "ended" }
+  var captureDeviceBatteryCritical: Bool {
+    captureDeviceBatteryPercent >= 0 &&
+      captureDeviceBatteryPercent <= 3 &&
+      !captureDeviceCharging
+  }
   var favoriteCount: Int { favoriteEventIDs.count }
 
   private var favoriteEventIDs: [String] = []
@@ -85,7 +95,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func addPoint(to side: String) {
-    guard side == "A" || side == "B", !matchComplete else { return }
+    guard
+      sessionStatus != "ended",
+      side == "A" || side == "B",
+      !matchComplete
+    else { return }
     if currentSetComplete && canAddSet {
       sets.append(WatchSetScore())
     }
@@ -127,7 +141,9 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func undoLastPoint() {
-    guard let point = pointHistory.popLast() else { return }
+    guard sessionStatus != "ended", let point = pointHistory.popLast() else {
+      return
+    }
     sets = point.before
     serving = point.beforeServing
     sideChangeDue = shouldSwitchSides()
@@ -184,6 +200,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func confirmSideChange() {
+    guard sessionStatus != "ended" else { return }
     sideChangeDue = false
     sentNotice = "Sides changed"
     emitVisionEvent(
@@ -195,14 +212,14 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func addNextSet() {
-    guard canAddSet else { return }
+    guard sessionStatus != "ended", canAddSet else { return }
     sets.append(WatchSetScore())
     WKInterfaceDevice.current().play(.start)
   }
 
   @discardableResult
   func endCurrentSet() -> Bool {
-    guard canAddSet else { return false }
+    guard sessionStatus != "ended", canAddSet else { return false }
     let endedSet = currentSetIndex + 1
     sets.append(WatchSetScore())
     sideChangeDue = false
@@ -271,7 +288,7 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     label: String? = nil,
     eventPayload: [String: Any]? = nil
   ) {
-    guard let sessionID else { return }
+    guard isVisionActive, let sessionID else { return }
     let now = Date()
     if eventType == "rally-won" || eventType == "undo" || eventType == "set-ended" {
       latestLocalScoreAt = now
@@ -489,6 +506,12 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     teamA = applicationContext["teamA"] as? String ?? teamA
     teamB = applicationContext["teamB"] as? String ?? teamB
     sessionStatus = applicationContext["status"] as? String ?? sessionStatus
+    if sessionStatus == "ended", let endedSessionID = sessionID {
+      pendingPayloads.removeAll {
+        $0["sessionId"] as? String == endedSessionID
+      }
+      sentNotice = "Session ended on iPhone"
+    }
     captureMode = applicationContext["captureMode"] as? String ?? captureMode
     if let startedAt = applicationContext["recordingStartedAt"] as? String {
       recordingStartedAt = parseDate(startedAt)
@@ -545,6 +568,30 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
         previewQuality = previewAcceptable ? "Court is in frame" : "Adjust camera"
       }
     }
+    if let status = applicationContext["captureStatus"] as? [String: Any] {
+      applyCaptureStatus(status)
+    }
+  }
+
+  private func applyCaptureStatus(_ status: [String: Any]) {
+    let wasCritical = captureDeviceBatteryCritical
+    let previousState = captureHealthState
+    captureHealthState = status["state"] as? String ?? captureHealthState
+    cameraActive = status["cameraActive"] as? Bool ?? cameraActive
+    captureDeviceBatteryPercent =
+      status["batteryPercent"] as? Int ?? captureDeviceBatteryPercent
+    captureDeviceCharging =
+      status["batteryCharging"] as? Bool ?? captureDeviceCharging
+    captureAlertMessage = status["message"] as? String
+    if captureDeviceBatteryCritical && !wasCritical {
+      WKInterfaceDevice.current().play(.notification)
+    } else if captureHealthState != previousState &&
+      (captureHealthState == "interrupted" ||
+        captureHealthState == "failed" ||
+        captureHealthState == "obscured")
+    {
+      WKInterfaceDevice.current().play(.failure)
+    }
   }
 
   nonisolated func session(
@@ -568,7 +615,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     didReceiveMessage message: [String: Any]
   ) {
     Task { @MainActor [weak self] in
-      self?.applyReceipt(message)
+      if message["type"] as? String == "duna.captureStatus" {
+        self?.applyCaptureStatus(message)
+      } else {
+        self?.applyReceipt(message)
+      }
     }
   }
 
@@ -577,7 +628,11 @@ final class WatchScoringStore: NSObject, ObservableObject, WCSessionDelegate {
     didReceiveUserInfo userInfo: [String: Any] = [:]
   ) {
     Task { @MainActor [weak self] in
-      self?.applyReceipt(userInfo)
+      if userInfo["type"] as? String == "duna.captureStatus" {
+        self?.applyCaptureStatus(userInfo)
+      } else {
+        self?.applyReceipt(userInfo)
+      }
     }
   }
 

@@ -41,6 +41,7 @@ import {
 } from "react-native-safe-area-context";
 import VideoCapture, {
   DunaVideoCaptureView,
+  type CaptureHealth,
   type CaptureGuidance,
   type CapturePoint,
   type DunaCourtCalibration,
@@ -3886,6 +3887,7 @@ function CaptureExperience({
   const [matchScoring, setMatchScoring] = useState<MatchScoringState>();
   const [showRemote, setShowRemote] = useState(false);
   const [previewHidden, setPreviewHidden] = useState(false);
+  const [captureHealth, setCaptureHealth] = useState<CaptureHealth>();
   const [replayBusy, setReplayBusy] = useState(false);
   const activeRef = useRef(false);
   const expectedStreamStopRef = useRef(false);
@@ -4512,6 +4514,8 @@ function CaptureExperience({
     if (!VideoCapture || busyRef.current || !activeRef.current) return;
     busyRef.current = true;
     setBusy(true);
+    VideoCapture.setPreviewDimmed(false);
+    setPreviewHidden(false);
     const stoppedAt = new Date();
     try {
       if (mode === "record") {
@@ -5006,6 +5010,7 @@ function CaptureExperience({
   };
 
   const closeCapture = async () => {
+    VideoCapture?.setPreviewDimmed(false);
     const current = sessionRef.current;
     if (current && current.status !== "ended" && current.status !== "expired") {
       try {
@@ -5144,6 +5149,26 @@ function CaptureExperience({
           onCaptureError={(event) =>
             reportCaptureError(event.nativeEvent.message)
           }
+          onCaptureHealth={(event) => {
+            const next = event.nativeEvent;
+            setCaptureHealth(next);
+            if (next.message) {
+              const criticalBattery =
+                next.batteryPercent >= 0 &&
+                next.batteryPercent <= 3 &&
+                !next.batteryCharging;
+              showCaptureNotice(
+                next.message,
+                next.state === "failed"
+                  ? "error"
+                  : criticalBattery ||
+                      next.state === "interrupted" ||
+                      next.state === "obscured"
+                    ? "warning"
+                    : "info",
+              );
+            }
+          }}
           onGuidance={(event) => {
             const next = event.nativeEvent;
             const detected = geometryFromGuidance(next);
@@ -5255,13 +5280,16 @@ function CaptureExperience({
             {formatClock(elapsedSeconds)}
           </Text>
           <Text style={styles.lowPowerTitle}>
-            {mode === "live"
-              ? "Live stream in progress"
-              : "Recording in progress"}
+            {captureHealth?.cameraActive === false
+              ? "Camera reconnecting"
+              : mode === "live"
+                ? "Live stream in progress"
+                : "Recording in progress"}
           </Text>
           <Text style={styles.lowPowerBody}>
-            Preview is hidden to reduce screen use. Camera, Watch scoring, and
-            remote control stay active.
+            {captureHealth?.cameraActive === false
+              ? "Duna has paused live video until the iPhone camera is healthy again."
+              : "The screen is dimmed to save power. Camera, Watch scoring, and remote control stay active."}
           </Text>
         </View>
       )}
@@ -5287,22 +5315,37 @@ function CaptureExperience({
             <DunaIcon color="#ffffff" name="close" size={21} />
           </Pressable>
           <View style={styles.captureStatus}>
-            {isActive && <View style={styles.liveDot} />}
+            {isActive &&
+              (captureHealth?.cameraActive ? (
+                <View style={styles.liveDot} />
+              ) : (
+                <ActivityIndicator color={palette.sand} size="small" />
+              ))}
             <View style={styles.captureStatusCopy}>
               <Text style={styles.captureStatusText}>
-                {recording
-                  ? "RECORDING"
-                  : streamState === "live"
-                    ? `LIVE · ${streamTransport?.toUpperCase() ?? "VIDEO"}`
-                    : streamState === "connecting"
-                      ? "CONNECTING"
-                      : mode === "live"
-                        ? "LIVE SETUP"
-                        : "CAMERA GUIDE"}
+                {captureHealth?.state === "recovering" ||
+                captureHealth?.state === "interrupted"
+                  ? "CAMERA RECOVERING"
+                  : captureHealth?.state === "preparing"
+                    ? "STARTING CAMERA"
+                    : recording
+                      ? "RECORDING"
+                      : streamState === "live"
+                        ? `LIVE · ${streamTransport?.toUpperCase() ?? "VIDEO"}`
+                        : streamState === "connecting"
+                          ? "CONNECTING"
+                          : mode === "live"
+                            ? "LIVE SETUP"
+                            : "CAMERA GUIDE"}
               </Text>
               {isActive && (
                 <Text style={styles.captureStatusTimer}>
-                  {formatClock(elapsedSeconds)}
+                  {captureHealth &&
+                  captureHealth.batteryPercent >= 0 &&
+                  captureHealth.batteryPercent <= 3 &&
+                  !captureHealth.batteryCharging
+                    ? `CONNECT POWER · ${captureHealth.batteryPercent}%`
+                    : formatClock(elapsedSeconds)}
                 </Text>
               )}
             </View>
@@ -5453,9 +5496,14 @@ function CaptureExperience({
               </Pressable>
               <Pressable
                 accessibilityLabel={
-                  previewHidden ? "Show camera preview" : "Hide camera preview"
+                  previewHidden ? "Restore screen brightness" : "Dim screen"
                 }
-                onPress={() => setPreviewHidden((current) => !current)}
+                onPress={() =>
+                  setPreviewHidden((current) => {
+                    VideoCapture?.setPreviewDimmed(!current);
+                    return !current;
+                  })
+                }
                 style={styles.favoriteMomentButton}
               >
                 <DunaIcon
@@ -5464,12 +5512,12 @@ function CaptureExperience({
                   size={21}
                 />
                 <Text style={styles.favoriteMomentText}>
-                  {previewHidden ? "Show" : "Hide"}
+                  {previewHidden ? "Bright" : "Dim"}
                 </Text>
               </Pressable>
             </View>
           )}
-          {session && streamState === "live" && (
+          {session && streamState === "live" && captureHealth?.cameraActive && (
             <Pressable onPress={() => void share()} style={styles.sharePill}>
               <Text style={styles.sharePillText}>Share live link</Text>
             </Pressable>

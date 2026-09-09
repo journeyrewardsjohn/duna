@@ -96,6 +96,24 @@ export interface PreparedVideo {
   readonly durationSeconds: number;
 }
 
+export interface CaptureHealth {
+  readonly state:
+    | "preview"
+    | "preparing"
+    | "active"
+    | "recovering"
+    | "interrupted"
+    | "obscured"
+    | "failed"
+    | "stopped";
+  /** True only after the current native camera mixer delivered a real frame. */
+  readonly cameraActive: boolean;
+  /** -1 when iOS has not reported a battery level yet. */
+  readonly batteryPercent: number;
+  readonly batteryCharging: boolean;
+  readonly message?: string;
+}
+
 /**
  * A deliberately small, on-device-selected still from an imported recording.
  * These are candidates for the player to confirm, never a claim that Duna has
@@ -127,6 +145,9 @@ export interface DunaVideoCaptureViewProps {
   }) => void;
   readonly onCaptureError?: (event: {
     readonly nativeEvent: { readonly message: string };
+  }) => void;
+  readonly onCaptureHealth?: (event: {
+    readonly nativeEvent: CaptureHealth;
   }) => void;
   readonly onPreview?: (event: {
     readonly nativeEvent: {
