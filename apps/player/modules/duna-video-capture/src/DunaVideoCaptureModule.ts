@@ -34,6 +34,7 @@ declare class DunaVideoCaptureNativeModule extends NativeModule<DunaVideoCapture
   ): Promise<readonly VideoFrameSample[]>;
   lockCalibration(): DunaCourtCalibration | null;
   releasePreview(): void;
+  setPreviewDimmed(dimmed: boolean): void;
 }
 
 export default requireOptionalNativeModule<DunaVideoCaptureNativeModule>(

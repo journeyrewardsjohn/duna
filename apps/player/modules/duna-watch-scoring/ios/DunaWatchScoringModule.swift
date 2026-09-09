@@ -8,6 +8,9 @@ private let seenVisionEventIDsDefaultsKey = "duna.seenWatchVisionEventIDs.v1"
 private let cameraPreviewNotification = Notification.Name(
   "co.duna.watch.camera-preview"
 )
+private let captureStatusNotification = Notification.Name(
+  "co.duna.watch.capture-status"
+)
 
 private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
   static let shared = DunaWatchConnectivityCenter()
@@ -26,6 +29,12 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
       self,
       selector: #selector(receiveCameraPreview(_:)),
       name: cameraPreviewNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(receiveCaptureStatus(_:)),
+      name: captureStatusNotification,
       object: nil
     )
     guard WCSession.isSupported() else { return }
@@ -117,6 +126,23 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
     _ = publishContext()
   }
 
+  @objc
+  private func receiveCaptureStatus(_ notification: Notification) {
+    guard var status = notification.userInfo as? [String: Any] else { return }
+    status["type"] = "duna.captureStatus"
+    currentContext["captureStatus"] = status
+    _ = publishContext()
+    let session = WCSession.default
+    guard session.activationState == .activated else { return }
+    if session.isReachable {
+      session.sendMessage(status, replyHandler: nil) { _ in
+        session.transferUserInfo(status)
+      }
+    } else {
+      session.transferUserInfo(status)
+    }
+  }
+
   private func receipt(
     for payload: [String: Any],
     accepted: Bool,
@@ -169,6 +195,15 @@ private final class DunaWatchConnectivityCenter: NSObject, WCSessionDelegate {
         for: payload,
         accepted: false,
         message: "iPhone does not recognize this action"
+      )
+    }
+    if currentContext["status"] as? String == "ended",
+      payload["sessionId"] as? String == currentContext["sessionId"] as? String
+    {
+      return receipt(
+        for: payload,
+        accepted: false,
+        message: "This Duna Vision session has ended"
       )
     }
     guard
