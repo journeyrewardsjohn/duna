@@ -141,13 +141,13 @@ Player native,PerformanceScreen,apps/player/App.tsx,pending,Physical device veri
 Player native,BookingModal,apps/player/App.tsx,pending,Physical device verification pending
 Player native,PickupModal,apps/player/App.tsx,pending,Physical device verification pending
 Player native,QuickActionsSheet,apps/player/App.tsx,local-review,All nine actions opened in light and dark; connected and physical workflows pending
-Player native,BookingManagementModal,apps/player/booking-management.tsx,pending,Physical device verification pending
+Player native,BookingManagementModal,apps/player/booking-management.tsx,local-review,Light and dark registration/team/pickup forms and cancellation confirmation reviewed locally; connected actions and device verification pending
 Player native,DiscoveryMapModal,apps/player/discovery-map.tsx,pending,Physical device verification pending
 Player native,PlayerDunaAiScreen,apps/player/duna-ai-screen.tsx,pending,Physical device verification pending
-Player native,HealthScreen,apps/player/health-screen.tsx,pending,Physical device verification pending
-Player native,CheckInModal,apps/player/health-screen.tsx,pending,Physical device verification pending
-Player native,ConnectModal,apps/player/health-screen.tsx,pending,Physical device verification pending
-Player native,ShareModal,apps/player/health-screen.tsx,pending,Physical device verification pending
+Player native,HealthScreen,apps/player/health-screen.tsx,local-review,Light and dark sample readiness/timeline reviewed locally; real Apple Health and device verification pending
+Player native,CheckInModal,apps/player/health-screen.tsx,local-review,Light and dark local rating and note controls reviewed; no private check-in saved
+Player native,ConnectModal,apps/player/health-screen.tsx,local-review,Light and dark category selection reviewed locally; Apple permission sheet requires device verification
+Player native,ShareModal,apps/player/health-screen.tsx,local-review,Light and dark recipient/category/scope and consent review; no grant submitted
 Player native,HomeV3Screen,apps/player/home-v3.tsx,superseded,Unused screen export; activity card components are used by SandHomeScreen
 Player native,PlayerMessagingScreen,apps/player/messaging-screen.tsx,pending,Physical device verification pending
 Player native,OrganizationExperienceModal,apps/player/organization-experience.tsx,pending,Physical device verification pending
@@ -165,7 +165,7 @@ Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,local-review,Lig
 Player native,SandHomeScreen,apps/player/sand-home.tsx,local-review,Light and dark hero and sheet review; physical scrolling and status bar verification pending
 Player native,ProvisionalPlayerModal,apps/player/score-upload.tsx,pending,Physical device verification pending
 Player native,ScoreUploadScreen,apps/player/score-upload.tsx,pending,Physical device verification pending
-Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,pending,Physical device verification pending
+Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,local-review,Light and dark sample program and response form reviewed; live missing-data state verified; connected response and device verification pending
 Player native,RecordingChoiceSheet,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VideoPlayerModal,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VideoStudioScreen,apps/player/video-studio.tsx,local-review,Capture entry and preview gates reviewed; actual capture and provider playback pending

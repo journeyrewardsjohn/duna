@@ -1,3 +1,4 @@
+import { usePlayerDesign, type PlayerDesignTokens } from "./design-theme";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { useMemo, useState } from "react";
@@ -247,11 +248,12 @@ function eventGlyph(kind: TrainingEvent["kind"]): string {
 }
 
 function TrainingCourt() {
-  const ink = "#122D3A";
+  const { tokens } = usePlayerDesign();
+  const ink = tokens.text1;
   return (
     <Svg height={146} viewBox="0 0 240 146" width="100%">
       <Rect
-        fill="#E7F4F1"
+        fill={tokens.surface2}
         height="132"
         rx="12"
         stroke={ink}
@@ -260,26 +262,33 @@ function TrainingCourt() {
         x="7"
         y="7"
       />
-      <Line stroke="#19B69D" strokeWidth="4" x1="7" x2="233" y1="73" y2="73" />
+      <Line
+        stroke={tokens.text1}
+        strokeWidth="4"
+        x1="7"
+        x2="233"
+        y1="73"
+        y2="73"
+      />
       {[
-        [67, 105, "#19B69D"],
-        [170, 92, "#19B69D"],
-        [73, 43, "#7A6BE8"],
-        [169, 29, "#7A6BE8"],
+        [67, 105, tokens.text1],
+        [170, 92, tokens.text1],
+        [73, 43, tokens.text2],
+        [169, 29, tokens.text2],
       ].map(([x, y, color], index) => (
         <Circle
           cx={Number(x)}
           cy={Number(y)}
-          fill="#FFFFFF"
+          fill={tokens.surface1}
           key={index}
           r="10"
           stroke={String(color)}
           strokeWidth="3"
         />
       ))}
-      <Circle cx="121" cy="60" fill="#F1B44C" r="5" />
+      <Circle cx="121" cy="60" fill={tokens.gold} r="5" />
       <Line
-        stroke="#F1B44C"
+        stroke={tokens.gold}
         strokeDasharray="6 6"
         strokeWidth="2"
         x1="120"
@@ -297,11 +306,15 @@ export function PlayerTrainingScreen({
   readonly onBack: () => void;
 }) {
   const runtime = usePlayerRuntime();
-  const palette = lightPalette;
-  const workspace = runtime.training ?? previewTraining();
-  const program = workspace.programs[0];
-  const practice = workspace.nextPractice;
-  const responseSession = workspace.recentSessions.find(
+  const { tokens } = usePlayerDesign();
+  const palette = useMemo(() => trainingPalette(tokens), [tokens]);
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const workspace =
+    runtime.training ??
+    (runtime.mode === "preview" ? previewTraining() : undefined);
+  const program = workspace?.programs[0];
+  const practice = workspace?.nextPractice;
+  const responseSession = workspace?.recentSessions.find(
     (session) => !session.response?.submittedAt,
   );
   const [checkInOpen, setCheckInOpen] = useState(false);
@@ -356,7 +369,7 @@ export function PlayerTrainingScreen({
     }
   };
 
-  if (!program || !practice) {
+  if (!workspace || !program || !practice) {
     return (
       <ScrollView
         contentContainerStyle={[
@@ -364,7 +377,12 @@ export function PlayerTrainingScreen({
           { backgroundColor: palette.canvas },
         ]}
       >
-        <Pressable onPress={onBack} style={styles.backButton}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to plans"
+          onPress={onBack}
+          style={styles.backButton}
+        >
           <Text style={{ color: palette.text }}>‹ Plans</Text>
         </Pressable>
         <Text style={[styles.eyebrow, { color: palette.accent }]}>
@@ -725,7 +743,12 @@ export function PlayerTrainingScreen({
               <Text style={[styles.eyebrow, { color: palette.accent }]}>
                 YOUR RESPONSE
               </Text>
-              <Pressable onPress={() => setCheckInOpen(false)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close training response"
+                style={styles.closeButton}
+                onPress={() => setCheckInOpen(false)}
+              >
                 <Text style={[styles.modalClose, { color: palette.text }]}>
                   ×
                 </Text>
@@ -742,6 +765,10 @@ export function PlayerTrainingScreen({
               {Array.from({ length: 10 }, (_, index) => index + 1).map(
                 (value) => (
                   <Pressable
+                    accessibilityRole="radio"
+                    accessibilityLabel={`Session effort ${value} of 10`}
+                    accessibilityState={{ checked: sessionRpe === value }}
+                    aria-checked={sessionRpe === value}
                     key={value}
                     onPress={() => setSessionRpe(value)}
                     style={[
@@ -769,6 +796,7 @@ export function PlayerTrainingScreen({
               Anything your coach should know? · optional
             </Text>
             <TextInput
+              accessibilityLabel="Optional feedback for your coach"
               maxLength={1_000}
               multiline
               onChangeText={setFeedback}
@@ -798,7 +826,7 @@ export function PlayerTrainingScreen({
               ]}
             >
               {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={palette.onAccent} />
               ) : (
                 <Text style={styles.submitText}>Send my response</Text>
               )}
@@ -810,243 +838,259 @@ export function PlayerTrainingScreen({
   );
 }
 
-const lightPalette = {
-  canvas: "#FFFFFF",
-  surface: "#F4F4F2",
-  soft: "#F1F6F9",
-  text: "#090909",
-  muted: "#767773",
-  line: "#E5E6E3",
-  deep: "#092B4D",
-  accent: "#103A63",
-  flare: "#D8B47A",
-};
+function trainingPalette(tokens: PlayerDesignTokens) {
+  return {
+    canvas: tokens.ground,
+    surface: tokens.surface1,
+    soft: tokens.surface2,
+    text: tokens.text1,
+    muted: tokens.text2,
+    line: tokens.hairline,
+    deep: tokens.surface1,
+    accent: tokens.text1,
+    flare: tokens.gold,
+    onAccent: tokens.buttonPrimaryForeground,
+    gain: tokens.gain,
+  };
+}
 
-const styles = StyleSheet.create({
-  content: {
-    gap: 18,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 150,
-  },
-  flex: { flex: 1 },
-  topline: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 38,
-  },
-  backButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 60,
-  },
-  eyebrow: { fontSize: 12, fontWeight: "800", letterSpacing: 1.6 },
-  phase: { fontSize: 12, fontWeight: "700" },
-  programCard: { borderRadius: 26, gap: 12, overflow: "hidden", padding: 22 },
-  programKicker: {
-    color: "#68DAC4",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  programTitle: {
-    color: "#FFFFFF",
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -1.2,
-    lineHeight: 33,
-  },
-  programPurpose: { color: "#C4D7D8", fontSize: 14, lineHeight: 21 },
-  progressTrack: {
-    backgroundColor: "#284F59",
-    borderRadius: 99,
-    height: 7,
-    marginTop: 6,
-    overflow: "hidden",
-  },
-  progressFill: {
-    backgroundColor: "#28C7AB",
-    borderRadius: 99,
-    height: "100%",
-  },
-  programFooter: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  programMeta: { color: "#B8CCCD", fontSize: 12, fontWeight: "700" },
-  sectionHeading: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    letterSpacing: -0.8,
-    lineHeight: 29,
-    marginTop: 3,
-  },
-  dateBadge: { alignItems: "flex-end", borderLeftWidth: 1, paddingLeft: 12 },
-  dateBadgeDay: { fontSize: 15, fontWeight: "800" },
-  dateBadgeTime: { fontSize: 12, marginTop: 2 },
-  practiceCard: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-    padding: 16,
-  },
-  practicePurpose: { fontSize: 17, fontWeight: "600", lineHeight: 24 },
-  signalRow: { flexDirection: "row", justifyContent: "space-between" },
-  signalLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
-  signalValue: { fontSize: 15, fontWeight: "800", marginTop: 3 },
-  opportunity: {
-    alignItems: "center",
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 9,
-    padding: 12,
-  },
-  opportunityValue: { fontSize: 22, fontWeight: "900" },
-  opportunityLabel: { flex: 1, fontSize: 12, lineHeight: 16 },
-  timeline: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
-  timelineRow: { flexDirection: "row", minHeight: 82 },
-  timelineRail: { alignItems: "center", width: 28 },
-  timelineDot: { borderRadius: 99, height: 10, marginTop: 5, width: 10 },
-  timelineLine: { flex: 1, width: 1 },
-  timelineCopy: { flex: 1, gap: 6, paddingBottom: 12 },
-  timelineTime: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
-  blockRow: {
-    alignItems: "center",
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 62,
-    padding: 12,
-  },
-  blockTitle: { fontSize: 15, fontWeight: "800" },
-  blockMeta: { fontSize: 12, marginTop: 3, textTransform: "capitalize" },
-  blockMinutes: { fontSize: 15, fontWeight: "900" },
-  checkInCard: {
-    alignItems: "center",
-    borderRadius: 22,
-    flexDirection: "row",
-    gap: 12,
-    padding: 19,
-  },
-  checkInKicker: {
-    color: "#D9FFF7",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  checkInTitle: {
-    color: "#FFFFFF",
-    fontSize: 19,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-  checkInBody: { color: "#DBFFF7", fontSize: 12, lineHeight: 17, marginTop: 4 },
-  checkInArrow: { color: "#FFFFFF", fontSize: 26, fontWeight: "600" },
-  notice: { borderRadius: 14, fontSize: 13, lineHeight: 19, padding: 14 },
-  loadCard: {
-    alignItems: "flex-end",
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    height: 180,
-    justifyContent: "space-between",
-    padding: 15,
-  },
-  loadColumn: { alignItems: "center", flex: 1 },
-  loadBarArea: {
-    alignItems: "center",
-    height: 98,
-    justifyContent: "flex-end",
-    position: "relative",
-    width: "100%",
-  },
-  loadBar: { borderRadius: 7, maxWidth: 24, width: "45%" },
-  tournamentMarker: {
-    borderRadius: 7,
-    borderWidth: 1,
-    height: 94,
-    position: "absolute",
-    width: "68%",
-  },
-  loadValue: { fontSize: 12, fontWeight: "900", marginTop: 6 },
-  loadWeek: { fontSize: 12, marginTop: 3 },
-  upcomingCard: {
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    paddingHorizontal: 14,
-  },
-  eventRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 74,
-    paddingVertical: 11,
-  },
-  eventGlyph: { fontSize: 20, width: 23 },
-  eventTitle: { fontSize: 15, fontWeight: "800" },
-  eventMeta: { fontSize: 12, marginTop: 3, textTransform: "capitalize" },
-  eventLoad: { fontSize: 14, fontWeight: "900" },
-  emptyTitle: {
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -1.2,
-    lineHeight: 38,
-    marginTop: 40,
-  },
-  body: { fontSize: 15, lineHeight: 22 },
-  modal: { flex: 1 },
-  modalContent: { gap: 18, padding: 22, paddingBottom: 44 },
-  modalTopline: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  modalClose: { fontSize: 34, fontWeight: "300", lineHeight: 40 },
-  modalTitle: {
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -1.2,
-    lineHeight: 39,
-  },
-  rpeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  rpeButton: {
-    alignItems: "center",
-    borderRadius: 14,
-    borderWidth: 1,
-    height: 54,
-    justifyContent: "center",
-    width: "17.5%",
-  },
-  rpeValue: { fontSize: 18, fontWeight: "900" },
-  rpeLegend: { flexDirection: "row", justifyContent: "space-between" },
-  inputLabel: { fontSize: 13, fontWeight: "800", marginTop: 8 },
-  feedbackInput: {
-    borderRadius: 16,
-    borderWidth: 1,
-    fontSize: 16,
-    minHeight: 130,
-    padding: 14,
-    textAlignVertical: "top",
-  },
-  privacy: { fontSize: 12, lineHeight: 17 },
-  submitButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    justifyContent: "center",
-    minHeight: 56,
-  },
-  submitText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
-  disabled: { opacity: 0.42 },
-});
+const createStyles = (palette: ReturnType<typeof trainingPalette>) =>
+  StyleSheet.create({
+    content: {
+      gap: 18,
+      paddingHorizontal: 18,
+      paddingTop: 14,
+      paddingBottom: 150,
+    },
+    flex: { flex: 1 },
+    topline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 38,
+    },
+    backButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 60,
+    },
+    eyebrow: { fontSize: 12, fontWeight: "500", letterSpacing: 1.6 },
+    phase: { fontSize: 12, fontWeight: "500" },
+    programCard: { borderRadius: 26, gap: 12, overflow: "hidden", padding: 22 },
+    programKicker: {
+      color: palette.muted,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.4,
+    },
+    programTitle: {
+      color: palette.text,
+      fontSize: 30,
+      fontWeight: "400",
+      letterSpacing: -0.75,
+      lineHeight: 33,
+    },
+    programPurpose: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    progressTrack: {
+      backgroundColor: palette.soft,
+      borderRadius: 99,
+      height: 7,
+      marginTop: 6,
+      overflow: "hidden",
+    },
+    progressFill: {
+      backgroundColor: palette.text,
+      borderRadius: 99,
+      height: "100%",
+    },
+    programFooter: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    programMeta: { color: palette.muted, fontSize: 12, fontWeight: "500" },
+    sectionHeading: {
+      alignItems: "flex-end",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 8,
+    },
+    sectionTitle: {
+      fontSize: 24,
+      fontWeight: "400",
+      letterSpacing: -0.6000000000000001,
+      lineHeight: 29,
+      marginTop: 3,
+    },
+    dateBadge: { alignItems: "flex-end", borderLeftWidth: 1, paddingLeft: 12 },
+    dateBadgeDay: { fontSize: 15, fontWeight: "500" },
+    dateBadgeTime: { fontSize: 12, marginTop: 2 },
+    practiceCard: {
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth,
+      gap: 14,
+      padding: 16,
+    },
+    practicePurpose: { fontSize: 17, fontWeight: "600", lineHeight: 24 },
+    signalRow: { flexDirection: "row", justifyContent: "space-between" },
+    signalLabel: { fontSize: 12, fontWeight: "500", letterSpacing: 1.2 },
+    signalValue: { fontSize: 15, fontWeight: "800", marginTop: 3 },
+    opportunity: {
+      alignItems: "center",
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 9,
+      padding: 12,
+    },
+    opportunityValue: { fontSize: 22, fontWeight: "900" },
+    opportunityLabel: { flex: 1, fontSize: 12, lineHeight: 16 },
+    timeline: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
+    timelineRow: { flexDirection: "row", minHeight: 82 },
+    timelineRail: { alignItems: "center", width: 28 },
+    timelineDot: { borderRadius: 99, height: 10, marginTop: 5, width: 10 },
+    timelineLine: { flex: 1, width: 1 },
+    timelineCopy: { flex: 1, gap: 6, paddingBottom: 12 },
+    timelineTime: { fontSize: 12, fontWeight: "500", letterSpacing: 1 },
+    blockRow: {
+      alignItems: "center",
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 62,
+      padding: 12,
+    },
+    blockTitle: { fontSize: 15, fontWeight: "500" },
+    blockMeta: { fontSize: 12, marginTop: 3, textTransform: "capitalize" },
+    blockMinutes: { fontSize: 15, fontWeight: "500" },
+    checkInCard: {
+      alignItems: "center",
+      borderRadius: 22,
+      flexDirection: "row",
+      gap: 12,
+      padding: 19,
+    },
+    checkInKicker: {
+      color: palette.onAccent,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.2,
+    },
+    checkInTitle: {
+      color: palette.onAccent,
+      fontSize: 19,
+      fontWeight: "500",
+      marginTop: 4,
+    },
+    checkInBody: {
+      color: palette.onAccent,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+    checkInArrow: { color: palette.onAccent, fontSize: 26, fontWeight: "600" },
+    notice: { borderRadius: 14, fontSize: 13, lineHeight: 19, padding: 14 },
+    loadCard: {
+      alignItems: "flex-end",
+      borderRadius: 20,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      height: 180,
+      justifyContent: "space-between",
+      padding: 15,
+    },
+    loadColumn: { alignItems: "center", flex: 1 },
+    loadBarArea: {
+      alignItems: "center",
+      height: 98,
+      justifyContent: "flex-end",
+      position: "relative",
+      width: "100%",
+    },
+    loadBar: { borderRadius: 7, maxWidth: 24, width: "45%" },
+    tournamentMarker: {
+      borderRadius: 7,
+      borderWidth: 1,
+      height: 94,
+      position: "absolute",
+      width: "68%",
+    },
+    loadValue: { fontSize: 12, fontWeight: "900", marginTop: 6 },
+    loadWeek: { fontSize: 12, marginTop: 3 },
+    upcomingCard: {
+      borderRadius: 20,
+      borderWidth: StyleSheet.hairlineWidth,
+      overflow: "hidden",
+      paddingHorizontal: 14,
+    },
+    eventRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 74,
+      paddingVertical: 11,
+    },
+    eventGlyph: { fontSize: 20, width: 23 },
+    eventTitle: { fontSize: 15, fontWeight: "500" },
+    eventMeta: { fontSize: 12, marginTop: 3, textTransform: "capitalize" },
+    eventLoad: { fontSize: 14, fontWeight: "900" },
+    emptyTitle: {
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.85,
+      lineHeight: 38,
+      marginTop: 40,
+    },
+    body: { fontSize: 15, lineHeight: 22 },
+    modal: { flex: 1 },
+    modalContent: { gap: 18, padding: 22, paddingBottom: 44 },
+    modalTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    modalClose: { fontSize: 34, fontWeight: "300", lineHeight: 40 },
+    closeButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalTitle: {
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.85,
+      lineHeight: 39,
+    },
+    rpeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    rpeButton: {
+      alignItems: "center",
+      borderRadius: 14,
+      borderWidth: 1,
+      height: 54,
+      justifyContent: "center",
+      width: "17.5%",
+    },
+    rpeValue: { fontSize: 18, fontWeight: "900" },
+    rpeLegend: { flexDirection: "row", justifyContent: "space-between" },
+    inputLabel: { fontSize: 14, fontWeight: "500", marginTop: 8 },
+    feedbackInput: {
+      borderRadius: 16,
+      borderWidth: 1,
+      fontSize: 16,
+      minHeight: 130,
+      padding: 14,
+      textAlignVertical: "top",
+    },
+    privacy: { fontSize: 15, lineHeight: 22 },
+    submitButton: {
+      alignItems: "center",
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    submitText: { color: palette.onAccent, fontSize: 16, fontWeight: "500" },
+    disabled: { opacity: 0.42 },
+  });

@@ -1,5 +1,5 @@
 import { SandLoader } from "./sand-loader";
-import { sandColors } from "@duna/ui/sand";
+import { usePlayerDesign } from "./design-theme";
 import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
@@ -233,16 +233,14 @@ const dunaMark = require("./assets/duna-mark.png");
 const dunaWelcomePoster = require("../../packages/ui/assets/duna-welcome-background-poster-v1.png");
 
 function RuntimeLoadingState() {
+  const { tokens, theme } = usePlayerDesign();
   return (
     <View
       accessibilityLabel="Loading Duna"
       accessibilityRole="progressbar"
-      style={[
-        runtimeStyles.loadingScreen,
-        { backgroundColor: sandColors.canvas },
-      ]}
+      style={[runtimeStyles.loadingScreen, { backgroundColor: tokens.ground }]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
       <SandLoader />
     </View>
   );

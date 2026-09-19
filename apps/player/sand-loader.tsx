@@ -9,10 +9,12 @@ export function SandLoader({
   label = "Loading Duna",
   size = 150,
   tone = "default",
+  showLabel = true,
 }: {
   readonly label?: string;
   readonly size?: number;
   readonly tone?: "default" | "inverse";
+  readonly showLabel?: boolean;
 }) {
   const { tokens } = usePlayerDesign();
   const [time, setTime] = useState(0);
@@ -73,15 +75,17 @@ export function SandLoader({
           );
         })}
       </Svg>
-      <Text
-        style={[
-          styles.label,
-          { color: tokens.text2 },
-          tone === "inverse" && { color: sandColors.inset },
-        ]}
-      >
-        {label}
-      </Text>
+      {showLabel && (
+        <Text
+          style={[
+            styles.label,
+            { color: tokens.text2 },
+            tone === "inverse" && { color: sandColors.inset },
+          ]}
+        >
+          {label}
+        </Text>
+      )}
     </View>
   );
 }

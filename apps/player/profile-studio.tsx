@@ -100,6 +100,7 @@ function Field({
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
@@ -1012,7 +1013,7 @@ const createStyles = (palette: ReturnType<typeof profilePalette>) =>
     field: { gap: 7 },
     fieldLabel: {
       color: palette.marine,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: "500",
       letterSpacing: 0.8,
     },

@@ -276,3 +276,36 @@ used the review app ports. The final shared-token correction aligns photo dissol
 with the sand ground and passed all 22 UI unit tests, including new contrast and
 dissolve invariants. Player iOS/Android exports passed; physical and store proof
 remain separate requirements. Exact-commit CI is required before release.
+
+## Player booking, training, and Health checkpoint — September 19
+
+- Booking management follows Appearance across registration details, team editing,
+  pickup settings, and cancellation confirmation. Form inputs, action targets,
+  labels, neutral separators, and selected-state contrast now use the shared
+  roles. Payment, invitation, capacity, and cancellation handlers are unchanged.
+- Training uses the same reading surfaces and lighter headings. Session-effort
+  choices expose their selected value, and optional feedback has an accessible
+  label. A live account with no training workspace no longer falls back to an
+  invented sample program; sample training remains confined to preview mode.
+- Health uses the shared theme tokens, quieter readiness cards, and readable
+  check-in, Apple permission-selection, and sharing sheets. Category and recipient
+  choices expose their selection. The confidence label wraps as a whole at phone
+  width. Existing consent, expiry, privacy, and data calculations remain intact.
+- Health imports use the shared sand particles while active and a static check
+  when complete. The existing progress, counts, and continue-in-background action
+  remain visible. The runtime loading canvas also follows Appearance.
+- Local browser-rendered native review covered light and dark main screens,
+  training response entry, Health rating/category/recipient choices, sharing
+  consent, timeline, active/completed imports, team editing, cancellation
+  confirmation, and pickup editing. Only local form state was changed; no booking,
+  invitation, training response, Health grant, or payment was submitted. Visible
+  text contrast was checked on those reviewed sheets in both appearances.
+
+Physical Dynamic Type, Apple Health permissions and import, connected changes,
+private video playback, native capture/Watch, and store delivery remain open.
+
+Checkpoint validation: the final `pnpm verify` passed all release checks and 117
+browser tests. Fresh Player iOS and Android exports passed. The browser renderer
+reviewed eight main-screen/empty-state combinations and 24 secondary-sheet states
+with no runtime errors; the 24 visible-text contrast checks reported no failures.
+These results use local data and do not establish connected or physical acceptance.
