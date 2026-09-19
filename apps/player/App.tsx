@@ -1,3 +1,4 @@
+import { sandColors } from "@duna/ui/sand";
 import {
   defaultEventMedia,
   evaluateDivisionCriteria,
@@ -372,14 +373,14 @@ const lightMobileTokens = resolveDunaMobileTokens("light", "editorial");
 
 const lightColors = {
   canvas: lightMobileTokens.ground,
-  ink: "#090909",
+  ink: sandColors.ink,
   depth: lightMobileTokens.surface1,
   navy: lightMobileTokens.inactiveFill,
   navyLift: lightMobileTokens.surface2,
-  bone: "#090909",
-  muted: "#767773",
-  aqua: "#103a63",
-  aquaDeep: "#092b4d",
+  bone: sandColors.ink,
+  muted: sandColors.muted,
+  aqua: sandColors.ink,
+  aquaDeep: sandColors.ink,
   sand: "#d8b47a",
   flare: "#e8683a",
   resultWin: "#efe5ce",
@@ -393,17 +394,17 @@ const lightColors = {
   danger: "#9a4a2e",
   onAccent: "#ffffff",
   white: "#ffffff",
-  overlayRgb: "9,9,9",
-  accentRgb: "16,58,99",
+  overlayRgb: sandColors.inkRgb,
+  accentRgb: sandColors.inkRgb,
   warningRgb: "138,106,47",
   positiveRgb: "47,107,58",
   dangerRgb: "154,74,46",
   flareRgb: "232,104,58",
-  inkRgb: "9,9,9",
-  depthRgb: "255,255,255",
-  navyRgb: "244,244,242",
-  boneRgb: "9,9,9",
-  whiteRgb: "255,255,255",
+  inkRgb: sandColors.inkRgb,
+  depthRgb: sandColors.surfaceRgb,
+  navyRgb: sandColors.insetRgb,
+  boneRgb: sandColors.inkRgb,
+  whiteRgb: sandColors.surfaceRgb,
 } as const;
 
 type Palette = {
@@ -2643,22 +2644,26 @@ function BookingCalendarModal({
                     const disabled = date < minDate || date > maxDate;
                     const selected = date === selectedDate;
                     return (
-                      <View key={date} style={styles.bookingCalendarCell}>
-                        <Pressable
-                          accessibilityLabel={`${localDateAnchor(
-                            date,
-                          ).toLocaleDateString("en-US", {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}${marker ? `, ${marker.count} scheduled` : ""}`}
-                          disabled={disabled}
-                          hitSlop={6}
-                          onPress={() => {
-                            selectionHaptic();
-                            onSelect(date);
-                          }}
+                      <Pressable
+                        key={date}
+                        style={styles.bookingCalendarCell}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected, disabled }}
+                        accessibilityLabel={`${localDateAnchor(
+                          date,
+                        ).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                        disabled={disabled}
+                        onPress={() => {
+                          selectionHaptic();
+                          onSelect(date);
+                        }}
+                      >
+                        <View
                           style={[
                             styles.bookingCalendarDay,
                             date === today && styles.bookingCalendarDayToday,
@@ -2694,8 +2699,8 @@ function BookingCalendarModal({
                               )}
                             </View>
                           )}
-                        </Pressable>
-                      </View>
+                        </View>
+                      </Pressable>
                     );
                   })}
                 </View>
@@ -15953,22 +15958,22 @@ function createStyles() {
       paddingTop: 8,
     },
     bookingCalendarEyebrow: {
-      color: colors.sand,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "500",
       letterSpacing: 1,
     },
     bookingCalendarTitle: {
       color: colors.bone,
       fontSize: 28,
-      fontWeight: "900",
-      letterSpacing: -1.5,
+      fontWeight: "500",
+      letterSpacing: -0.5,
       lineHeight: 31,
       marginTop: 7,
     },
     bookingCalendarInstruction: {
       color: colors.muted,
-      fontSize: 12,
+      fontSize: 14,
       lineHeight: 17,
       marginTop: 5,
     },
@@ -16012,8 +16017,8 @@ function createStyles() {
     bookingCalendarRange: {
       color: colors.bone,
       flex: 1,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       paddingHorizontal: 8,
       textAlign: "center",
     },
@@ -16028,7 +16033,7 @@ function createStyles() {
     },
     bookingCalendarMonth: {
       alignSelf: "stretch",
-      backgroundColor: colors.navy,
+      backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
       borderRadius: 20,
       borderWidth: 1,
@@ -16041,7 +16046,7 @@ function createStyles() {
     bookingCalendarMonthTitle: {
       color: colors.bone,
       fontSize: 16,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: -0.5,
       marginBottom: 10,
     },
@@ -16049,8 +16054,8 @@ function createStyles() {
     bookingCalendarWeekday: {
       color: colors.muted,
       flex: 1,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       paddingBottom: 7,
       textAlign: "center",
     },
@@ -16059,12 +16064,12 @@ function createStyles() {
       flexWrap: "wrap",
     },
     bookingCalendarBlank: {
-      height: 40,
+      height: 50,
       width: "14.285714%",
     },
     bookingCalendarCell: {
       alignItems: "center",
-      height: 40,
+      height: 50,
       justifyContent: "center",
       width: "14.285714%",
     },
@@ -16089,9 +16094,9 @@ function createStyles() {
     bookingCalendarDayDisabled: { opacity: 0.28 },
     bookingCalendarDayText: {
       color: colors.bone,
-      fontFamily: "Archivo-Table",
-      fontSize: 13,
-      fontWeight: "900",
+      fontVariant: ["tabular-nums"],
+      fontSize: 15,
+      fontWeight: "500",
     },
     bookingCalendarDayTextSelected: { color: "#ffffff" },
     bookingCalendarMarkers: {
@@ -16127,21 +16132,21 @@ function createStyles() {
     bookingCalendarAvailabilityButtonDisabled: { opacity: 0.42 },
     bookingCalendarAvailabilityButtonText: {
       color: "#ffffff",
-      fontSize: 13,
-      fontWeight: "900",
+      fontSize: 15,
+      fontWeight: "500",
     },
     bookingCalendarAvailabilityEyebrow: {
-      color: colors.sand,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "500",
       letterSpacing: 0.8,
     },
     bookingCalendarAvailabilityFact: {
-      backgroundColor: colors.navy,
+      backgroundColor: colors.depth,
       borderRadius: 999,
       color: colors.muted,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       overflow: "hidden",
       paddingHorizontal: 9,
       paddingVertical: 6,
@@ -16155,7 +16160,7 @@ function createStyles() {
     bookingCalendarAvailabilityTitle: {
       color: colors.bone,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "500",
       marginTop: 5,
     },
     bookingCalendarLegend: {

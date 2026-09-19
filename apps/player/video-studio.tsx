@@ -11,7 +11,9 @@ import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { VideoView, useVideoPlayer, type VideoSource } from "expo-video";
+import { StableVideoSurface } from "./video-player-surface";
+import { SandLoader } from "./sand-loader";
+import { sandColors } from "@duna/ui/sand";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -328,19 +330,19 @@ function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
 }
 
 const palette = {
-  canvas: "#f6f5f1",
-  depth: "#ffffff",
-  ink: "#1b1b19",
-  muted: "#766f61",
+  canvas: sandColors.canvas,
+  depth: sandColors.surface,
+  ink: sandColors.ink,
+  muted: sandColors.muted,
   navy: "#22343b",
-  aqua: "#3d6672",
-  aquaSoft: "#dfe5e4",
+  aqua: sandColors.ink,
+  aquaSoft: sandColors.inset,
   sand: "#c9a96a",
   flare: "#e8683a",
   positive: "#2f6b3a",
   warning: "#8a6a2f",
   danger: "#9a4a2e",
-  line: "#dedbd3",
+  line: sandColors.line,
 };
 
 const importedPlayerPalette: MobileSocialPalette = {
@@ -5657,108 +5659,6 @@ function CaptureExperience({
   );
 }
 
-function StableVideoSurface({
-  onCompleted,
-  onProgress,
-  posterUrl,
-  uri,
-}: {
-  readonly uri: string;
-  readonly posterUrl?: string;
-  readonly onProgress: (seconds: number) => void;
-  readonly onCompleted: (seconds: number) => void;
-}) {
-  const source = useMemo<VideoSource>(
-    () => ({
-      uri,
-      contentType: uri.includes(".m3u8") ? "hls" : "auto",
-      metadata: { title: "Duna video" },
-    }),
-    [uri],
-  );
-  const [firstFrame, setFirstFrame] = useState(false);
-  const [playerError, setPlayerError] = useState<string>();
-  const player = useVideoPlayer(source, (next) => {
-    next.audioMixingMode = "doNotMix";
-    next.timeUpdateEventInterval = 1;
-    next.play();
-  });
-
-  useEffect(() => {
-    setFirstFrame(false);
-    setPlayerError(undefined);
-    const status = player.addListener("statusChange", (event) => {
-      if (event.status === "error") {
-        setPlayerError(
-          event.error?.message ?? "This recording could not be opened.",
-        );
-      }
-    });
-    const progress = player.addListener("timeUpdate", (event) =>
-      onProgress(event.currentTime),
-    );
-    const completed = player.addListener("playToEnd", () =>
-      onCompleted(player.duration),
-    );
-    return () => {
-      status.remove();
-      progress.remove();
-      completed.remove();
-      player.pause();
-    };
-  }, [onCompleted, onProgress, player]);
-
-  const retry = async () => {
-    setPlayerError(undefined);
-    setFirstFrame(false);
-    try {
-      await player.replaceAsync(source);
-      player.play();
-    } catch (reason) {
-      setPlayerError(displayError(reason));
-    }
-  };
-
-  return (
-    <View style={styles.playerSurface}>
-      <VideoView
-        allowsVideoFrameAnalysis={false}
-        contentFit="contain"
-        nativeControls
-        onFirstFrameRender={() => setFirstFrame(true)}
-        player={player}
-        style={styles.player}
-      />
-      {!firstFrame && posterUrl && !playerError && (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <Image
-            resizeMode="contain"
-            source={{ uri: posterUrl }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-      )}
-      {!firstFrame && !playerError && (
-        <ActivityIndicator
-          color={palette.sand}
-          pointerEvents="none"
-          size="large"
-          style={styles.playerLoading}
-        />
-      )}
-      {!!playerError && (
-        <View style={styles.playerFailure}>
-          <Text style={styles.playerFailureTitle}>Video paused safely</Text>
-          <Text style={styles.playerFailureBody}>{playerError}</Text>
-          <Pressable onPress={() => void retry()} style={styles.playerRetry}>
-            <Text style={styles.playerRetryText}>Try again</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
-
 function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
   if (!report?.run) return "READY FOR EVIDENCE";
   switch (report.run.status) {
@@ -6288,6 +6188,7 @@ export function VideoPlayerModal({
 }) {
   const [playback, setPlayback] = useState<VideoPlayback>();
   const [error, setError] = useState<string>();
+  const [playbackAttempt, setPlaybackAttempt] = useState(0);
   const [playbackSeconds, setPlaybackSeconds] = useState(0);
   const [privateNote, setPrivateNote] = useState("");
   const [noteSavedAt, setNoteSavedAt] = useState<string>();
@@ -6298,8 +6199,17 @@ export function VideoPlayerModal({
 
   useEffect(() => {
     let active = true;
+    setError(undefined);
+    setPlayback(undefined);
+    setPlaybackSeconds(0);
+    setPrivateNote("");
+    setNoteSavedAt(undefined);
+    lastHeartbeat.current = 0;
     void client.public.videoPlayback
-      .query({ videoId: video.id, platform: "ios" })
+      .query({
+        videoId: video.id,
+        platform: "ios",
+      })
       .then((result) => {
         if (active) {
           setPlayback(result);
@@ -6313,7 +6223,7 @@ export function VideoPlayerModal({
     return () => {
       active = false;
     };
-  }, [client, video.id]);
+  }, [client, video.id, playbackAttempt]);
 
   useEffect(() => {
     if (video.status !== "live" || !video.match?.id) return;
@@ -6348,12 +6258,16 @@ export function VideoPlayerModal({
       const rounded = Math.max(0, Math.floor(seconds));
       if (!completed && rounded - lastHeartbeat.current < 10) return;
       lastHeartbeat.current = rounded;
-      void client.public.videoViewHeartbeat.mutate({
-        videoId: video.id,
-        viewSessionId: playback.viewSessionId,
-        watchedSeconds: rounded,
-        completed,
-      });
+      void client.public.videoViewHeartbeat
+        .mutate({
+          videoId: video.id,
+          viewSessionId: playback.viewSessionId,
+          watchedSeconds: rounded,
+          completed,
+        })
+        .catch(() => {
+          // Telemetry failure must not interrupt an authorized recording.
+        });
     },
     [client, playback, video.id],
   );
@@ -6410,7 +6324,12 @@ export function VideoPlayerModal({
     <Modal animationType="slide" onRequestClose={onClose} visible>
       <SafeAreaView style={styles.playerModal}>
         <View style={styles.modalHeaderDark}>
-          <Pressable hitSlop={12} onPress={onClose} style={styles.playerDone}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close video"
+            onPress={onClose}
+            style={styles.playerDone}
+          >
             <Text style={styles.headerActionLight}>Done</Text>
           </Pressable>
           <Text numberOfLines={1} style={styles.modalTitleLight}>
@@ -6421,10 +6340,27 @@ export function VideoPlayerModal({
         <View
           style={[styles.playerStage, portrait && styles.playerStagePortrait]}
         >
-          {!uri && !error && <ActivityIndicator color="#d4b77c" size="large" />}
-          {!!error && <Text style={styles.playerError}>{error}</Text>}
+          {!playback && !error && (
+            <SandLoader label="Opening video" size={90} tone="inverse" />
+          )}
+          {(error || (playback && !uri)) && (
+            <View style={styles.playbackUnavailable}>
+              <Text style={styles.playerError}>
+                {error ?? "This recording is not ready to play yet."}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPlaybackAttempt((attempt) => attempt + 1)}
+                style={styles.playerRetry}
+              >
+                <Text style={styles.playerRetryText}>Try again</Text>
+              </Pressable>
+            </View>
+          )}
           {uri && (
             <StableVideoSurface
+              key={uri}
+              title={video.title}
               onCompleted={handlePlaybackCompleted}
               onProgress={handlePlaybackProgress}
               posterUrl={playback?.posterUrl}
@@ -6513,7 +6449,7 @@ export function VideoPlayerModal({
                     What did you notice?
                   </Text>
                 </View>
-                <DunaIcon color={palette.aqua} name="lock" size={20} />
+                <DunaIcon color={sandColors.inset} name="lock" size={20} />
               </View>
               <Text style={styles.videoNoteBody}>
                 Save cues, tendencies, and moments to revisit. Only you can see
@@ -10163,7 +10099,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  playerModal: { backgroundColor: "#06090b", flex: 1 },
+  playerModal: { backgroundColor: "#242521", flex: 1 },
   modalHeaderDark: {
     alignItems: "center",
     borderBottomColor: "rgba(255,255,255,0.1)",
@@ -10173,13 +10109,17 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: 18,
   },
-  headerActionLight: { color: "#d4b77c", fontSize: 13, fontWeight: "800" },
-  playerDone: { justifyContent: "center", minHeight: 44, minWidth: 52 },
+  headerActionLight: {
+    color: sandColors.inset,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  playerDone: { justifyContent: "center", minHeight: 48, minWidth: 52 },
   modalTitleLight: {
-    color: "#ffffff",
+    color: sandColors.surface,
     flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "500",
     marginHorizontal: 10,
     textAlign: "center",
   },
@@ -10196,57 +10136,29 @@ const styles = StyleSheet.create({
     maxHeight: "58%",
     width: "72%",
   },
-  playerSurface: { height: "100%", width: "100%" },
-  player: { height: "100%", width: "100%" },
-  playerLoading: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  playerFailure: {
-    alignItems: "center",
-    backgroundColor: "rgba(5,10,12,0.96)",
-    bottom: 0,
-    gap: 9,
-    justifyContent: "center",
-    left: 0,
-    padding: 24,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  playerFailureTitle: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
-  playerFailureBody: {
-    color: "#b8c0c0",
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-  },
+  playbackUnavailable: { alignItems: "center", gap: 10, padding: 16 },
   playerRetry: {
     alignItems: "center",
-    backgroundColor: palette.aqua,
+    backgroundColor: sandColors.surface,
     borderRadius: 16,
     justifyContent: "center",
-    marginTop: 4,
     minHeight: 48,
     minWidth: 128,
     paddingHorizontal: 18,
   },
-  playerRetryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  playerRetryText: { color: sandColors.ink, fontSize: 15, fontWeight: "500" },
   playerError: { color: "#f27878", padding: 20, textAlign: "center" },
   playerDetailsScroll: { flex: 1 },
   playerInfo: { gap: 12, padding: 20 },
   playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
   playerTitle: {
-    color: "#ffffff",
-    fontSize: 25,
-    fontWeight: "800",
+    color: sandColors.surface,
+    fontSize: 28,
+    fontWeight: "400",
     letterSpacing: -0.6,
   },
-  playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
-  playerPrivacy: { color: "#d4b77c", fontSize: 12, fontWeight: "800" },
+  playerMeta: { color: "#c4c2ba", fontSize: 15, lineHeight: 22 },
+  playerPrivacy: { color: sandColors.inset, fontSize: 12, fontWeight: "500" },
   playerVenue: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -10256,17 +10168,21 @@ const styles = StyleSheet.create({
     minHeight: 68,
     padding: 13,
   },
-  playerVenueIcon: { color: "#d4b77c", fontSize: 22, fontWeight: "900" },
-  playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  playerVenueIcon: { color: sandColors.inset, fontSize: 22, fontWeight: "500" },
+  playerVenueName: {
+    color: sandColors.surface,
+    fontSize: 15,
+    fontWeight: "500",
+  },
   playerVenueAddress: {
-    color: "#aaaeb6",
+    color: "#c4c2ba",
     fontSize: 12,
     lineHeight: 15,
     marginTop: 2,
   },
   playerMetricCard: {
-    backgroundColor: "rgba(212,183,124,0.09)",
-    borderColor: "rgba(212,183,124,0.22)",
+    backgroundColor: "rgba(250,248,244,0.05)",
+    borderColor: "rgba(250,248,244,0.12)",
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -10275,22 +10191,22 @@ const styles = StyleSheet.create({
   },
   playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
   playerMetricValue: {
-    color: "#ffffff",
-    fontFamily: "Archivo-Table",
+    color: sandColors.surface,
+    fontVariant: ["tabular-nums"],
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "500",
   },
   playerMetricLabel: {
-    color: "#d4b77c",
+    color: sandColors.inset,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "500",
     letterSpacing: 0.8,
     marginTop: 4,
   },
   playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
   videoNoteCard: {
-    backgroundColor: "#0e191c",
-    borderColor: "rgba(82,215,205,0.25)",
+    backgroundColor: "#30312c",
+    borderColor: "rgba(250,248,244,0.12)",
     borderRadius: 20,
     borderWidth: 1,
     gap: 11,
@@ -10298,20 +10214,24 @@ const styles = StyleSheet.create({
   },
   videoNoteHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
   videoNoteEyebrow: {
-    color: palette.aqua,
+    color: sandColors.inset,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "500",
     letterSpacing: 1,
   },
-  videoNoteTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
-  videoNoteBody: { color: "#aab8b8", fontSize: 12, lineHeight: 17 },
+  videoNoteTitle: {
+    color: sandColors.surface,
+    fontSize: 18,
+    fontWeight: "500",
+  },
+  videoNoteBody: { color: "#c4c2ba", fontSize: 12, lineHeight: 17 },
   videoNoteInput: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderColor: "rgba(255,255,255,0.12)",
     borderRadius: 16,
     borderWidth: 1,
-    color: "#ffffff",
-    fontSize: 14,
+    color: sandColors.surface,
+    fontSize: 15,
     lineHeight: 20,
     minHeight: 112,
     padding: 14,
@@ -10322,17 +10242,17 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between",
   },
-  videoNoteStatus: { color: "#8fa3a3", flex: 1, fontSize: 12 },
+  videoNoteStatus: { color: "#c4c2ba", flex: 1, fontSize: 12 },
   videoNoteSave: {
     alignItems: "center",
-    backgroundColor: palette.aqua,
+    backgroundColor: sandColors.surface,
     borderRadius: 14,
     justifyContent: "center",
     minHeight: 48,
     minWidth: 112,
     paddingHorizontal: 16,
   },
-  videoNoteSaveText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  videoNoteSaveText: { color: sandColors.ink, fontSize: 15, fontWeight: "500" },
   visionAnalysisCard: {
     backgroundColor: "#10191b",
     borderColor: "rgba(212,183,124,0.28)",

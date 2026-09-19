@@ -944,3 +944,532 @@ html:not([data-theme="dark"]) body[data-zone="operator"] {
     border-color: var(--sand-line);
   }
 }
+
+/* Planning uses the same warm ground as Home. Status colors remain semantic. */
+.player-shell[data-zone="athletic"] {
+  --color-canvas: var(--sand-canvas);
+  --color-canvas-soft: var(--sand-canvas);
+  --color-surface: var(--sand-surface);
+  --color-line: var(--sand-line);
+  --color-line-strong: var(--sand-line);
+  --color-ink: var(--sand-ink);
+  --color-bone: var(--sand-ink);
+  --color-bone-muted: var(--sand-muted);
+  --color-primary: var(--sand-ink);
+  --color-on-primary: var(--sand-surface);
+  --shadow-small: none;
+  background: var(--sand-canvas);
+}
+.player-shell[data-zone="athletic"] :is(.page-heading-row, .page-heading) h1 {
+  font-weight: 400;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+.player-shell .primary-action {
+  background: var(--sand-ink);
+  color: var(--sand-surface);
+  border-color: var(--sand-ink);
+  box-shadow: none;
+  border-radius: 0.9rem;
+  font-weight: 500;
+  min-height: 52px;
+}
+.player-shell .secondary-action {
+  background: var(--sand-surface);
+  border-color: var(--sand-line);
+  color: var(--sand-ink);
+  box-shadow: none;
+  border-radius: 0.9rem;
+  min-height: 50px;
+  font-weight: 500;
+}
+.player-shell .play-agenda,
+.player-shell .play-create-card,
+.player-shell .play-venue-band {
+  background: var(--sand-surface);
+  border-color: var(--sand-line);
+  box-shadow: none;
+}
+.player-shell .play-agenda {
+  background: var(--sand-canvas);
+}
+.player-shell .play-agenda__heading h2 {
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+.player-shell .play-day {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--sand-line);
+  border-radius: 0;
+  padding: 1.5rem 0 0;
+}
+.player-shell .play-day__booking,
+.player-shell .play-day__empty {
+  background: var(--sand-surface);
+  border: 0;
+  border-radius: 1.25rem;
+  box-shadow: none;
+  padding: 1.25rem;
+}
+.player-shell .play-day__booking + .play-day__booking {
+  margin-top: 0.75rem;
+}
+.player-shell .play-day__time .duna-numeric {
+  font-size: 1rem;
+  font-weight: 500;
+}
+.player-shell .play-day__booking-copy strong {
+  font-weight: 500;
+}
+.player-shell .play-day__empty > span {
+  background: var(--sand-inset);
+  color: var(--sand-ink);
+}
+.player-shell .play-day__empty > a {
+  color: var(--sand-ink);
+}
+.sand-calendar-views {
+  display: flex;
+  gap: 0.35rem;
+  margin: 1.25rem 0;
+}
+.sand-calendar-views button {
+  min-height: 48px;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--sand-line);
+  background: transparent;
+  color: var(--sand-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.sand-calendar-views button[aria-pressed="true"] {
+  background: var(--sand-ink);
+  color: var(--sand-surface);
+}
+.sand-calendar-views button:last-child {
+  margin-left: auto;
+}
+.calendar-picker__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+.calendar-picker__heading h3 {
+  color: var(--sand-ink);
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  line-height: 1.2;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.calendar-picker .calendar-picker__rail-shell {
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+}
+.calendar-picker .calendar-picker__rail {
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+}
+.calendar-picker .calendar-picker__arrow,
+.calendar-picker .calendar-picker__open {
+  background: var(--sand-surface);
+  border: 0;
+  color: var(--sand-ink);
+  min-height: 50px;
+  min-width: 50px;
+  box-shadow: none;
+  font-weight: 500;
+}
+.calendar-picker .calendar-picker__pill {
+  flex-basis: 54px;
+  min-height: 100px;
+  padding: 0.5rem 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--sand-muted);
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+.calendar-picker .calendar-picker__pill > strong {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sand-ink);
+  margin: 0.4rem 0;
+}
+.calendar-picker .calendar-picker__pill > span,
+.calendar-picker .calendar-picker__pill > small {
+  font-weight: 400;
+}
+.calendar-picker .calendar-picker__pill[aria-current="date"] > strong {
+  background: var(--sand-ink);
+  color: var(--sand-surface);
+}
+.calendar-picker .calendar-picker__pill:hover > strong {
+  outline: 1px solid var(--sand-line);
+}
+.calendar-picker .calendar-picker__dots > i[data-tone="booking"] {
+  background: var(--sand-ink);
+}
+.calendar-dialog {
+  background: var(--sand-surface);
+  color: var(--sand-ink);
+  box-shadow: none;
+}
+.calendar-dialog .calendar-month {
+  background: var(--sand-canvas);
+  border: 0;
+}
+.calendar-dialog .calendar-month h3 {
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+.calendar-dialog .calendar-month__grid > button {
+  background: var(--sand-surface);
+  color: var(--sand-ink);
+  box-shadow: none;
+  transform: none;
+}
+.calendar-dialog .calendar-month__grid > button[aria-current="date"] {
+  background: var(--sand-ink);
+  border-color: var(--sand-ink);
+  color: var(--sand-surface);
+}
+.calendar-dialog .calendar-dialog__header > button,
+.calendar-dialog .calendar-dialog__toolbar > button {
+  min-width: 48px;
+  min-height: 48px;
+  background: var(--sand-canvas);
+  border: 0;
+  color: var(--sand-ink);
+}
+.calendar-dialog .calendar-dialog__toolbar {
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+}
+.venue-booking-shell,
+.booking-review-sheet {
+  --color-surface: var(--sand-surface);
+  --color-canvas-soft: var(--sand-canvas);
+  --color-ink: var(--sand-ink);
+  --color-bone-muted: var(--sand-muted);
+  --color-line: var(--sand-line);
+  color: var(--sand-ink);
+}
+.venue-booking-heading h2 {
+  font-weight: 400;
+  line-height: 1.2;
+}
+.venue-booking-shell .venue-duration-row button,
+.venue-booking-shell .venue-time-grid button {
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-color: var(--sand-line);
+  background: var(--sand-surface);
+  color: var(--sand-ink);
+  box-shadow: none;
+}
+.venue-booking-shell .venue-duration-row button.selected,
+.venue-booking-shell .venue-time-grid button.selected {
+  background: var(--sand-ink);
+  border-color: var(--sand-ink);
+  color: var(--sand-surface);
+}
+.venue-booking-shell .venue-court-list > button {
+  background: var(--sand-surface);
+  border-color: var(--sand-line);
+  box-shadow: none;
+}
+.venue-booking-shell .venue-court-list > button.selected {
+  border-color: var(--sand-ink);
+}
+.booking-review-sheet {
+  background: var(--sand-canvas);
+  border-radius: 2rem;
+  box-shadow: none;
+}
+.booking-review-sheet h2 {
+  font-weight: 400;
+}
+.booking-review-sheet
+  :is(.booking-review-reservation, .booking-policy-card, .booking-total-card) {
+  background: var(--sand-surface);
+  border-color: var(--sand-line);
+  box-shadow: none;
+  border-radius: 1.25rem;
+}
+.booking-review-sheet .booking-review-submit {
+  background: var(--sand-ink);
+  color: var(--sand-surface);
+  box-shadow: none;
+  border-radius: 0.9rem;
+  min-height: 56px;
+}
+.hq-shell .schedule-calendar {
+  background: var(--surface-1);
+}
+.hq-shell .schedule-calendar__toolbar h2 {
+  font-size: clamp(1.5rem, 2.3vw, 2.2rem);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.hq-shell .schedule-calendar__toolbar p {
+  max-width: 55ch;
+  color: var(--text-2);
+}
+.hq-shell .schedule-calendar .segmented-control {
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 999px;
+  padding: 0.25rem;
+  box-shadow: none;
+}
+.hq-shell .schedule-calendar .segmented-control button {
+  min-height: 44px;
+  padding-inline: 0.8rem;
+  font-weight: 500;
+  border-radius: 999px;
+  color: var(--text-1);
+}
+.hq-shell .schedule-calendar .segmented-control button.active {
+  background: var(--text-1);
+  color: var(--surface-1);
+  box-shadow: none;
+}
+.hq-shell .schedule-month-day {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+}
+.hq-shell .schedule-event {
+  box-shadow: none;
+  border-radius: 0.65rem;
+}
+.hq-shell .schedule-detail-drawer {
+  background: var(--ground);
+  border-color: var(--hairline);
+}
+@media (max-width: 720px) {
+  .player-shell .play-agenda {
+    padding: 1rem 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .player-shell .play-agenda__heading {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .calendar-picker .calendar-picker__rail-shell {
+    display: block;
+  }
+  .calendar-picker .calendar-picker__arrow {
+    display: none;
+  }
+  .calendar-picker .calendar-picker__pill {
+    flex-basis: calc((100% - 1.8rem) / 7);
+    min-width: 48px;
+  }
+  .calendar-picker .calendar-picker__open {
+    padding: 0.6rem;
+  }
+  .calendar-picker .calendar-picker__open > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+  }
+  .calendar-dialog .calendar-dialog__months {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .calendar-dialog .calendar-month {
+    padding: 0.5rem 0;
+  }
+}
+
+.player-shell .page-eyebrow {
+  color: var(--sand-muted);
+  font-weight: 500;
+}
+.player-shell .play-create-card h2 {
+  font-size: 1.6rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.player-shell .play-style-preview > span {
+  background: var(--sand-inset);
+  border-color: var(--sand-line);
+}
+
+/* Recording and replay use a quiet dark picture within the warm product shell. */
+.duna-video-gallery {
+  --video-lime: var(--sand-ink);
+  color: var(--sand-ink);
+  background: var(--sand-surface);
+  border-color: var(--sand-line);
+  border-radius: 24px;
+  box-shadow: none;
+  padding: clamp(20px, 3vw, 36px);
+}
+.duna-video-gallery::after {
+  display: none;
+}
+.duna-video-gallery__header h2 {
+  color: var(--sand-ink);
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.12;
+}
+.duna-video-gallery__header p,
+.duna-video-gallery__header .page-eyebrow,
+.duna-video-gallery__privacy {
+  color: var(--sand-muted);
+}
+.duna-video-gallery__stage {
+  background: #242521;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: none;
+}
+.duna-video-gallery__picture {
+  aspect-ratio: 16 / 9;
+  position: relative;
+  width: 100%;
+  background: #171815;
+}
+.duna-video-gallery__picture > video,
+.duna-video-gallery__picture > iframe,
+.duna-video-gallery__picture > mux-player {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+  --controls-backdrop-color: rgb(23 24 21 / 72%);
+}
+.duna-video-gallery__loading,
+.duna-video-gallery__failure {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+.duna-video-gallery__loading {
+  pointer-events: none;
+}
+.duna-video-gallery__loading .sand-loader,
+.duna-video-gallery__loading .sand-loader span {
+  color: #e8e3d9;
+}
+.duna-video-gallery__failure {
+  background: #242521;
+  color: #faf8f4;
+  padding: 16px;
+  z-index: 5;
+}
+.duna-video-gallery__failure p {
+  margin: 0;
+  color: #d9d4cb;
+}
+.duna-video-gallery__failure button {
+  background: #faf8f4;
+  color: #32332f;
+  border: 0;
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0 22px;
+  font: inherit;
+  cursor: pointer;
+}
+.duna-video-gallery__now-playing {
+  background: #242521;
+}
+.duna-video-gallery__now-playing > span {
+  background: rgb(250 248 244 / 8%);
+  color: #e8e3d9;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.duna-video-gallery__now-playing strong {
+  font-weight: 500;
+}
+.duna-video-gallery__now-playing small {
+  color: #d9d4cb;
+}
+.duna-video-gallery__options button {
+  background: var(--sand-canvas);
+  border-color: transparent;
+  border-radius: 18px;
+  padding: 12px;
+  min-height: 94px;
+}
+.duna-video-gallery__options button:hover:not(:disabled),
+.duna-video-gallery__options button.is-selected {
+  background: var(--sand-inset);
+  border-color: var(--sand-ink);
+  transform: none;
+}
+.duna-video-gallery__option-icon {
+  width: 80px;
+  height: 64px;
+  background: var(--sand-inset);
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+.duna-video-gallery__option-icon img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.duna-video-gallery__option-icon:has(img) svg {
+  color: white;
+  position: relative;
+  filter: drop-shadow(0 1px 3px #000);
+}
+.duna-video-gallery__options button strong {
+  color: var(--sand-ink);
+  font-weight: 500;
+}
+.duna-video-gallery__options button em,
+.duna-video-gallery__options button small,
+.duna-video-gallery__option-meta {
+  color: var(--sand-muted);
+}
+.duna-video-gallery__options button small {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.duna-video-gallery__message {
+  background: #f4e6de;
+  color: #7d3c29;
+  border-color: #d9b9a8;
+}
+.duna-video-gallery__picture .duna-video-score {
+  bottom: 54px;
+}
+.duna-video-gallery__picture .duna-video-health {
+  bottom: 54px;
+}
+
+/* A fieldset's min-content width must not size the entire form to its date rail. */
+.pickup-builder__main,
+.pickup-choice-section {
+  min-width: 0;
+}

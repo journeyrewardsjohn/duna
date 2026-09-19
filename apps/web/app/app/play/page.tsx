@@ -34,8 +34,7 @@ export default async function PlayPage() {
     <main className="standard-page play-page">
       <section className="page-heading-row play-page__heading">
         <div>
-          <span className="page-eyebrow">Your game, your people</span>
-          <h1>Make a plan to play.</h1>
+          <h1>Schedule</h1>
           <p>
             Book a court, open a match, or join a nearby run without the
             group-chat shuffle.

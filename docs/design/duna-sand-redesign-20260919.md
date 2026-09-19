@@ -85,3 +85,45 @@ No production deployment or mobile store release is claimed at this checkpoint.
 The screen inventory in `sand-screen-inventory.csv` tracks remaining work.
 Calendar/booking flows, video watching and recording, Pro, secondary screens,
 connected data validation, device QA, and production/store rollout remain open.
+
+## Calendar and video checkpoint — September 19
+
+- The shared light native palette, booking date picker, and Player calendar now
+  use the warm canvas and quiet circular date selection. Day, week, month, and
+  three-month views and device-calendar integration retain their existing flows.
+- The Player portal adds day/week agenda views and a month heading above the date
+  rail. Booking dates use each venue's timezone instead of a fixed Los Angeles
+  timezone. Three unit cases cover timezone boundaries and week boundaries.
+  The full calendar traps keyboard focus and restores it on close.
+- Pro now uses the sand light palette, compact labeled navigation with the Duna D,
+  safe-area spacing, and the particle loader. Its individual screens and dark/live
+  mode still require the remaining visual and connected workflow review.
+- The web gallery has a neutral photo-based recording selector and a dark viewing
+  surface. Loading, failed playback, and retry are explicit; retry refreshes the
+  authorized playback response. Superseded selection requests are cancelled.
+- Native playback subscriptions now follow the player instance, while reading
+  current callbacks from a ref. Previously a callback change during live score
+  refresh ran effect cleanup and paused the player. The extracted actual Expo
+  component passed a browser-renderer regression covering repeated parent
+  callback changes, progress, pause, seek, and resume. Reintroducing the old
+  dependency list in the review harness reproduced the pause. This is software
+  lifecycle evidence, not physical device playback proof.
+- The actual web gallery passed playback, selection, missing-source failure,
+  retry, and containment checks at 390, 1024, and 1440px with a local sample clip
+  and local playback responses. Private provider playback remains to be tested.
+- Full verification exposed a mobile pickup form whose fieldset expanded to the
+  date rail's intrinsic width. Both the form column and fieldset now allow
+  shrinking, and the hosting test asserts containment at that step.
+
+The first checkpoint's CI and web/HQ Vercel previews passed. This checkpoint is
+still a draft change: no production or native store release has occurred. Camera
+recording, native gestures, interruption recovery, Watch, provider-backed
+playback, the remaining screen inventory, and all final release proofs remain
+open. The review hub includes the working schedule, native calendar, and video.
+
+Checkpoint validation: the full `pnpm verify` release gate passed, including all
+111 browser checks. After the final native day-view simplification, Player lint,
+typecheck, and fresh iOS/Android exports passed. Pro iOS/Android exports also
+passed. Native calendar modes, HQ calendar, Player schedule, and the web gallery
+were visually reviewed with local data. The browser video regression and its
+failure reproduction live in the local review artifacts, outside the CI suite.

@@ -13,7 +13,7 @@ Player portal,/app/onboarding,apps/web/app/app/onboarding/page.tsx,pending,
 Player portal,/app,apps/web/app/app/page.tsx,first-review,
 Player portal,/app/pickup/[slug]/edit,apps/web/app/app/pickup/[slug]/edit/page.tsx,pending,
 Player portal,/app/pickup/new,apps/web/app/app/pickup/new/page.tsx,pending,
-Player portal,/app/play,apps/web/app/app/play/page.tsx,pending,
+Player portal,/app/play,apps/web/app/app/play/page.tsx,local-review,Day and week with fixtures; connected data pending
 Player portal,/app/profile,apps/web/app/app/profile/page.tsx,pending,
 Player portal,/app/score,apps/web/app/app/score/page.tsx,pending,
 Player portal,/app/settings,apps/web/app/app/settings/page.tsx,pending,
@@ -151,7 +151,7 @@ Player native,ShareModal,apps/player/health-screen.tsx,pending,Physical device v
 Player native,HomeV3Screen,apps/player/home-v3.tsx,pending,Physical device verification pending
 Player native,PlayerMessagingScreen,apps/player/messaging-screen.tsx,pending,Physical device verification pending
 Player native,OrganizationExperienceModal,apps/player/organization-experience.tsx,pending,Physical device verification pending
-Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,pending,Physical device verification pending
+Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,local-review,Browser renderer review; device calendar and physical gestures pending
 Player native,PlayerProfileSheet,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerProfileModal,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerPickerModal,apps/player/player-social.tsx,pending,Physical device verification pending
@@ -185,3 +185,5 @@ Pro native,MoneyScreen,apps/pro/money-screen.tsx,pending,Physical device verific
 Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,pending,Physical device verification pending
 Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,pending,Physical device verification pending
 Pro native,TicketScannerScreen,apps/pro/ticket-scanner.tsx,pending,Physical device verification pending
+Player native,StableVideoSurface,apps/player/video-player-surface.tsx,local-review,Expo browser playback lifecycle verified; physical device pending
+Player portal,DunaVideoGallery,apps/web/components/duna-video-gallery.tsx,local-review,Sample clip playback selection and retry verified; private provider playback pending

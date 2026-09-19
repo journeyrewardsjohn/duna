@@ -5,7 +5,7 @@ import Svg, { Circle } from "react-native-svg";
 import { SatoshiText as Text } from "./satoshi-text";
 
 export function SandLoader({
-  label = "Loading Duna",
+  label = "Loading Duna Pro",
   size = 150,
   tone = "default",
 }: {

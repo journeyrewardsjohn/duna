@@ -1,3 +1,4 @@
+import { sandColors } from "@duna/ui/sand";
 import { formatVenueTime } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
 import {
@@ -51,7 +52,11 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { GetPaidScreen } from "./get-paid";
 import { MoneyScreen } from "./money-screen";
 import { DunaAiScreen } from "./duna-ai-screen";
@@ -94,31 +99,33 @@ void SplashScreen.preventAutoHideAsync();
 const dunaProWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaProWordmarkWhite = require("./assets/duna-horizontal-white.png");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dunaProMark = require("./assets/duna-mark.png");
 
 const lightColors = {
-  canvas: "#eef4f8",
-  ink: "#173b65",
-  depth: "#ffffff",
-  navy: "#d8e8f2",
-  navyLift: "#f4f8fb",
-  bone: "#173b65",
-  muted: "#687b8e",
-  aqua: "#214b7a",
-  aquaDeep: "#173b65",
+  canvas: sandColors.canvas,
+  ink: sandColors.ink,
+  depth: sandColors.surface,
+  navy: sandColors.inset,
+  navyLift: sandColors.surface,
+  bone: sandColors.ink,
+  muted: sandColors.muted,
+  aqua: sandColors.ink,
+  aquaDeep: sandColors.ink,
   sand: "#d6a874",
   flare: "#f0a06d",
   positive: "#3c7a5b",
   warning: "#d9955f",
   danger: "#a64b43",
-  onAccent: "#ffffff",
-  overlayRgb: "23,59,101",
-  accentRgb: "33,75,122",
+  onAccent: sandColors.surface,
+  overlayRgb: sandColors.inkRgb,
+  accentRgb: sandColors.inkRgb,
   warningRgb: "217,149,95",
   positiveRgb: "60,122,91",
   dangerRgb: "166,75,67",
   flareRgb: "240,160,109",
-  inkRgb: "23,59,101",
-  depthRgb: "255,255,255",
+  inkRgb: sandColors.inkRgb,
+  depthRgb: sandColors.surfaceRgb,
 } as const;
 
 type Palette = {
@@ -4655,8 +4662,11 @@ function TabBar({
   readonly active: Tab;
   readonly onChange: (tab: NavDestination) => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.tabBar}>
+    <View
+      style={[styles.tabBar, { paddingBottom: Math.max(10, insets.bottom) }]}
+    >
       {tabs.map((tab) => (
         <Pressable
           accessibilityLabel={tab.label}
@@ -4675,7 +4685,7 @@ function TabBar({
                 accessibilityLabel="Duna AI"
                 accessibilityIgnoresInvertColors
                 resizeMode="contain"
-                source={dunaProWordmarkBlue}
+                source={dunaProMark}
                 style={styles.aiTabMarkImage}
               />
             </View>
@@ -4688,13 +4698,16 @@ function TabBar({
             >
               {tab.icon ? (
                 <tab.icon
-                  color={active === tab.key ? colors.warning : colors.muted}
-                  size={24}
-                  strokeWidth={active === tab.key ? 2.25 : 1.75}
+                  color={colors.bone}
+                  size={21}
+                  strokeWidth={active === tab.key ? 1.75 : 1.45}
                 />
               ) : null}
             </View>
           )}
+          <Text style={styles.tabLabel}>
+            {tab.key === "ai" ? "Duna" : tab.label}
+          </Text>
         </Pressable>
       ))}
     </View>
@@ -8031,59 +8044,37 @@ function createStyles(palette: Palette) {
       padding: 15,
     },
     tabBar: {
-      backgroundColor: rgba(colors.depthRgb, 0.99),
-      borderColor: rgba(colors.overlayRgb, 0.1),
-      borderRadius: 32,
-      borderWidth: 1,
-      bottom: Platform.OS === "ios" ? 14 : 10,
+      backgroundColor: colors.canvas,
+      borderTopColor: rgba(colors.overlayRgb, 0.15),
+      borderTopWidth: StyleSheet.hairlineWidth,
+      bottom: 0,
       flexDirection: "row",
-      left: 12,
-      minHeight: 62,
-      paddingBottom: 6,
-      paddingHorizontal: 8,
-      paddingTop: 6,
+      left: 0,
+      minHeight: 75,
+      paddingBottom: Platform.OS === "ios" ? 20 : 10,
+      paddingHorizontal: 10,
+      paddingTop: 5,
       position: "absolute",
-      right: 12,
-      shadowColor: "#173b65",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.12,
-      shadowRadius: 18,
+      right: 0,
     },
     tabItem: {
       alignItems: "center",
       flex: 1,
       justifyContent: "center",
-      minHeight: 50,
-      position: "relative",
+      minHeight: 55,
+      gap: 5,
     },
+    tabLabel: { color: colors.bone, fontSize: 12, lineHeight: 16 },
     tabIconShell: {
       alignItems: "center",
-      borderRadius: 22,
-      height: 44,
+      height: 24,
       justifyContent: "center",
-      width: 44,
+      width: 24,
     },
-    tabIconShellActive: {
-      backgroundColor: rgba(colors.warningRgb, 0.1),
-    },
-    aiTab: { marginTop: -15 },
-    aiTabMarkCrop: {
-      backgroundColor: colors.aqua,
-      borderColor: colors.depth,
-      borderRadius: 30,
-      borderWidth: 4,
-      height: 60,
-      overflow: "hidden",
-      position: "relative",
-      width: 60,
-    },
-    aiTabMarkImage: {
-      height: 60,
-      left: -3,
-      position: "absolute",
-      top: -2,
-      width: 137,
-    },
+    tabIconShellActive: { opacity: 1 },
+    aiTab: {},
+    aiTabMarkCrop: { height: 24, width: 24 },
+    aiTabMarkImage: { height: 24, width: 24 },
   });
 }
 

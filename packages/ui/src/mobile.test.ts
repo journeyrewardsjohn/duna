@@ -23,8 +23,8 @@ describe("Duna mobile design tokens", () => {
   });
 
   it("keeps product surfaces neutral and Duna accents role-based", () => {
-    expect(dunaAppColors.page).toBe("#FCFCFF");
-    expect(dunaAppColors.ink).toBe("#18181B");
+    expect(dunaAppColors.page).toBe("#F1EDE6");
+    expect(dunaAppColors.ink).toBe("#32332F");
     expect(dunaAppColors.navy).toBe("#142335");
     expect(dunaAppColors.blush).toBe("#FECFC0");
     expect(dunaAppShape.cardRadius).toBe(20);

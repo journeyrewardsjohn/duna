@@ -212,6 +212,7 @@ export function CalendarDatePicker({
   const railRef = useRef<HTMLDivElement>(null);
   const dateRefs = useRef(new Map<string, HTMLButtonElement>());
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const positionedRef = useRef(false);
   const titleId = useId();
@@ -245,6 +246,28 @@ export function CalendarDatePicker({
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setCalendarOpen(false);
+      if (event.key !== "Tab") return;
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), a[href], [tabindex='0']",
+      );
+      const first = controls?.[0];
+      const last = controls?.[controls.length - 1];
+      if (!first || !last) return;
+      if (
+        event.shiftKey &&
+        (document.activeElement === first ||
+          !dialogRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last ||
+          !dialogRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     window.requestAnimationFrame(() => closeRef.current?.focus());
@@ -289,7 +312,9 @@ export function CalendarDatePicker({
     const rail = railRef.current;
     if (!rail) return;
     rail.scrollBy({
-      behavior: "smooth",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
       left: direction * Math.max(240, rail.clientWidth * 0.72),
     });
     if (direction === 1) maybeExtendRail(rail);
@@ -297,6 +322,17 @@ export function CalendarDatePicker({
 
   return (
     <div className={`calendar-picker${className ? ` ${className}` : ""}`}>
+      <div className="calendar-picker__heading">
+        <h3>{monthLabel(value)}</h3>
+        <button
+          className="calendar-picker__open"
+          onClick={openCalendar}
+          type="button"
+        >
+          <CalendarDays aria-hidden size={18} />
+          <span>Full calendar</span>
+        </button>
+      </div>
       <div className="calendar-picker__rail-shell">
         <button
           aria-label="Show earlier dates"
@@ -351,14 +387,6 @@ export function CalendarDatePicker({
         >
           <ChevronRight aria-hidden size={19} />
         </button>
-        <button
-          className="calendar-picker__open"
-          onClick={openCalendar}
-          type="button"
-        >
-          <CalendarDays aria-hidden size={18} />
-          <span>Full calendar</span>
-        </button>
       </div>
 
       {calendarOpen ? (
@@ -372,6 +400,7 @@ export function CalendarDatePicker({
             aria-labelledby={titleId}
             aria-modal="true"
             className="calendar-dialog"
+            ref={dialogRef}
             role="dialog"
           >
             <header className="calendar-dialog__header">

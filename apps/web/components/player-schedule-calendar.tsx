@@ -10,20 +10,11 @@ import {
   CalendarDatePicker,
   type CalendarMarker,
 } from "./calendar-date-picker";
+import {
+  calendarInstantDay as instantIsoDay,
+  calendarWeekStart,
+} from "@/lib/calendar-time";
 import { isPlayerPlayableEvent } from "@/lib/player-pickups";
-
-function instantIsoDay(instant: string, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone,
-    year: "numeric",
-  }).formatToParts(new Date(instant));
-  const value = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-  return `${value.year}-${value.month}-${value.day}`;
-}
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -61,6 +52,7 @@ export function PlayerScheduleCalendar({
   readonly initialDate: string;
 }) {
   const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [view, setView] = useState<"day" | "week">("day");
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const playableEvents = useMemo(
     () => events.filter((event) => isPlayerPlayableEvent(event)),
@@ -69,7 +61,7 @@ export function PlayerScheduleCalendar({
   const markers = useMemo<readonly CalendarMarker[]>(
     () => [
       ...bookings.map((booking) => ({
-        date: instantIsoDay(booking.startsAt, "America/Los_Angeles"),
+        date: instantIsoDay(booking.startsAt, booking.venueTimezone ?? "UTC"),
         id: `booking-${booking.id}`,
         label: booking.title,
         tone: "booking" as const,
@@ -92,19 +84,12 @@ export function PlayerScheduleCalendar({
     ],
     [bookings, playableEvents],
   );
-  const selectedBookings = bookings.filter(
-    (booking) =>
-      instantIsoDay(booking.startsAt, "America/Los_Angeles") === selectedDate,
-  );
-  const selectedEvents = playableEvents.filter(
-    (event) =>
-      instantIsoDay(event.startsAt, event.timezone) === selectedDate &&
-      !selectedBookings.some(
-        (booking) =>
-          booking.title === event.title && booking.startsAt === event.startsAt,
-      ),
-  );
-  const planCount = selectedBookings.length + selectedEvents.length;
+  const visibleDates =
+    view === "week"
+      ? Array.from({ length: 7 }, (_, index) =>
+          addIsoDays(calendarWeekStart(selectedDate), index),
+        )
+      : [selectedDate];
 
   return (
     <>
@@ -128,79 +113,136 @@ export function PlayerScheduleCalendar({
         value={selectedDate}
       />
 
-      <div className="play-day">
-        <div className="play-day__header">
-          <div>
-            <strong>{relativeDateLabel(selectedDate, today)}</strong>
-            <span>{formatDate(selectedDate)}</span>
-          </div>
-          <span className="play-day__plan-count">
-            {planCount
-              ? `${planCount} ${planCount === 1 ? "plan" : "plans"}`
-              : "Open day"}
-          </span>
-        </div>
-
-        {planCount ? (
-          <div className="play-day__agenda">
-            {selectedBookings.map((booking) => (
-              <article className="play-day__booking" key={booking.id}>
-                <span className="play-day__time">
-                  <Numeric tier="table">
-                    {formatTime(booking.startsAt, "America/Los_Angeles")}
-                  </Numeric>
-                  <small>
-                    {formatTime(booking.endsAt, "America/Los_Angeles")}
-                  </small>
-                </span>
-                <span className="play-day__booking-copy">
-                  <Badge tone="positive">{booking.status}</Badge>
-                  <strong>{booking.title}</strong>
-                  <small>
-                    <MapPin aria-hidden size={13} /> {booking.venueName}
-                  </small>
-                </span>
-                <CalendarDays aria-hidden size={19} />
-              </article>
-            ))}
-            {selectedEvents.map((event) => (
-              <Link
-                className="play-day__booking play-day__booking--event"
-                href={`/events/${event.slug}`}
-                key={event.id}
-              >
-                <span className="play-day__time">
-                  <Numeric tier="table">
-                    {formatTime(event.startsAt, event.timezone)}
-                  </Numeric>
-                  <small>{formatTime(event.endsAt, event.timezone)}</small>
-                </span>
-                <span className="play-day__booking-copy">
-                  <Badge tone={event.live ? "live" : "neutral"}>
-                    {event.kind.replace("-", " ")}
-                  </Badge>
-                  <strong>{event.title}</strong>
-                  <small>
-                    <MapPin aria-hidden size={13} /> {event.venueName}
-                  </small>
-                </span>
-                <ArrowRight aria-hidden size={19} />
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="play-day__empty">
-            <span>
-              <Sparkles aria-hidden size={22} />
-            </span>
-            <div>
-              <strong>Your day is open.</strong>
-              <p>Reserve a court or host a match for nearby players.</p>
-            </div>
-            <Link href="/discover">See what’s available</Link>
-          </div>
-        )}
+      <div
+        className="sand-calendar-views"
+        role="group"
+        aria-label="Schedule view"
+      >
+        {(["day", "week"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={view === option}
+            onClick={() => setView(option)}
+          >
+            {option === "day" ? "Day" : "Week"}
+          </button>
+        ))}
+        <button type="button" onClick={() => setSelectedDate(today)}>
+          Today
+        </button>
       </div>
+      {visibleDates.map((date) => {
+        const selectedBookings = bookings.filter(
+          (booking) =>
+            instantIsoDay(booking.startsAt, booking.venueTimezone ?? "UTC") ===
+            date,
+        );
+        const selectedEvents = playableEvents.filter(
+          (event) =>
+            instantIsoDay(event.startsAt, event.timezone) === date &&
+            !selectedBookings.some(
+              (booking) =>
+                booking.title === event.title &&
+                booking.startsAt === event.startsAt,
+            ),
+        );
+        const planCount = selectedBookings.length + selectedEvents.length;
+
+        return (
+          <section
+            className="play-day"
+            key={date}
+            aria-label={formatDate(date)}
+          >
+            <div className="play-day__header">
+              <div>
+                <strong>{relativeDateLabel(date, today)}</strong>
+                <span>{formatDate(date)}</span>
+              </div>
+              <span className="play-day__plan-count">
+                {planCount
+                  ? `${planCount} ${planCount === 1 ? "plan" : "plans"}`
+                  : "Open day"}
+              </span>
+            </div>
+
+            {planCount ? (
+              <div className="play-day__agenda">
+                {selectedBookings.map((booking) => (
+                  <article className="play-day__booking" key={booking.id}>
+                    <span className="play-day__time">
+                      <Numeric tier="table">
+                        {formatTime(
+                          booking.startsAt,
+                          booking.venueTimezone ?? "UTC",
+                        )}
+                      </Numeric>
+                      <small>
+                        {formatTime(
+                          booking.endsAt,
+                          booking.venueTimezone ?? "UTC",
+                        )}
+                      </small>
+                    </span>
+                    <span className="play-day__booking-copy">
+                      <Badge
+                        tone={
+                          booking.status === "confirmed"
+                            ? "positive"
+                            : "warning"
+                        }
+                      >
+                        {booking.status.replaceAll("-", " ")}
+                      </Badge>
+                      <strong>{booking.title}</strong>
+                      <small>
+                        <MapPin aria-hidden size={13} /> {booking.venueName}
+                      </small>
+                    </span>
+                    <CalendarDays aria-hidden size={19} />
+                  </article>
+                ))}
+                {selectedEvents.map((event) => (
+                  <Link
+                    className="play-day__booking play-day__booking--event"
+                    href={`/events/${event.slug}`}
+                    key={event.id}
+                  >
+                    <span className="play-day__time">
+                      <Numeric tier="table">
+                        {formatTime(event.startsAt, event.timezone)}
+                      </Numeric>
+                      <small>{formatTime(event.endsAt, event.timezone)}</small>
+                    </span>
+                    <span className="play-day__booking-copy">
+                      <Badge tone={event.live ? "live" : "neutral"}>
+                        {event.kind.replace("-", " ")}
+                      </Badge>
+                      <strong>{event.title}</strong>
+                      <small>
+                        <MapPin aria-hidden size={13} /> {event.venueName}
+                      </small>
+                    </span>
+                    <ArrowRight aria-hidden size={19} />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="play-day__empty">
+                <span>
+                  <Sparkles aria-hidden size={22} />
+                </span>
+                <div>
+                  <strong>Your day is open.</strong>
+                  <p>Reserve a court or host a match for nearby players.</p>
+                </div>
+                <Link href="/discover">See what’s available</Link>
+              </div>
+            )}
+          </section>
+        );
+      })}
     </>
   );
 }

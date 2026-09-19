@@ -268,9 +268,9 @@ const mobileTokenSource = readFileSync(
   join(root, "packages/ui/src/mobile.ts"),
   "utf8",
 );
-if (!mobileTokenSource.includes('ground: whiteCanvas ? "#FFFFFF"')) {
+if (!mobileTokenSource.includes("ground: sandCanvas ? sandColors.canvas")) {
   violations.push(
-    "packages/ui/src/mobile.ts must preserve the true-white light mobile ground",
+    "packages/ui/src/mobile.ts must use the shared warm sand light mobile ground",
   );
 }
 

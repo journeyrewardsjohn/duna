@@ -15,7 +15,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { DunaIcon } from "./duna-icon";
-import { FellixText as Text } from "./satoshi-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   connectPlayerCalendar,
   readPlayerCalendarConnection,
@@ -182,6 +182,8 @@ function MiniMonth({
                 month: "long",
                 day: "numeric",
               })}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               key={date.toISOString()}
               onPress={() => onSelect(date)}
               style={[styles.monthDay, selected && styles.monthDaySelected]}
@@ -357,6 +359,7 @@ export function PlayerCalendarModal({
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Back from calendar"
             onPress={onClose}
             style={styles.close}
@@ -388,6 +391,8 @@ export function PlayerCalendarModal({
               ] as const
             ).map(([value, label]) => (
               <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === value }}
                 key={value}
                 onPress={() => setMode(value)}
                 style={[styles.mode, mode === value && styles.modeActive]}
@@ -405,24 +410,35 @@ export function PlayerCalendarModal({
           </ScrollView>
 
           <View style={styles.navigator}>
-            <Pressable onPress={() => shift(-1)} style={styles.navButton}>
-              <Text style={styles.navButtonText}>‹</Text>
+            <Pressable
+              accessibilityLabel="Previous period"
+              accessibilityRole="button"
+              onPress={() => shift(-1)}
+              style={styles.navButton}
+            >
+              <DunaIcon name="arrow-left" color={c.ink} size={20} />
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setFocus(startOfDay(new Date()))}
               style={styles.todayButton}
             >
               <Text style={styles.todayButtonText}>Today</Text>
             </Pressable>
-            <Pressable onPress={() => shift(1)} style={styles.navButton}>
-              <Text style={styles.navButtonText}>›</Text>
+            <Pressable
+              accessibilityLabel="Next period"
+              accessibilityRole="button"
+              onPress={() => shift(1)}
+              style={styles.navButton}
+            >
+              <DunaIcon name="arrow-right" color={c.ink} size={20} />
             </Pressable>
           </View>
 
           {!connected ? (
             <View style={styles.connection}>
               <View style={styles.connectionMark}>
-                <Text style={styles.connectionMarkText}>▦</Text>
+                <DunaIcon name="calendar" color={c.ink} size={22} />
               </View>
               <View style={styles.flex}>
                 <Text style={styles.connectionTitle}>
@@ -433,6 +449,7 @@ export function PlayerCalendarModal({
                 </Text>
               </View>
               <Pressable
+                accessibilityRole="button"
                 disabled={busy}
                 onPress={() => void connect()}
                 style={styles.connectionAction}
@@ -444,28 +461,13 @@ export function PlayerCalendarModal({
             </View>
           ) : (
             <View style={styles.connectedSummary}>
-              <Text style={styles.connectedSummaryMark}>✓</Text>
+              <DunaIcon name="check" color={c.positive} size={16} />
               <Text style={styles.connectedSummaryText}>
                 {calendarTitleText} · new plans sync automatically
               </Text>
             </View>
           )}
           {notice && <Text style={styles.notice}>{notice}</Text>}
-
-          {mode === "day" && (
-            <View style={styles.dayHero}>
-              <Text style={styles.dayHeroWeekday}>
-                {focus.toLocaleDateString("en-US", { weekday: "long" })}
-              </Text>
-              <Text style={styles.dayHeroNumber}>{focus.getDate()}</Text>
-              <Text style={styles.dayHeroMonth}>
-                {focus.toLocaleDateString("en-US", {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </Text>
-            </View>
-          )}
 
           {mode === "week" && (
             <View {...weekPanResponder.panHandlers} style={styles.week}>
@@ -479,14 +481,16 @@ export function PlayerCalendarModal({
                   ).length;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
                     key={date.toISOString()}
                     onPress={() => setFocus(date)}
-                    style={[styles.weekDay, selected && styles.weekDayActive]}
+                    style={styles.weekDay}
                   >
                     <Text
                       style={[
                         styles.weekDayLabel,
-                        selected && styles.weekDayTextActive,
+                        selected && styles.weekDayLabelActive,
                       ]}
                     >
                       {date
@@ -496,7 +500,7 @@ export function PlayerCalendarModal({
                     <Text
                       style={[
                         styles.weekDayNumber,
-                        selected && styles.weekDayTextActive,
+                        selected && styles.weekDayNumberActive,
                       ]}
                     >
                       {date.getDate()}
@@ -562,6 +566,7 @@ export function PlayerCalendarModal({
                   : item.event.location;
               return (
                 <Pressable
+                  accessibilityRole="button"
                   key={`${item.kind}:${id}`}
                   onPress={() => {
                     if (item.kind === "duna") {
@@ -744,29 +749,6 @@ const styles = StyleSheet.create({
     paddingTop: mobileGrid[4],
   },
   dayDots: { flexDirection: "row", gap: 2, marginTop: 2 },
-  dayHero: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
-    marginTop: mobileGrid[4],
-    padding: mobileGrid[4],
-  },
-  dayHeroMonth: { color: c.textSecondary, fontSize: 15 },
-  dayHeroNumber: {
-    color: c.ink,
-    fontSize: 60,
-    fontWeight: "800",
-    lineHeight: 68,
-  },
-  dayHeroWeekday: {
-    color: c.navy,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
   deviceDetail: {
     backgroundColor: c.subtle,
     borderRadius: 12,
@@ -819,7 +801,7 @@ const styles = StyleSheet.create({
     minHeight: mobileGrid[10],
     paddingHorizontal: mobileGrid[4],
   },
-  modeActive: { backgroundColor: c.ink },
+  modeActive: { backgroundColor: c.card },
   modeRail: {
     backgroundColor: c.subtle,
     borderRadius: dunaAppShape.cardRadius,
@@ -827,27 +809,27 @@ const styles = StyleSheet.create({
     padding: mobileGrid[1],
   },
   modeText: { color: c.textSecondary, fontSize: 14, fontWeight: "600" },
-  modeTextActive: { color: c.card },
+  modeTextActive: { color: c.ink },
   month: {
-    backgroundColor: c.card,
+    backgroundColor: c.page,
     borderColor: c.hairline,
     borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
+    borderWidth: 0,
     marginTop: mobileGrid[4],
-    padding: mobileGrid[3],
+    padding: mobileGrid[1],
   },
   monthDay: {
     alignItems: "center",
-    height: 43,
+    height: 50,
     justifyContent: "center",
     width: "14.285%",
   },
   monthDayMuted: { color: c.textFaint },
-  monthDaySelected: { backgroundColor: c.navy, borderRadius: 13 },
+  monthDaySelected: { backgroundColor: c.ink, borderRadius: 25 },
   monthDayText: { color: c.ink, fontSize: 13, fontWeight: "600" },
   monthDayTextSelected: { color: c.card },
   monthGrid: { flexDirection: "row", flexWrap: "wrap" },
-  monthTitle: { color: c.ink, fontSize: 18, fontWeight: "700" },
+  monthTitle: { color: c.ink, fontSize: 23, fontWeight: "400", padding: 10 },
   navButton: {
     alignItems: "center",
     backgroundColor: c.card,
@@ -875,7 +857,7 @@ const styles = StyleSheet.create({
   quarter: { gap: 2 },
   rangeHeader: { gap: mobileGrid[1] },
   safe: { backgroundColor: c.page, flex: 1 },
-  title: { color: c.ink, fontSize: 30, fontWeight: "700", lineHeight: 35 },
+  title: { color: c.ink, fontSize: 30, fontWeight: "400", lineHeight: 38 },
   todayButton: {
     alignItems: "center",
     borderColor: c.navy,
@@ -887,14 +869,14 @@ const styles = StyleSheet.create({
   },
   todayButtonText: { color: c.navy, fontSize: 14, fontWeight: "700" },
   week: {
-    backgroundColor: c.card,
+    backgroundColor: c.page,
     borderColor: c.hairline,
     borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
+    borderWidth: 0,
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: mobileGrid[4],
-    padding: mobileGrid[2],
+    padding: 0,
   },
   weekDay: {
     alignItems: "center",
@@ -903,7 +885,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     width: "13.5%",
   },
-  weekDayActive: { backgroundColor: c.navy },
+  weekDayLabelActive: { color: c.ink },
+  weekDayNumberActive: {
+    backgroundColor: c.ink,
+    color: c.card,
+    overflow: "hidden",
+  },
   weekDayDot: {
     backgroundColor: c.navy,
     borderRadius: 3,
@@ -915,11 +902,16 @@ const styles = StyleSheet.create({
   weekDayLabel: { color: c.textSecondary, fontSize: 12, fontWeight: "600" },
   weekDayNumber: {
     color: c.ink,
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 4,
+    fontSize: 19,
+    fontWeight: "400",
+    marginTop: 8,
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    lineHeight: 40,
+    textAlign: "center",
   },
-  weekDayTextActive: { color: c.card },
+
   weekdayLabel: {
     color: c.textTertiary,
     fontSize: 12,

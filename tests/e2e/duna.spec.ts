@@ -797,6 +797,7 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
 
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Where")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Who can see it")).toBeVisible();
   await expect(page.getByText("Add players now")).toBeVisible();
@@ -816,7 +817,7 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
 
 test("player planning keeps selection in place and extends its date rail", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/app/play");
   await expect(
     page.getByRole("heading", { name: "When do you want to play?" }),
@@ -854,6 +855,17 @@ test("player planning keeps selection in place and extends its date rail", async
     .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
     .toBe(scrollPosition);
 
+  const views = page.getByRole("group", { name: "Schedule view" });
+  await views.getByRole("button", { name: "Week", exact: true }).click();
+  await expect(page.locator(".play-day")).toHaveCount(7);
+  await expect(nextPill).toHaveAttribute("aria-current", "date");
+  await expectNoHorizontalOverflow(page);
+  await views.getByRole("button", { name: "Day", exact: true }).click();
+  await expect(page.locator(".play-day")).toHaveCount(1);
+  await page.screenshot({
+    path: testInfo.outputPath("sand-schedule.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const initialPillCount = await pills.count();
   expect(initialPillCount).toBeGreaterThanOrEqual(91);
   await rail.evaluate((element) => {
@@ -872,7 +884,21 @@ test("player planning keeps selection in place and extends its date rail", async
   await expect(
     calendar.getByText("Events to explore", { exact: true }),
   ).toBeVisible();
-  await calendar.getByRole("button", { name: "Close full calendar" }).click();
+  const closeCalendar = calendar.getByRole("button", {
+    name: "Close full calendar",
+  });
+  await closeCalendar.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect
+    .poll(() =>
+      calendar.evaluate((node) => node.contains(document.activeElement)),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("sand-calendar-months.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  await closeCalendar.click();
   await expect(calendar).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
