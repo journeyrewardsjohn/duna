@@ -127,3 +127,44 @@ typecheck, and fresh iOS/Android exports passed. Pro iOS/Android exports also
 passed. Native calendar modes, HQ calendar, Player schedule, and the web gallery
 were visually reviewed with local data. The browser video regression and its
 failure reproduction live in the local review artifacts, outside the CI suite.
+
+## Pro startup and workspace checkpoint — September 19
+
+- Removed Pro’s mandatory ten-second launch film. Both native app configurations
+  now open with the Duna mark on sand; the particle loader follows actual work.
+  The splash configuration requires new native binaries.
+- Pro Today, Calendar, and More use lighter type, neutral actions, larger control
+  targets, and small consistent line icons. The duplicate New calendar action
+  was removed while Add session keeps the same handler. Today was reviewed in
+  both light and dark appearance through the actual browser-rendered component.
+- Discovery and match date rails now share the warm surfaces. Map loading uses
+  the particle loader, and unavailable maps direct people to the results list.
+  Cards retain real supplied images; missing images no longer get blue gradients.
+- HQ finance, settings, offer creation, and the AI launcher use the neutral
+  presentation. Tenant brand previews retain their configured identity.
+- The Theme Kit heading incorrectly occupied the back button’s 44px grid column.
+  Correcting its markup restored the content column. Three responsive checks
+  cover the heading and setup-card text contrast.
+- Admin support and message-safety pages now recognize the server’s FORBIDDEN
+  code instead of matching one error sentence. Unauthorized users get the
+  existing access-required screen; service failures still propagate. Two unit
+  cases verify this distinction.
+- A cold-start browser test caught a menu accepting a tap before hydration.
+  Delaying JavaScript reproduced the lost first tap. The trigger now stays
+  disabled until its handler is ready; a deterministic delayed-script test and
+  the existing menu checks pass at all three viewport profiles.
+
+The read-only route crawl captured 75 local Player/HQ routes at desktop and phone
+widths. The screenshots are audit material, not proof of connected production
+workflows or a claim that all screens are complete. Pro’s creation, collection,
+notes, and balance screens still have independent color rules to migrate.
+The local video and promo-code pages require a database. Privileged admin
+content, physical camera/Watch behavior, and store/production rollout remain open.
+Xcode reports its version, but its device and simulator commands still reject the
+unaccepted license; version output does not establish native testing readiness.
+
+Checkpoint validation: the complete `pnpm verify` gate passed with 117 browser
+checks, including the delayed-hydration menu regression and responsive HQ setup
+checks. Fresh Pro iOS and Android exports passed. The corrected HQ settings,
+Theme Kit, money, and offer-builder views were reviewed at 390px and 1440px.
+These checks do not establish native hardware or connected provider behavior.

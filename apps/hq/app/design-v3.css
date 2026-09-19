@@ -3276,11 +3276,11 @@ body[data-zone="operator"] .hq-page-heading.settings-page__heading h1 {
 }
 
 body[data-zone="operator"] .settings-readiness h2 {
-  color: #fff;
+  color: var(--hq-ink);
 }
 
 body[data-zone="operator"] .settings-readiness :is(p, .hq-eyebrow) {
-  color: rgb(255 255 255 / 74%);
+  color: var(--hq-muted);
 }
 
 body[data-zone="operator"]
@@ -10605,11 +10605,11 @@ body[data-zone="operator"]
 }
 
 body[data-zone="operator"] .settings-readiness h2 {
-  color: #fff;
+  color: var(--hq-ink);
 }
 
 body[data-zone="operator"] .settings-readiness :is(p, .hq-eyebrow) {
-  color: rgb(255 255 255 / 74%);
+  color: var(--hq-muted);
 }
 
 body[data-zone="operator"]

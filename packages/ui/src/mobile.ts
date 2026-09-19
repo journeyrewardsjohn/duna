@@ -87,10 +87,6 @@ export const dunaAppShape = {
   pillRadius: 999,
 } as const;
 
-/** The supplied launch film is 10.042 seconds; this guard leaves its final
- * frame visible instead of cutting the animation off on a timer boundary. */
-export const dunaLaunchFilmMinimumMs = 10_100;
-
 export function resolveDunaMobileTokens(
   theme: DunaTheme,
   zone: DunaZone = "editorial",

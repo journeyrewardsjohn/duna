@@ -23,10 +23,14 @@ export default async function ThemeKitPage() {
     >
       <main className="hq-page operator-create-page theme-kit-page">
         <header className="hq-page-heading operator-create-page__heading">
-          <div>
-            <Link href="/settings?section=brand">
-              <ArrowLeft aria-hidden size={16} /> Back to settings
-            </Link>
+          <Link
+            aria-label="Back to settings"
+            className="operator-create-page__back"
+            href="/settings?section=brand"
+          >
+            <ArrowLeft aria-hidden size={18} />
+          </Link>
+          <div className="operator-create-page__copy">
             <span className="hq-eyebrow">Brand & storefront</span>
             <h1>Theme Kit</h1>
             <p>

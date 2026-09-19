@@ -1,3 +1,4 @@
+import { isAdminAccessDenied } from "@/lib/admin-access";
 import {
   Bot,
   CircleUserRound,
@@ -25,10 +26,7 @@ export default async function DunaSupportPage({
   const queue = await caller.messaging
     .supportQueue()
     .catch((error: unknown) => {
-      if (
-        error instanceof Error &&
-        error.message === "Platform administration access required"
-      ) {
+      if (isAdminAccessDenied(error)) {
         return undefined;
       }
       throw error;

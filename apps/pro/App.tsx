@@ -20,7 +20,23 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import {
   CalendarDays,
+  ChartNoAxesCombined,
   ChevronDown,
+  ChevronRight,
+  CreditCard,
+  FileCheck,
+  MapPin,
+  MessageCircle,
+  Package,
+  Plug,
+  ShieldCheck,
+  Ticket,
+  Trash2,
+  Trophy,
+  Users,
+  UserRound,
+  Video,
+  Wallet,
   Ellipsis,
   House,
   Moon,
@@ -83,15 +99,13 @@ import {
   type OperatorMatches,
   type ProRuntime,
 } from "./runtime";
-import { ProLaunchExperience } from "./launch-experience";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
   useSatoshiFonts,
 } from "./satoshi-text";
 
-// Keep the native poster in place until the first React frame contains the
-// bundled launch film. This prevents a white bridge frame on cold starts.
+// Keep the quiet native splash visible until Satoshi and the first frame are ready.
 void SplashScreen.preventAutoHideAsync();
 
 // Metro requires static module references so the full Duna mark ships natively.
@@ -1804,15 +1818,9 @@ function CalendarScreen({
         showsVerticalScrollIndicator={false}
       >
         <Header />
-        <PageTitle
-          action="New"
-          eyebrow="THE OPERATING HUB"
-          onAction={onCreate}
-          title="Court schedule."
-        />
+        <PageTitle eyebrow="SCHEDULE" title="Court schedule." />
         <Text style={styles.calendarIntro}>
-          Sessions, clinics, events, court time, coaches, players, equipment,
-          and changes in one live schedule.
+          Your club’s sessions, courts, and people in one place.
         </Text>
 
         <View style={styles.calendarToolbar}>
@@ -4318,6 +4326,26 @@ function ScorerScreen({
   );
 }
 
+const operationsIcons: Readonly<Record<string, LucideIcon>> = {
+  Calendar: CalendarDays,
+  "Products + services": Package,
+  "Events + leagues": Trophy,
+  "Coach video": Video,
+  Messages: MessageCircle,
+  Reports: ChartNoAxesCombined,
+  "Money + tax": Wallet,
+  "Memberships + credits": Ticket,
+  "Retail + inventory": Package,
+  "Coach payroll support": Users,
+  "Venues + courts": MapPin,
+  "Team + roles": Users,
+  "Policies + waivers": FileCheck,
+  Integrations: Plug,
+  "Billing + plan": CreditCard,
+  "Account + privacy": ShieldCheck,
+  "Delete my account": Trash2,
+};
+
 function MoreScreen({
   onCalendar,
   onCreate,
@@ -4544,27 +4572,33 @@ function MoreScreen({
           <View key={section[0]}>
             <Text style={styles.menuEyebrow}>{section[0]}</Text>
             <View style={styles.menuCard}>
-              {section[1].map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => {
-                    if (item === "Calendar") {
-                      onCalendar();
-                      return;
-                    }
-                    if (item === "Messages") {
-                      onMessages();
-                      return;
-                    }
-                    setSelectedMenu(item);
-                  }}
-                  style={styles.menuRow}
-                >
-                  <Text style={styles.menuIcon}>{item.charAt(0)}</Text>
-                  <Text style={styles.rowTitle}>{item}</Text>
-                  <Text style={styles.chevron}>›</Text>
-                </Pressable>
-              ))}
+              {section[1].map((item) => {
+                const Icon = operationsIcons[item] ?? UserRound;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={item}
+                    onPress={() => {
+                      if (item === "Calendar") {
+                        onCalendar();
+                        return;
+                      }
+                      if (item === "Messages") {
+                        onMessages();
+                        return;
+                      }
+                      setSelectedMenu(item);
+                    }}
+                    style={styles.menuRow}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Icon color={colors.bone} size={20} strokeWidth={1.6} />
+                    </View>
+                    <Text style={styles.menuLabel}>{item}</Text>
+                    <ChevronRight color={colors.muted} size={16} />
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         ))}
@@ -5143,22 +5177,19 @@ function ProApp() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useSatoshiFonts();
-  const [showLaunchExperience, setShowLaunchExperience] = useState(true);
 
   if (fontError) throw fontError;
   if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
-      <View onLayout={() => void SplashScreen.hideAsync()} style={{ flex: 1 }}>
+      <View
+        onLayout={() => void SplashScreen.hideAsync()}
+        style={{ flex: 1, backgroundColor: sandColors.canvas }}
+      >
         <ProRuntimeProvider>
           <ProApp />
         </ProRuntimeProvider>
-        {showLaunchExperience && (
-          <ProLaunchExperience
-            onComplete={() => setShowLaunchExperience(false)}
-          />
-        )}
       </View>
     </SafeAreaProvider>
   );
@@ -5247,8 +5278,8 @@ function createStyles(palette: Palette) {
     venueMatchesTitle: {
       color: colors.bone,
       fontSize: 24,
-      fontWeight: "900",
-      letterSpacing: -0.9,
+      fontWeight: "700",
+      letterSpacing: -0.3,
       marginTop: 4,
     },
     venueMatchesList: { gap: 9 },
@@ -5414,8 +5445,8 @@ function createStyles(palette: Palette) {
     },
     visionCoachBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 5,
     },
     visionCoachAction: {
@@ -5439,20 +5470,20 @@ function createStyles(palette: Palette) {
       fontWeight: "700",
     },
     nowCard: {
-      backgroundColor: colors.aquaDeep,
+      backgroundColor: colors.depth,
       borderRadius: 24,
       marginTop: 18,
       overflow: "hidden",
       padding: 18,
     },
     nowCardLive: {
-      backgroundColor: colors.aquaDeep,
+      backgroundColor: colors.depth,
       borderColor: rgba(colors.flareRgb, 0.5),
       borderWidth: 1,
     },
     nowCardNotes: {
-      backgroundColor: colors.aquaDeep,
-      borderColor: rgba(colors.warningRgb, 0.42),
+      backgroundColor: colors.depth,
+      borderColor: rgba(colors.overlayRgb, 0.08),
       borderWidth: 1,
     },
     nowCardTopline: {
@@ -5461,29 +5492,29 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
     },
     nowCardEyebrow: {
-      color: colors.warning,
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 1.2,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
     nowCardWeather: {
-      color: rgba("255,255,255", 0.68),
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "700",
     },
     nowCardTitle: {
-      color: colors.onAccent,
-      fontSize: 28,
-      fontWeight: "900",
-      letterSpacing: -1.2,
+      color: colors.bone,
+      fontSize: 25,
+      fontWeight: "500",
+      letterSpacing: -0.5,
       lineHeight: 31,
-      marginTop: 20,
+      marginTop: 14,
       maxWidth: 540,
     },
     nowCardBody: {
-      color: rgba("255,255,255", 0.7),
-      fontSize: 12,
-      lineHeight: 19,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 9,
       maxWidth: 560,
     },
@@ -5494,44 +5525,44 @@ function createStyles(palette: Palette) {
     },
     nowCardPrimary: {
       alignItems: "center",
-      backgroundColor: colors.onAccent,
+      backgroundColor: colors.aqua,
       borderRadius: 15,
       flex: 1.25,
       flexDirection: "row",
       gap: 7,
       justifyContent: "center",
-      minHeight: 50,
+      minHeight: 56,
       paddingHorizontal: 12,
     },
     nowCardPrimaryIcon: {
-      color: colors.aquaDeep,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.onAccent,
+      fontSize: 14,
+      fontWeight: "500",
     },
     nowCardPrimaryText: {
-      color: colors.aquaDeep,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.onAccent,
+      fontSize: 14,
+      fontWeight: "500",
     },
     nowCardSecondary: {
       alignItems: "center",
-      borderColor: rgba("255,255,255", 0.24),
+      borderColor: rgba(colors.overlayRgb, 0.16),
       borderRadius: 15,
       borderWidth: 1,
       flex: 0.75,
       justifyContent: "center",
-      minHeight: 50,
+      minHeight: 56,
       paddingHorizontal: 10,
     },
     nowCardSecondaryText: {
-      color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.bone,
+      fontSize: 14,
+      fontWeight: "500",
     },
     nowCardTrust: {
-      color: rgba("255,255,255", 0.5),
+      color: colors.muted,
       fontSize: 12,
-      lineHeight: 12,
+      lineHeight: 17,
       marginTop: 11,
     },
     todayJobs: {
@@ -5841,8 +5872,8 @@ function createStyles(palette: Palette) {
     calendarContent: { paddingBottom: 138, paddingHorizontal: 18 },
     calendarIntro: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 8,
       maxWidth: 520,
     },
@@ -5860,39 +5891,39 @@ function createStyles(palette: Palette) {
       borderRadius: 14,
       borderWidth: 1,
       justifyContent: "center",
-      minHeight: 42,
+      minHeight: 50,
       paddingHorizontal: 13,
     },
     calendarBlockButtonText: {
       color: colors.bone,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarNewButton: {
       alignItems: "center",
-      backgroundColor: colors.warning,
+      backgroundColor: colors.aqua,
       borderRadius: 14,
       justifyContent: "center",
-      minHeight: 42,
+      minHeight: 50,
       paddingHorizontal: 13,
     },
     calendarNewButtonText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarScanButton: {
       alignItems: "center",
       backgroundColor: colors.aqua,
       borderRadius: 14,
       justifyContent: "center",
-      minHeight: 42,
+      minHeight: 50,
       paddingHorizontal: 13,
     },
     calendarScanButtonText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarTimezone: {
       color: colors.muted,
@@ -5925,21 +5956,21 @@ function createStyles(palette: Palette) {
       fontWeight: "900",
     },
     calendarConnectionEyebrow: {
-      color: colors.warning,
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 0.9,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
     calendarConnectionTitle: {
       color: colors.bone,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 16,
+      fontWeight: "700",
       marginTop: 3,
     },
     calendarConnectionBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 14,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 3,
     },
     calendarConnectionNotice: {
@@ -5960,8 +5991,8 @@ function createStyles(palette: Palette) {
     },
     calendarConnectionButtonText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarDayBleed: {
       marginHorizontal: -18,
@@ -5975,19 +6006,19 @@ function createStyles(palette: Palette) {
     },
     calendarDayButton: {
       alignItems: "center",
-      backgroundColor: colors.depth,
+      backgroundColor: "transparent",
       borderColor: rgba(colors.overlayRgb, 0.08),
-      borderRadius: 17,
-      borderWidth: 1,
+      borderRadius: 28,
+      borderWidth: 0,
       justifyContent: "center",
-      minHeight: 88,
+      minHeight: 80,
       paddingHorizontal: 13,
       paddingVertical: 10,
-      width: 68,
+      width: 58,
     },
     calendarDayButtonActive: {
-      backgroundColor: colors.warning,
-      borderColor: colors.warning,
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
     },
     calendarDayWeekday: {
       color: colors.muted,
@@ -5999,7 +6030,7 @@ function createStyles(palette: Palette) {
       color: colors.bone,
       fontFamily: "Archivo-Block",
       fontSize: 22,
-      fontWeight: "900",
+      fontWeight: "500",
       lineHeight: 27,
       marginTop: 2,
     },
@@ -6021,6 +6052,8 @@ function createStyles(palette: Palette) {
       borderWidth: 1,
       paddingHorizontal: 12,
       paddingVertical: 9,
+      minHeight: 48,
+      justifyContent: "center",
     },
     calendarFilterActive: {
       backgroundColor: rgba(colors.accentRgb, 0.12),
@@ -6028,8 +6061,8 @@ function createStyles(palette: Palette) {
     },
     calendarFilterText: {
       color: colors.muted,
-      fontSize: 12,
-      fontWeight: "700",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarFilterTextActive: { color: colors.aqua },
     calendarPersonalHeading: {
@@ -6042,8 +6075,8 @@ function createStyles(palette: Palette) {
     calendarPersonalTitle: {
       color: colors.bone,
       fontSize: 18,
-      fontWeight: "900",
-      letterSpacing: -0.5,
+      fontWeight: "700",
+      letterSpacing: -0.3,
       marginTop: 3,
     },
     calendarPersonalAgenda: { gap: 8 },
@@ -6110,8 +6143,8 @@ function createStyles(palette: Palette) {
     calendarAgendaTitle: {
       color: colors.bone,
       fontSize: 22,
-      fontWeight: "900",
-      letterSpacing: -0.7,
+      fontWeight: "700",
+      letterSpacing: -0.3,
       marginTop: 4,
     },
     calendarAgenda: { gap: 9 },
@@ -6133,8 +6166,8 @@ function createStyles(palette: Palette) {
     },
     calendarEmptyBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 6,
       maxWidth: 310,
       textAlign: "center",
@@ -6151,26 +6184,26 @@ function createStyles(palette: Palette) {
       borderRadius: 14,
       borderWidth: 1,
       flex: 1,
-      minHeight: 44,
+      minHeight: 50,
       justifyContent: "center",
     },
     calendarEmptySecondaryText: {
       color: colors.bone,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarEmptyPrimary: {
       alignItems: "center",
-      backgroundColor: colors.warning,
+      backgroundColor: colors.aqua,
       borderRadius: 14,
       flex: 1,
-      minHeight: 44,
+      minHeight: 50,
       justifyContent: "center",
     },
     calendarEmptyPrimaryText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     calendarAgendaCard: {
       alignItems: "stretch",
@@ -6214,10 +6247,10 @@ function createStyles(palette: Palette) {
       justifyContent: "space-between",
     },
     calendarAgendaKind: {
-      color: colors.warning,
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 0.8,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
     calendarAgendaWeather: {
       color: colors.aqua,
@@ -6965,8 +6998,8 @@ function createStyles(palette: Palette) {
     organizationSheetContent: { padding: 18, paddingBottom: 48 },
     organizationSheetLead: {
       color: colors.muted,
-      fontSize: 13,
-      lineHeight: 20,
+      fontSize: 15,
+      lineHeight: 22,
       marginBottom: 16,
     },
     organizationSheetList: {
@@ -7043,34 +7076,36 @@ function createStyles(palette: Palette) {
       gap: 12,
     },
     eyebrow: {
-      color: colors.warning,
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
-      letterSpacing: 1.1,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
     displayTitle: {
       color: colors.bone,
-      fontSize: 40,
-      fontWeight: "900",
-      letterSpacing: -2.1,
-      lineHeight: 42,
+      fontSize: 36,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 43,
       marginTop: 6,
     },
     displayTitleCompact: {
-      fontSize: 36,
-      letterSpacing: -1.8,
-      lineHeight: 38,
+      fontSize: 32,
+      letterSpacing: -0.6,
+      lineHeight: 39,
     },
     primaryAction: {
-      backgroundColor: colors.warning,
+      backgroundColor: colors.aqua,
       borderRadius: 21,
       paddingHorizontal: 13,
       paddingVertical: 10,
+      minHeight: 50,
+      justifyContent: "center",
     },
     primaryActionText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     subhead: { color: colors.muted, fontSize: 12, marginTop: 8 },
     subheadStrong: { color: colors.bone, fontWeight: "700" },
@@ -7209,8 +7244,8 @@ function createStyles(palette: Palette) {
     sectionHeading: {
       color: colors.bone,
       fontSize: 23,
-      fontWeight: "900",
-      letterSpacing: -1,
+      fontWeight: "700",
+      letterSpacing: -0.3,
       marginTop: 4,
     },
     linkText: { color: colors.warning, fontSize: 12, fontWeight: "700" },
@@ -7954,9 +7989,9 @@ function createStyles(palette: Palette) {
     orgAvatarText: { color: colors.onAccent, fontSize: 12, fontWeight: "900" },
     orgName: { color: colors.bone, fontSize: 12, fontWeight: "800" },
     menuEyebrow: {
-      color: colors.warning,
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1,
       marginBottom: 7,
       marginTop: 22,
@@ -7979,16 +8014,11 @@ function createStyles(palette: Palette) {
     },
     menuIcon: {
       alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.08),
-      borderRadius: 8,
-      color: colors.warning,
-      fontSize: 12,
-      fontWeight: "900",
+      justifyContent: "center",
       height: 30,
-      lineHeight: 30,
-      textAlign: "center",
       width: 30,
     },
+    menuLabel: { color: colors.bone, fontSize: 15, fontWeight: "500", flex: 1 },
     moreDetailContent: { padding: 18, paddingBottom: 42 },
     moreDetailLead: {
       color: colors.muted,

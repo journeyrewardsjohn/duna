@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   dunaAppColors,
   dunaAppShape,
-  dunaLaunchFilmMinimumMs,
   mobileControl,
   mobileGrid,
   resolveDunaMobileTokens,
@@ -16,10 +15,6 @@ describe("Duna mobile design tokens", () => {
     }
     expect(mobileControl.minimumTarget).toBeGreaterThanOrEqual(48);
     expect(mobileControl.primaryTarget).toBeGreaterThanOrEqual(56);
-  });
-
-  it("keeps the full bundled launch film on screen", () => {
-    expect(dunaLaunchFilmMinimumMs).toBeGreaterThanOrEqual(10_042);
   });
 
   it("keeps product surfaces neutral and Duna accents role-based", () => {

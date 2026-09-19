@@ -121,6 +121,9 @@ function SiteMobileMenuView({
   readonly user?: NavigationUser;
 }) {
   const [open, setOpen] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+
+  useEffect(() => setInteractive(true), []);
   const [quickActions, setQuickActions] = useState<
     readonly SiteNavigationQuickAction[]
   >([]);
@@ -199,6 +202,7 @@ function SiteMobileMenuView({
         aria-expanded={open}
         aria-label="Open navigation menu"
         className="site-header__menu"
+        disabled={!interactive}
         onClick={() => setOpen(true)}
         ref={triggerRef}
         type="button"

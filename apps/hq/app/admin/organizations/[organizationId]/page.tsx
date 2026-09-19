@@ -1,3 +1,4 @@
+import { isAdminAccessDenied } from "@/lib/admin-access";
 import { notFound } from "next/navigation";
 import { AdminAccessDenied } from "@/components/admin-access-denied";
 import { AdminOrganizationDetailView } from "@/components/admin-panels";
@@ -14,10 +15,7 @@ export default async function AdminOrganizationPage({
   const detail = await caller.admin
     .organization({ organizationId })
     .catch((error: unknown) => {
-      if (
-        error instanceof Error &&
-        error.message === "Platform administration access required"
-      ) {
+      if (isAdminAccessDenied(error)) {
         return "access-denied" as const;
       }
       throw error;

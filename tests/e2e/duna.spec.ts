@@ -1351,3 +1351,76 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
+
+test("HQ setup keeps readable contrast and a usable Theme Kit heading", async ({
+  page,
+}) => {
+  await page.goto(`${hqBaseUrl}/settings`);
+  const readiness = page.locator(".settings-readiness");
+  await expect(readiness.getByRole("heading")).toBeVisible();
+  const contrast = await readiness.evaluate((card) => {
+    const channels = (color: string) =>
+      (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = (color: string) =>
+      channels(color)
+        .map((channel) => {
+          const value = channel / 255;
+          return value <= 0.04045
+            ? value / 12.92
+            : ((value + 0.055) / 1.055) ** 2.4;
+        })
+        .reduce(
+          (sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!,
+          0,
+        );
+    const background = luminance(getComputedStyle(card).backgroundColor);
+    return Array.from(card.querySelectorAll("h2, p")).map((element) => {
+      const foreground = luminance(getComputedStyle(element).color);
+      return (
+        (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05)
+      );
+    });
+  });
+  expect(contrast.length).toBeGreaterThan(0);
+  for (const ratio of contrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
+  await readiness.getByRole("link", { name: "Open Theme Kit" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Theme Kit", exact: true }),
+  ).toBeVisible();
+  const headingCopy = await getBox(page.locator(".operator-create-page__copy"));
+  expect(headingCopy.width).toBeGreaterThan(220);
+  await expect(
+    page.getByRole("link", { name: "Back to settings" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("mobile menu waits for its handler before accepting a tap", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let releaseScripts: () => void = () => {};
+  const scriptsReady = new Promise<void>((resolve) => {
+    releaseScripts = resolve;
+  });
+  await page.route("**/_next/static/**/*.js", async (route) => {
+    await scriptsReady;
+    await route.continue();
+  });
+  try {
+    await page.goto("/", { waitUntil: "commit" });
+    const trigger = page.getByRole("button", { name: "Open navigation menu" });
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toBeDisabled();
+    releaseScripts();
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "Where do you want to go?" }),
+    ).toBeVisible();
+  } finally {
+    releaseScripts();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});

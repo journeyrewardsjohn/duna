@@ -3,11 +3,11 @@ Public web,/about,apps/web/app/about/page.tsx,pending,
 Player portal,/app/booking-invite/[inviteToken],apps/web/app/app/booking-invite/[inviteToken]/page.tsx,pending,
 Player portal,/app/checkout/[slug],apps/web/app/app/checkout/[slug]/page.tsx,pending,
 Player portal,/app/discover/map,apps/web/app/app/discover/map/page.tsx,pending,
-Player portal,/app/discover,apps/web/app/app/discover/page.tsx,pending,
+Player portal,/app/discover,apps/web/app/app/discover/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
 Player portal,/app/discover/results,apps/web/app/app/discover/results/page.tsx,pending,
 Player portal,/app/health,apps/web/app/app/health/page.tsx,pending,
 Player portal,/app/matches/[id],apps/web/app/app/matches/[id]/page.tsx,pending,
-Player portal,/app/matches,apps/web/app/app/matches/page.tsx,pending,
+Player portal,/app/matches,apps/web/app/app/matches/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
 Player portal,/app/messages,apps/web/app/app/messages/page.tsx,pending,
 Player portal,/app/onboarding,apps/web/app/app/onboarding/page.tsx,pending,
 Player portal,/app,apps/web/app/app/page.tsx,first-review,
@@ -20,7 +20,7 @@ Player portal,/app/settings,apps/web/app/app/settings/page.tsx,pending,
 Player portal,/app/team/claim/[token],apps/web/app/app/team/claim/[token]/page.tsx,pending,
 Player portal,/app/venues/[venueId],apps/web/app/app/venues/[venueId]/page.tsx,pending,
 Player portal,/app/video/[videoId],apps/web/app/app/video/[videoId]/page.tsx,pending,
-Player portal,/app/video,apps/web/app/app/video/page.tsx,pending,
+Player portal,/app/video,apps/web/app/app/video/page.tsx,pending,Local route requires database; connected route review remains open
 Player portal,/app/wallet,apps/web/app/app/wallet/page.tsx,pending,
 Player portal,/app/wallet/predictions,apps/web/app/app/wallet/predictions/page.tsx,pending,
 Player portal,/apps/apple-watch,apps/web/app/apps/apple-watch/page.tsx,pending,
@@ -65,10 +65,10 @@ Public web,/watch/[videoId],apps/web/app/watch/[videoId]/page.tsx,pending,
 HQ,/[module],apps/hq/app/[module]/page.tsx,pending,
 HQ,/account,apps/hq/app/account/page.tsx,pending,
 HQ,/admin/[module],apps/hq/app/admin/[module]/page.tsx,pending,
-HQ,/admin/messaging-safety,apps/hq/app/admin/messaging-safety/page.tsx,pending,
+HQ,/admin/messaging-safety,apps/hq/app/admin/messaging-safety/page.tsx,access-state-reviewed,Correct access-denied UI; privileged workspace still requires authorized review
 HQ,/admin/organizations/[organizationId],apps/hq/app/admin/organizations/[organizationId]/page.tsx,pending,
 HQ,/admin,apps/hq/app/admin/page.tsx,pending,
-HQ,/admin/support,apps/hq/app/admin/support/page.tsx,pending,
+HQ,/admin/support,apps/hq/app/admin/support/page.tsx,access-state-reviewed,Correct access-denied UI; privileged workspace still requires authorized review
 HQ,/admin/video,apps/hq/app/admin/video/page.tsx,pending,
 HQ,/audiences/[audienceId],apps/hq/app/audiences/[audienceId]/page.tsx,pending,
 HQ,/audiences/create,apps/hq/app/audiences/create/page.tsx,pending,
@@ -95,7 +95,7 @@ HQ,/onboarding/complete,apps/hq/app/onboarding/complete/page.tsx,pending,
 HQ,/onboarding,apps/hq/app/onboarding/page.tsx,pending,
 HQ,/,apps/hq/app/page.tsx,first-review,
 HQ,/payments/disputes,apps/hq/app/payments/disputes/page.tsx,pending,
-HQ,/payments,apps/hq/app/payments/page.tsx,pending,
+HQ,/payments,apps/hq/app/payments/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
 HQ,/payments/payout-settings,apps/hq/app/payments/payout-settings/page.tsx,pending,
 HQ,/payments/refund-policies,apps/hq/app/payments/refund-policies/page.tsx,pending,
 HQ,/payments/setup,apps/hq/app/payments/setup/page.tsx,pending,
@@ -104,12 +104,12 @@ HQ,/payments/transactions,apps/hq/app/payments/transactions/page.tsx,pending,
 HQ,/products/[itemId]/builder,apps/hq/app/products/[itemId]/builder/page.tsx,pending,
 HQ,/products/[itemId]/draft-ready,apps/hq/app/products/[itemId]/draft-ready/page.tsx,pending,
 HQ,/products/[itemId],apps/hq/app/products/[itemId]/page.tsx,pending,
-HQ,/products/create,apps/hq/app/products/create/page.tsx,pending,
+HQ,/products/create,apps/hq/app/products/create/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
 HQ,/products/types/[productType],apps/hq/app/products/types/[productType]/page.tsx,pending,
 HQ,/programs,apps/hq/app/programs/page.tsx,pending,
-HQ,/promo-codes,apps/hq/app/promo-codes/page.tsx,pending,
-HQ,/settings,apps/hq/app/settings/page.tsx,pending,
-HQ,/settings/theme,apps/hq/app/settings/theme/page.tsx,pending,
+HQ,/promo-codes,apps/hq/app/promo-codes/page.tsx,pending,Local route requires database; connected route review remains open
+HQ,/settings,apps/hq/app/settings/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
+HQ,/settings/theme,apps/hq/app/settings/theme/page.tsx,local-review,Warm presentation reviewed with local fixtures; connected acceptance pending
 HQ,/setup,apps/hq/app/setup/page.tsx,pending,
 HQ,/stripe/return,apps/hq/app/stripe/return/page.tsx,pending,
 HQ,/team/[personId],apps/hq/app/team/[personId]/page.tsx,pending,
@@ -160,7 +160,6 @@ Player native,VideoDataPreferencesModal,apps/player/profile-hub.tsx,pending,Phys
 Player native,ProfileDetailsModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
 Player native,SubscriptionManagementModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
 Player native,ProfileHubScreen,apps/player/profile-hub.tsx,pending,Physical device verification pending
-Player native,SheetHeader,apps/player/profile-studio.tsx,pending,Physical device verification pending
 Player native,ProfileEditorModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
 Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
 Player native,SandHomeScreen,apps/player/sand-home.tsx,first-review,Physical device verification pending
@@ -168,22 +167,45 @@ Player native,ProvisionalPlayerModal,apps/player/score-upload.tsx,pending,Physic
 Player native,ScoreUploadScreen,apps/player/score-upload.tsx,pending,Physical device verification pending
 Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,pending,Physical device verification pending
 Player native,RecordingChoiceSheet,apps/player/video-studio.tsx,pending,Physical device verification pending
-Player native,clampedScreenPoint,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VideoPlayerModal,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VideoStudioScreen,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VisionSecondScreen,apps/player/vision-second-screen.tsx,pending,Physical device verification pending
-Pro native,TodayScreen,apps/pro/App.tsx,pending,Physical device verification pending
-Pro native,CalendarScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,TodayScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
+Pro native,CalendarScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
 Pro native,PeopleScreen,apps/pro/App.tsx,pending,Physical device verification pending
 Pro native,ScorerScreen,apps/pro/App.tsx,pending,Physical device verification pending
-Pro native,MoreScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,MoreScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
 Pro native,CoachVideoScreen,apps/pro/coach-video.tsx,pending,Physical device verification pending
 Pro native,DunaAiScreen,apps/pro/duna-ai-screen.tsx,pending,Physical device verification pending
-Pro native,GetPaidScreen,apps/pro/get-paid.tsx,pending,Physical device verification pending
+Pro native,GetPaidScreen,apps/pro/get-paid.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
 Pro native,ProMessagingScreen,apps/pro/messaging-screen.tsx,pending,Physical device verification pending
-Pro native,MoneyScreen,apps/pro/money-screen.tsx,pending,Physical device verification pending
-Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,pending,Physical device verification pending
-Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,pending,Physical device verification pending
+Pro native,MoneyScreen,apps/pro/money-screen.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
+Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
+Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
 Pro native,TicketScannerScreen,apps/pro/ticket-scanner.tsx,pending,Physical device verification pending
 Player native,StableVideoSurface,apps/player/video-player-surface.tsx,local-review,Expo browser playback lifecycle verified; physical device pending
 Player portal,DunaVideoGallery,apps/web/components/duna-video-gallery.tsx,local-review,Sample clip playback selection and retry verified; private provider playback pending
+HQ,/calendar,apps/hq/app/[module]/page.tsx,pending,
+HQ,/locations,apps/hq/app/[module]/page.tsx,pending,
+HQ,/members,apps/hq/app/[module]/page.tsx,pending,
+HQ,/team,apps/hq/app/[module]/page.tsx,pending,
+HQ,/products,apps/hq/app/[module]/page.tsx,pending,
+HQ,/events,apps/hq/app/[module]/page.tsx,pending,
+HQ,/leagues,apps/hq/app/[module]/page.tsx,pending,
+HQ,/marketing,apps/hq/app/[module]/page.tsx,pending,
+HQ,/reports,apps/hq/app/[module]/page.tsx,pending,
+HQ,/admin/organizations,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/people,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/ratings,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/trust,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/sand-data,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/pro-tour,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/player-intelligence,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/player-mapping,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/ratings-lab,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/predictions,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/vision,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/payments,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/audit,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/flags,apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/health,apps/hq/app/admin/[module]/page.tsx,pending,
