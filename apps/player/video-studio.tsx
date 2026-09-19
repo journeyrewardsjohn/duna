@@ -6758,7 +6758,9 @@ export function ProfileVideoSection({
               <View style={styles.usageLabels}>
                 <Text style={styles.usageTitle}>{usage.label}</Text>
                 <Text style={styles.usageValue}>
-                  {formatDuration(usage.used)} of {formatDuration(usage.limit)}
+                  {usage.limit > 0
+                    ? `${formatDuration(usage.used)} of ${formatDuration(usage.limit)}`
+                    : "Not included"}
                 </Text>
               </View>
               <View style={styles.progressTrack}>
@@ -7743,19 +7745,16 @@ export function VideoStudioScreen({
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <View style={styles.liveMark}>
-              <View style={styles.liveMarkCore} />
+              <DunaIcon name="video" size={22} color={palette.ink} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.eyebrow}>DUNA VIDEO</Text>
-              <Text style={styles.heroTitle}>
-                Your game, live and on record.
-              </Text>
+              <Text style={styles.heroTitle}>Capture your game</Text>
             </View>
           </View>
           <Text style={styles.heroBody}>
-            Choose how you want to capture. Both Duna recording and live mode
-            keep Apple Watch scoring, favorite moments, overlays, and the remote
-            camera preview in sync.
+            Record, go live, or upload. Keep scoring and highlights connected
+            with your Apple Watch.
           </Text>
           {entitlement?.kind === "complimentary" && (
             <View style={styles.complimentaryBadge}>
@@ -7773,16 +7772,18 @@ export function VideoStudioScreen({
           )}
           <View style={styles.captureChoiceStack}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Record with Duna"
               disabled={!isIos || !client}
               onPress={recordNew}
               style={[
                 styles.captureChoiceCard,
                 styles.captureChoiceCardRecord,
-                (!isIos || !client) && styles.disabled,
+                (!isIos || !client) && styles.captureChoiceUnavailable,
               ]}
             >
               <View style={styles.captureChoiceIcon}>
-                <View style={styles.captureChoiceRecordCore} />
+                <DunaIcon name="camera" size={22} color={palette.ink} />
               </View>
               <View style={styles.captureChoiceCopy}>
                 <View style={styles.captureChoiceHeading}>
@@ -7792,23 +7793,25 @@ export function VideoStudioScreen({
                   <Text style={styles.captureChoiceBadge}>PRIVATE FIRST</Text>
                 </View>
                 <Text style={styles.captureChoiceBody}>
-                  Save full-quality video on this iPhone while your Watch
-                  scores, marks highlights, and checks the camera. Duna uploads
-                  when the connection you allow is available.
+                  Save on iPhone. Score and mark highlights with your Watch.
+                  Upload when your connection allows.
                 </Text>
               </View>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go Live"
               disabled={!isIos || !client || !canBroadcast}
               onPress={() => void openLive()}
               style={[
                 styles.captureChoiceCard,
                 styles.captureChoiceCardLive,
-                (!isIos || !client || !canBroadcast) && styles.disabled,
+                (!isIos || !client || !canBroadcast) &&
+                  styles.captureChoiceUnavailable,
               ]}
             >
               <View style={styles.captureChoiceIconLive}>
-                <View style={styles.liveButtonDot} />
+                <DunaIcon name="video" size={22} color={palette.ink} />
               </View>
               <View style={styles.captureChoiceCopy}>
                 <View style={styles.captureChoiceHeading}>
@@ -7818,16 +7821,17 @@ export function VideoStudioScreen({
                   </Text>
                 </View>
                 <Text style={styles.captureChoiceBodyLight}>
-                  Broadcast now with the same Watch controls and decide who can
-                  watch live and after the match.
+                  Stream with Watch scoring and highlights. Choose who can watch
+                  live and after the match.
                 </Text>
               </View>
             </Pressable>
           </View>
           <Pressable
+            accessibilityRole="button"
             disabled={!client}
             onPress={() => void chooseLibrary()}
-            style={[styles.libraryButton, !client && styles.disabled]}
+            style={styles.libraryButton}
           >
             <Text style={styles.libraryButtonText}>
               Upload an existing video
@@ -7918,9 +7922,7 @@ export function VideoStudioScreen({
             )}
           </View>
         )}
-        {loading && (
-          <ActivityIndicator color={palette.aqua} style={styles.loader} />
-        )}
+        {loading && <SandLoader label="Loading your videos" size={110} />}
 
         <View style={styles.usageCard}>
           <View style={styles.sectionHeading}>
@@ -7936,7 +7938,9 @@ export function VideoStudioScreen({
             <View style={styles.usageLabels}>
               <Text style={styles.usageTitle}>Live streaming</Text>
               <Text style={styles.usageValue}>
-                {formatDuration(liveUsed)} of {formatDuration(liveLimit)}
+                {liveLimit > 0
+                  ? `${formatDuration(liveUsed)} of ${formatDuration(liveLimit)}`
+                  : "Not included"}
               </Text>
             </View>
             <View style={styles.progressTrack}>
@@ -7952,7 +7956,9 @@ export function VideoStudioScreen({
             <View style={styles.usageLabels}>
               <Text style={styles.usageTitle}>Uploaded video</Text>
               <Text style={styles.usageValue}>
-                {formatDuration(uploadUsed)} of {formatDuration(uploadLimit)}
+                {uploadLimit > 0
+                  ? `${formatDuration(uploadUsed)} of ${formatDuration(uploadLimit)}`
+                  : "Not included"}
               </Text>
             </View>
             <View style={styles.progressTrack}>
@@ -8223,26 +8229,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   screen: { gap: 18, padding: 18, paddingBottom: 120 },
   hero: {
-    backgroundColor: palette.navy,
-    borderRadius: 24,
+    backgroundColor: palette.canvas,
     gap: 16,
     overflow: "hidden",
-    padding: 20,
+    padding: 2,
   },
   heroTop: { alignItems: "center", flexDirection: "row", gap: 14 },
   liveMark: {
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.13)",
+    backgroundColor: palette.aquaSoft,
     borderRadius: 24,
     height: 48,
     justifyContent: "center",
     width: 48,
-  },
-  liveMarkCore: {
-    backgroundColor: "#ff7a59",
-    borderRadius: 7,
-    height: 14,
-    width: 14,
   },
   eyebrow: {
     color: palette.aqua,
@@ -8251,13 +8250,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   heroTitle: {
-    color: "#ffffff",
-    fontSize: 25,
-    fontWeight: "800",
+    color: palette.ink,
+    fontSize: 30,
+    fontWeight: "400",
     letterSpacing: -0.7,
-    lineHeight: 29,
+    lineHeight: 36,
   },
-  heroBody: { color: "#dfe5e4", fontSize: 14, lineHeight: 21 },
+  heroBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   complimentaryBadge: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(212,183,124,0.16)",
@@ -8268,7 +8267,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   complimentaryText: { color: palette.sand, fontSize: 12, fontWeight: "800" },
-  iosNote: { color: palette.sand, fontSize: 12, lineHeight: 18 },
+  iosNote: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   captureChoiceStack: { gap: 10 },
   captureChoiceCard: {
     alignItems: "center",
@@ -8279,11 +8278,16 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   captureChoiceCardRecord: {
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(61,102,114,0.45)",
+    backgroundColor: palette.depth,
+    borderColor: palette.line,
     borderWidth: 1,
   },
-  captureChoiceCardLive: { backgroundColor: palette.flare },
+  captureChoiceCardLive: {
+    backgroundColor: palette.depth,
+    borderColor: palette.line,
+    borderWidth: 1,
+  },
+  captureChoiceUnavailable: { borderStyle: "dashed" },
   captureChoiceIcon: {
     alignItems: "center",
     backgroundColor: palette.aquaSoft,
@@ -8294,23 +8298,11 @@ const styles = StyleSheet.create({
   },
   captureChoiceIconLive: {
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: palette.aquaSoft,
     borderRadius: 25,
     height: 50,
     justifyContent: "center",
     width: 50,
-  },
-  captureChoiceRecordCore: {
-    backgroundColor: palette.aqua,
-    borderRadius: 11,
-    height: 22,
-    width: 22,
-  },
-  liveButtonDot: {
-    backgroundColor: "#ffffff",
-    borderRadius: 9,
-    height: 18,
-    width: 18,
   },
   captureChoiceCopy: { flex: 1, gap: 6 },
   captureChoiceHeading: {
@@ -8319,51 +8311,52 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  captureChoiceTitle: { color: palette.ink, fontSize: 17, fontWeight: "900" },
+  captureChoiceTitle: { color: palette.ink, fontSize: 17, fontWeight: "700" },
   captureChoiceTitleLight: {
-    color: "#ffffff",
+    color: palette.ink,
     fontSize: 17,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   captureChoiceBadge: {
     backgroundColor: palette.aquaSoft,
     borderRadius: 10,
-    color: palette.navy,
+    color: palette.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "500",
     letterSpacing: 0.7,
     overflow: "hidden",
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
   captureChoiceBadgeLight: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: palette.aquaSoft,
     borderRadius: 10,
-    color: "#ffffff",
+    color: palette.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "500",
     letterSpacing: 0.7,
     overflow: "hidden",
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
-  captureChoiceBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
+  captureChoiceBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   captureChoiceBodyLight: {
-    color: "rgba(255,255,255,0.88)",
-    fontSize: 12,
-    lineHeight: 16,
+    color: palette.muted,
+    fontSize: 15,
+    lineHeight: 22,
   },
   libraryButton: {
-    borderColor: "rgba(255,255,255,0.36)",
+    backgroundColor: palette.depth,
+    borderColor: palette.line,
     borderRadius: 14,
     borderWidth: 1,
     gap: 2,
-    minHeight: 54,
+    minHeight: 56,
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
-  libraryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  libraryButtonMeta: { color: "rgba(255,255,255,0.65)", fontSize: 12 },
+  libraryButtonText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+  libraryButtonMeta: { color: palette.muted, fontSize: 14, lineHeight: 20 },
   disabled: { opacity: 0.42 },
   errorCard: {
     alignItems: "center",

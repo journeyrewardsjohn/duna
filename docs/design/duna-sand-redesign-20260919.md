@@ -218,3 +218,23 @@ an app-wide appearance selector or dark-mode acceptance.
 Checkpoint validation: the full `pnpm verify` gate passed with 117 browser checks,
 and fresh Player iOS/Android exports passed. The profile and four account sheets
 were visually reviewed through the browser renderer, with no runtime errors.
+
+## Player capture entry and discovery checkpoint — September 19
+
+The recording entry now uses warm surfaces and readable capture choices, while
+the viewing stage and active capture retain their separate presentation. The
+existing iPhone, authenticated-client, and live-plan gates remain in place.
+Unavailable capture choices retain readable descriptions. Video loading uses the
+sand particles, and a zero plan allowance reads “Not included.” Discovery, coach
+search, section headings, and the quick-actions sheet use lighter, quieter type.
+
+The browser-rendered Player audit opened all nine quick actions without runtime
+errors. That is navigation and presentation evidence using sample data, not
+camera, map-provider, device-picker, coach-availability, or private-video proof.
+The canonical Player portal currently requests sign-in in the available browser;
+a sign-in handoff is pending for connected account and recording review.
+
+Checkpoint validation: `pnpm verify` passed with all 117 browser checks. Fresh
+Player iOS/Android exports passed. The browser review confirmed that preview
+accounts cannot start recording, livestreaming, or an upload, and that zero
+allowance uses the explicit “Not included” label.

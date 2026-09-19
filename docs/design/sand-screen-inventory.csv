@@ -131,8 +131,8 @@ Player native,VenueFinderModal,apps/player/App.tsx,pending,Physical device verif
 Player native,VenueBookingModal,apps/player/App.tsx,pending,Physical device verification pending
 Player native,MobilePredictionMarketSheet,apps/player/App.tsx,pending,Physical device verification pending
 Player native,ProTourModal,apps/player/App.tsx,pending,Physical device verification pending
-Player native,DiscoverScreen,apps/player/App.tsx,pending,Physical device verification pending
-Player native,FindCoachScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,DiscoverScreen,apps/player/App.tsx,local-review,Discovery headings and navigation reviewed with sample runtime; connected queries pending
+Player native,FindCoachScreen,apps/player/App.tsx,local-review,Coach search and empty state reviewed with sample runtime; connected listings pending
 Player native,PlayLauncherScreen,apps/player/App.tsx,pending,Physical device verification pending
 Player native,PlansScreen,apps/player/App.tsx,pending,Physical device verification pending
 Player native,WalletScreen,apps/player/App.tsx,pending,Physical device verification pending
@@ -140,7 +140,7 @@ Player native,PredictionPortfolioScreen,apps/player/App.tsx,pending,Physical dev
 Player native,PerformanceScreen,apps/player/App.tsx,pending,Physical device verification pending
 Player native,BookingModal,apps/player/App.tsx,pending,Physical device verification pending
 Player native,PickupModal,apps/player/App.tsx,pending,Physical device verification pending
-Player native,QuickActionsSheet,apps/player/App.tsx,pending,Physical device verification pending
+Player native,QuickActionsSheet,apps/player/App.tsx,local-review,All nine navigation entries opened in browser renderer; physical workflows pending
 Player native,BookingManagementModal,apps/player/booking-management.tsx,pending,Physical device verification pending
 Player native,DiscoveryMapModal,apps/player/discovery-map.tsx,pending,Physical device verification pending
 Player native,PlayerDunaAiScreen,apps/player/duna-ai-screen.tsx,pending,Physical device verification pending
@@ -168,7 +168,7 @@ Player native,ScoreUploadScreen,apps/player/score-upload.tsx,pending,Physical de
 Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,pending,Physical device verification pending
 Player native,RecordingChoiceSheet,apps/player/video-studio.tsx,pending,Physical device verification pending
 Player native,VideoPlayerModal,apps/player/video-studio.tsx,pending,Physical device verification pending
-Player native,VideoStudioScreen,apps/player/video-studio.tsx,pending,Physical device verification pending
+Player native,VideoStudioScreen,apps/player/video-studio.tsx,local-review,Capture entry and preview gates reviewed; actual capture and provider playback pending
 Player native,VisionSecondScreen,apps/player/vision-second-screen.tsx,pending,Physical device verification pending
 Pro native,TodayScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
 Pro native,CalendarScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
