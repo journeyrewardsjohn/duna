@@ -127,7 +127,6 @@ import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
-import { LiquidGlassSurface } from "./liquid-glass-surface";
 import {
   playerPrimaryDestination,
   type PlayerPrimaryDestination,
@@ -172,12 +171,13 @@ import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
 import { PlayerDunaAiScreen } from "./duna-ai-screen";
 import {
-  HomeV3Screen,
   type HomeV3Avatar,
   type HomeV3Match,
   type HomeV3OpenGame,
   type HomeV3UpcomingItem,
 } from "./home-v3";
+import { SandHomeScreen } from "./sand-home";
+import { SandTabBar } from "./sand-tab-bar";
 import { linkedHomeEvent } from "./home-v3-data";
 import {
   MobilePlacePicker,
@@ -200,8 +200,6 @@ void SplashScreen.preventAutoHideAsync();
 const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerBrandIcon = require("./assets/duna-mark.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type MobilePredictionDiscoveryItem = NonNullable<
@@ -678,17 +676,6 @@ function DunaWordmark({
       />
       {pro && <Text style={styles.proPill}>PRO</Text>}
     </View>
-  );
-}
-
-function DunaMark({ size }: { readonly size: number }) {
-  return (
-    <Image
-      accessibilityIgnoresInvertColors
-      resizeMode="contain"
-      source={dunaPlayerBrandIcon}
-      style={{ height: size, width: size }}
-    />
   );
 }
 
@@ -1694,6 +1681,7 @@ function HomeScreenV3({
     organizationWallets,
     people: runtimePeople,
   } = usePlayerRuntime();
+  const [selectedClub, setSelectedClub] = useState<string>();
   const player = dashboard?.player ?? demoPlayer;
   const previewSchedule = useMemo(() => {
     const previewTimeZone = "America/Los_Angeles";
@@ -1946,12 +1934,10 @@ function HomeScreenV3({
         onPress: () => onOpenEvent(event),
       };
     });
-  const upcoming = [...bookingItems, ...unbookedEventItems]
-    .sort(
-      (left, right) =>
-        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
-    )
-    .slice(0, 6);
+  const upcoming = [...bookingItems, ...unbookedEventItems].sort(
+    (left, right) =>
+      new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+  );
 
   const compactPrice = (amountMinor: number, currency: string) =>
     amountMinor === 0
@@ -1967,7 +1953,10 @@ function HomeScreenV3({
       /(^|\s)(2s|4s|6s|doubles|mixed)(\s|$)/i.test(tag),
     ) ??
     (event.kind === "pickup" ? "Pickup" : "Open play");
-  const openGameCandidates = events
+  const clubEvents = selectedClub
+    ? events.filter((event) => event.organizationId === selectedClub)
+    : events;
+  const openGameCandidates = clubEvents
     .filter(
       (event) =>
         ["pickup", "open-play"].includes(event.kind) &&
@@ -2143,7 +2132,34 @@ function HomeScreenV3({
   }));
 
   return (
-    <HomeV3Screen
+    <SandHomeScreen
+      playerId={player.id}
+      clubs={(organizationWallets ?? []).map((club) => ({
+        id: club.organizationId,
+        name: club.organizationName,
+      }))}
+      selectedClub={selectedClub}
+      onSelectClub={setSelectedClub}
+      onProfile={messaging.openProfile}
+      features={clubEvents
+        .filter(
+          (event) =>
+            event.lifecycleStatus !== "cancelled" &&
+            Date.parse(event.endsAt) > now,
+        )
+        .slice(0, 8)
+        .map((event) => ({
+          id: event.id,
+          title: event.title,
+          detail: `${event.venueName} · ${formatVenueTime(event.startsAt, event.timezone)}`,
+          image: new URL(
+            event.media?.find((item) => item.kind === "image")?.url ??
+              event.imageUrl ??
+              defaultEventMedia(event.kind, event.id).path,
+            dunaWebUrl,
+          ).toString(),
+          onPress: () => onOpenEvent(event),
+        }))}
       contextLine={contextLine}
       crew={
         crewAvatars.length
@@ -2158,7 +2174,8 @@ function HomeScreenV3({
       }
       firstName={firstName}
       insight={
-        dashboard?.feed[0]?.title ?? "Your sideout game is becoming an edge."
+        dashboard?.feed[0]?.title ??
+        "Find a session, review your results, or plan your next game with Duna."
       }
       moreOpenGamesCount={Math.max(0, openGameCandidates.length - 2)}
       notificationCount={messaging.unreadCount}
@@ -14202,108 +14219,19 @@ function PickupModal({
   );
 }
 
-function TabBar({
-  active,
-  onDunaAi,
-  onChange,
-  onQuickActions,
-  unreadCount,
-}: {
+function TabBar(props: {
   readonly active: Tab;
   readonly onDunaAi: () => void;
   readonly onChange: (destination: PlayerPrimaryDestination) => void;
   readonly onQuickActions: () => void;
   readonly unreadCount: number;
 }) {
-  const insets = useSafeAreaInsets();
-  const selected = playerPrimaryDestination(active);
-  const destinationButton = (
-    destination: PlayerPrimaryDestination,
-    label: string,
-    icon: DunaIconName,
-  ) => {
-    const isSelected = selected === destination;
-    return (
-      <Pressable
-        accessibilityLabel={label}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isSelected }}
-        key={destination}
-        onPress={() => {
-          selectionHaptic();
-          onChange(destination);
-        }}
-        style={[styles.tabItem, isSelected && styles.tabItemActive]}
-      >
-        <View style={styles.tabIconWrap}>
-          <DunaIcon
-            color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
-            name={icon}
-            size={24}
-            strokeWidth={isSelected ? 1.75 : 1.45}
-          />
-          {destination === "messages" && unreadCount > 0 && (
-            <View style={styles.tabUnreadBadge}>
-              <Text style={styles.tabUnreadText}>
-                {Math.min(unreadCount, 9)}
-              </Text>
-            </View>
-          )}
-        </View>
-      </Pressable>
-    );
-  };
-
   return (
-    <View
-      style={[
-        styles.tabBarPosition,
-        { bottom: Math.max(mobileGrid[2], insets.bottom - mobileGrid[5]) },
-      ]}
-    >
-      <View style={styles.tabBar}>
-        <LiquidGlassSurface
-          borderColor={rgba(colors.whiteRgb, 0.82)}
-          cornerRadius={mobileGrid[7]}
-          fallbackColor={rgba(colors.whiteRgb, 0.82)}
-          tint="#edf4f8"
-        />
-        {destinationButton("home", "Home", "home")}
-        {destinationButton("calendar", "Calendar", "calendar")}
-        <Pressable
-          accessibilityHint="Opens your full-screen Duna AI copilot"
-          accessibilityLabel="Duna AI"
-          accessibilityRole="button"
-          onPress={() => {
-            selectionHaptic();
-            onDunaAi();
-          }}
-          style={styles.tabAiButton}
-        >
-          <View style={styles.tabAiHalo}>
-            <DunaMark size={mobileGrid[7]} />
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityHint="Opens contextual Player actions"
-          accessibilityLabel="Quick actions"
-          accessibilityRole="button"
-          onPress={() => {
-            selectionHaptic();
-            onQuickActions();
-          }}
-          style={styles.tabItem}
-        >
-          <DunaIcon
-            color={rgba(colors.accentRgb, 0.78)}
-            name="plus"
-            size={25}
-            strokeWidth={1.55}
-          />
-        </Pressable>
-        {destinationButton("messages", "Messages", "message")}
-      </View>
-    </View>
+    <SandTabBar
+      {...props}
+      selected={playerPrimaryDestination(props.active)}
+      onPressFeedback={selectionHaptic}
+    />
   );
 }
 
@@ -15137,8 +15065,8 @@ function DunaApp() {
         {runtime.dashboard ? (
           <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
         ) : null}
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style="dark" />
+        <SafeAreaView edges={tab === "home" ? [] : ["top"]} style={styles.safe}>
+          <StatusBar style={tab === "home" ? "light" : "dark"} />
           <View style={styles.app}>
             <PreviewBanner
               hidden={tab === "home" || tab === "messages" || tab === "ai"}
@@ -23370,85 +23298,6 @@ function createStyles() {
       flexDirection: "row",
       justifyContent: "space-between",
       padding: 14,
-    },
-    tabBarPosition: {
-      left: mobileControl.pageInset,
-      position: "absolute",
-      right: mobileControl.pageInset,
-      zIndex: 90,
-    },
-    tabBar: {
-      alignItems: "center",
-      backgroundColor: "transparent",
-      borderRadius: mobileGrid[7],
-      flexDirection: "row",
-      minHeight: mobileGrid[12] + mobileGrid[2],
-      paddingHorizontal: mobileGrid[1],
-      paddingVertical: mobileGrid[1],
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.1,
-      shadowRadius: 22,
-      elevation: 12,
-      overflow: "visible",
-    },
-    tabItem: {
-      alignItems: "center",
-      borderRadius: mobileControl.pillRadius,
-      flex: 1,
-      height: mobileGrid[10],
-      justifyContent: "center",
-      position: "relative",
-    },
-    tabItemActive: {
-      backgroundColor: rgba(colors.whiteRgb, 0.58),
-      borderColor: rgba(colors.whiteRgb, 0.76),
-      borderWidth: 1,
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.06,
-      shadowRadius: 10,
-    },
-    tabIconWrap: { position: "relative" },
-    tabUnreadBadge: {
-      alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderColor: colors.white,
-      borderRadius: mobileGrid[2],
-      borderWidth: 2,
-      height: mobileGrid[4],
-      justifyContent: "center",
-      minWidth: mobileGrid[4],
-      position: "absolute",
-      right: -11,
-      top: -10,
-    },
-    tabUnreadText: {
-      color: colors.white,
-      fontSize: 12,
-      fontWeight: "700",
-      lineHeight: 14,
-    },
-    tabAiButton: {
-      alignItems: "center",
-      flex: 1,
-      justifyContent: "center",
-      marginTop: -mobileGrid[1],
-      minHeight: mobileGrid[12] + mobileGrid[2],
-    },
-    tabAiHalo: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.whiteRgb, 0.76),
-      borderColor: rgba(colors.whiteRgb, 0.92),
-      borderRadius: mobileControl.pillRadius,
-      borderWidth: 1,
-      height: mobileGrid[12],
-      justifyContent: "center",
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 7 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      width: mobileGrid[12],
     },
     quickSheetBackdrop: {
       backgroundColor: rgba(colors.inkRgb, 0.42),

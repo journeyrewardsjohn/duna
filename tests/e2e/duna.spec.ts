@@ -197,7 +197,7 @@ test("mobile public navigation opens as a full-screen product sheet", async ({
     { width: 1024, height: 768 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open navigation menu" }).click();
 
     const sheet = page.getByRole("dialog", {
@@ -342,28 +342,57 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("player home puts useful actions and the personal calendar first", async ({
+test("player sand home preserves actions, club filtering, and AI", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/app");
   await expect(
-    page.getByRole("heading", { name: /Ready to play/ }),
+    page.getByRole("heading", { name: "Your place in the sand." }),
   ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath("player-sand-home.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const quickActions = page.getByRole("navigation", {
     name: "Player quick actions",
   });
   await expect(
-    quickActions.getByRole("link", { name: /Find play/ }),
+    quickActions.getByRole("link", { name: "Find a game" }),
+  ).toHaveAttribute("href", "/discover");
+  await expect(
+    quickActions.getByRole("link", { name: "Watch & record" }),
+  ).toHaveAttribute("href", "/app/video");
+  await expect(
+    quickActions.getByRole("link", { name: "Book a court" }),
+  ).toHaveAttribute("href", "/app/play");
+  await page.getByRole("button", { name: "My Clubs", exact: true }).click();
+  const clubs = page.getByRole("dialog", { name: "My Clubs" });
+  await expect(clubs).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath("player-club-sheet.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  await clubs
+    .getByRole("button", { name: /South Bay Volleyball Club/ })
+    .click();
+  await expect(clubs).not.toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "At South Bay Volleyball Club" }),
   ).toBeVisible();
   await expect(
-    quickActions.getByRole("link", { name: /Host pickup/ }),
+    page.getByRole("heading", { name: "My activities" }),
   ).toBeVisible();
-  await expect(page.getByText("Next up", { exact: true })).toBeVisible();
-  const actionCenter = page.getByRole("navigation", {
-    name: "Duna action center",
-  });
-  await expect(actionCenter).toBeVisible();
-  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  await page
+    .getByRole("button", { name: "Show Make time for your game." })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Show Make time for your game." }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Search with Duna", exact: true })
+    .click();
   const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
   await expect(dunaAi).toBeVisible();
   await expect(
@@ -373,18 +402,6 @@ test("player home puts useful actions and the personal calendar first", async ({
     dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
   ).toBeVisible();
   await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
-  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
-  const command = page.getByRole("dialog", { name: "Search Duna Player" });
-  await expect(command).toBeVisible();
-  await expect(command.getByText("Go anywhere")).toBeVisible();
-  await page.keyboard.press("Escape");
-  const nextUpDate = page
-    .getByRole("region", { name: "Your day" })
-    .locator("time")
-    .first();
-  await expect(nextUpDate).toBeVisible();
-  await expect(nextUpDate).not.toContainText(":");
-  await expect(page.locator('img[src*="duna-campaign-rally"]')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
 
@@ -990,11 +1007,11 @@ test("settings use the available desktop width and collapse cleanly", async ({
 
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
-}) => {
+}, testInfo) => {
   test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
-    page.getByRole("heading", { name: "Good morning." }),
+    page.getByRole("heading", { name: "Your club, at a glance." }),
   ).toBeVisible();
   await expect(
     page.getByText(
@@ -1019,9 +1036,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     };
   });
   expect(aiAnalystColors).toEqual({
-    action: "rgb(169, 196, 99)",
-    heading: "rgb(232, 242, 212)",
-    signalHeading: "rgb(232, 242, 212)",
+    action: "rgb(50, 51, 47)",
+    heading: "rgb(50, 51, 47)",
+    signalHeading: "rgb(50, 51, 47)",
   });
   await expect(page.getByText("Payments are connected.")).toHaveCount(0);
   await expect(
@@ -1030,6 +1047,17 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
       .getByText("Payments", { exact: true }),
   ).toHaveCount(0);
 
+  const clippedMetrics = await page
+    .locator(".hq-analytics-metric")
+    .evaluateAll(
+      (cards) =>
+        cards.filter((card) => card.scrollWidth > card.clientWidth + 1).length,
+    );
+  expect(clippedMetrics).toBe(0);
+  await page.screenshot({
+    path: testInfo.outputPath("hq-sand-overview.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const schedule = page.locator(".hq-schedule-list");
   await expect(schedule).toBeVisible();
   await expect(schedule.locator("a.hq-schedule-row")).toHaveCount(5);

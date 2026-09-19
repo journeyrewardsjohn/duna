@@ -1,3 +1,5 @@
+import { SandLoader } from "./sand-loader";
+import { sandColors } from "@duna/ui/sand";
 import {
   WorkOSMobileAuthProvider,
   useWorkOSMobileAuth,
@@ -235,10 +237,13 @@ function RuntimeLoadingState() {
     <View
       accessibilityLabel="Loading Duna"
       accessibilityRole="progressbar"
-      style={runtimeStyles.loadingScreen}
+      style={[
+        runtimeStyles.loadingScreen,
+        { backgroundColor: sandColors.canvas },
+      ]}
     >
       <StatusBar style="dark" />
-      <ActivityIndicator color="#1B1B19" size="small" />
+      <SandLoader />
     </View>
   );
 }

@@ -104,7 +104,7 @@ export function OperatorOverview({
       <header className="hq-page-heading hq-overview-heading">
         <div>
           <span className="hq-eyebrow">{today}</span>
-          <h1>Good morning.</h1>
+          <h1>Your club, at a glance.</h1>
           <p>Here’s what is happening across {dashboard.organization.name}.</p>
         </div>
         <div>

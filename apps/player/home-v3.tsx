@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
-import { FellixText as Text } from "./satoshi-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 const dunaMark = require("./assets/duna-mark.png") as ImageSourcePropType;
 const c = dunaAppColors;
@@ -374,7 +374,7 @@ function SectionHeader({
   );
 }
 
-function UpcomingCard({ item }: { readonly item: HomeV3UpcomingItem }) {
+export function UpcomingCard({ item }: { readonly item: HomeV3UpcomingItem }) {
   return (
     <Pressable
       accessibilityLabel={`${item.title}, ${item.day} at ${item.time}`}
@@ -444,7 +444,7 @@ function OpenGamePlayer({ slot }: { slot: HomeV3GameSlot | HomeV3OpenSlot }) {
   );
 }
 
-function OpenGameCard({ game }: { readonly game: HomeV3OpenGame }) {
+export function OpenGameCard({ game }: { readonly game: HomeV3OpenGame }) {
   return (
     <Pressable
       accessibilityLabel={`${game.time}, ${game.location}, ${game.level}`}
@@ -536,7 +536,7 @@ function MatchTeamRow({ team }: { readonly team: HomeV3MatchTeam }) {
   );
 }
 
-function MatchCard({ match }: { readonly match: HomeV3Match }) {
+export function MatchCard({ match }: { readonly match: HomeV3Match }) {
   return (
     <Pressable
       accessibilityLabel={`${match.kicker}${match.weather ? `, ${match.weather}` : ""}, rating ${match.delta}`}

@@ -111,22 +111,33 @@ const playerDashboardSource = readFileSync(
   join(root, "apps/web/app/app/page.tsx"),
   "utf8",
 );
+const sandPlayerSource = readFileSync(
+  join(root, "apps/web/components/sand-player-home.tsx"),
+  "utf8",
+);
 for (const contract of [
-  "futureBookings",
-  "nextPersonalEvent",
-  "defaultEventMedia",
-  "new Date(event.startsAt).getTime() >= now",
-  "new Date(booking.startsAt).getTime() >= now",
-  'aria-label="Player quick actions"',
+  "Date.parse(event.endsAt) > now",
+  "Date.parse(booking.endsAt) > now",
+  "nextHosted",
+  "caller.player.organizationAccess()",
 ] as const) {
-  if (!playerDashboardSource.includes(contract)) {
-    violations.push(`apps/web/app/app/page.tsx must preserve ${contract}`);
-  }
+  if (!playerDashboardSource.includes(contract))
+    violations.push(
+      `Player home must preserve its real schedule and club data: ${contract}`,
+    );
 }
-if (playerDashboardSource.includes("duna-campaign-rally")) {
-  violations.push(
-    "apps/web/app/app/page.tsx must not restore the decorative campaign hero",
-  );
+for (const contract of [
+  'aria-label="Player quick actions"',
+  "defaultEventMedia",
+  "My Clubs",
+  "showModal",
+  "localStorage",
+  "event.organizationId === selected",
+] as const) {
+  if (!sandPlayerSource.includes(contract))
+    violations.push(
+      `Player home must preserve its sand interaction contract: ${contract}`,
+    );
 }
 
 const playerEventCardSource = readFileSync(
@@ -191,39 +202,39 @@ for (const contract of [
     `Player Home must preserve the booking-derived schedule contract: ${contract}`,
   );
 }
-const nativeHeaderIndex = playerHomeV3Source.indexOf("styles.header");
-const nativeQuickActionsIndex = playerHomeV3Source.indexOf(
-  "contentContainerStyle={styles.quickActions}",
+const sandNativeSource = readFileSync(
+  join(root, "apps/player/sand-home.tsx"),
+  "utf8",
 );
-const nativeTabsIndex = playerHomeV3Source.indexOf("styles.tabs");
-const nativeNextUpIndex = playerHomeV3Source.indexOf('title="Next up"');
-if (
-  nativeHeaderIndex < 0 ||
-  nativeQuickActionsIndex < 0 ||
-  nativeTabsIndex < 0 ||
-  nativeNextUpIndex < 0 ||
-  nativeHeaderIndex > nativeQuickActionsIndex ||
-  nativeQuickActionsIndex > nativeTabsIndex ||
-  nativeTabsIndex > nativeNextUpIndex
-) {
-  violations.push(
-    "Player Home must preserve the greeting, animated quick actions, filters, then personal Next up hierarchy",
-  );
+for (const contract of [
+  "pagingEnabled",
+  "reducedMotion",
+  "My activities",
+  "My Clubs",
+  "onSelectClub",
+  "accessibilityViewIsModal",
+  "props.playerId",
+] as const) {
+  if (!sandNativeSource.includes(contract))
+    violations.push(`Native sand Home must preserve ${contract}`);
 }
+const sandNavigationSource = readFileSync(
+  join(root, "apps/player/sand-tab-bar.tsx"),
+  "utf8",
+);
 for (const contract of [
   'destinationButton("home", "Home", "home")',
-  'destinationButton("calendar", "Calendar", "calendar")',
+  'destinationButton("calendar", "Schedule", "calendar")',
   'accessibilityLabel="Duna AI"',
   'accessibilityLabel="Quick actions"',
   'destinationButton("messages", "Messages", "message")',
-  "<LiquidGlassSurface",
-  "<DunaMark size={mobileGrid[7]} />",
+  "<DunaMark size={24} />",
+  "styles.tabLabel",
 ] as const) {
-  if (!playerNativeSource.includes(contract)) {
+  if (!sandNavigationSource.includes(contract))
     violations.push(
-      `apps/player/App.tsx must preserve the icon-only glass dock contract: ${contract}`,
+      `Player must preserve its labeled navigation and existing handlers: ${contract}`,
     );
-  }
 }
 for (const retiredThemeContract of [
   "ThemeButton",

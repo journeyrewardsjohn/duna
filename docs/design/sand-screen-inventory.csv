@@ -1,0 +1,187 @@
+surface,screen_or_route,source,design_status,verification
+Public web,/about,apps/web/app/about/page.tsx,pending,
+Player portal,/app/booking-invite/[inviteToken],apps/web/app/app/booking-invite/[inviteToken]/page.tsx,pending,
+Player portal,/app/checkout/[slug],apps/web/app/app/checkout/[slug]/page.tsx,pending,
+Player portal,/app/discover/map,apps/web/app/app/discover/map/page.tsx,pending,
+Player portal,/app/discover,apps/web/app/app/discover/page.tsx,pending,
+Player portal,/app/discover/results,apps/web/app/app/discover/results/page.tsx,pending,
+Player portal,/app/health,apps/web/app/app/health/page.tsx,pending,
+Player portal,/app/matches/[id],apps/web/app/app/matches/[id]/page.tsx,pending,
+Player portal,/app/matches,apps/web/app/app/matches/page.tsx,pending,
+Player portal,/app/messages,apps/web/app/app/messages/page.tsx,pending,
+Player portal,/app/onboarding,apps/web/app/app/onboarding/page.tsx,pending,
+Player portal,/app,apps/web/app/app/page.tsx,first-review,
+Player portal,/app/pickup/[slug]/edit,apps/web/app/app/pickup/[slug]/edit/page.tsx,pending,
+Player portal,/app/pickup/new,apps/web/app/app/pickup/new/page.tsx,pending,
+Player portal,/app/play,apps/web/app/app/play/page.tsx,pending,
+Player portal,/app/profile,apps/web/app/app/profile/page.tsx,pending,
+Player portal,/app/score,apps/web/app/app/score/page.tsx,pending,
+Player portal,/app/settings,apps/web/app/app/settings/page.tsx,pending,
+Player portal,/app/team/claim/[token],apps/web/app/app/team/claim/[token]/page.tsx,pending,
+Player portal,/app/venues/[venueId],apps/web/app/app/venues/[venueId]/page.tsx,pending,
+Player portal,/app/video/[videoId],apps/web/app/app/video/[videoId]/page.tsx,pending,
+Player portal,/app/video,apps/web/app/app/video/page.tsx,pending,
+Player portal,/app/wallet,apps/web/app/app/wallet/page.tsx,pending,
+Player portal,/app/wallet/predictions,apps/web/app/app/wallet/predictions/page.tsx,pending,
+Player portal,/apps/apple-watch,apps/web/app/apps/apple-watch/page.tsx,pending,
+Public web,/avp,apps/web/app/avp/page.tsx,pending,
+Public web,/checkout/[slug],apps/web/app/checkout/[slug]/page.tsx,pending,
+Public web,/clubs/[slug],apps/web/app/clubs/[slug]/page.tsx,pending,
+Public web,/clubs/[slug]/products/[productSlug],apps/web/app/clubs/[slug]/products/[productSlug]/page.tsx,pending,
+Public web,/coaches/[handle],apps/web/app/coaches/[handle]/page.tsx,pending,
+Public web,/create,apps/web/app/create/page.tsx,pending,
+Public web,/discover/map,apps/web/app/discover/map/page.tsx,pending,
+Public web,/discover,apps/web/app/discover/page.tsx,pending,
+Public web,/discover/results,apps/web/app/discover/results/page.tsx,pending,
+Public web,/events/[slug]/match/[matchSlug]/[matchId],apps/web/app/events/[slug]/match/[matchSlug]/[matchId]/page.tsx,pending,
+Public web,/events/[slug],apps/web/app/events/[slug]/page.tsx,pending,
+Public web,/join/guardian/[token],apps/web/app/join/guardian/[token]/page.tsx,pending,
+Public web,/join/match/[inviteToken],apps/web/app/join/match/[inviteToken]/page.tsx,pending,
+Public web,/join/organization/[inviteToken],apps/web/app/join/organization/[inviteToken]/page.tsx,pending,
+Public web,/join/team/[inviteToken],apps/web/app/join/team/[inviteToken]/page.tsx,pending,
+Public web,/legal/[document],apps/web/app/legal/[document]/page.tsx,pending,
+Public web,/legal,apps/web/app/legal/page.tsx,pending,
+Public web,/live/[matchId],apps/web/app/live/[matchId]/page.tsx,pending,
+Public web,/matches/[matchId],apps/web/app/matches/[matchId]/page.tsx,pending,
+Public web,/methodology,apps/web/app/methodology/page.tsx,pending,
+Public web,/,apps/web/app/page.tsx,pending,
+Public web,/players/[handle],apps/web/app/players/[handle]/page.tsx,pending,
+Public web,/pro/onboarding-complete,apps/web/app/pro/onboarding-complete/page.tsx,pending,
+Public web,/pro,apps/web/app/pro/page.tsx,pending,
+Public web,/pro/teams/[teamNo],apps/web/app/pro/teams/[teamNo]/page.tsx,pending,
+Public web,/rankings,apps/web/app/rankings/page.tsx,pending,
+Public web,/run-your-club/features/[...slug],apps/web/app/run-your-club/features/[...slug]/page.tsx,pending,
+Public web,/run-your-club/features,apps/web/app/run-your-club/features/page.tsx,pending,
+Public web,/run-your-club,apps/web/app/run-your-club/page.tsx,pending,
+Public web,/run-your-club/training,apps/web/app/run-your-club/training/page.tsx,pending,
+Public web,/run-your-club/training-os,apps/web/app/run-your-club/training-os/page.tsx,pending,
+Public web,/safety,apps/web/app/safety/page.tsx,pending,
+Public web,/sign-in,apps/web/app/sign-in/page.tsx,pending,
+Public web,/sign-up,apps/web/app/sign-up/page.tsx,pending,
+Public web,/venues/[venueId],apps/web/app/venues/[venueId]/page.tsx,pending,
+Public web,/vision/remote/[token],apps/web/app/vision/remote/[token]/page.tsx,pending,
+Public web,/waivers/complete,apps/web/app/waivers/complete/page.tsx,pending,
+Public web,/watch/[videoId],apps/web/app/watch/[videoId]/page.tsx,pending,
+HQ,/[module],apps/hq/app/[module]/page.tsx,pending,
+HQ,/account,apps/hq/app/account/page.tsx,pending,
+HQ,/admin/[module],apps/hq/app/admin/[module]/page.tsx,pending,
+HQ,/admin/messaging-safety,apps/hq/app/admin/messaging-safety/page.tsx,pending,
+HQ,/admin/organizations/[organizationId],apps/hq/app/admin/organizations/[organizationId]/page.tsx,pending,
+HQ,/admin,apps/hq/app/admin/page.tsx,pending,
+HQ,/admin/support,apps/hq/app/admin/support/page.tsx,pending,
+HQ,/admin/video,apps/hq/app/admin/video/page.tsx,pending,
+HQ,/audiences/[audienceId],apps/hq/app/audiences/[audienceId]/page.tsx,pending,
+HQ,/audiences/create,apps/hq/app/audiences/create/page.tsx,pending,
+HQ,/audiences,apps/hq/app/audiences/page.tsx,pending,
+HQ,/events/[sessionId]/divisions/[divisionId],apps/hq/app/events/[sessionId]/divisions/[divisionId]/page.tsx,pending,
+HQ,/events/[sessionId],apps/hq/app/events/[sessionId]/page.tsx,pending,
+HQ,/events/court-bookings/[activityId],apps/hq/app/events/court-bookings/[activityId]/page.tsx,pending,
+HQ,/events/create,apps/hq/app/events/create/page.tsx,pending,
+HQ,/events/matches/[activityId],apps/hq/app/events/matches/[activityId]/page.tsx,pending,
+HQ,/events/types/[eventType],apps/hq/app/events/types/[eventType]/page.tsx,pending,
+HQ,/leagues/create,apps/hq/app/leagues/create/page.tsx,pending,
+HQ,/locations/[venueId]/courts/[courtId],apps/hq/app/locations/[venueId]/courts/[courtId]/page.tsx,pending,
+HQ,/locations/[venueId]/courts/create,apps/hq/app/locations/[venueId]/courts/create/page.tsx,pending,
+HQ,/locations/[venueId]/layout,apps/hq/app/locations/[venueId]/layout/page.tsx,pending,
+HQ,/locations/[venueId],apps/hq/app/locations/[venueId]/page.tsx,pending,
+HQ,/locations/create,apps/hq/app/locations/create/page.tsx,pending,
+HQ,/marketing/create,apps/hq/app/marketing/create/page.tsx,pending,
+HQ,/members/[personId]/health,apps/hq/app/members/[personId]/health/page.tsx,pending,
+HQ,/members/[personId],apps/hq/app/members/[personId]/page.tsx,pending,
+HQ,/members/invite,apps/hq/app/members/invite/page.tsx,pending,
+HQ,/messages/create,apps/hq/app/messages/create/page.tsx,pending,
+HQ,/messages,apps/hq/app/messages/page.tsx,pending,
+HQ,/onboarding/complete,apps/hq/app/onboarding/complete/page.tsx,pending,
+HQ,/onboarding,apps/hq/app/onboarding/page.tsx,pending,
+HQ,/,apps/hq/app/page.tsx,first-review,
+HQ,/payments/disputes,apps/hq/app/payments/disputes/page.tsx,pending,
+HQ,/payments,apps/hq/app/payments/page.tsx,pending,
+HQ,/payments/payout-settings,apps/hq/app/payments/payout-settings/page.tsx,pending,
+HQ,/payments/refund-policies,apps/hq/app/payments/refund-policies/page.tsx,pending,
+HQ,/payments/setup,apps/hq/app/payments/setup/page.tsx,pending,
+HQ,/payments/transactions/[transactionId],apps/hq/app/payments/transactions/[transactionId]/page.tsx,pending,
+HQ,/payments/transactions,apps/hq/app/payments/transactions/page.tsx,pending,
+HQ,/products/[itemId]/builder,apps/hq/app/products/[itemId]/builder/page.tsx,pending,
+HQ,/products/[itemId]/draft-ready,apps/hq/app/products/[itemId]/draft-ready/page.tsx,pending,
+HQ,/products/[itemId],apps/hq/app/products/[itemId]/page.tsx,pending,
+HQ,/products/create,apps/hq/app/products/create/page.tsx,pending,
+HQ,/products/types/[productType],apps/hq/app/products/types/[productType]/page.tsx,pending,
+HQ,/programs,apps/hq/app/programs/page.tsx,pending,
+HQ,/promo-codes,apps/hq/app/promo-codes/page.tsx,pending,
+HQ,/settings,apps/hq/app/settings/page.tsx,pending,
+HQ,/settings/theme,apps/hq/app/settings/theme/page.tsx,pending,
+HQ,/setup,apps/hq/app/setup/page.tsx,pending,
+HQ,/stripe/return,apps/hq/app/stripe/return/page.tsx,pending,
+HQ,/team/[personId],apps/hq/app/team/[personId]/page.tsx,pending,
+HQ,/team/invite,apps/hq/app/team/invite/page.tsx,pending,
+HQ,/training/drills/create/advanced,apps/hq/app/training/drills/create/advanced/page.tsx,pending,
+HQ,/training/drills/create,apps/hq/app/training/drills/create/page.tsx,pending,
+HQ,/training,apps/hq/app/training/page.tsx,pending,
+HQ,/training/practice-plans/[planId],apps/hq/app/training/practice-plans/[planId]/page.tsx,pending,
+HQ,/training/practice-plans/[planId]/print,apps/hq/app/training/practice-plans/[planId]/print/page.tsx,pending,
+HQ,/training/practice-plans/create,apps/hq/app/training/practice-plans/create/page.tsx,pending,
+HQ,/training/practices/[eventId],apps/hq/app/training/practices/[eventId]/page.tsx,pending,
+HQ,/training/programs/[programId],apps/hq/app/training/programs/[programId]/page.tsx,pending,
+HQ,/training/programs/create,apps/hq/app/training/programs/create/page.tsx,pending,
+Player native,PolicyReviewModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,CoachProfileModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,HomeScreenV3,apps/player/App.tsx,pending,Physical device verification pending
+Player native,BookingCalendarModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,VenueFinderModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,VenueBookingModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,MobilePredictionMarketSheet,apps/player/App.tsx,pending,Physical device verification pending
+Player native,ProTourModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,DiscoverScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,FindCoachScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,PlayLauncherScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,PlansScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,WalletScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,PredictionPortfolioScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,PerformanceScreen,apps/player/App.tsx,pending,Physical device verification pending
+Player native,BookingModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,PickupModal,apps/player/App.tsx,pending,Physical device verification pending
+Player native,QuickActionsSheet,apps/player/App.tsx,pending,Physical device verification pending
+Player native,BookingManagementModal,apps/player/booking-management.tsx,pending,Physical device verification pending
+Player native,DiscoveryMapModal,apps/player/discovery-map.tsx,pending,Physical device verification pending
+Player native,PlayerDunaAiScreen,apps/player/duna-ai-screen.tsx,pending,Physical device verification pending
+Player native,HealthScreen,apps/player/health-screen.tsx,pending,Physical device verification pending
+Player native,CheckInModal,apps/player/health-screen.tsx,pending,Physical device verification pending
+Player native,ConnectModal,apps/player/health-screen.tsx,pending,Physical device verification pending
+Player native,ShareModal,apps/player/health-screen.tsx,pending,Physical device verification pending
+Player native,HomeV3Screen,apps/player/home-v3.tsx,pending,Physical device verification pending
+Player native,PlayerMessagingScreen,apps/player/messaging-screen.tsx,pending,Physical device verification pending
+Player native,OrganizationExperienceModal,apps/player/organization-experience.tsx,pending,Physical device verification pending
+Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,pending,Physical device verification pending
+Player native,PlayerProfileSheet,apps/player/player-social.tsx,pending,Physical device verification pending
+Player native,PlayerProfileModal,apps/player/player-social.tsx,pending,Physical device verification pending
+Player native,PlayerPickerModal,apps/player/player-social.tsx,pending,Physical device verification pending
+Player native,NotificationPreferencesModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,VideoDataPreferencesModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,ProfileDetailsModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,SubscriptionManagementModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,ProfileHubScreen,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,SheetHeader,apps/player/profile-studio.tsx,pending,Physical device verification pending
+Player native,ProfileEditorModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
+Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
+Player native,SandHomeScreen,apps/player/sand-home.tsx,first-review,Physical device verification pending
+Player native,ProvisionalPlayerModal,apps/player/score-upload.tsx,pending,Physical device verification pending
+Player native,ScoreUploadScreen,apps/player/score-upload.tsx,pending,Physical device verification pending
+Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,pending,Physical device verification pending
+Player native,RecordingChoiceSheet,apps/player/video-studio.tsx,pending,Physical device verification pending
+Player native,clampedScreenPoint,apps/player/video-studio.tsx,pending,Physical device verification pending
+Player native,VideoPlayerModal,apps/player/video-studio.tsx,pending,Physical device verification pending
+Player native,VideoStudioScreen,apps/player/video-studio.tsx,pending,Physical device verification pending
+Player native,VisionSecondScreen,apps/player/vision-second-screen.tsx,pending,Physical device verification pending
+Pro native,TodayScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,CalendarScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,PeopleScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,ScorerScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,MoreScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,CoachVideoScreen,apps/pro/coach-video.tsx,pending,Physical device verification pending
+Pro native,DunaAiScreen,apps/pro/duna-ai-screen.tsx,pending,Physical device verification pending
+Pro native,GetPaidScreen,apps/pro/get-paid.tsx,pending,Physical device verification pending
+Pro native,ProMessagingScreen,apps/pro/messaging-screen.tsx,pending,Physical device verification pending
+Pro native,MoneyScreen,apps/pro/money-screen.tsx,pending,Physical device verification pending
+Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,pending,Physical device verification pending
+Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,pending,Physical device verification pending
+Pro native,TicketScannerScreen,apps/pro/ticket-scanner.tsx,pending,Physical device verification pending
