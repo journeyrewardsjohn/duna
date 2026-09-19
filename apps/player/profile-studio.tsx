@@ -1,3 +1,4 @@
+import { usePlayerDesign, type PlayerDesignTokens } from "./design-theme";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -21,17 +22,27 @@ import {
 import type { DunaApiClient, UploadedPlayerMedia } from "./mobile-api";
 import { usePlayerRuntime } from "./runtime";
 
-const palette = {
-  fog: "#f7f5ef",
-  paper: "#ffffff",
-  ink: "#111719",
-  marine: "#203740",
-  muted: "#706a60",
-  line: "#dfdfdc",
-  aqua: "#2caeb5",
-  coral: "#c55b49",
-  wash: "#e9eeeb",
-} as const;
+function profilePalette(tokens: PlayerDesignTokens) {
+  return {
+    fog: tokens.ground,
+    paper: tokens.surface1,
+    ink: tokens.text1,
+    marine: tokens.text1,
+    muted: tokens.text2,
+    line: tokens.hairline,
+    aqua: tokens.text1,
+    coral: tokens.loss,
+    wash: tokens.surface2,
+    onAccent: tokens.buttonPrimaryForeground,
+  };
+}
+function useProfileDesign() {
+  const { tokens } = usePlayerDesign();
+  return useMemo(() => {
+    const palette = profilePalette(tokens);
+    return { palette, styles: createStyles(palette) };
+  }, [tokens]);
+}
 
 type PlayerArtworkWorkflow = NonNullable<
   Awaited<
@@ -48,6 +59,8 @@ function SheetHeader({
   readonly onClose: () => void;
   readonly title: string;
 }) {
+  const { styles } = useProfileDesign();
+
   return (
     <View style={styles.header}>
       <View style={styles.flex}>
@@ -81,6 +94,8 @@ function Field({
   readonly placeholder?: string;
   readonly value: string;
 }) {
+  const { palette, styles } = useProfileDesign();
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -109,6 +124,8 @@ function Choice<T extends string>({
   readonly options: readonly { readonly label: string; readonly value: T }[];
   readonly value: T;
 }) {
+  const { styles } = useProfileDesign();
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -145,6 +162,8 @@ export function ProfileEditorModal({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { palette, styles } = useProfileDesign();
+
   const { client, mode, refresh, settings } = usePlayerRuntime();
   const profile = settings?.profile;
   const [displayName, setDisplayName] = useState("");
@@ -325,7 +344,9 @@ export function ProfileEditorModal({
               onPress={() => void save()}
               style={[styles.primary, busy && styles.disabled]}
             >
-              {busy && <ActivityIndicator color={palette.paper} size="small" />}
+              {busy && (
+                <ActivityIndicator color={palette.onAccent} size="small" />
+              )}
               <Text style={styles.primaryText}>
                 {busy ? "Saving…" : "Save profile"}
               </Text>
@@ -376,6 +397,8 @@ export function PlayerArtworkModal({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { palette, styles } = useProfileDesign();
+
   const { client, mode, refresh, uploadPlayerMedia } = usePlayerRuntime();
   const [photos, setPhotos] = useState<readonly SelectedPhoto[]>([]);
   const [brief, setBrief] = useState("");
@@ -707,7 +730,10 @@ export function PlayerArtworkModal({
                     ]}
                   >
                     {approvalBusy && (
-                      <ActivityIndicator color={palette.paper} size="small" />
+                      <ActivityIndicator
+                        color={palette.onAccent}
+                        size="small"
+                      />
                     )}
                     <Text style={styles.approveArtworkText}>
                       {approvalBusy ? "Publishing artwork…" : "Approve artwork"}
@@ -866,7 +892,9 @@ export function PlayerArtworkModal({
               onPress={() => void submit()}
               style={[styles.primary, busy && styles.disabled]}
             >
-              {busy && <ActivityIndicator color={palette.paper} size="small" />}
+              {busy && (
+                <ActivityIndicator color={palette.onAccent} size="small" />
+              )}
               <Text style={styles.primaryText}>
                 {busy ? "Preparing artwork…" : "Create profile artwork"}
               </Text>
@@ -878,285 +906,294 @@ export function PlayerArtworkModal({
   );
 }
 
-const styles = StyleSheet.create({
-  addPhoto: {
-    alignItems: "center",
-    backgroundColor: palette.wash,
-    borderColor: palette.marine,
-    borderRadius: 20,
-    borderStyle: "dashed",
-    borderWidth: 1,
-    height: 172,
-    justifyContent: "center",
-    width: "48.3%",
-  },
-  addPhotoIcon: { color: palette.marine, fontSize: 30 },
-  addPhotoMeta: { color: palette.muted, fontSize: 12, marginTop: 4 },
-  addPhotoText: { color: palette.marine, fontSize: 15, fontWeight: "800" },
-  approveArtwork: {
-    alignItems: "center",
-    backgroundColor: palette.marine,
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    minHeight: 52,
-    paddingHorizontal: 16,
-  },
-  approveArtworkText: { color: palette.paper, fontSize: 15, fontWeight: "900" },
-  artworkHero: {
-    backgroundColor: palette.marine,
-    borderRadius: 24,
-    overflow: "hidden",
-    padding: 22,
-  },
-  artworkHeroBody: {
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
-  },
-  artworkHeroNumber: {
-    color: palette.aqua,
-    fontFamily: "Archivo-Hero",
-    fontSize: 48,
-    fontWeight: "900",
-  },
-  artworkHeroTitle: { color: palette.paper, fontSize: 25, fontWeight: "800" },
-  body: { color: palette.muted, fontSize: 15, lineHeight: 22, marginTop: 6 },
-  checkbox: {
-    alignItems: "center",
-    borderColor: palette.marine,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    height: 25,
-    justifyContent: "center",
-    width: 25,
-  },
-  checkboxChecked: { backgroundColor: palette.marine },
-  checkboxText: { color: palette.paper, fontSize: 14, fontWeight: "900" },
-  choice: {
-    alignItems: "center",
-    borderColor: palette.line,
-    borderRadius: 12,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 8,
-  },
-  choiceSelected: {
-    backgroundColor: palette.marine,
-    borderColor: palette.marine,
-  },
-  choiceText: { color: palette.marine, fontSize: 13, fontWeight: "800" },
-  choiceTextSelected: { color: palette.paper },
-  choices: { flexDirection: "row", gap: 8 },
-  close: {
-    alignItems: "center",
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  closeText: { color: palette.ink, fontSize: 29, lineHeight: 33 },
-  content: { gap: 18, padding: 20, paddingBottom: 54 },
-  disabled: { opacity: 0.55 },
-  error: {
-    color: palette.coral,
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  eyebrow: {
-    color: palette.marine,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  field: { gap: 7 },
-  fieldLabel: {
-    color: palette.marine,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  flex: { flex: 1, minWidth: 0 },
-  header: {
-    alignItems: "center",
-    borderBottomColor: palette.line,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-  },
-  input: {
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 14,
-    borderWidth: 1,
-    color: palette.ink,
-    fontSize: 16,
-    minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  introCard: {
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 18,
-  },
-  introTitle: { color: palette.ink, fontSize: 22, fontWeight: "800" },
-  notice: {
-    backgroundColor: palette.wash,
-    borderRadius: 12,
-    color: palette.marine,
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
-    padding: 13,
-  },
-  photo: { height: 124, width: "100%" },
-  photoCard: {
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 172,
-    overflow: "hidden",
-    width: "48.3%",
-  },
-  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  photoMeta: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  photoNumber: {
-    color: palette.marine,
-    fontFamily: "Archivo-Chip",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  photoQuality: { color: palette.aqua, fontSize: 12, fontWeight: "900" },
-  photoQualityBad: { color: palette.coral },
-  primary: {
-    alignItems: "center",
-    backgroundColor: palette.marine,
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 9,
-    justifyContent: "center",
-    minHeight: 56,
-    paddingHorizontal: 18,
-  },
-  primaryText: { color: palette.paper, fontSize: 16, fontWeight: "900" },
-  progress: { color: palette.marine, fontSize: 14, fontWeight: "800" },
-  reviewBody: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-  reviewImage: {
-    backgroundColor: palette.wash,
-    borderRadius: 14,
-    height: 176,
-    width: 132,
-  },
-  reviewImages: { gap: 10, paddingVertical: 14 },
-  reviewPackage: {
-    backgroundColor: "#e7f1f2",
-    borderColor: "#b7dadd",
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 16,
-  },
-  reviewTitle: {
-    color: palette.marine,
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  removePhoto: {
-    alignItems: "center",
-    backgroundColor: "rgba(17,23,25,0.78)",
-    borderRadius: 16,
-    height: 32,
-    justifyContent: "center",
-    position: "absolute",
-    right: 8,
-    top: 8,
-    width: 32,
-  },
-  removePhotoText: { color: palette.paper, fontSize: 21, lineHeight: 24 },
-  retryPhoto: {
-    alignItems: "center",
-    backgroundColor: palette.paper,
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    minHeight: 48,
-    position: "absolute",
-    right: 0,
-  },
-  retryPhotoText: { color: palette.coral, fontSize: 12, fontWeight: "900" },
-  rights: {
-    alignItems: "flex-start",
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 76,
-    padding: 15,
-  },
-  rightsBody: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 3,
-  },
-  rightsTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
-  safe: { backgroundColor: palette.fog, flex: 1 },
-  statusDot: {
-    backgroundColor: palette.aqua,
-    borderRadius: 6,
-    height: 12,
-    width: 12,
-  },
-  statusRow: {
-    alignItems: "center",
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 14,
-  },
-  statusText: {
-    color: palette.ink,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  textarea: { minHeight: 112, textAlignVertical: "top" },
-  title: { color: palette.ink, fontSize: 25, fontWeight: "800", marginTop: 2 },
-  uploadReady: {
-    color: palette.marine,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 20,
-  },
-});
+const createStyles = (palette: ReturnType<typeof profilePalette>) =>
+  StyleSheet.create({
+    addPhoto: {
+      alignItems: "center",
+      backgroundColor: palette.wash,
+      borderColor: palette.marine,
+      borderRadius: 20,
+      borderStyle: "dashed",
+      borderWidth: 1,
+      height: 172,
+      justifyContent: "center",
+      width: "48.3%",
+    },
+    addPhotoIcon: { color: palette.marine, fontSize: 30 },
+    addPhotoMeta: { color: palette.muted, fontSize: 12, marginTop: 4 },
+    addPhotoText: { color: palette.marine, fontSize: 15, fontWeight: "500" },
+    approveArtwork: {
+      alignItems: "center",
+      backgroundColor: palette.marine,
+      borderRadius: 14,
+      flexDirection: "row",
+      gap: 8,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 16,
+    },
+    approveArtworkText: {
+      color: palette.onAccent,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    artworkHero: {
+      backgroundColor: palette.paper,
+      borderRadius: 24,
+      overflow: "hidden",
+      padding: 22,
+    },
+    artworkHeroBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 8,
+    },
+    artworkHeroNumber: {
+      color: palette.aqua,
+      fontSize: 48,
+      fontWeight: "500",
+    },
+    artworkHeroTitle: { color: palette.ink, fontSize: 25, fontWeight: "400" },
+    body: { color: palette.muted, fontSize: 15, lineHeight: 22, marginTop: 6 },
+    checkbox: {
+      alignItems: "center",
+      borderColor: palette.marine,
+      borderRadius: 7,
+      borderWidth: 1.5,
+      height: 25,
+      justifyContent: "center",
+      width: 25,
+    },
+    checkboxChecked: { backgroundColor: palette.marine },
+    checkboxText: { color: palette.onAccent, fontSize: 14, fontWeight: "500" },
+    choice: {
+      alignItems: "center",
+      borderColor: palette.line,
+      borderRadius: 12,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 8,
+    },
+    choiceSelected: {
+      backgroundColor: palette.marine,
+      borderColor: palette.marine,
+    },
+    choiceText: { color: palette.marine, fontSize: 14, fontWeight: "500" },
+    choiceTextSelected: { color: palette.onAccent },
+    choices: { flexDirection: "row", gap: 8 },
+    close: {
+      alignItems: "center",
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    closeText: { color: palette.ink, fontSize: 29, lineHeight: 33 },
+    content: { gap: 18, padding: 20, paddingBottom: 54 },
+    disabled: { opacity: 0.55 },
+    error: {
+      color: palette.coral,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 20,
+    },
+    eyebrow: {
+      color: palette.marine,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.2,
+    },
+    field: { gap: 7 },
+    fieldLabel: {
+      color: palette.marine,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.8,
+    },
+    flex: { flex: 1, minWidth: 0 },
+    header: {
+      alignItems: "center",
+      borderBottomColor: palette.line,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+    },
+    input: {
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 14,
+      borderWidth: 1,
+      color: palette.ink,
+      fontSize: 16,
+      minHeight: 52,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    introCard: {
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 18,
+    },
+    introTitle: { color: palette.ink, fontSize: 22, fontWeight: "400" },
+    notice: {
+      backgroundColor: palette.wash,
+      borderRadius: 12,
+      color: palette.marine,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 20,
+      padding: 13,
+    },
+    photo: { height: 124, width: "100%" },
+    photoCard: {
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 172,
+      overflow: "hidden",
+      width: "48.3%",
+    },
+    photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    photoMeta: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+      justifyContent: "space-between",
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    photoNumber: {
+      color: palette.marine,
+      fontFamily: "Archivo-Chip",
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    photoQuality: { color: palette.aqua, fontSize: 12, fontWeight: "500" },
+    photoQualityBad: { color: palette.coral },
+    primary: {
+      alignItems: "center",
+      backgroundColor: palette.marine,
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 18,
+    },
+    primaryText: { color: palette.onAccent, fontSize: 16, fontWeight: "500" },
+    progress: { color: palette.marine, fontSize: 14, fontWeight: "500" },
+    reviewBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 5,
+    },
+    reviewImage: {
+      backgroundColor: palette.wash,
+      borderRadius: 14,
+      height: 176,
+      width: 132,
+    },
+    reviewImages: { gap: 10, paddingVertical: 14 },
+    reviewPackage: {
+      backgroundColor: palette.wash,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 16,
+    },
+    reviewTitle: {
+      color: palette.marine,
+      fontSize: 18,
+      fontWeight: "400",
+      marginTop: 4,
+    },
+    removePhoto: {
+      alignItems: "center",
+      backgroundColor: "rgba(17,23,25,0.78)",
+      borderRadius: 16,
+      height: 32,
+      justifyContent: "center",
+      position: "absolute",
+      right: 8,
+      top: 8,
+      width: 32,
+    },
+    removePhotoText: { color: palette.onAccent, fontSize: 21, lineHeight: 24 },
+    retryPhoto: {
+      alignItems: "center",
+      backgroundColor: palette.paper,
+      bottom: 0,
+      justifyContent: "center",
+      left: 0,
+      minHeight: 48,
+      position: "absolute",
+      right: 0,
+    },
+    retryPhotoText: { color: palette.coral, fontSize: 14, fontWeight: "500" },
+    rights: {
+      alignItems: "flex-start",
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 76,
+      padding: 15,
+    },
+    rightsBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    rightsTitle: { color: palette.ink, fontSize: 15, fontWeight: "400" },
+    safe: { backgroundColor: palette.fog, flex: 1 },
+    statusDot: {
+      backgroundColor: palette.aqua,
+      borderRadius: 6,
+      height: 12,
+      width: 12,
+    },
+    statusRow: {
+      alignItems: "center",
+      backgroundColor: palette.paper,
+      borderColor: palette.line,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 14,
+    },
+    statusText: {
+      color: palette.ink,
+      fontSize: 15,
+      fontWeight: "500",
+      marginTop: 3,
+    },
+    textarea: { minHeight: 112, textAlignVertical: "top" },
+    title: {
+      color: palette.ink,
+      fontSize: 25,
+      fontWeight: "400",
+      marginTop: 2,
+    },
+    uploadReady: {
+      color: palette.marine,
+      fontSize: 14,
+      fontWeight: "500",
+      lineHeight: 20,
+    },
+  });

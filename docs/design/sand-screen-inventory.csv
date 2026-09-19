@@ -140,7 +140,7 @@ Player native,PredictionPortfolioScreen,apps/player/App.tsx,pending,Physical dev
 Player native,PerformanceScreen,apps/player/App.tsx,pending,Physical device verification pending
 Player native,BookingModal,apps/player/App.tsx,pending,Physical device verification pending
 Player native,PickupModal,apps/player/App.tsx,pending,Physical device verification pending
-Player native,QuickActionsSheet,apps/player/App.tsx,local-review,All nine navigation entries opened in browser renderer; physical workflows pending
+Player native,QuickActionsSheet,apps/player/App.tsx,local-review,All nine actions opened in light and dark; connected and physical workflows pending
 Player native,BookingManagementModal,apps/player/booking-management.tsx,pending,Physical device verification pending
 Player native,DiscoveryMapModal,apps/player/discovery-map.tsx,pending,Physical device verification pending
 Player native,PlayerDunaAiScreen,apps/player/duna-ai-screen.tsx,pending,Physical device verification pending
@@ -148,10 +148,10 @@ Player native,HealthScreen,apps/player/health-screen.tsx,pending,Physical device
 Player native,CheckInModal,apps/player/health-screen.tsx,pending,Physical device verification pending
 Player native,ConnectModal,apps/player/health-screen.tsx,pending,Physical device verification pending
 Player native,ShareModal,apps/player/health-screen.tsx,pending,Physical device verification pending
-Player native,HomeV3Screen,apps/player/home-v3.tsx,pending,Physical device verification pending
+Player native,HomeV3Screen,apps/player/home-v3.tsx,superseded,Unused screen export; activity card components are used by SandHomeScreen
 Player native,PlayerMessagingScreen,apps/player/messaging-screen.tsx,pending,Physical device verification pending
 Player native,OrganizationExperienceModal,apps/player/organization-experience.tsx,pending,Physical device verification pending
-Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,local-review,Browser renderer review; device calendar and physical gestures pending
+Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,local-review,Light and dark browser review; native calendar integration and physical gestures pending
 Player native,PlayerProfileSheet,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerProfileModal,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerPickerModal,apps/player/player-social.tsx,pending,Physical device verification pending
@@ -159,10 +159,10 @@ Player native,NotificationPreferencesModal,apps/player/profile-hub.tsx,local-rev
 Player native,VideoDataPreferencesModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
 Player native,ProfileDetailsModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
 Player native,SubscriptionManagementModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
-Player native,ProfileHubScreen,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
-Player native,ProfileEditorModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
-Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
-Player native,SandHomeScreen,apps/player/sand-home.tsx,first-review,Physical device verification pending
+Player native,ProfileHubScreen,apps/player/profile-hub.tsx,local-review,Light and dark appearance and persistence reviewed in browser renderer; connected and device verification pending
+Player native,ProfileEditorModal,apps/player/profile-studio.tsx,local-review,Light and dark sample form reviewed; account save and physical verification pending
+Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,local-review,Light and dark sample preparation sheet reviewed; no media or artwork request submitted
+Player native,SandHomeScreen,apps/player/sand-home.tsx,local-review,Light and dark hero and sheet review; physical scrolling and status bar verification pending
 Player native,ProvisionalPlayerModal,apps/player/score-upload.tsx,pending,Physical device verification pending
 Player native,ScoreUploadScreen,apps/player/score-upload.tsx,pending,Physical device verification pending
 Player native,PlayerTrainingScreen,apps/player/training-screen.tsx,pending,Physical device verification pending
@@ -209,3 +209,4 @@ HQ,/admin/payments,apps/hq/app/admin/[module]/page.tsx,pending,
 HQ,/admin/audit,apps/hq/app/admin/[module]/page.tsx,pending,
 HQ,/admin/flags,apps/hq/app/admin/[module]/page.tsx,pending,
 HQ,/admin/health,apps/hq/app/admin/[module]/page.tsx,pending,
+Player native,AppearanceModal,apps/player/profile-hub.tsx,local-review,Light dark device preference and reload persistence checked; physical acceptance pending

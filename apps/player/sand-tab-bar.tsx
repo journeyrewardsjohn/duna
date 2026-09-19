@@ -1,4 +1,6 @@
-import { sandColors } from "@duna/ui/sand";
+import { usePlayerDesign } from "./design-theme";
+import { useMemo } from "react";
+import type { resolveDunaSandColors } from "@duna/ui/mobile";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
@@ -35,6 +37,9 @@ export function SandTabBar({
   readonly unreadCount: number;
   readonly onPressFeedback?: () => void;
 }) {
+  const { sand: sandColors } = usePlayerDesign();
+  const styles = useMemo(() => createStyles(sandColors), [sandColors]);
+
   const insets = useSafeAreaInsets();
   const destinationButton = (
     destination: PlayerPrimaryDestination,
@@ -123,64 +128,65 @@ export function SandTabBar({
   );
 }
 
-const styles = StyleSheet.create({
-  tabBarPosition: {
-    left: 0,
-    position: "absolute",
-    right: 0,
-    zIndex: 90,
-    backgroundColor: sandColors.canvas,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: sandColors.line,
-  },
-  tabBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 65,
-    paddingHorizontal: 10,
-    paddingTop: 5,
-  },
-  tabItem: {
-    alignItems: "center",
-    flex: 1,
-    minHeight: 55,
-    justifyContent: "center",
-    gap: 5,
-    position: "relative",
-  },
-  tabItemActive: { opacity: 1 },
-  tabLabel: { color: sandColors.ink, fontSize: 12, lineHeight: 16 },
-  tabIconWrap: { position: "relative" },
-  tabUnreadBadge: {
-    alignItems: "center",
-    backgroundColor: sandColors.ink,
-    borderColor: sandColors.surface,
-    borderRadius: 8,
-    borderWidth: 2,
-    height: 16,
-    justifyContent: "center",
-    minWidth: 16,
-    position: "absolute",
-    right: -11,
-    top: -10,
-  },
-  tabUnreadText: {
-    color: sandColors.surface,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  tabAiButton: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 55,
-    gap: 3,
-  },
-  tabAiHalo: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 25,
-    width: 25,
-  },
-});
+const createStyles = (sandColors: ReturnType<typeof resolveDunaSandColors>) =>
+  StyleSheet.create({
+    tabBarPosition: {
+      left: 0,
+      position: "absolute",
+      right: 0,
+      zIndex: 90,
+      backgroundColor: sandColors.canvas,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: sandColors.line,
+    },
+    tabBar: {
+      alignItems: "center",
+      flexDirection: "row",
+      minHeight: 65,
+      paddingHorizontal: 10,
+      paddingTop: 5,
+    },
+    tabItem: {
+      alignItems: "center",
+      flex: 1,
+      minHeight: 55,
+      justifyContent: "center",
+      gap: 5,
+      position: "relative",
+    },
+    tabItemActive: { opacity: 1 },
+    tabLabel: { color: sandColors.ink, fontSize: 12, lineHeight: 16 },
+    tabIconWrap: { position: "relative" },
+    tabUnreadBadge: {
+      alignItems: "center",
+      backgroundColor: sandColors.ink,
+      borderColor: sandColors.surface,
+      borderRadius: 8,
+      borderWidth: 2,
+      height: 16,
+      justifyContent: "center",
+      minWidth: 16,
+      position: "absolute",
+      right: -11,
+      top: -10,
+    },
+    tabUnreadText: {
+      color: sandColors.surface,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 14,
+    },
+    tabAiButton: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 55,
+      gap: 3,
+    },
+    tabAiHalo: {
+      alignItems: "center",
+      justifyContent: "center",
+      height: 25,
+      width: 25,
+    },
+  });

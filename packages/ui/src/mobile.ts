@@ -101,10 +101,12 @@ export function resolveDunaMobileTokens(
     ground: sandCanvas ? sandColors.canvas : semantic.ground,
     groundWarm: sandCanvas ? sandColors.canvas : semantic.groundWarm,
     groundCool: sandCanvas ? sandColors.inset : semantic.groundCool,
+    dissolve: sandCanvas ? sandColors.canvas : semantic.dissolve,
     surface2: sandCanvas ? sandColors.inset : semantic.surface2,
     surface1: sandCanvas ? sandColors.surface : semantic.surface1,
     text1: sandCanvas ? sandColors.ink : semantic.text1,
     text2: sandCanvas ? sandColors.muted : semantic.text2,
+    text3: sandCanvas ? sandColors.muted : semantic.text3,
     hairline: sandCanvas ? sandColors.line : semantic.hairline,
     glass: dark ? "rgba(20,26,30,0.82)" : "rgba(255,255,255,0.82)",
     glassStrong: dark ? "rgba(20,26,30,0.94)" : "rgba(255,255,255,0.94)",
@@ -114,4 +116,19 @@ export function resolveDunaMobileTokens(
     selectedFill: dark ? semantic.surface3 : "rgba(255,255,255,0.76)",
     inactiveFill: dark ? semantic.surface1 : sandColors.inset,
   } as const;
+}
+
+/** The photographic shell keeps its image overlays while the reading surfaces follow appearance. */
+export function resolveDunaSandColors(theme: DunaTheme) {
+  const tokens = resolveDunaMobileTokens(theme, "editorial");
+  return {
+    ...sandColors,
+    canvas: tokens.ground,
+    surface: tokens.surface1,
+    inset: tokens.surface2,
+    ink: tokens.text1,
+    muted: tokens.text2,
+    line: tokens.hairline,
+    scrim: tokens.scrim,
+  };
 }

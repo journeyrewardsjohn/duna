@@ -4,7 +4,7 @@ export const sandColors = {
   surface: "#FAF8F4",
   inset: "#E8E3D9",
   ink: "#32332F",
-  muted: "#686761",
+  muted: "#5E5E58",
   line: "#D9D4CB",
   white: "#FFFFFF",
   inkRgb: "50,51,47",

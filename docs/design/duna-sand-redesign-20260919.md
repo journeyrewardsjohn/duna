@@ -238,3 +238,41 @@ Checkpoint validation: `pnpm verify` passed with all 117 browser checks. Fresh
 Player iOS/Android exports passed. The browser review confirmed that preview
 accounts cannot start recording, livestreaming, or an upload, and that zero
 allowance uses the explicit “Not included” label.
+
+## Player appearance and secondary sheets checkpoint — September 19
+
+Player now has a persisted Light, Dark, and Match device preference under Profile.
+The saved choice resolves before the app content mounts. Home, compact navigation,
+calendar, discovery, the root workflow palette, account sheets, profile editing,
+and video presentation now use that choice. Event and match detail resolve the
+selected appearance while retaining live-zone semantics. The Home status bar also
+changes contrast when the content sheet covers the photograph.
+
+Profile editing and artwork preparation use the quiet form style. Their existing
+save, upload, rights-confirmation, and publishing controls are preserved. Video
+entry, setup, usage, and profile cards use theme-aware surfaces; camera overlays
+and the viewing stage retain their separate presentation. The review caught and
+fixed disappearing profile initials, pale video empty states, a white-on-white
+Tour introduction, and dark map-sheet headings. Muted sand text was darkened to
+stay readable on the inset surfaces.
+
+Actual browser-rendered Player checks cover preference switching, persistence on
+reload, following device changes, calendar navigation, and recording navigation.
+All nine quick actions opened in both appearances without runtime errors. Profile
+editing and artwork sheets were visually reviewed in both appearances; no account
+record, photo, or artwork request was submitted. Automated contrast scans are an
+audit aid: underlying content hidden by native sheets and photographic overlays
+require visual interpretation.
+
+This is not app-wide acceptance yet. Training, Health, booking management, and
+other independent secondary styles still need their remaining review. Native
+Dynamic Type, glare, status-bar behavior, physical camera/Watch workflows, private
+provider playback, and store delivery remain open. The unused HomeV3Screen export
+is superseded by SandHomeScreen; its shared activity cards remain in use.
+
+Checkpoint validation: the full `pnpm verify` gate passed with 117 browser checks.
+The first local attempt used an inactive default server address; the passing run
+used the review app ports. The final shared-token correction aligns photo dissolve
+with the sand ground and passed all 22 UI unit tests, including new contrast and
+dissolve invariants. Player iOS/Android exports passed; physical and store proof
+remain separate requirements. Exact-commit CI is required before release.

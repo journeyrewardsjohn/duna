@@ -1,3 +1,4 @@
+import { usePlayerDesign } from "./design-theme";
 import { formatMoney, type EventKind, type EventSummary } from "@duna/core";
 import {
   mobileControl,
@@ -167,10 +168,11 @@ export function NativeEventDetails({
   }
   const destinationTransition = destinationTransitionRef.current;
   const phase = event ? phaseFor(event) : "upcoming";
+  const { theme } = usePlayerDesign();
   const tokens = useMemo(
     () =>
-      resolveDunaMobileTokens("light", phase === "live" ? "live" : "athletic"),
-    [phase],
+      resolveDunaMobileTokens(theme, phase === "live" ? "live" : "athletic"),
+    [theme, phase],
   );
   const styles = useMemo(() => createStyles(tokens), [tokens]);
 

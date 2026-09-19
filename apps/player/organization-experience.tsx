@@ -1,7 +1,7 @@
+import { resolveDunaMobileTokens } from "@duna/ui/mobile";
 import { annualPrepaySavingsPercent, nativeMapUrl } from "@duna/core";
 import {
   environmentalColors,
-  resolveDunaTokens,
   type DunaTheme,
   type ResolvedDunaTokens,
 } from "@duna/ui/tokens";
@@ -378,7 +378,7 @@ export function OrganizationExperienceModal({
 }) {
   const { client, dashboard, publicClient, refresh } = usePlayerRuntime();
   const themeTokens = useMemo(
-    () => resolveDunaTokens(theme, "editorial"),
+    () => resolveDunaMobileTokens(theme, "editorial"),
     [theme],
   );
   const styles = useMemo(() => createStyles(themeTokens), [themeTokens]);

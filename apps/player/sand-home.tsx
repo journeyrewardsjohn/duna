@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { sandColors as c } from "@duna/ui/sand";
+import { usePlayerDesign } from "./design-theme";
+import type { resolveDunaSandColors } from "@duna/ui/mobile";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useRef, useState } from "react";
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -59,6 +61,9 @@ export function SandHomeScreen(
     readonly features: readonly Feature[];
   },
 ) {
+  const { sand: c, theme } = usePlayerDesign();
+  const s = useMemo(() => createStyles(c), [c]);
+
   const insets = useSafeAreaInsets();
   const [width, setWidth] = useState(390);
   const [reducedMotion, setReducedMotion] = useState(true);
@@ -84,6 +89,18 @@ export function SandHomeScreen(
   const carousel = useRef<ScrollView>(null);
   const activeClub = props.clubs.find((club) => club.id === props.selectedClub);
   const heroHeight = Math.min(560, Math.max(440, width * 1.2));
+  const [sheetAtTop, setSheetAtTop] = useState(false);
+  const sheetAtTopRef = useRef(false);
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }) => {
+      const next = value >= heroHeight - 35 - insets.top;
+      if (next !== sheetAtTopRef.current) {
+        sheetAtTopRef.current = next;
+        setSheetAtTop(next);
+      }
+    });
+    return () => scrollY.removeListener(listener);
+  }, [heroHeight, insets.top, scrollY]);
   const slides = [
     {
       title: "Your place in the sand.",
@@ -141,6 +158,7 @@ export function SandHomeScreen(
       style={s.screen}
       onLayout={({ nativeEvent }) => setWidth(nativeEvent.layout.width)}
     >
+      <StatusBar style={sheetAtTop && theme === "light" ? "dark" : "light"} />
       <Animated.ScrollView
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
@@ -523,232 +541,243 @@ export function SandHomeScreen(
   );
 }
 
-const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.canvas },
-  hero: { position: "relative" },
-  slide: { justifyContent: "flex-end" },
-  veil: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: c.veil,
-  },
-  heroCopy: { paddingHorizontal: 30, paddingBottom: 115, paddingTop: 60 },
-  heroTitle: {
-    color: c.white,
-    textAlign: "center",
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: "400",
-  },
-  heroDetail: {
-    color: c.white,
-    textAlign: "center",
-    fontSize: 16,
-    lineHeight: 24,
-    marginTop: 15,
-  },
-  heroTop: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  heroIcon: {
-    width: 50,
-    height: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.glass,
-    borderRadius: 25,
-  },
-  clubTrigger: {
-    minHeight: 50,
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: c.glass,
-    borderRadius: 25,
-    paddingHorizontal: 15,
-  },
-  clubTriggerText: { color: c.white, fontSize: 14, flexShrink: 1 },
-  notification: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    width: 7,
-    height: 7,
-    borderRadius: 5,
-    backgroundColor: c.white,
-  },
-  pagination: {
-    position: "absolute",
-    bottom: 45,
-    flexDirection: "row",
-    alignSelf: "center",
-  },
-  dotTarget: {
-    minWidth: 50,
-    minHeight: 50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dot: {
-    height: 6,
-    width: 6,
-    borderRadius: 3,
-    backgroundColor: c.white,
-    opacity: 0.5,
-  },
-  dotActive: { width: 25, opacity: 1 },
-  scroll: { flex: 1 },
-  sheet: {
-    marginTop: -35,
-    padding: 20,
-    gap: 20,
-    borderTopLeftRadius: 35,
-    borderTopRightRadius: 35,
-    backgroundColor: c.canvas,
-    minHeight: 600,
-  },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.surface,
-    minHeight: 55,
-    paddingHorizontal: 20,
-    gap: 12,
-    borderRadius: 30,
-  },
-  searchText: { flex: 1, color: c.ink, fontSize: 17 },
-  heading: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginTop: 5,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    lineHeight: 27,
-    color: c.ink,
-    fontWeight: "700",
-    flexShrink: 1,
-  },
-  cardTitle: { fontSize: 18, lineHeight: 25, color: c.ink, fontWeight: "700" },
-  muted: { fontSize: 15, lineHeight: 22, color: c.muted },
-  activityCard: {
-    backgroundColor: c.surface,
-    borderRadius: 25,
-    padding: 20,
-    gap: 10,
-  },
-  actions: { flexDirection: "row", gap: 5, marginTop: 10 },
-  action: { flex: 1, alignItems: "center", gap: 10, minHeight: 90 },
-  actionIcon: {
-    backgroundColor: c.inset,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionLabel: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: c.ink,
-    textAlign: "center",
-    textTransform: "capitalize",
-  },
-  recentGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  recent: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.surface,
-    padding: 10,
-    gap: 10,
-    borderRadius: 18,
-    minHeight: 70,
-  },
-  thumb: { width: 40, height: 45, borderRadius: 10 },
-  recentLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: c.ink },
-  featureRail: { gap: 15 },
-  feature: { gap: 8 },
-  featureImage: {
-    width: "100%",
-    height: 185,
-    borderRadius: 25,
-    backgroundColor: c.inset,
-  },
-  featureTitle: { fontSize: 21, lineHeight: 27, color: c.ink },
-  roundButton: {
-    minHeight: 50,
-    minWidth: 50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  link: { fontSize: 14, color: c.ink, fontWeight: "500" },
-  textTarget: { minHeight: 50, justifyContent: "center" },
-  empty: { padding: 20, gap: 8, borderRadius: 20, backgroundColor: c.surface },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: c.scrim,
-  },
-  clubSheet: {
-    minHeight: "55%",
-    maxHeight: "85%",
-    padding: 20,
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 35,
-    borderTopRightRadius: 35,
-    gap: 15,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 5,
-    backgroundColor: c.line,
-    alignSelf: "center",
-  },
-  sheetHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  clubSearch: {
-    flexDirection: "row",
-    borderColor: c.line,
-    borderWidth: 1,
-    borderRadius: 15,
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 15,
-    minHeight: 50,
-  },
-  input: { flex: 1, fontSize: 16, color: c.ink, minHeight: 50 },
-  clubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 15,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: c.line,
-  },
-  clubMark: {
-    width: 60,
-    height: 65,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.inset,
-    borderRadius: 15,
-  },
-  flex: { flex: 1 },
-});
+const createStyles = (c: ReturnType<typeof resolveDunaSandColors>) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.canvas },
+    hero: { position: "relative" },
+    slide: { justifyContent: "flex-end" },
+    veil: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      backgroundColor: c.veil,
+    },
+    heroCopy: { paddingHorizontal: 30, paddingBottom: 115, paddingTop: 60 },
+    heroTitle: {
+      color: c.white,
+      textAlign: "center",
+      fontSize: 26,
+      lineHeight: 32,
+      fontWeight: "400",
+    },
+    heroDetail: {
+      color: c.white,
+      textAlign: "center",
+      fontSize: 16,
+      lineHeight: 24,
+      marginTop: 15,
+    },
+    heroTop: {
+      position: "absolute",
+      left: 20,
+      right: 20,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    heroIcon: {
+      width: 50,
+      height: 50,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.glass,
+      borderRadius: 25,
+    },
+    clubTrigger: {
+      minHeight: 50,
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: c.glass,
+      borderRadius: 25,
+      paddingHorizontal: 15,
+    },
+    clubTriggerText: { color: c.white, fontSize: 14, flexShrink: 1 },
+    notification: {
+      position: "absolute",
+      right: 10,
+      top: 10,
+      width: 7,
+      height: 7,
+      borderRadius: 5,
+      backgroundColor: c.white,
+    },
+    pagination: {
+      position: "absolute",
+      bottom: 45,
+      flexDirection: "row",
+      alignSelf: "center",
+    },
+    dotTarget: {
+      minWidth: 50,
+      minHeight: 50,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dot: {
+      height: 6,
+      width: 6,
+      borderRadius: 3,
+      backgroundColor: c.white,
+      opacity: 0.5,
+    },
+    dotActive: { width: 25, opacity: 1 },
+    scroll: { flex: 1 },
+    sheet: {
+      marginTop: -35,
+      padding: 20,
+      gap: 20,
+      borderTopLeftRadius: 35,
+      borderTopRightRadius: 35,
+      backgroundColor: c.canvas,
+      minHeight: 600,
+    },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      minHeight: 55,
+      paddingHorizontal: 20,
+      gap: 12,
+      borderRadius: 30,
+    },
+    searchText: { flex: 1, color: c.ink, fontSize: 17 },
+    heading: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      marginTop: 5,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      lineHeight: 27,
+      color: c.ink,
+      fontWeight: "700",
+      flexShrink: 1,
+    },
+    cardTitle: {
+      fontSize: 18,
+      lineHeight: 25,
+      color: c.ink,
+      fontWeight: "700",
+    },
+    muted: { fontSize: 15, lineHeight: 22, color: c.muted },
+    activityCard: {
+      backgroundColor: c.surface,
+      borderRadius: 25,
+      padding: 20,
+      gap: 10,
+    },
+    actions: { flexDirection: "row", gap: 5, marginTop: 10 },
+    action: { flex: 1, alignItems: "center", gap: 10, minHeight: 90 },
+    actionIcon: {
+      backgroundColor: c.inset,
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    actionLabel: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: c.ink,
+      textAlign: "center",
+      textTransform: "capitalize",
+    },
+    recentGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    recent: {
+      flexBasis: "47%",
+      flexGrow: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      padding: 10,
+      gap: 10,
+      borderRadius: 18,
+      minHeight: 70,
+    },
+    thumb: { width: 40, height: 45, borderRadius: 10 },
+    recentLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: c.ink },
+    featureRail: { gap: 15 },
+    feature: { gap: 8 },
+    featureImage: {
+      width: "100%",
+      height: 185,
+      borderRadius: 25,
+      backgroundColor: c.inset,
+    },
+    featureTitle: { fontSize: 21, lineHeight: 27, color: c.ink },
+    roundButton: {
+      minHeight: 50,
+      minWidth: 50,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    link: { fontSize: 14, color: c.ink, fontWeight: "500" },
+    textTarget: { minHeight: 50, justifyContent: "center" },
+    empty: {
+      padding: 20,
+      gap: 8,
+      borderRadius: 20,
+      backgroundColor: c.surface,
+    },
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: c.scrim,
+    },
+    clubSheet: {
+      minHeight: "55%",
+      maxHeight: "85%",
+      padding: 20,
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 35,
+      borderTopRightRadius: 35,
+      gap: 15,
+    },
+    handle: {
+      width: 40,
+      height: 5,
+      borderRadius: 5,
+      backgroundColor: c.line,
+      alignSelf: "center",
+    },
+    sheetHeading: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    clubSearch: {
+      flexDirection: "row",
+      borderColor: c.line,
+      borderWidth: 1,
+      borderRadius: 15,
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 15,
+      minHeight: 50,
+    },
+    input: { flex: 1, fontSize: 16, color: c.ink, minHeight: 50 },
+    clubRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 15,
+      paddingVertical: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: c.line,
+    },
+    clubMark: {
+      width: 60,
+      height: 65,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.inset,
+      borderRadius: 15,
+    },
+    flex: { flex: 1 },
+  });

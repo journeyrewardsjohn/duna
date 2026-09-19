@@ -1,3 +1,4 @@
+import { usePlayerDesign } from "./design-theme";
 import type { MatchSummary } from "@duna/core";
 import {
   mobileControl,
@@ -258,9 +259,10 @@ export function NativeMatchDetails({
   }) => Promise<string>;
   readonly visible: boolean;
 }) {
+  const { theme } = usePlayerDesign();
   const tokens = useMemo(
-    () => resolveDunaMobileTokens("light", "athletic"),
-    [],
+    () => resolveDunaMobileTokens(theme, "athletic"),
+    [theme],
   );
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
