@@ -4,13 +4,19 @@ import {
   useStripeTerminal,
   type Reader,
 } from "@stripe/stripe-terminal-react-native";
+import {
+  CircleCheck,
+  CircleX,
+  CircleAlert,
+  Nfc,
+  Layers,
+  Wallet,
+} from "lucide-react-native";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   Platform,
   Pressable,
   ScrollView,
@@ -24,6 +30,12 @@ import {
 } from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
+import {
+  useProDesign,
+  useProStyles,
+  type ProDesignTokens,
+} from "./design-theme";
+import { SandLoader } from "./sand-loader";
 
 type PaymentWorkspace = Awaited<
   ReturnType<DunaApiClient["operator"]["paymentWorkspace"]["query"]>
@@ -70,6 +82,7 @@ function messageForReaderDisplay(message: Reader.DisplayMessage): string {
 }
 
 function ProgressHeader({ step }: { readonly step: number }) {
+  const styles = useProStyles(createStyles);
   return (
     <View style={styles.progressRow}>
       {[0, 1, 2, 3].map((value) => (
@@ -93,101 +106,28 @@ function PaymentMotion({
   readonly state: "ready" | "processing" | ResultState;
   readonly prompt: string;
 }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const success = useRef(new Animated.Value(0.85)).current;
-  useEffect(() => {
-    if (state === "processing" || state === "ready") {
-      const animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, {
-            toValue: 1,
-            duration: 1_250,
-            easing: Easing.inOut(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulse, {
-            toValue: 0,
-            duration: 1_250,
-            easing: Easing.inOut(Easing.cubic),
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      animation.start();
-      return () => animation.stop();
-    }
-    Animated.spring(success, {
-      toValue: 1,
-      damping: 11,
-      stiffness: 160,
-      useNativeDriver: true,
-    }).start();
-  }, [pulse, state, success]);
-  const background =
+  const { tokens } = useProDesign();
+  const styles = useProStyles(createStyles);
+  const Icon =
     state === "approved"
-      ? "#167b55"
+      ? CircleCheck
       : state === "declined"
-        ? "#a13e47"
+        ? CircleX
         : state === "error"
-          ? "#814c2a"
-          : "#143d67";
+          ? CircleAlert
+          : Nfc;
+  const statusColor =
+    state === "approved"
+      ? tokens.gain
+      : state === "declined" || state === "error"
+        ? tokens.loss
+        : tokens.text1;
   return (
-    <View style={[styles.motion, { backgroundColor: background }]}>
-      {(state === "ready" || state === "processing") && (
-        <>
-          <Animated.View
-            style={[
-              styles.orbit,
-              {
-                opacity: pulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.18, 0.55],
-                }),
-                transform: [
-                  {
-                    scale: pulse.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.82, 1.12],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.phone,
-              {
-                transform: [
-                  {
-                    translateY: pulse.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [3, -4],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.phoneSpeaker} />
-            <View style={styles.tapZone}>
-              <Text style={styles.tapZoneIcon}>)))</Text>
-            </View>
-          </Animated.View>
-          <View style={styles.cardShape}>
-            <View style={styles.cardChip} />
-            <Text style={styles.cardMark}>DUNA</Text>
-          </View>
-        </>
-      )}
-      {(state === "approved" || state === "declined" || state === "error") && (
-        <Animated.View style={{ transform: [{ scale: success }] }}>
-          <View style={styles.resultIcon}>
-            <Text style={styles.resultIconText}>
-              {state === "approved" ? "✓" : state === "declined" ? "×" : "!"}
-            </Text>
-          </View>
-        </Animated.View>
+    <View style={styles.motion} accessibilityLiveRegion="polite">
+      {state === "processing" ? (
+        <SandLoader label="Processing payment" size={130} />
+      ) : (
+        <Icon size={64} strokeWidth={1.3} color={statusColor} />
       )}
       <Text style={styles.motionAmount}>{money(amount, currency)}</Text>
       <Text style={styles.motionPrompt}>{prompt}</Text>
@@ -202,6 +142,8 @@ function GoalCard({
   readonly workspace: PaymentWorkspace;
   readonly onUpdated: (workspace: PaymentWorkspace) => void;
 }) {
+  const { tokens } = useProDesign();
+  const styles = useProStyles(createStyles);
   const { client, mode } = useProRuntime();
   const [editing, setEditing] = useState(false);
   const [target, setTarget] = useState("");
@@ -285,7 +227,7 @@ function GoalCard({
               keyboardType="decimal-pad"
               onChangeText={setTarget}
               placeholder="5,000"
-              placeholderTextColor="#97a1b0"
+              placeholderTextColor={tokens.text2}
               style={styles.goalInput}
               value={target}
             />
@@ -318,7 +260,7 @@ function GoalCard({
             style={styles.goalSave}
           >
             {busy ? (
-              <ActivityIndicator color="#22343b" />
+              <ActivityIndicator color={tokens.buttonPrimaryForeground} />
             ) : (
               <Text style={styles.goalSaveText}>Save earnings goal</Text>
             )}
@@ -336,6 +278,8 @@ function GetPaidFlow({
   readonly onClose: () => void;
   readonly onCreate: () => void;
 }) {
+  const { tokens, dark } = useProDesign();
+  const styles = useProStyles(createStyles);
   const { client, mode, workspace: operatorWorkspace } = useProRuntime();
   const [workspace, setWorkspace] = useState<PaymentWorkspace>();
   const [loading, setLoading] = useState(true);
@@ -564,8 +508,12 @@ function GetPaidFlow({
     if (Platform.OS === "android") {
       await terminal.setTapToPayUxConfiguration({
         tapZone: { indicator: "above", bias: 0.1 },
-        darkMode: DarkMode.DARK,
-        colors: { primary: "#D4B77C", success: "#85D49B", error: "#F27878" },
+        darkMode: dark ? DarkMode.DARK : DarkMode.LIGHT,
+        colors: {
+          primary: tokens.text1,
+          success: tokens.gain,
+          error: tokens.loss,
+        },
       });
     }
     if (!terminal.connectedReader) {
@@ -743,8 +691,7 @@ function GetPaidFlow({
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <ActivityIndicator color="#3d6672" size="large" />
-          <Text style={styles.centerText}>Opening payments…</Text>
+          <SandLoader label="Loading payments" />
         </View>
       </SafeAreaView>
     );
@@ -790,7 +737,7 @@ function GetPaidFlow({
           />
           {busy && (
             <View style={styles.secureLine}>
-              <ActivityIndicator color="#3d6672" />
+              <ActivityIndicator color={tokens.text1} />
               <Text style={styles.secureText}>
                 Keep Duna Pro open while the card is working.
               </Text>
@@ -864,11 +811,12 @@ function GetPaidFlow({
             <View style={styles.amountInputWrap}>
               <Text style={styles.amountCurrency}>$</Text>
               <TextInput
+                accessibilityLabel="Amount to collect"
                 autoFocus
                 keyboardType="decimal-pad"
                 onChangeText={setAmount}
                 placeholder="0.00"
-                placeholderTextColor="#c2c8d0"
+                placeholderTextColor={tokens.text2}
                 style={styles.amountInput}
                 value={amount}
               />
@@ -925,7 +873,7 @@ function GetPaidFlow({
             <TextInput
               onChangeText={setSearch}
               placeholder="Search people"
-              placeholderTextColor="#98a2b3"
+              placeholderTextColor={tokens.text2}
               style={styles.search}
               value={search}
             />
@@ -1002,7 +950,7 @@ function GetPaidFlow({
               <TextInput
                 onChangeText={setCustomLabel}
                 placeholder="What is this payment for?"
-                placeholderTextColor="#98a2b3"
+                placeholderTextColor={tokens.text2}
                 style={styles.search}
                 value={customLabel}
               />
@@ -1073,7 +1021,7 @@ function GetPaidFlow({
                 ]}
               >
                 <View style={styles.tenderIcon}>
-                  <Text style={styles.tenderIconText}>)))</Text>
+                  <Nfc size={22} strokeWidth={1.7} color={tokens.text1} />
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.tenderTitle}>Tap to Pay</Text>
@@ -1111,7 +1059,7 @@ function GetPaidFlow({
                 ]}
               >
                 <View style={styles.tenderIcon}>
-                  <Text style={styles.tenderIconText}>✦</Text>
+                  <Layers size={22} strokeWidth={1.7} color={tokens.text1} />
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.tenderTitle}>Club credits</Text>
@@ -1147,7 +1095,7 @@ function GetPaidFlow({
                 ]}
               >
                 <View style={styles.tenderIcon}>
-                  <Text style={styles.tenderIconText}>$</Text>
+                  <Wallet size={22} strokeWidth={1.7} color={tokens.text1} />
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.tenderTitle}>Cash wallet</Text>
@@ -1190,7 +1138,7 @@ function GetPaidFlow({
           style={[styles.primaryButton, busy && styles.disabled]}
         >
           {busy ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={tokens.buttonPrimaryForeground} />
           ) : (
             <Text style={styles.primaryButtonText}>
               {step < 3
@@ -1231,540 +1179,516 @@ export function GetPaidScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f6f5f1", flex: 1 },
-  flex: { flex: 1, minWidth: 0 },
-  center: {
-    alignItems: "center",
-    flex: 1,
-    gap: 14,
-    justifyContent: "center",
-    padding: 28,
-  },
-  centerText: {
-    color: "#766f61",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  loadTitle: {
-    color: "#1b1b19",
-    fontSize: 26,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  paymentTopbar: {
-    alignItems: "center",
-    borderBottomColor: "#e7e4dc",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 58,
-    paddingHorizontal: 16,
-  },
-  topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
-  topButtonRight: { textAlign: "right" },
-  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
-  content: { padding: 20, paddingBottom: 128 },
-  progressRow: { flexDirection: "row", gap: 6, marginBottom: 28, marginTop: 8 },
-  progress: { backgroundColor: "#dfe3e8", borderRadius: 4, flex: 1, height: 5 },
-  progressOn: { backgroundColor: "#3d6672" },
-  eyebrow: {
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-    marginTop: 10,
-  },
-  title: {
-    color: "#1b1b19",
-    fontSize: 34,
-    fontWeight: "900",
-    letterSpacing: -1.2,
-    lineHeight: 39,
-    marginTop: 7,
-  },
-  amountInputWrap: {
-    alignItems: "center",
-    borderBottomColor: "#cbd2dc",
-    borderBottomWidth: 2,
-    flexDirection: "row",
-    marginTop: 36,
-    paddingBottom: 8,
-  },
-  amountCurrency: {
-    color: "#3d6672",
-    fontFamily: "Archivo-Hero",
-    fontSize: 38,
-    fontWeight: "900",
-    marginRight: 6,
-  },
-  amountInput: {
-    color: "#1b1b19",
-    flex: 1,
-    fontFamily: "Archivo-Hero",
-    fontSize: 56,
-    fontWeight: "900",
-    letterSpacing: -2,
-    minHeight: 78,
-    padding: 0,
-  },
-  quickAmounts: { flexDirection: "row", gap: 8, marginTop: 14 },
-  quickAmount: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 13,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 50,
-  },
-  quickAmountText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
-  goalCard: {
-    backgroundColor: "#22343b",
-    borderRadius: 22,
-    marginBottom: 28,
-    padding: 18,
-  },
-  goalTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  goalEyebrow: {
-    color: "#d9bd82",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  goalAmount: {
-    color: "#fff",
-    fontFamily: "Archivo-Block",
-    fontSize: 24,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  goalButton: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,.22)",
-    borderRadius: 13,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 13,
-  },
-  goalButtonText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  goalTrack: {
-    backgroundColor: "rgba(255,255,255,.14)",
-    borderRadius: 6,
-    height: 8,
-    marginTop: 17,
-    overflow: "hidden",
-  },
-  goalFill: { backgroundColor: "#d4b77c", borderRadius: 6, height: 8 },
-  goalMeta: {
-    color: "rgba(255,255,255,.68)",
-    fontSize: 12,
-    lineHeight: 15,
-    marginTop: 8,
-  },
-  goalEditor: { gap: 10, marginTop: 16 },
-  goalInputWrap: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,.12)",
-    borderRadius: 13,
-    flexDirection: "row",
-    minHeight: 54,
-    paddingHorizontal: 13,
-  },
-  goalCurrency: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  goalInput: {
-    color: "#fff",
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "900",
-    minHeight: 52,
-    paddingHorizontal: 8,
-  },
-  goalPeriods: { flexDirection: "row", gap: 6 },
-  goalPeriod: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,.2)",
-    borderRadius: 10,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 40,
-  },
-  goalPeriodOn: { backgroundColor: "#fff" },
-  goalPeriodText: {
-    color: "rgba(255,255,255,.7)",
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "capitalize",
-  },
-  goalPeriodTextOn: { color: "#22343b" },
-  goalSave: {
-    alignItems: "center",
-    backgroundColor: "#d4b77c",
-    borderRadius: 12,
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  goalSaveText: { color: "#22343b", fontSize: 12, fontWeight: "900" },
-  inlineError: { color: "#ffd0d0", fontSize: 12, lineHeight: 15 },
-  sectionLabel: {
-    color: "#766f61",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-    marginTop: 34,
-  },
-  history: {
-    backgroundColor: "#fff",
-    borderColor: "#e5e8ed",
-    borderRadius: 18,
-    borderWidth: 1,
-    marginTop: 10,
-    overflow: "hidden",
-  },
-  historyRow: {
-    alignItems: "center",
-    borderBottomColor: "#edf0f3",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 68,
-    paddingHorizontal: 13,
-  },
-  historyDot: { borderRadius: 5, height: 10, width: 10 },
-  historyDotGood: { backgroundColor: "#2f6b3a" },
-  historyDotBad: { backgroundColor: "#9a4a2e" },
-  historyDotWait: { backgroundColor: "#ba7d24" },
-  historyTitle: { color: "#1b1b19", fontSize: 12, fontWeight: "900" },
-  historyMeta: {
-    color: "#766f61",
-    fontSize: 12,
-    marginTop: 3,
-    textTransform: "capitalize",
-  },
-  historyAmount: {
-    color: "#1b1b19",
-    fontFamily: "Archivo-Table",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  search: {
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 15,
-    borderWidth: 1,
-    color: "#1b1b19",
-    fontSize: 15,
-    marginTop: 22,
-    minHeight: 56,
-    paddingHorizontal: 15,
-  },
-  peopleList: { gap: 9, marginTop: 13 },
-  personRow: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#e2e5ea",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 76,
-    padding: 12,
-  },
-  personRowOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
-  avatar: {
-    alignItems: "center",
-    backgroundColor: "#e9edf3",
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  avatarText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
-  personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#766f61", fontSize: 12, marginTop: 4 },
-  radio: {
-    alignItems: "center",
-    borderColor: "#bfc6d0",
-    borderRadius: 12,
-    borderWidth: 2,
-    height: 24,
-    justifyContent: "center",
-    width: 24,
-  },
-  radioOn: { borderColor: "#3d6672" },
-  radioDot: {
-    backgroundColor: "#3d6672",
-    borderRadius: 6,
-    height: 12,
-    width: 12,
-  },
-  empty: { color: "#766f61", fontSize: 13, padding: 24, textAlign: "center" },
-  referenceRow: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#e2e5ea",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 10,
-    minHeight: 78,
-    padding: 12,
-  },
-  referenceRowOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
-  referenceIcon: {
-    alignItems: "center",
-    backgroundColor: "#eef3f8",
-    borderRadius: 13,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  referenceIconText: { color: "#3d6672", fontSize: 20, fontWeight: "900" },
-  referenceTitle: { color: "#1b1b19", fontSize: 13, fontWeight: "900" },
-  referenceMeta: {
-    color: "#766f61",
-    fontSize: 12,
-    lineHeight: 13,
-    marginTop: 4,
-  },
-  referencePrice: {
-    color: "#1b1b19",
-    fontFamily: "Archivo-Table",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  summary: {
-    backgroundColor: "#22343b",
-    borderRadius: 20,
-    marginTop: 22,
-    padding: 18,
-  },
-  summaryAmount: {
-    color: "#fff",
-    fontFamily: "Archivo-Block",
-    fontSize: 34,
-    fontWeight: "900",
-    letterSpacing: -1,
-  },
-  summaryMeta: { color: "rgba(255,255,255,.68)", fontSize: 12, marginTop: 6 },
-  tenders: { gap: 10, marginTop: 16 },
-  tender: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#e2e5ea",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 86,
-    padding: 13,
-  },
-  tenderOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
-  tenderIcon: {
-    alignItems: "center",
-    backgroundColor: "#22343b",
-    borderRadius: 14,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  tenderIconText: { color: "#d4b77c", fontSize: 17, fontWeight: "900" },
-  tenderTitle: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  tenderMeta: { color: "#766f61", fontSize: 12, lineHeight: 13, marginTop: 4 },
-  disabled: { opacity: 0.45 },
-  netCard: {
-    backgroundColor: "#eef5f1",
-    borderRadius: 17,
-    marginTop: 16,
-    padding: 15,
-  },
-  netLabel: {
-    color: "#3d7d66",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  netAmount: {
-    color: "#245b46",
-    fontFamily: "Archivo-Block",
-    fontSize: 22,
-    fontWeight: "900",
-    marginTop: 5,
-  },
-  netMeta: { color: "#587466", fontSize: 12, lineHeight: 14, marginTop: 5 },
-  paymentError: {
-    backgroundColor: "#fff0f0",
-    borderRadius: 13,
-    color: "#9a4a2e",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 16,
-    padding: 13,
-  },
-  footer: {
-    backgroundColor: "rgba(248,247,243,.96)",
-    borderTopColor: "#e7e4dc",
-    borderTopWidth: 1,
-    bottom: 0,
-    left: 0,
-    padding: 14,
-    position: "absolute",
-    right: 0,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#3d6672",
-    borderRadius: 16,
-    justifyContent: "center",
-    minHeight: 58,
-    paddingHorizontal: 18,
-  },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  secondaryButton: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 56,
-  },
-  secondaryButtonText: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
-  closeTextButton: { minHeight: 48, padding: 14 },
-  closeText: { color: "#3d6672", fontSize: 13, fontWeight: "900" },
-  resultPage: { padding: 18, paddingBottom: 50 },
-  motion: {
-    alignItems: "center",
-    borderRadius: 28,
-    justifyContent: "center",
-    minHeight: 430,
-    overflow: "hidden",
-    padding: 24,
-  },
-  orbit: {
-    borderColor: "#d4b77c",
-    borderRadius: 150,
-    borderWidth: 2,
-    height: 280,
-    position: "absolute",
-    top: 42,
-    width: 280,
-  },
-  phone: {
-    alignItems: "center",
-    backgroundColor: "#091b2f",
-    borderColor: "rgba(255,255,255,.45)",
-    borderRadius: 30,
-    borderWidth: 2,
-    height: 190,
-    justifyContent: "flex-start",
-    paddingTop: 14,
-    width: 104,
-  },
-  phoneSpeaker: {
-    backgroundColor: "rgba(255,255,255,.25)",
-    borderRadius: 3,
-    height: 5,
-    width: 30,
-  },
-  tapZone: {
-    alignItems: "center",
-    backgroundColor: "rgba(212,183,124,.12)",
-    borderColor: "#d4b77c",
-    borderRadius: 32,
-    borderWidth: 2,
-    height: 64,
-    justifyContent: "center",
-    marginTop: 20,
-    width: 64,
-  },
-  tapZoneIcon: {
-    color: "#d4b77c",
-    fontSize: 17,
-    fontWeight: "900",
-    transform: [{ rotate: "90deg" }],
-  },
-  cardShape: {
-    backgroundColor: "#f5dfaa",
-    borderRadius: 15,
-    height: 92,
-    padding: 13,
-    position: "absolute",
-    right: 30,
-    top: 158,
-    transform: [{ rotate: "-11deg" }],
-    width: 146,
-  },
-  cardChip: {
-    backgroundColor: "#c3a356",
-    borderRadius: 4,
-    height: 24,
-    width: 32,
-  },
-  cardMark: {
-    color: "#604b24",
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: "auto",
-    textAlign: "right",
-  },
-  resultIcon: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,.7)",
-    borderRadius: 70,
-    borderWidth: 3,
-    height: 140,
-    justifyContent: "center",
-    width: 140,
-  },
-  resultIconText: {
-    color: "#fff",
-    fontSize: 78,
-    fontWeight: "800",
-    lineHeight: 88,
-  },
-  motionAmount: {
-    bottom: 64,
-    color: "#fff",
-    fontFamily: "Archivo-Block",
-    fontSize: 34,
-    fontWeight: "900",
-    letterSpacing: -1,
-    position: "absolute",
-  },
-  motionPrompt: {
-    bottom: 33,
-    color: "rgba(255,255,255,.72)",
-    fontSize: 12,
-    fontWeight: "700",
-    maxWidth: 280,
-    position: "absolute",
-    textAlign: "center",
-  },
-  secureLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "center",
-    marginTop: 16,
-  },
-  secureText: { color: "#766f61", fontSize: 12, fontWeight: "700" },
-  resultActions: { gap: 9, marginTop: 18 },
-  loggedTrust: {
-    color: "#766f61",
-    fontSize: 12,
-    lineHeight: 14,
-    marginTop: 15,
-    textAlign: "center",
-  },
-});
+function createStyles(tokens: ProDesignTokens) {
+  return StyleSheet.create({
+    safe: { backgroundColor: tokens.ground, flex: 1 },
+    flex: { flex: 1, minWidth: 0 },
+    center: {
+      alignItems: "center",
+      flex: 1,
+      gap: 14,
+      justifyContent: "center",
+      padding: 28,
+    },
+    centerText: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+    },
+    loadTitle: {
+      color: tokens.text1,
+      fontSize: 26,
+      fontWeight: "400",
+      textAlign: "center",
+    },
+    paymentTopbar: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 58,
+      paddingHorizontal: 16,
+    },
+    topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
+    topButtonText: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    topButtonRight: { textAlign: "right" },
+    topTitle: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    content: { padding: 20, paddingBottom: 128 },
+    progressRow: {
+      flexDirection: "row",
+      gap: 6,
+      marginBottom: 28,
+      marginTop: 8,
+    },
+    progress: {
+      backgroundColor: tokens.hairline,
+      borderRadius: 4,
+      flex: 1,
+      height: 5,
+    },
+    progressOn: { backgroundColor: tokens.text1 },
+    eyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.1,
+      marginTop: 10,
+    },
+    title: {
+      color: tokens.text1,
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 39,
+      marginTop: 7,
+    },
+    amountInputWrap: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 2,
+      flexDirection: "row",
+      marginTop: 36,
+      paddingBottom: 8,
+    },
+    amountCurrency: {
+      color: tokens.text1,
+      fontSize: 38,
+      fontWeight: "400",
+      marginRight: 6,
+    },
+    amountInput: {
+      color: tokens.text1,
+      flex: 1,
+      fontSize: 56,
+      fontWeight: "400",
+      letterSpacing: -1,
+      minHeight: 78,
+      padding: 0,
+
+      fontVariant: ["tabular-nums"],
+
+      minWidth: 0,
+    },
+    quickAmounts: { flexDirection: "row", gap: 8, marginTop: 14 },
+    quickAmount: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 13,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 50,
+    },
+    quickAmountText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    goalCard: {
+      backgroundColor: tokens.surface1,
+      borderRadius: 22,
+      marginBottom: 28,
+      padding: 18,
+    },
+    goalTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    goalEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    goalAmount: {
+      color: tokens.text1,
+      fontSize: 30,
+      fontWeight: "400",
+      marginTop: 4,
+    },
+    goalButton: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 13,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 13,
+    },
+    goalButtonText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    goalTrack: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 6,
+      height: 8,
+      marginTop: 17,
+      overflow: "hidden",
+    },
+    goalFill: { backgroundColor: tokens.text1, borderRadius: 6, height: 8 },
+    goalMeta: {
+      color: tokens.text2,
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: 8,
+    },
+    goalEditor: { gap: 10, marginTop: 16 },
+    goalInputWrap: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 13,
+      flexDirection: "row",
+      minHeight: 54,
+      paddingHorizontal: 13,
+    },
+    goalCurrency: { color: tokens.text1, fontSize: 18, fontWeight: "700" },
+    goalInput: {
+      color: tokens.text1,
+      flex: 1,
+      fontSize: 20,
+      fontWeight: "400",
+      minHeight: 52,
+      paddingHorizontal: 8,
+
+      minWidth: 0,
+    },
+    goalPeriods: { flexDirection: "row", gap: 6 },
+    goalPeriod: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 10,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    goalPeriodOn: { backgroundColor: tokens.buttonPrimaryBackground },
+    goalPeriodText: {
+      color: tokens.text2,
+      fontSize: 14,
+      fontWeight: "500",
+      textTransform: "capitalize",
+    },
+    goalPeriodTextOn: { color: tokens.buttonPrimaryForeground },
+    goalSave: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    goalSaveText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    inlineError: { color: tokens.loss, fontSize: 12, lineHeight: 15 },
+    sectionLabel: {
+      color: tokens.text2,
+      fontSize: 14,
+      fontWeight: "500",
+      letterSpacing: 0,
+      marginTop: 34,
+    },
+    history: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      marginTop: 10,
+      overflow: "hidden",
+    },
+    historyRow: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 68,
+      paddingHorizontal: 13,
+    },
+    historyDot: { borderRadius: 5, height: 10, width: 10 },
+    historyDotGood: { backgroundColor: tokens.gain },
+    historyDotBad: { backgroundColor: tokens.loss },
+    historyDotWait: { backgroundColor: tokens.flareText },
+    historyTitle: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    historyMeta: {
+      color: tokens.text2,
+      fontSize: 12,
+      marginTop: 3,
+      textTransform: "capitalize",
+    },
+    historyAmount: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    search: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 15,
+      borderWidth: 1,
+      color: tokens.text1,
+      fontSize: 16,
+      marginTop: 22,
+      minHeight: 56,
+      paddingHorizontal: 15,
+
+      minWidth: 0,
+    },
+    peopleList: { gap: 9, marginTop: 13 },
+    personRow: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 76,
+      padding: 12,
+    },
+    personRowOn: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.text1,
+    },
+    avatar: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 22,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    avatarText: { color: tokens.text1, fontSize: 13, fontWeight: "700" },
+    personName: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    personMeta: { color: tokens.text2, fontSize: 12, marginTop: 4 },
+    radio: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 12,
+      borderWidth: 2,
+      height: 24,
+      justifyContent: "center",
+      width: 24,
+    },
+    radioOn: { borderColor: tokens.text1 },
+    radioDot: {
+      backgroundColor: tokens.text1,
+      borderRadius: 6,
+      height: 12,
+      width: 12,
+    },
+    empty: {
+      color: tokens.text2,
+      fontSize: 15,
+      padding: 24,
+      textAlign: "center",
+    },
+    referenceRow: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 10,
+      minHeight: 78,
+      padding: 12,
+    },
+    referenceRowOn: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.text1,
+    },
+    referenceIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 13,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    referenceIconText: { color: tokens.text1, fontSize: 20, fontWeight: "700" },
+    referenceTitle: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    referenceMeta: {
+      color: tokens.text2,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+    referencePrice: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    summary: {
+      backgroundColor: tokens.surface1,
+      borderRadius: 20,
+      marginTop: 22,
+      padding: 18,
+    },
+    summaryAmount: {
+      color: tokens.text1,
+      fontSize: 34,
+      fontWeight: "700",
+      letterSpacing: -1,
+    },
+    summaryMeta: {
+      color: tokens.text2,
+      fontSize: 15,
+      marginTop: 6,
+      lineHeight: 22,
+    },
+    tenders: { gap: 10, marginTop: 16 },
+    tender: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 86,
+      padding: 13,
+    },
+    tenderOn: { backgroundColor: tokens.surface2, borderColor: tokens.text1 },
+    tenderIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: 14,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    tenderIconText: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    tenderTitle: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    tenderMeta: {
+      color: tokens.text2,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+    disabled: { opacity: 0.45 },
+    netCard: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 17,
+      marginTop: 16,
+      padding: 15,
+    },
+    netLabel: {
+      color: tokens.gain,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.9,
+    },
+    netAmount: {
+      color: tokens.gain,
+      fontSize: 22,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+    netMeta: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 5,
+    },
+    paymentError: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 13,
+      color: tokens.loss,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 16,
+      padding: 13,
+    },
+    footer: {
+      backgroundColor: tokens.ground,
+      borderTopColor: tokens.hairline,
+      borderTopWidth: 1,
+      bottom: 0,
+      left: 0,
+      padding: 14,
+      position: "absolute",
+      right: 0,
+    },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 58,
+      paddingHorizontal: 18,
+    },
+    primaryButtonText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    secondaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 16,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    secondaryButtonText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    closeTextButton: { minHeight: 48, padding: 14 },
+    closeText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    resultPage: { padding: 18, paddingBottom: 50 },
+    motion: {
+      alignItems: "center",
+      borderRadius: 28,
+      justifyContent: "center",
+      minHeight: 360,
+      overflow: "hidden",
+      padding: 30,
+
+      backgroundColor: tokens.surface1,
+
+      gap: 24,
+    },
+    motionAmount: {
+      bottom: 0,
+      color: tokens.text1,
+      fontSize: 40,
+      fontWeight: "400",
+      letterSpacing: -1,
+      position: "relative",
+
+      fontVariant: ["tabular-nums"],
+    },
+    motionPrompt: {
+      bottom: 0,
+      color: tokens.text2,
+      fontSize: 15,
+      fontWeight: "400",
+      maxWidth: 280,
+      position: "relative",
+      textAlign: "center",
+
+      lineHeight: 22,
+    },
+    secureLine: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "center",
+      marginTop: 16,
+    },
+    secureText: { color: tokens.text2, fontSize: 12, fontWeight: "700" },
+    resultActions: { gap: 9, marginTop: 18 },
+    loggedTrust: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 15,
+      textAlign: "center",
+    },
+  });
+}

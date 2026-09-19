@@ -177,11 +177,11 @@ Pro native,ScorerScreen,apps/pro/App.tsx,pending,Physical device verification pe
 Pro native,MoreScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
 Pro native,CoachVideoScreen,apps/pro/coach-video.tsx,pending,Physical device verification pending
 Pro native,DunaAiScreen,apps/pro/duna-ai-screen.tsx,pending,Physical device verification pending
-Pro native,GetPaidScreen,apps/pro/get-paid.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
+Pro native,GetPaidScreen,apps/pro/get-paid.tsx,local-review,Light and dark component review with sample data; connected and physical workflows pending
 Pro native,ProMessagingScreen,apps/pro/messaging-screen.tsx,pending,Physical device verification pending
-Pro native,MoneyScreen,apps/pro/money-screen.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
-Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
-Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,needs-redesign,Independent color rules need theme migration; physical workflows pending
+Pro native,MoneyScreen,apps/pro/money-screen.tsx,local-review,Light and dark component review with sample data; connected and physical workflows pending
+Pro native,OperatorCreateScreen,apps/pro/operator-create.tsx,local-review,Light and dark component review with sample data; connected and physical workflows pending
+Pro native,SessionNotesScreen,apps/pro/session-notes.tsx,local-review,Light and dark component review with sample data; connected and physical workflows pending
 Pro native,TicketScannerScreen,apps/pro/ticket-scanner.tsx,pending,Physical device verification pending
 Player native,StableVideoSurface,apps/player/video-player-surface.tsx,local-review,Expo browser playback lifecycle verified; physical device pending
 Player portal,DunaVideoGallery,apps/web/components/duna-video-gallery.tsx,local-review,Sample clip playback selection and retry verified; private provider playback pending

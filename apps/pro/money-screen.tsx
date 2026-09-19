@@ -1,4 +1,11 @@
 import type { OrganizationMoneyWorkspace } from "@duna/api";
+import {
+  ArrowDownToLine,
+  CreditCard,
+  Nfc,
+  RefreshCw,
+  X,
+} from "lucide-react-native";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
 import { useMemo, useState } from "react";
@@ -263,11 +270,11 @@ export function MoneyScreen({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <X size={20} strokeWidth={1.7} color={palette.text} />
           </Pressable>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>DUNA MONEY</Text>
-            <Text style={styles.title}>Earned here. Ready when you are.</Text>
+            <Text style={styles.title}>Money</Text>
             <Text style={styles.subtitle}>
               {dashboard?.organization.name ?? "Your organization"} · balances,
               holds, payouts, and disputes
@@ -278,7 +285,7 @@ export function MoneyScreen({
             onPress={() => void refresh()}
             style={styles.refresh}
           >
-            <Text style={styles.refreshText}>↻</Text>
+            <RefreshCw size={18} strokeWidth={1.7} color={palette.text} />
           </Pressable>
         </View>
 
@@ -348,21 +355,25 @@ export function MoneyScreen({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.actionPrimaryIcon}>⇩</Text>
+            <ArrowDownToLine
+              size={20}
+              strokeWidth={1.7}
+              color={palette.onAccent}
+            />
             <Text style={styles.actionPrimaryText}>Transfer to bank</Text>
           </Pressable>
           <Pressable
             onPress={onCollect}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <Text style={styles.actionIcon}>)))</Text>
+            <Nfc size={20} strokeWidth={1.7} color={palette.text} />
             <Text style={styles.actionText}>Collect payment</Text>
           </Pressable>
           <Pressable
             onPress={() => setCardOpen(true)}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <Text style={styles.actionIcon}>▱</Text>
+            <CreditCard size={20} strokeWidth={1.7} color={palette.text} />
             <Text style={styles.actionText}>Virtual card</Text>
             <Text style={styles.soon}>SOON</Text>
           </Pressable>
@@ -567,7 +578,7 @@ export function MoneyScreen({
               onPress={() => setPayoutOpen(false)}
               style={styles.close}
             >
-              <Text style={styles.closeText}>×</Text>
+              <X size={20} strokeWidth={1.7} color={palette.text} />
             </Pressable>
           </View>
           <View style={styles.modalContent}>
@@ -636,7 +647,7 @@ export function MoneyScreen({
               </Text>
             </View>
             <Pressable onPress={() => setCardOpen(false)} style={styles.close}>
-              <Text style={styles.closeText}>×</Text>
+              <X size={20} strokeWidth={1.7} color={palette.text} />
             </Pressable>
           </View>
           <View style={styles.modalContent}>
@@ -689,41 +700,41 @@ function createStyles(colors: MoneyScreenPalette) {
       borderColor: colors.border,
       borderRadius: 12,
       borderWidth: 1,
-      height: 40,
+      height: 48,
       justifyContent: "center",
-      width: 40,
+      width: 48,
     },
     closeText: { color: colors.text, fontSize: 25, lineHeight: 27 },
     headerCopy: { flex: 1, minWidth: 0 },
     eyebrow: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.35,
     },
     title: {
       color: colors.text,
-      fontSize: 27,
-      fontWeight: "900",
-      letterSpacing: -0.9,
-      lineHeight: 30,
+      fontSize: 32,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 38,
       marginTop: 5,
     },
     subtitle: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 5,
     },
     refresh: {
       alignItems: "center",
-      height: 40,
+      height: 48,
       justifyContent: "center",
-      width: 36,
+      width: 48,
     },
     refreshText: { color: colors.accent, fontSize: 22 },
     hero: {
-      backgroundColor: colors.navy,
+      backgroundColor: colors.surface,
       borderColor: colors.border,
       borderRadius: 22,
       borderWidth: 1,
@@ -736,14 +747,14 @@ function createStyles(colors: MoneyScreenPalette) {
       justifyContent: "space-between",
     },
     heroLabel: {
-      color: "#b6c8d2",
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.4,
     },
     livePill: {
       alignItems: "center",
-      backgroundColor: "rgba(105,220,158,0.12)",
+      backgroundColor: colors.surfaceAlt,
       borderRadius: 999,
       flexDirection: "row",
       gap: 6,
@@ -759,18 +770,25 @@ function createStyles(colors: MoneyScreenPalette) {
     liveText: {
       color: colors.positive,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: 1,
     },
     balance: {
-      color: "#f7faf8",
+      color: colors.text,
       fontSize: 48,
-      fontWeight: "900",
-      letterSpacing: -2.2,
+      fontWeight: "400",
+      letterSpacing: -1,
       lineHeight: 55,
       marginTop: 14,
+
+      fontVariant: ["tabular-nums"],
     },
-    heroBody: { color: "#b6c8d2", fontSize: 12, lineHeight: 17, maxWidth: 320 },
+    heroBody: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      maxWidth: 320,
+    },
     release: {
       alignItems: "center",
       flexDirection: "row",
@@ -778,24 +796,24 @@ function createStyles(colors: MoneyScreenPalette) {
       marginTop: 12,
     },
     releaseIcon: { color: colors.positive, fontSize: 15 },
-    releaseText: { color: "#c4ead5", flex: 1, fontSize: 12 },
+    releaseText: { color: colors.positive, flex: 1, fontSize: 14 },
     heroFooter: {
-      borderTopColor: "rgba(255,255,255,0.1)",
+      borderTopColor: colors.border,
       borderTopWidth: 1,
       flexDirection: "row",
       gap: 32,
       paddingTop: 14,
     },
     metricLabel: {
-      color: "#91a8b5",
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.1,
     },
     metricValue: {
-      color: "#f7faf8",
+      color: colors.text,
       fontSize: 15,
-      fontWeight: "900",
+      fontWeight: "700",
       marginTop: 3,
     },
     actions: { flexDirection: "row", gap: 8 },
@@ -824,25 +842,25 @@ function createStyles(colors: MoneyScreenPalette) {
     actionPrimaryIcon: {
       color: colors.onAccent,
       fontSize: 20,
-      fontWeight: "900",
+      fontWeight: "700",
     },
     actionPrimaryText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "700",
       textAlign: "center",
     },
-    actionIcon: { color: colors.accent, fontSize: 18, fontWeight: "900" },
+    actionIcon: { color: colors.accent, fontSize: 18, fontWeight: "700" },
     actionText: {
       color: colors.text,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       textAlign: "center",
     },
     soon: {
       color: colors.warning,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: 1,
     },
     pressed: { opacity: 0.72 },
@@ -859,19 +877,19 @@ function createStyles(colors: MoneyScreenPalette) {
     tileLabel: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1,
     },
     tileValue: {
       color: colors.text,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "700",
       marginTop: 8,
     },
     tileMeta: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 14,
+      fontSize: 14,
+      lineHeight: 20,
       marginTop: 3,
     },
     sectionHeader: {
@@ -883,7 +901,7 @@ function createStyles(colors: MoneyScreenPalette) {
     sectionTitle: {
       color: colors.text,
       fontSize: 20,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: -0.5,
       marginTop: 4,
     },
@@ -893,7 +911,7 @@ function createStyles(colors: MoneyScreenPalette) {
     statusText: {
       color: colors.positive,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: 1,
     },
     bankCard: {
@@ -915,12 +933,12 @@ function createStyles(colors: MoneyScreenPalette) {
       width: 40,
     },
     bankIconText: { color: colors.accent, fontSize: 18 },
-    bankName: { color: colors.text, fontSize: 13, fontWeight: "900" },
+    bankName: { color: colors.text, fontSize: 15, fontWeight: "500" },
     bankMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     manage: {
       color: colors.accent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "700",
       letterSpacing: 0.6,
     },
     flex: { flex: 1, minWidth: 0 },
@@ -929,7 +947,7 @@ function createStyles(colors: MoneyScreenPalette) {
       borderRadius: 999,
       color: colors.text,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       minWidth: 28,
       paddingHorizontal: 8,
       paddingVertical: 6,
@@ -959,26 +977,26 @@ function createStyles(colors: MoneyScreenPalette) {
       width: 36,
     },
     rowIconHold: { backgroundColor: `${colors.warning}18` },
-    rowIconText: { color: colors.accent, fontSize: 16, fontWeight: "900" },
-    rowTitle: { color: colors.text, fontSize: 12, fontWeight: "900" },
+    rowIconText: { color: colors.accent, fontSize: 16, fontWeight: "700" },
+    rowTitle: { color: colors.text, fontSize: 15, fontWeight: "500" },
     rowMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     rowFee: { color: colors.muted, fontSize: 12, marginTop: 3 },
     rowAmount: { alignItems: "flex-end", maxWidth: 110 },
-    rowValue: { color: colors.positive, fontSize: 12, fontWeight: "900" },
+    rowValue: { color: colors.positive, fontSize: 14, fontWeight: "700" },
     rowStatus: {
       color: colors.positive,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: 0.7,
       marginTop: 5,
     },
     rowStatusHold: { color: colors.warning },
     empty: { padding: 20 },
-    emptyTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
+    emptyTitle: { color: colors.text, fontSize: 17, fontWeight: "700" },
     emptyBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 4,
     },
     shield: { color: colors.positive, fontSize: 22 },
@@ -994,13 +1012,13 @@ function createStyles(colors: MoneyScreenPalette) {
     safetyLabel: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 0.8,
     },
     safetyValue: {
       color: colors.text,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "700",
       marginTop: 5,
     },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
@@ -1015,12 +1033,12 @@ function createStyles(colors: MoneyScreenPalette) {
     modalTitle: {
       color: colors.text,
       fontSize: 25,
-      fontWeight: "900",
-      letterSpacing: -0.8,
+      fontWeight: "400",
+      letterSpacing: -0.6,
       marginTop: 5,
     },
     modalContent: { gap: 18, padding: 20 },
-    modalBody: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+    modalBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     modalBank: {
       alignItems: "center",
       backgroundColor: colors.surface,
@@ -1032,7 +1050,7 @@ function createStyles(colors: MoneyScreenPalette) {
       padding: 15,
     },
     modalBankIcon: { color: colors.accent, fontSize: 20 },
-    check: { color: colors.positive, fontSize: 18, fontWeight: "900" },
+    check: { color: colors.positive, fontSize: 18, fontWeight: "700" },
     modalAmount: {
       backgroundColor: colors.surfaceAlt,
       borderRadius: 16,
@@ -1041,8 +1059,8 @@ function createStyles(colors: MoneyScreenPalette) {
     modalAmountValue: {
       color: colors.text,
       fontSize: 38,
-      fontWeight: "900",
-      letterSpacing: -1.5,
+      fontWeight: "400",
+      letterSpacing: -1,
       marginVertical: 7,
     },
     submit: {
@@ -1053,41 +1071,43 @@ function createStyles(colors: MoneyScreenPalette) {
       justifyContent: "center",
       padding: 14,
     },
-    submitText: { color: colors.onAccent, fontSize: 13, fontWeight: "900" },
+    submitText: { color: colors.onAccent, fontSize: 14, fontWeight: "700" },
     disabled: { opacity: 0.45 },
     message: {
       backgroundColor: colors.surfaceAlt,
       borderRadius: 12,
       color: colors.text,
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 15,
+      lineHeight: 22,
       padding: 12,
     },
     virtualCard: {
-      backgroundColor: colors.navy,
-      borderColor: "rgba(255,255,255,0.12)",
+      backgroundColor: colors.surfaceAlt,
+      borderColor: colors.border,
       borderRadius: 20,
       borderWidth: 1,
       height: 215,
       justifyContent: "space-between",
       padding: 20,
+
+      minHeight: 215,
     },
     virtualBrand: {
-      color: "#f7faf8",
+      color: colors.text,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "700",
       letterSpacing: 2.5,
     },
     virtualNumber: {
-      color: "#f7faf8",
+      color: colors.text,
       fontSize: 16,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 2,
     },
     virtualName: {
-      color: "#b6c8d2",
+      color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.2,
     },
     notice: {
@@ -1101,11 +1121,11 @@ function createStyles(colors: MoneyScreenPalette) {
       padding: 14,
     },
     noticeIcon: { color: colors.positive, fontSize: 19 },
-    noticeTitle: { color: colors.text, fontSize: 12, fontWeight: "900" },
+    noticeTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
     noticeBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 3,
     },
   });

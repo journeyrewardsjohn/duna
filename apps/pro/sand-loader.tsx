@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AccessibilityInfo, AppState, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { SatoshiText as Text } from "./satoshi-text";
+import { useProDesign } from "./design-theme";
 
 export function SandLoader({
   label = "Loading Duna Pro",
@@ -13,6 +14,7 @@ export function SandLoader({
   readonly size?: number;
   readonly tone?: "default" | "inverse";
 }) {
+  const { tokens } = useProDesign();
   const [time, setTime] = useState(0);
   useEffect(() => {
     let reduced = true;
@@ -66,7 +68,7 @@ export function SandLoader({
               cy={p.y}
               r={p.radius}
               opacity={p.opacity}
-              fill={tone === "inverse" ? sandColors.surface : sandColors.ink}
+              fill={tone === "inverse" ? sandColors.surface : tokens.text1}
             />
           );
         })}
@@ -74,6 +76,7 @@ export function SandLoader({
       <Text
         style={[
           styles.label,
+          { color: tokens.text2 },
           tone === "inverse" && { color: sandColors.inset },
         ]}
       >

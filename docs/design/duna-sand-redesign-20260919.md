@@ -168,3 +168,34 @@ checks, including the delayed-hydration menu regression and responsive HQ setup
 checks. Fresh Pro iOS and Android exports passed. The corrected HQ settings,
 Theme Kit, money, and offer-builder views were reviewed at 390px and 1440px.
 These checks do not establish native hardware or connected provider behavior.
+
+## Pro forms and money checkpoint — September 19
+
+- Create, Get Paid, and session notes now resolve their colors from the shared
+  native editorial tokens and follow the selected appearance. Create uses small
+  line icons and compact choices; forms retain the existing guided steps and
+  publishing guards. Labels, body text, and touch targets are easier to read.
+- Payment progress uses the sand loader while processing and distinct success,
+  declined, and error icons. The Android reader sheet follows the selected
+  theme. Collection, authorization, ledger, and provider calls are unchanged.
+- Session notes keep the separate private save and explicit sharing steps. The
+  active microphone animation respects reduced motion; the ready state uses a
+  simple microphone icon. Transcript and summary inputs now have explicit labels.
+- Money uses readable foregrounds on the warm card, a concise heading, and small
+  line icons. Today’s Money link previously opened Get Paid; it now opens the
+  balance workspace, while the existing Get Paid action still opens collection.
+- Browser review found the large payment input expanding its scroll container
+  to 588px at a 390px viewport. Explicit shrink constraints remove the sideways
+  scroll; the payment-step review asserts containment before continuing.
+
+Actual component reviews cover light and dark creation, payments through tender
+selection, Money navigation, and note drafting and recipient selection. Local
+sample responses drive these checks. They do not collect money, publish notes,
+open a physical microphone, or establish connected-provider behavior.
+
+Checkpoint validation: `pnpm verify` passed, including all 117 browser checks.
+Fresh Pro iOS and Android exports passed. The browser-rendered native review also
+confirmed that Today opens Money, both payment appearances remain contained at
+390px, all four payment steps stay reachable, and note drafting preserves the
+recipient-selection and separate-sharing behavior. No live payment or note was
+submitted during these reviews.
