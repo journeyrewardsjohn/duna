@@ -6640,7 +6640,7 @@ export function ProfileVideoSection({
   return (
     <View style={styles.profileVideoSection}>
       <View style={styles.profileVideoHeading}>
-        <View style={styles.flex}>
+        <View style={styles.profileVideoCopy}>
           <Text style={styles.eyebrow}>YOUR FILM ROOM</Text>
           <Text style={styles.profileVideoTitle}>Videos</Text>
           <Text style={styles.profileVideoBody}>
@@ -6653,7 +6653,7 @@ export function ProfileVideoSection({
         </Pressable>
       </View>
 
-      {loading && <ActivityIndicator color={palette.aqua} />}
+      {loading && <SandLoader label="Loading your videos" size={90} />}
       {!!error && (
         <View style={styles.errorCard}>
           <Text style={styles.errorText}>{error}</Text>
@@ -9974,34 +9974,39 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   profileVideoSection: {
-    backgroundColor: "#ffffff",
+    backgroundColor: sandColors.surface,
     borderColor: palette.line,
     borderRadius: 24,
     borderWidth: 1,
     gap: 15,
+    marginTop: 20,
     padding: 16,
   },
   profileVideoHeading: {
-    alignItems: "flex-start",
-    flexDirection: "row",
+    alignItems: "stretch",
     gap: 12,
   },
+  profileVideoCopy: { gap: 6 },
   profileVideoTitle: {
     color: palette.ink,
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: -0.6,
+    fontSize: 24,
+    fontWeight: "500",
+    letterSpacing: -0.4,
   },
-  profileVideoBody: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  profileVideoBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   profileVideoOpen: {
     alignItems: "center",
-    backgroundColor: palette.navy,
+    backgroundColor: sandColors.ink,
     borderRadius: 15,
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 56,
     paddingHorizontal: 14,
   },
-  profileVideoOpenText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+  profileVideoOpenText: {
+    color: sandColors.surface,
+    fontSize: 14,
+    fontWeight: "700",
+  },
   profileVideoInvitations: { gap: 10 },
   profileVideoInvitationEyebrow: {
     color: palette.positive,

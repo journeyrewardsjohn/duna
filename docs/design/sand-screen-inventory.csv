@@ -155,11 +155,11 @@ Player native,PlayerCalendarModal,apps/player/player-calendar.tsx,local-review,B
 Player native,PlayerProfileSheet,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerProfileModal,apps/player/player-social.tsx,pending,Physical device verification pending
 Player native,PlayerPickerModal,apps/player/player-social.tsx,pending,Physical device verification pending
-Player native,NotificationPreferencesModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
-Player native,VideoDataPreferencesModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
-Player native,ProfileDetailsModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
-Player native,SubscriptionManagementModal,apps/player/profile-hub.tsx,pending,Physical device verification pending
-Player native,ProfileHubScreen,apps/player/profile-hub.tsx,pending,Physical device verification pending
+Player native,NotificationPreferencesModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
+Player native,VideoDataPreferencesModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
+Player native,ProfileDetailsModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
+Player native,SubscriptionManagementModal,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
+Player native,ProfileHubScreen,apps/player/profile-hub.tsx,local-review,Warm light component review with sample account; connected and physical verification pending
 Player native,ProfileEditorModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
 Player native,PlayerArtworkModal,apps/player/profile-studio.tsx,pending,Physical device verification pending
 Player native,SandHomeScreen,apps/player/sand-home.tsx,first-review,Physical device verification pending

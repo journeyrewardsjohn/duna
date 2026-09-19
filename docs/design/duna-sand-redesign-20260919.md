@@ -199,3 +199,22 @@ confirmed that Today opens Money, both payment appearances remain contained at
 390px, all four payment steps stay reachable, and note drafting preserves the
 recipient-selection and separate-sharing behavior. No live payment or note was
 submitted during these reviews.
+
+## Player profile checkpoint — September 19
+
+The profile hub and its detail, notification, subscription, and data-use sheets
+now use the shared warm editorial tokens, compact neutral icons, lighter titles,
+and readable descriptions. Subscription actions retain their existing billing,
+renewal, cancellation, and preview guards. The profile video section separates
+its description from the recording action and uses the sand loading state.
+
+The full Player app now has a local browser-renderer review entry. Profile sheets
+were reviewed with a clearly marked sample account and external actions disabled;
+notification preferences remain inaccessible through the production preview path
+as before. No consent, subscription, or billing record was changed. The Player
+root currently fixes its presentation to light; this checkpoint does not claim
+an app-wide appearance selector or dark-mode acceptance.
+
+Checkpoint validation: the full `pnpm verify` gate passed with 117 browser checks,
+and fresh Player iOS/Android exports passed. The profile and four account sheets
+were visually reviewed through the browser renderer, with no runtime errors.
