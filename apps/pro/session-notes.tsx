@@ -1,3 +1,4 @@
+import { Mic, AudioLines } from "lucide-react-native";
 import { AudioSession } from "@livekit/react-native";
 import * as Crypto from "expo-crypto";
 import * as Haptics from "expo-haptics";
@@ -20,6 +21,12 @@ import {
 } from "./satoshi-text";
 import type { DunaApiClient } from "./mobile-api";
 import { useProRuntime } from "./runtime";
+import {
+  useProDesign,
+  useProStyles,
+  type ProDesignTokens,
+} from "./design-theme";
+import { SandLoader } from "./sand-loader";
 
 type SessionDetail = Awaited<
   ReturnType<DunaApiClient["operator"]["sessionDetail"]["query"]>
@@ -78,9 +85,11 @@ function clock(seconds: number): string {
 }
 
 function VoiceOrb({ active }: { readonly active: boolean }) {
+  const { tokens, reducedMotion } = useProDesign();
+  const styles = useProStyles(createStyles);
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!active) {
+    if (!active || reducedMotion) {
       pulse.setValue(0);
       return;
     }
@@ -102,7 +111,7 @@ function VoiceOrb({ active }: { readonly active: boolean }) {
     );
     animation.start();
     return () => animation.stop();
-  }, [active, pulse]);
+  }, [active, pulse, reducedMotion]);
   return (
     <View style={styles.orbWrap}>
       <Animated.View
@@ -125,7 +134,11 @@ function VoiceOrb({ active }: { readonly active: boolean }) {
         ]}
       />
       <View style={[styles.orb, active && styles.orbActive]}>
-        <Text style={styles.orbIcon}>{active ? "▥" : "●"}</Text>
+        {active ? (
+          <AudioLines size={28} color={tokens.loss} />
+        ) : (
+          <Mic size={28} color={tokens.text1} strokeWidth={1.6} />
+        )}
       </View>
     </View>
   );
@@ -142,6 +155,8 @@ export function SessionNotesScreen({
   readonly onClose: () => void;
   readonly onSaved: () => Promise<void>;
 }) {
+  const { tokens } = useProDesign();
+  const styles = useProStyles(createStyles);
   const { client, createSessionNoteRoom, mode } = useProRuntime();
   const [detail, setDetail] = useState<SessionDetail>();
   const [loading, setLoading] = useState(true);
@@ -391,8 +406,7 @@ export function SessionNotesScreen({
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
         <View style={styles.centerState}>
-          <ActivityIndicator color="#3d6672" size="large" />
-          <Text style={styles.centerTitle}>Opening the session</Text>
+          <SandLoader label="Opening the session" />
         </View>
       </SafeAreaView>
     );
@@ -452,7 +466,7 @@ export function SessionNotesScreen({
                 style={[styles.primaryButton, busy && styles.disabled]}
               >
                 {busy ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={tokens.buttonPrimaryForeground} />
                 ) : (
                   <Text style={styles.primaryButtonText}>Share now</Text>
                 )}
@@ -511,12 +525,12 @@ export function SessionNotesScreen({
           <VoiceOrb active={phase === "listening"} />
           <Text style={styles.voiceState}>
             {phase === "connecting"
-              ? "CONNECTING LIVEKIT"
+              ? "CONNECTING MICROPHONE"
               : phase === "listening"
                 ? `LISTENING · ${clock(elapsed)}`
                 : recorded
                   ? "VOICE DRAFT READY"
-                  : "LIVEKIT VOICE NOTE"}
+                  : "VOICE NOTE"}
           </Text>
           <Text style={styles.voicePrompt}>
             {phase === "listening"
@@ -541,7 +555,7 @@ export function SessionNotesScreen({
               ]}
             >
               {phase === "connecting" ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={tokens.buttonPrimaryForeground} />
               ) : (
                 <>
                   <Text style={styles.recordButtonIcon}>●</Text>
@@ -558,10 +572,11 @@ export function SessionNotesScreen({
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>EDITABLE TRANSCRIPT</Text>
           <TextInput
+            accessibilityLabel="Editable transcript"
             multiline
             onChangeText={setTranscript}
             placeholder="You can also type a note here…"
-            placeholderTextColor="#98a2b3"
+            placeholderTextColor={tokens.text2}
             style={[styles.input, styles.transcriptInput]}
             value={transcript}
           />
@@ -569,13 +584,14 @@ export function SessionNotesScreen({
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>SHORT SUMMARY</Text>
           <TextInput
+            accessibilityLabel="Short summary"
             multiline
             onChangeText={setSummary}
             onFocus={() =>
               setSummary((value) => value || summarize(transcript))
             }
             placeholder="Duna will draft this from the transcript."
-            placeholderTextColor="#98a2b3"
+            placeholderTextColor={tokens.text2}
             style={[styles.input, styles.summaryInput]}
             value={summary}
           />
@@ -583,9 +599,10 @@ export function SessionNotesScreen({
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>TITLE · OPTIONAL</Text>
           <TextInput
+            accessibilityLabel="Title, optional"
             onChangeText={setSubject}
             placeholder="Serve-receive follow-up"
-            placeholderTextColor="#98a2b3"
+            placeholderTextColor={tokens.text2}
             style={styles.input}
             value={subject}
           />
@@ -711,7 +728,7 @@ export function SessionNotesScreen({
           ]}
         >
           {busy ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={tokens.buttonPrimaryForeground} />
           ) : (
             <Text style={styles.primaryButtonText}>Save note draft</Text>
           )}
@@ -721,345 +738,390 @@ export function SessionNotesScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f6f5f1", flex: 1 },
-  flex: { flex: 1 },
-  topbar: {
-    alignItems: "center",
-    borderBottomColor: "#e7e4dc",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 58,
-    paddingHorizontal: 16,
-  },
-  topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
-  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
-  centerState: {
-    alignItems: "center",
-    flex: 1,
-    gap: 14,
-    justifyContent: "center",
-  },
-  centerTitle: { color: "#1b1b19", fontSize: 18, fontWeight: "900" },
-  content: { padding: 20, paddingBottom: 135 },
-  eyebrow: {
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.15,
-    marginTop: 12,
-  },
-  title: {
-    color: "#1b1b19",
-    fontSize: 34,
-    fontWeight: "900",
-    letterSpacing: -1.1,
-    lineHeight: 39,
-    marginTop: 8,
-  },
-  subtitle: { color: "#766f61", fontSize: 14, lineHeight: 22, marginTop: 9 },
-  voiceCard: {
-    alignItems: "center",
-    backgroundColor: "#141a1e",
-    borderRadius: 26,
-    marginTop: 24,
-    overflow: "hidden",
-    padding: 24,
-  },
-  voiceCardLive: { backgroundColor: "#22343b" },
-  orbWrap: {
-    alignItems: "center",
-    height: 104,
-    justifyContent: "center",
-    width: 104,
-  },
-  orbPulse: {
-    backgroundColor: "#d4b77c",
-    borderRadius: 52,
-    height: 104,
-    position: "absolute",
-    width: 104,
-  },
-  orb: {
-    alignItems: "center",
-    backgroundColor: "#f7c86b",
-    borderRadius: 36,
-    height: 72,
-    justifyContent: "center",
-    width: 72,
-  },
-  orbActive: { backgroundColor: "#d4b77c" },
-  orbIcon: { color: "#141a1e", fontSize: 24, fontWeight: "900" },
-  voiceState: {
-    color: "#f7c86b",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    marginTop: 15,
-  },
-  voicePrompt: {
-    color: "#d9e5ea",
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  recordButton: {
-    alignItems: "center",
-    backgroundColor: "#3d6672",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 9,
-    justifyContent: "center",
-    marginTop: 20,
-    minHeight: 56,
-    paddingHorizontal: 24,
-    width: "100%",
-  },
-  recordButtonIcon: { color: "#f7c86b", fontSize: 16 },
-  recordButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  stopButton: {
-    alignItems: "center",
-    backgroundColor: "#f7f3ea",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 9,
-    justifyContent: "center",
-    marginTop: 20,
-    minHeight: 56,
-    paddingHorizontal: 24,
-    width: "100%",
-  },
-  stopButtonIcon: { color: "#c45252", fontSize: 14 },
-  stopButtonText: { color: "#141a1e", fontSize: 15, fontWeight: "900" },
-  voiceError: {
-    color: "#ffd6d6",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 14,
-    textAlign: "center",
-  },
-  fieldGroup: { gap: 7, marginTop: 22 },
-  label: {
-    color: "#475467",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  input: {
-    backgroundColor: "#fff",
-    borderColor: "#dfe3e8",
-    borderRadius: 16,
-    borderWidth: 1,
-    color: "#1b1b19",
-    fontSize: 15,
-    minHeight: 54,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-  },
-  transcriptInput: { minHeight: 150, textAlignVertical: "top" },
-  summaryInput: { minHeight: 105, textAlignVertical: "top" },
-  sectionLabel: {
-    color: "#475467",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.95,
-    marginTop: 28,
-    marginBottom: 8,
-  },
-  visibilityCard: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#e3e6eb",
-    borderRadius: 19,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    marginTop: 9,
-    minHeight: 88,
-    padding: 14,
-  },
-  visibilityCardOn: { backgroundColor: "#edece6", borderColor: "#3d6672" },
-  visibilityIcon: {
-    alignItems: "center",
-    backgroundColor: "#edece6",
-    borderRadius: 13,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  visibilityIconText: { color: "#3d6672", fontSize: 19, fontWeight: "900" },
-  visibilityTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
-  visibilityBody: {
-    color: "#766f61",
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-  radio: {
-    alignItems: "center",
-    borderColor: "#b9c0ca",
-    borderRadius: 11,
-    borderWidth: 2,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  radioOn: { borderColor: "#3d6672" },
-  radioDot: {
-    backgroundColor: "#3d6672",
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  peopleList: { gap: 8 },
-  personRow: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#e3e6eb",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 72,
-    padding: 12,
-  },
-  personRowOn: { backgroundColor: "#f1f8f6", borderColor: "#3d7d66" },
-  personAvatar: {
-    alignItems: "center",
-    backgroundColor: "#edece6",
-    borderRadius: 20,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  personAvatarText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
-  personName: { color: "#1b1b19", fontSize: 14, fontWeight: "900" },
-  personMeta: { color: "#766f61", fontSize: 12, lineHeight: 15, marginTop: 3 },
-  check: {
-    alignItems: "center",
-    borderColor: "#c7cdd5",
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: "center",
-    width: 28,
-  },
-  checkOn: { backgroundColor: "#3d7d66", borderColor: "#3d7d66" },
-  checkText: { color: "#fff", fontSize: 14, fontWeight: "900" },
-  privacyNote: {
-    alignItems: "flex-start",
-    backgroundColor: "#f0eee7",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 22,
-    padding: 14,
-  },
-  privacyNoteIcon: { color: "#3d7d66", fontSize: 16, fontWeight: "900" },
-  privacyNoteText: { color: "#587466", flex: 1, fontSize: 12, lineHeight: 17 },
-  error: {
-    color: "#b42318",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 18,
-    marginTop: 14,
-  },
-  footer: {
-    backgroundColor: "#f6f5f1",
-    borderTopColor: "#e7e4dc",
-    borderTopWidth: 1,
-    bottom: 0,
-    left: 0,
-    padding: 14,
-    position: "absolute",
-    right: 0,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#3d6672",
-    borderRadius: 16,
-    justifyContent: "center",
-    minHeight: 56,
-    paddingHorizontal: 20,
-  },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  secondaryButton: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#dfe3e8",
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 54,
-    paddingHorizontal: 20,
-  },
-  secondaryButtonText: { color: "#3d6672", fontSize: 14, fontWeight: "900" },
-  disabled: { opacity: 0.5 },
-  savedPage: {
-    alignItems: "center",
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
-  },
-  savedIcon: {
-    alignItems: "center",
-    backgroundColor: "#edece6",
-    borderRadius: 37,
-    height: 74,
-    justifyContent: "center",
-    width: 74,
-  },
-  savedIconShared: { backgroundColor: "#dcf4e4" },
-  savedIconText: { color: "#3d6672", fontSize: 30, fontWeight: "900" },
-  savedEyebrow: {
-    color: "#3d7d66",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    marginTop: 24,
-  },
-  savedTitle: {
-    color: "#1b1b19",
-    fontSize: 31,
-    fontWeight: "900",
-    letterSpacing: -1,
-    lineHeight: 36,
-    marginTop: 9,
-    textAlign: "center",
-  },
-  savedBody: {
-    color: "#766f61",
-    fontSize: 14,
-    lineHeight: 22,
-    marginVertical: 18,
-    maxWidth: 520,
-    textAlign: "center",
-  },
-  savedActions: { gap: 10, width: "100%" },
-  confirmCard: {
-    backgroundColor: "#fff",
-    borderColor: "#dde2e8",
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 11,
-    marginTop: 10,
-    padding: 18,
-    width: "100%",
-  },
-  confirmEyebrow: {
-    color: "#b4653d",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  confirmTitle: { color: "#1b1b19", fontSize: 23, fontWeight: "900" },
-  confirmBody: {
-    color: "#766f61",
-    fontSize: 12,
-    lineHeight: 19,
-    marginBottom: 5,
-  },
-});
+function createStyles(tokens: ProDesignTokens) {
+  return StyleSheet.create({
+    safe: { backgroundColor: tokens.ground, flex: 1 },
+    flex: { flex: 1 },
+    topbar: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 58,
+      paddingHorizontal: 16,
+    },
+    topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
+    topButtonText: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    topTitle: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    centerState: {
+      alignItems: "center",
+      flex: 1,
+      gap: 14,
+      justifyContent: "center",
+    },
+    centerTitle: { color: tokens.text1, fontSize: 18, fontWeight: "700" },
+    content: { padding: 20, paddingBottom: 135 },
+    eyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.15,
+      marginTop: 12,
+    },
+    title: {
+      color: tokens.text1,
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 39,
+      marginTop: 8,
+    },
+    subtitle: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 9,
+    },
+    voiceCard: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: 26,
+      marginTop: 24,
+      overflow: "hidden",
+      padding: 24,
+    },
+    voiceCardLive: { backgroundColor: tokens.surface1 },
+    orbWrap: {
+      alignItems: "center",
+      height: 104,
+      justifyContent: "center",
+      width: 104,
+    },
+    orbPulse: {
+      backgroundColor: tokens.loss,
+      borderRadius: 52,
+      height: 104,
+      position: "absolute",
+      width: 104,
+    },
+    orb: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 36,
+      height: 72,
+      justifyContent: "center",
+      width: 72,
+    },
+    orbActive: { backgroundColor: tokens.surface2 },
+    voiceState: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      marginTop: 15,
+    },
+    voicePrompt: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 8,
+      textAlign: "center",
+    },
+    recordButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "center",
+      marginTop: 20,
+      minHeight: 56,
+      paddingHorizontal: 24,
+      width: "100%",
+    },
+    recordButtonIcon: { color: tokens.buttonPrimaryForeground, fontSize: 16 },
+    recordButtonText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    stopButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "center",
+      marginTop: 20,
+      minHeight: 56,
+      paddingHorizontal: 24,
+      width: "100%",
+    },
+    stopButtonIcon: { color: tokens.loss, fontSize: 14 },
+    stopButtonText: { color: tokens.text1, fontSize: 14, fontWeight: "700" },
+    voiceError: {
+      color: tokens.loss,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 14,
+      textAlign: "center",
+    },
+    fieldGroup: { gap: 7, marginTop: 22 },
+    label: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+      letterSpacing: 0,
+    },
+    input: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 16,
+      borderWidth: 1,
+      color: tokens.text1,
+      fontSize: 16,
+      minHeight: 54,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+    },
+    transcriptInput: { minHeight: 150, textAlignVertical: "top" },
+    summaryInput: { minHeight: 105, textAlignVertical: "top" },
+    sectionLabel: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+      letterSpacing: 0,
+      marginTop: 28,
+      marginBottom: 8,
+    },
+    visibilityCard: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 19,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      marginTop: 9,
+      minHeight: 88,
+      padding: 14,
+    },
+    visibilityCardOn: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.text1,
+    },
+    visibilityIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 13,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    visibilityIconText: {
+      color: tokens.text1,
+      fontSize: 19,
+      fontWeight: "700",
+    },
+    visibilityTitle: { color: tokens.text1, fontSize: 15, fontWeight: "700" },
+    visibilityBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    radio: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 11,
+      borderWidth: 2,
+      height: 22,
+      justifyContent: "center",
+      width: 22,
+    },
+    radioOn: { borderColor: tokens.text1 },
+    radioDot: {
+      backgroundColor: tokens.text1,
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    peopleList: { gap: 8 },
+    personRow: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 72,
+      padding: 12,
+    },
+    personRowOn: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.text1,
+    },
+    personAvatar: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    personAvatarText: { color: tokens.text1, fontSize: 12, fontWeight: "700" },
+    personName: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    personMeta: {
+      color: tokens.text2,
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+    check: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 8,
+      borderWidth: 1,
+      height: 28,
+      justifyContent: "center",
+      width: 28,
+    },
+    checkOn: {
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderColor: tokens.buttonPrimaryBackground,
+    },
+    checkText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    privacyNote: {
+      alignItems: "flex-start",
+      backgroundColor: tokens.surface2,
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 22,
+      padding: 14,
+    },
+    privacyNoteIcon: { color: tokens.gain, fontSize: 16, fontWeight: "700" },
+    privacyNoteText: {
+      color: tokens.text2,
+      flex: 1,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    error: {
+      color: tokens.loss,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 18,
+      marginTop: 14,
+    },
+    footer: {
+      backgroundColor: tokens.ground,
+      borderTopColor: tokens.hairline,
+      borderTopWidth: 1,
+      bottom: 0,
+      left: 0,
+      padding: 14,
+      position: "absolute",
+      right: 0,
+    },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 20,
+    },
+    primaryButtonText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    secondaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 16,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 54,
+      paddingHorizontal: 20,
+    },
+    secondaryButtonText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    disabled: { opacity: 0.5 },
+    savedPage: {
+      alignItems: "center",
+      flexGrow: 1,
+      justifyContent: "center",
+      padding: 24,
+    },
+    savedIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 37,
+      height: 74,
+      justifyContent: "center",
+      width: 74,
+    },
+    savedIconShared: { backgroundColor: tokens.surface2 },
+    savedIconText: { color: tokens.text1, fontSize: 30, fontWeight: "700" },
+    savedEyebrow: {
+      color: tokens.gain,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      marginTop: 24,
+    },
+    savedTitle: {
+      color: tokens.text1,
+      fontSize: 31,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 36,
+      marginTop: 9,
+      textAlign: "center",
+    },
+    savedBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginVertical: 18,
+      maxWidth: 520,
+      textAlign: "center",
+    },
+    savedActions: { gap: 10, width: "100%" },
+    confirmCard: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 1,
+      gap: 11,
+      marginTop: 10,
+      padding: 18,
+      width: "100%",
+    },
+    confirmEyebrow: {
+      color: tokens.flareText,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    confirmTitle: { color: tokens.text1, fontSize: 23, fontWeight: "500" },
+    confirmBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: 5,
+    },
+  });
+}

@@ -197,7 +197,7 @@ test("mobile public navigation opens as a full-screen product sheet", async ({
     { width: 1024, height: 768 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open navigation menu" }).click();
 
     const sheet = page.getByRole("dialog", {
@@ -342,28 +342,57 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("player home puts useful actions and the personal calendar first", async ({
+test("player sand home preserves actions, club filtering, and AI", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/app");
   await expect(
-    page.getByRole("heading", { name: /Ready to play/ }),
+    page.getByRole("heading", { name: "Your place in the sand." }),
   ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath("player-sand-home.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const quickActions = page.getByRole("navigation", {
     name: "Player quick actions",
   });
   await expect(
-    quickActions.getByRole("link", { name: /Find play/ }),
+    quickActions.getByRole("link", { name: "Find a game" }),
+  ).toHaveAttribute("href", "/discover");
+  await expect(
+    quickActions.getByRole("link", { name: "Watch & record" }),
+  ).toHaveAttribute("href", "/app/video");
+  await expect(
+    quickActions.getByRole("link", { name: "Book a court" }),
+  ).toHaveAttribute("href", "/app/play");
+  await page.getByRole("button", { name: "My Clubs", exact: true }).click();
+  const clubs = page.getByRole("dialog", { name: "My Clubs" });
+  await expect(clubs).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath("player-club-sheet.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  await clubs
+    .getByRole("button", { name: /South Bay Volleyball Club/ })
+    .click();
+  await expect(clubs).not.toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "At South Bay Volleyball Club" }),
   ).toBeVisible();
   await expect(
-    quickActions.getByRole("link", { name: /Host pickup/ }),
+    page.getByRole("heading", { name: "My activities" }),
   ).toBeVisible();
-  await expect(page.getByText("Next up", { exact: true })).toBeVisible();
-  const actionCenter = page.getByRole("navigation", {
-    name: "Duna action center",
-  });
-  await expect(actionCenter).toBeVisible();
-  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  await page
+    .getByRole("button", { name: "Show Make time for your game." })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Show Make time for your game." }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Search with Duna", exact: true })
+    .click();
   const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
   await expect(dunaAi).toBeVisible();
   await expect(
@@ -373,18 +402,6 @@ test("player home puts useful actions and the personal calendar first", async ({
     dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
   ).toBeVisible();
   await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
-  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
-  const command = page.getByRole("dialog", { name: "Search Duna Player" });
-  await expect(command).toBeVisible();
-  await expect(command.getByText("Go anywhere")).toBeVisible();
-  await page.keyboard.press("Escape");
-  const nextUpDate = page
-    .getByRole("region", { name: "Your day" })
-    .locator("time")
-    .first();
-  await expect(nextUpDate).toBeVisible();
-  await expect(nextUpDate).not.toContainText(":");
-  await expect(page.locator('img[src*="duna-campaign-rally"]')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
 
@@ -780,6 +797,7 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
 
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Where")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Who can see it")).toBeVisible();
   await expect(page.getByText("Add players now")).toBeVisible();
@@ -799,7 +817,7 @@ test("pickup host flow publishes a complete listing", async ({ page }) => {
 
 test("player planning keeps selection in place and extends its date rail", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/app/play");
   await expect(
     page.getByRole("heading", { name: "When do you want to play?" }),
@@ -837,6 +855,17 @@ test("player planning keeps selection in place and extends its date rail", async
     .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
     .toBe(scrollPosition);
 
+  const views = page.getByRole("group", { name: "Schedule view" });
+  await views.getByRole("button", { name: "Week", exact: true }).click();
+  await expect(page.locator(".play-day")).toHaveCount(7);
+  await expect(nextPill).toHaveAttribute("aria-current", "date");
+  await expectNoHorizontalOverflow(page);
+  await views.getByRole("button", { name: "Day", exact: true }).click();
+  await expect(page.locator(".play-day")).toHaveCount(1);
+  await page.screenshot({
+    path: testInfo.outputPath("sand-schedule.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const initialPillCount = await pills.count();
   expect(initialPillCount).toBeGreaterThanOrEqual(91);
   await rail.evaluate((element) => {
@@ -855,7 +884,21 @@ test("player planning keeps selection in place and extends its date rail", async
   await expect(
     calendar.getByText("Events to explore", { exact: true }),
   ).toBeVisible();
-  await calendar.getByRole("button", { name: "Close full calendar" }).click();
+  const closeCalendar = calendar.getByRole("button", {
+    name: "Close full calendar",
+  });
+  await closeCalendar.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect
+    .poll(() =>
+      calendar.evaluate((node) => node.contains(document.activeElement)),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("sand-calendar-months.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  await closeCalendar.click();
   await expect(calendar).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
@@ -990,11 +1033,11 @@ test("settings use the available desktop width and collapse cleanly", async ({
 
 test("HQ, admin, and AI changes preserve explicit control", async ({
   page,
-}) => {
+}, testInfo) => {
   test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
-    page.getByRole("heading", { name: "Good morning." }),
+    page.getByRole("heading", { name: "Your club, at a glance." }),
   ).toBeVisible();
   await expect(
     page.getByText(
@@ -1019,9 +1062,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     };
   });
   expect(aiAnalystColors).toEqual({
-    action: "rgb(169, 196, 99)",
-    heading: "rgb(232, 242, 212)",
-    signalHeading: "rgb(232, 242, 212)",
+    action: "rgb(50, 51, 47)",
+    heading: "rgb(50, 51, 47)",
+    signalHeading: "rgb(50, 51, 47)",
   });
   await expect(page.getByText("Payments are connected.")).toHaveCount(0);
   await expect(
@@ -1030,6 +1073,17 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
       .getByText("Payments", { exact: true }),
   ).toHaveCount(0);
 
+  const clippedMetrics = await page
+    .locator(".hq-analytics-metric")
+    .evaluateAll(
+      (cards) =>
+        cards.filter((card) => card.scrollWidth > card.clientWidth + 1).length,
+    );
+  expect(clippedMetrics).toBe(0);
+  await page.screenshot({
+    path: testInfo.outputPath("hq-sand-overview.png"),
+    style: "nextjs-portal { display: none; }",
+  });
   const schedule = page.locator(".hq-schedule-list");
   await expect(schedule).toBeVisible();
   await expect(schedule.locator("a.hq-schedule-row")).toHaveCount(5);
@@ -1296,4 +1350,77 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("dialog", { name: "Search Duna HQ" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("HQ setup keeps readable contrast and a usable Theme Kit heading", async ({
+  page,
+}) => {
+  await page.goto(`${hqBaseUrl}/settings`);
+  const readiness = page.locator(".settings-readiness");
+  await expect(readiness.getByRole("heading")).toBeVisible();
+  const contrast = await readiness.evaluate((card) => {
+    const channels = (color: string) =>
+      (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = (color: string) =>
+      channels(color)
+        .map((channel) => {
+          const value = channel / 255;
+          return value <= 0.04045
+            ? value / 12.92
+            : ((value + 0.055) / 1.055) ** 2.4;
+        })
+        .reduce(
+          (sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!,
+          0,
+        );
+    const background = luminance(getComputedStyle(card).backgroundColor);
+    return Array.from(card.querySelectorAll("h2, p")).map((element) => {
+      const foreground = luminance(getComputedStyle(element).color);
+      return (
+        (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05)
+      );
+    });
+  });
+  expect(contrast.length).toBeGreaterThan(0);
+  for (const ratio of contrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
+  await readiness.getByRole("link", { name: "Open Theme Kit" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Theme Kit", exact: true }),
+  ).toBeVisible();
+  const headingCopy = await getBox(page.locator(".operator-create-page__copy"));
+  expect(headingCopy.width).toBeGreaterThan(220);
+  await expect(
+    page.getByRole("link", { name: "Back to settings" }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("mobile menu waits for its handler before accepting a tap", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let releaseScripts: () => void = () => {};
+  const scriptsReady = new Promise<void>((resolve) => {
+    releaseScripts = resolve;
+  });
+  await page.route("**/_next/static/**/*.js", async (route) => {
+    await scriptsReady;
+    await route.continue();
+  });
+  try {
+    await page.goto("/", { waitUntil: "commit" });
+    const trigger = page.getByRole("button", { name: "Open navigation menu" });
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toBeDisabled();
+    releaseScripts();
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "Where do you want to go?" }),
+    ).toBeVisible();
+  } finally {
+    releaseScripts();
+    await page.unrouteAll({ behavior: "wait" });
+  }
 });

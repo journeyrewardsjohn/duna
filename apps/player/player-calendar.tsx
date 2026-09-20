@@ -15,7 +15,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { DunaIcon } from "./duna-icon";
-import { FellixText as Text } from "./satoshi-text";
+import { SatoshiText as Text } from "./satoshi-text";
 import {
   connectPlayerCalendar,
   readPlayerCalendarConnection,
@@ -33,7 +33,32 @@ type AgendaItem =
   | { readonly kind: "duna"; readonly booking: PlayerCalendarBooking }
   | { readonly kind: "device"; readonly event: DeviceEvent };
 
-const c = dunaAppColors;
+import { usePlayerDesign, type PlayerDesignTokens } from "./design-theme";
+function calendarColors(tokens: PlayerDesignTokens) {
+  return {
+    ...dunaAppColors,
+    page: tokens.ground,
+    card: tokens.surface1,
+    subtle: tokens.surface2,
+    subtleStrong: tokens.surface2,
+    ink: tokens.text1,
+    navy: tokens.text1,
+    navyLift: tokens.text2,
+    hairline: tokens.hairline,
+    border: tokens.hairlineStrong,
+    textSecondary: tokens.text2,
+    textTertiary: tokens.text2,
+    textFaint: tokens.text3,
+    positive: tokens.gain,
+  };
+}
+function useCalendarDesign() {
+  const { tokens } = usePlayerDesign();
+  return useMemo(() => {
+    const colors = calendarColors(tokens);
+    return { colors, styles: createStyles(colors) };
+  }, [tokens]);
+}
 
 function startOfDay(value: Date) {
   const date = new Date(value);
@@ -151,6 +176,8 @@ function MiniMonth({
   readonly month: Date;
   readonly onSelect: (date: Date) => void;
 }) {
+  const { styles } = useCalendarDesign();
+
   return (
     <View style={styles.month}>
       <Text style={styles.monthTitle}>
@@ -182,6 +209,8 @@ function MiniMonth({
                 month: "long",
                 day: "numeric",
               })}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               key={date.toISOString()}
               onPress={() => onSelect(date)}
               style={[styles.monthDay, selected && styles.monthDaySelected]}
@@ -222,6 +251,8 @@ export function PlayerCalendarModal({
   readonly onOpenBooking: (bookingId: string) => void;
   readonly visible: boolean;
 }) {
+  const { colors: c, styles } = useCalendarDesign();
+
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<CalendarMode>("week");
   const [focus, setFocus] = useState(startOfDay(initialDate ?? new Date()));
@@ -357,6 +388,7 @@ export function PlayerCalendarModal({
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Back from calendar"
             onPress={onClose}
             style={styles.close}
@@ -388,6 +420,8 @@ export function PlayerCalendarModal({
               ] as const
             ).map(([value, label]) => (
               <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === value }}
                 key={value}
                 onPress={() => setMode(value)}
                 style={[styles.mode, mode === value && styles.modeActive]}
@@ -405,24 +439,35 @@ export function PlayerCalendarModal({
           </ScrollView>
 
           <View style={styles.navigator}>
-            <Pressable onPress={() => shift(-1)} style={styles.navButton}>
-              <Text style={styles.navButtonText}>‹</Text>
+            <Pressable
+              accessibilityLabel="Previous period"
+              accessibilityRole="button"
+              onPress={() => shift(-1)}
+              style={styles.navButton}
+            >
+              <DunaIcon name="arrow-left" color={c.ink} size={20} />
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               onPress={() => setFocus(startOfDay(new Date()))}
               style={styles.todayButton}
             >
               <Text style={styles.todayButtonText}>Today</Text>
             </Pressable>
-            <Pressable onPress={() => shift(1)} style={styles.navButton}>
-              <Text style={styles.navButtonText}>›</Text>
+            <Pressable
+              accessibilityLabel="Next period"
+              accessibilityRole="button"
+              onPress={() => shift(1)}
+              style={styles.navButton}
+            >
+              <DunaIcon name="arrow-right" color={c.ink} size={20} />
             </Pressable>
           </View>
 
           {!connected ? (
             <View style={styles.connection}>
               <View style={styles.connectionMark}>
-                <Text style={styles.connectionMarkText}>▦</Text>
+                <DunaIcon name="calendar" color={c.ink} size={22} />
               </View>
               <View style={styles.flex}>
                 <Text style={styles.connectionTitle}>
@@ -433,6 +478,7 @@ export function PlayerCalendarModal({
                 </Text>
               </View>
               <Pressable
+                accessibilityRole="button"
                 disabled={busy}
                 onPress={() => void connect()}
                 style={styles.connectionAction}
@@ -444,28 +490,13 @@ export function PlayerCalendarModal({
             </View>
           ) : (
             <View style={styles.connectedSummary}>
-              <Text style={styles.connectedSummaryMark}>✓</Text>
+              <DunaIcon name="check" color={c.positive} size={16} />
               <Text style={styles.connectedSummaryText}>
                 {calendarTitleText} · new plans sync automatically
               </Text>
             </View>
           )}
           {notice && <Text style={styles.notice}>{notice}</Text>}
-
-          {mode === "day" && (
-            <View style={styles.dayHero}>
-              <Text style={styles.dayHeroWeekday}>
-                {focus.toLocaleDateString("en-US", { weekday: "long" })}
-              </Text>
-              <Text style={styles.dayHeroNumber}>{focus.getDate()}</Text>
-              <Text style={styles.dayHeroMonth}>
-                {focus.toLocaleDateString("en-US", {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </Text>
-            </View>
-          )}
 
           {mode === "week" && (
             <View {...weekPanResponder.panHandlers} style={styles.week}>
@@ -479,14 +510,16 @@ export function PlayerCalendarModal({
                   ).length;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
                     key={date.toISOString()}
                     onPress={() => setFocus(date)}
-                    style={[styles.weekDay, selected && styles.weekDayActive]}
+                    style={styles.weekDay}
                   >
                     <Text
                       style={[
                         styles.weekDayLabel,
-                        selected && styles.weekDayTextActive,
+                        selected && styles.weekDayLabelActive,
                       ]}
                     >
                       {date
@@ -496,7 +529,7 @@ export function PlayerCalendarModal({
                     <Text
                       style={[
                         styles.weekDayNumber,
-                        selected && styles.weekDayTextActive,
+                        selected && styles.weekDayNumberActive,
                       ]}
                     >
                       {date.getDate()}
@@ -562,6 +595,7 @@ export function PlayerCalendarModal({
                   : item.event.location;
               return (
                 <Pressable
+                  accessibilityRole="button"
                   key={`${item.kind}:${id}`}
                   onPress={() => {
                     if (item.kind === "duna") {
@@ -638,294 +672,286 @@ export function PlayerCalendarModal({
   );
 }
 
-const styles = StyleSheet.create({
-  agenda: {
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
-    overflow: "hidden",
-  },
-  agendaAccent: {
-    alignSelf: "stretch",
-    backgroundColor: c.navy,
-    width: 4,
-  },
-  agendaAccentDevice: { backgroundColor: c.sand },
-  agendaArrow: { color: c.textTertiary, fontSize: 25 },
-  agendaCount: { color: c.textSecondary, fontSize: 14, fontWeight: "600" },
-  agendaEyebrow: {
-    color: c.navy,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-  },
-  agendaHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: mobileGrid[2],
-    marginTop: mobileGrid[5],
-  },
-  agendaItem: {
-    alignItems: "center",
-    borderBottomColor: c.hairline,
-    borderBottomWidth: mobileGrid.hairline,
-    flexDirection: "row",
-    minHeight: 76,
-    paddingRight: mobileGrid[3],
-  },
-  agendaMeta: { color: c.textSecondary, fontSize: 14, marginTop: 3 },
-  agendaTime: { paddingHorizontal: 12, width: 76 },
-  agendaTimeText: { color: c.navy, fontSize: 13, fontWeight: "700" },
-  agendaTitle: { color: c.ink, fontSize: 16, fontWeight: "600" },
-  calendarNavTitle: {
-    color: c.ink,
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  close: {
-    alignItems: "center",
-    backgroundColor: c.subtle,
-    borderRadius: dunaAppShape.pillRadius,
-    height: mobileGrid[10],
-    justifyContent: "center",
-    width: mobileGrid[10],
-  },
-  connection: {
-    alignItems: "center",
-    backgroundColor: c.subtleStrong,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.actionTileRadius,
-    borderWidth: mobileGrid.hairline,
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    marginTop: mobileGrid[4],
-    padding: mobileGrid[3],
-  },
-  connectionAction: {
-    alignItems: "center",
-    backgroundColor: c.ink,
-    borderRadius: dunaAppShape.compactRadius,
-    justifyContent: "center",
-    minHeight: mobileGrid[10],
-    paddingHorizontal: mobileGrid[3],
-  },
-  connectionActionText: { color: c.card, fontSize: 13, fontWeight: "700" },
-  connectionBody: { color: c.textSecondary, fontSize: 13, marginTop: 2 },
-  connectionMark: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderRadius: dunaAppShape.compactRadius,
-    height: mobileGrid[9],
-    justifyContent: "center",
-    width: mobileGrid[9],
-  },
-  connectionMarkText: { color: c.navy, fontSize: 19 },
-  connectionTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
-  connectedSummary: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 7,
-    justifyContent: "center",
-    marginTop: mobileGrid[3],
-  },
-  connectedSummaryMark: { color: c.positive, fontSize: 14, fontWeight: "700" },
-  connectedSummaryText: {
-    color: c.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  content: {
-    paddingBottom: mobileGrid[12],
-    paddingHorizontal: mobileGrid[4],
-    paddingTop: mobileGrid[4],
-  },
-  dayDots: { flexDirection: "row", gap: 2, marginTop: 2 },
-  dayHero: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
-    marginTop: mobileGrid[4],
-    padding: mobileGrid[4],
-  },
-  dayHeroMonth: { color: c.textSecondary, fontSize: 15 },
-  dayHeroNumber: {
-    color: c.ink,
-    fontSize: 60,
-    fontWeight: "800",
-    lineHeight: 68,
-  },
-  dayHeroWeekday: {
-    color: c.navy,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
-  deviceDetail: {
-    backgroundColor: c.subtle,
-    borderRadius: 12,
-    marginTop: 8,
-    padding: 10,
-  },
-  deviceDetailText: { color: c.textSecondary, fontSize: 13, lineHeight: 19 },
-  deviceDot: {
-    backgroundColor: c.sand,
-    borderRadius: 2,
-    height: 4,
-    width: 4,
-  },
-  dunaDot: {
-    backgroundColor: c.navy,
-    borderRadius: 2,
-    height: 4,
-    width: 4,
-  },
-  empty: { alignItems: "center", padding: 30 },
-  emptyBody: {
-    color: c.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 5,
-    textAlign: "center",
-  },
-  emptyTitle: { color: c.ink, fontSize: 18, fontWeight: "700" },
-  eyebrow: {
-    color: c.navy,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.3,
-  },
-  flex: { flex: 1, minWidth: 0 },
-  header: {
-    alignItems: "center",
-    backgroundColor: c.page,
-    borderBottomColor: c.hairline,
-    borderBottomWidth: mobileGrid.hairline,
-    flexDirection: "row",
-    paddingHorizontal: mobileGrid[4],
-    paddingVertical: mobileGrid[2],
-  },
-  headerSpacer: { height: mobileGrid[10], width: mobileGrid[10] },
-  mode: {
-    alignItems: "center",
-    borderRadius: dunaAppShape.compactRadius,
-    justifyContent: "center",
-    minHeight: mobileGrid[10],
-    paddingHorizontal: mobileGrid[4],
-  },
-  modeActive: { backgroundColor: c.ink },
-  modeRail: {
-    backgroundColor: c.subtle,
-    borderRadius: dunaAppShape.cardRadius,
-    gap: mobileGrid[1],
-    padding: mobileGrid[1],
-  },
-  modeText: { color: c.textSecondary, fontSize: 14, fontWeight: "600" },
-  modeTextActive: { color: c.card },
-  month: {
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
-    marginTop: mobileGrid[4],
-    padding: mobileGrid[3],
-  },
-  monthDay: {
-    alignItems: "center",
-    height: 43,
-    justifyContent: "center",
-    width: "14.285%",
-  },
-  monthDayMuted: { color: c.textFaint },
-  monthDaySelected: { backgroundColor: c.navy, borderRadius: 13 },
-  monthDayText: { color: c.ink, fontSize: 13, fontWeight: "600" },
-  monthDayTextSelected: { color: c.card },
-  monthGrid: { flexDirection: "row", flexWrap: "wrap" },
-  monthTitle: { color: c.ink, fontSize: 18, fontWeight: "700" },
-  navButton: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.pillRadius,
-    borderWidth: mobileGrid.hairline,
-    height: mobileGrid[10],
-    justifyContent: "center",
-    width: mobileGrid[10],
-  },
-  navButtonText: { color: c.navy, fontSize: 30, lineHeight: 33 },
-  navigator: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "center",
-    marginTop: mobileGrid[3],
-  },
-  notice: {
-    color: c.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: mobileGrid[2],
-  },
-  quarter: { gap: 2 },
-  rangeHeader: { gap: mobileGrid[1] },
-  safe: { backgroundColor: c.page, flex: 1 },
-  title: { color: c.ink, fontSize: 30, fontWeight: "700", lineHeight: 35 },
-  todayButton: {
-    alignItems: "center",
-    borderColor: c.navy,
-    borderRadius: dunaAppShape.compactRadius,
-    borderWidth: mobileGrid.hairline,
-    justifyContent: "center",
-    minHeight: mobileGrid[10],
-    paddingHorizontal: mobileGrid[4],
-  },
-  todayButtonText: { color: c.navy, fontSize: 14, fontWeight: "700" },
-  week: {
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: mobileGrid.hairline,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: mobileGrid[4],
-    padding: mobileGrid[2],
-  },
-  weekDay: {
-    alignItems: "center",
-    borderRadius: 18,
-    minHeight: 70,
-    paddingVertical: 10,
-    width: "13.5%",
-  },
-  weekDayActive: { backgroundColor: c.navy },
-  weekDayDot: {
-    backgroundColor: c.navy,
-    borderRadius: 3,
-    height: 5,
-    marginTop: 5,
-    width: 5,
-  },
-  weekDayDotActive: { backgroundColor: c.sand },
-  weekDayLabel: { color: c.textSecondary, fontSize: 12, fontWeight: "600" },
-  weekDayNumber: {
-    color: c.ink,
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  weekDayTextActive: { color: c.card },
-  weekdayLabel: {
-    color: c.textTertiary,
-    fontSize: 12,
-    fontWeight: "700",
-    textAlign: "center",
-    width: "14.285%",
-  },
-  weekdayRow: { flexDirection: "row", marginTop: 13 },
-});
+const createStyles = (c: ReturnType<typeof calendarColors>) =>
+  StyleSheet.create({
+    agenda: {
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: mobileGrid.hairline,
+      overflow: "hidden",
+    },
+    agendaAccent: {
+      alignSelf: "stretch",
+      backgroundColor: c.navy,
+      width: 4,
+    },
+    agendaAccentDevice: { backgroundColor: c.sand },
+    agendaArrow: { color: c.textTertiary, fontSize: 25 },
+    agendaCount: { color: c.textSecondary, fontSize: 14, fontWeight: "600" },
+    agendaEyebrow: {
+      color: c.navy,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.4,
+    },
+    agendaHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: mobileGrid[2],
+      marginTop: mobileGrid[5],
+    },
+    agendaItem: {
+      alignItems: "center",
+      borderBottomColor: c.hairline,
+      borderBottomWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      minHeight: 76,
+      paddingRight: mobileGrid[3],
+    },
+    agendaMeta: { color: c.textSecondary, fontSize: 14, marginTop: 3 },
+    agendaTime: { paddingHorizontal: 12, width: 76 },
+    agendaTimeText: { color: c.navy, fontSize: 13, fontWeight: "700" },
+    agendaTitle: { color: c.ink, fontSize: 16, fontWeight: "600" },
+    calendarNavTitle: {
+      color: c.ink,
+      flex: 1,
+      fontSize: 18,
+      fontWeight: "600",
+      textAlign: "center",
+    },
+    close: {
+      alignItems: "center",
+      backgroundColor: c.subtle,
+      borderRadius: dunaAppShape.pillRadius,
+      height: mobileGrid[10],
+      justifyContent: "center",
+      width: mobileGrid[10],
+    },
+    connection: {
+      alignItems: "center",
+      backgroundColor: c.subtleStrong,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.actionTileRadius,
+      borderWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[4],
+      padding: mobileGrid[3],
+    },
+    connectionAction: {
+      alignItems: "center",
+      backgroundColor: c.ink,
+      borderRadius: dunaAppShape.compactRadius,
+      justifyContent: "center",
+      minHeight: mobileGrid[10],
+      paddingHorizontal: mobileGrid[3],
+    },
+    connectionActionText: { color: c.card, fontSize: 13, fontWeight: "700" },
+    connectionBody: { color: c.textSecondary, fontSize: 13, marginTop: 2 },
+    connectionMark: {
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderRadius: dunaAppShape.compactRadius,
+      height: mobileGrid[9],
+      justifyContent: "center",
+      width: mobileGrid[9],
+    },
+    connectionMarkText: { color: c.navy, fontSize: 19 },
+    connectionTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
+    connectedSummary: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 7,
+      justifyContent: "center",
+      marginTop: mobileGrid[3],
+    },
+    connectedSummaryMark: {
+      color: c.positive,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    connectedSummaryText: {
+      color: c.textSecondary,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    content: {
+      paddingBottom: mobileGrid[12],
+      paddingHorizontal: mobileGrid[4],
+      paddingTop: mobileGrid[4],
+    },
+    dayDots: { flexDirection: "row", gap: 2, marginTop: 2 },
+    deviceDetail: {
+      backgroundColor: c.subtle,
+      borderRadius: 12,
+      marginTop: 8,
+      padding: 10,
+    },
+    deviceDetailText: { color: c.textSecondary, fontSize: 13, lineHeight: 19 },
+    deviceDot: {
+      backgroundColor: c.sand,
+      borderRadius: 2,
+      height: 4,
+      width: 4,
+    },
+    dunaDot: {
+      backgroundColor: c.navy,
+      borderRadius: 2,
+      height: 4,
+      width: 4,
+    },
+    empty: { alignItems: "center", padding: 30 },
+    emptyBody: {
+      color: c.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 5,
+      textAlign: "center",
+    },
+    emptyTitle: { color: c.ink, fontSize: 18, fontWeight: "700" },
+    eyebrow: {
+      color: c.navy,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.3,
+    },
+    flex: { flex: 1, minWidth: 0 },
+    header: {
+      alignItems: "center",
+      backgroundColor: c.page,
+      borderBottomColor: c.hairline,
+      borderBottomWidth: mobileGrid.hairline,
+      flexDirection: "row",
+      paddingHorizontal: mobileGrid[4],
+      paddingVertical: mobileGrid[2],
+    },
+    headerSpacer: { height: mobileGrid[10], width: mobileGrid[10] },
+    mode: {
+      alignItems: "center",
+      borderRadius: dunaAppShape.compactRadius,
+      justifyContent: "center",
+      minHeight: mobileGrid[10],
+      paddingHorizontal: mobileGrid[4],
+    },
+    modeActive: { backgroundColor: c.card },
+    modeRail: {
+      backgroundColor: c.subtle,
+      borderRadius: dunaAppShape.cardRadius,
+      gap: mobileGrid[1],
+      padding: mobileGrid[1],
+    },
+    modeText: { color: c.textSecondary, fontSize: 14, fontWeight: "600" },
+    modeTextActive: { color: c.ink },
+    month: {
+      backgroundColor: c.page,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: 0,
+      marginTop: mobileGrid[4],
+      padding: mobileGrid[1],
+    },
+    monthDay: {
+      alignItems: "center",
+      height: 50,
+      justifyContent: "center",
+      width: "14.285%",
+    },
+    monthDayMuted: { color: c.textFaint },
+    monthDaySelected: { backgroundColor: c.ink, borderRadius: 25 },
+    monthDayText: { color: c.ink, fontSize: 13, fontWeight: "600" },
+    monthDayTextSelected: { color: c.card },
+    monthGrid: { flexDirection: "row", flexWrap: "wrap" },
+    monthTitle: { color: c.ink, fontSize: 23, fontWeight: "400", padding: 10 },
+    navButton: {
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.pillRadius,
+      borderWidth: mobileGrid.hairline,
+      height: mobileGrid[10],
+      justifyContent: "center",
+      width: mobileGrid[10],
+    },
+    navButtonText: { color: c.navy, fontSize: 30, lineHeight: 33 },
+    navigator: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "center",
+      marginTop: mobileGrid[3],
+    },
+    notice: {
+      color: c.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: mobileGrid[2],
+    },
+    quarter: { gap: 2 },
+    rangeHeader: { gap: mobileGrid[1] },
+    safe: { backgroundColor: c.page, flex: 1 },
+    title: { color: c.ink, fontSize: 30, fontWeight: "400", lineHeight: 38 },
+    todayButton: {
+      alignItems: "center",
+      borderColor: c.navy,
+      borderRadius: dunaAppShape.compactRadius,
+      borderWidth: mobileGrid.hairline,
+      justifyContent: "center",
+      minHeight: mobileGrid[10],
+      paddingHorizontal: mobileGrid[4],
+    },
+    todayButtonText: { color: c.navy, fontSize: 14, fontWeight: "700" },
+    week: {
+      backgroundColor: c.page,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: 0,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: mobileGrid[4],
+      padding: 0,
+    },
+    weekDay: {
+      alignItems: "center",
+      borderRadius: 18,
+      minHeight: 70,
+      paddingVertical: 10,
+      width: "13.5%",
+    },
+    weekDayLabelActive: { color: c.ink },
+    weekDayNumberActive: {
+      backgroundColor: c.ink,
+      color: c.card,
+      overflow: "hidden",
+    },
+    weekDayDot: {
+      backgroundColor: c.navy,
+      borderRadius: 3,
+      height: 5,
+      marginTop: 5,
+      width: 5,
+    },
+    weekDayDotActive: { backgroundColor: c.sand },
+    weekDayLabel: { color: c.textSecondary, fontSize: 12, fontWeight: "600" },
+    weekDayNumber: {
+      color: c.ink,
+      fontSize: 19,
+      fontWeight: "400",
+      marginTop: 8,
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      lineHeight: 40,
+      textAlign: "center",
+    },
+
+    weekdayLabel: {
+      color: c.textTertiary,
+      fontSize: 12,
+      fontWeight: "700",
+      textAlign: "center",
+      width: "14.285%",
+    },
+    weekdayRow: { flexDirection: "row", marginTop: 13 },
+  });

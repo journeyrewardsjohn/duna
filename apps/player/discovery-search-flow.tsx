@@ -1,7 +1,7 @@
+import { resolveDunaMobileTokens } from "@duna/ui/mobile";
 import type { DiscoveryMapItem } from "@duna/api";
 import {
   radii,
-  resolveDunaTokens,
   spacing,
   type DunaTheme,
   type ResolvedDunaTokens,
@@ -917,7 +917,7 @@ export function DiscoverySearchFlow({
   readonly visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  const token = resolveDunaTokens(theme, "editorial");
+  const token = resolveDunaMobileTokens(theme, "editorial");
   const topInset = Math.max(
     insets.top,
     Platform.OS === "ios" ? 54 : spacing[3],
@@ -1051,7 +1051,7 @@ function createStyles(
     },
     mainHeadingCopy: { alignItems: "center", flex: 1 },
     mainEyebrow: {
-      color: token.flareText,
+      color: token.text2,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,

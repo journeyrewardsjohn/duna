@@ -14,10 +14,38 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
-import { FellixText as Text } from "./satoshi-text";
+import { SatoshiText as Text } from "./satoshi-text";
 
 const dunaMark = require("./assets/duna-mark.png") as ImageSourcePropType;
-const c = dunaAppColors;
+import { usePlayerDesign, type PlayerDesignTokens } from "./design-theme";
+
+function homeColors(tokens: PlayerDesignTokens) {
+  return {
+    ...dunaAppColors,
+    page: tokens.ground,
+    card: tokens.surface1,
+    subtle: tokens.surface2,
+    subtleStrong: tokens.surface2,
+    ink: tokens.text1,
+    textSecondary: tokens.text2,
+    textTertiary: tokens.text2,
+    textFaint: tokens.text3,
+    hairline: tokens.hairline,
+    border: tokens.hairline,
+    cream: tokens.surface2,
+    positive: tokens.gain,
+    positiveWash: tokens.surface2,
+    navy: tokens.text1,
+    navyLift: tokens.text2,
+  };
+}
+function useHomeDesign() {
+  const { tokens } = usePlayerDesign();
+  return useMemo(() => {
+    const c = homeColors(tokens);
+    return { c, styles: createStyles(c) };
+  }, [tokens]);
+}
 
 export type HomeV3Tab = "all" | "open" | "training" | "circles";
 
@@ -133,7 +161,9 @@ function Avatar({
   avatar: HomeV3Avatar;
   size?: number;
 }) {
-  const palette = [c.navy, c.sand, c.sky, c.blush] as const;
+  const { c, styles } = useHomeDesign();
+
+  const palette = [dunaAppColors.navy, c.sand, c.sky, c.blush] as const;
   const backgroundColor =
     palette[
       Math.abs(
@@ -142,7 +172,7 @@ function Avatar({
           .reduce((sum, character) => sum + character.charCodeAt(0), 0),
       ) % palette.length
     ];
-  const darkText = backgroundColor !== c.navy;
+  const darkText = backgroundColor !== dunaAppColors.navy;
   return (
     <View
       style={[styles.avatar, { backgroundColor, height: size, width: size }]}
@@ -167,6 +197,8 @@ function AvatarStack({
   readonly overflowCount?: number;
   readonly size?: number;
 }) {
+  const { styles } = useHomeDesign();
+
   return (
     <View style={styles.avatarStack}>
       {avatars.slice(0, 2).map((avatar, index) => (
@@ -215,6 +247,8 @@ function QuickAction({
   readonly action: HomeV3QuickAction;
   readonly reduceMotion: boolean;
 }) {
+  const { styles } = useHomeDesign();
+
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     progress.stopAnimation();
@@ -364,6 +398,8 @@ function SectionHeader({
   readonly onAction: () => void;
   readonly title: string;
 }) {
+  const { styles } = useHomeDesign();
+
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -374,7 +410,9 @@ function SectionHeader({
   );
 }
 
-function UpcomingCard({ item }: { readonly item: HomeV3UpcomingItem }) {
+export function UpcomingCard({ item }: { readonly item: HomeV3UpcomingItem }) {
+  const { c, styles } = useHomeDesign();
+
   return (
     <Pressable
       accessibilityLabel={`${item.title}, ${item.day} at ${item.time}`}
@@ -422,6 +460,8 @@ function UpcomingCard({ item }: { readonly item: HomeV3UpcomingItem }) {
 }
 
 function OpenGamePlayer({ slot }: { slot: HomeV3GameSlot | HomeV3OpenSlot }) {
+  const { c, styles } = useHomeDesign();
+
   if (slot.open) {
     return (
       <View style={styles.openPlayer}>
@@ -444,7 +484,9 @@ function OpenGamePlayer({ slot }: { slot: HomeV3GameSlot | HomeV3OpenSlot }) {
   );
 }
 
-function OpenGameCard({ game }: { readonly game: HomeV3OpenGame }) {
+export function OpenGameCard({ game }: { readonly game: HomeV3OpenGame }) {
+  const { c, styles } = useHomeDesign();
+
   return (
     <Pressable
       accessibilityLabel={`${game.time}, ${game.location}, ${game.level}`}
@@ -500,6 +542,8 @@ function OpenGameCard({ game }: { readonly game: HomeV3OpenGame }) {
 }
 
 function MatchTeamRow({ team }: { readonly team: HomeV3MatchTeam }) {
+  const { c, styles } = useHomeDesign();
+
   return (
     <View style={styles.matchTeamRow}>
       <AvatarStack
@@ -536,7 +580,9 @@ function MatchTeamRow({ team }: { readonly team: HomeV3MatchTeam }) {
   );
 }
 
-function MatchCard({ match }: { readonly match: HomeV3Match }) {
+export function MatchCard({ match }: { readonly match: HomeV3Match }) {
+  const { styles } = useHomeDesign();
+
   return (
     <Pressable
       accessibilityLabel={`${match.kicker}${match.weather ? `, ${match.weather}` : ""}, rating ${match.delta}`}
@@ -572,6 +618,8 @@ function MatchCard({ match }: { readonly match: HomeV3Match }) {
 }
 
 function RatingSparkline({ data }: { readonly data: readonly number[] }) {
+  const { c, styles } = useHomeDesign();
+
   const points = useMemo(() => {
     if (data.length < 2) return "";
     const minimum = Math.min(...data);
@@ -600,6 +648,8 @@ function RatingSparkline({ data }: { readonly data: readonly number[] }) {
 }
 
 export function HomeV3Screen(props: HomeV3Props) {
+  const { c, styles } = useHomeDesign();
+
   const [activeTab, setActiveTab] = useState<HomeV3Tab>("all");
   const reduceMotion = useReducedMotion();
   const tabs: readonly { key: HomeV3Tab; label: string }[] = [
@@ -870,552 +920,565 @@ export function HomeV3Screen(props: HomeV3Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    backgroundColor: c.page,
-    paddingBottom: 138,
-  },
-  pressed: { opacity: 0.76, transform: [{ scale: 0.988 }] },
-  header: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    justifyContent: "space-between",
-    paddingHorizontal: mobileGrid[3] + 1,
-    paddingTop: mobileGrid[4] + 2,
-  },
-  headerCopy: { flex: 1, minWidth: 0 },
-  greeting: {
-    color: c.ink,
-    fontSize: 28,
-    fontWeight: "600",
-    letterSpacing: -0.6,
-    lineHeight: 31,
-    maxWidth: 245,
-  },
-  context: {
-    color: c.textTertiary,
-    fontSize: 14,
-    lineHeight: 19,
-    marginTop: mobileGrid[1],
-  },
-  headerActions: { flexDirection: "row", gap: mobileGrid[2] - 2 },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.pillRadius,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: "center",
-    position: "relative",
-    width: 42,
-  },
-  notificationDot: {
-    backgroundColor: c.navyLift,
-    borderColor: c.card,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    height: 8,
-    position: "absolute",
-    right: 5,
-    top: 5,
-    width: 8,
-  },
-  quickActions: {
-    gap: mobileGrid[2],
-    paddingHorizontal: mobileGrid[3] + 1,
-    paddingTop: mobileGrid[6],
-  },
-  quickAction: { alignItems: "center", width: 82 },
-  quickActionTile: {
-    alignItems: "center",
-    backgroundColor: c.subtle,
-    borderRadius: dunaAppShape.actionTileRadius,
-    height: 64,
-    justifyContent: "center",
-    position: "relative",
-    width: 82,
-  },
-  quickActionLabel: {
-    color: c.ink,
-    fontSize: 12,
-    fontWeight: "500",
-    lineHeight: 15,
-    marginTop: 7,
-    textAlign: "center",
-  },
-  courtBall: {
-    backgroundColor: c.gold,
-    borderRadius: 3,
-    height: 5,
-    left: 39,
-    position: "absolute",
-    top: 28,
-    width: 5,
-  },
-  scoreDigit: {
-    alignItems: "center",
-    backgroundColor: c.subtle,
-    height: 12,
-    justifyContent: "center",
-    left: 29,
-    position: "absolute",
-    top: 26,
-    width: 10,
-  },
-  scoreDigitText: {
-    color: c.navy,
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 10,
-  },
-  recordingDot: {
-    backgroundColor: c.danger,
-    borderColor: c.subtle,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    height: 8,
-    position: "absolute",
-    right: 24,
-    top: 19,
-    width: 8,
-  },
-  tabs: {
-    borderBottomColor: c.subtleStrong,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: mobileGrid[5],
-    paddingHorizontal: mobileGrid[3] + 1,
-  },
-  tab: { alignItems: "center", paddingHorizontal: 1 },
-  tabLabel: {
-    color: c.textTertiary,
-    fontSize: 15,
-    fontWeight: "500",
-    lineHeight: 20,
-    paddingBottom: mobileGrid[2],
-  },
-  tabLabelActive: { color: c.ink, fontWeight: "600" },
-  tabIndicator: { backgroundColor: "transparent", height: 2, width: "100%" },
-  tabIndicatorActive: { backgroundColor: c.ink },
-  sectionInset: {
-    paddingHorizontal: mobileGrid[3] + 1,
-    paddingTop: mobileGrid[5],
-  },
-  insightInset: {
-    paddingHorizontal: mobileGrid[3] + 1,
-    paddingTop: mobileGrid[3],
-  },
-  crewCard: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.actionTileRadius,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: mobileGrid[3],
-    minHeight: 82,
-    padding: mobileGrid[3],
-  },
-  avatarStack: { alignItems: "center", flexDirection: "row" },
-  avatar: {
-    alignItems: "center",
-    borderColor: c.card,
-    borderRadius: dunaAppShape.pillRadius,
-    borderWidth: 2,
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  avatarImage: { height: "100%", width: "100%" },
-  avatarText: { color: c.page, fontSize: 12, fontWeight: "600" },
-  avatarTextDark: { color: c.navy },
-  avatarOverflow: {
-    alignItems: "center",
-    backgroundColor: c.sky,
-    borderColor: c.card,
-    borderRadius: dunaAppShape.pillRadius,
-    borderWidth: 2,
-    justifyContent: "center",
-  },
-  avatarOverflowText: { color: c.navy, fontSize: 12, fontWeight: "600" },
-  crewMessage: {
-    color: c.ink,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
-    lineHeight: 20,
-  },
-  sectionHeader: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: mobileGrid[2] + 2,
-  },
-  sectionTitle: {
-    color: c.ink,
-    fontSize: 20,
-    fontWeight: "600",
-    letterSpacing: -0.2,
-    lineHeight: 26,
-  },
-  sectionAction: { color: c.textSecondary, fontSize: 14, fontWeight: "500" },
-  cardList: { gap: mobileGrid[2] },
-  upcomingCard: {
-    alignItems: "center",
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: mobileGrid[3],
-    minHeight: 92,
-    padding: mobileGrid[3],
-  },
-  upcomingDate: {
-    alignItems: "center",
-    backgroundColor: c.cream,
-    borderRadius: dunaAppShape.compactRadius,
-    height: 56,
-    justifyContent: "center",
-    width: 54,
-  },
-  upcomingDay: {
-    color: c.textTertiary,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.6,
-    lineHeight: 13,
-  },
-  upcomingTime: {
-    color: c.navy,
-    fontSize: 16,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "600",
-    lineHeight: 20,
-    marginTop: 1,
-  },
-  upcomingCopy: { flex: 1, minWidth: 0 },
-  upcomingTitle: {
-    color: c.ink,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 20,
-  },
-  upcomingMeta: {
-    color: c.textTertiary,
-    fontSize: 13,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  recurrencePill: {
-    alignSelf: "flex-start",
-    backgroundColor: c.subtleStrong,
-    borderRadius: dunaAppShape.pillRadius,
-    marginTop: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-  },
-  recurrenceText: {
-    color: c.navyLift,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.45,
-  },
-  goingStatus: {
-    alignItems: "center",
-    backgroundColor: c.positiveWash,
-    borderRadius: 12,
-    height: 24,
-    justifyContent: "center",
-    width: 24,
-  },
-  actionStatus: {
-    backgroundColor: c.blush,
-    borderRadius: dunaAppShape.pillRadius,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  actionStatusText: { color: c.navy, fontSize: 12.5, fontWeight: "600" },
-  emptyCard: {
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: 1,
-    padding: mobileGrid[4],
-  },
-  emptyTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
-  emptyBody: {
-    color: c.textTertiary,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  openSection: {
-    backgroundColor: c.navy,
-    borderRadius: dunaAppShape.sectionRadius,
-    marginHorizontal: mobileGrid[2] + 2,
-    marginTop: mobileGrid[5],
-    padding: mobileGrid[2] + 2,
-    paddingTop: mobileGrid[4],
-  },
-  openSectionHeading: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    justifyContent: "space-between",
-    paddingHorizontal: mobileGrid[2] - 2,
-  },
-  openSectionCopy: { flex: 1, minWidth: 0 },
-  openSectionTitle: {
-    color: c.page,
-    fontSize: 20,
-    fontWeight: "600",
-    letterSpacing: -0.2,
-  },
-  openSectionMeta: {
-    color: c.mist,
-    fontSize: 13,
-    lineHeight: 17,
-    marginTop: 5,
-  },
-  openSectionMap: { color: c.mist, fontSize: 14, fontWeight: "500" },
-  openGamesList: { gap: mobileGrid[2], marginTop: mobileGrid[3] },
-  openGameCard: {
-    backgroundColor: c.page,
-    borderRadius: dunaAppShape.cardRadius,
-    overflow: "hidden",
-  },
-  openGameHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: mobileGrid[3],
-    paddingTop: mobileGrid[3],
-  },
-  openGameTime: {
-    color: c.ink,
-    fontSize: 16,
-    fontWeight: "600",
-    letterSpacing: -0.15,
-  },
-  bookedStatus: { alignItems: "center", flexDirection: "row", gap: 6 },
-  bookedCheck: {
-    alignItems: "center",
-    backgroundColor: c.positiveWash,
-    borderRadius: 10,
-    height: 20,
-    justifyContent: "center",
-    width: 20,
-  },
-  bookedText: { color: c.positive, fontSize: 12.5, fontWeight: "500" },
-  openGameLocationRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: mobileGrid[2] - 2,
-    paddingHorizontal: mobileGrid[3],
-    paddingTop: mobileGrid[2],
-  },
-  locationPin: {
-    alignItems: "center",
-    backgroundColor: c.gold,
-    borderRadius: 11,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  locationPinCenter: {
-    borderColor: c.navy,
-    borderRadius: 3,
-    borderWidth: 1.3,
-    height: 6,
-    width: 6,
-  },
-  openGameLocation: { color: c.textSecondary, flex: 1, fontSize: 13.5 },
-  roster: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: mobileGrid[2],
-    paddingVertical: mobileGrid[3],
-  },
-  rosterDivider: {
-    alignSelf: "center",
-    backgroundColor: c.hairline,
-    height: 64,
-    width: 1,
-  },
-  openPlayer: { alignItems: "center", minWidth: 56 },
-  openPlayerSlot: {
-    alignItems: "center",
-    borderColor: c.mist,
-    borderRadius: 22,
-    borderStyle: "dashed",
-    borderWidth: 1.4,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  openPlayerName: {
-    color: c.navyLift,
-    fontSize: 12,
-    fontWeight: "500",
-    marginTop: 4,
-    maxWidth: 62,
-  },
-  openPlayerRating: {
-    color: c.textTertiary,
-    fontSize: 12,
-    lineHeight: 14,
-    marginTop: 1,
-  },
-  openGameFooter: {
-    borderTopColor: c.subtleStrong,
-    borderTopWidth: 1,
-    flexDirection: "row",
-  },
-  openGameDetails: {
-    flex: 1,
-    paddingHorizontal: mobileGrid[3],
-    paddingVertical: 13,
-  },
-  openGameLevel: { color: c.ink, fontSize: 14, fontWeight: "600" },
-  openGameMode: { color: c.textTertiary, fontSize: 13, marginTop: 2 },
-  openGamePrice: { alignItems: "center", justifyContent: "center", width: 104 },
-  openGamePriceValue: { color: c.navy, fontSize: 17, fontWeight: "600" },
-  openGameDuration: { color: c.navy, fontSize: 12.5, marginTop: 1 },
-  openEmpty: {
-    backgroundColor: c.page,
-    borderRadius: dunaAppShape.cardRadius,
-    padding: mobileGrid[4],
-  },
-  openEmptyTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
-  openEmptyBody: {
-    color: c.textTertiary,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  moreOpenGames: { alignItems: "center", paddingBottom: 7, paddingTop: 14 },
-  moreOpenGamesText: { color: c.page, fontSize: 14, fontWeight: "500" },
-  matchCard: {
-    backgroundColor: c.card,
-    borderColor: c.hairline,
-    borderRadius: dunaAppShape.cardRadius,
-    borderWidth: 1,
-    padding: mobileGrid[3],
-  },
-  matchCardHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    justifyContent: "space-between",
-  },
-  matchKicker: {
-    color: c.textTertiary,
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.6,
-  },
-  matchDelta: {
-    color: c.textTertiary,
-    fontSize: 12,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "500",
-  },
-  matchDeltaPositive: { color: c.positive },
-  matchWeather: {
-    color: c.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: mobileGrid[1],
-  },
-  matchTeams: { gap: mobileGrid[2], marginTop: mobileGrid[2] + 2 },
-  matchTeamRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: mobileGrid[2],
-  },
-  matchTeamCopy: { flex: 1, minWidth: 0 },
-  matchTeamName: { color: c.ink, fontSize: 13.5, fontWeight: "500" },
-  matchTeamRating: { color: c.textTertiary, fontSize: 12, marginTop: 1 },
-  matchWinner: {
-    alignItems: "center",
-    backgroundColor: c.gold,
-    borderRadius: 9,
-    height: 18,
-    justifyContent: "center",
-    width: 18,
-  },
-  matchWinnerEmpty: { backgroundColor: "transparent" },
-  setScore: {
-    color: c.textFaint,
-    fontSize: 15,
-    fontVariant: ["tabular-nums"],
-    minWidth: 24,
-    textAlign: "center",
-  },
-  setScoreWon: { color: c.navy, fontWeight: "600" },
-  ratingStrip: {
-    alignItems: "center",
-    backgroundColor: c.cream,
-    borderRadius: dunaAppShape.actionTileRadius,
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    marginTop: mobileGrid[2],
-    minHeight: 62,
-    paddingHorizontal: mobileGrid[3],
-  },
-  ratingLabel: {
-    color: c.textTertiary,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-  },
-  sparklinePlaceholder: { flex: 1, height: 30 },
-  ratingValues: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 7,
-    marginLeft: "auto",
-  },
-  ratingValue: {
-    color: c.navy,
-    fontSize: 22,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "600",
-  },
-  ratingDelta: {
-    color: c.positive,
-    fontSize: 12,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "500",
-  },
-  ratingDeltaNegative: { color: c.danger },
-  insightCard: {
-    alignItems: "center",
-    backgroundColor: c.sky,
-    borderRadius: dunaAppShape.actionTileRadius,
-    flexDirection: "row",
-    gap: mobileGrid[2] + 2,
-    minHeight: 72,
-    padding: mobileGrid[3],
-  },
-  insightMark: { borderRadius: 7, height: 30, width: 30 },
-  insightCopy: { flex: 1, minWidth: 0 },
-  insightEyebrow: {
-    color: c.navyLift,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-  },
-  insightText: {
-    color: c.navy,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 18,
-    marginTop: 3,
-  },
-});
+const createStyles = (c: ReturnType<typeof homeColors>) =>
+  StyleSheet.create({
+    content: {
+      backgroundColor: c.page,
+      paddingBottom: 138,
+    },
+    pressed: { opacity: 0.76, transform: [{ scale: 0.988 }] },
+    header: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      justifyContent: "space-between",
+      paddingHorizontal: mobileGrid[3] + 1,
+      paddingTop: mobileGrid[4] + 2,
+    },
+    headerCopy: { flex: 1, minWidth: 0 },
+    greeting: {
+      color: c.ink,
+      fontSize: 28,
+      fontWeight: "600",
+      letterSpacing: -0.6,
+      lineHeight: 31,
+      maxWidth: 245,
+    },
+    context: {
+      color: c.textTertiary,
+      fontSize: 14,
+      lineHeight: 19,
+      marginTop: mobileGrid[1],
+    },
+    headerActions: { flexDirection: "row", gap: mobileGrid[2] - 2 },
+    iconButton: {
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.pillRadius,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      position: "relative",
+      width: 42,
+    },
+    notificationDot: {
+      backgroundColor: c.navyLift,
+      borderColor: c.card,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      height: 8,
+      position: "absolute",
+      right: 5,
+      top: 5,
+      width: 8,
+    },
+    quickActions: {
+      gap: mobileGrid[2],
+      paddingHorizontal: mobileGrid[3] + 1,
+      paddingTop: mobileGrid[6],
+    },
+    quickAction: { alignItems: "center", width: 82 },
+    quickActionTile: {
+      alignItems: "center",
+      backgroundColor: c.subtle,
+      borderRadius: dunaAppShape.actionTileRadius,
+      height: 64,
+      justifyContent: "center",
+      position: "relative",
+      width: 82,
+    },
+    quickActionLabel: {
+      color: c.ink,
+      fontSize: 12,
+      fontWeight: "500",
+      lineHeight: 15,
+      marginTop: 7,
+      textAlign: "center",
+    },
+    courtBall: {
+      backgroundColor: c.gold,
+      borderRadius: 3,
+      height: 5,
+      left: 39,
+      position: "absolute",
+      top: 28,
+      width: 5,
+    },
+    scoreDigit: {
+      alignItems: "center",
+      backgroundColor: c.subtle,
+      height: 12,
+      justifyContent: "center",
+      left: 29,
+      position: "absolute",
+      top: 26,
+      width: 10,
+    },
+    scoreDigitText: {
+      color: c.navy,
+      fontSize: 12,
+      fontWeight: "600",
+      lineHeight: 10,
+    },
+    recordingDot: {
+      backgroundColor: c.danger,
+      borderColor: c.subtle,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      height: 8,
+      position: "absolute",
+      right: 24,
+      top: 19,
+      width: 8,
+    },
+    tabs: {
+      borderBottomColor: c.subtleStrong,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: mobileGrid[5],
+      paddingHorizontal: mobileGrid[3] + 1,
+    },
+    tab: { alignItems: "center", paddingHorizontal: 1 },
+    tabLabel: {
+      color: c.textTertiary,
+      fontSize: 15,
+      fontWeight: "500",
+      lineHeight: 20,
+      paddingBottom: mobileGrid[2],
+    },
+    tabLabelActive: { color: c.ink, fontWeight: "600" },
+    tabIndicator: { backgroundColor: "transparent", height: 2, width: "100%" },
+    tabIndicatorActive: { backgroundColor: c.ink },
+    sectionInset: {
+      paddingHorizontal: mobileGrid[3] + 1,
+      paddingTop: mobileGrid[5],
+    },
+    insightInset: {
+      paddingHorizontal: mobileGrid[3] + 1,
+      paddingTop: mobileGrid[3],
+    },
+    crewCard: {
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.actionTileRadius,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: 82,
+      padding: mobileGrid[3],
+    },
+    avatarStack: { alignItems: "center", flexDirection: "row" },
+    avatar: {
+      alignItems: "center",
+      borderColor: c.card,
+      borderRadius: dunaAppShape.pillRadius,
+      borderWidth: 2,
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    avatarImage: { height: "100%", width: "100%" },
+    avatarText: { color: c.page, fontSize: 12, fontWeight: "600" },
+    avatarTextDark: { color: c.navy },
+    avatarOverflow: {
+      alignItems: "center",
+      backgroundColor: c.sky,
+      borderColor: c.card,
+      borderRadius: dunaAppShape.pillRadius,
+      borderWidth: 2,
+      justifyContent: "center",
+    },
+    avatarOverflowText: { color: c.navy, fontSize: 12, fontWeight: "600" },
+    crewMessage: {
+      color: c.ink,
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "500",
+      lineHeight: 20,
+    },
+    sectionHeader: {
+      alignItems: "baseline",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: mobileGrid[2] + 2,
+    },
+    sectionTitle: {
+      color: c.ink,
+      fontSize: 20,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+      lineHeight: 26,
+    },
+    sectionAction: { color: c.textSecondary, fontSize: 14, fontWeight: "500" },
+    cardList: { gap: mobileGrid[2] },
+    upcomingCard: {
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[3],
+      minHeight: 92,
+      padding: mobileGrid[3],
+    },
+    upcomingDate: {
+      alignItems: "center",
+      backgroundColor: c.cream,
+      borderRadius: dunaAppShape.compactRadius,
+      height: 56,
+      justifyContent: "center",
+      width: 54,
+    },
+    upcomingDay: {
+      color: c.textTertiary,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0.6,
+      lineHeight: 13,
+    },
+    upcomingTime: {
+      color: c.navy,
+      fontSize: 16,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "600",
+      lineHeight: 20,
+      marginTop: 1,
+    },
+    upcomingCopy: { flex: 1, minWidth: 0 },
+    upcomingTitle: {
+      color: c.ink,
+      fontSize: 15,
+      fontWeight: "600",
+      lineHeight: 20,
+    },
+    upcomingMeta: {
+      color: c.textTertiary,
+      fontSize: 13,
+      lineHeight: 17,
+      marginTop: 2,
+    },
+    recurrencePill: {
+      alignSelf: "flex-start",
+      backgroundColor: c.subtleStrong,
+      borderRadius: dunaAppShape.pillRadius,
+      marginTop: 6,
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+    },
+    recurrenceText: {
+      color: c.navyLift,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0.45,
+    },
+    goingStatus: {
+      alignItems: "center",
+      backgroundColor: c.positiveWash,
+      borderRadius: 12,
+      height: 24,
+      justifyContent: "center",
+      width: 24,
+    },
+    actionStatus: {
+      backgroundColor: c.blush,
+      borderRadius: dunaAppShape.pillRadius,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    actionStatusText: { color: c.navy, fontSize: 12.5, fontWeight: "600" },
+    emptyCard: {
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: 1,
+      padding: mobileGrid[4],
+    },
+    emptyTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
+    emptyBody: {
+      color: c.textTertiary,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    openSection: {
+      backgroundColor: c.navy,
+      borderRadius: dunaAppShape.sectionRadius,
+      marginHorizontal: mobileGrid[2] + 2,
+      marginTop: mobileGrid[5],
+      padding: mobileGrid[2] + 2,
+      paddingTop: mobileGrid[4],
+    },
+    openSectionHeading: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      justifyContent: "space-between",
+      paddingHorizontal: mobileGrid[2] - 2,
+    },
+    openSectionCopy: { flex: 1, minWidth: 0 },
+    openSectionTitle: {
+      color: c.page,
+      fontSize: 20,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+    },
+    openSectionMeta: {
+      color: c.mist,
+      fontSize: 13,
+      lineHeight: 17,
+      marginTop: 5,
+    },
+    openSectionMap: { color: c.mist, fontSize: 14, fontWeight: "500" },
+    openGamesList: { gap: mobileGrid[2], marginTop: mobileGrid[3] },
+    openGameCard: {
+      backgroundColor: c.page,
+      borderRadius: dunaAppShape.cardRadius,
+      overflow: "hidden",
+    },
+    openGameHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingHorizontal: mobileGrid[3],
+      paddingTop: mobileGrid[3],
+    },
+    openGameTime: {
+      color: c.ink,
+      fontSize: 16,
+      fontWeight: "600",
+      letterSpacing: -0.15,
+    },
+    bookedStatus: { alignItems: "center", flexDirection: "row", gap: 6 },
+    bookedCheck: {
+      alignItems: "center",
+      backgroundColor: c.positiveWash,
+      borderRadius: 10,
+      height: 20,
+      justifyContent: "center",
+      width: 20,
+    },
+    bookedText: { color: c.positive, fontSize: 12.5, fontWeight: "500" },
+    openGameLocationRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2] - 2,
+      paddingHorizontal: mobileGrid[3],
+      paddingTop: mobileGrid[2],
+    },
+    locationPin: {
+      alignItems: "center",
+      backgroundColor: c.gold,
+      borderRadius: 11,
+      height: 22,
+      justifyContent: "center",
+      width: 22,
+    },
+    locationPinCenter: {
+      borderColor: c.navy,
+      borderRadius: 3,
+      borderWidth: 1.3,
+      height: 6,
+      width: 6,
+    },
+    openGameLocation: { color: c.textSecondary, flex: 1, fontSize: 13.5 },
+    roster: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-around",
+      paddingHorizontal: mobileGrid[2],
+      paddingVertical: mobileGrid[3],
+    },
+    rosterDivider: {
+      alignSelf: "center",
+      backgroundColor: c.hairline,
+      height: 64,
+      width: 1,
+    },
+    openPlayer: { alignItems: "center", minWidth: 56 },
+    openPlayerSlot: {
+      alignItems: "center",
+      borderColor: c.mist,
+      borderRadius: 22,
+      borderStyle: "dashed",
+      borderWidth: 1.4,
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    openPlayerName: {
+      color: c.navyLift,
+      fontSize: 12,
+      fontWeight: "500",
+      marginTop: 4,
+      maxWidth: 62,
+    },
+    openPlayerRating: {
+      color: c.textTertiary,
+      fontSize: 12,
+      lineHeight: 14,
+      marginTop: 1,
+    },
+    openGameFooter: {
+      borderTopColor: c.subtleStrong,
+      borderTopWidth: 1,
+      flexDirection: "row",
+    },
+    openGameDetails: {
+      flex: 1,
+      paddingHorizontal: mobileGrid[3],
+      paddingVertical: 13,
+    },
+    openGameLevel: { color: c.ink, fontSize: 14, fontWeight: "600" },
+    openGameMode: { color: c.textTertiary, fontSize: 13, marginTop: 2 },
+    openGamePrice: {
+      alignItems: "center",
+      justifyContent: "center",
+      width: 104,
+    },
+    openGamePriceValue: {
+      color: dunaAppColors.navy,
+      fontSize: 17,
+      fontWeight: "600",
+    },
+    openGameDuration: {
+      color: dunaAppColors.navy,
+      fontSize: 12.5,
+      marginTop: 1,
+    },
+    openEmpty: {
+      backgroundColor: c.page,
+      borderRadius: dunaAppShape.cardRadius,
+      padding: mobileGrid[4],
+    },
+    openEmptyTitle: { color: c.ink, fontSize: 15, fontWeight: "600" },
+    openEmptyBody: {
+      color: c.textTertiary,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    moreOpenGames: { alignItems: "center", paddingBottom: 7, paddingTop: 14 },
+    moreOpenGamesText: { color: c.page, fontSize: 14, fontWeight: "500" },
+    matchCard: {
+      backgroundColor: c.card,
+      borderColor: c.hairline,
+      borderRadius: dunaAppShape.cardRadius,
+      borderWidth: 1,
+      padding: mobileGrid[3],
+    },
+    matchCardHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      justifyContent: "space-between",
+    },
+    matchKicker: {
+      color: c.textTertiary,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0.6,
+    },
+    matchDelta: {
+      color: c.textTertiary,
+      fontSize: 12,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "500",
+    },
+    matchDeltaPositive: { color: c.positive },
+    matchWeather: {
+      color: c.textSecondary,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: mobileGrid[1],
+    },
+    matchTeams: { gap: mobileGrid[2], marginTop: mobileGrid[2] + 2 },
+    matchTeamRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: mobileGrid[2],
+    },
+    matchTeamCopy: { flex: 1, minWidth: 0 },
+    matchTeamName: { color: c.ink, fontSize: 13.5, fontWeight: "500" },
+    matchTeamRating: { color: c.textTertiary, fontSize: 12, marginTop: 1 },
+    matchWinner: {
+      alignItems: "center",
+      backgroundColor: c.gold,
+      borderRadius: 9,
+      height: 18,
+      justifyContent: "center",
+      width: 18,
+    },
+    matchWinnerEmpty: { backgroundColor: "transparent" },
+    setScore: {
+      color: c.textFaint,
+      fontSize: 15,
+      fontVariant: ["tabular-nums"],
+      minWidth: 24,
+      textAlign: "center",
+    },
+    setScoreWon: { color: c.navy, fontWeight: "600" },
+    ratingStrip: {
+      alignItems: "center",
+      backgroundColor: c.cream,
+      borderRadius: dunaAppShape.actionTileRadius,
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[2],
+      minHeight: 62,
+      paddingHorizontal: mobileGrid[3],
+    },
+    ratingLabel: {
+      color: c.textTertiary,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0.8,
+    },
+    sparklinePlaceholder: { flex: 1, height: 30 },
+    ratingValues: {
+      alignItems: "baseline",
+      flexDirection: "row",
+      gap: 7,
+      marginLeft: "auto",
+    },
+    ratingValue: {
+      color: c.navy,
+      fontSize: 22,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "600",
+    },
+    ratingDelta: {
+      color: c.positive,
+      fontSize: 12,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "500",
+    },
+    ratingDeltaNegative: { color: c.danger },
+    insightCard: {
+      alignItems: "center",
+      backgroundColor: c.sky,
+      borderRadius: dunaAppShape.actionTileRadius,
+      flexDirection: "row",
+      gap: mobileGrid[2] + 2,
+      minHeight: 72,
+      padding: mobileGrid[3],
+    },
+    insightMark: { borderRadius: 7, height: 30, width: 30 },
+    insightCopy: { flex: 1, minWidth: 0 },
+    insightEyebrow: {
+      color: c.navyLift,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0.8,
+    },
+    insightText: {
+      color: c.navy,
+      fontSize: 14,
+      fontWeight: "500",
+      lineHeight: 18,
+      marginTop: 3,
+    },
+  });

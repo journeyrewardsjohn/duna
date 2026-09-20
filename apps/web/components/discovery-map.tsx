@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { SandLoader } from "@duna/ui/sand-loader";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import { DiscoveryCard } from "./discovery-card";
@@ -108,13 +109,6 @@ export function DiscoveryMap({
         ? items
         : items.filter((item) => item.entityType === mapFilter),
     [items, mapFilter],
-  );
-  const mappedItems = useMemo(
-    () =>
-      filteredItems.filter(
-        (item) => item.latitude !== undefined && item.longitude !== undefined,
-      ),
-    [filteredItems],
   );
   const listItems = useMemo(() => {
     const inArea = areaIds
@@ -410,16 +404,15 @@ export function DiscoveryMap({
       />
       {!loaded && !unavailable ? (
         <div className="discover-v2-map__loading">
-          <span />
-          <strong>Opening the world of sand…</strong>
+          <SandLoader label="Loading the map" size={120} />
         </div>
       ) : null}
       {unavailable ? (
         <div className="discover-v2-map__fallback">
           <MapIcon aria-hidden size={28} />
-          <strong>Map view is almost ready.</strong>
+          <strong>Map view is unavailable.</strong>
           <span>
-            {mappedItems.length} geocoded places are available in the list.
+            Continue exploring {filteredItems.length} results in the list.
           </span>
         </div>
       ) : null}

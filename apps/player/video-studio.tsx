@@ -4,14 +4,17 @@ import {
   mobileGrid,
   resolveDunaMobileTokens,
 } from "@duna/ui/mobile";
-import type { DunaTheme } from "@duna/ui/tokens";
+import { environmentalColors, type DunaTheme } from "@duna/ui/tokens";
+import { usePlayerDesign, type PlayerDesignTokens } from "./design-theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { VideoView, useVideoPlayer, type VideoSource } from "expo-video";
+import { StableVideoSurface } from "./video-player-surface";
+import { SandLoader } from "./sand-loader";
+import { sandColors } from "@duna/ui/sand";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -104,7 +107,7 @@ import {
   getCompletedFileBackedParts,
   isBackgroundUploadAvailable,
 } from "@duna/expo-background-upload";
-import { PlayerPickerModal, type MobileSocialPalette } from "./player-social";
+import { PlayerPickerModal } from "./player-social";
 import { startDunaLiveActivity } from "./live-activities";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
 import type { ProvisionalParticipant } from "./score-upload";
@@ -327,51 +330,40 @@ function storedDefaults(form: CaptureForm): StoredCaptureDefaults {
   };
 }
 
-const palette = {
-  canvas: "#f6f5f1",
-  depth: "#ffffff",
-  ink: "#1b1b19",
-  muted: "#766f61",
-  navy: "#22343b",
-  aqua: "#3d6672",
-  aquaSoft: "#dfe5e4",
-  sand: "#c9a96a",
-  flare: "#e8683a",
-  positive: "#2f6b3a",
-  warning: "#8a6a2f",
-  danger: "#9a4a2e",
-  line: "#dedbd3",
-};
-
-const importedPlayerPalette: MobileSocialPalette = {
-  canvas: palette.canvas,
-  ink: palette.ink,
-  depth: palette.depth,
-  navy: palette.navy,
-  navyLift: "#31484f",
-  bone: palette.ink,
-  muted: palette.muted,
-  aqua: palette.aqua,
-  aquaDeep: "#274f5b",
-  sand: palette.sand,
-  flare: palette.flare,
-  positive: palette.positive,
-  warning: palette.warning,
-  danger: palette.danger,
-  onAccent: "#ffffff",
-  white: "#ffffff",
-  overlayRgb: "27,27,25",
-  accentRgb: "61,102,114",
-  warningRgb: "138,106,47",
-  positiveRgb: "47,107,58",
-  dangerRgb: "154,74,46",
-  flareRgb: "232,104,58",
-  inkRgb: "27,27,25",
-  depthRgb: "255,255,255",
-  navyRgb: "34,52,59",
-  boneRgb: "27,27,25",
-  whiteRgb: "255,255,255",
-};
+function videoPalette(tokens: PlayerDesignTokens) {
+  return {
+    canvas: tokens.ground,
+    depth: tokens.surface1,
+    ink: tokens.text1,
+    muted: tokens.text2,
+    navy: environmentalColors.marine900,
+    aqua: tokens.text1,
+    aquaSoft: tokens.surface2,
+    sand: tokens.gold,
+    flare: tokens.flare,
+    positive: tokens.gain,
+    warning: tokens.flareText,
+    danger: tokens.loss,
+    line: tokens.hairline,
+    onAccent: tokens.buttonPrimaryForeground,
+  };
+}
+const videoStyleCache = new WeakMap<
+  PlayerDesignTokens,
+  ReturnType<typeof createVideoStyles>
+>();
+function useVideoDesign() {
+  const { tokens, colors } = usePlayerDesign();
+  return useMemo(() => {
+    const palette = videoPalette(tokens);
+    let styles = videoStyleCache.get(tokens);
+    if (!styles) {
+      styles = createVideoStyles(palette);
+      videoStyleCache.set(tokens, styles);
+    }
+    return { palette, styles, importedPlayerPalette: colors };
+  }, [tokens, colors]);
+}
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3_600);
@@ -571,6 +563,8 @@ function VisionScoreboard({
   readonly teamA: string;
   readonly teamB: string;
 }) {
+  const { styles } = useVideoDesign();
+
   const current = score.sets[
     Math.min(score.setIndex, score.sets.length - 1)
   ] ?? {
@@ -638,6 +632,8 @@ function ChoiceRow<Value extends string>({
     readonly recommended?: boolean;
   }[];
 }) {
+  const { styles } = useVideoDesign();
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -691,6 +687,8 @@ function ToggleRow({
   readonly value: boolean;
   readonly onChange: (value: boolean) => void;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   return (
     <View style={styles.toggleRow}>
       <View style={styles.flex}>
@@ -776,6 +774,8 @@ function RecordingChoiceSheet({
   readonly value: string;
   readonly visible: boolean;
 }) {
+  const { styles } = useVideoDesign();
+
   return (
     <Modal
       animationType="slide"
@@ -889,6 +889,8 @@ function CaptureSetupForm({
   readonly onYoutubeConnectionsChanged?: () => Promise<void>;
   readonly theme: DunaTheme;
 }) {
+  const { styles } = useVideoDesign();
+
   const insets = useSafeAreaInsets();
   const [sheet, setSheet] = useState<CaptureSetupSheet>();
   const [linkingYoutube, setLinkingYoutube] = useState(false);
@@ -2143,6 +2145,8 @@ function AssociationPicker({
   readonly value?: VideoAssociation;
   readonly onChange: (value: VideoAssociation | undefined) => void;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<readonly VideoAssociation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2299,6 +2303,8 @@ function QuickRecordingMatchSetup({
   readonly onCreated: (association: VideoAssociation) => void;
   readonly venue?: VenueSelection;
 }) {
+  const { importedPlayerPalette, styles } = useVideoDesign();
+
   const [recorderRole, setRecorderRole] = useState<"player" | "spectator">(
     "player",
   );
@@ -2742,6 +2748,8 @@ function ImportedVisionSetupCard({
   readonly onEditCourt: () => void;
   readonly onIdentifyPlayers: () => void;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   const courtFrame = frameForId(setup, setup?.courtFrameId);
   const playerFrame = frameForId(setup, setup?.playerFrameId);
   const frames = setup?.frames ?? [];
@@ -2933,6 +2941,8 @@ function VideoDetailsForm({
   readonly foregroundOnlyUpload: boolean;
   readonly theme: DunaTheme;
 }) {
+  const { styles } = useVideoDesign();
+
   if (mode === "live" || mode === "record") {
     return (
       <CaptureSetupForm
@@ -3284,6 +3294,8 @@ function CourtLine({
   readonly size: { readonly width: number; readonly height: number };
   readonly thickness?: number;
 }) {
+  const { styles } = useVideoDesign();
+
   const startX = start.x * size.width;
   const startY = start.y * size.height;
   const endX = end.x * size.width;
@@ -3323,6 +3335,8 @@ function CourtOverlay({
   /** The editor may deliberately begin from an assisted shape. */
   readonly forceVisible?: boolean;
 }) {
+  const { palette, styles } = useVideoDesign();
+
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -3521,6 +3535,8 @@ function CalibrationAnchor({
   readonly size: { readonly width: number; readonly height: number };
   readonly tone?: "court" | "net" | "antenna";
 }) {
+  const { styles } = useVideoDesign();
+
   const start = useRef(point);
   const pointRef = useRef(point);
   const onMoveRef = useRef(onMove);
@@ -3612,6 +3628,8 @@ function CourtCalibrationEditor({
   readonly onChange: (geometry: CourtGeometry) => void;
   readonly onSave: () => void;
 }) {
+  const { styles } = useVideoDesign();
+
   const [size, setSize] = useState({ width: 0, height: 0 });
   const hasNet = Boolean(geometry.netTopLine);
   return (
@@ -3824,6 +3842,8 @@ function CaptureExperience({
   ) => void;
   readonly preferSrt: boolean;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isLandscapeViewport = width > height;
@@ -5657,108 +5677,6 @@ function CaptureExperience({
   );
 }
 
-function StableVideoSurface({
-  onCompleted,
-  onProgress,
-  posterUrl,
-  uri,
-}: {
-  readonly uri: string;
-  readonly posterUrl?: string;
-  readonly onProgress: (seconds: number) => void;
-  readonly onCompleted: (seconds: number) => void;
-}) {
-  const source = useMemo<VideoSource>(
-    () => ({
-      uri,
-      contentType: uri.includes(".m3u8") ? "hls" : "auto",
-      metadata: { title: "Duna video" },
-    }),
-    [uri],
-  );
-  const [firstFrame, setFirstFrame] = useState(false);
-  const [playerError, setPlayerError] = useState<string>();
-  const player = useVideoPlayer(source, (next) => {
-    next.audioMixingMode = "doNotMix";
-    next.timeUpdateEventInterval = 1;
-    next.play();
-  });
-
-  useEffect(() => {
-    setFirstFrame(false);
-    setPlayerError(undefined);
-    const status = player.addListener("statusChange", (event) => {
-      if (event.status === "error") {
-        setPlayerError(
-          event.error?.message ?? "This recording could not be opened.",
-        );
-      }
-    });
-    const progress = player.addListener("timeUpdate", (event) =>
-      onProgress(event.currentTime),
-    );
-    const completed = player.addListener("playToEnd", () =>
-      onCompleted(player.duration),
-    );
-    return () => {
-      status.remove();
-      progress.remove();
-      completed.remove();
-      player.pause();
-    };
-  }, [onCompleted, onProgress, player]);
-
-  const retry = async () => {
-    setPlayerError(undefined);
-    setFirstFrame(false);
-    try {
-      await player.replaceAsync(source);
-      player.play();
-    } catch (reason) {
-      setPlayerError(displayError(reason));
-    }
-  };
-
-  return (
-    <View style={styles.playerSurface}>
-      <VideoView
-        allowsVideoFrameAnalysis={false}
-        contentFit="contain"
-        nativeControls
-        onFirstFrameRender={() => setFirstFrame(true)}
-        player={player}
-        style={styles.player}
-      />
-      {!firstFrame && posterUrl && !playerError && (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <Image
-            resizeMode="contain"
-            source={{ uri: posterUrl }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-      )}
-      {!firstFrame && !playerError && (
-        <ActivityIndicator
-          color={palette.sand}
-          pointerEvents="none"
-          size="large"
-          style={styles.playerLoading}
-        />
-      )}
-      {!!playerError && (
-        <View style={styles.playerFailure}>
-          <Text style={styles.playerFailureTitle}>Video paused safely</Text>
-          <Text style={styles.playerFailureBody}>{playerError}</Text>
-          <Pressable onPress={() => void retry()} style={styles.playerRetry}>
-            <Text style={styles.playerRetryText}>Try again</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
-
 function analysisStatusLabel(report: VideoAnalysisReport | undefined): string {
   if (!report?.run) return "READY FOR EVIDENCE";
   switch (report.run.status) {
@@ -5790,6 +5708,8 @@ function VisionAnalysisCard({
   readonly teamB: string;
   readonly videoId: string;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   const [report, setReport] = useState<VideoAnalysisReport>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -6286,8 +6206,11 @@ export function VideoPlayerModal({
   readonly video: VideoSummary;
   readonly onClose: () => void;
 }) {
+  const { styles } = useVideoDesign();
+
   const [playback, setPlayback] = useState<VideoPlayback>();
   const [error, setError] = useState<string>();
+  const [playbackAttempt, setPlaybackAttempt] = useState(0);
   const [playbackSeconds, setPlaybackSeconds] = useState(0);
   const [privateNote, setPrivateNote] = useState("");
   const [noteSavedAt, setNoteSavedAt] = useState<string>();
@@ -6298,8 +6221,17 @@ export function VideoPlayerModal({
 
   useEffect(() => {
     let active = true;
+    setError(undefined);
+    setPlayback(undefined);
+    setPlaybackSeconds(0);
+    setPrivateNote("");
+    setNoteSavedAt(undefined);
+    lastHeartbeat.current = 0;
     void client.public.videoPlayback
-      .query({ videoId: video.id, platform: "ios" })
+      .query({
+        videoId: video.id,
+        platform: "ios",
+      })
       .then((result) => {
         if (active) {
           setPlayback(result);
@@ -6313,7 +6245,7 @@ export function VideoPlayerModal({
     return () => {
       active = false;
     };
-  }, [client, video.id]);
+  }, [client, video.id, playbackAttempt]);
 
   useEffect(() => {
     if (video.status !== "live" || !video.match?.id) return;
@@ -6348,12 +6280,16 @@ export function VideoPlayerModal({
       const rounded = Math.max(0, Math.floor(seconds));
       if (!completed && rounded - lastHeartbeat.current < 10) return;
       lastHeartbeat.current = rounded;
-      void client.public.videoViewHeartbeat.mutate({
-        videoId: video.id,
-        viewSessionId: playback.viewSessionId,
-        watchedSeconds: rounded,
-        completed,
-      });
+      void client.public.videoViewHeartbeat
+        .mutate({
+          videoId: video.id,
+          viewSessionId: playback.viewSessionId,
+          watchedSeconds: rounded,
+          completed,
+        })
+        .catch(() => {
+          // Telemetry failure must not interrupt an authorized recording.
+        });
     },
     [client, playback, video.id],
   );
@@ -6410,7 +6346,12 @@ export function VideoPlayerModal({
     <Modal animationType="slide" onRequestClose={onClose} visible>
       <SafeAreaView style={styles.playerModal}>
         <View style={styles.modalHeaderDark}>
-          <Pressable hitSlop={12} onPress={onClose} style={styles.playerDone}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close video"
+            onPress={onClose}
+            style={styles.playerDone}
+          >
             <Text style={styles.headerActionLight}>Done</Text>
           </Pressable>
           <Text numberOfLines={1} style={styles.modalTitleLight}>
@@ -6421,10 +6362,27 @@ export function VideoPlayerModal({
         <View
           style={[styles.playerStage, portrait && styles.playerStagePortrait]}
         >
-          {!uri && !error && <ActivityIndicator color="#d4b77c" size="large" />}
-          {!!error && <Text style={styles.playerError}>{error}</Text>}
+          {!playback && !error && (
+            <SandLoader label="Opening video" size={90} tone="inverse" />
+          )}
+          {(error || (playback && !uri)) && (
+            <View style={styles.playbackUnavailable}>
+              <Text style={styles.playerError}>
+                {error ?? "This recording is not ready to play yet."}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPlaybackAttempt((attempt) => attempt + 1)}
+                style={styles.playerRetry}
+              >
+                <Text style={styles.playerRetryText}>Try again</Text>
+              </Pressable>
+            </View>
+          )}
           {uri && (
             <StableVideoSurface
+              key={uri}
+              title={video.title}
               onCompleted={handlePlaybackCompleted}
               onProgress={handlePlaybackProgress}
               posterUrl={playback?.posterUrl}
@@ -6513,7 +6471,7 @@ export function VideoPlayerModal({
                     What did you notice?
                   </Text>
                 </View>
-                <DunaIcon color={palette.aqua} name="lock" size={20} />
+                <DunaIcon color={sandColors.inset} name="lock" size={20} />
               </View>
               <Text style={styles.videoNoteBody}>
                 Save cues, tendencies, and moments to revisit. Only you can see
@@ -6576,6 +6534,8 @@ function VideoCard({
   readonly metric?: VideoMetric;
   readonly onPress: () => void;
 }) {
+  const { styles } = useVideoDesign();
+
   return (
     <Pressable onPress={onPress} style={styles.videoCard}>
       <View style={styles.videoThumb}>
@@ -6640,6 +6600,8 @@ export function ProfileVideoSection({
   readonly onOpenLibrary: () => void;
   readonly runtime: PlayerRuntime;
 }) {
+  const { styles, palette } = useVideoDesign();
+
   const client = runtime.client;
   const [studio, setStudio] = useState<VideoStudioData>();
   const [metrics, setMetrics] = useState<readonly VideoMetric[]>([]);
@@ -6704,7 +6666,7 @@ export function ProfileVideoSection({
   return (
     <View style={styles.profileVideoSection}>
       <View style={styles.profileVideoHeading}>
-        <View style={styles.flex}>
+        <View style={styles.profileVideoCopy}>
           <Text style={styles.eyebrow}>YOUR FILM ROOM</Text>
           <Text style={styles.profileVideoTitle}>Videos</Text>
           <Text style={styles.profileVideoBody}>
@@ -6717,7 +6679,7 @@ export function ProfileVideoSection({
         </Pressable>
       </View>
 
-      {loading && <ActivityIndicator color={palette.aqua} />}
+      {loading && <SandLoader label="Loading your videos" size={90} />}
       {!!error && (
         <View style={styles.errorCard}>
           <Text style={styles.errorText}>{error}</Text>
@@ -6822,7 +6784,9 @@ export function ProfileVideoSection({
               <View style={styles.usageLabels}>
                 <Text style={styles.usageTitle}>{usage.label}</Text>
                 <Text style={styles.usageValue}>
-                  {formatDuration(usage.used)} of {formatDuration(usage.limit)}
+                  {usage.limit > 0
+                    ? `${formatDuration(usage.used)} of ${formatDuration(usage.limit)}`
+                    : "Not included"}
                 </Text>
               </View>
               <View style={styles.progressTrack}>
@@ -6888,6 +6852,8 @@ export function VideoStudioScreen({
   readonly runtime: PlayerRuntime;
   readonly theme?: DunaTheme;
 }) {
+  const { styles, palette, importedPlayerPalette } = useVideoDesign();
+
   const client = runtime.client;
   const [studio, setStudio] = useState<VideoStudioData>();
   const [metrics, setMetrics] = useState<readonly VideoMetric[]>([]);
@@ -7807,19 +7773,16 @@ export function VideoStudioScreen({
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <View style={styles.liveMark}>
-              <View style={styles.liveMarkCore} />
+              <DunaIcon name="video" size={22} color={palette.ink} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.eyebrow}>DUNA VIDEO</Text>
-              <Text style={styles.heroTitle}>
-                Your game, live and on record.
-              </Text>
+              <Text style={styles.heroTitle}>Capture your game</Text>
             </View>
           </View>
           <Text style={styles.heroBody}>
-            Choose how you want to capture. Both Duna recording and live mode
-            keep Apple Watch scoring, favorite moments, overlays, and the remote
-            camera preview in sync.
+            Record, go live, or upload. Keep scoring and highlights connected
+            with your Apple Watch.
           </Text>
           {entitlement?.kind === "complimentary" && (
             <View style={styles.complimentaryBadge}>
@@ -7837,16 +7800,18 @@ export function VideoStudioScreen({
           )}
           <View style={styles.captureChoiceStack}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Record with Duna"
               disabled={!isIos || !client}
               onPress={recordNew}
               style={[
                 styles.captureChoiceCard,
                 styles.captureChoiceCardRecord,
-                (!isIos || !client) && styles.disabled,
+                (!isIos || !client) && styles.captureChoiceUnavailable,
               ]}
             >
               <View style={styles.captureChoiceIcon}>
-                <View style={styles.captureChoiceRecordCore} />
+                <DunaIcon name="camera" size={22} color={palette.ink} />
               </View>
               <View style={styles.captureChoiceCopy}>
                 <View style={styles.captureChoiceHeading}>
@@ -7856,23 +7821,25 @@ export function VideoStudioScreen({
                   <Text style={styles.captureChoiceBadge}>PRIVATE FIRST</Text>
                 </View>
                 <Text style={styles.captureChoiceBody}>
-                  Save full-quality video on this iPhone while your Watch
-                  scores, marks highlights, and checks the camera. Duna uploads
-                  when the connection you allow is available.
+                  Save on iPhone. Score and mark highlights with your Watch.
+                  Upload when your connection allows.
                 </Text>
               </View>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go Live"
               disabled={!isIos || !client || !canBroadcast}
               onPress={() => void openLive()}
               style={[
                 styles.captureChoiceCard,
                 styles.captureChoiceCardLive,
-                (!isIos || !client || !canBroadcast) && styles.disabled,
+                (!isIos || !client || !canBroadcast) &&
+                  styles.captureChoiceUnavailable,
               ]}
             >
               <View style={styles.captureChoiceIconLive}>
-                <View style={styles.liveButtonDot} />
+                <DunaIcon name="video" size={22} color={palette.ink} />
               </View>
               <View style={styles.captureChoiceCopy}>
                 <View style={styles.captureChoiceHeading}>
@@ -7882,16 +7849,17 @@ export function VideoStudioScreen({
                   </Text>
                 </View>
                 <Text style={styles.captureChoiceBodyLight}>
-                  Broadcast now with the same Watch controls and decide who can
-                  watch live and after the match.
+                  Stream with Watch scoring and highlights. Choose who can watch
+                  live and after the match.
                 </Text>
               </View>
             </Pressable>
           </View>
           <Pressable
+            accessibilityRole="button"
             disabled={!client}
             onPress={() => void chooseLibrary()}
-            style={[styles.libraryButton, !client && styles.disabled]}
+            style={styles.libraryButton}
           >
             <Text style={styles.libraryButtonText}>
               Upload an existing video
@@ -7982,9 +7950,7 @@ export function VideoStudioScreen({
             )}
           </View>
         )}
-        {loading && (
-          <ActivityIndicator color={palette.aqua} style={styles.loader} />
-        )}
+        {loading && <SandLoader label="Loading your videos" size={110} />}
 
         <View style={styles.usageCard}>
           <View style={styles.sectionHeading}>
@@ -8000,7 +7966,9 @@ export function VideoStudioScreen({
             <View style={styles.usageLabels}>
               <Text style={styles.usageTitle}>Live streaming</Text>
               <Text style={styles.usageValue}>
-                {formatDuration(liveUsed)} of {formatDuration(liveLimit)}
+                {liveLimit > 0
+                  ? `${formatDuration(liveUsed)} of ${formatDuration(liveLimit)}`
+                  : "Not included"}
               </Text>
             </View>
             <View style={styles.progressTrack}>
@@ -8016,7 +7984,9 @@ export function VideoStudioScreen({
             <View style={styles.usageLabels}>
               <Text style={styles.usageTitle}>Uploaded video</Text>
               <Text style={styles.usageValue}>
-                {formatDuration(uploadUsed)} of {formatDuration(uploadLimit)}
+                {uploadLimit > 0
+                  ? `${formatDuration(uploadUsed)} of ${formatDuration(uploadLimit)}`
+                  : "Not included"}
               </Text>
             </View>
             <View style={styles.progressTrack}>
@@ -8283,2449 +8253,2497 @@ export function VideoStudioScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  screen: { gap: 18, padding: 18, paddingBottom: 120 },
-  hero: {
-    backgroundColor: palette.navy,
-    borderRadius: 24,
-    gap: 16,
-    overflow: "hidden",
-    padding: 20,
-  },
-  heroTop: { alignItems: "center", flexDirection: "row", gap: 14 },
-  liveMark: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.13)",
-    borderRadius: 24,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  liveMarkCore: {
-    backgroundColor: "#ff7a59",
-    borderRadius: 7,
-    height: 14,
-    width: 14,
-  },
-  eyebrow: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-  },
-  heroTitle: {
-    color: "#ffffff",
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: -0.7,
-    lineHeight: 29,
-  },
-  heroBody: { color: "#dfe5e4", fontSize: 14, lineHeight: 21 },
-  complimentaryBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(212,183,124,0.16)",
-    borderColor: "rgba(212,183,124,0.5)",
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  complimentaryText: { color: palette.sand, fontSize: 12, fontWeight: "800" },
-  iosNote: { color: palette.sand, fontSize: 12, lineHeight: 18 },
-  captureChoiceStack: { gap: 10 },
-  captureChoiceCard: {
-    alignItems: "center",
-    borderRadius: 18,
-    flexDirection: "row",
-    gap: 13,
-    minHeight: 112,
-    padding: 15,
-  },
-  captureChoiceCardRecord: {
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(61,102,114,0.45)",
-    borderWidth: 1,
-  },
-  captureChoiceCardLive: { backgroundColor: palette.flare },
-  captureChoiceIcon: {
-    alignItems: "center",
-    backgroundColor: palette.aquaSoft,
-    borderRadius: 25,
-    height: 50,
-    justifyContent: "center",
-    width: 50,
-  },
-  captureChoiceIconLive: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 25,
-    height: 50,
-    justifyContent: "center",
-    width: 50,
-  },
-  captureChoiceRecordCore: {
-    backgroundColor: palette.aqua,
-    borderRadius: 11,
-    height: 22,
-    width: 22,
-  },
-  liveButtonDot: {
-    backgroundColor: "#ffffff",
-    borderRadius: 9,
-    height: 18,
-    width: 18,
-  },
-  captureChoiceCopy: { flex: 1, gap: 6 },
-  captureChoiceHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  captureChoiceTitle: { color: palette.ink, fontSize: 17, fontWeight: "900" },
-  captureChoiceTitleLight: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  captureChoiceBadge: {
-    backgroundColor: palette.aquaSoft,
-    borderRadius: 10,
-    color: palette.navy,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-    overflow: "hidden",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  captureChoiceBadgeLight: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 10,
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-    overflow: "hidden",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  captureChoiceBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
-  captureChoiceBodyLight: {
-    color: "rgba(255,255,255,0.88)",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  libraryButton: {
-    borderColor: "rgba(255,255,255,0.36)",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 2,
-    minHeight: 54,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  libraryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  libraryButtonMeta: { color: "rgba(255,255,255,0.65)", fontSize: 12 },
-  disabled: { opacity: 0.42 },
-  errorCard: {
-    alignItems: "center",
-    backgroundColor: "#fff1ef",
-    borderColor: "#f2c3ba",
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 13,
-  },
-  errorText: { color: palette.danger, flex: 1, fontSize: 12, lineHeight: 17 },
-  textAction: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
-  loader: { marginVertical: 10 },
-  offlineQueueAction: {
-    alignItems: "center",
-    borderColor: "rgba(61,102,114,0.28)",
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: 11,
-  },
-  offlineQueueActionText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  offlineQueueActions: { gap: 6 },
-  offlineQueueCancel: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 28,
-    paddingHorizontal: 8,
-  },
-  offlineQueueCancelText: {
-    color: palette.danger,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  offlineQueueBody: {
-    color: "#526d65",
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-  offlineQueueCard: {
-    alignItems: "center",
-    backgroundColor: "#edf4f0",
-    borderColor: "#b9d7c7",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 11,
-    padding: 13,
-  },
-  offlineQueueIcon: {
-    alignItems: "center",
-    backgroundColor: "#d5eadf",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  offlineQueueIconText: {
-    color: palette.positive,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  offlineQueueTitle: { color: palette.navy, fontSize: 13, fontWeight: "900" },
-  readyImportCard: {
-    alignItems: "center",
-    backgroundColor: "#eaf1f4",
-    borderColor: "#b9d0d8",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 11,
-    padding: 13,
-  },
-  readyImportIcon: {
-    alignItems: "center",
-    backgroundColor: "#d6e5e9",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  readyImportIconText: { color: palette.aqua, fontSize: 16, fontWeight: "900" },
-  readyImportTitle: { color: palette.navy, fontSize: 13, fontWeight: "900" },
-  readyImportBody: {
-    color: "#526d75",
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-  readyImportAction: {
-    alignItems: "center",
-    borderColor: "rgba(61,102,114,0.3)",
-    borderRadius: 11,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 38,
-    paddingHorizontal: 10,
-  },
-  readyImportActionText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  usageCard: {
-    backgroundColor: palette.depth,
-    borderColor: palette.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 17,
-    padding: 18,
-  },
-  sectionHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  sectionTitle: {
-    color: palette.ink,
-    fontSize: 20,
-    fontWeight: "800",
-    letterSpacing: -0.45,
-    marginTop: 3,
-  },
-  usagePlan: {
-    backgroundColor: palette.aquaSoft,
-    borderRadius: 14,
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "800",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  usageRow: { gap: 7 },
-  usageLabels: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  usageTitle: { color: palette.ink, fontSize: 12, fontWeight: "700" },
-  usageValue: { color: palette.muted, fontSize: 12 },
-  progressTrack: {
-    backgroundColor: "#eef0f3",
-    borderRadius: 4,
-    height: 7,
-    overflow: "hidden",
-  },
-  progressFill: {
-    backgroundColor: palette.aqua,
-    borderRadius: 4,
-    height: 7,
-  },
-  progressFillSand: {
-    backgroundColor: palette.sand,
-    borderRadius: 4,
-    height: 7,
-  },
-  usageFootnote: { color: palette.muted, fontSize: 12, lineHeight: 15 },
-  section: { gap: 11 },
-  countBadge: {
-    backgroundColor: palette.aquaSoft,
-    borderRadius: 12,
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "800",
-    minWidth: 26,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    textAlign: "center",
-  },
-  videoCard: {
-    backgroundColor: palette.depth,
-    borderColor: palette.line,
-    borderRadius: 17,
-    borderWidth: 1,
-    flexDirection: "row",
-    minHeight: 110,
-    overflow: "hidden",
-  },
-  videoThumb: {
-    alignItems: "center",
-    backgroundColor: palette.navy,
-    justifyContent: "center",
-    position: "relative",
-    width: 128,
-  },
-  videoPlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderColor: "rgba(255,255,255,0.55)",
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  videoPlayText: { color: "#ffffff", fontSize: 14, marginLeft: 2 },
-  liveBadge: {
-    alignItems: "center",
-    backgroundColor: palette.flare,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 4,
-    left: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    position: "absolute",
-    top: 8,
-  },
-  liveBadgeDot: {
-    backgroundColor: "#ffffff",
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  liveBadgeText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
-  videoThumbMeta: {
-    bottom: 7,
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 12,
-    position: "absolute",
-    right: 8,
-  },
-  videoCardBody: { flex: 1, gap: 6, justifyContent: "center", padding: 13 },
-  videoTitle: {
-    color: palette.ink,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 18,
-  },
-  videoMeta: { color: palette.muted, fontSize: 12 },
-  videoPrivacy: { color: palette.aqua, fontSize: 12, fontWeight: "700" },
-  metricLine: { color: palette.positive, fontSize: 12, fontWeight: "700" },
-  emptyCard: {
-    backgroundColor: "#f2efe8",
-    borderRadius: 16,
-    gap: 5,
-    padding: 16,
-  },
-  emptyTitle: { color: palette.ink, fontSize: 13, fontWeight: "800" },
-  emptyBody: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  analyticsDisclosure: {
-    backgroundColor: "#eef5f4",
-    borderRadius: 18,
-    gap: 6,
-    padding: 17,
-  },
-  analyticsTitle: { color: palette.positive, fontSize: 13, fontWeight: "800" },
-  analyticsBody: { color: "#48645a", fontSize: 12, lineHeight: 17 },
-  modalSafe: { backgroundColor: palette.canvas, flex: 1 },
-  quickMatchSafe: { backgroundColor: palette.canvas, flex: 1 },
-  quickMatchHeader: {
-    alignItems: "center",
-    borderBottomColor: palette.line,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 62,
-    paddingHorizontal: 18,
-  },
-  quickMatchContent: { gap: 20, padding: 20, paddingBottom: 120 },
-  recorderRoleSection: { gap: 10 },
-  recorderRoleRow: { flexDirection: "row", gap: 10 },
-  recorderRoleChoice: {
-    backgroundColor: palette.depth,
-    borderColor: palette.line,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    flex: 1,
-    gap: 4,
-    minHeight: 116,
-    padding: 14,
-  },
-  recorderRoleChoiceSelected: {
-    backgroundColor: palette.aquaSoft,
-    borderColor: palette.aqua,
-  },
-  recorderRoleRadio: {
-    alignItems: "center",
-    borderColor: palette.muted,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    height: 20,
-    justifyContent: "center",
-    marginBottom: 5,
-    width: 20,
-  },
-  recorderRoleRadioSelected: { borderColor: palette.aqua },
-  recorderRoleRadioCore: {
-    backgroundColor: palette.aqua,
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  recorderRoleTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
-  recorderRoleBody: { color: palette.muted, fontSize: 12, lineHeight: 16 },
-  quickMatchRoster: { gap: 12 },
-  quickMatchHostRow: {
-    alignItems: "center",
-    backgroundColor: palette.depth,
-    borderColor: palette.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    minHeight: 82,
-    padding: 13,
-  },
-  quickMatchHostName: { color: palette.ink, fontSize: 16, fontWeight: "800" },
-  quickMatchHostMeta: { color: palette.muted, fontSize: 13, marginTop: 3 },
-  quickMatchYouPill: {
-    alignItems: "center",
-    backgroundColor: palette.aquaSoft,
-    borderRadius: 18,
-    justifyContent: "center",
-    minHeight: 42,
-    minWidth: 70,
-    paddingHorizontal: 13,
-  },
-  quickMatchYouText: { color: palette.aqua, fontSize: 13, fontWeight: "800" },
-  quickMatchTeamLabel: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  quickMatchConsent: {
-    alignItems: "center",
-    backgroundColor: "#eef5f4",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 14,
-    padding: 15,
-  },
-  quickMatchConsentTitle: {
-    color: palette.ink,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  quickMatchConsentBody: {
-    color: palette.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  modalHeader: {
-    alignItems: "center",
-    borderBottomColor: palette.line,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 62,
-    paddingHorizontal: 18,
-  },
-  modalTitle: { color: palette.ink, fontSize: 17, fontWeight: "800" },
-  headerAction: { color: palette.aqua, fontSize: 15, fontWeight: "700" },
-  headerTap: { justifyContent: "center", minHeight: 44, minWidth: 56 },
-  headerSpacer: { width: 56 },
-  formContent: { gap: 24, padding: 20, paddingBottom: 126 },
-  formHero: { gap: 8, paddingBottom: 4 },
-  formStep: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  formTitle: {
-    color: palette.ink,
-    fontSize: 31,
-    fontWeight: "800",
-    letterSpacing: -1,
-    lineHeight: 35,
-  },
-  formIntro: { color: palette.muted, fontSize: 14, lineHeight: 21 },
-  field: { gap: 9 },
-  fieldLabel: { color: palette.ink, fontSize: 16, fontWeight: "800" },
-  fieldDescription: { color: palette.muted, fontSize: 13, lineHeight: 19 },
-  input: {
-    backgroundColor: "#ffffff",
-    borderColor: "#d7dce3",
-    borderRadius: 18,
-    borderWidth: 1,
-    color: palette.ink,
-    fontSize: 16,
-    minHeight: 62,
-    paddingHorizontal: 16,
-  },
-  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  choice: {
-    backgroundColor: "#ffffff",
-    borderColor: "#d7dce3",
-    borderRadius: 17,
-    borderWidth: 1,
-    flexBasis: "47%",
-    flexGrow: 1,
-    justifyContent: "center",
-    minHeight: 70,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  choiceActive: {
-    backgroundColor: palette.aquaSoft,
-    borderColor: palette.aqua,
-  },
-  choiceText: { color: palette.ink, fontSize: 14, fontWeight: "800" },
-  choiceTextActive: { color: palette.aqua },
-  choiceBody: {
-    color: palette.muted,
-    fontSize: 12,
-    lineHeight: 15,
-    marginTop: 4,
-  },
-  choiceBodyActive: { color: "#526c8e" },
-  recommendedLabel: {
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    marginTop: 7,
-  },
-  selectedAssociation: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: palette.aqua,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 72,
-    padding: 15,
-  },
-  associationTitle: { color: palette.ink, fontSize: 14, fontWeight: "800" },
-  associationMeta: {
-    color: palette.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  optionList: { gap: 7 },
-  scheduledAssociationSection: {
-    backgroundColor: "#edf4f0",
-    borderColor: "#c7ded2",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-    marginBottom: 12,
-    padding: 12,
-  },
-  scheduledAssociationHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  scheduledAssociationEyebrow: {
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  scheduledAssociationTitle: {
-    color: palette.navy,
-    fontSize: 13,
-    fontWeight: "900",
-    marginTop: 2,
-  },
-  scheduledAssociationHint: {
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
-  scheduledAssociationCard: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.78)",
-    borderColor: "rgba(47,107,58,0.16)",
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 58,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  scheduledAssociationDot: {
-    backgroundColor: palette.positive,
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  matchEmptyState: { gap: 9 },
-  createMatchInlineButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderColor: "rgba(61,102,114,0.35)",
-    borderRadius: 11,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: 12,
-  },
-  createMatchInlineText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  option: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: palette.line,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    minHeight: 64,
-    padding: 14,
-  },
-  yoursBadge: {
-    backgroundColor: "#e8f5ee",
-    borderRadius: 8,
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    overflow: "hidden",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  importedVideoNote: {
-    color: palette.warning,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 6,
-  },
-  importedVisionCard: {
-    backgroundColor: "#eef4f2",
-    borderColor: "#bed7cf",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 12,
-    padding: 15,
-  },
-  importedVisionHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-  },
-  importedVisionMark: {
-    alignItems: "center",
-    backgroundColor: "#d5e7df",
-    borderRadius: 17,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  importedVisionMarkText: {
-    color: palette.positive,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  importedVisionEyebrow: {
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  importedVisionTitle: {
-    color: palette.navy,
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 2,
-  },
-  importedVisionBody: { color: "#526d65", fontSize: 12, lineHeight: 17 },
-  importedVisionLoading: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.65)",
-    borderColor: "rgba(47,107,58,0.14)",
-    borderRadius: 13,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 58,
-    paddingHorizontal: 12,
-  },
-  importedVisionLoadingText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  importedVisionLabel: {
-    color: palette.navy,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-    marginTop: 2,
-  },
-  importedFrameRail: { gap: 9, paddingRight: 3 },
-  importedFrame: {
-    backgroundColor: "#ffffff",
-    borderColor: "#cbdad5",
-    borderRadius: 11,
-    borderWidth: 1,
-    height: 110,
-    overflow: "hidden",
-    position: "relative",
-    width: 115,
-  },
-  importedFrameSelected: { borderColor: palette.aqua, borderWidth: 2 },
-  importedFrameImage: { height: 80, width: "100%" },
-  importedFrameTime: {
-    color: palette.navy,
-    fontSize: 12,
-    fontWeight: "800",
-    paddingHorizontal: 7,
-    paddingTop: 5,
-  },
-  importedFrameCheck: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 10,
-    height: 20,
-    justifyContent: "center",
-    position: "absolute",
-    right: 5,
-    top: 5,
-    width: 20,
-  },
-  importedFrameCheckText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
-  importedVisionAction: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.72)",
-    borderColor: "#c5d8d1",
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  importedVisionActionText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  importedVisionActionArrow: {
-    color: palette.aqua,
-    fontSize: 22,
-    fontWeight: "500",
-  },
-  importedVisionUnavailable: {
-    color: palette.warning,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  importedVisionPrivacy: { color: "#60716d", fontSize: 12, lineHeight: 15 },
-  toggleRow: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: palette.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 14,
-    minHeight: 82,
-    padding: 16,
-  },
-  toggleTitle: { color: palette.ink, fontSize: 15, fontWeight: "800" },
-  toggleBody: {
-    color: palette.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 4,
-  },
-  privatePracticeCard: {
-    alignItems: "center",
-    backgroundColor: "#eef5f2",
-    borderColor: "#b9d9ca",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    minHeight: 82,
-    padding: 16,
-  },
-  privateIcon: {
-    alignItems: "center",
-    backgroundColor: "#d9ede4",
-    borderRadius: 19,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  privateIconText: { color: palette.positive, fontSize: 16, fontWeight: "900" },
-  disclosure: { color: palette.warning, fontSize: 12, lineHeight: 18 },
-  fileSummary: {
-    alignItems: "center",
-    backgroundColor: "#eaf4ef",
-    borderRadius: 18,
-    flexDirection: "row",
-    gap: 12,
-    padding: 16,
-  },
-  fileSummaryTitle: {
-    color: palette.positive,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  fileSummaryIcon: {
-    alignItems: "center",
-    backgroundColor: "#d4eadf",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  fileSummaryIconText: {
-    color: palette.positive,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  modalFooter: {
-    backgroundColor: "rgba(248,247,243,0.96)",
-    borderTopColor: palette.line,
-    borderTopWidth: 1,
-    bottom: 0,
-    left: 0,
-    padding: 16,
-    position: "absolute",
-    right: 0,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 18,
-    justifyContent: "center",
-    minHeight: 58,
-    paddingHorizontal: 18,
-  },
-  primaryButtonText: { color: "#ffffff", fontSize: 16, fontWeight: "800" },
-  secondaryButton: {
-    alignItems: "center",
-    borderColor: palette.aqua,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  secondaryButtonText: { color: palette.aqua, fontSize: 12, fontWeight: "800" },
-  captureRoot: { backgroundColor: "#050708", flex: 1 },
-  captureNoticeHost: {
-    alignItems: "center",
-    left: 16,
-    position: "absolute",
-    right: 16,
-    zIndex: 15,
-  },
-  captureNoticePill: {
-    alignItems: "center",
-    backgroundColor: "rgba(4,10,13,0.94)",
-    borderColor: "rgba(140,236,229,0.42)",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    maxWidth: 540,
-    minHeight: 46,
-    minWidth: 230,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.32,
-    shadowRadius: 14,
-  },
-  captureNoticePillError: { borderColor: "rgba(248,113,113,0.58)" },
-  captureNoticePillSuccess: { borderColor: "rgba(74,222,128,0.5)" },
-  captureNoticePillWarning: { borderColor: "rgba(233,199,127,0.58)" },
-  captureNoticeDot: {
-    backgroundColor: "#57d8d0",
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  captureNoticeDotError: { backgroundColor: "#f87171" },
-  captureNoticeDotSuccess: { backgroundColor: "#4ade80" },
-  captureNoticeDotWarning: { backgroundColor: palette.sand },
-  captureNoticeText: {
-    color: "#ffffff",
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
-    textAlign: "center",
-  },
-  orientationLoading: {
-    alignItems: "center",
-    flex: 1,
-    gap: 12,
-    justifyContent: "center",
-  },
-  orientationLoadingText: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  dynamicCourtLine: {
-    borderTopWidth: 2,
-    height: 2,
-    position: "absolute",
-  },
-  dynamicHorizon: {
-    height: 1,
-    left: "3%",
-    opacity: 0.6,
-    position: "absolute",
-    right: "3%",
-  },
-  alignmentNetLabel: {
-    alignItems: "center",
-    backgroundColor: "rgba(3,8,11,0.68)",
-    borderColor: "rgba(212,183,124,0.58)",
-    borderRadius: 9,
-    borderWidth: 1,
-    minWidth: 50,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    position: "absolute",
-  },
-  alignmentNetLabelText: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  calibrationEditor: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 20,
-  },
-  calibrationEditorShade: {
-    backgroundColor: "rgba(0,0,0,0.2)",
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  calibrationEditorUi: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  calibrationEditorHeader: {
-    alignItems: "center",
-    backgroundColor: "rgba(3,9,12,0.82)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 62,
-    padding: 9,
-  },
-  calibrationEditorHeaderButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 58,
-  },
-  calibrationEditorHeaderButtonText: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  calibrationEditorHeading: { alignItems: "center", flex: 1 },
-  calibrationEditorEyebrow: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  calibrationEditorTitle: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
-  calibrationEditorSave: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 13,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 58,
-  },
-  calibrationEditorSaveText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  calibrationEditorBottom: {
-    backgroundColor: "rgba(3,9,12,0.88)",
-    borderColor: "rgba(255,255,255,0.22)",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 10,
-    padding: 13,
-  },
-  calibrationEditorHelp: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  calibrationPresetRow: { gap: 8, paddingRight: 12 },
-  calibrationPreset: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 46,
-    paddingHorizontal: 13,
-  },
-  calibrationPresetSelected: {
-    backgroundColor: "rgba(61,102,114,0.22)",
-    borderColor: palette.aqua,
-  },
-  calibrationPresetText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  calibrationEditorStatus: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  calibrationEditorStatusText: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  calibrationEditorStatusMeta: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 12,
-  },
-  calibrationAnchor: {
-    alignItems: "center",
-    backgroundColor: "rgba(201,169,106,0.24)",
-    borderColor: palette.sand,
-    borderRadius: 27,
-    borderWidth: 2,
-    height: 54,
-    justifyContent: "center",
-    position: "absolute",
-    width: 54,
-    zIndex: 24,
-  },
-  calibrationAnchorNet: {
-    backgroundColor: "rgba(61,102,114,0.24)",
-    borderColor: palette.aqua,
-  },
-  calibrationAnchorAntenna: {
-    backgroundColor: "rgba(232,104,58,0.25)",
-    borderColor: palette.flare,
-  },
-  calibrationAnchorOffscreen: { borderStyle: "dashed" },
-  calibrationAnchorCore: {
-    backgroundColor: "#ffffff",
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-  calibrationAnchorLabel: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: 2,
-  },
-  courtOverlay: {
-    bottom: "24%",
-    left: "8%",
-    position: "absolute",
-    right: "8%",
-    top: "18%",
-  },
-  courtOutline: {
-    borderRadius: 6,
-    borderWidth: 2,
-    flex: 1,
-    overflow: "hidden",
-    position: "relative",
-    transform: [{ perspective: 700 }, { rotateX: "18deg" }],
-  },
-  netLine: {
-    height: 2,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: "50%",
-  },
-  centerMark: {
-    height: "100%",
-    left: "50%",
-    opacity: 0.35,
-    position: "absolute",
-    width: 1,
-  },
-  safeMargin: {
-    borderStyle: "dashed",
-    borderWidth: 1,
-    bottom: "7%",
-    left: "5%",
-    position: "absolute",
-    right: "5%",
-    top: "7%",
-  },
-  horizon: {
-    height: 1,
-    left: "-5%",
-    opacity: 0.5,
-    position: "absolute",
-    right: "-5%",
-    top: "-9%",
-  },
-  captureChrome: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingBottom: 22,
-    paddingHorizontal: 16,
-    zIndex: 5,
-  },
-  captureChromeLandscape: { paddingBottom: 12, paddingHorizontal: 22 },
-  captureTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 8,
-  },
-  captureTopLandscape: { paddingTop: 2 },
-  captureClose: {
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.56)",
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: 25,
-    borderWidth: 1,
-    height: 50,
-    justifyContent: "center",
-    width: 50,
-  },
-  remoteButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.56)",
-    borderColor: "rgba(255,255,255,0.28)",
-    borderRadius: 25,
-    borderWidth: 1,
-    gap: 2,
-    height: 50,
-    justifyContent: "center",
-    width: 65,
-  },
-  remoteButtonText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  captureStatus: {
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.58)",
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 50,
-    paddingHorizontal: 15,
-    paddingVertical: 7,
-  },
-  captureStatusCopy: { alignItems: "center", gap: 1 },
-  captureStatusText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.9,
-  },
-  captureStatusTimer: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 13,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "500",
-    letterSpacing: 0.4,
-  },
-  liveDot: {
-    backgroundColor: "#e8683a",
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  lowPowerOverlay: {
-    alignItems: "center",
-    backgroundColor: "#111315",
-    bottom: 0,
-    gap: 10,
-    justifyContent: "center",
-    left: 0,
-    paddingHorizontal: 30,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 4,
-  },
-  lowPowerMark: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.14)",
-    borderRadius: 30,
-    borderWidth: 1,
-    height: 60,
-    justifyContent: "center",
-    marginBottom: 5,
-    width: 60,
-  },
-  lowPowerTimer: {
-    color: "#ffffff",
-    fontSize: 32,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-    letterSpacing: -0.8,
-  },
-  lowPowerTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  lowPowerBody: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 390,
-    textAlign: "center",
-  },
-  captureBottom: { alignItems: "center", gap: 12 },
-  captureBottomLandscape: {
-    alignItems: "flex-start",
-    alignSelf: "stretch",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "space-between",
-  },
-  guidanceCard: {
-    alignSelf: "stretch",
-    backgroundColor: "rgba(4,10,13,0.78)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 5,
-    padding: 13,
-  },
-  orientationWarning: {
-    alignItems: "center",
-    backgroundColor: "rgba(201,169,106,0.15)",
-    borderColor: "rgba(201,169,106,0.7)",
-    borderRadius: 13,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 7,
-    padding: 11,
-  },
-  orientationWarningIcon: {
-    color: palette.sand,
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  orientationWarningTitle: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  orientationWarningBody: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 12,
-    lineHeight: 14,
-    marginTop: 2,
-  },
-  guidanceTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 9,
-    justifyContent: "space-between",
-  },
-  guidanceReadyDot: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-    borderRadius: 6,
-    height: 12,
-    width: 12,
-  },
-  guidanceReadyDotActive: { backgroundColor: palette.positive },
-  guidanceGrade: {
-    color: palette.sand,
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  guidanceScore: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
-  guidanceNote: {
-    color: "rgba(255,255,255,0.66)",
-    fontSize: 12,
-    lineHeight: 14,
-  },
-  calibrationGuide: {
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderColor: "rgba(255,255,255,0.16)",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 7,
-    marginTop: 3,
-    padding: 10,
-  },
-  calibrationGuideHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  calibrationGuideEyebrow: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.9,
-  },
-  calibrationGuideState: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  calibrationGuidePrompt: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 17,
-  },
-  calibrationGuideSteps: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  calibrationGuideStep: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 4,
-  },
-  calibrationGuideMark: {
-    color: "rgba(255,255,255,0.45)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  calibrationGuideMarkDone: { color: palette.positive },
-  calibrationGuideMarkActive: { color: palette.sand },
-  calibrationGuideStepText: {
-    color: "rgba(255,255,255,0.64)",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  calibrationGuideStepTextActive: { color: "#ffffff" },
-  guidanceSignals: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 3,
-  },
-  guidanceSignal: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 9,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  guidanceSignalText: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  guidanceAdjustCompact: {
-    alignItems: "center",
-    borderColor: "rgba(201,169,106,0.7)",
-    borderRadius: 9,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 28,
-    paddingHorizontal: 10,
-  },
-  guidanceAdjustCompactText: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  adjustCalibrationButton: {
-    alignItems: "center",
-    borderColor: "rgba(201,169,106,0.66)",
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: "center",
-    marginTop: 3,
-    minHeight: 44,
-  },
-  adjustCalibrationButtonText: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  partialCourtNote: {
-    color: palette.sand,
-    fontSize: 12,
-    lineHeight: 13,
-    marginTop: 2,
-  },
-  orientationRestartButton: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    borderColor: "rgba(255,255,255,0.38)",
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 16,
-  },
-  orientationRestartButtonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  captureError: {
-    alignSelf: "stretch",
-    backgroundColor: "rgba(130,25,25,0.82)",
-    borderRadius: 12,
-    padding: 10,
-  },
-  captureErrorText: { color: "#ffffff", fontSize: 12, textAlign: "center" },
-  captureFallbackButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderRadius: 11,
-    justifyContent: "center",
-    marginTop: 9,
-    minHeight: 44,
-  },
-  captureFallbackButtonText: {
-    color: "#7f1d1d",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  sharePill: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 18,
-    paddingHorizontal: 15,
-    paddingVertical: 9,
-  },
-  sharePillText: { color: palette.navy, fontSize: 12, fontWeight: "800" },
-  captureMomentActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  favoriteMomentButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(4,10,13,0.82)",
-    borderColor: "rgba(255,255,255,0.28)",
-    borderRadius: 25,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 7,
-    minHeight: 50,
-    paddingHorizontal: 15,
-  },
-  favoriteMomentText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  remoteStatusPill: {
-    alignItems: "center",
-    backgroundColor: "rgba(4,10,13,0.82)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 25,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 7,
-    minHeight: 50,
-    paddingHorizontal: 15,
-  },
-  remoteStatusDot: {
-    backgroundColor: "#98a2b3",
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  remoteStatusDotLive: { backgroundColor: palette.positive },
-  remoteStatusText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  captureButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(232,104,58,0.94)",
-    borderColor: "#ffffff",
-    borderRadius: 32,
-    borderWidth: 2,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 62,
-    paddingHorizontal: 20,
-  },
-  captureButtonStop: { backgroundColor: "rgba(20,24,30,0.9)" },
-  captureButtonCore: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    height: 24,
-    width: 24,
-  },
-  captureButtonCoreStop: { borderRadius: 4, height: 20, width: 20 },
-  captureButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
-  visionScoreboard: {
-    backgroundColor: "rgba(5,9,13,0.9)",
-    borderColor: "rgba(255,255,255,0.24)",
-    borderRadius: 10,
-    borderWidth: 1,
-    bottom: 12,
-    minWidth: 176,
-    overflow: "hidden",
-    paddingBottom: 6,
-    position: "absolute",
-    right: 12,
-    zIndex: 6,
-  },
-  visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
-  visionScoreboardLandscape: { bottom: 12, right: 22 },
-  visionScoreHeader: {
-    alignItems: "center",
-    backgroundColor: "rgba(34,52,59,0.92)",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 3,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  visionScoreBrand: {
-    color: palette.sand,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  visionScoreSet: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  visionScoreRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    minHeight: 25,
-    paddingHorizontal: 8,
-  },
-  visionServeDot: {
-    backgroundColor: palette.positive,
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  visionServeDotOff: { opacity: 0 },
-  visionTeamName: {
-    color: "#ffffff",
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "800",
-    maxWidth: 102,
-  },
-  visionSetCount: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 12,
-    fontWeight: "700",
-    minWidth: 12,
-    textAlign: "center",
-  },
-  visionPointCount: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "900",
-    minWidth: 24,
-    textAlign: "right",
-  },
-  healthVideoOverlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(5,9,13,0.88)",
-    borderColor: "rgba(255,255,255,0.22)",
-    borderRadius: 11,
-    borderWidth: 1,
-    bottom: 12,
-    flexDirection: "row",
-    gap: 8,
-    left: 12,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    position: "absolute",
-    zIndex: 6,
-  },
-  healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
-  healthVideoValue: {
-    color: "#ffffff",
-    fontFamily: "Archivo-Table",
-    fontSize: 14,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "900",
-  },
-  healthVideoLabel: {
-    color: "rgba(255,255,255,0.58)",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    marginTop: 1,
-  },
-  remoteBackdrop: {
-    alignItems: "center",
-    backgroundColor: "rgba(2,5,8,0.76)",
-    flex: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-  remoteCard: {
-    backgroundColor: palette.canvas,
-    borderRadius: 24,
-    gap: 16,
-    maxWidth: 430,
-    padding: 22,
-    width: "100%",
-  },
-  remoteCardHeader: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
-  remoteEyebrow: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.3,
-  },
-  remoteTitle: {
-    color: palette.ink,
-    fontSize: 21,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-    marginTop: 4,
-  },
-  remoteClose: {
-    alignItems: "center",
-    backgroundColor: "#e9e8e3",
-    borderRadius: 17,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  remoteCloseText: { color: palette.ink, fontSize: 23, lineHeight: 25 },
-  remoteBody: { color: palette.muted, fontSize: 12, lineHeight: 18 },
-  qrFrame: {
-    alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: "#ffffff",
-    borderColor: palette.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 14,
-  },
-  remoteConnectionRow: {
-    alignItems: "center",
-    alignSelf: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  remoteConnectionText: { color: palette.ink, fontSize: 12, fontWeight: "800" },
-  remoteShareButton: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 14,
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  remoteShareText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
-  reviewContent: {
-    alignItems: "stretch",
-    gap: 18,
-    padding: 22,
-    paddingBottom: 120,
-  },
-  successMark: {
-    alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: "#e8f5ee",
-    borderRadius: 34,
-    height: 68,
-    justifyContent: "center",
-    width: 68,
-  },
-  successMarkText: { color: palette.positive, fontSize: 30, fontWeight: "900" },
-  reviewTitle: {
-    color: palette.ink,
-    fontSize: 24,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  reviewBody: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  profileVideoSection: {
-    backgroundColor: "#ffffff",
-    borderColor: palette.line,
-    borderRadius: 24,
-    borderWidth: 1,
-    gap: 15,
-    padding: 16,
-  },
-  profileVideoHeading: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-  },
-  profileVideoTitle: {
-    color: palette.ink,
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: -0.6,
-  },
-  profileVideoBody: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  profileVideoOpen: {
-    alignItems: "center",
-    backgroundColor: palette.navy,
-    borderRadius: 15,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 14,
-  },
-  profileVideoOpenText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  profileVideoInvitations: { gap: 10 },
-  profileVideoInvitationEyebrow: {
-    color: palette.positive,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  profileVideoInvitation: {
-    backgroundColor: "#eef7f4",
-    borderColor: "#c8e4db",
-    borderRadius: 19,
-    borderWidth: 1,
-    gap: 11,
-    padding: 13,
-  },
-  profileVideoInvitationMain: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 11,
-    minHeight: 58,
-  },
-  profileVideoInvitationThumb: { borderRadius: 12, height: 58, width: 88 },
-  profileVideoInvitationThumbFallback: {
-    alignItems: "center",
-    backgroundColor: "#dceee9",
-    borderRadius: 12,
-    height: 58,
-    justifyContent: "center",
-    width: 88,
-  },
-  profileVideoInvitationTitle: {
-    color: palette.ink,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  profileVideoInvitationMeta: {
-    color: palette.muted,
-    fontSize: 12,
-    marginTop: 3,
-  },
-  profileVideoInvitationBody: {
-    color: "#48645a",
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  profileVideoDecisionRow: { flexDirection: "row", gap: 9 },
-  profileVideoDecisionSecondary: {
-    alignItems: "center",
-    borderColor: palette.aqua,
-    borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 10,
-  },
-  profileVideoDecisionSecondaryText: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  profileVideoDecisionPrimary: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 14,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 10,
-  },
-  profileVideoDecisionPrimaryText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  profileVideoUsage: {
-    backgroundColor: palette.depth,
-    borderRadius: 18,
-    gap: 13,
-    padding: 14,
-  },
-  profileVideoUsageTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  profileVideoUsageTitle: {
-    color: palette.ink,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  profileVideoUsageRow: { gap: 6 },
-  profileVideoArchiveHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  playerModal: { backgroundColor: "#06090b", flex: 1 },
-  modalHeaderDark: {
-    alignItems: "center",
-    borderBottomColor: "rgba(255,255,255,0.1)",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 56,
-    paddingHorizontal: 18,
-  },
-  headerActionLight: { color: "#d4b77c", fontSize: 13, fontWeight: "800" },
-  playerDone: { justifyContent: "center", minHeight: 44, minWidth: 52 },
-  modalTitleLight: {
-    color: "#ffffff",
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    marginHorizontal: 10,
-    textAlign: "center",
-  },
-  playerStage: {
-    alignItems: "center",
-    aspectRatio: 16 / 9,
-    backgroundColor: "#000000",
-    justifyContent: "center",
-    width: "100%",
-  },
-  playerStagePortrait: {
-    alignSelf: "center",
-    aspectRatio: 9 / 16,
-    maxHeight: "58%",
-    width: "72%",
-  },
-  playerSurface: { height: "100%", width: "100%" },
-  player: { height: "100%", width: "100%" },
-  playerLoading: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  playerFailure: {
-    alignItems: "center",
-    backgroundColor: "rgba(5,10,12,0.96)",
-    bottom: 0,
-    gap: 9,
-    justifyContent: "center",
-    left: 0,
-    padding: 24,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  playerFailureTitle: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
-  playerFailureBody: {
-    color: "#b8c0c0",
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  playerRetry: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 16,
-    justifyContent: "center",
-    marginTop: 4,
-    minHeight: 48,
-    minWidth: 128,
-    paddingHorizontal: 18,
-  },
-  playerRetryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
-  playerError: { color: "#f27878", padding: 20, textAlign: "center" },
-  playerDetailsScroll: { flex: 1 },
-  playerInfo: { gap: 12, padding: 20 },
-  playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
-  playerTitle: {
-    color: "#ffffff",
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: -0.6,
-  },
-  playerMeta: { color: "#aaa79e", fontSize: 13, lineHeight: 18 },
-  playerPrivacy: { color: "#d4b77c", fontSize: 12, fontWeight: "800" },
-  playerVenue: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 11,
-    minHeight: 68,
-    padding: 13,
-  },
-  playerVenueIcon: { color: "#d4b77c", fontSize: 22, fontWeight: "900" },
-  playerVenueName: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  playerVenueAddress: {
-    color: "#aaaeb6",
-    fontSize: 12,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  playerMetricCard: {
-    backgroundColor: "rgba(212,183,124,0.09)",
-    borderColor: "rgba(212,183,124,0.22)",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    minHeight: 74,
-    paddingVertical: 12,
-  },
-  playerMetricItem: { alignItems: "center", flex: 1, justifyContent: "center" },
-  playerMetricValue: {
-    color: "#ffffff",
-    fontFamily: "Archivo-Table",
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  playerMetricLabel: {
-    color: "#d4b77c",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    marginTop: 4,
-  },
-  playerMetricDivider: { backgroundColor: "rgba(255,255,255,0.12)", width: 1 },
-  videoNoteCard: {
-    backgroundColor: "#0e191c",
-    borderColor: "rgba(82,215,205,0.25)",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 11,
-    padding: 16,
-  },
-  videoNoteHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
-  videoNoteEyebrow: {
-    color: palette.aqua,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  videoNoteTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
-  videoNoteBody: { color: "#aab8b8", fontSize: 12, lineHeight: 17 },
-  videoNoteInput: {
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 16,
-    borderWidth: 1,
-    color: "#ffffff",
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 112,
-    padding: 14,
-  },
-  videoNoteFooter: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  videoNoteStatus: { color: "#8fa3a3", flex: 1, fontSize: 12 },
-  videoNoteSave: {
-    alignItems: "center",
-    backgroundColor: palette.aqua,
-    borderRadius: 14,
-    justifyContent: "center",
-    minHeight: 48,
-    minWidth: 112,
-    paddingHorizontal: 16,
-  },
-  videoNoteSaveText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  visionAnalysisCard: {
-    backgroundColor: "#10191b",
-    borderColor: "rgba(212,183,124,0.28)",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 12,
-    padding: 15,
-  },
-  visionAnalysisHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-  },
-  visionAnalysisEyebrow: {
-    color: "#d4b77c",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  visionAnalysisTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
-  visionAnalysisStatus: {
-    color: "#a8d9bf",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-    maxWidth: 88,
-    textAlign: "right",
-  },
-  visionAnalysisBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
-  visionCourt: {
-    backgroundColor: "#1b2929",
-    borderColor: "rgba(255,255,255,0.3)",
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 240,
-    overflow: "hidden",
-    position: "relative",
-  },
-  visionCourtNet: {
-    backgroundColor: "rgba(255,255,255,0.78)",
-    height: 2,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: "50%",
-    zIndex: 3,
-  },
-  visionHeatCell: {
-    alignItems: "center",
-    backgroundColor: "#54c5aa",
-    borderColor: "rgba(255,255,255,0.16)",
-    borderWidth: 0.5,
-    justifyContent: "center",
-    position: "absolute",
-  },
-  visionHeatCellText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
-  visionCourtLabels: {
-    bottom: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    left: 9,
-    position: "absolute",
-    right: 9,
-  },
-  visionCourtLabel: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-  },
-  visionCourtTapHint: {
-    alignSelf: "center",
-    backgroundColor: "rgba(3,9,12,0.7)",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    position: "absolute",
-    top: "46%",
-  },
-  visionCourtTapText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.55,
-  },
-  visionMetricsRow: { flexDirection: "row", gap: 7 },
-  visionMetric: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 11,
-    flex: 1,
-    minHeight: 62,
-    paddingHorizontal: 7,
-    paddingVertical: 9,
-  },
-  visionMetricValue: {
-    color: "#ffffff",
-    fontFamily: "Archivo-Table",
-    fontSize: 19,
-    fontWeight: "800",
-  },
-  visionMetricLabel: {
-    color: "#b8c1be",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.52,
-    lineHeight: 11,
-    marginTop: 3,
-  },
-  visionPerformanceCard: {
-    backgroundColor: "rgba(84,197,170,0.07)",
-    borderColor: "rgba(84,197,170,0.2)",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-    padding: 12,
-  },
-  visionPerformanceHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-  },
-  visionPerformanceEyebrow: {
-    color: "#a8d9bf",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  visionPerformanceTitle: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-  visionPerformanceCoverage: {
-    color: "#b8c1be",
-    fontFamily: "Archivo-Chip",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  visionPerformanceSummary: {
-    color: "#c7cfcb",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  visionPerformanceMetrics: { flexDirection: "row", gap: 7 },
-  visionPerformanceMetric: {
-    backgroundColor: "rgba(255,255,255,0.055)",
-    borderRadius: 10,
-    flex: 1,
-    minHeight: 58,
-    padding: 8,
-  },
-  visionPerformanceValue: {
-    color: "#ffffff",
-    fontFamily: "Archivo-Table",
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  visionPerformanceLabel: {
-    color: "#aeb8b5",
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 12,
-    marginTop: 3,
-  },
-  visionSideRow: {
-    alignItems: "center",
-    borderTopColor: "rgba(255,255,255,0.1)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 9,
-  },
-  visionSideName: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
-  visionSideDetail: {
-    color: "#aeb8b5",
-    fontSize: 12,
-    lineHeight: 14,
-    marginTop: 2,
-  },
-  visionSideEfficiency: { alignItems: "flex-end" },
-  visionSideEfficiencyValue: {
-    color: "#a8d9bf",
-    fontFamily: "Archivo-Table",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  visionSideEfficiencyLabel: {
-    color: "#aeb8b5",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  visionPerformanceEmpty: {
-    color: "#aeb8b5",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  visionPerformanceReview: {
-    color: "#d4b77c",
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  visionOwnerReviewCard: {
-    backgroundColor: "rgba(212,183,124,0.09)",
-    borderColor: "rgba(212,183,124,0.28)",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-    padding: 12,
-  },
-  visionOwnerReviewEyebrow: {
-    color: "#d4b77c",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  visionOwnerReviewTitle: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  visionOwnerReviewBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
-  visionOwnerReviewButton: {
-    alignItems: "center",
-    backgroundColor: "#a8d9bf",
-    borderRadius: 10,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 10,
-  },
-  visionOwnerReviewButtonText: {
-    color: "#111719",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  visionOwnerReviewDrafts: { gap: 7, marginTop: 2 },
-  visionOwnerReviewDraft: {
-    borderTopColor: "rgba(255,255,255,0.12)",
-    borderTopWidth: 1,
-    gap: 2,
-    paddingTop: 7,
-  },
-  visionOwnerReviewDraftTitle: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  visionOwnerReviewDraftBody: {
-    color: "#c7cfcb",
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  visionReviewRail: {
-    backgroundColor: "rgba(212,183,124,0.1)",
-    borderColor: "rgba(212,183,124,0.22)",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-    padding: 10,
-  },
-  visionReviewTitle: {
-    color: "#d4b77c",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  visionReviewItem: {
-    alignItems: "center",
-    borderTopColor: "rgba(212,183,124,0.16)",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 8,
-  },
-  visionReviewItemTitle: { color: "#f2f5f3", fontSize: 12, lineHeight: 15 },
-  visionReviewItemMeta: {
-    color: "#aeb8b5",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-  visionReviewActions: { flexDirection: "row", gap: 6 },
-  visionReviewReject: {
-    alignItems: "center",
-    borderColor: "rgba(255,255,255,0.24)",
-    borderRadius: 10,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 10,
-  },
-  visionReviewRejectText: {
-    color: "#d2d7d5",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  visionReviewConfirm: {
-    alignItems: "center",
-    backgroundColor: "#a8d9bf",
-    borderRadius: 10,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 10,
-  },
-  visionReviewConfirmText: {
-    color: "#111719",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  visionEvidenceNote: { color: "#aeb8b5", fontSize: 12, lineHeight: 15 },
-  visionAnalysisButton: {
-    alignItems: "center",
-    backgroundColor: "#d4b77c",
-    borderRadius: 13,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 12,
-  },
-  visionAnalysisButtonText: {
-    color: "#111719",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  visionAnalysisNotice: { color: "#b9d9ca", fontSize: 12, lineHeight: 15 },
-  uploadOverlay: {
-    alignItems: "center",
-    backgroundColor: "rgba(10,20,28,0.92)",
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    padding: 32,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  uploadOverlayTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "800",
-    marginTop: 16,
-  },
-  uploadOverlayBody: { color: "#d0d5dd", fontSize: 12, marginTop: 6 },
-  uploadTrack: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 5,
-    height: 8,
-    marginTop: 18,
-    overflow: "hidden",
-    width: "100%",
-  },
-  uploadFill: { backgroundColor: "#d4b77c", height: 8 },
-  importedCalibrationScene: { backgroundColor: "#07151a", flex: 1 },
-  importedCalibrationImage: {
-    height: "100%",
-    opacity: 0.92,
-    resizeMode: "contain",
-    width: "100%",
-  },
-  sheetBackdrop: {
-    backgroundColor: "rgba(4,10,16,0.56)",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: palette.canvas,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    gap: 12,
-    padding: 20,
-    paddingBottom: 38,
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    backgroundColor: "#cbd0d8",
-    borderRadius: 3,
-    height: 5,
-    marginBottom: 4,
-    width: 42,
-  },
-  sheetTitle: { color: palette.ink, fontSize: 22, fontWeight: "800" },
-  sheetBody: { color: palette.muted, fontSize: 12, lineHeight: 18 },
-  sheetActionPrimary: {
-    backgroundColor: palette.aqua,
-    borderRadius: 15,
-    gap: 3,
-    padding: 15,
-  },
-  sheetActionPrimaryText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  sheetAction: {
-    backgroundColor: "#ffffff",
-    borderColor: palette.line,
-    borderRadius: 15,
-    borderWidth: 1,
-    gap: 3,
-    padding: 15,
-  },
-  sheetActionText: { color: palette.ink, fontSize: 13, fontWeight: "800" },
-  sheetActionMeta: { color: "#98a2b3", fontSize: 12 },
-});
+const createVideoStyles = (palette: ReturnType<typeof videoPalette>) =>
+  StyleSheet.create({
+    flex: { flex: 1 },
+    screen: { gap: 18, padding: 18, paddingBottom: 120 },
+    hero: {
+      backgroundColor: palette.canvas,
+      gap: 16,
+      overflow: "hidden",
+      padding: 2,
+    },
+    heroTop: { alignItems: "center", flexDirection: "row", gap: 14 },
+    liveMark: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    eyebrow: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.6,
+    },
+    heroTitle: {
+      color: palette.ink,
+      fontSize: 30,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 36,
+    },
+    heroBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    complimentaryBadge: {
+      alignSelf: "flex-start",
+      backgroundColor: "rgba(212,183,124,0.16)",
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    complimentaryText: { color: palette.sand, fontSize: 12, fontWeight: "500" },
+    iosNote: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    captureChoiceStack: { gap: 10 },
+    captureChoiceCard: {
+      alignItems: "center",
+      borderRadius: 18,
+      flexDirection: "row",
+      gap: 13,
+      minHeight: 112,
+      padding: 15,
+    },
+    captureChoiceCardRecord: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderWidth: 1,
+    },
+    captureChoiceCardLive: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderWidth: 1,
+    },
+    captureChoiceUnavailable: { borderStyle: "dashed" },
+    captureChoiceIcon: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 25,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    captureChoiceIconLive: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 25,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    captureChoiceCopy: { flex: 1, gap: 6 },
+    captureChoiceHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    captureChoiceTitle: { color: palette.ink, fontSize: 17, fontWeight: "700" },
+    captureChoiceTitleLight: {
+      color: palette.ink,
+      fontSize: 17,
+      fontWeight: "700",
+    },
+    captureChoiceBadge: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 10,
+      color: palette.ink,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.7,
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+    captureChoiceBadgeLight: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 10,
+      color: palette.ink,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.7,
+      overflow: "hidden",
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+    captureChoiceBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    captureChoiceBodyLight: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    libraryButton: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 2,
+      minHeight: 56,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+    },
+    libraryButtonText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+    libraryButtonMeta: { color: palette.muted, fontSize: 14, lineHeight: 20 },
+    disabled: { opacity: 0.42 },
+    errorCard: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      padding: 13,
+    },
+    errorText: { color: palette.danger, flex: 1, fontSize: 12, lineHeight: 17 },
+    textAction: { color: palette.aqua, fontSize: 12, fontWeight: "500" },
+    loader: { marginVertical: 10 },
+    offlineQueueAction: {
+      alignItems: "center",
+      borderColor: palette.line,
+      borderRadius: 12,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 11,
+    },
+    offlineQueueActionText: {
+      color: palette.aqua,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    offlineQueueActions: { gap: 6 },
+    offlineQueueCancel: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 28,
+      paddingHorizontal: 8,
+    },
+    offlineQueueCancelText: {
+      color: palette.danger,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    offlineQueueBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    offlineQueueCard: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      padding: 13,
+    },
+    offlineQueueIcon: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    offlineQueueIconText: {
+      color: palette.positive,
+      fontSize: 18,
+      fontWeight: "500",
+    },
+    offlineQueueTitle: { color: palette.ink, fontSize: 13, fontWeight: "500" },
+    readyImportCard: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      padding: 13,
+    },
+    readyImportIcon: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    readyImportIconText: {
+      color: palette.aqua,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    readyImportTitle: { color: palette.ink, fontSize: 13, fontWeight: "500" },
+    readyImportBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    readyImportAction: {
+      alignItems: "center",
+      borderColor: palette.line,
+      borderRadius: 11,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 10,
+    },
+    readyImportActionText: {
+      color: palette.aqua,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    usageCard: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 17,
+      padding: 18,
+    },
+    sectionHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    sectionTitle: {
+      color: palette.ink,
+      fontSize: 20,
+      fontWeight: "500",
+      letterSpacing: -0.45,
+      marginTop: 3,
+    },
+    usagePlan: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 14,
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      overflow: "hidden",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    usageRow: { gap: 7 },
+    usageLabels: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    usageTitle: { color: palette.ink, fontSize: 12, fontWeight: "700" },
+    usageValue: { color: palette.muted, fontSize: 12 },
+    progressTrack: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 4,
+      height: 7,
+      overflow: "hidden",
+    },
+    progressFill: {
+      backgroundColor: palette.aqua,
+      borderRadius: 4,
+      height: 7,
+    },
+    progressFillSand: {
+      backgroundColor: palette.sand,
+      borderRadius: 4,
+      height: 7,
+    },
+    usageFootnote: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    section: { gap: 11 },
+    countBadge: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 12,
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      minWidth: 26,
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      textAlign: "center",
+    },
+    videoCard: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 110,
+      overflow: "hidden",
+    },
+    videoThumb: {
+      alignItems: "center",
+      backgroundColor: palette.navy,
+      justifyContent: "center",
+      position: "relative",
+      width: 128,
+    },
+    videoPlay: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.18)",
+      borderColor: "rgba(255,255,255,0.55)",
+      borderRadius: 20,
+      borderWidth: 1,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    videoPlayText: { color: "#ffffff", fontSize: 14, marginLeft: 2 },
+    liveBadge: {
+      alignItems: "center",
+      backgroundColor: palette.flare,
+      borderRadius: 8,
+      flexDirection: "row",
+      gap: 4,
+      left: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+      position: "absolute",
+      top: 8,
+    },
+    liveBadgeDot: {
+      backgroundColor: "#ffffff",
+      borderRadius: 3,
+      height: 6,
+      width: 6,
+    },
+    liveBadgeText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
+    videoThumbMeta: {
+      bottom: 7,
+      color: "rgba(255,255,255,0.8)",
+      fontSize: 12,
+      position: "absolute",
+      right: 8,
+    },
+    videoCardBody: { flex: 1, gap: 6, justifyContent: "center", padding: 13 },
+    videoTitle: {
+      color: palette.ink,
+      fontSize: 14,
+      fontWeight: "500",
+      lineHeight: 18,
+    },
+    videoMeta: { color: palette.muted, fontSize: 12 },
+    videoPrivacy: { color: palette.aqua, fontSize: 12, fontWeight: "700" },
+    metricLine: { color: palette.positive, fontSize: 12, fontWeight: "700" },
+    emptyCard: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 16,
+      gap: 5,
+      padding: 16,
+    },
+    emptyTitle: { color: palette.ink, fontSize: 16, fontWeight: "500" },
+    emptyBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    analyticsDisclosure: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      gap: 6,
+      padding: 17,
+    },
+    analyticsTitle: { color: palette.ink, fontSize: 16, fontWeight: "500" },
+    analyticsBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    modalSafe: { backgroundColor: palette.canvas, flex: 1 },
+    quickMatchSafe: { backgroundColor: palette.canvas, flex: 1 },
+    quickMatchHeader: {
+      alignItems: "center",
+      borderBottomColor: palette.line,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 62,
+      paddingHorizontal: 18,
+    },
+    quickMatchContent: { gap: 20, padding: 20, paddingBottom: 120 },
+    recorderRoleSection: { gap: 10 },
+    recorderRoleRow: { flexDirection: "row", gap: 10 },
+    recorderRoleChoice: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      flex: 1,
+      gap: 4,
+      minHeight: 116,
+      padding: 14,
+    },
+    recorderRoleChoiceSelected: {
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.aqua,
+    },
+    recorderRoleRadio: {
+      alignItems: "center",
+      borderColor: palette.muted,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      height: 20,
+      justifyContent: "center",
+      marginBottom: 5,
+      width: 20,
+    },
+    recorderRoleRadioSelected: { borderColor: palette.aqua },
+    recorderRoleRadioCore: {
+      backgroundColor: palette.aqua,
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    recorderRoleTitle: { color: palette.ink, fontSize: 15, fontWeight: "500" },
+    recorderRoleBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    quickMatchRoster: { gap: 12 },
+    quickMatchHostRow: {
+      alignItems: "center",
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      minHeight: 82,
+      padding: 13,
+    },
+    quickMatchHostName: { color: palette.ink, fontSize: 16, fontWeight: "500" },
+    quickMatchHostMeta: { color: palette.muted, fontSize: 13, marginTop: 3 },
+    quickMatchYouPill: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      justifyContent: "center",
+      minHeight: 42,
+      minWidth: 70,
+      paddingHorizontal: 13,
+    },
+    quickMatchYouText: { color: palette.aqua, fontSize: 13, fontWeight: "500" },
+    quickMatchTeamLabel: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.9,
+    },
+    quickMatchConsent: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 14,
+      padding: 15,
+    },
+    quickMatchConsentTitle: {
+      color: palette.ink,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    quickMatchConsentBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    modalHeader: {
+      alignItems: "center",
+      borderBottomColor: palette.line,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 62,
+      paddingHorizontal: 18,
+    },
+    modalTitle: { color: palette.ink, fontSize: 17, fontWeight: "500" },
+    headerAction: { color: palette.aqua, fontSize: 15, fontWeight: "700" },
+    headerTap: { justifyContent: "center", minHeight: 48, minWidth: 56 },
+    headerSpacer: { width: 56 },
+    formContent: { gap: 24, padding: 20, paddingBottom: 126 },
+    formHero: { gap: 8, paddingBottom: 4 },
+    formStep: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.4,
+    },
+    formTitle: {
+      color: palette.ink,
+      fontSize: 31,
+      fontWeight: "500",
+      letterSpacing: -1,
+      lineHeight: 35,
+    },
+    formIntro: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    field: { gap: 9 },
+    fieldLabel: { color: palette.ink, fontSize: 16, fontWeight: "500" },
+    fieldDescription: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    input: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1,
+      color: palette.ink,
+      fontSize: 16,
+      minHeight: 62,
+      paddingHorizontal: 16,
+    },
+    choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    choice: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 17,
+      borderWidth: 1,
+      flexBasis: "47%",
+      flexGrow: 1,
+      justifyContent: "center",
+      minHeight: 70,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    choiceActive: {
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.aqua,
+    },
+    choiceText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+    choiceTextActive: { color: palette.aqua },
+    choiceBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+    choiceBodyActive: { color: palette.muted },
+    recommendedLabel: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.8,
+      marginTop: 7,
+    },
+    selectedAssociation: {
+      alignItems: "center",
+      backgroundColor: palette.depth,
+      borderColor: palette.aqua,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 72,
+      padding: 15,
+    },
+    associationTitle: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+    associationMeta: {
+      color: palette.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 3,
+    },
+    optionList: { gap: 7 },
+    scheduledAssociationSection: {
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 8,
+      marginBottom: 12,
+      padding: 12,
+    },
+    scheduledAssociationHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    scheduledAssociationEyebrow: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.1,
+    },
+    scheduledAssociationTitle: {
+      color: palette.ink,
+      fontSize: 13,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    scheduledAssociationHint: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.6,
+    },
+    scheduledAssociationCard: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 58,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    scheduledAssociationDot: {
+      backgroundColor: palette.positive,
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    matchEmptyState: { gap: 9 },
+    createMatchInlineButton: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      borderColor: palette.line,
+      borderRadius: 11,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    createMatchInlineText: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    option: {
+      alignItems: "center",
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 64,
+      padding: 14,
+    },
+    yoursBadge: {
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 8,
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      overflow: "hidden",
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+    },
+    helper: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    importedVideoNote: {
+      color: palette.warning,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 6,
+    },
+    importedVisionCard: {
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 12,
+      padding: 15,
+    },
+    importedVisionHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    importedVisionMark: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 17,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    importedVisionMarkText: {
+      color: palette.positive,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    importedVisionEyebrow: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.1,
+    },
+    importedVisionTitle: {
+      color: palette.ink,
+      fontSize: 15,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    importedVisionBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    importedVisionLoading: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 9,
+      minHeight: 58,
+      paddingHorizontal: 12,
+    },
+    importedVisionLoadingText: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    importedVisionLabel: {
+      color: palette.ink,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.9,
+      marginTop: 2,
+    },
+    importedFrameRail: { gap: 9, paddingRight: 3 },
+    importedFrame: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 11,
+      borderWidth: 1,
+      height: 110,
+      overflow: "hidden",
+      position: "relative",
+      width: 115,
+    },
+    importedFrameSelected: { borderColor: palette.aqua, borderWidth: 2 },
+    importedFrameImage: { height: 80, width: "100%" },
+    importedFrameTime: {
+      color: palette.ink,
+      fontSize: 12,
+      fontWeight: "500",
+      paddingHorizontal: 7,
+      paddingTop: 5,
+    },
+    importedFrameCheck: {
+      alignItems: "center",
+      backgroundColor: palette.aqua,
+      borderRadius: 10,
+      height: 20,
+      justifyContent: "center",
+      position: "absolute",
+      right: 5,
+      top: 5,
+      width: 20,
+    },
+    importedFrameCheckText: {
+      color: palette.onAccent,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    importedVisionAction: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    importedVisionActionText: {
+      color: palette.aqua,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    importedVisionActionArrow: {
+      color: palette.aqua,
+      fontSize: 22,
+      fontWeight: "500",
+    },
+    importedVisionUnavailable: {
+      color: palette.warning,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    importedVisionPrivacy: {
+      color: palette.muted,
+      fontSize: 12,
+      lineHeight: 15,
+    },
+    toggleRow: {
+      alignItems: "center",
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 14,
+      minHeight: 82,
+      padding: 16,
+    },
+    toggleTitle: { color: palette.ink, fontSize: 15, fontWeight: "500" },
+    toggleBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+    privatePracticeCard: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      minHeight: 82,
+      padding: 16,
+    },
+    privateIcon: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 19,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    privateIconText: {
+      color: palette.positive,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    disclosure: { color: palette.warning, fontSize: 12, lineHeight: 18 },
+    fileSummary: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      flexDirection: "row",
+      gap: 12,
+      padding: 16,
+    },
+    fileSummaryTitle: {
+      color: palette.positive,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    fileSummaryIcon: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 18,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    fileSummaryIconText: {
+      color: palette.positive,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    modalFooter: {
+      backgroundColor: "rgba(248,247,243,0.96)",
+      borderTopColor: palette.line,
+      borderTopWidth: 1,
+      bottom: 0,
+      left: 0,
+      padding: 16,
+      position: "absolute",
+      right: 0,
+    },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: palette.aqua,
+      borderRadius: 18,
+      justifyContent: "center",
+      minHeight: 58,
+      paddingHorizontal: 18,
+    },
+    primaryButtonText: {
+      color: palette.onAccent,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    secondaryButton: {
+      alignItems: "center",
+      borderColor: palette.aqua,
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    secondaryButtonText: {
+      color: palette.aqua,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    captureRoot: { backgroundColor: "#050708", flex: 1 },
+    captureNoticeHost: {
+      alignItems: "center",
+      left: 16,
+      position: "absolute",
+      right: 16,
+      zIndex: 15,
+    },
+    captureNoticePill: {
+      alignItems: "center",
+      backgroundColor: "rgba(4,10,13,0.94)",
+      borderColor: "rgba(140,236,229,0.42)",
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      maxWidth: 540,
+      minHeight: 46,
+      minWidth: 230,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.32,
+      shadowRadius: 14,
+    },
+    captureNoticePillError: { borderColor: "rgba(248,113,113,0.58)" },
+    captureNoticePillSuccess: { borderColor: "rgba(74,222,128,0.5)" },
+    captureNoticePillWarning: { borderColor: "rgba(233,199,127,0.58)" },
+    captureNoticeDot: {
+      backgroundColor: "#57d8d0",
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    captureNoticeDotError: { backgroundColor: "#f87171" },
+    captureNoticeDotSuccess: { backgroundColor: "#4ade80" },
+    captureNoticeDotWarning: { backgroundColor: palette.sand },
+    captureNoticeText: {
+      color: "#ffffff",
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 17,
+      textAlign: "center",
+    },
+    orientationLoading: {
+      alignItems: "center",
+      flex: 1,
+      gap: 12,
+      justifyContent: "center",
+    },
+    orientationLoadingText: {
+      color: "rgba(255,255,255,0.82)",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    dynamicCourtLine: {
+      borderTopWidth: 2,
+      height: 2,
+      position: "absolute",
+    },
+    dynamicHorizon: {
+      height: 1,
+      left: "3%",
+      opacity: 0.6,
+      position: "absolute",
+      right: "3%",
+    },
+    alignmentNetLabel: {
+      alignItems: "center",
+      backgroundColor: "rgba(3,8,11,0.68)",
+      borderColor: "rgba(212,183,124,0.58)",
+      borderRadius: 9,
+      borderWidth: 1,
+      minWidth: 50,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      position: "absolute",
+    },
+    alignmentNetLabelText: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+    },
+    calibrationEditor: {
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      zIndex: 20,
+    },
+    calibrationEditorShade: {
+      backgroundColor: "rgba(0,0,0,0.2)",
+      bottom: 0,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    calibrationEditorUi: {
+      flex: 1,
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    calibrationEditorHeader: {
+      alignItems: "center",
+      backgroundColor: "rgba(3,9,12,0.82)",
+      borderColor: "rgba(255,255,255,0.2)",
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 62,
+      padding: 9,
+    },
+    calibrationEditorHeaderButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
+      minWidth: 58,
+    },
+    calibrationEditorHeaderButtonText: {
+      color: "rgba(255,255,255,0.78)",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    calibrationEditorHeading: { alignItems: "center", flex: 1 },
+    calibrationEditorEyebrow: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    calibrationEditorTitle: {
+      color: "#ffffff",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    calibrationEditorSave: {
+      alignItems: "center",
+      backgroundColor: palette.aqua,
+      borderRadius: 13,
+      justifyContent: "center",
+      minHeight: 44,
+      minWidth: 58,
+    },
+    calibrationEditorSaveText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    calibrationEditorBottom: {
+      backgroundColor: "rgba(3,9,12,0.88)",
+      borderColor: "rgba(255,255,255,0.22)",
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 10,
+      padding: 13,
+    },
+    calibrationEditorHelp: {
+      color: "rgba(255,255,255,0.82)",
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    calibrationPresetRow: { gap: 8, paddingRight: 12 },
+    calibrationPreset: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.1)",
+      borderColor: "rgba(255,255,255,0.2)",
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 46,
+      paddingHorizontal: 13,
+    },
+    calibrationPresetSelected: {
+      backgroundColor: "rgba(61,102,114,0.22)",
+      borderColor: palette.aqua,
+    },
+    calibrationPresetText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    calibrationEditorStatus: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    calibrationEditorStatusText: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    calibrationEditorStatusMeta: {
+      color: "rgba(255,255,255,0.6)",
+      fontSize: 12,
+    },
+    calibrationAnchor: {
+      alignItems: "center",
+      backgroundColor: "rgba(201,169,106,0.24)",
+      borderColor: palette.sand,
+      borderRadius: 27,
+      borderWidth: 2,
+      height: 54,
+      justifyContent: "center",
+      position: "absolute",
+      width: 54,
+      zIndex: 24,
+    },
+    calibrationAnchorNet: {
+      backgroundColor: "rgba(61,102,114,0.24)",
+      borderColor: palette.aqua,
+    },
+    calibrationAnchorAntenna: {
+      backgroundColor: "rgba(232,104,58,0.25)",
+      borderColor: palette.flare,
+    },
+    calibrationAnchorOffscreen: { borderStyle: "dashed" },
+    calibrationAnchorCore: {
+      backgroundColor: "#ffffff",
+      borderRadius: 5,
+      height: 10,
+      width: 10,
+    },
+    calibrationAnchorLabel: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    courtOverlay: {
+      bottom: "24%",
+      left: "8%",
+      position: "absolute",
+      right: "8%",
+      top: "18%",
+    },
+    courtOutline: {
+      borderRadius: 6,
+      borderWidth: 2,
+      flex: 1,
+      overflow: "hidden",
+      position: "relative",
+      transform: [{ perspective: 700 }, { rotateX: "18deg" }],
+    },
+    netLine: {
+      height: 2,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: "50%",
+    },
+    centerMark: {
+      height: "100%",
+      left: "50%",
+      opacity: 0.35,
+      position: "absolute",
+      width: 1,
+    },
+    safeMargin: {
+      borderStyle: "dashed",
+      borderWidth: 1,
+      bottom: "7%",
+      left: "5%",
+      position: "absolute",
+      right: "5%",
+      top: "7%",
+    },
+    horizon: {
+      height: 1,
+      left: "-5%",
+      opacity: 0.5,
+      position: "absolute",
+      right: "-5%",
+      top: "-9%",
+    },
+    captureChrome: {
+      flex: 1,
+      justifyContent: "space-between",
+      paddingBottom: 22,
+      paddingHorizontal: 16,
+      zIndex: 5,
+    },
+    captureChromeLandscape: { paddingBottom: 12, paddingHorizontal: 22 },
+    captureTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingTop: 8,
+    },
+    captureTopLandscape: { paddingTop: 2 },
+    captureClose: {
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.56)",
+      borderColor: "rgba(255,255,255,0.18)",
+      borderRadius: 25,
+      borderWidth: 1,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+    },
+    remoteButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.56)",
+      borderColor: "rgba(255,255,255,0.28)",
+      borderRadius: 25,
+      borderWidth: 1,
+      gap: 2,
+      height: 50,
+      justifyContent: "center",
+      width: 65,
+    },
+    remoteButtonText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    captureStatus: {
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.58)",
+      borderColor: "rgba(255,255,255,0.18)",
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 50,
+      paddingHorizontal: 15,
+      paddingVertical: 7,
+    },
+    captureStatusCopy: { alignItems: "center", gap: 1 },
+    captureStatusText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.9,
+    },
+    captureStatusTimer: {
+      color: "rgba(255,255,255,0.8)",
+      fontSize: 13,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "500",
+      letterSpacing: 0.4,
+    },
+    liveDot: {
+      backgroundColor: "#e8683a",
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    lowPowerOverlay: {
+      alignItems: "center",
+      backgroundColor: "#111315",
+      bottom: 0,
+      gap: 10,
+      justifyContent: "center",
+      left: 0,
+      paddingHorizontal: 30,
+      position: "absolute",
+      right: 0,
+      top: 0,
+      zIndex: 4,
+    },
+    lowPowerMark: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.08)",
+      borderColor: "rgba(255,255,255,0.14)",
+      borderRadius: 30,
+      borderWidth: 1,
+      height: 60,
+      justifyContent: "center",
+      marginBottom: 5,
+      width: 60,
+    },
+    lowPowerTimer: {
+      color: "#ffffff",
+      fontSize: 32,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "700",
+      letterSpacing: -0.8,
+    },
+    lowPowerTitle: {
+      color: "#ffffff",
+      fontSize: 20,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    lowPowerBody: {
+      color: "rgba(255,255,255,0.62)",
+      fontSize: 14,
+      lineHeight: 20,
+      maxWidth: 390,
+      textAlign: "center",
+    },
+    captureBottom: { alignItems: "center", gap: 12 },
+    captureBottomLandscape: {
+      alignItems: "flex-start",
+      alignSelf: "stretch",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      justifyContent: "space-between",
+    },
+    guidanceCard: {
+      alignSelf: "stretch",
+      backgroundColor: "rgba(4,10,13,0.78)",
+      borderColor: "rgba(255,255,255,0.2)",
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 5,
+      padding: 13,
+    },
+    orientationWarning: {
+      alignItems: "center",
+      backgroundColor: "rgba(201,169,106,0.15)",
+      borderColor: "rgba(201,169,106,0.7)",
+      borderRadius: 13,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 7,
+      padding: 11,
+    },
+    orientationWarningIcon: {
+      color: palette.sand,
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    orientationWarningTitle: {
+      color: "#ffffff",
+      fontSize: 13,
+      fontWeight: "800",
+      textTransform: "capitalize",
+    },
+    orientationWarningBody: {
+      color: "rgba(255,255,255,0.72)",
+      fontSize: 12,
+      lineHeight: 14,
+      marginTop: 2,
+    },
+    guidanceTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 9,
+      justifyContent: "space-between",
+    },
+    guidanceReadyDot: {
+      backgroundColor: "rgba(255,255,255,0.25)",
+      borderRadius: 6,
+      height: 12,
+      width: 12,
+    },
+    guidanceReadyDotActive: { backgroundColor: palette.positive },
+    guidanceGrade: {
+      color: palette.sand,
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    guidanceScore: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+    guidanceWarning: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
+    guidanceNote: {
+      color: "rgba(255,255,255,0.66)",
+      fontSize: 12,
+      lineHeight: 14,
+    },
+    calibrationGuide: {
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderColor: "rgba(255,255,255,0.16)",
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 7,
+      marginTop: 3,
+      padding: 10,
+    },
+    calibrationGuideHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    calibrationGuideEyebrow: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.9,
+    },
+    calibrationGuideState: {
+      color: "rgba(255,255,255,0.62)",
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.6,
+    },
+    calibrationGuidePrompt: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 17,
+    },
+    calibrationGuideSteps: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    calibrationGuideStep: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+    },
+    calibrationGuideMark: {
+      color: "rgba(255,255,255,0.45)",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    calibrationGuideMarkDone: { color: palette.positive },
+    calibrationGuideMarkActive: { color: palette.sand },
+    calibrationGuideStepText: {
+      color: "rgba(255,255,255,0.64)",
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    calibrationGuideStepTextActive: { color: "#ffffff" },
+    guidanceSignals: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 3,
+    },
+    guidanceSignal: {
+      backgroundColor: "rgba(255,255,255,0.1)",
+      borderRadius: 9,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    guidanceSignalText: {
+      color: "rgba(255,255,255,0.85)",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    guidanceAdjustCompact: {
+      alignItems: "center",
+      borderColor: "rgba(201,169,106,0.7)",
+      borderRadius: 9,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 28,
+      paddingHorizontal: 10,
+    },
+    guidanceAdjustCompactText: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    adjustCalibrationButton: {
+      alignItems: "center",
+      borderColor: "rgba(201,169,106,0.66)",
+      borderRadius: 12,
+      borderWidth: 1,
+      justifyContent: "center",
+      marginTop: 3,
+      minHeight: 44,
+    },
+    adjustCalibrationButtonText: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    partialCourtNote: {
+      color: palette.sand,
+      fontSize: 12,
+      lineHeight: 13,
+      marginTop: 2,
+    },
+    orientationRestartButton: {
+      alignItems: "center",
+      alignSelf: "stretch",
+      borderColor: "rgba(255,255,255,0.38)",
+      borderRadius: 12,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+    orientationRestartButtonText: {
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    captureError: {
+      alignSelf: "stretch",
+      backgroundColor: "rgba(130,25,25,0.82)",
+      borderRadius: 12,
+      padding: 10,
+    },
+    captureErrorText: { color: "#ffffff", fontSize: 12, textAlign: "center" },
+    captureFallbackButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.96)",
+      borderRadius: 11,
+      justifyContent: "center",
+      marginTop: 9,
+      minHeight: 44,
+    },
+    captureFallbackButtonText: {
+      color: "#7f1d1d",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    sharePill: {
+      backgroundColor: "rgba(255,255,255,0.92)",
+      borderRadius: 18,
+      paddingHorizontal: 15,
+      paddingVertical: 9,
+    },
+    sharePillText: { color: palette.navy, fontSize: 12, fontWeight: "800" },
+    captureMomentActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    favoriteMomentButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(4,10,13,0.82)",
+      borderColor: "rgba(255,255,255,0.28)",
+      borderRadius: 25,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 7,
+      minHeight: 50,
+      paddingHorizontal: 15,
+    },
+    favoriteMomentText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+    remoteStatusPill: {
+      alignItems: "center",
+      backgroundColor: "rgba(4,10,13,0.82)",
+      borderColor: "rgba(255,255,255,0.2)",
+      borderRadius: 25,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 7,
+      minHeight: 50,
+      paddingHorizontal: 15,
+    },
+    remoteStatusDot: {
+      backgroundColor: "#98a2b3",
+      borderRadius: 4,
+      height: 8,
+      width: 8,
+    },
+    remoteStatusDotLive: { backgroundColor: palette.positive },
+    remoteStatusText: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+    captureButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(232,104,58,0.94)",
+      borderColor: "#ffffff",
+      borderRadius: 32,
+      borderWidth: 2,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 62,
+      paddingHorizontal: 20,
+    },
+    captureButtonStop: { backgroundColor: "rgba(20,24,30,0.9)" },
+    captureButtonCore: {
+      backgroundColor: "#ffffff",
+      borderRadius: 12,
+      height: 24,
+      width: 24,
+    },
+    captureButtonCoreStop: { borderRadius: 4, height: 20, width: 20 },
+    captureButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+    visionScoreboard: {
+      backgroundColor: "rgba(5,9,13,0.9)",
+      borderColor: "rgba(255,255,255,0.24)",
+      borderRadius: 10,
+      borderWidth: 1,
+      bottom: 12,
+      minWidth: 176,
+      overflow: "hidden",
+      paddingBottom: 6,
+      position: "absolute",
+      right: 12,
+      zIndex: 6,
+    },
+    visionScoreboardCompact: { bottom: 142, minWidth: 184, right: 16 },
+    visionScoreboardLandscape: { bottom: 12, right: 22 },
+    visionScoreHeader: {
+      alignItems: "center",
+      backgroundColor: "rgba(34,52,59,0.92)",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 3,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    visionScoreBrand: {
+      color: palette.sand,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    visionScoreSet: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+    visionScoreRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 6,
+      minHeight: 25,
+      paddingHorizontal: 8,
+    },
+    visionServeDot: {
+      backgroundColor: palette.positive,
+      borderRadius: 3,
+      height: 6,
+      width: 6,
+    },
+    visionServeDotOff: { opacity: 0 },
+    visionTeamName: {
+      color: "#ffffff",
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "800",
+      maxWidth: 102,
+    },
+    visionSetCount: {
+      color: "rgba(255,255,255,0.62)",
+      fontSize: 12,
+      fontWeight: "700",
+      minWidth: 12,
+      textAlign: "center",
+    },
+    visionPointCount: {
+      color: "#ffffff",
+      fontSize: 17,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "900",
+      minWidth: 24,
+      textAlign: "right",
+    },
+    healthVideoOverlay: {
+      alignItems: "center",
+      backgroundColor: "rgba(5,9,13,0.88)",
+      borderColor: "rgba(255,255,255,0.22)",
+      borderRadius: 11,
+      borderWidth: 1,
+      bottom: 12,
+      flexDirection: "row",
+      gap: 8,
+      left: 12,
+      paddingHorizontal: 11,
+      paddingVertical: 8,
+      position: "absolute",
+      zIndex: 6,
+    },
+    healthVideoHeart: { color: "#ff6a5f", fontSize: 16 },
+    healthVideoValue: {
+      color: "#ffffff",
+      fontFamily: "Archivo-Table",
+      fontSize: 14,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "900",
+    },
+    healthVideoLabel: {
+      color: "rgba(255,255,255,0.58)",
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+      marginTop: 1,
+    },
+    remoteBackdrop: {
+      alignItems: "center",
+      backgroundColor: "rgba(2,5,8,0.76)",
+      flex: 1,
+      justifyContent: "center",
+      padding: 20,
+    },
+    remoteCard: {
+      backgroundColor: palette.canvas,
+      borderRadius: 24,
+      gap: 16,
+      maxWidth: 430,
+      padding: 22,
+      width: "100%",
+    },
+    remoteCardHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+    },
+    remoteEyebrow: {
+      color: palette.aqua,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.3,
+    },
+    remoteTitle: {
+      color: palette.ink,
+      fontSize: 21,
+      fontWeight: "500",
+      letterSpacing: -0.4,
+      marginTop: 4,
+    },
+    remoteClose: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 17,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    remoteCloseText: { color: palette.ink, fontSize: 23, lineHeight: 25 },
+    remoteBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    qrFrame: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: "#ffffff",
+      borderColor: palette.line,
+      borderRadius: 18,
+      borderWidth: 1,
+      padding: 14,
+    },
+    remoteConnectionRow: {
+      alignItems: "center",
+      alignSelf: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    remoteConnectionText: {
+      color: palette.ink,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    remoteShareButton: {
+      alignItems: "center",
+      backgroundColor: palette.aqua,
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 48,
+    },
+    remoteShareText: {
+      color: palette.onAccent,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    reviewContent: {
+      alignItems: "stretch",
+      gap: 18,
+      padding: 22,
+      paddingBottom: 120,
+    },
+    successMark: {
+      alignItems: "center",
+      alignSelf: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 34,
+      height: 68,
+      justifyContent: "center",
+      width: 68,
+    },
+    successMarkText: {
+      color: palette.positive,
+      fontSize: 30,
+      fontWeight: "500",
+    },
+    reviewTitle: {
+      color: palette.ink,
+      fontSize: 24,
+      fontWeight: "500",
+      textAlign: "center",
+    },
+    reviewBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+    },
+    profileVideoSection: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 24,
+      borderWidth: 1,
+      gap: 15,
+      marginTop: 20,
+      padding: 16,
+    },
+    profileVideoHeading: {
+      alignItems: "stretch",
+      gap: 12,
+    },
+    profileVideoCopy: { gap: 6 },
+    profileVideoTitle: {
+      color: palette.ink,
+      fontSize: 24,
+      fontWeight: "500",
+      letterSpacing: -0.4,
+    },
+    profileVideoBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    profileVideoOpen: {
+      alignItems: "center",
+      backgroundColor: palette.ink,
+      borderRadius: 15,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 14,
+    },
+    profileVideoOpenText: {
+      color: palette.onAccent,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    profileVideoInvitations: { gap: 10 },
+    profileVideoInvitationEyebrow: {
+      color: palette.positive,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.9,
+    },
+    profileVideoInvitation: {
+      backgroundColor: palette.aquaSoft,
+      borderColor: palette.line,
+      borderRadius: 19,
+      borderWidth: 1,
+      gap: 11,
+      padding: 13,
+    },
+    profileVideoInvitationMain: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 58,
+    },
+    profileVideoInvitationThumb: { borderRadius: 12, height: 58, width: 88 },
+    profileVideoInvitationThumbFallback: {
+      alignItems: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 12,
+      height: 58,
+      justifyContent: "center",
+      width: 88,
+    },
+    profileVideoInvitationTitle: {
+      color: palette.ink,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    profileVideoInvitationMeta: {
+      color: palette.muted,
+      fontSize: 12,
+      marginTop: 3,
+    },
+    profileVideoInvitationBody: {
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    profileVideoDecisionRow: { flexDirection: "row", gap: 9 },
+    profileVideoDecisionSecondary: {
+      alignItems: "center",
+      borderColor: palette.aqua,
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 10,
+    },
+    profileVideoDecisionSecondaryText: {
+      color: palette.aqua,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    profileVideoDecisionPrimary: {
+      alignItems: "center",
+      backgroundColor: palette.aqua,
+      borderRadius: 14,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 10,
+    },
+    profileVideoDecisionPrimaryText: {
+      color: palette.onAccent,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    profileVideoUsage: {
+      backgroundColor: palette.depth,
+      borderRadius: 18,
+      gap: 13,
+      padding: 14,
+    },
+    profileVideoUsageTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    profileVideoUsageTitle: {
+      color: palette.ink,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    profileVideoUsageRow: { gap: 6 },
+    profileVideoArchiveHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    playerModal: { backgroundColor: "#242521", flex: 1 },
+    modalHeaderDark: {
+      alignItems: "center",
+      borderBottomColor: "rgba(255,255,255,0.1)",
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 56,
+      paddingHorizontal: 18,
+    },
+    headerActionLight: {
+      color: sandColors.inset,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    playerDone: { justifyContent: "center", minHeight: 48, minWidth: 52 },
+    modalTitleLight: {
+      color: sandColors.surface,
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "500",
+      marginHorizontal: 10,
+      textAlign: "center",
+    },
+    playerStage: {
+      alignItems: "center",
+      aspectRatio: 16 / 9,
+      backgroundColor: "#000000",
+      justifyContent: "center",
+      width: "100%",
+    },
+    playerStagePortrait: {
+      alignSelf: "center",
+      aspectRatio: 9 / 16,
+      maxHeight: "58%",
+      width: "72%",
+    },
+    playbackUnavailable: { alignItems: "center", gap: 10, padding: 16 },
+    playerRetry: {
+      alignItems: "center",
+      backgroundColor: sandColors.surface,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 128,
+      paddingHorizontal: 18,
+    },
+    playerRetryText: { color: sandColors.ink, fontSize: 15, fontWeight: "500" },
+    playerError: { color: "#f27878", padding: 20, textAlign: "center" },
+    playerDetailsScroll: { flex: 1 },
+    playerInfo: { gap: 12, padding: 20 },
+    playerKickerRow: { alignItems: "center", flexDirection: "row", gap: 7 },
+    playerTitle: {
+      color: sandColors.surface,
+      fontSize: 28,
+      fontWeight: "400",
+      letterSpacing: -0.6,
+    },
+    playerMeta: { color: "#c4c2ba", fontSize: 15, lineHeight: 22 },
+    playerPrivacy: { color: sandColors.inset, fontSize: 12, fontWeight: "500" },
+    playerVenue: {
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderRadius: 16,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 68,
+      padding: 13,
+    },
+    playerVenueIcon: {
+      color: sandColors.inset,
+      fontSize: 22,
+      fontWeight: "500",
+    },
+    playerVenueName: {
+      color: sandColors.surface,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    playerVenueAddress: {
+      color: "#c4c2ba",
+      fontSize: 12,
+      lineHeight: 15,
+      marginTop: 2,
+    },
+    playerMetricCard: {
+      backgroundColor: "rgba(250,248,244,0.05)",
+      borderColor: "rgba(250,248,244,0.12)",
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 74,
+      paddingVertical: 12,
+    },
+    playerMetricItem: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+    },
+    playerMetricValue: {
+      color: sandColors.surface,
+      fontVariant: ["tabular-nums"],
+      fontSize: 17,
+      fontWeight: "500",
+    },
+    playerMetricLabel: {
+      color: sandColors.inset,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.8,
+      marginTop: 4,
+    },
+    playerMetricDivider: {
+      backgroundColor: "rgba(255,255,255,0.12)",
+      width: 1,
+    },
+    videoNoteCard: {
+      backgroundColor: "#30312c",
+      borderColor: "rgba(250,248,244,0.12)",
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 11,
+      padding: 16,
+    },
+    videoNoteHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
+    videoNoteEyebrow: {
+      color: sandColors.inset,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1,
+    },
+    videoNoteTitle: {
+      color: sandColors.surface,
+      fontSize: 18,
+      fontWeight: "500",
+    },
+    videoNoteBody: { color: "#c4c2ba", fontSize: 12, lineHeight: 17 },
+    videoNoteInput: {
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderColor: "rgba(255,255,255,0.12)",
+      borderRadius: 16,
+      borderWidth: 1,
+      color: sandColors.surface,
+      fontSize: 15,
+      lineHeight: 20,
+      minHeight: 112,
+      padding: 14,
+    },
+    videoNoteFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    videoNoteStatus: { color: "#c4c2ba", flex: 1, fontSize: 12 },
+    videoNoteSave: {
+      alignItems: "center",
+      backgroundColor: sandColors.surface,
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 48,
+      minWidth: 112,
+      paddingHorizontal: 16,
+    },
+    videoNoteSaveText: {
+      color: sandColors.ink,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    visionAnalysisCard: {
+      backgroundColor: "#10191b",
+      borderColor: "rgba(212,183,124,0.28)",
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 12,
+      padding: 15,
+    },
+    visionAnalysisHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+    },
+    visionAnalysisEyebrow: {
+      color: "#d4b77c",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+    visionAnalysisTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
+    visionAnalysisStatus: {
+      color: "#a8d9bf",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+      maxWidth: 88,
+      textAlign: "right",
+    },
+    visionAnalysisBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
+    visionCourt: {
+      backgroundColor: "#1b2929",
+      borderColor: "rgba(255,255,255,0.3)",
+      borderRadius: 10,
+      borderWidth: 2,
+      height: 240,
+      overflow: "hidden",
+      position: "relative",
+    },
+    visionCourtNet: {
+      backgroundColor: "rgba(255,255,255,0.78)",
+      height: 2,
+      left: 0,
+      position: "absolute",
+      right: 0,
+      top: "50%",
+      zIndex: 3,
+    },
+    visionHeatCell: {
+      alignItems: "center",
+      backgroundColor: "#54c5aa",
+      borderColor: "rgba(255,255,255,0.16)",
+      borderWidth: 0.5,
+      justifyContent: "center",
+      position: "absolute",
+    },
+    visionHeatCellText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
+    visionCourtLabels: {
+      bottom: 7,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      left: 9,
+      position: "absolute",
+      right: 9,
+    },
+    visionCourtLabel: {
+      color: "rgba(255,255,255,0.72)",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    visionCourtTapHint: {
+      alignSelf: "center",
+      backgroundColor: "rgba(3,9,12,0.7)",
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      position: "absolute",
+      top: "46%",
+    },
+    visionCourtTapText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.55,
+    },
+    visionMetricsRow: { flexDirection: "row", gap: 7 },
+    visionMetric: {
+      backgroundColor: "rgba(255,255,255,0.06)",
+      borderRadius: 11,
+      flex: 1,
+      minHeight: 62,
+      paddingHorizontal: 7,
+      paddingVertical: 9,
+    },
+    visionMetricValue: {
+      color: "#ffffff",
+      fontFamily: "Archivo-Table",
+      fontSize: 19,
+      fontWeight: "800",
+    },
+    visionMetricLabel: {
+      color: "#b8c1be",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.52,
+      lineHeight: 11,
+      marginTop: 3,
+    },
+    visionPerformanceCard: {
+      backgroundColor: "rgba(84,197,170,0.07)",
+      borderColor: "rgba(84,197,170,0.2)",
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 10,
+      padding: 12,
+    },
+    visionPerformanceHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+    },
+    visionPerformanceEyebrow: {
+      color: "#a8d9bf",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    visionPerformanceTitle: {
+      color: "#ffffff",
+      fontSize: 15,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    visionPerformanceCoverage: {
+      color: "#b8c1be",
+      fontFamily: "Archivo-Chip",
+      fontSize: 12,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+    visionPerformanceSummary: {
+      color: "#c7cfcb",
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    visionPerformanceMetrics: { flexDirection: "row", gap: 7 },
+    visionPerformanceMetric: {
+      backgroundColor: "rgba(255,255,255,0.055)",
+      borderRadius: 10,
+      flex: 1,
+      minHeight: 58,
+      padding: 8,
+    },
+    visionPerformanceValue: {
+      color: "#ffffff",
+      fontFamily: "Archivo-Table",
+      fontSize: 17,
+      fontWeight: "800",
+    },
+    visionPerformanceLabel: {
+      color: "#aeb8b5",
+      fontSize: 12,
+      fontWeight: "800",
+      lineHeight: 12,
+      marginTop: 3,
+    },
+    visionSideRow: {
+      alignItems: "center",
+      borderTopColor: "rgba(255,255,255,0.1)",
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      paddingTop: 9,
+    },
+    visionSideName: { color: "#ffffff", fontSize: 12, fontWeight: "800" },
+    visionSideDetail: {
+      color: "#aeb8b5",
+      fontSize: 12,
+      lineHeight: 14,
+      marginTop: 2,
+    },
+    visionSideEfficiency: { alignItems: "flex-end" },
+    visionSideEfficiencyValue: {
+      color: "#a8d9bf",
+      fontFamily: "Archivo-Table",
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    visionSideEfficiencyLabel: {
+      color: "#aeb8b5",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    visionPerformanceEmpty: {
+      color: "#aeb8b5",
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    visionPerformanceReview: {
+      color: "#d4b77c",
+      fontSize: 12,
+      lineHeight: 15,
+    },
+    visionOwnerReviewCard: {
+      backgroundColor: "rgba(212,183,124,0.09)",
+      borderColor: "rgba(212,183,124,0.28)",
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 8,
+      padding: 12,
+    },
+    visionOwnerReviewEyebrow: {
+      color: "#d4b77c",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    visionOwnerReviewTitle: {
+      color: "#ffffff",
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    visionOwnerReviewBody: { color: "#c7cfcb", fontSize: 12, lineHeight: 16 },
+    visionOwnerReviewButton: {
+      alignItems: "center",
+      backgroundColor: "#a8d9bf",
+      borderRadius: 10,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 10,
+    },
+    visionOwnerReviewButtonText: {
+      color: "#111719",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    visionOwnerReviewDrafts: { gap: 7, marginTop: 2 },
+    visionOwnerReviewDraft: {
+      borderTopColor: "rgba(255,255,255,0.12)",
+      borderTopWidth: 1,
+      gap: 2,
+      paddingTop: 7,
+    },
+    visionOwnerReviewDraftTitle: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    visionOwnerReviewDraftBody: {
+      color: "#c7cfcb",
+      fontSize: 12,
+      lineHeight: 15,
+    },
+    visionReviewRail: {
+      backgroundColor: "rgba(212,183,124,0.1)",
+      borderColor: "rgba(212,183,124,0.22)",
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 4,
+      padding: 10,
+    },
+    visionReviewTitle: {
+      color: "#d4b77c",
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    visionReviewItem: {
+      alignItems: "center",
+      borderTopColor: "rgba(212,183,124,0.16)",
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      paddingTop: 8,
+    },
+    visionReviewItemTitle: { color: "#f2f5f3", fontSize: 12, lineHeight: 15 },
+    visionReviewItemMeta: {
+      color: "#aeb8b5",
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    visionReviewActions: { flexDirection: "row", gap: 6 },
+    visionReviewReject: {
+      alignItems: "center",
+      borderColor: "rgba(255,255,255,0.24)",
+      borderRadius: 10,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    visionReviewRejectText: {
+      color: "#d2d7d5",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    visionReviewConfirm: {
+      alignItems: "center",
+      backgroundColor: "#a8d9bf",
+      borderRadius: 10,
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 10,
+    },
+    visionReviewConfirmText: {
+      color: "#111719",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    visionEvidenceNote: { color: "#aeb8b5", fontSize: 12, lineHeight: 15 },
+    visionAnalysisButton: {
+      alignItems: "center",
+      backgroundColor: "#d4b77c",
+      borderRadius: 13,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    visionAnalysisButtonText: {
+      color: "#111719",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    visionAnalysisNotice: { color: "#b9d9ca", fontSize: 12, lineHeight: 15 },
+    uploadOverlay: {
+      alignItems: "center",
+      backgroundColor: "rgba(10,20,28,0.92)",
+      bottom: 0,
+      justifyContent: "center",
+      left: 0,
+      padding: 32,
+      position: "absolute",
+      right: 0,
+      top: 0,
+    },
+    uploadOverlayTitle: {
+      color: "#ffffff",
+      fontSize: 20,
+      fontWeight: "800",
+      marginTop: 16,
+    },
+    uploadOverlayBody: { color: "#d0d5dd", fontSize: 12, marginTop: 6 },
+    uploadTrack: {
+      backgroundColor: "rgba(255,255,255,0.15)",
+      borderRadius: 5,
+      height: 8,
+      marginTop: 18,
+      overflow: "hidden",
+      width: "100%",
+    },
+    uploadFill: { backgroundColor: "#d4b77c", height: 8 },
+    importedCalibrationScene: { backgroundColor: "#07151a", flex: 1 },
+    importedCalibrationImage: {
+      height: "100%",
+      opacity: 0.92,
+      resizeMode: "contain",
+      width: "100%",
+    },
+    sheetBackdrop: {
+      backgroundColor: "rgba(4,10,16,0.56)",
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: palette.canvas,
+      borderTopLeftRadius: 26,
+      borderTopRightRadius: 26,
+      gap: 12,
+      padding: 20,
+      paddingBottom: 38,
+    },
+    sheetHandle: {
+      alignSelf: "center",
+      backgroundColor: palette.aquaSoft,
+      borderRadius: 3,
+      height: 5,
+      marginBottom: 4,
+      width: 42,
+    },
+    sheetTitle: { color: palette.ink, fontSize: 22, fontWeight: "500" },
+    sheetBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+    sheetActionPrimary: {
+      backgroundColor: palette.aqua,
+      borderRadius: 15,
+      gap: 3,
+      padding: 15,
+    },
+    sheetActionPrimaryText: {
+      color: palette.onAccent,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    sheetAction: {
+      backgroundColor: palette.depth,
+      borderColor: palette.line,
+      borderRadius: 15,
+      borderWidth: 1,
+      gap: 3,
+      padding: 15,
+    },
+    sheetActionText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+    sheetActionMeta: { color: palette.muted, fontSize: 12 },
+  });

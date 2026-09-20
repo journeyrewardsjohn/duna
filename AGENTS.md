@@ -3,6 +3,12 @@
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
 and data truth always take precedence over visual novelty.
 
+## September 19 product redesign
+
+`docs/design/duna-sand-redesign-20260919.md` supersedes the earlier white
+utility-home, photography restriction, and glass-dock presentation requirements
+for product surfaces. Preserve their functionality and accessibility contracts.
+
 ## Required design references
 
 Read the relevant reference before changing any user-facing surface:

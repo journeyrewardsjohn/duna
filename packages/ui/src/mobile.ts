@@ -1,3 +1,4 @@
+import { sandColors } from "./sand";
 import {
   resolveDunaTokens,
   type DunaContrast,
@@ -50,21 +51,21 @@ export const mobileType = {
  * Product-app color roles from the current Duna mobile design system.
  *
  * Keep these semantic instead of reaching for the broader environmental
- * palette. The app is deliberately snow/charcoal first; Duna color belongs in
+ * palette. The app uses warm sand and charcoal; Duna color belongs in
  * small brand, status, data, and section moments.
  */
 export const dunaAppColors = {
-  page: "#FCFCFF",
-  card: "#FFFFFF",
-  subtle: "#F5F5F8",
-  subtleStrong: "#F2F3F6",
-  ink: "#18181B",
+  page: sandColors.canvas,
+  card: sandColors.surface,
+  subtle: sandColors.inset,
+  subtleStrong: sandColors.inset,
+  ink: sandColors.ink,
   inkPressed: "#464649",
-  textSecondary: "#6E6E72",
-  textTertiary: "#909092",
+  textSecondary: sandColors.muted,
+  textTertiary: sandColors.muted,
   textFaint: "#B9B9BE",
-  hairline: "#E4E6EC",
-  border: "#D7DAE3",
+  hairline: sandColors.line,
+  border: sandColors.line,
   navy: "#142335",
   navyLift: "#2B385C",
   mist: "#7C95AB",
@@ -86,10 +87,6 @@ export const dunaAppShape = {
   pillRadius: 999,
 } as const;
 
-/** The supplied launch film is 10.042 seconds; this guard leaves its final
- * frame visible instead of cutting the animation off on a timer boundary. */
-export const dunaLaunchFilmMinimumMs = 10_100;
-
 export function resolveDunaMobileTokens(
   theme: DunaTheme,
   zone: DunaZone = "editorial",
@@ -97,20 +94,41 @@ export function resolveDunaMobileTokens(
 ) {
   const semantic = resolveDunaTokens(theme, zone, contrast);
   const dark = theme === "dark" || zone === "live";
-  const whiteCanvas = !dark && contrast === "ambient";
+  const sandCanvas = !dark && contrast === "ambient";
 
   return {
     ...semantic,
-    ground: whiteCanvas ? "#FFFFFF" : semantic.ground,
-    groundWarm: whiteCanvas ? "#F8F4EC" : semantic.groundWarm,
-    groundCool: whiteCanvas ? "#F1F6F9" : semantic.groundCool,
-    surface2: whiteCanvas ? "#F4F4F2" : semantic.surface2,
+    ground: sandCanvas ? sandColors.canvas : semantic.ground,
+    groundWarm: sandCanvas ? sandColors.canvas : semantic.groundWarm,
+    groundCool: sandCanvas ? sandColors.inset : semantic.groundCool,
+    dissolve: sandCanvas ? sandColors.canvas : semantic.dissolve,
+    surface2: sandCanvas ? sandColors.inset : semantic.surface2,
+    surface1: sandCanvas ? sandColors.surface : semantic.surface1,
+    text1: sandCanvas ? sandColors.ink : semantic.text1,
+    text2: sandCanvas ? sandColors.muted : semantic.text2,
+    text3: sandCanvas ? sandColors.muted : semantic.text3,
+    hairline: sandCanvas ? sandColors.line : semantic.hairline,
     glass: dark ? "rgba(20,26,30,0.82)" : "rgba(255,255,255,0.82)",
     glassStrong: dark ? "rgba(20,26,30,0.94)" : "rgba(255,255,255,0.94)",
     glassEdge: dark ? "rgba(181,204,211,0.18)" : "rgba(255,255,255,0.72)",
     blueUnderlay: dark ? "rgba(34,52,59,0.78)" : "rgba(181,204,211,0.30)",
     sandUnderlay: dark ? "rgba(201,169,106,0.18)" : "rgba(239,230,211,0.58)",
     selectedFill: dark ? semantic.surface3 : "rgba(255,255,255,0.76)",
-    inactiveFill: dark ? semantic.surface1 : "#F4F4F2",
+    inactiveFill: dark ? semantic.surface1 : sandColors.inset,
   } as const;
+}
+
+/** The photographic shell keeps its image overlays while the reading surfaces follow appearance. */
+export function resolveDunaSandColors(theme: DunaTheme) {
+  const tokens = resolveDunaMobileTokens(theme, "editorial");
+  return {
+    ...sandColors,
+    canvas: tokens.ground,
+    surface: tokens.surface1,
+    inset: tokens.surface2,
+    ink: tokens.text1,
+    muted: tokens.text2,
+    line: tokens.hairline,
+    scrim: tokens.scrim,
+  };
 }

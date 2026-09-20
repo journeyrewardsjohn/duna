@@ -1,4 +1,9 @@
 import {
+  PlayerDesignProvider,
+  usePlayerDesign,
+  type PlayerPalette,
+} from "./design-theme";
+import {
   defaultEventMedia,
   evaluateDivisionCriteria,
   eventDivisionAgeLabel,
@@ -29,11 +34,7 @@ import {
   demoWalletEntries,
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  mobileControl,
-  mobileGrid,
-  resolveDunaMobileTokens,
-} from "@duna/ui/mobile";
+import { mobileControl, mobileGrid } from "@duna/ui/mobile";
 import * as Clipboard from "expo-clipboard";
 import * as Contacts from "expo-contacts";
 import * as Crypto from "expo-crypto";
@@ -127,7 +128,6 @@ import { LocalTournamentPanel } from "./local-tournament";
 import { PlayerMessagingScreen } from "./messaging-screen";
 import { listenForMessagingNotificationResponses } from "./messaging-notifications";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
-import { LiquidGlassSurface } from "./liquid-glass-surface";
 import {
   playerPrimaryDestination,
   type PlayerPrimaryDestination,
@@ -172,12 +172,13 @@ import { NativeMarkdownContent } from "./markdown-content";
 import { PlayerTrainingScreen } from "./training-screen";
 import { PlayerDunaAiScreen } from "./duna-ai-screen";
 import {
-  HomeV3Screen,
   type HomeV3Avatar,
   type HomeV3Match,
   type HomeV3OpenGame,
   type HomeV3UpcomingItem,
 } from "./home-v3";
+import { SandHomeScreen } from "./sand-home";
+import { SandTabBar } from "./sand-tab-bar";
 import { linkedHomeEvent } from "./home-v3-data";
 import {
   MobilePlacePicker,
@@ -200,8 +201,6 @@ void SplashScreen.preventAutoHideAsync();
 const dunaPlayerWordmarkBlue = require("./assets/duna-horizontal-blue.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaPlayerWordmarkWhite = require("./assets/duna-horizontal-white.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerBrandIcon = require("./assets/duna-mark.png");
 
 type MobileCoach = NonNullable<PlayerRuntime["coaches"]>[number];
 type MobilePredictionDiscoveryItem = NonNullable<
@@ -370,50 +369,7 @@ const demoSandRatingByPersonId = new Map(
   demoPeople.map((person) => [person.id, person.rating.display] as const),
 );
 
-const lightMobileTokens = resolveDunaMobileTokens("light", "editorial");
-
-const lightColors = {
-  canvas: lightMobileTokens.ground,
-  ink: "#090909",
-  depth: lightMobileTokens.surface1,
-  navy: lightMobileTokens.inactiveFill,
-  navyLift: lightMobileTokens.surface2,
-  bone: "#090909",
-  muted: "#767773",
-  aqua: "#103a63",
-  aquaDeep: "#092b4d",
-  sand: "#d8b47a",
-  flare: "#e8683a",
-  resultWin: "#efe5ce",
-  resultWinBorder: "#d7bd84",
-  resultLoss: "#b5ccd3",
-  resultLossBorder: "#87aab5",
-  signal: "#c8f04a",
-  signalInk: "#17200d",
-  positive: "#2f6b3a",
-  warning: "#8a6a2f",
-  danger: "#9a4a2e",
-  onAccent: "#ffffff",
-  white: "#ffffff",
-  overlayRgb: "9,9,9",
-  accentRgb: "16,58,99",
-  warningRgb: "138,106,47",
-  positiveRgb: "47,107,58",
-  dangerRgb: "154,74,46",
-  flareRgb: "232,104,58",
-  inkRgb: "9,9,9",
-  depthRgb: "255,255,255",
-  navyRgb: "244,244,242",
-  boneRgb: "9,9,9",
-  whiteRgb: "255,255,255",
-} as const;
-
-type Palette = {
-  readonly [Key in keyof typeof lightColors]: string;
-};
-
-type ThemeName = "light" | "dark";
-const colors: Palette = lightColors;
+type Palette = PlayerPalette;
 
 function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${alpha})`;
@@ -628,6 +584,7 @@ function closestWeather<
 }
 
 function PreviewBanner({ hidden = false }: { readonly hidden?: boolean }) {
+  const { styles } = useAppDesign();
   const { isOffline, lastSuccessfulSyncAt, mode } = usePlayerRuntime();
   if (hidden) return null;
   if (mode === "preview") {
@@ -666,29 +623,21 @@ function DunaWordmark({
   readonly pro?: boolean;
   readonly tone?: "default" | "light";
 }) {
+  const { styles, theme } = useAppDesign();
   return (
     <View style={styles.wordmark}>
       <Image
         accessibilityLabel="Duna"
         resizeMode="contain"
         source={
-          tone === "light" ? dunaPlayerWordmarkWhite : dunaPlayerWordmarkBlue
+          tone === "light" || theme === "dark"
+            ? dunaPlayerWordmarkWhite
+            : dunaPlayerWordmarkBlue
         }
         style={styles.wordmarkImage}
       />
       {pro && <Text style={styles.proPill}>PRO</Text>}
     </View>
-  );
-}
-
-function DunaMark({ size }: { readonly size: number }) {
-  return (
-    <Image
-      accessibilityIgnoresInvertColors
-      resizeMode="contain"
-      source={dunaPlayerBrandIcon}
-      style={{ height: size, width: size }}
-    />
   );
 }
 
@@ -699,6 +648,7 @@ function Pill({
   readonly children: string;
   readonly tone?: "neutral" | "positive" | "live" | "warning";
 }) {
+  const { colors, styles } = useAppDesign();
   const palette: Record<typeof tone, ViewStyle> = {
     neutral: {
       backgroundColor: rgba(colors.overlayRgb, 0.06),
@@ -753,6 +703,7 @@ function MobilePolicyReviewCard({
   readonly onPress: () => void;
   readonly policy: MobilePolicyReviewDocument;
 }) {
+  const { styles } = useAppDesign();
   return (
     <Pressable
       accessibilityHint="Opens the full document and its acceptance button"
@@ -831,6 +782,7 @@ function PolicyReviewModal({
   readonly read: boolean;
   readonly visible: boolean;
 }) {
+  const { styles, colors } = useAppDesign();
   const metrics = useRef<PolicyScrollMetrics>({
     contentHeight: 0,
     offsetY: 0,
@@ -975,6 +927,7 @@ function PolicyReviewModal({
 }
 
 function AppHeader({ eyebrow }: { readonly eyebrow?: string }) {
+  const { styles, colors } = useAppDesign();
   const { dashboard } = usePlayerRuntime();
   const messaging = useContext(MessagingNavigationContext);
   const initials = dashboard?.player.initials ?? demoPlayer.initials;
@@ -1071,6 +1024,7 @@ function CoachCard({
   readonly preferred?: boolean;
   readonly onPress: (coach: MobileCoach) => void;
 }) {
+  const { styles } = useAppDesign();
   return (
     <Pressable
       accessibilityHint={`Open ${coach.displayName}'s schedule and services`}
@@ -1134,6 +1088,7 @@ function CoachProfileModal({
     session: MobileCoach["upcomingSessions"][number],
   ) => void;
 }) {
+  const { styles } = useAppDesign();
   const onOpenSessionRef = useRef(onOpenSession);
   onOpenSessionRef.current = onOpenSession;
   const sessionTransitionRef = useRef<
@@ -1344,6 +1299,7 @@ function MemberOrganizationCard({
 }: {
   readonly compact?: boolean;
 }) {
+  const { styles, colors } = useAppDesign();
   const {
     activeAuthOrganizationId,
     authOrganizations = [],
@@ -1694,6 +1650,7 @@ function HomeScreenV3({
     organizationWallets,
     people: runtimePeople,
   } = usePlayerRuntime();
+  const [selectedClub, setSelectedClub] = useState<string>();
   const player = dashboard?.player ?? demoPlayer;
   const previewSchedule = useMemo(() => {
     const previewTimeZone = "America/Los_Angeles";
@@ -1946,12 +1903,10 @@ function HomeScreenV3({
         onPress: () => onOpenEvent(event),
       };
     });
-  const upcoming = [...bookingItems, ...unbookedEventItems]
-    .sort(
-      (left, right) =>
-        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
-    )
-    .slice(0, 6);
+  const upcoming = [...bookingItems, ...unbookedEventItems].sort(
+    (left, right) =>
+      new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+  );
 
   const compactPrice = (amountMinor: number, currency: string) =>
     amountMinor === 0
@@ -1967,7 +1922,10 @@ function HomeScreenV3({
       /(^|\s)(2s|4s|6s|doubles|mixed)(\s|$)/i.test(tag),
     ) ??
     (event.kind === "pickup" ? "Pickup" : "Open play");
-  const openGameCandidates = events
+  const clubEvents = selectedClub
+    ? events.filter((event) => event.organizationId === selectedClub)
+    : events;
+  const openGameCandidates = clubEvents
     .filter(
       (event) =>
         ["pickup", "open-play"].includes(event.kind) &&
@@ -2143,7 +2101,34 @@ function HomeScreenV3({
   }));
 
   return (
-    <HomeV3Screen
+    <SandHomeScreen
+      playerId={player.id}
+      clubs={(organizationWallets ?? []).map((club) => ({
+        id: club.organizationId,
+        name: club.organizationName,
+      }))}
+      selectedClub={selectedClub}
+      onSelectClub={setSelectedClub}
+      onProfile={messaging.openProfile}
+      features={clubEvents
+        .filter(
+          (event) =>
+            event.lifecycleStatus !== "cancelled" &&
+            Date.parse(event.endsAt) > now,
+        )
+        .slice(0, 8)
+        .map((event) => ({
+          id: event.id,
+          title: event.title,
+          detail: `${event.venueName} · ${formatVenueTime(event.startsAt, event.timezone)}`,
+          image: new URL(
+            event.media?.find((item) => item.kind === "image")?.url ??
+              event.imageUrl ??
+              defaultEventMedia(event.kind, event.id).path,
+            dunaWebUrl,
+          ).toString(),
+          onPress: () => onOpenEvent(event),
+        }))}
       contextLine={contextLine}
       crew={
         crewAvatars.length
@@ -2158,7 +2143,8 @@ function HomeScreenV3({
       }
       firstName={firstName}
       insight={
-        dashboard?.feed[0]?.title ?? "Your sideout game is becoming an edge."
+        dashboard?.feed[0]?.title ??
+        "Find a session, review your results, or plan your next game with Duna."
       }
       moreOpenGamesCount={Math.max(0, openGameCandidates.length - 2)}
       notificationCount={messaging.unreadCount}
@@ -2235,6 +2221,7 @@ function SectionHeader({
   readonly action?: string;
   readonly onAction?: () => void;
 }) {
+  const { styles } = useAppDesign();
   return (
     <View style={styles.sectionHeader}>
       <View>
@@ -2257,6 +2244,7 @@ function EventCard({
   readonly eventIndex: number;
   readonly onPress: (eventIndex: number) => void;
 }) {
+  const { styles } = useAppDesign();
   const { dashboard } = usePlayerRuntime();
   const event = (dashboard?.events ?? demoEvents)[eventIndex];
   if (!event) return null;
@@ -2428,6 +2416,7 @@ function BookingCalendarModal({
   readonly selectedDate: string;
   readonly visible: boolean;
 }) {
+  const { styles } = useAppDesign();
   const { width } = useWindowDimensions();
   const [visibleMonth, setVisibleMonth] = useState(() =>
     startOfLocalMonth(selectedDate),
@@ -2626,22 +2615,26 @@ function BookingCalendarModal({
                     const disabled = date < minDate || date > maxDate;
                     const selected = date === selectedDate;
                     return (
-                      <View key={date} style={styles.bookingCalendarCell}>
-                        <Pressable
-                          accessibilityLabel={`${localDateAnchor(
-                            date,
-                          ).toLocaleDateString("en-US", {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}${marker ? `, ${marker.count} scheduled` : ""}`}
-                          disabled={disabled}
-                          hitSlop={6}
-                          onPress={() => {
-                            selectionHaptic();
-                            onSelect(date);
-                          }}
+                      <Pressable
+                        key={date}
+                        style={styles.bookingCalendarCell}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected, disabled }}
+                        accessibilityLabel={`${localDateAnchor(
+                          date,
+                        ).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}${marker ? `, ${marker.count} scheduled` : ""}`}
+                        disabled={disabled}
+                        onPress={() => {
+                          selectionHaptic();
+                          onSelect(date);
+                        }}
+                      >
+                        <View
                           style={[
                             styles.bookingCalendarDay,
                             date === today && styles.bookingCalendarDayToday,
@@ -2677,8 +2670,8 @@ function BookingCalendarModal({
                               )}
                             </View>
                           )}
-                        </Pressable>
-                      </View>
+                        </View>
+                      </Pressable>
                     );
                   })}
                 </View>
@@ -2736,6 +2729,7 @@ function VenueFinderModal({
   readonly onClose: () => void;
   readonly onSelect: (request: CourtBookingRequest) => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { venues } = usePlayerRuntime();
   const [query, setQuery] = useState("");
   const [origin, setOrigin] = useState<DiscoveryCoordinates>();
@@ -2995,6 +2989,7 @@ function VenueBookingModal({
   readonly onClose: () => void;
   readonly onOpenMatch?: (matchId: string, matchSlug: string) => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const { client, dashboard, mode, publicClient, refresh } = usePlayerRuntime();
@@ -4986,6 +4981,7 @@ function ProTourBrandMark({
   readonly source: "fivb" | "avp";
   readonly compact?: boolean;
 }) {
+  const { styles } = useAppDesign();
   const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => setLogoFailed(false), [source]);
   const label = source === "avp" ? "AVP" : "BEACH PRO TOUR";
@@ -5029,6 +5025,7 @@ function ProTourEventCard({
   readonly event: ProCoverageEvent;
   readonly onPress: () => void;
 }) {
+  const { styles } = useAppDesign();
   const live = event.live;
   return (
     <Pressable
@@ -5103,6 +5100,7 @@ function MobilePredictionChart({
 }: {
   readonly market: MobilePredictionMarket;
 }) {
+  const { styles, colors } = useAppDesign();
   const { width } = useWindowDimensions();
   const reveal = useRef(new Animated.Value(0)).current;
   const [selectedIndex, setSelectedIndex] = useState(
@@ -5300,6 +5298,7 @@ function MobilePredictionMarketSheet({
   readonly target: MobilePredictionTarget;
   readonly wallet?: PlayerRuntime["predictionWallet"];
 }) {
+  const { styles } = useAppDesign();
   const [market, setMarket] = useState(initialMarket);
   const [side, setSide] = useState<"yes" | "no">("yes");
   const [credits, setCredits] = useState("1");
@@ -5613,6 +5612,7 @@ function MobileTournamentMarkets({
     externalTeamId: string,
   ) => void;
 }) {
+  const { styles } = useAppDesign();
   if (!markets.length) return null;
   return (
     <View style={styles.mobileTournamentMarkets}>
@@ -5689,6 +5689,7 @@ function ProTourMatchCard({
   readonly onFollow?: () => void;
   readonly onOpen?: () => void;
 }) {
+  const { styles } = useAppDesign();
   const live = match.status === "live";
   const time =
     match.time ??
@@ -5819,6 +5820,7 @@ function ProTourSectionTitle({
   readonly title: string;
   readonly trailing?: string;
 }) {
+  const { styles } = useAppDesign();
   return (
     <View style={styles.proMobileSectionTitleRow}>
       <View style={styles.proMobileSectionTitleCopy}>
@@ -5839,6 +5841,7 @@ function ProTourModal({
   readonly onClose: () => void;
   readonly initialSlug?: string;
 }) {
+  const { styles, colors } = useAppDesign();
   const { width } = useWindowDimensions();
   const { client, predictionWallet, publicClient, proCoverage, refresh } =
     usePlayerRuntime();
@@ -7092,6 +7095,7 @@ function ProTourModal({
 }
 
 function FollowPlayerCard({ player }: { readonly player: PersonSummary }) {
+  const { styles } = useAppDesign();
   const { client, mode } = usePlayerRuntime();
   const { openPlayerProfile } = usePlayerProfileNavigation();
   const [following, setFollowing] = useState(false);
@@ -7235,7 +7239,7 @@ function DiscoverScreen({
   readonly onOpenEvent: (eventIndex: number) => void;
   readonly onOrganization: (slug: string) => void;
 }) {
-  const theme: ThemeName = "light";
+  const { styles, theme } = useAppDesign();
   const [filter, setFilter] = useState("For you");
   const [bookingVenueId, setBookingVenueId] = useState<string>();
   const [selectedCoach, setSelectedCoach] = useState<MobileCoach>();
@@ -8093,6 +8097,7 @@ function FindCoachScreen({
   readonly onBack: () => void;
   readonly onOpenEvent: (eventIndex: number) => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { coaches = [], dashboard, venues = [] } = usePlayerRuntime();
   const [mode, setMode] = useState<"near" | "virtual">("near");
   const [query, setQuery] = useState("");
@@ -8466,6 +8471,7 @@ function PlayLauncherScreen({
 }: {
   readonly onAction: (action: HomeQuickAction) => void;
 }) {
+  const { styles } = useAppDesign();
   const actions: readonly {
     readonly key: HomeQuickAction;
     readonly icon: string;
@@ -8581,6 +8587,7 @@ function PlansScreen({
   readonly onTraining: () => void;
   readonly onSeeAllMatches: () => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { dashboard, mode, training } = usePlayerRuntime();
   const bookings = dashboard?.bookings ?? demoBookings;
   const events = dashboard?.events ?? demoEvents;
@@ -8848,6 +8855,7 @@ function MobilePredictionDiscoveryRail({
   readonly items: readonly MobilePredictionDiscoveryItem[];
   readonly onOpenPortfolio: () => void;
 }) {
+  const { styles } = useAppDesign();
   if (!items.length) return null;
   return (
     <>
@@ -8959,6 +8967,7 @@ function PredictionWalletSummaryCard({
 }: {
   readonly onPress: () => void;
 }) {
+  const { styles } = useAppDesign();
   const { predictionWallet } = usePlayerRuntime();
   const portfolio = predictionWallet?.portfolio;
   return (
@@ -9028,6 +9037,7 @@ function PredictionWalletSummaryCard({
 }
 
 function WalletScreen({ onClose }: { readonly onClose: () => void }) {
+  const { styles, colors } = useAppDesign();
   const {
     client,
     memberCard,
@@ -9380,6 +9390,7 @@ function PredictionPositionRow({
 }: {
   readonly position: MobilePredictionPosition;
 }) {
+  const { styles } = useAppDesign();
   const determined = position.status !== "open";
   const statusLabel =
     position.status === "open"
@@ -9468,6 +9479,7 @@ function PredictionPortfolioScreen({
 }: {
   readonly onBack: () => void;
 }) {
+  const { styles } = useAppDesign();
   const { predictionDiscovery, predictionWallet } = usePlayerRuntime();
   const positions = predictionWallet?.positions ?? [];
   const openPositions = positions.filter(
@@ -9728,6 +9740,7 @@ function MobileResultCard({
   readonly personId: string;
   readonly participantProfiles: readonly MobilePerformanceParticipantProfile[];
 }) {
+  const { styles } = useAppDesign();
   const [expanded, setExpanded] = useState(false);
   const reducedMotion = useReducedMotion();
   const reveal = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
@@ -10028,6 +10041,7 @@ function PerformanceScreen({
   readonly onPredictions: () => void;
   readonly onWallet: () => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { client, dashboard, mode, settings, signOut } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   const fallbackMatches = dashboard?.recentMatches ?? demoMatches;
@@ -11089,6 +11103,7 @@ function BookingModal({
   readonly eventOverride?: EventSummary;
   readonly onClose: () => void;
 }) {
+  const { styles, colors } = useAppDesign();
   const { client, dashboard, mode, people, refresh, settings } =
     usePlayerRuntime();
   const { openPlayerProfile } = usePlayerProfileNavigation();
@@ -12820,6 +12835,7 @@ function PickupModal({
   readonly initialCourtBooking?: HostedMatchSeed;
   readonly onReserveCourtVenue?: (request: CourtBookingRequest) => void;
 }) {
+  const { colors, styles } = useAppDesign();
   const { client, dashboard, mode, refresh, venues } = usePlayerRuntime();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
@@ -14202,108 +14218,19 @@ function PickupModal({
   );
 }
 
-function TabBar({
-  active,
-  onDunaAi,
-  onChange,
-  onQuickActions,
-  unreadCount,
-}: {
+function TabBar(props: {
   readonly active: Tab;
   readonly onDunaAi: () => void;
   readonly onChange: (destination: PlayerPrimaryDestination) => void;
   readonly onQuickActions: () => void;
   readonly unreadCount: number;
 }) {
-  const insets = useSafeAreaInsets();
-  const selected = playerPrimaryDestination(active);
-  const destinationButton = (
-    destination: PlayerPrimaryDestination,
-    label: string,
-    icon: DunaIconName,
-  ) => {
-    const isSelected = selected === destination;
-    return (
-      <Pressable
-        accessibilityLabel={label}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isSelected }}
-        key={destination}
-        onPress={() => {
-          selectionHaptic();
-          onChange(destination);
-        }}
-        style={[styles.tabItem, isSelected && styles.tabItemActive]}
-      >
-        <View style={styles.tabIconWrap}>
-          <DunaIcon
-            color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
-            name={icon}
-            size={24}
-            strokeWidth={isSelected ? 1.75 : 1.45}
-          />
-          {destination === "messages" && unreadCount > 0 && (
-            <View style={styles.tabUnreadBadge}>
-              <Text style={styles.tabUnreadText}>
-                {Math.min(unreadCount, 9)}
-              </Text>
-            </View>
-          )}
-        </View>
-      </Pressable>
-    );
-  };
-
   return (
-    <View
-      style={[
-        styles.tabBarPosition,
-        { bottom: Math.max(mobileGrid[2], insets.bottom - mobileGrid[5]) },
-      ]}
-    >
-      <View style={styles.tabBar}>
-        <LiquidGlassSurface
-          borderColor={rgba(colors.whiteRgb, 0.82)}
-          cornerRadius={mobileGrid[7]}
-          fallbackColor={rgba(colors.whiteRgb, 0.82)}
-          tint="#edf4f8"
-        />
-        {destinationButton("home", "Home", "home")}
-        {destinationButton("calendar", "Calendar", "calendar")}
-        <Pressable
-          accessibilityHint="Opens your full-screen Duna AI copilot"
-          accessibilityLabel="Duna AI"
-          accessibilityRole="button"
-          onPress={() => {
-            selectionHaptic();
-            onDunaAi();
-          }}
-          style={styles.tabAiButton}
-        >
-          <View style={styles.tabAiHalo}>
-            <DunaMark size={mobileGrid[7]} />
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityHint="Opens contextual Player actions"
-          accessibilityLabel="Quick actions"
-          accessibilityRole="button"
-          onPress={() => {
-            selectionHaptic();
-            onQuickActions();
-          }}
-          style={styles.tabItem}
-        >
-          <DunaIcon
-            color={rgba(colors.accentRgb, 0.78)}
-            name="plus"
-            size={25}
-            strokeWidth={1.55}
-          />
-        </Pressable>
-        {destinationButton("messages", "Messages", "message")}
-      </View>
-    </View>
+    <SandTabBar
+      {...props}
+      selected={playerPrimaryDestination(props.active)}
+      onPressFeedback={selectionHaptic}
+    />
   );
 }
 
@@ -14316,6 +14243,7 @@ function QuickActionsSheet({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { styles, colors } = useAppDesign();
   const insets = useSafeAreaInsets();
   const actions: readonly {
     readonly detail: string;
@@ -14464,6 +14392,7 @@ function VideoTransferBanner({
   readonly onPress: () => void;
   readonly status: VideoTransferStatus;
 }) {
+  const { styles, colors } = useAppDesign();
   const slideX = useRef(new Animated.Value(0)).current;
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
@@ -14584,6 +14513,7 @@ function WatchScoreInbox({
 }: {
   readonly onReview: (draft: WatchScoreDraft) => void;
 }) {
+  const { styles } = useAppDesign();
   const [draft, setDraft] = useState<WatchScoreDraft | null>(null);
 
   useEffect(() => {
@@ -14668,8 +14598,8 @@ type OrganizationModalDestination =
   | { readonly kind: "venue"; readonly venueId: string };
 
 function DunaApp() {
+  const { colors, styles, theme } = useAppDesign();
   const runtime = usePlayerRuntime();
-  const theme: ThemeName = "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
   const [aiReturnTab, setAiReturnTab] = useState<Tab>("home");
@@ -15137,8 +15067,10 @@ function DunaApp() {
         {runtime.dashboard ? (
           <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
         ) : null}
-        <SafeAreaView edges={["top"]} style={styles.safe}>
-          <StatusBar style="dark" />
+        <SafeAreaView edges={tab === "home" ? [] : ["top"]} style={styles.safe}>
+          {tab !== "home" && (
+            <StatusBar style={theme === "dark" ? "light" : "dark"} />
+          )}
           <View style={styles.app}>
             <PreviewBanner
               hidden={tab === "home" || tab === "messages" || tab === "ai"}
@@ -15565,16 +15497,21 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View onLayout={() => void SplashScreen.hideAsync()} style={{ flex: 1 }}>
-        <PlayerRuntimeProvider>
-          <DunaApp />
-        </PlayerRuntimeProvider>
-      </View>
+      <PlayerDesignProvider>
+        <View
+          onLayout={() => void SplashScreen.hideAsync()}
+          style={{ flex: 1 }}
+        >
+          <PlayerRuntimeProvider>
+            <DunaApp />
+          </PlayerRuntimeProvider>
+        </View>
+      </PlayerDesignProvider>
     </SafeAreaProvider>
   );
 }
 
-function createStyles() {
+function createStyles(colors: Palette) {
   return StyleSheet.create({
     confirmationRoster: { alignSelf: "stretch", width: "100%" },
     safe: { backgroundColor: colors.canvas, flex: 1 },
@@ -16025,22 +15962,22 @@ function createStyles() {
       paddingTop: 8,
     },
     bookingCalendarEyebrow: {
-      color: colors.sand,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "500",
       letterSpacing: 1,
     },
     bookingCalendarTitle: {
       color: colors.bone,
       fontSize: 28,
-      fontWeight: "900",
-      letterSpacing: -1.5,
+      fontWeight: "500",
+      letterSpacing: -0.5,
       lineHeight: 31,
       marginTop: 7,
     },
     bookingCalendarInstruction: {
       color: colors.muted,
-      fontSize: 12,
+      fontSize: 14,
       lineHeight: 17,
       marginTop: 5,
     },
@@ -16084,8 +16021,8 @@ function createStyles() {
     bookingCalendarRange: {
       color: colors.bone,
       flex: 1,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       paddingHorizontal: 8,
       textAlign: "center",
     },
@@ -16100,7 +16037,7 @@ function createStyles() {
     },
     bookingCalendarMonth: {
       alignSelf: "stretch",
-      backgroundColor: colors.navy,
+      backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.1),
       borderRadius: 20,
       borderWidth: 1,
@@ -16113,7 +16050,7 @@ function createStyles() {
     bookingCalendarMonthTitle: {
       color: colors.bone,
       fontSize: 16,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: -0.5,
       marginBottom: 10,
     },
@@ -16121,8 +16058,8 @@ function createStyles() {
     bookingCalendarWeekday: {
       color: colors.muted,
       flex: 1,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       paddingBottom: 7,
       textAlign: "center",
     },
@@ -16131,12 +16068,12 @@ function createStyles() {
       flexWrap: "wrap",
     },
     bookingCalendarBlank: {
-      height: 40,
+      height: 50,
       width: "14.285714%",
     },
     bookingCalendarCell: {
       alignItems: "center",
-      height: 40,
+      height: 50,
       justifyContent: "center",
       width: "14.285714%",
     },
@@ -16161,9 +16098,9 @@ function createStyles() {
     bookingCalendarDayDisabled: { opacity: 0.28 },
     bookingCalendarDayText: {
       color: colors.bone,
-      fontFamily: "Archivo-Table",
-      fontSize: 13,
-      fontWeight: "900",
+      fontVariant: ["tabular-nums"],
+      fontSize: 15,
+      fontWeight: "500",
     },
     bookingCalendarDayTextSelected: { color: "#ffffff" },
     bookingCalendarMarkers: {
@@ -16199,21 +16136,21 @@ function createStyles() {
     bookingCalendarAvailabilityButtonDisabled: { opacity: 0.42 },
     bookingCalendarAvailabilityButtonText: {
       color: "#ffffff",
-      fontSize: 13,
-      fontWeight: "900",
+      fontSize: 15,
+      fontWeight: "500",
     },
     bookingCalendarAvailabilityEyebrow: {
-      color: colors.sand,
-      fontSize: 12,
-      fontWeight: "900",
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "500",
       letterSpacing: 0.8,
     },
     bookingCalendarAvailabilityFact: {
-      backgroundColor: colors.navy,
+      backgroundColor: colors.depth,
       borderRadius: 999,
       color: colors.muted,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       overflow: "hidden",
       paddingHorizontal: 9,
       paddingVertical: 6,
@@ -16227,7 +16164,7 @@ function createStyles() {
     bookingCalendarAvailabilityTitle: {
       color: colors.bone,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "500",
       marginTop: 5,
     },
     bookingCalendarLegend: {
@@ -17631,7 +17568,7 @@ function createStyles() {
       position: "relative",
       width: mobileControl.minimumTarget,
     },
-    avatarText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+    avatarText: { color: colors.onAccent, fontSize: 14, fontWeight: "700" },
     homeWelcome: {
       alignItems: "flex-start",
       flexDirection: "row",
@@ -17717,14 +17654,14 @@ function createStyles() {
     coachFinderBack: {
       alignSelf: "flex-start",
       marginBottom: 18,
-      minHeight: 40,
+      minHeight: 48,
       paddingRight: 16,
       paddingTop: 8,
     },
     coachFinderBackText: {
       color: colors.aqua,
       fontSize: 14,
-      fontWeight: "900",
+      fontWeight: "500",
     },
     coachFinderEyebrow: {
       lineHeight: 17,
@@ -17732,8 +17669,8 @@ function createStyles() {
     },
     coachFinderIntro: {
       color: colors.muted,
-      fontSize: 14,
-      lineHeight: 21,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 8,
       maxWidth: 430,
     },
@@ -17758,14 +17695,14 @@ function createStyles() {
     coachFinderModeEyebrow: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1,
     },
     coachFinderModeEyebrowActive: { color: colors.onAccent },
     coachFinderModeTitle: {
       color: colors.bone,
-      fontSize: 18,
-      fontWeight: "900",
+      fontSize: 17,
+      fontWeight: "500",
       marginTop: 8,
     },
     coachFinderModeTitleActive: { color: colors.onAccent },
@@ -17865,8 +17802,8 @@ function createStyles() {
     coachFinderArrow: { color: colors.aqua, fontSize: 28 },
     coachFinderBio: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 14,
     },
     coachFinderFacts: {
@@ -17897,11 +17834,11 @@ function createStyles() {
     coachFinderServicePreview: {
       color: colors.bone,
       flex: 1,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       marginRight: 10,
     },
-    coachFinderPrice: { color: colors.aqua, fontSize: 12, fontWeight: "900" },
+    coachFinderPrice: { color: colors.aqua, fontSize: 14, fontWeight: "500" },
     coachFinderEmpty: {
       alignItems: "center",
       backgroundColor: colors.depth,
@@ -17913,13 +17850,13 @@ function createStyles() {
     coachFinderEmptyTitle: {
       color: colors.bone,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "500",
       textAlign: "center",
     },
     coachFinderEmptyBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 7,
       textAlign: "center",
     },
@@ -17929,11 +17866,13 @@ function createStyles() {
       marginTop: 15,
       paddingHorizontal: 16,
       paddingVertical: 10,
+      minHeight: 48,
+      justifyContent: "center",
     },
     coachFinderClearText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     playLauncherIntro: {
       color: colors.muted,
@@ -18908,10 +18847,10 @@ function createStyles() {
     },
     displayTitle: {
       color: colors.bone,
-      fontSize: 42,
-      fontWeight: "900",
-      letterSpacing: -2.2,
-      lineHeight: 42,
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 40,
     },
     discoverSearchPrimary: {
       alignItems: "center",
@@ -18936,7 +18875,7 @@ function createStyles() {
     },
     discoverSearchIcon: { color: colors.bone, fontSize: 25 },
     discoverSearchEyebrow: {
-      color: colors.flare,
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.1,
@@ -18950,7 +18889,7 @@ function createStyles() {
     },
     discoverSearchMeta: { color: colors.muted, fontSize: 12, marginTop: 5 },
     discoverSearchArrow: {
-      color: colors.flare,
+      color: colors.ink,
       fontSize: 20,
       fontWeight: "900",
     },
@@ -19191,13 +19130,13 @@ function createStyles() {
     },
     sectionTitle: {
       color: colors.bone,
-      fontSize: 25,
-      fontWeight: "900",
-      letterSpacing: -1.2,
-      lineHeight: 28,
+      fontSize: 23,
+      fontWeight: "700",
+      letterSpacing: -0.4,
+      lineHeight: 29,
       marginTop: 4,
     },
-    sectionAction: { color: colors.aqua, fontSize: 12, fontWeight: "700" },
+    sectionAction: { color: colors.aqua, fontSize: 14, fontWeight: "700" },
     horizontalBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     eventCard: {
       backgroundColor: colors.depth,
@@ -19596,7 +19535,7 @@ function createStyles() {
       paddingHorizontal: 18,
     },
     proMobileIntro: {
-      backgroundColor: colors.aquaDeep,
+      backgroundColor: colors.depth,
       borderRadius: 22,
       flexDirection: "row",
       gap: 12,
@@ -19611,23 +19550,23 @@ function createStyles() {
       minWidth: 0,
     },
     proMobileIntroKicker: {
-      color: "#ff9d81",
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
     proMobileIntroTitle: {
-      color: "#ffffff",
+      color: colors.ink,
       fontSize: 25,
-      fontWeight: "900",
-      letterSpacing: -1.1,
-      lineHeight: 27,
+      fontWeight: "400",
+      letterSpacing: -0.5,
+      lineHeight: 30,
       marginTop: 10,
     },
     proMobileIntroBody: {
-      color: "rgba(255,255,255,.72)",
-      fontSize: 12,
-      lineHeight: 16,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 9,
     },
     proMobileIntroBrands: {
@@ -23371,85 +23310,6 @@ function createStyles() {
       justifyContent: "space-between",
       padding: 14,
     },
-    tabBarPosition: {
-      left: mobileControl.pageInset,
-      position: "absolute",
-      right: mobileControl.pageInset,
-      zIndex: 90,
-    },
-    tabBar: {
-      alignItems: "center",
-      backgroundColor: "transparent",
-      borderRadius: mobileGrid[7],
-      flexDirection: "row",
-      minHeight: mobileGrid[12] + mobileGrid[2],
-      paddingHorizontal: mobileGrid[1],
-      paddingVertical: mobileGrid[1],
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.1,
-      shadowRadius: 22,
-      elevation: 12,
-      overflow: "visible",
-    },
-    tabItem: {
-      alignItems: "center",
-      borderRadius: mobileControl.pillRadius,
-      flex: 1,
-      height: mobileGrid[10],
-      justifyContent: "center",
-      position: "relative",
-    },
-    tabItemActive: {
-      backgroundColor: rgba(colors.whiteRgb, 0.58),
-      borderColor: rgba(colors.whiteRgb, 0.76),
-      borderWidth: 1,
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.06,
-      shadowRadius: 10,
-    },
-    tabIconWrap: { position: "relative" },
-    tabUnreadBadge: {
-      alignItems: "center",
-      backgroundColor: colors.aqua,
-      borderColor: colors.white,
-      borderRadius: mobileGrid[2],
-      borderWidth: 2,
-      height: mobileGrid[4],
-      justifyContent: "center",
-      minWidth: mobileGrid[4],
-      position: "absolute",
-      right: -11,
-      top: -10,
-    },
-    tabUnreadText: {
-      color: colors.white,
-      fontSize: 12,
-      fontWeight: "700",
-      lineHeight: 14,
-    },
-    tabAiButton: {
-      alignItems: "center",
-      flex: 1,
-      justifyContent: "center",
-      marginTop: -mobileGrid[1],
-      minHeight: mobileGrid[12] + mobileGrid[2],
-    },
-    tabAiHalo: {
-      alignItems: "center",
-      backgroundColor: rgba(colors.whiteRgb, 0.76),
-      borderColor: rgba(colors.whiteRgb, 0.92),
-      borderRadius: mobileControl.pillRadius,
-      borderWidth: 1,
-      height: mobileGrid[12],
-      justifyContent: "center",
-      shadowColor: colors.aquaDeep,
-      shadowOffset: { width: 0, height: 7 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      width: mobileGrid[12],
-    },
     quickSheetBackdrop: {
       backgroundColor: rgba(colors.inkRgb, 0.42),
       flex: 1,
@@ -23478,7 +23338,7 @@ function createStyles() {
       marginBottom: mobileGrid[4],
     },
     quickSheetEyebrow: {
-      color: colors.sand,
+      color: colors.muted,
       fontSize: 12,
       fontWeight: "700",
       letterSpacing: 1,
@@ -23486,8 +23346,8 @@ function createStyles() {
     quickSheetTitle: {
       color: colors.bone,
       fontSize: 28,
-      fontWeight: "700",
-      letterSpacing: -0.8,
+      fontWeight: "400",
+      letterSpacing: -0.5,
       lineHeight: 34,
       marginTop: mobileGrid[1],
     },
@@ -23530,12 +23390,12 @@ function createStyles() {
     quickSheetActionTitle: {
       color: colors.bone,
       fontSize: 16,
-      fontWeight: "700",
+      fontWeight: "500",
     },
     quickSheetActionDetail: {
       color: colors.muted,
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: mobileGrid[1],
     },
     modalSafe: { backgroundColor: colors.canvas, flex: 1 },
@@ -24824,4 +24684,14 @@ function createStyles() {
   });
 }
 
-const styles = createStyles();
+const appStyleCache = new WeakMap<Palette, ReturnType<typeof createStyles>>();
+
+function useAppDesign() {
+  const design = usePlayerDesign();
+  let styles = appStyleCache.get(design.colors);
+  if (!styles) {
+    styles = createStyles(design.colors);
+    appStyleCache.set(design.colors, styles);
+  }
+  return { ...design, styles };
+}

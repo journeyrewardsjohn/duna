@@ -1,10 +1,10 @@
+import { resolveDunaMobileTokens } from "@duna/ui/mobile";
 import type { DiscoveryEntityType, DiscoveryMapItem } from "@duna/api";
 import { formatMoney } from "@duna/core";
 import {
   environmentalColors,
   motion,
   radii,
-  resolveDunaTokens,
   spacing,
   type DunaTheme,
   type ResolvedDunaTokens,
@@ -372,7 +372,7 @@ export function DiscoveryMapPreview({
   readonly onOpen: () => void;
   readonly theme?: DunaTheme;
 }) {
-  const token = resolveDunaTokens(theme, "editorial");
+  const token = resolveDunaMobileTokens(theme, "editorial");
   const styles = useMemo(() => createStyles(token), [token]);
   const mapToken = useMapboxToken();
   const mappedItems = items.filter(
@@ -747,7 +747,7 @@ export function DiscoveryMapModal({
   readonly searchLabel?: string;
   readonly theme?: DunaTheme;
 }) {
-  const token = resolveDunaTokens(theme, "editorial");
+  const token = resolveDunaMobileTokens(theme, "editorial");
   const styles = useMemo(() => createStyles(token), [token]);
   const mapToken = useMapboxToken(visible);
   const reducedMotion = useReducedMotion();
@@ -1707,42 +1707,44 @@ function createStyles(token: ResolvedDunaTokens) {
       width: 48,
     },
     createMatchMarkText: {
-      color: environmentalColors.marine900,
+      color: token.text1,
       fontSize: 25,
       fontWeight: "500",
     },
     createMatchEyebrow: {
-      color: environmentalColors.marine900,
+      color: token.text2,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
     createMatchTitle: {
-      color: environmentalColors.ink,
+      color: token.text1,
       fontSize: 22,
-      fontWeight: "900",
+      fontWeight: "400",
       marginTop: spacing[2],
       textAlign: "center",
     },
     createMatchBody: {
       color: token.text2,
-      fontSize: 13,
-      lineHeight: 19,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: spacing[2],
       maxWidth: 310,
       textAlign: "center",
     },
     createMatchButton: {
-      backgroundColor: environmentalColors.marine900,
+      backgroundColor: token.buttonPrimaryBackground,
+      minHeight: 56,
+      justifyContent: "center",
       borderRadius: radii.pill,
       marginTop: spacing[4],
       paddingHorizontal: spacing[5],
       paddingVertical: spacing[3],
     },
     createMatchButtonText: {
-      color: environmentalColors.white,
-      fontSize: 13,
-      fontWeight: "900",
+      color: token.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "500",
     },
   });
 }

@@ -1,3 +1,4 @@
+import { isAdminAccessDenied } from "@/lib/admin-access";
 import { AdminAccessDenied } from "@/components/admin-access-denied";
 import { AdminOverview } from "@/components/admin-panels";
 import { AdminShell } from "@/components/admin-shell";
@@ -11,10 +12,7 @@ export default async function AdminPage() {
   ])
     .then(([overview, organizations]) => ({ overview, organizations }))
     .catch((error: unknown) => {
-      if (
-        error instanceof Error &&
-        error.message === "Platform administration access required"
-      ) {
+      if (isAdminAccessDenied(error)) {
         return undefined;
       }
       throw error;

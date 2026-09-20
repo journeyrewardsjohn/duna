@@ -1,3 +1,4 @@
+import { isAdminAccessDenied } from "@/lib/admin-access";
 import { notFound, redirect } from "next/navigation";
 import { AdminAccessDenied } from "@/components/admin-access-denied";
 import { AdminPanel } from "@/components/admin-panels";
@@ -181,13 +182,7 @@ export default async function AdminModulePage({
       }),
     )
     .catch((error: unknown) => {
-      if (
-        error instanceof Error &&
-        [
-          "Platform administration access required",
-          "Super Admin access required",
-        ].includes(error.message)
-      ) {
+      if (isAdminAccessDenied(error)) {
         return undefined;
       }
       throw error;

@@ -1,3 +1,4 @@
+import { resolveDunaMobileTokens } from "@duna/ui/mobile";
 import type {
   HealthCategory,
   HealthCheckInInput,
@@ -48,6 +49,7 @@ import {
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
 import { usePlayerRuntime } from "./runtime";
+import { SandLoader } from "./sand-loader";
 
 type HealthTheme = "light" | "dark";
 const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
@@ -548,7 +550,7 @@ export function HealthScreen({
 }) {
   const runtime = usePlayerRuntime();
   const { client, mode } = runtime;
-  const palette = theme === "dark" ? darkPalette : lightPalette;
+  const palette = useMemo(() => healthPalette(theme), [theme]);
   const styles = useMemo(() => createHealthStyles(palette), [palette]);
   const [dashboard, setDashboard] = useState<HealthDashboard | undefined>(
     mode === "preview" ? demoHealth : undefined,
@@ -1613,8 +1615,6 @@ function ReadinessHero({
       : `AS OF ${new Date(`${readiness.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}`;
   return (
     <View style={styles.readinessHero}>
-      <View style={styles.readinessGlowA} />
-      <View style={styles.readinessGlowB} />
       <Text style={styles.readinessEyebrow}>
         DUNA READINESS · {readinessWhen}
       </Text>
@@ -1990,6 +1990,7 @@ function CheckInModal({
   readonly styles: ReturnType<typeof createHealthStyles>;
   readonly visible: boolean;
 }) {
+  const placeholderColor = styles.modalBody.color;
   const questions = [
     ["perceivedRecovery", "How recovered do you feel?", "Low", "Great"],
     ["energy", "Energy right now", "Flat", "High"],
@@ -2006,7 +2007,12 @@ function CheckInModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["bottom"]} style={styles.checkInSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close private check-in"
+              style={styles.closeButton}
+              onPress={onClose}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>PRIVATE CHECK-IN</Text>
@@ -2027,7 +2033,9 @@ function CheckInModal({
                   {[1, 2, 3, 4, 5].map((value) => (
                     <Pressable
                       accessibilityRole="radio"
-                      accessibilityState={{ selected: checkIn[key] === value }}
+                      accessibilityLabel={`${label}: ${value} of 5`}
+                      accessibilityState={{ checked: checkIn[key] === value }}
+                      aria-checked={checkIn[key] === value}
                       key={value}
                       onPress={() => onChange({ ...checkIn, [key]: value })}
                       style={[
@@ -2064,6 +2072,12 @@ function CheckInModal({
                   ["Hard", 9],
                 ].map(([label, value]) => (
                   <Pressable
+                    accessibilityRole="radio"
+                    accessibilityLabel={`Practice effort: ${label}`}
+                    accessibilityState={{
+                      checked: checkIn.practiceRpe === value,
+                    }}
+                    aria-checked={checkIn.practiceRpe === value}
                     key={label}
                     onPress={() =>
                       onChange({
@@ -2089,6 +2103,12 @@ function CheckInModal({
                 <View style={styles.durationRow}>
                   {[45, 75, 105].map((minutes) => (
                     <Pressable
+                      accessibilityRole="radio"
+                      accessibilityLabel={`Practice duration: ${minutes} minutes`}
+                      accessibilityState={{
+                        checked: checkIn.practiceMinutes === minutes,
+                      }}
+                      aria-checked={checkIn.practiceMinutes === minutes}
                       key={minutes}
                       onPress={() =>
                         onChange({ ...checkIn, practiceMinutes: minutes })
@@ -2106,11 +2126,12 @@ function CheckInModal({
               )}
             </View>
             <TextInput
+              accessibilityLabel="Optional private check-in note"
               maxLength={280}
               multiline
               onChangeText={(note) => onChange({ ...checkIn, note })}
               placeholder="Anything worth remembering? Optional."
-              placeholderTextColor="#7b8584"
+              placeholderTextColor={placeholderColor}
               style={styles.checkInNote}
               value={checkIn.note}
             />
@@ -2141,58 +2162,18 @@ function HealthImportOverlay({
   readonly status?: HealthImportStatus;
   readonly styles: ReturnType<typeof createHealthStyles>;
 }) {
-  const spin = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const visible = Boolean(status);
-  const shouldSpin = Boolean(
-    status &&
-    (status.phase === "permission" ||
-      (status.phase === "reading" && status.recordsFound === 0)),
-  );
+  const reduceMotion = useHealthReducedMotion();
 
   useEffect(() => {
-    let mounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (mounted) setReduceMotion(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduceMotion,
-    );
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!visible || !shouldSpin || reduceMotion) {
-      spin.setValue(0);
-      return;
-    }
-    const animation = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 2_200,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    animation.start();
-    return () => {
-      animation.stop();
-      spin.setValue(0);
-    };
-  }, [reduceMotion, shouldSpin, spin, visible]);
-
-  useEffect(() => {
-    Animated.timing(progress, {
+    const animation = Animated.timing(progress, {
       toValue: status ? healthImportProgress[status.phase] : 0,
       duration: reduceMotion ? 0 : 420,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [progress, reduceMotion, status?.phase]);
 
   if (!status) return null;
@@ -2265,26 +2246,16 @@ function HealthImportOverlay({
       <View accessibilityViewIsModal style={styles.importBackdrop}>
         <View style={styles.importCard}>
           <View style={styles.importMark}>
-            <Animated.View
-              style={[
-                styles.importOrbit,
-                {
-                  transform: [
-                    {
-                      rotate: spin.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ["0deg", "360deg"],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <View style={styles.importOrbitDot} />
-            </Animated.View>
-            <View style={styles.importHeart}>
-              <Text style={styles.importHeartText}>♥</Text>
-            </View>
+            {status.phase === "complete" ? (
+              <Text
+                accessibilityLabel="Import complete"
+                style={styles.importComplete}
+              >
+                ✓
+              </Text>
+            ) : (
+              <SandLoader label={copy.title} size={108} showLabel={false} />
+            )}
           </View>
           <Text style={styles.importEyebrow}>{copy.eyebrow}</Text>
           <Text style={styles.importTitle}>{copy.title}</Text>
@@ -2367,9 +2338,7 @@ function Stat({
   );
 }
 
-type HealthPalette = {
-  readonly [Key in keyof typeof lightPalette]: string;
-};
+type HealthPalette = ReturnType<typeof healthPalette>;
 
 function ConnectModal({
   busy,
@@ -2400,7 +2369,12 @@ function ConnectModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close Apple Health categories"
+              style={styles.closeButton}
+              onPress={onClose}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>APPLE HEALTH</Text>
@@ -2427,6 +2401,7 @@ function ConnectModal({
                     <Pressable
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: selected }}
+                      aria-checked={selected}
                       key={category}
                       onPress={() => onToggle(category)}
                       style={[
@@ -2528,7 +2503,12 @@ function ShareModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close Health sharing"
+              style={styles.closeButton}
+              onPress={onClose}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>DUNA SHARING</Text>
@@ -2545,6 +2525,11 @@ function ShareModal({
             <Text style={styles.formLabel}>1 · RECIPIENT</Text>
             {candidates.map((candidate) => (
               <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{
+                  checked: selectedCandidateId === candidate.id,
+                }}
+                aria-checked={selectedCandidateId === candidate.id}
                 key={candidate.id}
                 onPress={() => onSelectCandidate(candidate.id)}
                 style={[
@@ -2567,6 +2552,11 @@ function ShareModal({
               {(Object.keys(healthCategoryDetails) as HealthCategory[]).map(
                 (category) => (
                   <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{
+                      checked: categories.includes(category),
+                    }}
+                    aria-checked={categories.includes(category)}
                     key={category}
                     onPress={() => onToggleCategory(category)}
                     style={[
@@ -2612,6 +2602,12 @@ function ShareModal({
                   scope === "video-overlay" && !categories.includes("heart");
                 return (
                   <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{
+                      checked: scopes.includes(scope),
+                      disabled,
+                    }}
+                    aria-checked={scopes.includes(scope)}
                     disabled={disabled}
                     key={scope}
                     onPress={() => onToggleScope(scope)}
@@ -2665,45 +2661,28 @@ function ShareModal({
   );
 }
 
-const lightPalette = {
-  canvas: "#F6F5F1",
-  surface: "#FFFFFF",
-  surfaceSoft: "#EDECE6",
-  ink: "#1B1B19",
-  muted: "#766F61",
-  line: "#DEDBD3",
-  aqua: "#3D6672",
-  aquaSoft: "#DFE5E4",
-  lime: "#6BAE78",
-  coral: "#E8683A",
-  amber: "#C9A96A",
-  performance: "#141A1E",
-  performanceText: "#EDF1F2",
-  performanceMuted: "#A9B4B8",
-  performanceAccent: "#D4B77C",
-  onAccent: "#FFFFFF",
-  overlay: "rgba(8,14,17,0.58)",
-} as const;
-
-const darkPalette: HealthPalette = {
-  canvas: "#0D1114",
-  surface: "#141A1E",
-  surfaceSoft: "#1B2429",
-  ink: "#EDF1F2",
-  muted: "#A9B4B8",
-  line: "#2A363B",
-  aqua: "#B5CCD3",
-  aquaSoft: "#22343B",
-  lime: "#6BAE78",
-  coral: "#F4794C",
-  amber: "#D4B77C",
-  performance: "#101A20",
-  performanceText: "#EDF1F2",
-  performanceMuted: "#A9B4B8",
-  performanceAccent: "#D4B77C",
-  onAccent: "#0D1114",
-  overlay: "rgba(0,0,0,0.72)",
-};
+function healthPalette(theme: HealthTheme) {
+  const tokens = resolveDunaMobileTokens(theme, "editorial");
+  return {
+    canvas: tokens.ground,
+    surface: tokens.surface1,
+    surfaceSoft: tokens.surface2,
+    ink: tokens.text1,
+    muted: tokens.text2,
+    line: tokens.hairline,
+    aqua: tokens.text1,
+    aquaSoft: tokens.surface2,
+    lime: tokens.gain,
+    coral: tokens.flareText,
+    amber: tokens.gold,
+    performance: tokens.surface2,
+    performanceText: tokens.text1,
+    performanceMuted: tokens.text2,
+    performanceAccent: tokens.text1,
+    onAccent: tokens.buttonPrimaryForeground,
+    overlay: tokens.scrim,
+  };
+}
 
 function createHealthStyles(colors: HealthPalette) {
   return StyleSheet.create({
@@ -2734,13 +2713,13 @@ function createHealthStyles(colors: HealthPalette) {
     navTitle: {
       color: colors.ink,
       fontSize: 22,
-      fontWeight: "800",
+      fontWeight: "400",
       letterSpacing: -0.5,
     },
     eyebrow: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.3,
       marginBottom: 4,
     },
@@ -2765,7 +2744,7 @@ function createHealthStyles(colors: HealthPalette) {
     previewText: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1.1,
       textAlign: "center",
     },
@@ -2783,16 +2762,16 @@ function createHealthStyles(colors: HealthPalette) {
     errorTitle: {
       color: colors.ink,
       fontSize: 13,
-      fontWeight: "800",
+      fontWeight: "500",
       marginBottom: 3,
     },
     error: {
       color: colors.coral,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
     },
     errorAction: {
-      minHeight: 38,
+      minHeight: 48,
       paddingHorizontal: 12,
       borderRadius: 12,
       backgroundColor: colors.coral,
@@ -2801,16 +2780,16 @@ function createHealthStyles(colors: HealthPalette) {
     },
     errorActionText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     notice: {
       color: colors.aqua,
       backgroundColor: colors.aquaSoft,
       borderRadius: 12,
       padding: 12,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
     },
     connectHero: {
       backgroundColor: colors.surface,
@@ -2825,10 +2804,10 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.ink,
       fontSize: 24,
       lineHeight: 28,
-      fontWeight: "800",
+      fontWeight: "400",
       letterSpacing: -0.7,
     },
-    heroBody: { color: colors.muted, fontSize: 13, lineHeight: 20 },
+    heroBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     benefitRow: { flexDirection: "row", gap: 8 },
     benefit: {
       flex: 1,
@@ -2840,12 +2819,12 @@ function createHealthStyles(colors: HealthPalette) {
     benefitLabel: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: 15,
       marginTop: 4,
     },
     primaryButton: {
-      minHeight: 52,
+      minHeight: 56,
       borderRadius: 16,
       backgroundColor: colors.aqua,
       alignItems: "center",
@@ -2855,12 +2834,12 @@ function createHealthStyles(colors: HealthPalette) {
     primaryButtonText: {
       color: colors.onAccent,
       fontSize: 14,
-      fontWeight: "800",
+      fontWeight: "500",
     },
     finePrint: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       textAlign: "center",
     },
     importBackdrop: {
@@ -2881,6 +2860,13 @@ function createHealthStyles(colors: HealthPalette) {
       borderWidth: 1,
       borderColor: colors.line,
     },
+    importComplete: { color: colors.ink, fontSize: 44, fontWeight: "400" },
+    closeButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     importMark: {
       width: 108,
       height: 108,
@@ -2888,44 +2874,11 @@ function createHealthStyles(colors: HealthPalette) {
       justifyContent: "center",
       marginBottom: 22,
     },
-    importOrbit: {
-      position: "absolute",
-      width: 106,
-      height: 106,
-      borderRadius: 53,
-      borderWidth: 2,
-      borderColor: colors.aquaSoft,
-    },
-    importOrbitDot: {
-      position: "absolute",
-      width: 13,
-      height: 13,
-      borderRadius: 7,
-      backgroundColor: colors.lime,
-      top: -7,
-      left: 46,
-      shadowColor: colors.lime,
-      shadowOpacity: 0.8,
-      shadowRadius: 8,
-    },
-    importHeart: {
-      width: 70,
-      height: 70,
-      borderRadius: 24,
-      backgroundColor: colors.aquaSoft,
-      alignItems: "center",
-      justifyContent: "center",
-      transform: [{ rotate: "-8deg" }],
-    },
-    importHeartText: {
-      color: colors.coral,
-      fontSize: 34,
-      transform: [{ rotate: "8deg" }],
-    },
+
     importEyebrow: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1.5,
       marginBottom: 8,
     },
@@ -2933,14 +2886,14 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.ink,
       fontSize: 26,
       lineHeight: 31,
-      fontWeight: "900",
+      fontWeight: "400",
       letterSpacing: -0.7,
       textAlign: "center",
     },
     importBody: {
       color: colors.muted,
-      fontSize: 13,
-      lineHeight: 20,
+      fontSize: 15,
+      lineHeight: 22,
       textAlign: "center",
       marginTop: 10,
       maxWidth: 330,
@@ -2948,7 +2901,7 @@ function createHealthStyles(colors: HealthPalette) {
     importCount: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "700",
       marginTop: 22,
     },
     importMinimizeButton: {
@@ -2962,8 +2915,8 @@ function createHealthStyles(colors: HealthPalette) {
     },
     importMinimizeButtonText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     importProgressTrack: {
       width: "100%",
@@ -2994,7 +2947,7 @@ function createHealthStyles(colors: HealthPalette) {
     importStageText: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
     },
     readinessHero: {
       backgroundColor: colors.surface,
@@ -3006,30 +2959,11 @@ function createHealthStyles(colors: HealthPalette) {
       padding: 24,
       position: "relative",
     },
-    readinessGlowA: {
-      backgroundColor: `${colors.aqua}52`,
-      borderRadius: 140,
-      height: 250,
-      position: "absolute",
-      right: -58,
-      top: -28,
-      transform: [{ rotate: "-18deg" }],
-      width: 210,
-    },
-    readinessGlowB: {
-      backgroundColor: `${colors.amber}52`,
-      borderRadius: 105,
-      bottom: 74,
-      height: 150,
-      position: "absolute",
-      right: 54,
-      transform: [{ rotate: "22deg" }],
-      width: 175,
-    },
+
     readinessEyebrow: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1.4,
     },
     readinessScoreRow: {
@@ -3039,17 +2973,15 @@ function createHealthStyles(colors: HealthPalette) {
     },
     readinessNumber: {
       color: colors.ink,
-      fontFamily: "Archivo-Hero",
       fontSize: 48,
-      fontWeight: "800",
-      letterSpacing: -6,
+      fontWeight: "700",
+      letterSpacing: -1.2,
       lineHeight: 52,
     },
     readinessScale: {
       color: colors.muted,
-      fontFamily: "Archivo-Chip",
       fontSize: 14,
-      fontWeight: "700",
+      fontWeight: "500",
       marginBottom: 15,
       marginLeft: 10,
     },
@@ -3068,13 +3000,13 @@ function createHealthStyles(colors: HealthPalette) {
     readinessStatus: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       textTransform: "capitalize",
     },
     readinessSummary: {
       color: colors.ink,
       fontSize: 17,
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: 24,
       marginTop: 38,
       maxWidth: 315,
@@ -3095,6 +3027,7 @@ function createHealthStyles(colors: HealthPalette) {
     factorHeading: {
       alignItems: "flex-start",
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 12,
       justifyContent: "space-between",
       marginBottom: 8,
@@ -3102,9 +3035,10 @@ function createHealthStyles(colors: HealthPalette) {
     confidencePill: {
       backgroundColor: colors.aquaSoft,
       borderRadius: 999,
+      flexShrink: 0,
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       overflow: "hidden",
       paddingHorizontal: 9,
       paddingVertical: 6,
@@ -3120,10 +3054,9 @@ function createHealthStyles(colors: HealthPalette) {
       flexDirection: "row",
       justifyContent: "space-between",
     },
-    factorLabel: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+    factorLabel: { color: colors.ink, fontSize: 14, fontWeight: "500" },
     factorValue: {
       color: colors.ink,
-      fontFamily: "Archivo-Table",
       fontSize: 15,
       fontWeight: "900",
     },
@@ -3142,8 +3075,8 @@ function createHealthStyles(colors: HealthPalette) {
     factorFillWatch: { backgroundColor: colors.coral },
     factorSummary: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 7,
     },
     checkInCard: {
@@ -3166,11 +3099,11 @@ function createHealthStyles(colors: HealthPalette) {
     },
     checkInMarkText: { color: colors.aqua, fontSize: 22, fontWeight: "900" },
     checkInCopy: { flex: 1, minWidth: 0 },
-    checkInTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+    checkInTitle: { color: colors.ink, fontSize: 14, fontWeight: "500" },
     checkInBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 4,
     },
     checkInArrow: { color: colors.ink, fontSize: 24, fontWeight: "500" },
@@ -3185,14 +3118,14 @@ function createHealthStyles(colors: HealthPalette) {
     recommendationEyebrow: {
       color: colors.performanceAccent,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1.2,
       marginBottom: 5,
     },
     recommendationText: {
       color: colors.performanceText,
       fontSize: 13,
-      fontWeight: "700",
+      fontWeight: "500",
       lineHeight: 19,
     },
     trendCard: {
@@ -3209,23 +3142,22 @@ function createHealthStyles(colors: HealthPalette) {
       gap: 12,
       justifyContent: "space-between",
     },
-    trendLabel: { color: colors.ink, fontSize: 16, fontWeight: "900" },
+    trendLabel: { color: colors.ink, fontSize: 16, fontWeight: "500" },
     trendDescription: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 13,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 4,
       maxWidth: 210,
     },
     trendLatest: { alignItems: "flex-end" },
     trendLatestValue: {
       color: colors.ink,
-      fontFamily: "Archivo-Block",
       fontSize: 32,
-      fontWeight: "800",
-      letterSpacing: -1,
+      fontWeight: "700",
+      letterSpacing: -0.8,
     },
-    trendUnit: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+    trendUnit: { color: colors.muted, fontSize: 12, fontWeight: "500" },
     trendEmpty: { color: colors.muted, fontSize: 12, marginVertical: 36 },
     trendSelected: {
       alignItems: "center",
@@ -3240,7 +3172,7 @@ function createHealthStyles(colors: HealthPalette) {
     trendSelectedDate: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 0.7,
       textTransform: "uppercase",
     },
@@ -3248,7 +3180,7 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.ink,
       flex: 1,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "700",
     },
     trendSelectedClose: { color: colors.muted, fontSize: 16 },
     trendFooter: {
@@ -3262,14 +3194,13 @@ function createHealthStyles(colors: HealthPalette) {
     trendBandLabel: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1,
     },
     trendBandValue: {
       color: colors.ink,
-      fontFamily: "Archivo-Chip",
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "700",
     },
     sleepCard: {
       backgroundColor: colors.surface,
@@ -3283,13 +3214,13 @@ function createHealthStyles(colors: HealthPalette) {
       flexDirection: "row",
       justifyContent: "space-between",
     },
-    sleepTitle: { color: colors.ink, fontSize: 24, fontWeight: "800" },
+    sleepTitle: { color: colors.ink, fontSize: 24, fontWeight: "400" },
     sleepBadge: {
       backgroundColor: colors.aquaSoft,
       borderRadius: 999,
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       overflow: "hidden",
       paddingHorizontal: 9,
       paddingVertical: 6,
@@ -3316,7 +3247,7 @@ function createHealthStyles(colors: HealthPalette) {
     },
     sleepStageDot: { borderRadius: 4, height: 7, width: 7 },
     sleepStageName: { color: colors.muted, flex: 1, fontSize: 12 },
-    sleepStageValue: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    sleepStageValue: { color: colors.ink, fontSize: 12, fontWeight: "700" },
     sleepStats: {
       borderBottomColor: colors.line,
       borderBottomWidth: StyleSheet.hairlineWidth,
@@ -3331,9 +3262,9 @@ function createHealthStyles(colors: HealthPalette) {
     sleepStatLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
     sleepSummary: {
       color: colors.ink,
-      fontSize: 13,
-      fontWeight: "700",
-      lineHeight: 19,
+      fontSize: 15,
+      fontWeight: "500",
+      lineHeight: 22,
       marginTop: 14,
     },
     sleepEstimate: {
@@ -3343,7 +3274,7 @@ function createHealthStyles(colors: HealthPalette) {
       marginTop: 7,
     },
     strainCard: {
-      backgroundColor: "#111A1A",
+      backgroundColor: colors.surfaceSoft,
       borderRadius: 24,
       padding: 19,
     },
@@ -3355,42 +3286,42 @@ function createHealthStyles(colors: HealthPalette) {
     },
     strainScoreRow: { alignItems: "flex-end", flexDirection: "row" },
     strainNumber: {
-      color: "#F8F6EF",
+      color: colors.muted,
       fontSize: 50,
       fontWeight: "300",
-      letterSpacing: -3,
+      letterSpacing: -1.25,
     },
-    strainScale: { color: "#A8B4B1", fontSize: 12, marginBottom: 9 },
+    strainScale: { color: colors.muted, fontSize: 12, marginBottom: 9 },
     strainArc: {
-      backgroundColor: "#263433",
+      backgroundColor: colors.surfaceSoft,
       borderRadius: 5,
       height: 10,
       overflow: "hidden",
       width: 125,
     },
     strainArcFill: {
-      backgroundColor: "#BEEB71",
+      backgroundColor: colors.surfaceSoft,
       borderRadius: 5,
       height: 10,
     },
     strainSummary: {
-      color: "#DCE3DF",
-      fontSize: 12,
-      lineHeight: 18,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 10,
     },
     strainCompare: {
       alignItems: "center",
-      borderTopColor: "#2C3C3A",
+      borderTopColor: colors.line,
       borderTopWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       justifyContent: "space-around",
       marginTop: 15,
       paddingTop: 14,
     },
-    strainCompareValue: { color: "#F8F6EF", fontSize: 17, fontWeight: "900" },
-    strainCompareLabel: { color: "#97A6A2", fontSize: 12, marginTop: 2 },
-    strainVersus: { color: "#657572", fontSize: 12, fontWeight: "900" },
+    strainCompareValue: { color: colors.ink, fontSize: 17, fontWeight: "900" },
+    strainCompareLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
+    strainVersus: { color: colors.muted, fontSize: 12, fontWeight: "500" },
     researchCard: {
       backgroundColor: colors.surface,
       borderColor: colors.line,
@@ -3398,11 +3329,11 @@ function createHealthStyles(colors: HealthPalette) {
       borderWidth: 1,
       padding: 17,
     },
-    researchTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+    researchTitle: { color: colors.ink, fontSize: 19, fontWeight: "500" },
     researchBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 15,
+      lineHeight: 22,
       marginBottom: 8,
       marginTop: 6,
     },
@@ -3417,7 +3348,7 @@ function createHealthStyles(colors: HealthPalette) {
     researchCitationTitle: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       lineHeight: 15,
     },
     checkInSheet: {
@@ -3437,8 +3368,8 @@ function createHealthStyles(colors: HealthPalette) {
     },
     checkInQuestionLabel: {
       color: colors.ink,
-      fontSize: 13,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       marginBottom: 11,
     },
     ratingRow: { flexDirection: "row", gap: 7 },
@@ -3447,11 +3378,11 @@ function createHealthStyles(colors: HealthPalette) {
       backgroundColor: colors.surfaceSoft,
       borderRadius: 12,
       flex: 1,
-      height: 42,
+      minHeight: 48,
       justifyContent: "center",
     },
     ratingButtonActive: { backgroundColor: colors.aqua },
-    ratingText: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+    ratingText: { color: colors.ink, fontSize: 14, fontWeight: "700" },
     ratingTextActive: { color: colors.onAccent },
     ratingEnds: {
       flexDirection: "row",
@@ -3461,6 +3392,8 @@ function createHealthStyles(colors: HealthPalette) {
     ratingEnd: { color: colors.muted, fontSize: 12 },
     effortRow: { flexDirection: "row", gap: 7 },
     effortButton: {
+      minHeight: 48,
+      justifyContent: "center",
       alignItems: "center",
       backgroundColor: colors.surfaceSoft,
       borderRadius: 11,
@@ -3468,9 +3401,11 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 10,
     },
     effortButtonActive: { backgroundColor: colors.aquaSoft },
-    effortText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    effortText: { color: colors.ink, fontSize: 14, fontWeight: "500" },
     durationRow: { flexDirection: "row", gap: 7, marginTop: 9 },
     durationButton: {
+      minHeight: 48,
+      justifyContent: "center",
       alignItems: "center",
       borderColor: colors.line,
       borderRadius: 999,
@@ -3479,14 +3414,14 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 8,
     },
     durationButtonActive: { borderColor: colors.aqua },
-    durationText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+    durationText: { color: colors.muted, fontSize: 14, fontWeight: "500" },
     checkInNote: {
       backgroundColor: colors.surface,
       borderColor: colors.line,
       borderRadius: 16,
       borderWidth: 1,
       color: colors.ink,
-      fontSize: 12,
+      fontSize: 16,
       minHeight: 82,
       padding: 14,
       textAlignVertical: "top",
@@ -3525,12 +3460,12 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.ink,
       fontSize: 36,
       fontWeight: "900",
-      letterSpacing: -2,
+      letterSpacing: -0.9,
     },
     scoreLabel: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "700",
       letterSpacing: 1,
     },
     recoveryCopy: { flex: 1 },
@@ -3560,35 +3495,37 @@ function createHealthStyles(colors: HealthPalette) {
     historySyncIconText: {
       color: colors.onAccent,
       fontSize: 19,
-      fontWeight: "900",
+      fontWeight: "500",
     },
     historySyncCopy: { flex: 1, minWidth: 0 },
     historySyncEyebrow: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 0.75,
     },
     historySyncTitle: {
       color: colors.ink,
       fontSize: 16,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: -0.35,
       marginTop: 4,
     },
     historySyncBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 5,
     },
     historySyncSourceNote: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 14,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 7,
     },
     historySyncAction: {
+      minHeight: 48,
+      justifyContent: "center",
       borderColor: colors.aqua,
       borderRadius: 999,
       borderWidth: 1,
@@ -3597,8 +3534,8 @@ function createHealthStyles(colors: HealthPalette) {
     },
     historySyncActionText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     statCard: {
@@ -3613,20 +3550,20 @@ function createHealthStyles(colors: HealthPalette) {
     statLabel: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.1,
     },
     statValue: {
       color: colors.ink,
       fontSize: 32,
       fontWeight: "900",
-      letterSpacing: -1,
+      letterSpacing: -0.8,
       marginTop: 10,
     },
     statUnit: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       marginTop: 2,
     },
     emptyHealthCard: {
@@ -3655,12 +3592,12 @@ function createHealthStyles(colors: HealthPalette) {
     emptyHealthTitle: {
       color: colors.ink,
       fontSize: 14,
-      fontWeight: "900",
+      fontWeight: "500",
     },
     emptyHealthBody: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 5,
     },
     emptyHealthActions: {
@@ -3670,6 +3607,8 @@ function createHealthStyles(colors: HealthPalette) {
       marginTop: 12,
     },
     emptyHealthButton: {
+      minHeight: 48,
+      justifyContent: "center",
       backgroundColor: colors.aqua,
       borderRadius: 11,
       paddingVertical: 8,
@@ -3677,12 +3616,13 @@ function createHealthStyles(colors: HealthPalette) {
     },
     emptyHealthButtonText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     sectionHeader: {
       marginTop: 8,
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "flex-end",
       justifyContent: "space-between",
       gap: 12,
@@ -3690,10 +3630,12 @@ function createHealthStyles(colors: HealthPalette) {
     sectionTitle: {
       color: colors.ink,
       fontSize: 22,
-      fontWeight: "800",
+      fontWeight: "400",
       letterSpacing: -0.5,
     },
     secondaryButton: {
+      minHeight: 48,
+      justifyContent: "center",
       backgroundColor: colors.aquaSoft,
       paddingVertical: 9,
       paddingHorizontal: 13,
@@ -3701,8 +3643,8 @@ function createHealthStyles(colors: HealthPalette) {
     },
     secondaryButtonText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
     },
     card: {
       backgroundColor: colors.surface,
@@ -3718,9 +3660,9 @@ function createHealthStyles(colors: HealthPalette) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.line,
     },
-    dayDate: { color: colors.ink, fontSize: 12, fontWeight: "800", width: 72 },
+    dayDate: { color: colors.ink, fontSize: 12, fontWeight: "500", width: 72 },
     dayMetric: { flex: 1, alignItems: "flex-end" },
-    dayValue: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+    dayValue: { color: colors.ink, fontSize: 15, fontWeight: "700" },
     dayLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
     horizontalBleed: { marginHorizontal: -18, paddingLeft: 18 },
     matchRow: { flexDirection: "row", gap: 10, paddingRight: 36 },
@@ -3737,15 +3679,15 @@ function createHealthStyles(colors: HealthPalette) {
       justifyContent: "space-between",
       alignItems: "center",
     },
-    matchDate: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-    result: { fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+    matchDate: { color: colors.muted, fontSize: 12, fontWeight: "500" },
+    result: { fontSize: 12, fontWeight: "500", letterSpacing: 1 },
     win: { color: colors.aqua },
     loss: { color: colors.coral },
     matchTitle: {
       color: colors.ink,
       fontSize: 16,
       lineHeight: 21,
-      fontWeight: "800",
+      fontWeight: "500",
       marginVertical: 12,
     },
     matchSignals: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -3756,7 +3698,7 @@ function createHealthStyles(colors: HealthPalette) {
       paddingVertical: 5,
       paddingHorizontal: 7,
       fontSize: 12,
-      fontWeight: "700",
+      fontWeight: "500",
     },
     insightCard: {
       backgroundColor: colors.aquaSoft,
@@ -3769,9 +3711,9 @@ function createHealthStyles(colors: HealthPalette) {
     insightCopy: { flex: 1 },
     insightTitle: {
       color: colors.ink,
-      fontSize: 13,
-      lineHeight: 19,
-      fontWeight: "700",
+      fontSize: 15,
+      lineHeight: 22,
+      fontWeight: "500",
     },
     timelineRow: {
       minHeight: 66,
@@ -3791,16 +3733,16 @@ function createHealthStyles(colors: HealthPalette) {
       alignItems: "center",
       justifyContent: "center",
     },
-    timelineIconText: { color: colors.aqua, fontSize: 16, fontWeight: "800" },
+    timelineIconText: { color: colors.aqua, fontSize: 16, fontWeight: "500" },
     timelineCopy: { flex: 1, minWidth: 0 },
-    timelineTitle: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    timelineTitle: { color: colors.ink, fontSize: 14, fontWeight: "500" },
     timelineMeta: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 14,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 3,
     },
-    timelineValue: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+    timelineValue: { color: colors.ink, fontSize: 13, fontWeight: "700" },
     privacyCard: {
       backgroundColor: colors.surface,
       borderRadius: 20,
@@ -3822,7 +3764,7 @@ function createHealthStyles(colors: HealthPalette) {
       alignItems: "center",
       justifyContent: "center",
     },
-    lockText: { color: colors.aqua, fontSize: 18, fontWeight: "900" },
+    lockText: { color: colors.aqua, fontSize: 18, fontWeight: "500" },
     grantRow: {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.line,
@@ -3832,31 +3774,31 @@ function createHealthStyles(colors: HealthPalette) {
       alignItems: "center",
       gap: 10,
     },
-    revokeText: { color: colors.coral, fontSize: 12, fontWeight: "800" },
+    revokeText: { color: colors.coral, fontSize: 14, fontWeight: "500" },
     systemNote: {
       borderRadius: 20,
       backgroundColor: colors.surfaceSoft,
       padding: 18,
       gap: 9,
     },
-    systemNoteTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-    systemNoteBody: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+    systemNoteTitle: { color: colors.ink, fontSize: 14, fontWeight: "500" },
+    systemNoteBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     linkText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       marginTop: 4,
     },
     deleteText: {
       color: colors.coral,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
       marginTop: 10,
     },
     disclaimer: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       textAlign: "center",
       paddingHorizontal: 20,
     },
@@ -3881,11 +3823,11 @@ function createHealthStyles(colors: HealthPalette) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.line,
     },
-    modalClose: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
+    modalClose: { color: colors.aqua, fontSize: 14, fontWeight: "500" },
     modalEyebrow: {
       color: colors.muted,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1.3,
     },
     modalSpacer: { width: 35 },
@@ -3894,10 +3836,10 @@ function createHealthStyles(colors: HealthPalette) {
       color: colors.ink,
       fontSize: 28,
       lineHeight: 32,
-      fontWeight: "900",
-      letterSpacing: -1,
+      fontWeight: "400",
+      letterSpacing: -0.7,
     },
-    modalBody: { color: colors.muted, fontSize: 13, lineHeight: 20 },
+    modalBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     categoryList: { gap: 8 },
     categoryRow: {
       flexDirection: "row",
@@ -3921,8 +3863,8 @@ function createHealthStyles(colors: HealthPalette) {
       alignItems: "center",
       justifyContent: "center",
     },
-    categoryIconText: { color: colors.ink, fontSize: 18, fontWeight: "800" },
-    checkText: { color: colors.aqua, fontSize: 19, fontWeight: "900" },
+    categoryIconText: { color: colors.ink, fontSize: 18, fontWeight: "500" },
+    checkText: { color: colors.aqua, fontSize: 19, fontWeight: "500" },
     promiseCard: {
       backgroundColor: colors.surfaceSoft,
       borderRadius: 17,
@@ -3931,15 +3873,15 @@ function createHealthStyles(colors: HealthPalette) {
     promiseTitle: {
       color: colors.ink,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       marginBottom: 5,
     },
-    promiseBody: { color: colors.muted, fontSize: 12, lineHeight: 16 },
+    promiseBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     disabled: { opacity: 0.42 },
     formLabel: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
       letterSpacing: 1.2,
       marginTop: 8,
     },
@@ -3955,6 +3897,8 @@ function createHealthStyles(colors: HealthPalette) {
     },
     chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     choiceChip: {
+      minHeight: 48,
+      justifyContent: "center",
       borderRadius: 20,
       paddingHorizontal: 13,
       paddingVertical: 9,
@@ -3966,7 +3910,7 @@ function createHealthStyles(colors: HealthPalette) {
       backgroundColor: colors.aqua,
       borderColor: colors.aqua,
     },
-    choiceChipText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    choiceChipText: { color: colors.ink, fontSize: 14, fontWeight: "500" },
     choiceChipTextActive: { color: colors.onAccent },
     scopeList: { gap: 8 },
     scopeRow: {

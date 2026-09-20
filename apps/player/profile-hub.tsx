@@ -27,6 +27,12 @@ import {
   type VideoNetworkPreferences,
 } from "./video-offline";
 
+import {
+  usePlayerDesign,
+  usePlayerStyles,
+  type PlayerDesignTokens,
+} from "./design-theme";
+
 type HubDestination =
   "profile" | "wallet" | "predictions" | "health" | "performance" | "video";
 
@@ -61,6 +67,83 @@ function money(value: number) {
   }).format(value / 100);
 }
 
+function AppearanceModal({
+  visible,
+  onClose,
+}: {
+  readonly visible: boolean;
+  readonly onClose: () => void;
+}) {
+  const { tokens, preference, setPreference } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView edges={["top", "bottom"]} style={styles.modalSafe}>
+        <View style={styles.modalHeader}>
+          <Text style={[styles.modalTitle, styles.flex]}>Appearance</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close appearance"
+            onPress={onClose}
+            style={styles.close}
+          >
+            <DunaIcon color={tokens.text1} name="close" size={22} />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.subscriptionContent}>
+          <Text style={styles.subscriptionIntro}>
+            Choose how Duna looks on this device.
+          </Text>
+          {(
+            [
+              {
+                value: "light",
+                title: "Light",
+                detail: "Warm sand and charcoal",
+              },
+              {
+                value: "dark",
+                title: "Dark",
+                detail: "Soft light on warm dark surfaces",
+              },
+              {
+                value: "system",
+                title: "Match device",
+                detail: "Follow your device appearance",
+              },
+            ] as const
+          ).map(({ value, title, detail }) => (
+            <Pressable
+              key={value}
+              accessibilityRole="radio"
+              accessibilityLabel={title}
+              accessibilityState={{ checked: preference === value }}
+              aria-checked={preference === value}
+              onPress={() => setPreference(value)}
+              style={styles.notificationRow}
+            >
+              <View style={styles.flex}>
+                <Text style={styles.notificationTitle}>{title}</Text>
+                <Text style={styles.notificationBody}>{detail}</Text>
+              </View>
+              {preference === value ? (
+                <DunaIcon name="check" size={22} color={tokens.text1} />
+              ) : (
+                <View style={{ width: 22 }} />
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function NotificationPreferencesModal({
   onClose,
   visible,
@@ -68,6 +151,9 @@ function NotificationPreferencesModal({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { tokens } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+
   const { client, mode, refresh, settings } = usePlayerRuntime();
   const [saving, setSaving] =
     useState<(typeof notificationOptions)[number]["scope"]>();
@@ -116,14 +202,14 @@ function NotificationPreferencesModal({
         <View style={styles.modalHeader}>
           <View style={styles.flex}>
             <Text style={styles.eyebrow}>COMMUNICATION</Text>
-            <Text style={styles.modalTitle}>Notifications.</Text>
+            <Text style={styles.modalTitle}>Notifications</Text>
           </View>
           <Pressable
             accessibilityLabel="Close notification preferences"
             onPress={onClose}
             style={styles.close}
           >
-            <DunaIcon color="#1B1B19" name="close" size={22} />
+            <DunaIcon color={tokens.text1} name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.subscriptionContent}>
@@ -145,7 +231,7 @@ function NotificationPreferencesModal({
                   accessibilityLabel={`${enabled ? "Disable" : "Enable"} ${option.title}`}
                   disabled={Boolean(saving) || mode === "preview"}
                   onValueChange={(next) => void setPreference(option, next)}
-                  trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+                  trackColor={{ false: tokens.hairline, true: tokens.text1 }}
                   value={enabled}
                 />
               </View>
@@ -164,6 +250,9 @@ function VideoDataPreferencesModal({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { tokens } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+
   const [preferences, setPreferences] = useState<VideoNetworkPreferences>(
     defaultVideoNetworkPreferences,
   );
@@ -199,14 +288,14 @@ function VideoDataPreferencesModal({
         <View style={styles.modalHeader}>
           <View style={styles.flex}>
             <Text style={styles.eyebrow}>DATA USE</Text>
-            <Text style={styles.modalTitle}>Offline first.</Text>
+            <Text style={styles.modalTitle}>Data use</Text>
           </View>
           <Pressable
             accessibilityLabel="Close video data preferences"
             onPress={onClose}
             style={styles.close}
           >
-            <DunaIcon color="#1B1B19" name="close" size={22} />
+            <DunaIcon color={tokens.text1} name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.subscriptionContent}>
@@ -230,7 +319,7 @@ function VideoDataPreferencesModal({
               onValueChange={(allowCellularUploads) =>
                 update({ ...preferences, allowCellularUploads })
               }
-              trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+              trackColor={{ false: tokens.hairline, true: tokens.text1 }}
               value={preferences.allowCellularUploads}
             />
           </View>
@@ -249,7 +338,7 @@ function VideoDataPreferencesModal({
               onValueChange={(allowCellularLive) =>
                 update({ ...preferences, allowCellularLive })
               }
-              trackColor={{ false: "#d9ddda", true: "#5c8a93" }}
+              trackColor={{ false: tokens.hairline, true: tokens.text1 }}
               value={preferences.allowCellularLive}
             />
           </View>
@@ -278,6 +367,9 @@ function ProfileDetailsModal({
   readonly onEditProfile: () => void;
   readonly visible: boolean;
 }) {
+  const { tokens } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+
   const { dashboard, settings } = usePlayerRuntime();
   const player = dashboard?.player ?? demoPlayer;
   return (
@@ -291,14 +383,14 @@ function ProfileDetailsModal({
         <View style={styles.modalHeader}>
           <View style={styles.flex}>
             <Text style={styles.eyebrow}>PLAYER PROFILE</Text>
-            <Text style={styles.modalTitle}>Your public story.</Text>
+            <Text style={styles.modalTitle}>Profile details</Text>
           </View>
           <Pressable
             accessibilityLabel="Close profile details"
             onPress={onClose}
             style={styles.close}
           >
-            <DunaIcon color="#1B1B19" name="close" size={22} />
+            <DunaIcon color={tokens.text1} name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.modalContent}>
@@ -395,6 +487,9 @@ function SubscriptionManagementModal({
   readonly onClose: () => void;
   readonly visible: boolean;
 }) {
+  const { tokens } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+
   const { client, mode, organizationWallets, refresh, settings } =
     usePlayerRuntime();
   const [busy, setBusy] = useState<string>();
@@ -476,14 +571,14 @@ function SubscriptionManagementModal({
         <View style={styles.modalHeader}>
           <View style={styles.flex}>
             <Text style={styles.eyebrow}>SUBSCRIPTIONS + BILLING</Text>
-            <Text style={styles.modalTitle}>Your memberships.</Text>
+            <Text style={styles.modalTitle}>Subscriptions</Text>
           </View>
           <Pressable
             accessibilityLabel="Close subscription management"
             onPress={onClose}
             style={styles.close}
           >
-            <DunaIcon color="#1B1B19" name="close" size={22} />
+            <DunaIcon color={tokens.text1} name="close" size={22} />
           </Pressable>
         </View>
         <ScrollView
@@ -728,7 +823,7 @@ function SubscriptionManagementModal({
             style={styles.billingButton}
           >
             {busy === "billing" ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={tokens.buttonPrimaryForeground} />
             ) : (
               <>
                 <Text style={styles.billingButtonText}>
@@ -761,6 +856,9 @@ export function ProfileHubScreen({
   readonly onEditProfile: () => void;
   readonly onOrganization: (organizationSlug: string) => void;
 }) {
+  const { tokens, preference } = usePlayerDesign();
+  const styles = usePlayerStyles(createStyles);
+
   const runtime = usePlayerRuntime();
   const {
     dashboard,
@@ -776,6 +874,7 @@ export function ProfileHubScreen({
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [videoDataOpen, setVideoDataOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const actions: readonly {
     readonly key: HubDestination;
     readonly icon: DunaIconName;
@@ -846,7 +945,7 @@ export function ProfileHubScreen({
         <View style={styles.topHeader}>
           <View style={styles.flex}>
             <Text style={styles.topEyebrow}>YOUR DUNA</Text>
-            <Text style={styles.topTitle}>Profile.</Text>
+            <Text style={styles.topTitle}>Profile</Text>
             <Text style={styles.topBody}>
               Your game, identity, and connections in one place.
             </Text>
@@ -882,7 +981,7 @@ export function ProfileHubScreen({
             </Text>
             <Text style={styles.identityRatingLabel}>SAND RATING</Text>
           </View>
-          <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+          <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
         </Pressable>
 
         <View style={styles.quickGrid}>
@@ -906,13 +1005,9 @@ export function ProfileHubScreen({
                     action.tone === "sand" && styles.quickIconSand,
                   ]}
                 >
-                  <DunaIcon color="#153F70" name={action.icon} size={21} />
+                  <DunaIcon color={tokens.text1} name={action.icon} size={21} />
                 </View>
-                <DunaIcon
-                  color="rgba(27,27,25,0.42)"
-                  name="chevron-right"
-                  size={17}
-                />
+                <DunaIcon color={tokens.text2} name="chevron-right" size={17} />
               </View>
               <View>
                 <Text style={styles.quickTitle}>{action.title}</Text>
@@ -961,7 +1056,7 @@ export function ProfileHubScreen({
                   {organization.credits.toLocaleString("en-US")} credits
                 </Text>
               </View>
-              <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+              <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
             </Pressable>
           ))}
           {!organizationWallets?.length && (
@@ -979,12 +1074,33 @@ export function ProfileHubScreen({
         </View>
         <View style={styles.settings}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Appearance"
+            onPress={() => setAppearanceOpen(true)}
+            style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
+          >
+            <View style={styles.settingIcon}>
+              <DunaIcon color={tokens.text1} name="settings" size={20} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.settingText}>Appearance</Text>
+              <Text style={styles.settingMeta}>
+                {preference === "system"
+                  ? "Match device"
+                  : preference === "dark"
+                    ? "Dark"
+                    : "Light"}
+              </Text>
+            </View>
+            <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
+          </Pressable>
+          <Pressable
             disabled={mode === "preview"}
             onPress={() => setSubscriptionsOpen(true)}
             style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
             <View style={styles.settingIcon}>
-              <DunaIcon color="#153F70" name="wallet" size={20} />
+              <DunaIcon color={tokens.text1} name="wallet" size={20} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.settingText}>Subscriptions + billing</Text>
@@ -992,7 +1108,7 @@ export function ProfileHubScreen({
                 Duna, clubs, organizations, and coaches
               </Text>
             </View>
-            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+            <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
           </Pressable>
           <Pressable
             disabled={mode === "preview"}
@@ -1000,7 +1116,7 @@ export function ProfileHubScreen({
             style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
             <View style={styles.settingIcon}>
-              <DunaIcon color="#153F70" name="bell" size={20} />
+              <DunaIcon color={tokens.text1} name="bell" size={20} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.settingText}>Notifications</Text>
@@ -1008,14 +1124,14 @@ export function ProfileHubScreen({
                 Account and optional updates
               </Text>
             </View>
-            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+            <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
           </Pressable>
           <Pressable
             onPress={() => setVideoDataOpen(true)}
             style={({ pressed }) => [styles.setting, pressed && styles.pressed]}
           >
             <View style={styles.settingIcon}>
-              <DunaIcon color="#153F70" name="waves" size={20} />
+              <DunaIcon color={tokens.text1} name="waves" size={20} />
             </View>
             <View style={styles.flex}>
               <Text style={styles.settingText}>Data use</Text>
@@ -1023,7 +1139,7 @@ export function ProfileHubScreen({
                 Wi‑Fi, cellular uploads, and live video
               </Text>
             </View>
-            <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+            <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
           </Pressable>
           {(
             [
@@ -1061,13 +1177,13 @@ export function ProfileHubScreen({
               ]}
             >
               <View style={styles.settingIcon}>
-                <DunaIcon color="#153F70" name={icon} size={20} />
+                <DunaIcon color={tokens.text1} name={icon} size={20} />
               </View>
               <View style={styles.flex}>
                 <Text style={styles.settingText}>{title}</Text>
                 <Text style={styles.settingMeta}>{body}</Text>
               </View>
-              <DunaIcon color="#7B7B76" name="chevron-right" size={18} />
+              <DunaIcon color={tokens.text2} name="chevron-right" size={18} />
             </Pressable>
           ))}
           {signOut && (
@@ -1107,505 +1223,533 @@ export function ProfileHubScreen({
         onClose={() => setVideoDataOpen(false)}
         visible={videoDataOpen}
       />
+      <AppearanceModal
+        visible={appearanceOpen}
+        onClose={() => setAppearanceOpen(false)}
+      />
     </>
   );
 }
 
-const styles = StyleSheet.create({
-  artworkActions: { flexDirection: "row", gap: 9, marginTop: 18 },
-  artworkBody: { color: "#706a60", fontSize: 15, lineHeight: 22, marginTop: 8 },
-  artworkCard: {
-    backgroundColor: "#ffffff",
-    borderColor: "#dfdfdc",
-    borderRadius: 22,
-    borderWidth: 1,
-    marginTop: 22,
-    padding: 18,
-  },
-  artworkTitle: {
-    color: "#111719",
-    fontSize: 23,
-    fontWeight: "800",
-    lineHeight: 27,
-    marginTop: 5,
-  },
-  close: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(27,27,25,0.10)",
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  billingButton: {
-    alignItems: "center",
-    backgroundColor: "#203740",
-    borderRadius: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 8,
-    minHeight: 58,
-    paddingHorizontal: 18,
-  },
-  billingButtonArrow: {
-    color: "#ffffff",
-    fontSize: 18,
-    marginLeft: 10,
-  },
-  billingButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  billingFootnote: {
-    color: "#777166",
-    fontSize: 12,
-    lineHeight: 17,
-    paddingHorizontal: 8,
-    textAlign: "center",
-  },
-  detailFact: { alignItems: "center", flex: 1 },
-  detailFactLabel: {
-    color: "#777166",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    marginTop: 3,
-  },
-  detailFactValue: { color: "#111719", fontSize: 22, fontWeight: "800" },
-  detailFacts: {
-    backgroundColor: "#ffffff",
-    borderColor: "#dfdfdc",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    marginTop: 18,
-    paddingVertical: 18,
-  },
-  eyebrow: {
-    color: "#203740",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-  flex: { flex: 1, minWidth: 0 },
-  identity: {
-    alignItems: "center",
-    backgroundColor: "#F4F4F2",
-    borderRadius: mobileControl.cardRadius,
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    marginTop: mobileGrid[5],
-    minHeight: 100,
-    padding: mobileGrid[3],
-  },
-  identityMeta: {
-    color: "#77756F",
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  identityName: {
-    color: "#1B1B19",
-    fontSize: 19,
-    fontWeight: "700",
-    lineHeight: 24,
-  },
-  identityPhoto: { borderRadius: 30, height: 60, width: 60 },
-  identityPhotoFallback: {
-    alignItems: "center",
-    backgroundColor: "#E5EDF2",
-    borderRadius: 30,
-    height: 60,
-    justifyContent: "center",
-    width: 60,
-  },
-  identityPhotoText: { color: "#153F70", fontSize: 17, fontWeight: "700" },
-  identityRating: {
-    color: "#153F70",
-    fontSize: 21,
-    fontWeight: "700",
-    lineHeight: 24,
-    textAlign: "right",
-  },
-  identityRatingBlock: { alignItems: "flex-end" },
-  identityRatingLabel: {
-    color: "#77756F",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 15,
-  },
-  modalContent: { padding: 20, paddingBottom: 48 },
-  modalHeader: {
-    alignItems: "center",
-    borderBottomColor: "#e1dfda",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  modalSafe: { backgroundColor: "#FFFFFF", flex: 1 },
-  modalTitle: {
-    color: "#111719",
-    fontSize: 25,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  subscriptionActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 17,
-  },
-  subscriptionCard: {
-    backgroundColor: "#ffffff",
-    borderColor: "#dfdfdc",
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 18,
-  },
-  subscriptionContent: { gap: 13, padding: 18, paddingBottom: 48 },
-  subscriptionDangerAction: {
-    alignItems: "center",
-    borderColor: "#d8b0aa",
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 45,
-    paddingHorizontal: 15,
-  },
-  subscriptionDangerText: {
-    color: "#a54032",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  subscriptionEmpty: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "#dfdfdc",
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 26,
-  },
-  subscriptionError: {
-    backgroundColor: "#f9e9e6",
-    borderRadius: 14,
-    color: "#a54032",
-    fontSize: 12,
-    lineHeight: 18,
-    padding: 13,
-  },
-  subscriptionIntro: { color: "#706a60", fontSize: 14, lineHeight: 21 },
-  subscriptionManagedExternally: {
-    color: "#777166",
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 15,
-  },
-  subscriptionMeta: {
-    color: "#706a60",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 7,
-  },
-  subscriptionNotice: {
-    backgroundColor: "#e6f2ea",
-    borderRadius: 14,
-    color: "#2f6b3a",
-    fontSize: 12,
-    fontWeight: "700",
-    padding: 13,
-  },
-  subscriptionOwner: {
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  subscriptionPeriod: { color: "#777166", fontSize: 12, marginTop: 4 },
-  subscriptionPrimaryAction: {
-    alignItems: "center",
-    backgroundColor: "#203740",
-    borderRadius: 14,
-    justifyContent: "center",
-    minHeight: 45,
-    paddingHorizontal: 16,
-  },
-  subscriptionPrimaryText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  subscriptionSecondaryAction: {
-    alignItems: "center",
-    borderColor: "#b7c4c8",
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 45,
-    paddingHorizontal: 15,
-  },
-  subscriptionSecondaryText: {
-    color: "#203740",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  subscriptionStatusPill: {
-    backgroundColor: "#e9efef",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  subscriptionStatusText: {
-    color: "#203740",
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "capitalize",
-  },
-  subscriptionTitle: {
-    color: "#111719",
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-    marginTop: 4,
-  },
-  subscriptionTopRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-  },
-  notificationBody: {
-    color: "#706a60",
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  notificationRow: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "#dfdfdc",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 14,
-    padding: 16,
-  },
-  notificationTitle: { color: "#111719", fontSize: 16, fontWeight: "800" },
-  organization: {
-    alignItems: "center",
-    borderBottomColor: "#ebe9e4",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 11,
-    minHeight: 74,
-    paddingHorizontal: 15,
-  },
-  organizationEmpty: { padding: 18 },
-  organizationMark: {
-    alignItems: "center",
-    backgroundColor: "#E5EDF2",
-    borderRadius: 19,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  organizationMarkText: { color: "#153F70", fontSize: 14, fontWeight: "700" },
-  organizationMeta: { color: "#77756F", fontSize: 13, marginTop: 3 },
-  organizationName: { color: "#1B1B19", fontSize: 16, fontWeight: "700" },
-  organizations: {
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(27,27,25,0.10)",
-    borderRadius: mobileControl.cardRadius,
-    borderWidth: 1,
-    marginTop: 12,
-    overflow: "hidden",
-  },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-  primary: {
-    alignItems: "center",
-    backgroundColor: "#203740",
-    borderRadius: 14,
-    flex: 1.3,
-    justifyContent: "center",
-    minHeight: 50,
-  },
-  primaryText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
-  profileDetailsHandle: { color: "#203740", fontSize: 16, marginTop: 3 },
-  profileDetailsMeta: { color: "#777166", fontSize: 15, marginTop: 6 },
-  profileDetailsName: {
-    color: "#111719",
-    fontSize: 28,
-    fontWeight: "800",
-    marginTop: 12,
-  },
-  profileIdentity: { alignItems: "center" },
-  profilePhoto: { borderRadius: 54, height: 108, width: 108 },
-  profilePhotoFallback: {
-    alignItems: "center",
-    backgroundColor: "#e7e8e5",
-    borderRadius: 54,
-    height: 108,
-    justifyContent: "center",
-    width: 108,
-  },
-  profilePhotoText: { color: "#203740", fontSize: 28, fontWeight: "900" },
-  quickBody: {
-    color: "#77756F",
-    fontSize: 13,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  quickCard: {
-    backgroundColor: "#F4F4F2",
-    borderRadius: mobileControl.cardRadius,
-    flexBasis: "47%",
-    flexGrow: 1,
-    justifyContent: "space-between",
-    maxWidth: "48.5%",
-    minHeight: 140,
-    padding: mobileGrid[3],
-  },
-  quickCardBlue: { backgroundColor: "#EEF4F8" },
-  quickCardSand: { backgroundColor: "#F8F2E8" },
-  quickCardTop: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  quickGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: mobileGrid[2],
-    marginTop: mobileGrid[3],
-  },
-  quickIcon: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: mobileGrid[2],
-    height: mobileGrid[8],
-    justifyContent: "center",
-    width: mobileGrid[8],
-  },
-  quickIconBlue: { backgroundColor: "rgba(255,255,255,0.82)" },
-  quickIconSand: { backgroundColor: "rgba(255,255,255,0.82)" },
-  quickTitle: {
-    color: "#1B1B19",
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  screen: {
-    backgroundColor: "#FFFFFF",
-    flexGrow: 1,
-    paddingHorizontal: mobileControl.pageInset,
-    paddingTop: mobileGrid[4],
-    paddingBottom: 155,
-  },
-  secondary: {
-    alignItems: "center",
-    borderColor: "#203740",
-    borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 50,
-  },
-  secondaryText: { color: "#203740", fontSize: 14, fontWeight: "800" },
-  sectionCount: { color: "#153F70", fontSize: 12, fontWeight: "700" },
-  sectionCountPill: {
-    alignItems: "center",
-    backgroundColor: "#EEF4F8",
-    borderRadius: mobileControl.pillRadius,
-    height: mobileGrid[6],
-    justifyContent: "center",
-    minWidth: mobileGrid[6],
-    paddingHorizontal: mobileGrid[2],
-  },
-  sectionHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: mobileGrid[7],
-  },
-  sectionTitle: {
-    color: "#1B1B19",
-    fontSize: 21,
-    fontWeight: "700",
-    letterSpacing: -0.25,
-    lineHeight: 26,
-  },
-  setting: {
-    alignItems: "center",
-    borderBottomColor: "#ebe9e4",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: mobileGrid[2],
-    minHeight: 72,
-    paddingHorizontal: mobileGrid[3],
-  },
-  settingIcon: {
-    alignItems: "center",
-    backgroundColor: "#F4F4F2",
-    borderRadius: mobileGrid[2],
-    height: mobileGrid[8],
-    justifyContent: "center",
-    width: mobileGrid[8],
-  },
-  settingMeta: {
-    color: "#77756F",
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  settingText: { color: "#1B1B19", fontSize: 15, fontWeight: "700" },
-  settings: {
-    backgroundColor: "#ffffff",
-    borderColor: "rgba(27,27,25,0.10)",
-    borderRadius: mobileControl.cardRadius,
-    borderWidth: 1,
-    marginTop: 12,
-    overflow: "hidden",
-  },
-  signOut: { color: "#9A4A2E", fontSize: 15, fontWeight: "700" },
-  signOutRow: {
-    justifyContent: "center",
-    minHeight: 62,
-    paddingHorizontal: mobileGrid[3],
-  },
-  topBody: {
-    color: "#77756F",
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: mobileGrid[1],
-  },
-  topEyebrow: {
-    color: "#153F70",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  topHeader: { flexDirection: "row" },
-  topTitle: {
-    color: "#1B1B19",
-    fontSize: 38,
-    fontWeight: "500",
-    letterSpacing: -1.15,
-    lineHeight: 42,
-    marginTop: mobileGrid[1],
-  },
-  videoOfflineNote: {
-    backgroundColor: "#edf2ef",
-    borderColor: "#c9dbd1",
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 18,
-    padding: 16,
-  },
-  videoOfflineNoteBody: {
-    color: "#577066",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-  videoOfflineNoteTitle: { color: "#203740", fontSize: 14, fontWeight: "800" },
-});
+const createStyles = (tokens: PlayerDesignTokens) =>
+  StyleSheet.create({
+    artworkActions: { flexDirection: "row", gap: 9, marginTop: 18 },
+    artworkBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 8,
+    },
+    artworkCard: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 22,
+      padding: 18,
+    },
+    artworkTitle: {
+      color: tokens.text1,
+      fontSize: 23,
+      fontWeight: "400",
+      lineHeight: 27,
+      marginTop: 5,
+    },
+    close: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+    billingButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 18,
+      flexDirection: "row",
+      justifyContent: "center",
+      marginTop: 8,
+      minHeight: 58,
+      paddingHorizontal: 18,
+    },
+    billingButtonArrow: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 18,
+      marginLeft: 10,
+    },
+    billingButtonText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    billingFootnote: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      paddingHorizontal: 8,
+      textAlign: "center",
+    },
+    detailFact: { alignItems: "center", flex: 1 },
+    detailFactLabel: {
+      color: tokens.text2,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.8,
+      marginTop: 3,
+    },
+    detailFactValue: { color: tokens.text1, fontSize: 22, fontWeight: "500" },
+    detailFacts: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      marginTop: 18,
+      paddingVertical: 18,
+    },
+    eyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 1.2,
+    },
+    flex: { flex: 1, minWidth: 0 },
+    identity: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: mobileControl.cardRadius,
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[5],
+      minHeight: 90,
+      padding: mobileGrid[3],
+    },
+    identityMeta: {
+      color: tokens.text2,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 2,
+    },
+    identityName: {
+      color: tokens.text1,
+      fontSize: 17,
+      fontWeight: "700",
+      lineHeight: 24,
+    },
+    identityPhoto: { borderRadius: 30, height: 60, width: 60 },
+    identityPhotoFallback: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 30,
+      height: 60,
+      justifyContent: "center",
+      width: 60,
+    },
+    identityPhotoText: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    identityRating: {
+      color: tokens.text1,
+      fontSize: 21,
+      fontWeight: "700",
+      lineHeight: 24,
+      textAlign: "right",
+    },
+    identityRatingBlock: { alignItems: "flex-end" },
+    identityRatingLabel: {
+      color: tokens.text2,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0,
+      lineHeight: 15,
+    },
+    modalContent: { padding: 20, paddingBottom: 48 },
+    modalHeader: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+    },
+    modalSafe: { backgroundColor: tokens.ground, flex: 1 },
+    modalTitle: {
+      color: tokens.text1,
+      fontSize: 28,
+      fontWeight: "400",
+      marginTop: 3,
+    },
+    subscriptionActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 17,
+    },
+    subscriptionCard: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 18,
+    },
+    subscriptionContent: { gap: 13, padding: 18, paddingBottom: 48 },
+    subscriptionDangerAction: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 15,
+    },
+    subscriptionDangerText: {
+      color: tokens.loss,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    subscriptionEmpty: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 26,
+    },
+    subscriptionError: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 14,
+      color: tokens.loss,
+      fontSize: 15,
+      lineHeight: 22,
+      padding: 13,
+    },
+    subscriptionIntro: { color: tokens.text2, fontSize: 15, lineHeight: 22 },
+    subscriptionManagedExternally: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 15,
+    },
+    subscriptionMeta: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 7,
+    },
+    subscriptionNotice: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 14,
+      color: tokens.gain,
+      fontSize: 15,
+      fontWeight: "700",
+      padding: 13,
+      lineHeight: 22,
+    },
+    subscriptionOwner: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    subscriptionPeriod: { color: tokens.text2, fontSize: 12, marginTop: 4 },
+    subscriptionPrimaryAction: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 14,
+      justifyContent: "center",
+      minHeight: 56,
+      paddingHorizontal: 16,
+    },
+    subscriptionPrimaryText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    subscriptionSecondaryAction: {
+      alignItems: "center",
+      borderColor: tokens.hairline,
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingHorizontal: 15,
+    },
+    subscriptionSecondaryText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    subscriptionStatusPill: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    subscriptionStatusText: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      textTransform: "capitalize",
+    },
+    subscriptionTitle: {
+      color: tokens.text1,
+      fontSize: 20,
+      fontWeight: "500",
+      letterSpacing: -0.4,
+      marginTop: 4,
+    },
+    subscriptionTopRow: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+    },
+    notificationBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 3,
+    },
+    notificationRow: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 14,
+      padding: 16,
+    },
+    notificationTitle: { color: tokens.text1, fontSize: 16, fontWeight: "500" },
+    organization: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 11,
+      minHeight: 74,
+      paddingHorizontal: 15,
+    },
+    organizationEmpty: { padding: 18 },
+    organizationMark: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 19,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    organizationMarkText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    organizationMeta: { color: tokens.text2, fontSize: 13, marginTop: 3 },
+    organizationName: { color: tokens.text1, fontSize: 16, fontWeight: "700" },
+    organizations: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: 1,
+      marginTop: 12,
+      overflow: "hidden",
+    },
+    pressed: { opacity: 0.78 },
+    primary: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 14,
+      flex: 1.3,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    primaryText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    profileDetailsHandle: { color: tokens.text1, fontSize: 16, marginTop: 3 },
+    profileDetailsMeta: { color: tokens.text2, fontSize: 15, marginTop: 6 },
+    profileDetailsName: {
+      color: tokens.text1,
+      fontSize: 28,
+      fontWeight: "400",
+      marginTop: 12,
+    },
+    profileIdentity: { alignItems: "center" },
+    profilePhoto: { borderRadius: 54, height: 108, width: 108 },
+    profilePhotoFallback: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 54,
+      height: 108,
+      justifyContent: "center",
+      width: 108,
+    },
+    profilePhotoText: { color: tokens.text1, fontSize: 28, fontWeight: "700" },
+    quickBody: {
+      color: tokens.text2,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 3,
+    },
+    quickCard: {
+      backgroundColor: tokens.surface1,
+      borderRadius: mobileControl.cardRadius,
+      flexBasis: "47%",
+      flexGrow: 1,
+      justifyContent: "space-between",
+      maxWidth: "48.5%",
+      minHeight: 112,
+      padding: mobileGrid[3],
+      gap: 14,
+    },
+    quickCardBlue: { backgroundColor: tokens.surface1 },
+    quickCardSand: { backgroundColor: tokens.surface1 },
+    quickCardTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    quickGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: mobileGrid[2],
+      marginTop: mobileGrid[3],
+    },
+    quickIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 20,
+      height: mobileGrid[8],
+      justifyContent: "center",
+      width: mobileGrid[8],
+    },
+    quickIconBlue: { backgroundColor: tokens.surface2 },
+    quickIconSand: { backgroundColor: tokens.surface2 },
+    quickTitle: {
+      color: tokens.text1,
+      fontSize: 16,
+      fontWeight: "500",
+      lineHeight: 22,
+    },
+    screen: {
+      backgroundColor: tokens.ground,
+      flexGrow: 1,
+      paddingHorizontal: mobileControl.pageInset,
+      paddingTop: mobileGrid[4],
+      paddingBottom: 155,
+    },
+    secondary: {
+      alignItems: "center",
+      borderColor: tokens.text1,
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    secondaryText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    sectionCount: { color: tokens.text1, fontSize: 12, fontWeight: "700" },
+    sectionCountPill: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: mobileControl.pillRadius,
+      height: mobileGrid[6],
+      justifyContent: "center",
+      minWidth: mobileGrid[6],
+      paddingHorizontal: mobileGrid[2],
+    },
+    sectionHeading: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: mobileGrid[7],
+    },
+    sectionTitle: {
+      color: tokens.text1,
+      fontSize: 21,
+      fontWeight: "700",
+      letterSpacing: -0.25,
+      lineHeight: 26,
+    },
+    setting: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: mobileGrid[2],
+      minHeight: 72,
+      paddingHorizontal: mobileGrid[3],
+    },
+    settingIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderRadius: mobileGrid[2],
+      height: mobileGrid[8],
+      justifyContent: "center",
+      width: mobileGrid[8],
+    },
+    settingMeta: {
+      color: tokens.text2,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 2,
+    },
+    settingText: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    settings: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: mobileControl.cardRadius,
+      borderWidth: 1,
+      marginTop: 12,
+      overflow: "hidden",
+    },
+    signOut: { color: tokens.loss, fontSize: 15, fontWeight: "700" },
+    signOutRow: {
+      justifyContent: "center",
+      minHeight: 62,
+      paddingHorizontal: mobileGrid[3],
+    },
+    topBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 21,
+      marginTop: mobileGrid[1],
+    },
+    topEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+    },
+    topHeader: { flexDirection: "row" },
+    topTitle: {
+      color: tokens.text1,
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      lineHeight: 40,
+      marginTop: mobileGrid[1],
+    },
+    videoOfflineNote: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.hairline,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginTop: 18,
+      padding: 16,
+    },
+    videoOfflineNoteBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 5,
+    },
+    videoOfflineNoteTitle: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+  });

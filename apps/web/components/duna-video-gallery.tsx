@@ -7,6 +7,8 @@ import type {
 } from "@duna/api";
 import MuxPlayer from "@mux/mux-player-react";
 import { Badge } from "@duna/ui";
+import { SandLoader } from "@duna/ui/sand-loader";
+import Image from "next/image";
 import { Clock3, Eye, LockKeyhole, Play, Radio, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -43,18 +45,28 @@ function CloudflareStreamPlayer({
   onEnded,
   onPause,
   onTimeUpdate,
+  onReady,
+  onError,
   src,
   title,
 }: {
   readonly onEnded: (seconds: number) => void;
   readonly onPause: (seconds: number) => void;
   readonly onTimeUpdate: (seconds: number) => void;
+  readonly onReady: () => void;
+  readonly onError: () => void;
   readonly src: string;
   readonly title: string;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const callbacks = useRef({ onEnded, onPause, onTimeUpdate });
-  callbacks.current = { onEnded, onPause, onTimeUpdate };
+  const callbacks = useRef({
+    onEnded,
+    onPause,
+    onTimeUpdate,
+    onReady,
+    onError,
+  });
+  callbacks.current = { onEnded, onPause, onTimeUpdate, onReady, onError };
 
   useEffect(() => {
     let active = true;
@@ -66,6 +78,8 @@ function CloudflareStreamPlayer({
       callbacks.current.onTimeUpdate(controller?.currentTime ?? 0);
     const pause = () => callbacks.current.onPause(controller?.currentTime ?? 0);
     const ended = () => callbacks.current.onEnded(controller?.currentTime ?? 0);
+    const ready = () => callbacks.current.onReady();
+    const error = () => callbacks.current.onError();
     const attach = () => {
       const iframe = iframeRef.current;
       const factory = (window as CloudflareStreamWindow).Stream;
@@ -74,6 +88,9 @@ function CloudflareStreamPlayer({
       controller.addEventListener("timeupdate", timeUpdate);
       controller.addEventListener("pause", pause);
       controller.addEventListener("ended", ended);
+      controller.addEventListener("canplay", ready);
+      controller.addEventListener("playing", ready);
+      controller.addEventListener("error", error);
     };
 
     if ((window as CloudflareStreamWindow).Stream) {
@@ -95,12 +112,17 @@ function CloudflareStreamPlayer({
       controller?.removeEventListener("timeupdate", timeUpdate);
       controller?.removeEventListener("pause", pause);
       controller?.removeEventListener("ended", ended);
+      controller?.removeEventListener("canplay", ready);
+      controller?.removeEventListener("playing", ready);
+      controller?.removeEventListener("error", error);
     };
   }, [src]);
 
   return (
     <iframe
       ref={iframeRef}
+      onLoad={onReady}
+      onError={onError}
       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
       allowFullScreen
       src={src}
@@ -223,6 +245,11 @@ export function DunaVideoGallery({
     initialPlayback,
   );
   const [loadingId, setLoadingId] = useState<string>();
+  const [mediaState, setMediaState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const playbackRequest = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => playbackRequest.current?.abort(), []);
   const [message, setMessage] = useState<string>();
   const [currentTime, setCurrentTime] = useState(0);
   const [liveScore, setLiveScore] = useState<VisionScoreSnapshot>();
@@ -290,14 +317,23 @@ export function DunaVideoGallery({
           completed,
         }),
         keepalive: true,
+      }).catch(() => {
+        // Playback does not depend on view telemetry reaching the server.
       });
     },
     [playback],
   );
 
   const chooseVideo = useCallback(
-    async (video: VideoSummary) => {
-      if (playback?.video.id === video.id) return;
+    async (video: VideoSummary, retry = false) => {
+      playbackRequest.current?.abort();
+      if (playback?.video.id === video.id && !retry) {
+        setLoadingId(undefined);
+        setMessage(undefined);
+        return;
+      }
+      const request = new AbortController();
+      playbackRequest.current = request;
       setLoadingId(video.id);
       setMessage(undefined);
       try {
@@ -305,6 +341,7 @@ export function DunaVideoGallery({
         if (accessToken) query.set("token", accessToken);
         const response = await fetch(`/api/video/playback?${query}`, {
           cache: "no-store",
+          signal: request.signal,
         });
         const payload = (await response.json()) as
           { playback: VideoPlayback } | { error: string };
@@ -313,18 +350,21 @@ export function DunaVideoGallery({
             "error" in payload ? payload.error : "Video is not ready.",
           );
         }
+        if (request.signal.aborted) return;
         lastHeartbeat.current = 0;
+        setMediaState("loading");
         setCurrentTime(0);
         setLiveScore(undefined);
         setPlayback(payload.playback);
       } catch (error) {
+        if (request.signal.aborted) return;
         setMessage(
           error instanceof Error
             ? error.message
             : "This video could not be opened.",
         );
       } finally {
-        setLoadingId(undefined);
+        if (!request.signal.aborted) setLoadingId(undefined);
       }
     },
     [accessToken, playback?.video.id],
@@ -353,81 +393,120 @@ export function DunaVideoGallery({
 
       {playback && (
         <div className="duna-video-gallery__stage">
-          {playback.provider === "mux" && playback.playbackId ? (
-            <MuxPlayer
-              accentColor="#d5ff4f"
-              envKey={playback.dataEnvironmentKey}
-              metadataVideoId={playback.video.id}
-              metadataVideoTitle={playback.video.title}
-              playbackId={playback.playbackId}
-              primaryColor="#f8fafc"
-              secondaryColor="#081522"
-              streamType={
-                playback.video.status === "live" ? "ll-live" : "on-demand"
-              }
-              title={playback.video.title}
-              tokens={
-                playback.playbackToken
-                  ? { playback: playback.playbackToken }
-                  : undefined
-              }
-              onEnded={(event) => reportView(muxCurrentTime(event), true)}
-              onPause={(event) => reportView(muxCurrentTime(event), false)}
-              onTimeUpdate={(event) => {
-                const seconds = muxCurrentTime(event);
-                setCurrentTime(seconds);
-                reportView(seconds, false);
-              }}
-            />
-          ) : playback.provider === "cloudflare" && playback.embedUrl ? (
-            <CloudflareStreamPlayer
-              onEnded={(seconds) => reportView(seconds, true)}
-              onPause={(seconds) => reportView(seconds, false)}
-              onTimeUpdate={(seconds) => {
-                setCurrentTime(seconds);
-                reportView(seconds, false);
-              }}
-              src={playback.embedUrl}
-              title={playback.video.title}
-            />
-          ) : playback.sourceUrl ? (
-            <video
-              controls
-              playsInline
-              poster={playback.posterUrl}
-              src={playback.sourceUrl}
-              title={playback.video.title}
-              onEnded={(event) =>
-                reportView(event.currentTarget.currentTime, true)
-              }
-              onPause={(event) =>
-                reportView(event.currentTarget.currentTime, false)
-              }
-              onTimeUpdate={(event) => {
-                setCurrentTime(event.currentTarget.currentTime);
-                reportView(event.currentTarget.currentTime, false);
-              }}
-            />
-          ) : null}
-          {overlayScore && (
-            <ScoreOverlay
-              score={overlayScore}
-              teamA={playback.vision?.settings.teamA ?? overlayTeams.teamA}
-              teamB={playback.vision?.settings.teamB ?? overlayTeams.teamB}
-            />
-          )}
-          {overlayHeartRate !== undefined && (
-            <aside
-              aria-label="Private heart rate overlay"
-              className="duna-video-health"
-            >
-              <b aria-hidden>♥</b>
-              <span>
-                <strong>{Math.round(overlayHeartRate)} BPM</strong>
-                <small>PRIVATE DUNA HEALTH</small>
-              </span>
-            </aside>
-          )}
+          <div
+            className="duna-video-gallery__picture"
+            key={playback.viewSessionId}
+          >
+            {playback.provider === "mux" && playback.playbackId ? (
+              <MuxPlayer
+                accentColor="#e8e3d9"
+                envKey={playback.dataEnvironmentKey}
+                metadataVideoId={playback.video.id}
+                metadataVideoTitle={playback.video.title}
+                playbackId={playback.playbackId}
+                primaryColor="#faf8f4"
+                secondaryColor="#242521"
+                streamType={
+                  playback.video.status === "live" ? "ll-live" : "on-demand"
+                }
+                title={playback.video.title}
+                poster={playback.posterUrl}
+                onLoadedData={() => setMediaState("ready")}
+                onPlaying={() => setMediaState("ready")}
+                onWaiting={() => setMediaState("loading")}
+                onError={() => setMediaState("error")}
+                tokens={
+                  playback.playbackToken
+                    ? { playback: playback.playbackToken }
+                    : undefined
+                }
+                onEnded={(event) => reportView(muxCurrentTime(event), true)}
+                onPause={(event) => reportView(muxCurrentTime(event), false)}
+                onTimeUpdate={(event) => {
+                  const seconds = muxCurrentTime(event);
+                  setCurrentTime(seconds);
+                  reportView(seconds, false);
+                }}
+              />
+            ) : playback.provider === "cloudflare" && playback.embedUrl ? (
+              <CloudflareStreamPlayer
+                onReady={() => setMediaState("ready")}
+                onError={() => setMediaState("error")}
+                onEnded={(seconds) => reportView(seconds, true)}
+                onPause={(seconds) => reportView(seconds, false)}
+                onTimeUpdate={(seconds) => {
+                  setCurrentTime(seconds);
+                  reportView(seconds, false);
+                }}
+                src={playback.embedUrl}
+                title={playback.video.title}
+              />
+            ) : playback.sourceUrl ? (
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedData={() => setMediaState("ready")}
+                onPlaying={() => setMediaState("ready")}
+                onWaiting={() => setMediaState("loading")}
+                onCanPlay={() => setMediaState("ready")}
+                onError={() => setMediaState("error")}
+                poster={playback.posterUrl}
+                src={playback.sourceUrl}
+                title={playback.video.title}
+                onEnded={(event) =>
+                  reportView(event.currentTarget.currentTime, true)
+                }
+                onPause={(event) =>
+                  reportView(event.currentTarget.currentTime, false)
+                }
+                onTimeUpdate={(event) => {
+                  setCurrentTime(event.currentTarget.currentTime);
+                  reportView(event.currentTarget.currentTime, false);
+                }}
+              />
+            ) : null}
+            {mediaState === "loading" && (
+              <div className="duna-video-gallery__loading">
+                <SandLoader label="Loading video" size={80} />
+              </div>
+            )}
+            {(mediaState === "error" ||
+              (!playback.playbackId &&
+                !playback.embedUrl &&
+                !playback.sourceUrl)) && (
+              <div className="duna-video-gallery__failure" role="alert">
+                <strong>Unable to play this video</strong>
+                <p>Check your connection and try again.</p>
+                <button
+                  type="button"
+                  disabled={Boolean(loadingId)}
+                  onClick={() => void chooseVideo(playback.video, true)}
+                >
+                  {loadingId ? "Opening video…" : "Try again"}
+                </button>
+              </div>
+            )}
+            {overlayScore && (
+              <ScoreOverlay
+                score={overlayScore}
+                teamA={playback.vision?.settings.teamA ?? overlayTeams.teamA}
+                teamB={playback.vision?.settings.teamB ?? overlayTeams.teamB}
+              />
+            )}
+            {overlayHeartRate !== undefined && (
+              <aside
+                aria-label="Private heart rate overlay"
+                className="duna-video-health"
+              >
+                <b aria-hidden>♥</b>
+                <span>
+                  <strong>{Math.round(overlayHeartRate)} BPM</strong>
+                  <small>PRIVATE DUNA HEALTH</small>
+                </span>
+              </aside>
+            )}
+          </div>
           <div className="duna-video-gallery__now-playing">
             <span>
               {playback.video.status === "live" ? (
@@ -446,7 +525,11 @@ export function DunaVideoGallery({
         </div>
       )}
 
-      {message && <p className="duna-video-gallery__message">{message}</p>}
+      {message && (
+        <p role="alert" className="duna-video-gallery__message">
+          {message}
+        </p>
+      )}
 
       <div className="duna-video-gallery__options">
         {videos.map((video) => {
@@ -458,6 +541,7 @@ export function DunaVideoGallery({
           return (
             <button
               aria-pressed={selected}
+              aria-busy={loadingId === video.id}
               className={selected ? "is-selected" : undefined}
               disabled={loadingId === video.id || video.status === "processing"}
               key={video.id}
@@ -465,6 +549,15 @@ export function DunaVideoGallery({
               onClick={() => void chooseVideo(video)}
             >
               <span className="duna-video-gallery__option-icon">
+                {video.posterUrl && (
+                  <Image
+                    unoptimized
+                    src={video.posterUrl}
+                    alt=""
+                    width={88}
+                    height={66}
+                  />
+                )}
                 {video.status === "live" ? (
                   <Radio aria-hidden size={20} />
                 ) : (
@@ -472,7 +565,9 @@ export function DunaVideoGallery({
                 )}
               </span>
               <span>
-                <small>{statusLabel(video)}</small>
+                <small>
+                  {loadingId === video.id ? "Opening…" : statusLabel(video)}
+                </small>
                 <strong>{video.title}</strong>
                 <em>
                   <UserRound aria-hidden size={13} />

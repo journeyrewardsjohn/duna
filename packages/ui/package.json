@@ -7,6 +7,9 @@
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
     "./mobile": "./src/mobile.ts",
+    "./sand": "./src/sand.ts",
+    "./sand-loader": "./src/sand-loader.tsx",
+    "./sand.css": "./src/sand.css",
     "./theme": "./src/theme.ts",
     "./theme-toggle": "./src/theme-toggle.tsx",
     "./tokens": "./src/tokens.ts"

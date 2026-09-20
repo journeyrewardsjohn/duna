@@ -17,43 +17,51 @@ import {
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
 import { useProRuntime } from "./runtime";
+import {
+  useProDesign,
+  useProStyles,
+  type ProDesignTokens,
+} from "./design-theme";
+import {
+  CalendarDays,
+  ChevronRight,
+  Layers,
+  Package,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react-native";
 
 type CreateKind = "session" | "service" | "good" | "plan";
 
 const createOptions: readonly {
   kind: CreateKind;
-  icon: string;
+  icon: LucideIcon;
   title: string;
   body: string;
-  accent: string;
 }[] = [
   {
     kind: "session",
-    icon: "▦",
+    icon: CalendarDays,
     title: "Session",
     body: "Put a lesson, clinic, or open play on the calendar.",
-    accent: "#3d6672",
   },
   {
     kind: "service",
-    icon: "◎",
+    icon: UserRound,
     title: "Service",
     body: "Create something players can book with you.",
-    accent: "#3d7d66",
   },
   {
     kind: "good",
-    icon: "◇",
+    icon: Package,
     title: "Good",
     body: "Photograph, stock, and optionally sell an item.",
-    accent: "#b4653d",
   },
   {
     kind: "plan",
-    icon: "✦",
+    icon: Layers,
     title: "Plan",
     body: "Start a membership, credit pack, or bundle.",
-    accent: "#745aa6",
   },
 ];
 
@@ -129,17 +137,20 @@ function Field({
   readonly multiline?: boolean;
   readonly suffix?: string;
 }) {
+  const { tokens } = useProDesign();
+  const styles = useProStyles(createStyles);
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.inputWrap}>
         <TextInput
+          accessibilityLabel={label}
           autoCapitalize="sentences"
           keyboardType={keyboardType}
           multiline={multiline}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#98a2b3"
+          placeholderTextColor={tokens.text2}
           style={[styles.input, multiline && styles.inputMultiline]}
           value={value}
         />
@@ -160,6 +171,7 @@ function Choices<T extends string>({
   readonly value: T;
   readonly onChange: (value: T) => void;
 }) {
+  const styles = useProStyles(createStyles);
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>
@@ -204,6 +216,7 @@ function Toggle({
   readonly value: boolean;
   readonly onChange: (value: boolean) => void;
 }) {
+  const styles = useProStyles(createStyles);
   return (
     <Pressable
       accessibilityRole="switch"
@@ -231,6 +244,8 @@ export function OperatorCreateScreen({
   readonly onCreated: () => Promise<void>;
   readonly onGetPaid: () => void;
 }) {
+  const { tokens } = useProDesign();
+  const styles = useProStyles(createStyles);
   const { client, mode, uploadProductImage, workspace } = useProRuntime();
   const [kind, setKind] = useState<CreateKind>();
   const [step, setStep] = useState(0);
@@ -644,15 +659,17 @@ export function OperatorCreateScreen({
       </View>
       {!kind ? (
         <ScrollView contentContainerStyle={styles.hub}>
-          <Text style={styles.hubEyebrow}>BIG JOBS, FEWER STEPS</Text>
+          <Text style={styles.hubEyebrow}>CREATE</Text>
           <Text style={styles.hubTitle}>What are you making?</Text>
           <Text style={styles.hubBody}>
-            Start it here. Duna keeps the advanced settings out of your way
-            until you need them.
+            Add a session, bookable service, product, or plan for your club.
           </Text>
           <View style={styles.optionGrid}>
             {createOptions.map((option) => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={option.title}
+                accessibilityHint={option.body}
                 key={option.kind}
                 onPress={() => {
                   setKind(option.kind);
@@ -661,19 +678,22 @@ export function OperatorCreateScreen({
                 }}
                 style={styles.optionCard}
               >
-                <View
-                  style={[
-                    styles.optionIcon,
-                    { backgroundColor: option.accent },
-                  ]}
-                >
-                  <Text style={styles.optionIconText}>{option.icon}</Text>
+                <View style={styles.optionIcon}>
+                  <option.icon
+                    size={22}
+                    color={tokens.text1}
+                    strokeWidth={1.7}
+                  />
                 </View>
-                <Text style={styles.optionTitle}>{option.title}</Text>
-                <Text style={styles.optionBody}>{option.body}</Text>
-                <Text style={[styles.optionArrow, { color: option.accent }]}>
-                  →
-                </Text>
+                <View style={styles.flex}>
+                  <Text style={styles.optionTitle}>{option.title}</Text>
+                  <Text style={styles.optionBody}>{option.body}</Text>
+                </View>
+                <ChevronRight
+                  size={18}
+                  color={tokens.text2}
+                  strokeWidth={1.7}
+                />
               </Pressable>
             ))}
           </View>
@@ -1153,7 +1173,7 @@ export function OperatorCreateScreen({
                 style={[styles.primaryButton, busy && styles.buttonDisabled]}
               >
                 {busy ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={tokens.buttonPrimaryForeground} />
                 ) : (
                   <Text style={styles.primaryButtonText}>Create draft</Text>
                 )}
@@ -1166,390 +1186,428 @@ export function OperatorCreateScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: "#f6f5f1", flex: 1 },
-  flex: { flex: 1 },
-  topbar: {
-    alignItems: "center",
-    borderBottomColor: "#e7e4dc",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 58,
-    paddingHorizontal: 16,
-  },
-  topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
-  topButtonText: { color: "#3d6672", fontSize: 15, fontWeight: "800" },
-  topTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
-  hub: { padding: 20, paddingBottom: 60 },
-  hubEyebrow: {
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-    marginTop: 14,
-  },
-  hubTitle: {
-    color: "#1b1b19",
-    fontSize: 36,
-    fontWeight: "900",
-    letterSpacing: -1.3,
-    lineHeight: 40,
-    marginTop: 10,
-  },
-  hubBody: {
-    color: "#766f61",
-    fontSize: 15,
-    lineHeight: 23,
-    marginTop: 10,
-    maxWidth: 540,
-  },
-  optionGrid: { gap: 12, marginTop: 28 },
-  optionCard: {
-    backgroundColor: "#fff",
-    borderColor: "#e7e9ee",
-    borderRadius: 22,
-    borderWidth: 1,
-    minHeight: 152,
-    padding: 18,
-  },
-  optionIcon: {
-    alignItems: "center",
-    borderRadius: 14,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  optionIconText: { color: "#fff", fontSize: 22, fontWeight: "900" },
-  optionTitle: {
-    color: "#1b1b19",
-    fontSize: 21,
-    fontWeight: "900",
-    marginTop: 16,
-  },
-  optionBody: {
-    color: "#766f61",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
-    maxWidth: "84%",
-  },
-  optionArrow: {
-    fontSize: 24,
-    fontWeight: "900",
-    position: "absolute",
-    right: 20,
-    top: 64,
-  },
-  form: { padding: 20, paddingBottom: 130 },
-  progressRow: { flexDirection: "row", gap: 6, marginTop: 8 },
-  progress: { backgroundColor: "#dfe3e8", borderRadius: 4, flex: 1, height: 5 },
-  progressOn: { backgroundColor: "#3d6672" },
-  stepEyebrow: {
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-    marginTop: 26,
-  },
-  stepTitle: {
-    color: "#1b1b19",
-    fontSize: 31,
-    fontWeight: "900",
-    letterSpacing: -1,
-    lineHeight: 36,
-    marginTop: 8,
-  },
-  formStack: { gap: 18, marginTop: 28 },
-  storyCard: {
-    backgroundColor: "#faf6f2",
-    borderColor: "#d3e3f0",
-    borderRadius: 22,
-    borderWidth: 1,
-    marginTop: 20,
-    padding: 18,
-  },
-  storyCardEyebrow: {
-    color: "#143d6b",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  storyCardTitle: {
-    color: "#143d6b",
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-    marginTop: 8,
-  },
-  storyCardBody: {
-    color: "#5e6f82",
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 7,
-  },
-  storyFields: { gap: 16, marginTop: 20 },
-  fieldWrap: { gap: 7 },
-  label: { color: "#344054", fontSize: 12, fontWeight: "800" },
-  inputWrap: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 15,
-    borderWidth: 1,
-    flexDirection: "row",
-    minHeight: 56,
-    paddingHorizontal: 15,
-  },
-  input: {
-    color: "#1b1b19",
-    flex: 1,
-    fontSize: 16,
-    minHeight: 54,
-    paddingVertical: 12,
-  },
-  inputMultiline: { minHeight: 92, textAlignVertical: "top" },
-  inputSuffix: {
-    color: "#766f61",
-    fontSize: 12,
-    fontWeight: "800",
-    marginLeft: 8,
-  },
-  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 52,
-    minWidth: 88,
-    paddingHorizontal: 16,
-  },
-  choiceSelected: { backgroundColor: "#edece6", borderColor: "#3d6672" },
-  choiceText: { color: "#766f61", fontSize: 13, fontWeight: "800" },
-  choiceTextSelected: { color: "#3d6672" },
-  toggle: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 82,
-    padding: 15,
-  },
-  toggleOn: { backgroundColor: "#f2f8f5", borderColor: "#71a48c" },
-  toggleTitle: { color: "#1b1b19", fontSize: 15, fontWeight: "900" },
-  toggleBody: { color: "#766f61", fontSize: 12, lineHeight: 16, marginTop: 4 },
-  switchTrack: {
-    backgroundColor: "#cfd5dc",
-    borderRadius: 14,
-    height: 28,
-    justifyContent: "center",
-    paddingHorizontal: 3,
-    width: 48,
-  },
-  switchTrackOn: { backgroundColor: "#3d7d66" },
-  switchKnob: {
-    backgroundColor: "#fff",
-    borderRadius: 11,
-    height: 22,
-    width: 22,
-  },
-  switchKnobOn: { alignSelf: "flex-end" },
-  photoCard: {
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  photo: { aspectRatio: 4 / 3, width: "100%" },
-  photoGallery: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    padding: 10,
-  },
-  photoThumbnailWrap: {
-    borderRadius: 10,
-    height: 58,
-    overflow: "hidden",
-    width: 58,
-  },
-  photoThumbnail: { height: "100%", width: "100%" },
-  photoRemove: {
-    alignItems: "center",
-    backgroundColor: "rgba(27,27,25,0.78)",
-    borderRadius: 10,
-    height: 20,
-    justifyContent: "center",
-    position: "absolute",
-    right: 3,
-    top: 3,
-    width: 20,
-  },
-  photoRemoveText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  photoEmpty: {
-    alignItems: "center",
-    aspectRatio: 4 / 3,
-    backgroundColor: "#eef3f8",
-    justifyContent: "center",
-  },
-  photoEmptyIcon: { color: "#3d6672", fontSize: 36 },
-  photoEmptyText: {
-    color: "#766f61",
-    fontSize: 13,
-    fontWeight: "800",
-    marginTop: 8,
-  },
-  photoActions: { flexDirection: "row", gap: 8, padding: 10 },
-  photoButton: {
-    alignItems: "center",
-    backgroundColor: "#f7f8fa",
-    borderRadius: 13,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 52,
-  },
-  photoButtonText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
-  inlineSetup: {
-    backgroundColor: "#eef3f8",
-    borderRadius: 19,
-    gap: 14,
-    padding: 16,
-  },
-  inlineSetupTitle: { color: "#1b1b19", fontSize: 17, fontWeight: "900" },
-  inlineSetupBody: { color: "#766f61", fontSize: 12, lineHeight: 18 },
-  adviceCard: {
-    backgroundColor: "#fff7e8",
-    borderColor: "#edd3a6",
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 16,
-  },
-  adviceTitle: { color: "#80571b", fontSize: 14, fontWeight: "900" },
-  adviceBody: { color: "#805f31", fontSize: 12, lineHeight: 18, marginTop: 6 },
-  reviewCard: { backgroundColor: "#22343b", borderRadius: 24, padding: 20 },
-  reviewEyebrow: {
-    color: "#e7c37f",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  reviewTitle: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-    marginTop: 12,
-  },
-  reviewBody: {
-    color: "rgba(255,255,255,.72)",
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 7,
-  },
-  draftPill: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,.12)",
-    borderRadius: 20,
-    marginTop: 18,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  draftPillText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-  },
-  error: {
-    backgroundColor: "#fff0f0",
-    borderRadius: 12,
-    color: "#9a4a2e",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 18,
-    padding: 13,
-  },
-  footer: {
-    backgroundColor: "rgba(248,247,243,.96)",
-    borderTopColor: "#e7e4dc",
-    borderTopWidth: 1,
-    bottom: 0,
-    left: 0,
-    padding: 14,
-    position: "absolute",
-    right: 0,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#3d6672",
-    borderRadius: 16,
-    justifyContent: "center",
-    minHeight: 58,
-    paddingHorizontal: 18,
-  },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  buttonDisabled: { opacity: 0.55 },
-  successPage: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    padding: 24,
-  },
-  successIcon: {
-    alignItems: "center",
-    backgroundColor: "#e6f3ec",
-    borderRadius: 42,
-    height: 84,
-    justifyContent: "center",
-    width: 84,
-  },
-  successIconText: { color: "#2f6b3a", fontSize: 40, fontWeight: "900" },
-  successEyebrow: {
-    color: "#2f6b3a",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    marginTop: 24,
-  },
-  successTitle: {
-    color: "#1b1b19",
-    fontSize: 31,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  successBody: {
-    color: "#766f61",
-    fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 24,
-    marginTop: 9,
-    maxWidth: 360,
-    textAlign: "center",
-  },
-  successActions: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 10,
-    width: "100%",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#d9dee7",
-    borderRadius: 15,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 54,
-  },
-  secondaryButtonText: { color: "#3d6672", fontSize: 12, fontWeight: "900" },
-});
+function createStyles(tokens: ProDesignTokens) {
+  return StyleSheet.create({
+    safe: { backgroundColor: tokens.ground, flex: 1 },
+    flex: { flex: 1 },
+    topbar: {
+      alignItems: "center",
+      borderBottomColor: tokens.hairline,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 58,
+      paddingHorizontal: 16,
+    },
+    topButton: { justifyContent: "center", minHeight: 48, minWidth: 72 },
+    topButtonText: { color: tokens.text1, fontSize: 15, fontWeight: "500" },
+    topTitle: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    hub: { padding: 20, paddingBottom: 60 },
+    hubEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.1,
+      marginTop: 14,
+    },
+    hubTitle: {
+      color: tokens.text1,
+      fontSize: 34,
+      fontWeight: "400",
+      letterSpacing: -0.8,
+      lineHeight: 40,
+      marginTop: 10,
+    },
+    hubBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 23,
+      marginTop: 10,
+      maxWidth: 540,
+    },
+    optionGrid: { gap: 12, marginTop: 28 },
+    optionCard: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 0,
+      minHeight: 112,
+      padding: 20,
+
+      alignItems: "center",
+
+      flexDirection: "row",
+
+      gap: 15,
+    },
+    optionIcon: {
+      alignItems: "center",
+      borderRadius: 25,
+      height: 50,
+      justifyContent: "center",
+      width: 50,
+
+      backgroundColor: tokens.surface2,
+    },
+    optionTitle: {
+      color: tokens.text1,
+      fontSize: 17,
+      fontWeight: "700",
+      marginTop: 0,
+    },
+    optionBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 5,
+      maxWidth: "100%",
+    },
+    form: { padding: 20, paddingBottom: 130 },
+    progressRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+    progress: {
+      backgroundColor: tokens.hairline,
+      borderRadius: 4,
+      flex: 1,
+      height: 5,
+    },
+    progressOn: { backgroundColor: tokens.text1 },
+    stepEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+      marginTop: 26,
+    },
+    stepTitle: {
+      color: tokens.text1,
+      fontSize: 31,
+      fontWeight: "400",
+      letterSpacing: -0.6,
+      lineHeight: 36,
+      marginTop: 8,
+    },
+    formStack: { gap: 18, marginTop: 28 },
+    storyCard: {
+      backgroundColor: tokens.ground,
+      borderColor: tokens.hairline,
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 20,
+      padding: 18,
+    },
+    storyCardEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.1,
+    },
+    storyCardTitle: {
+      color: tokens.text1,
+      fontSize: 22,
+      fontWeight: "500",
+      letterSpacing: -0.4,
+      marginTop: 8,
+    },
+    storyCardBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 7,
+    },
+    storyFields: { gap: 16, marginTop: 20 },
+    fieldWrap: { gap: 7 },
+    label: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    inputWrap: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      minHeight: 56,
+      paddingHorizontal: 15,
+    },
+    input: {
+      color: tokens.text1,
+      flex: 1,
+      fontSize: 16,
+      minHeight: 54,
+      paddingVertical: 12,
+
+      minWidth: 0,
+    },
+    inputMultiline: { minHeight: 92, textAlignVertical: "top" },
+    inputSuffix: {
+      color: tokens.text2,
+      fontSize: 12,
+      fontWeight: "500",
+      marginLeft: 8,
+    },
+    choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    choice: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 14,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 52,
+      minWidth: 88,
+      paddingHorizontal: 16,
+    },
+    choiceSelected: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.text1,
+    },
+    choiceText: { color: tokens.text2, fontSize: 14, fontWeight: "500" },
+    choiceTextSelected: { color: tokens.text1 },
+    toggle: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      minHeight: 82,
+      padding: 15,
+    },
+    toggleOn: { backgroundColor: tokens.surface2, borderColor: tokens.text1 },
+    toggleTitle: { color: tokens.text1, fontSize: 15, fontWeight: "700" },
+    toggleBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+    switchTrack: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 14,
+      height: 28,
+      justifyContent: "center",
+      paddingHorizontal: 3,
+      width: 48,
+    },
+    switchTrackOn: { backgroundColor: tokens.text1 },
+    switchKnob: {
+      backgroundColor: tokens.surface1,
+      borderRadius: 11,
+      height: 22,
+      width: 22,
+    },
+    switchKnobOn: { alignSelf: "flex-end" },
+    photoCard: {
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 20,
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+    photo: { aspectRatio: 4 / 3, width: "100%" },
+    photoGallery: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      padding: 10,
+    },
+    photoThumbnailWrap: {
+      borderRadius: 10,
+      height: 58,
+      overflow: "hidden",
+      width: 58,
+    },
+    photoThumbnail: { height: "100%", width: "100%" },
+    photoRemove: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      position: "absolute",
+      right: 0,
+      top: 0,
+      width: 48,
+    },
+    photoRemoveText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    photoEmpty: {
+      alignItems: "center",
+      aspectRatio: 4 / 3,
+      backgroundColor: tokens.surface2,
+      justifyContent: "center",
+    },
+    photoEmptyIcon: { color: tokens.text1, fontSize: 36 },
+    photoEmptyText: {
+      color: tokens.text2,
+      fontSize: 15,
+      fontWeight: "500",
+      marginTop: 8,
+    },
+    photoActions: { flexDirection: "row", gap: 8, padding: 10 },
+    photoButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 13,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 52,
+    },
+    photoButtonText: { color: tokens.text1, fontSize: 14, fontWeight: "500" },
+    inlineSetup: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 19,
+      gap: 14,
+      padding: 16,
+    },
+    inlineSetupTitle: { color: tokens.text1, fontSize: 17, fontWeight: "700" },
+    inlineSetupBody: { color: tokens.text2, fontSize: 15, lineHeight: 22 },
+    adviceCard: {
+      backgroundColor: tokens.surface2,
+      borderColor: tokens.hairline,
+      borderRadius: 18,
+      borderWidth: 1,
+      padding: 16,
+    },
+    adviceTitle: { color: tokens.flareText, fontSize: 14, fontWeight: "700" },
+    adviceBody: {
+      color: tokens.flareText,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 6,
+    },
+    reviewCard: {
+      backgroundColor: tokens.surface1,
+      borderRadius: 24,
+      padding: 20,
+    },
+    reviewEyebrow: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1,
+    },
+    reviewTitle: {
+      color: tokens.text1,
+      fontSize: 26,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      marginTop: 12,
+    },
+    reviewBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 7,
+    },
+    draftPill: {
+      alignSelf: "flex-start",
+      backgroundColor: tokens.surface2,
+      borderRadius: 20,
+      marginTop: 18,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+    draftPillText: {
+      color: tokens.text1,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.7,
+    },
+    error: {
+      backgroundColor: tokens.surface2,
+      borderRadius: 12,
+      color: tokens.loss,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 18,
+      padding: 13,
+    },
+    footer: {
+      backgroundColor: tokens.ground,
+      borderTopColor: tokens.hairline,
+      borderTopWidth: 1,
+      bottom: 0,
+      left: 0,
+      padding: 14,
+      position: "absolute",
+      right: 0,
+    },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.buttonPrimaryBackground,
+      borderRadius: 16,
+      justifyContent: "center",
+      minHeight: 58,
+      paddingHorizontal: 18,
+    },
+    primaryButtonText: {
+      color: tokens.buttonPrimaryForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    buttonDisabled: { opacity: 0.55 },
+    successPage: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      padding: 24,
+    },
+    successIcon: {
+      alignItems: "center",
+      backgroundColor: tokens.surface2,
+      borderRadius: 42,
+      height: 84,
+      justifyContent: "center",
+      width: 84,
+    },
+    successIconText: { color: tokens.gain, fontSize: 40, fontWeight: "700" },
+    successEyebrow: {
+      color: tokens.gain,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      marginTop: 24,
+    },
+    successTitle: {
+      color: tokens.text1,
+      fontSize: 31,
+      fontWeight: "400",
+      letterSpacing: -0.7,
+      marginTop: 8,
+      textAlign: "center",
+    },
+    successBody: {
+      color: tokens.text2,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: 24,
+      marginTop: 9,
+      maxWidth: 360,
+      textAlign: "center",
+    },
+    successActions: {
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 10,
+      width: "100%",
+    },
+    secondaryButton: {
+      alignItems: "center",
+      backgroundColor: tokens.surface1,
+      borderColor: tokens.hairline,
+      borderRadius: 15,
+      borderWidth: 1,
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 54,
+    },
+    secondaryButtonText: {
+      color: tokens.text1,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+  });
+}

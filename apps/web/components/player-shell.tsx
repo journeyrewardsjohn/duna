@@ -2,7 +2,7 @@
 
 import type { PlayerOrganizationAccess } from "@duna/api";
 import type { PersonSummary } from "@duna/core";
-import { DunaMark, Numeric } from "@duna/ui";
+import { DunaActionTrigger, DunaMark, Numeric } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   CalendarDays,
@@ -36,7 +36,7 @@ const navigation = [
 ] as const;
 
 const mobileNavigation = navigation.filter(({ label }) =>
-  ["Home", "Discover", "Play", "Matches", "Video"].includes(label),
+  ["Home", "Play"].includes(label),
 );
 
 export function PlayerShell({
@@ -221,10 +221,27 @@ export function PlayerShell({
                   key={href}
                 >
                   <Icon aria-hidden size={20} />
-                  <span>{label}</span>
+                  <span>{label === "Play" ? "Schedule" : label}</span>
                 </Link>
               );
             })}
+            <DunaActionTrigger className="sand-nav-duna" panel="chat">
+              <DunaMark compact />
+              <span>Duna</span>
+            </DunaActionTrigger>
+            <button
+              type="button"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="player-mobile-menu"
+              onClick={() => setMobileMenuOpen((value) => !value)}
+            >
+              <Menu aria-hidden size={20} />
+              <span>Explore</span>
+            </button>
+            <Link href="/app/messages">
+              <MessageCircle aria-hidden size={20} />
+              <span>Messages</span>
+            </Link>
           </nav>
           <DunaActionCenter />
         </>

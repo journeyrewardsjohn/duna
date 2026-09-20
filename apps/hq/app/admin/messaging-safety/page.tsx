@@ -1,3 +1,4 @@
+import { isAdminAccessDenied } from "@/lib/admin-access";
 import {
   CheckCircle2,
   Clock3,
@@ -21,10 +22,7 @@ export default async function MessageSafetyPage() {
   const cases = await caller.messaging
     .moderationQueue()
     .catch((error: unknown) => {
-      if (
-        error instanceof Error &&
-        error.message === "Platform administration access required"
-      ) {
+      if (isAdminAccessDenied(error)) {
         return undefined;
       }
       throw error;
