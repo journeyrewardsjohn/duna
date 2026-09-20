@@ -172,10 +172,10 @@ Player native,VideoStudioScreen,apps/player/video-studio.tsx,local-review,Captur
 Player native,VisionSecondScreen,apps/player/vision-second-screen.tsx,pending,Physical device verification pending
 Pro native,TodayScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
 Pro native,CalendarScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
-Pro native,PeopleScreen,apps/pro/App.tsx,pending,Physical device verification pending
-Pro native,ScorerScreen,apps/pro/App.tsx,pending,Physical device verification pending
+Pro native,PeopleScreen,apps/pro/App.tsx,local-review,Light/dark list and profile/invitation forms reviewed locally; search/filter and guardian selections pass; no invitation sent
+Pro native,ScorerScreen,apps/pro/App.tsx,local-review,Preview points and undo pass at phone portrait/landscape and tablet; live synchronization and physical scoring pending
 Pro native,MoreScreen,apps/pro/App.tsx,local-review,Actual components with local data reviewed; connected and physical acceptance pending
-Pro native,CoachVideoScreen,apps/pro/coach-video.tsx,pending,Physical device verification pending
+Pro native,CoachVideoScreen,apps/pro/coach-video.tsx,local-review,Light/dark entry and direct More navigation reviewed; physical capture/upload and private playback pending
 Pro native,DunaAiScreen,apps/pro/duna-ai-screen.tsx,pending,Physical device verification pending
 Pro native,GetPaidScreen,apps/pro/get-paid.tsx,local-review,Light and dark component review with sample data; connected and physical workflows pending
 Pro native,ProMessagingScreen,apps/pro/messaging-screen.tsx,pending,Physical device verification pending

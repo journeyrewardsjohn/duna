@@ -11,7 +11,6 @@ import {
 } from "@duna/expo-background-upload";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   AppState,
   Platform,
   Pressable,
@@ -23,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { DunaApiClient } from "./mobile-api";
 import { DunaNumericText, SatoshiText as Text } from "./satoshi-text";
 import { useProRuntime } from "./runtime";
+import { SandLoader } from "./sand-loader";
 import type { TournamentControlPalette as VideoPalette } from "./tournament-control";
 
 type VideoStudio = Awaited<
@@ -583,6 +583,10 @@ export function CoachVideoScreen({
           style={styles.eventRail}
         >
           <Pressable
+            accessibilityRole="radio"
+            accessibilityLabel="Practice without an event"
+            accessibilityState={{ checked: !selectedEvent }}
+            aria-checked={!selectedEvent}
             onPress={() => setSelectedEventId(undefined)}
             style={[styles.event, !selectedEvent && styles.eventActive]}
           >
@@ -597,6 +601,9 @@ export function CoachVideoScreen({
           </Pressable>
           {events.map((event) => (
             <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedEvent?.id === event.id }}
+              aria-checked={selectedEvent?.id === event.id}
               key={event.id}
               onPress={() => setSelectedEventId(event.id)}
               style={[
@@ -618,7 +625,7 @@ export function CoachVideoScreen({
         </ScrollView>
         <Text style={styles.section}>VIDEO LIBRARY</Text>
         {loading ? (
-          <ActivityIndicator color={palette.accent} />
+          <SandLoader label="Loading coaching videos" size={90} />
         ) : studio?.videos.length ? (
           studio.videos.slice(0, 8).map((video) => (
             <View key={video.id} style={styles.video}>
@@ -662,7 +669,7 @@ function createStyles(palette: VideoPalette) {
       alignItems: "center",
       height: 48,
       justifyContent: "center",
-      width: 36,
+      width: 48,
     },
     closeText: { color: palette.ink, fontSize: 36, lineHeight: 38 },
     eyebrow: {
@@ -674,7 +681,7 @@ function createStyles(palette: VideoPalette) {
     title: {
       color: palette.ink,
       fontSize: 25,
-      fontWeight: "800",
+      fontWeight: "400",
       letterSpacing: -0.35,
     },
     content: { gap: 14, padding: 18, paddingBottom: 42 },
@@ -684,21 +691,21 @@ function createStyles(palette: VideoPalette) {
       gap: 8,
       padding: 18,
     },
-    heroTitle: { color: palette.ink, fontSize: 20, fontWeight: "800" },
-    heroBody: { color: palette.muted, fontSize: 14, lineHeight: 20 },
+    heroTitle: { color: palette.ink, fontSize: 20, fontWeight: "500" },
+    heroBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
     notice: {
       backgroundColor: palette.surfaceAlt,
       borderColor: palette.warning,
       borderLeftWidth: 3,
       color: palette.ink,
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: 15,
+      lineHeight: 22,
       padding: 12,
     },
     section: {
       color: palette.muted,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       letterSpacing: 1.1,
       marginTop: 6,
     },
@@ -708,26 +715,28 @@ function createStyles(palette: VideoPalette) {
       backgroundColor: palette.accent,
       borderRadius: 18,
       flex: 1,
+      minWidth: 0,
       gap: 4,
       justifyContent: "center",
       minHeight: 86,
       padding: 14,
     },
-    primaryText: { color: palette.onAccent, fontSize: 15, fontWeight: "800" },
-    primaryMeta: { color: palette.onAccent, fontSize: 12, opacity: 0.8 },
+    primaryText: { color: palette.onAccent, fontSize: 15, fontWeight: "500" },
+    primaryMeta: { color: palette.onAccent, fontSize: 15, opacity: 1 },
     secondary: {
       alignItems: "center",
       borderColor: palette.border,
       borderRadius: 18,
       borderWidth: 1,
       flex: 1,
+      minWidth: 0,
       gap: 4,
       justifyContent: "center",
       minHeight: 86,
       padding: 14,
     },
-    secondaryText: { color: palette.ink, fontSize: 14, fontWeight: "800" },
-    secondaryMeta: { color: palette.muted, fontSize: 12, textAlign: "center" },
+    secondaryText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
+    secondaryMeta: { color: palette.muted, fontSize: 15, textAlign: "center" },
     ready: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -736,9 +745,9 @@ function createStyles(palette: VideoPalette) {
       gap: 10,
       padding: 18,
     },
-    readyTitle: { color: palette.ink, fontSize: 17, fontWeight: "800" },
+    readyTitle: { color: palette.ink, fontSize: 17, fontWeight: "500" },
     readyValue: { color: palette.accent, fontSize: 38 },
-    readyMeta: { color: palette.muted, fontSize: 13 },
+    readyMeta: { color: palette.muted, fontSize: 15 },
     textButton: {
       alignItems: "center",
       minHeight: 48,
@@ -761,7 +770,7 @@ function createStyles(palette: VideoPalette) {
       backgroundColor: palette.accent,
       borderColor: palette.accent,
     },
-    eventText: { color: palette.ink, fontSize: 13, fontWeight: "700" },
+    eventText: { color: palette.ink, fontSize: 14, fontWeight: "500" },
     eventTextActive: { color: palette.onAccent },
     video: {
       alignItems: "center",
@@ -783,7 +792,7 @@ function createStyles(palette: VideoPalette) {
     videoState: {
       color: palette.positive,
       fontSize: 12,
-      fontWeight: "800",
+      fontWeight: "500",
       textTransform: "uppercase",
     },
     empty: {
@@ -794,7 +803,7 @@ function createStyles(palette: VideoPalette) {
       gap: 8,
       padding: 18,
     },
-    emptyTitle: { color: palette.ink, fontSize: 18, fontWeight: "800" },
-    emptyBody: { color: palette.muted, fontSize: 14, lineHeight: 20 },
+    emptyTitle: { color: palette.ink, fontSize: 18, fontWeight: "500" },
+    emptyBody: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   });
 }

@@ -1,4 +1,6 @@
+import { resolveDunaMobileTokens } from "@duna/ui/mobile";
 import { sandColors } from "@duna/ui/sand";
+import { environmentalColors, type DunaZone } from "@duna/ui/tokens";
 import { formatVenueTime } from "@duna/core";
 import { demoOrganization, demoPeople } from "@duna/core/demo";
 import {
@@ -117,61 +119,43 @@ const dunaProWordmarkWhite = require("./assets/duna-horizontal-white.png");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dunaProMark = require("./assets/duna-mark.png");
 
-const lightColors = {
-  canvas: sandColors.canvas,
-  ink: sandColors.ink,
-  depth: sandColors.surface,
-  navy: sandColors.inset,
-  navyLift: sandColors.surface,
-  bone: sandColors.ink,
-  muted: sandColors.muted,
-  aqua: sandColors.ink,
-  aquaDeep: sandColors.ink,
-  sand: "#d6a874",
-  flare: "#f0a06d",
-  positive: "#3c7a5b",
-  warning: "#d9955f",
-  danger: "#a64b43",
-  onAccent: sandColors.surface,
-  overlayRgb: sandColors.inkRgb,
-  accentRgb: sandColors.inkRgb,
-  warningRgb: "217,149,95",
-  positiveRgb: "60,122,91",
-  dangerRgb: "166,75,67",
-  flareRgb: "240,160,109",
-  inkRgb: sandColors.inkRgb,
-  depthRgb: sandColors.surfaceRgb,
-} as const;
-
-type Palette = {
-  readonly [Key in keyof typeof lightColors]: string;
-};
-
-const darkColors: Palette = {
-  canvas: "#0d1114",
-  ink: "#0d1114",
-  depth: "#141a1e",
-  navy: "#101a20",
-  navyLift: "#1b2429",
-  bone: "#edf1f2",
-  muted: "#a9b4b8",
-  aqua: "#b5ccd3",
-  aquaDeep: "#8fb0bc",
-  sand: "#d4b77c",
-  flare: "#f4794c",
-  positive: "#6bae78",
-  warning: "#d4b77c",
-  danger: "#c4785c",
-  onAccent: "#0d1114",
-  overlayRgb: "237,241,242",
-  accentRgb: "181,204,211",
-  warningRgb: "212,183,124",
-  positiveRgb: "107,174,120",
-  dangerRgb: "196,120,92",
-  flareRgb: "244,121,76",
-  inkRgb: "13,17,20",
-  depthRgb: "20,26,30",
-};
+function colorRgb(hex: string) {
+  return [1, 3, 5]
+    .map((offset) => parseInt(hex.slice(offset, offset + 2), 16))
+    .join(",");
+}
+function paletteFor(theme: "light" | "dark", zone: DunaZone = "editorial") {
+  const tokens = resolveDunaMobileTokens(theme, zone);
+  return {
+    canvas: tokens.ground,
+    ink: environmentalColors.ink,
+    depth: tokens.surface1,
+    navy: tokens.surface2,
+    navyLift: tokens.surface2,
+    bone: tokens.text1,
+    muted: tokens.text2,
+    aqua: tokens.buttonPrimaryBackground,
+    aquaDeep: tokens.buttonPrimaryBackground,
+    sand: tokens.gold,
+    flare: tokens.flare,
+    positive: tokens.gain,
+    warning: tokens.flareText,
+    danger: tokens.loss,
+    onAccent: tokens.buttonPrimaryForeground,
+    overlayRgb: colorRgb(tokens.text1),
+    accentRgb: colorRgb(tokens.buttonPrimaryBackground),
+    warningRgb: colorRgb(tokens.flareText),
+    positiveRgb: colorRgb(tokens.gain),
+    dangerRgb: colorRgb(tokens.loss),
+    flareRgb: colorRgb(tokens.flare),
+    inkRgb: colorRgb(environmentalColors.ink),
+    depthRgb: colorRgb(tokens.surface1),
+  };
+}
+const lightColors = paletteFor("light");
+const darkColors = paletteFor("dark");
+const liveColors = paletteFor("dark", "live");
+type Palette = ReturnType<typeof paletteFor>;
 
 type ThemeName = "light" | "dark";
 type ThemePreference = ThemeName | "system";
@@ -453,11 +437,11 @@ function Pill({
       borderColor: rgba(colors.positiveRgb, 0.22),
     },
     warning: {
-      backgroundColor: rgba(colors.warningRgb, 0.08),
+      backgroundColor: colors.depth,
       borderColor: rgba(colors.warningRgb, 0.22),
     },
     live: {
-      backgroundColor: rgba(colors.flareRgb, 0.08),
+      backgroundColor: colors.depth,
       borderColor: rgba(colors.flareRgb, 0.25),
     },
   };
@@ -468,7 +452,7 @@ function Pill({
           styles.pillText,
           tone === "positive" && { color: colors.positive },
           tone === "warning" && { color: colors.warning },
-          tone === "live" && { color: "#ff9a7a" },
+          tone === "live" && { color: colors.warning },
         ]}
       >
         {children.toUpperCase()}
@@ -918,12 +902,24 @@ function VenueMatchesSection({
                 match.status === "live" && styles.venueMatchActionLive,
               ]}
             >
-              <Text style={styles.venueMatchActionText}>
+              <Text
+                style={[
+                  styles.venueMatchActionText,
+                  match.status === "live" && styles.venueMatchActionTextLive,
+                ]}
+              >
                 {match.status === "live"
                   ? "Resume courtside scoring"
                   : "Open match + score"}
               </Text>
-              <Text style={styles.venueMatchActionText}>→</Text>
+              <Text
+                style={[
+                  styles.venueMatchActionText,
+                  match.status === "live" && styles.venueMatchActionTextLive,
+                ]}
+              >
+                →
+              </Text>
             </Pressable>
           </View>
         ))}
@@ -3109,7 +3105,7 @@ function PeopleScreen({
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteFeedback, setInviteFeedback] = useState<string>();
   const { client, members, mode, refresh, workspace } = useProRuntime();
-  const people = members ?? demoPeople;
+  const people = members ?? (mode === "preview" ? demoPeople : []);
   const filteredPeople = people.filter((person) => {
     const query = search.trim().toLowerCase();
     if (
@@ -3210,13 +3206,14 @@ function PeopleScreen({
         <Header />
         <PageTitle
           action="Add person"
-          eyebrow="CRM + ELIGIBILITY"
+          eyebrow="YOUR COMMUNITY"
           onAction={() => setInviteOpen(true)}
-          title="People."
+          title="People"
         />
         <View style={styles.searchField}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
+            accessibilityLabel="Search people"
             onChangeText={setSearch}
             placeholder={`Search ${people.length} people…`}
             placeholderTextColor={colors.muted}
@@ -3239,6 +3236,10 @@ function PeopleScreen({
               "Minors",
             ].map((item) => (
               <Pressable
+                accessibilityRole="radio"
+                accessibilityLabel={`People filter: ${item}`}
+                accessibilityState={{ checked: filter === item }}
+                aria-checked={filter === item}
                 key={item}
                 onPress={() => setFilter(item)}
                 style={[
@@ -3261,7 +3262,7 @@ function PeopleScreen({
         <View style={styles.peopleSummary}>
           <View>
             <Text style={styles.metricValue}>{people.length}</Text>
-            <Text style={styles.metaText}>active people</Text>
+            <Text style={styles.metaText}>people</Text>
           </View>
           <View>
             <Text style={styles.metricValue}>{guardianCount}</Text>
@@ -3273,12 +3274,28 @@ function PeopleScreen({
           </View>
         </View>
         <View style={styles.peopleList}>
+          {filteredPeople.length === 0 && (
+            <View style={styles.peopleEmpty}>
+              <Text style={styles.peopleEmptyTitle}>
+                {search.trim() || filter !== "All"
+                  ? "No people match this view"
+                  : "Your people will appear here"}
+              </Text>
+              <Text style={styles.peopleEmptyBody}>
+                {search.trim() || filter !== "All"
+                  ? "Try a different name or filter."
+                  : "Invite a player to connect them with your club."}
+              </Text>
+            </View>
+          )}
           {filteredPeople.map((person) => {
             const relationship = workspace?.people.find(
               (candidate) => candidate.personId === person.id,
             );
             return (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${person.displayName} profile`}
                 key={person.id}
                 onPress={() => setSelectedPersonId(person.id)}
                 style={styles.personRow}
@@ -3287,7 +3304,7 @@ function PeopleScreen({
                   <Text style={styles.personAvatarText}>{person.initials}</Text>
                 </View>
                 <View style={styles.flex}>
-                  <Text style={styles.rowTitle}>{person.displayName}</Text>
+                  <Text style={styles.personName}>{person.displayName}</Text>
                   <Text style={styles.metaText}>
                     @{person.handle} · {person.roles.join(" + ")}
                   </Text>
@@ -3340,7 +3357,7 @@ function PeopleScreen({
         <SafeAreaView edges={["top", "bottom"]} style={styles.peopleModalSafe}>
           <View style={styles.peopleModalHeader}>
             <View>
-              <Text style={styles.eyebrow}>CONNECTED PERSON</Text>
+              <Text style={styles.eyebrow}>PLAYER PROFILE</Text>
               <Text style={styles.peopleModalTitle}>
                 {selectedPerson?.displayName ?? "Player"}
               </Text>
@@ -3381,17 +3398,17 @@ function PeopleScreen({
                   <Text style={styles.metricValue}>
                     {selectedPerson.rating.display.toFixed(2)}
                   </Text>
-                  <Text style={styles.metaText}>rating</Text>
+                  <Text style={styles.metaText}>Sand Rating</Text>
                 </View>
                 <View>
                   <Text style={styles.metricValue}>
-                    {selectedRelationship?.creditBalance ?? 0}
+                    {selectedRelationship?.creditBalance ?? "—"}
                   </Text>
                   <Text style={styles.metaText}>credits</Text>
                 </View>
                 <View>
                   <Text style={styles.metricValue}>
-                    {selectedRelationship?.upcomingCount ?? 0}
+                    {selectedRelationship?.upcomingCount ?? "—"}
                   </Text>
                   <Text style={styles.metaText}>upcoming</Text>
                 </View>
@@ -3473,7 +3490,7 @@ function PeopleScreen({
         <SafeAreaView edges={["top", "bottom"]} style={styles.peopleModalSafe}>
           <View style={styles.peopleModalHeader}>
             <View>
-              <Text style={styles.eyebrow}>NATIVE INVITATION</Text>
+              <Text style={styles.eyebrow}>INVITE A PLAYER</Text>
               <Text style={styles.peopleModalTitle}>Add a player.</Text>
             </View>
             <Pressable
@@ -3491,6 +3508,7 @@ function PeopleScreen({
             </Text>
             <Text style={styles.calendarFieldLabel}>PLAYER NAME</Text>
             <TextInput
+              accessibilityLabel="Player name"
               onChangeText={setInviteName}
               placeholder="Full name"
               placeholderTextColor={colors.muted}
@@ -3501,6 +3519,7 @@ function PeopleScreen({
             <TextInput
               autoCapitalize="none"
               keyboardType="email-address"
+              accessibilityLabel="Player email"
               onChangeText={setInviteEmail}
               placeholder="player@example.com"
               placeholderTextColor={colors.muted}
@@ -3510,6 +3529,7 @@ function PeopleScreen({
             <Text style={styles.calendarFieldLabel}>PHONE · OPTIONAL</Text>
             <TextInput
               keyboardType="phone-pad"
+              accessibilityLabel="Optional player phone"
               onChangeText={setInvitePhone}
               placeholder="+1 310 555 0100"
               placeholderTextColor={colors.muted}
@@ -3517,6 +3537,10 @@ function PeopleScreen({
               value={invitePhone}
             />
             <Pressable
+              accessibilityRole="checkbox"
+              accessibilityLabel="This player is a minor"
+              accessibilityState={{ checked: inviteMinor }}
+              aria-checked={inviteMinor}
               onPress={() => setInviteMinor((value) => !value)}
               style={styles.peopleInviteToggle}
             >
@@ -3532,7 +3556,7 @@ function PeopleScreen({
               </View>
               <View style={styles.flex}>
                 <Text style={styles.rowTitle}>This player is a minor</Text>
-                <Text style={styles.metaText}>
+                <Text style={styles.peopleInviteHint}>
                   The invitation goes to a verified guardian.
                 </Text>
               </View>
@@ -3541,6 +3565,7 @@ function PeopleScreen({
               <>
                 <Text style={styles.calendarFieldLabel}>GUARDIAN NAME</Text>
                 <TextInput
+                  accessibilityLabel="Guardian name"
                   onChangeText={setGuardianName}
                   placeholder="Guardian name"
                   placeholderTextColor={colors.muted}
@@ -3551,6 +3576,7 @@ function PeopleScreen({
                 <TextInput
                   autoCapitalize="none"
                   keyboardType="email-address"
+                  accessibilityLabel="Guardian email"
                   onChangeText={setGuardianEmail}
                   placeholder="guardian@example.com"
                   placeholderTextColor={colors.muted}
@@ -3721,8 +3747,9 @@ function ScorerScreen({
   readonly onExit: () => void;
 }) {
   const { client, matches = [], mode } = useProRuntime();
-  const { width: scorerWidth } = useWindowDimensions();
-  const expandedScorer = scorerWidth >= 700;
+  const { width: scorerWidth, height: scorerHeight } = useWindowDimensions();
+  const compactScorer = scorerHeight < 550;
+  const expandedScorer = scorerWidth >= 700 && !compactScorer;
   const [previewSystem, setPreviewSystem] = useState<ScoringSystem>("rally");
   const [events, setEvents] = useState<readonly ScoreEvent[]>(initialEvents);
   const [pending, setPending] = useState<readonly PendingScoreEvent[]>([]);
@@ -3987,45 +4014,86 @@ function ScorerScreen({
 
   return (
     <View style={styles.scorer}>
-      <View style={styles.scorerTop}>
-        <Pressable
-          accessibilityLabel="Exit live scoring"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={onExit}
+      <View
+        style={[styles.scorerTop, compactScorer && styles.scorerTopCompact]}
+      >
+        <View
           style={[
-            styles.scorerExitButton,
-            expandedScorer && styles.scorerExitButtonExpanded,
+            styles.scorerToolbar,
+            compactScorer && styles.scorerToolbarCompact,
           ]}
         >
-          <Text
+          <Pressable
+            accessibilityLabel="Exit live scoring"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={onExit}
             style={[
-              styles.scorerExitIcon,
-              expandedScorer && styles.scorerExitIconExpanded,
+              styles.scorerExitButton,
+              expandedScorer && styles.scorerExitButtonExpanded,
             ]}
           >
-            ‹
-          </Text>
-          <View>
             <Text
               style={[
-                styles.scorerExitText,
-                expandedScorer && styles.scorerExitTextExpanded,
+                styles.scorerExitIcon,
+                expandedScorer && styles.scorerExitIconExpanded,
               ]}
             >
-              Exit scoring
+              ‹
             </Text>
-            <Text
-              style={[
-                styles.scorerExitMeta,
-                expandedScorer && styles.scorerExitMetaExpanded,
-              ]}
+            <View>
+              <Text
+                style={[
+                  styles.scorerExitText,
+                  expandedScorer && styles.scorerExitTextExpanded,
+                ]}
+              >
+                Exit scoring
+              </Text>
+              <Text
+                style={[
+                  styles.scorerExitMeta,
+                  expandedScorer && styles.scorerExitMetaExpanded,
+                ]}
+              >
+                Progress is saved
+              </Text>
+            </View>
+          </Pressable>
+          <View style={styles.scorerStatusGroup}>
+            <Pill tone={scoreComplete ? "positive" : "live"}>
+              {scoreComplete
+                ? "Complete"
+                : mode === "preview"
+                  ? "Preview"
+                  : "Live"}
+            </Pill>
+            <Pressable
+              disabled={busy}
+              onPress={() => void synchronize()}
+              style={styles.syncButton}
             >
-              Progress is saved
-            </Text>
+              <Text
+                style={[styles.syncIcon, offline && { color: colors.warning }]}
+              >
+                {offline ? "◌" : "●"}
+              </Text>
+              <Text style={styles.syncText}>
+                {offline
+                  ? `${pending.length} saved`
+                  : busy
+                    ? "Syncing"
+                    : "Synced"}
+              </Text>
+            </Pressable>
           </View>
-        </Pressable>
-        <View style={styles.scorerIdentity}>
+        </View>
+        <View
+          style={[
+            styles.scorerIdentity,
+            compactScorer && styles.scorerIdentityCompact,
+          ]}
+        >
           <Text
             numberOfLines={1}
             style={[
@@ -4046,38 +4114,15 @@ function ScorerScreen({
             {serverState?.venueName ?? "Manhattan Beach · Court 4"}
           </Text>
         </View>
-        <View style={styles.scorerStatusGroup}>
-          <Pill tone={scoreComplete ? "positive" : "live"}>
-            {scoreComplete
-              ? "Complete"
-              : mode === "preview"
-                ? "Preview"
-                : "Live"}
-          </Pill>
-          <Pressable
-            disabled={busy}
-            onPress={() => void synchronize()}
-            style={styles.syncButton}
-          >
-            <Text
-              style={[styles.syncIcon, offline && { color: colors.warning }]}
-            >
-              {offline ? "◌" : "●"}
-            </Text>
-            <Text style={styles.syncText}>
-              {offline
-                ? `${pending.length} saved`
-                : busy
-                  ? "Syncing"
-                  : "Synced"}
-            </Text>
-          </Pressable>
-        </View>
       </View>
       <View style={styles.scorerFormat}>
         {mode === "preview" && (
           <View style={styles.segmented}>
             <Pressable
+              accessibilityRole="radio"
+              accessibilityLabel="Rally scoring"
+              accessibilityState={{ checked: system === "rally" }}
+              aria-checked={system === "rally"}
               onPress={() => setPreviewSystem("rally")}
               style={[
                 styles.segmentButton,
@@ -4096,6 +4141,10 @@ function ScorerScreen({
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="radio"
+              accessibilityLabel="Sideout scoring"
+              accessibilityState={{ checked: system === "sideout" }}
+              aria-checked={system === "sideout"}
               onPress={() => setPreviewSystem("sideout")}
               style={[
                 styles.segmentButton,
@@ -4138,6 +4187,9 @@ function ScorerScreen({
       )}
       <View style={styles.court}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Point for ${teamA?.name ?? "Mara / Theo"}`}
+          accessibilityState={{ disabled: scoreComplete || busy }}
           disabled={scoreComplete || busy}
           onPress={() => point("A")}
           style={[styles.teamButton, styles.teamA]}
@@ -4160,6 +4212,7 @@ function ScorerScreen({
               style={[
                 styles.scoreAvatar,
                 expandedScorer && styles.scoreAvatarExpanded,
+                compactScorer && styles.scoreAvatarCompact,
               ]}
             >
               <Text
@@ -4175,6 +4228,7 @@ function ScorerScreen({
               style={[
                 styles.scoreAvatar,
                 expandedScorer && styles.scoreAvatarExpanded,
+                compactScorer && styles.scoreAvatarCompact,
               ]}
             >
               <Text
@@ -4196,7 +4250,11 @@ function ScorerScreen({
             </Text>
           </View>
           <Text
-            style={[styles.bigScore, expandedScorer && styles.bigScoreExpanded]}
+            style={[
+              styles.bigScore,
+              expandedScorer && styles.bigScoreExpanded,
+              compactScorer && styles.bigScoreCompact,
+            ]}
           >
             {current.a}
           </Text>
@@ -4210,6 +4268,9 @@ function ScorerScreen({
           <Text style={styles.versusText}>VS</Text>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Point for ${teamB?.name ?? "Noa / Elena"}`}
+          accessibilityState={{ disabled: scoreComplete || busy }}
           disabled={scoreComplete || busy}
           onPress={() => point("B")}
           style={[styles.teamButton, styles.teamB]}
@@ -4232,6 +4293,7 @@ function ScorerScreen({
               style={[
                 styles.scoreAvatar,
                 expandedScorer && styles.scoreAvatarExpanded,
+                compactScorer && styles.scoreAvatarCompact,
               ]}
             >
               <Text
@@ -4247,6 +4309,7 @@ function ScorerScreen({
               style={[
                 styles.scoreAvatar,
                 expandedScorer && styles.scoreAvatarExpanded,
+                compactScorer && styles.scoreAvatarCompact,
               ]}
             >
               <Text
@@ -4268,7 +4331,11 @@ function ScorerScreen({
             </Text>
           </View>
           <Text
-            style={[styles.bigScore, expandedScorer && styles.bigScoreExpanded]}
+            style={[
+              styles.bigScore,
+              expandedScorer && styles.bigScoreExpanded,
+              compactScorer && styles.bigScoreCompact,
+            ]}
           >
             {current.b}
           </Text>
@@ -4281,6 +4348,8 @@ function ScorerScreen({
       </View>
       <View style={styles.scorerBottom}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Undo last point"
           disabled={events.length <= 1 || busy}
           onPress={undo}
           style={styles.secondaryAction}
@@ -4588,6 +4657,10 @@ function MoreScreen({
                       }
                       if (item === "Messages") {
                         onMessages();
+                        return;
+                      }
+                      if (item === "Coach video") {
+                        onVideo();
                         return;
                       }
                       setSelectedMenu(item);
@@ -4913,11 +4986,25 @@ function ProApp() {
     }).start();
   }, [reduceMotion, screenTransition, tab]);
 
-  activePalette = surfaceTheme === "dark" ? darkColors : lightColors;
-  activeStyles = surfaceTheme === "dark" ? darkStyles : lightStyles;
+  activePalette =
+    surface === "score" || surface === "scan"
+      ? liveColors
+      : surfaceTheme === "dark"
+        ? darkColors
+        : lightColors;
+  activeStyles =
+    surface === "score" || surface === "scan"
+      ? liveStyles
+      : surfaceTheme === "dark"
+        ? darkStyles
+        : lightStyles;
 
   return (
-    <ProDesignProvider theme={surfaceTheme} reducedMotion={reduceMotion}>
+    <ProDesignProvider
+      theme={surfaceTheme}
+      zone={surface === "score" || surface === "scan" ? "live" : "editorial"}
+      reducedMotion={reduceMotion}
+    >
       <OpenDunaAiContext.Provider value={() => setSurface("ai")}>
         <ThemeContext.Provider
           value={{
@@ -5043,7 +5130,10 @@ function ProApp() {
               />
             </SafeAreaView>
           ) : surface === "score" ? (
-            <SafeAreaView edges={["top"]} style={styles.safe}>
+            <SafeAreaView
+              edges={["top", "bottom", "left", "right"]}
+              style={styles.safe}
+            >
               <StatusBar style="light" />
               <View style={styles.app}>
                 <ScorerScreen
@@ -5241,14 +5331,14 @@ function createStyles(palette: Palette) {
     },
     previewBanner: {
       alignItems: "center",
-      backgroundColor: rgba(colors.warningRgb, 0.12),
-      borderBottomColor: rgba(colors.warningRgb, 0.24),
+      backgroundColor: colors.navy,
+      borderBottomColor: rgba(colors.overlayRgb, 0.12),
       borderBottomWidth: 1,
       paddingHorizontal: 12,
       paddingVertical: 7,
     },
     previewBannerText: {
-      color: colors.warning,
+      color: colors.bone,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.8,
@@ -5383,15 +5473,16 @@ function createStyles(palette: Palette) {
       flexDirection: "row",
       justifyContent: "space-between",
       marginTop: 12,
-      minHeight: 50,
+      minHeight: 56,
       paddingHorizontal: 14,
     },
     venueMatchActionLive: { backgroundColor: colors.flare },
     venueMatchActionText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
+    venueMatchActionTextLive: { color: colors.ink },
     venueMatchesEmpty: {
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
@@ -6401,7 +6492,7 @@ function createStyles(palette: Palette) {
     },
     calendarFieldLabel: {
       color: colors.muted,
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: "900",
       letterSpacing: 1,
       marginBottom: 8,
@@ -7359,7 +7450,7 @@ function createStyles(palette: Palette) {
       paddingHorizontal: 12,
     },
     searchIcon: { color: colors.muted, fontSize: 18 },
-    searchInput: { color: colors.bone, flex: 1, fontSize: 12, height: 44 },
+    searchInput: { color: colors.bone, flex: 1, fontSize: 16, minHeight: 50 },
     filterBleed: { marginHorizontal: -18, paddingHorizontal: 18 },
     filterRow: {
       flexDirection: "row",
@@ -7368,6 +7459,8 @@ function createStyles(palette: Palette) {
       paddingRight: 36,
     },
     filterChip: {
+      minHeight: 48,
+      justifyContent: "center",
       backgroundColor: colors.depth,
       borderColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 17,
@@ -7376,11 +7469,16 @@ function createStyles(palette: Palette) {
       paddingVertical: 7,
     },
     filterActive: {
-      backgroundColor: colors.warning,
-      borderColor: colors.warning,
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
     },
-    filterText: { color: colors.muted, fontSize: 12 },
-    filterTextActive: { color: colors.onAccent, fontWeight: "800" },
+    filterText: { color: colors.muted, fontSize: 14 },
+    filterTextActive: { color: colors.onAccent, fontWeight: "500" },
+    peopleEmpty: { padding: 20, gap: 8 },
+    peopleEmptyTitle: { color: colors.bone, fontSize: 18, fontWeight: "500" },
+    peopleEmptyBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+    personName: { color: colors.bone, fontSize: 15, fontWeight: "500" },
+    peopleInviteHint: { color: colors.muted, fontSize: 15, lineHeight: 22 },
     peopleSummary: {
       backgroundColor: colors.navy,
       borderColor: rgba(colors.overlayRgb, 0.07),
@@ -7416,7 +7514,7 @@ function createStyles(palette: Palette) {
       justifyContent: "center",
       width: 34,
     },
-    personAvatarText: { color: colors.bone, fontSize: 12, fontWeight: "900" },
+    personAvatarText: { color: colors.bone, fontSize: 12, fontWeight: "500" },
     personRelationshipMeta: {
       color: colors.aqua,
       fontSize: 12,
@@ -7442,17 +7540,17 @@ function createStyles(palette: Palette) {
     peopleModalTitle: {
       color: colors.bone,
       fontSize: 22,
-      fontWeight: "900",
-      letterSpacing: -0.8,
+      fontWeight: "400",
+      letterSpacing: -0.5,
       marginTop: 3,
     },
     peopleModalClose: {
       alignItems: "center",
       backgroundColor: colors.navy,
-      borderRadius: 18,
-      height: 38,
+      borderRadius: 24,
+      height: 48,
       justifyContent: "center",
-      width: 38,
+      width: 48,
     },
     peopleModalCloseText: {
       color: colors.bone,
@@ -7472,13 +7570,13 @@ function createStyles(palette: Palette) {
     peopleProfileAvatarText: {
       color: colors.onAccent,
       fontSize: 24,
-      fontWeight: "900",
+      fontWeight: "500",
     },
     peopleProfileName: {
       color: colors.bone,
       fontSize: 26,
-      fontWeight: "900",
-      letterSpacing: -1,
+      fontWeight: "400",
+      letterSpacing: -0.5,
       marginTop: 13,
     },
     peopleProfileMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
@@ -7509,38 +7607,38 @@ function createStyles(palette: Palette) {
     peopleProfileCardTitle: {
       color: colors.bone,
       fontSize: 18,
-      fontWeight: "900",
+      fontWeight: "500",
       marginTop: 5,
     },
     peopleProfileCardBody: {
       color: colors.muted,
-      fontSize: 12,
+      fontSize: 15,
       marginTop: 5,
     },
     peopleProfileReason: {
       color: colors.warning,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 6,
     },
     peopleProfileActions: { flexDirection: "row", gap: 8, marginTop: 12 },
     peopleProfileActionHint: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 15,
+      fontSize: 15,
+      lineHeight: 22,
       marginTop: 8,
       textAlign: "center",
     },
     peopleProfileEmail: {
       alignItems: "center",
       justifyContent: "center",
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 10,
     },
     peopleProfileEmailText: {
       color: colors.aqua,
-      fontSize: 12,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
     },
     peopleProfilePrimary: {
       alignItems: "center",
@@ -7548,12 +7646,12 @@ function createStyles(palette: Palette) {
       borderRadius: 15,
       flex: 1,
       justifyContent: "center",
-      minHeight: 50,
+      minHeight: 56,
     },
     peopleProfilePrimaryText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     peopleProfileSecondary: {
       alignItems: "center",
@@ -7566,14 +7664,14 @@ function createStyles(palette: Palette) {
     },
     peopleProfileSecondaryText: {
       color: colors.bone,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     peopleInviteContent: { padding: 18, paddingBottom: 42 },
     peopleInviteLead: {
       color: colors.muted,
-      fontSize: 12,
-      lineHeight: 18,
+      fontSize: 15,
+      lineHeight: 22,
       marginBottom: 18,
     },
     peopleInviteInput: {
@@ -7582,7 +7680,7 @@ function createStyles(palette: Palette) {
       borderRadius: 14,
       borderWidth: 1,
       color: colors.bone,
-      fontSize: 13,
+      fontSize: 16,
       marginBottom: 13,
       minHeight: 50,
       paddingHorizontal: 13,
@@ -7608,8 +7706,8 @@ function createStyles(palette: Palette) {
       width: 26,
     },
     peopleInviteToggleMarkActive: {
-      backgroundColor: colors.positive,
-      borderColor: colors.positive,
+      backgroundColor: colors.aqua,
+      borderColor: colors.aqua,
     },
     peopleInviteToggleMarkText: {
       color: colors.onAccent,
@@ -7618,8 +7716,8 @@ function createStyles(palette: Palette) {
     },
     peopleInviteFeedback: {
       color: colors.aqua,
-      fontSize: 12,
-      lineHeight: 16,
+      fontSize: 15,
+      lineHeight: 22,
       marginBottom: 10,
     },
     peopleInviteSubmit: {
@@ -7627,20 +7725,20 @@ function createStyles(palette: Palette) {
       backgroundColor: colors.aquaDeep,
       borderRadius: 16,
       justifyContent: "center",
-      minHeight: 54,
+      minHeight: 56,
     },
     peopleInviteSubmitText: {
       color: colors.onAccent,
-      fontSize: 12,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "500",
     },
     scorer: { backgroundColor: colors.canvas, flex: 1 },
     scorerTop: {
-      alignItems: "center",
+      alignItems: "stretch",
       borderBottomColor: rgba(colors.overlayRgb, 0.07),
       borderBottomWidth: 1,
-      flexDirection: "row",
-      gap: 14,
+      flexDirection: "column",
+      gap: 10,
       justifyContent: "space-between",
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -7664,16 +7762,27 @@ function createStyles(palette: Palette) {
       lineHeight: 28,
     },
     scorerExitIconExpanded: { fontSize: 32, lineHeight: 33 },
-    scorerExitText: { color: colors.bone, fontSize: 13, fontWeight: "800" },
+    scorerExitText: { color: colors.bone, fontSize: 14, fontWeight: "500" },
     scorerExitTextExpanded: { fontSize: 16 },
     scorerExitMeta: { color: colors.muted, fontSize: 12, marginTop: 1 },
     scorerExitMetaExpanded: { fontSize: 12 },
     matchPickerExit: { alignSelf: "flex-start", marginBottom: 12 },
-    scorerIdentity: { flex: 1, minWidth: 0 },
+    scorerTopCompact: { flexDirection: "row", paddingVertical: 8, gap: 18 },
+    scorerToolbarCompact: { flex: 1 },
+    scorerIdentityCompact: { flex: 1 },
+    scoreAvatarCompact: { display: "none" },
+    bigScoreCompact: { fontSize: 84, lineHeight: 92, letterSpacing: -2.52 },
+    scorerToolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    scorerIdentity: { minWidth: 0, gap: 3 },
     scorerMatch: {
       color: colors.aqua,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 0.4,
     },
     scorerMatchExpanded: { fontSize: 15 },
@@ -7695,21 +7804,23 @@ function createStyles(palette: Palette) {
       borderRadius: 18,
       flexDirection: "row",
       gap: 6,
-      minHeight: 38,
+      minHeight: 48,
       paddingHorizontal: 11,
       paddingVertical: 8,
     },
     syncIcon: { color: colors.positive, fontSize: 12 },
-    syncText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+    syncText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
     scorerFormat: {
       alignItems: "center",
       flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
       justifyContent: "center",
       minHeight: 44,
       paddingHorizontal: 14,
       paddingVertical: 8,
     },
-    scorerFormatText: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+    scorerFormatText: { color: colors.muted, fontSize: 14, fontWeight: "500" },
     scorerFormatTextExpanded: { fontSize: 16 },
     segmented: {
       backgroundColor: rgba(colors.overlayRgb, 0.05),
@@ -7718,13 +7829,15 @@ function createStyles(palette: Palette) {
       padding: 2,
     },
     segmentButton: {
+      minHeight: 48,
+      justifyContent: "center",
       borderRadius: 16,
       paddingHorizontal: 11,
       paddingVertical: 6,
     },
     segmentButtonExpanded: { paddingHorizontal: 16, paddingVertical: 8 },
     segmentActive: { backgroundColor: colors.aqua },
-    segmentText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+    segmentText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
     segmentTextExpanded: { fontSize: 14 },
     segmentTextActive: { color: colors.onAccent },
     scoreNotice: {
@@ -7776,7 +7889,14 @@ function createStyles(palette: Palette) {
       letterSpacing: 0.7,
     },
     serveTextExpanded: { fontSize: 14 },
-    teamPeople: { alignItems: "center", flexDirection: "row" },
+    teamPeople: {
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      width: "100%",
+      gap: 6,
+    },
     scoreAvatar: {
       alignItems: "center",
       backgroundColor: colors.navyLift,
@@ -7798,22 +7918,24 @@ function createStyles(palette: Palette) {
     teamName: {
       color: colors.bone,
       fontSize: 16,
-      fontWeight: "800",
-      marginLeft: 9,
+      fontWeight: "500",
+      marginLeft: 0,
+      width: "100%",
+      textAlign: "center",
     },
-    teamNameExpanded: { fontSize: 22, marginLeft: 12 },
+    teamNameExpanded: { width: "auto", fontSize: 22, marginLeft: 12 },
     bigScore: {
       color: colors.bone,
-      fontFamily: "Archivo-Score",
+      fontVariant: ["tabular-nums"],
       fontSize: 124,
       fontWeight: "900",
-      letterSpacing: -10,
+      letterSpacing: -3.72,
       lineHeight: 130,
       marginVertical: 4,
     },
     bigScoreExpanded: {
       fontSize: 184,
-      letterSpacing: -14,
+      letterSpacing: -5.52,
       lineHeight: 192,
       marginVertical: 12,
     },
@@ -7857,14 +7979,14 @@ function createStyles(palette: Palette) {
       borderColor: rgba(colors.overlayRgb, 0.08),
       borderRadius: 17,
       borderWidth: 1,
-      minHeight: 42,
+      minHeight: 48,
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
     secondaryActionText: {
       color: colors.bone,
-      fontSize: 13,
-      fontWeight: "800",
+      fontSize: 14,
+      fontWeight: "500",
     },
     syncSummary: { alignItems: "center", flexDirection: "row", gap: 6 },
     syncSummaryText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
@@ -7879,9 +8001,9 @@ function createStyles(palette: Palette) {
     setLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
     setScore: {
       color: colors.bone,
-      fontFamily: "Archivo-Table",
+      fontVariant: ["tabular-nums"],
       fontSize: 13,
-      fontWeight: "800",
+      fontWeight: "700",
       marginTop: 2,
     },
     moreScore: { padding: 6 },
@@ -8116,6 +8238,7 @@ function createStyles(palette: Palette) {
 
 const lightStyles = createStyles(lightColors);
 const darkStyles = createStyles(darkColors);
+const liveStyles = createStyles(liveColors);
 activePalette = lightColors;
 let activeStyles = lightStyles;
 const styles = new Proxy(lightStyles, {

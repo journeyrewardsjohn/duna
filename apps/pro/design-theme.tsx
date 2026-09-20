@@ -1,5 +1,5 @@
 import { resolveDunaMobileTokens } from "@duna/ui/mobile";
-import type { DunaTheme } from "@duna/ui/tokens";
+import type { DunaTheme, DunaZone } from "@duna/ui/tokens";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 export type ProDesignTokens = ReturnType<typeof resolveDunaMobileTokens>;
@@ -12,20 +12,22 @@ const ProDesignContext = createContext({
 
 export function ProDesignProvider({
   theme,
+  zone = "editorial",
   reducedMotion,
   children,
 }: {
   readonly theme: DunaTheme;
+  readonly zone?: DunaZone;
   readonly reducedMotion: boolean;
   readonly children: ReactNode;
 }) {
   const value = useMemo(
     () => ({
-      tokens: resolveDunaMobileTokens(theme, "editorial"),
-      dark: theme === "dark",
+      tokens: resolveDunaMobileTokens(theme, zone),
+      dark: theme === "dark" || zone === "live",
       reducedMotion,
     }),
-    [theme, reducedMotion],
+    [theme, zone, reducedMotion],
   );
   return (
     <ProDesignContext.Provider value={value}>

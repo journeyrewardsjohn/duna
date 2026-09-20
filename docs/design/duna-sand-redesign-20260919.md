@@ -309,3 +309,37 @@ browser tests. Fresh Player iOS and Android exports passed. The browser renderer
 reviewed eight main-screen/empty-state combinations and 24 secondary-sheet states
 with no runtime errors; the 24 visible-text contrast checks reported no failures.
 These results use local data and do not establish connected or physical acceptance.
+
+## Pro People, courtside, and coaching video checkpoint — September 19
+
+- Pro's root palette now uses the same shared light/dark editorial tokens as its
+  secondary screens. Courtside scoring and scanning explicitly use the live zone.
+  The preview banner and live match actions have readable text in both themes.
+- People has larger search and invitation fields, quiet neutral filters, visible
+  empty results, accessible selection, and a simpler player profile. Guardian
+  fields retain the existing minor invitation flow. Missing live members no longer
+  fall back to sample players; unavailable relationship totals display a dash.
+- The scoring header separates match identity from exit and sync controls. A
+  compact landscape arrangement preserves large point targets and readable team
+  names. Scores use tabular figures and restrained tracking. Point, undo, and
+  format controls keep the existing scoring and synchronization handlers.
+- Coach video opens directly from More, removing the redundant introductory
+  sheet. Its existing recording/import, private upload, and event association
+  screens now use readable type and the shared loading animation. Capture and
+  upload APIs are unchanged.
+- Actual browser-rendered components were reviewed with local data in light and
+  dark. People search, empty filters, minor/guardian fields, and radio states were
+  exercised without sending an invitation. Preview points for each team and Undo
+  passed at 390×844, 844×390, and 1024×768; the scoring controls stayed in bounds.
+  Existing Create, payment-selection, and session-note form checks also passed.
+
+Live scoring synchronization and offline recovery, actual coaching capture/upload,
+private provider playback, hardware gestures, and physical/native release remain
+separate acceptance work. The browser review does not establish those outcomes.
+
+Checkpoint validation: `pnpm verify` passed, including all 117 browser tests.
+The final status-pill contrast refinement then passed Pro formatting, lint,
+typecheck, the light/dark navigation contrast review, and fresh Pro iOS/Android
+exports. The 16 People/scoring/video states and eight navigation/action checks
+reported no visible-text contrast failures in their reviewed viewports. Physical
+and connected proof is still pending.
