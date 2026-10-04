@@ -6,6 +6,14 @@ const webBaseUrl =
   process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${webPort}`;
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ?? `http://127.0.0.1:${hqPort}`;
+// Viewport suites represent separate local clients. Sharing one loopback IP
+// exhausts the public API bucket in fast production-build runs. Keep the real
+// limiter enabled, and never supply a synthetic identity to a remote target.
+const localTargets = [webBaseUrl, hqBaseUrl].every((url) =>
+  ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname),
+);
+const clientHeaders = (client: number) =>
+  localTargets ? { "x-forwarded-for": `127.0.0.${client}` } : undefined;
 const webServerCommand = process.env.CI
   ? `pnpm --filter @duna/web exec next start --port ${webPort} --hostname 127.0.0.1`
   : `pnpm --filter @duna/web exec next dev --port ${webPort} --hostname 127.0.0.1`;
@@ -47,12 +55,19 @@ export default defineConfig({
     },
   ],
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "desktop",
+      use: {
+        ...devices["Desktop Chrome"],
+        extraHTTPHeaders: clientHeaders(2),
+      },
+    },
     {
       name: "tablet",
       use: {
         ...devices["iPad (gen 7)"],
         browserName: "chromium",
+        extraHTTPHeaders: clientHeaders(3),
       },
     },
     {
@@ -60,6 +75,7 @@ export default defineConfig({
       use: {
         ...devices["iPhone 15"],
         browserName: "chromium",
+        extraHTTPHeaders: clientHeaders(4),
       },
     },
   ],
