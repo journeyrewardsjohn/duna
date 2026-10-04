@@ -841,6 +841,17 @@ test("player planning keeps selection in place and extends its date rail", async
   await expect
     .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
     .toBeGreaterThan(0);
+  // Bring the calendar above the fixed phone navigation before measuring.
+  // Otherwise click's automatic scrolling can move both axes while trying to
+  // uncover a day beneath the navigation, before selection is dispatched.
+  await rail.evaluate((element) =>
+    element.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "instant",
+    }),
+  );
+  await expect(nextPill).toBeInViewport({ ratio: 1 });
   const scrollPosition = await rail.evaluate((element) =>
     Math.round(element.scrollLeft),
   );
@@ -979,6 +990,7 @@ test("settings use the available desktop width and collapse cleanly", async ({
 }) => {
   await page.setViewportSize({ width: 1800, height: 1100 });
   await page.goto("/app/settings");
+  await expect(page.locator(".settings-layout")).toBeVisible();
 
   const [layoutBox, navigationBox, contentBox] = await Promise.all([
     getBox(page.locator(".settings-layout")),

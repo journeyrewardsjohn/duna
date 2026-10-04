@@ -66,6 +66,20 @@
   box-shadow: none;
   transform: none;
 }
+:root .player-shell .calendar-picker__pill {
+  flex-basis: 60px;
+  min-height: 76px;
+  border-radius: 14px;
+  animation: none;
+  transform: none;
+  box-shadow: none;
+}
+:root .player-shell .calendar-picker__rail {
+  scroll-behavior: auto;
+}
+:root .player-shell .calendar-picker__pill[aria-current="date"] > strong {
+  color: inherit;
+}
 :root .player-shell .date-pill-filter__rail a[aria-current="date"],
 :root .player-shell .calendar-picker__pill[aria-current="date"],
 :root .player-shell .calendar-month__grid button[aria-current="date"] {
