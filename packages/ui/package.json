@@ -12,7 +12,8 @@
     "./tokens": "./src/tokens.ts",
     "./hq-workspace.css": "./src/hq-workspace.css",
     "./particle-loader": "./src/particle-loader.tsx",
-    "./public-website.css": "./src/public-website.css"
+    "./public-website.css": "./src/public-website.css",
+    "./player-workspace.css": "./src/player-workspace.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

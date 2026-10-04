@@ -195,6 +195,7 @@ const nativeHeaderIndex = playerHomeV3Source.indexOf("styles.header");
 const nativeQuickActionsIndex = playerHomeV3Source.indexOf(
   "contentContainerStyle={styles.quickActions}",
 );
+const nativePromptIndex = playerHomeV3Source.indexOf("styles.taskSection");
 const nativeTabsIndex = playerHomeV3Source.indexOf("styles.tabs");
 const nativeNextUpIndex = playerHomeV3Source.indexOf('title="Next up"');
 if (
@@ -202,12 +203,14 @@ if (
   nativeQuickActionsIndex < 0 ||
   nativeTabsIndex < 0 ||
   nativeNextUpIndex < 0 ||
-  nativeHeaderIndex > nativeQuickActionsIndex ||
-  nativeQuickActionsIndex > nativeTabsIndex ||
-  nativeTabsIndex > nativeNextUpIndex
+  nativePromptIndex < 0 ||
+  nativeHeaderIndex > nativePromptIndex ||
+  nativePromptIndex > nativeQuickActionsIndex ||
+  nativeQuickActionsIndex > nativeNextUpIndex ||
+  nativeNextUpIndex > nativeTabsIndex
 ) {
   violations.push(
-    "Player Home must preserve the greeting, animated quick actions, filters, then personal Next up hierarchy",
+    "Player Home must preserve greeting, editable Duna prompt, quick actions, personal Next up, then secondary discovery",
   );
 }
 for (const contract of [
@@ -217,7 +220,7 @@ for (const contract of [
   'accessibilityLabel="Quick actions"',
   'destinationButton("messages", "Messages", "message")',
   "<LiquidGlassSurface",
-  "<DunaMark size={mobileGrid[7]} />",
+  "<DunaMark size={mobileGrid[5]} />",
 ] as const) {
   if (!playerNativeSource.includes(contract)) {
     violations.push(

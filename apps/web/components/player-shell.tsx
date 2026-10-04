@@ -2,7 +2,7 @@
 
 import type { PlayerOrganizationAccess } from "@duna/api";
 import type { PersonSummary } from "@duna/core";
-import { DunaMark, Numeric } from "@duna/ui";
+import { DunaActionTrigger, DunaMark, DunaTaskPrompt, Numeric } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   CalendarDays,
@@ -13,6 +13,8 @@ import {
   Menu,
   MessageCircle,
   Plus,
+  Search,
+  Settings,
   Trophy,
   WalletCards,
 } from "lucide-react";
@@ -35,9 +37,12 @@ const navigation = [
   { label: "Wallet", href: "/app/wallet", icon: WalletCards },
 ] as const;
 
-const mobileNavigation = navigation.filter(({ label }) =>
-  ["Home", "Discover", "Play", "Matches", "Video"].includes(label),
-);
+const mobileNavigation = [
+  navigation[0],
+  navigation[3],
+  navigation[1],
+  navigation[5],
+];
 
 export function PlayerShell({
   authConfigured,
@@ -96,13 +101,14 @@ export function PlayerShell({
             <Plus aria-hidden size={18} />
             Record a match
           </Link>
-          <div className="player-sidebar__plus">
-            <div>
-              <span>PREMIUM</span>
-              <small>No fees · deeper stats</small>
-            </div>
-            <Link href="/app/settings">View plan</Link>
-          </div>
+          <Link
+            className="player-sidebar__settings"
+            href="/app/settings"
+            aria-label="Settings and plan"
+          >
+            <Settings aria-hidden size={19} />
+            <span>Settings & plan</span>
+          </Link>
           <Link className="player-sidebar__profile" href="/app/profile">
             <ProfileAvatar
               className="player-shell__avatar"
@@ -143,6 +149,22 @@ export function PlayerShell({
               homeMarket={player.homeMarket}
             />
             <div className="player-topbar__actions">
+              <DunaActionTrigger
+                className="player-search-trigger"
+                label="Search Duna"
+                panel="search"
+              >
+                <Search aria-hidden size={18} />
+                <span className="sr-only">Search Duna</span>
+              </DunaActionTrigger>
+              <DunaActionTrigger
+                className="player-ai-trigger"
+                label="Open Duna AI"
+                panel="chat"
+              >
+                <DunaMark compact />
+                <span>Ask Duna</span>
+              </DunaActionTrigger>
               <ThemeToggle />
               <Link aria-label="Messages" href="/app/messages">
                 <MessageCircle aria-hidden size={19} />
@@ -201,7 +223,14 @@ export function PlayerShell({
             </Link>
           </nav>
         ) : null}
-        <div className="player-content">{children}</div>
+        <div className="player-content">
+          {!focusedFlow &&
+            pathname !== "/app" &&
+            !["/app/video", "/app/messages", "/app/score"].some((path) =>
+              pathname.startsWith(path),
+            ) && <DunaTaskPrompt compact />}
+          {children}
+        </div>
       </div>
 
       {!focusedFlow && (
@@ -210,7 +239,7 @@ export function PlayerShell({
             aria-label="Mobile player navigation"
             className="player-bottom-nav"
           >
-            {mobileNavigation.map(({ label, href, icon: Icon }) => {
+            {mobileNavigation.slice(0, 2).map(({ label, href, icon: Icon }) => {
               const active =
                 href === "/app" ? pathname === href : pathname.startsWith(href);
               return (
@@ -225,6 +254,25 @@ export function PlayerShell({
                 </Link>
               );
             })}
+            <DunaActionTrigger
+              className="player-bottom-nav__ai"
+              label="Open Duna AI"
+              panel="chat"
+            >
+              <DunaMark compact />
+              <span>Ask Duna</span>
+            </DunaActionTrigger>
+            {mobileNavigation.slice(2).map(({ label, href, icon: Icon }) => (
+              <Link
+                href={href}
+                key={href}
+                aria-current={pathname.startsWith(href) ? "page" : undefined}
+                className={pathname.startsWith(href) ? "active" : undefined}
+              >
+                <Icon aria-hidden size={20} />
+                <span>{label}</span>
+              </Link>
+            ))}
           </nav>
           <DunaActionCenter />
         </>

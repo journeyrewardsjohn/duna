@@ -30,6 +30,7 @@ import {
 } from "@duna/core/demo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  dunaAppColors,
   mobileControl,
   mobileGrid,
   resolveDunaMobileTokens,
@@ -1673,6 +1674,7 @@ type DiscoverIntentKind = Exclude<
 >;
 
 function HomeScreenV3({
+  onAskDuna,
   onAction,
   onOpenBooking,
   onOpenEvent,
@@ -1680,6 +1682,7 @@ function HomeScreenV3({
   onOpenPerformance,
   onOpenSchedule,
 }: {
+  readonly onAskDuna: (prompt: string) => void;
   readonly onAction: (action: HomeQuickAction) => void;
   readonly onOpenBooking: (bookingId: string) => void;
   readonly onOpenEvent: (event: EventSummary) => void;
@@ -1946,6 +1949,10 @@ function HomeScreenV3({
         onPress: () => onOpenEvent(event),
       };
     });
+  const nextUp = [...bookingItems].sort(
+    (left, right) =>
+      new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+  )[0];
   const upcoming = [...bookingItems, ...unbookedEventItems]
     .sort(
       (left, right) =>
@@ -2144,6 +2151,7 @@ function HomeScreenV3({
 
   return (
     <HomeV3Screen
+      onAskDuna={onAskDuna}
       contextLine={contextLine}
       crew={
         crewAvatars.length
@@ -2158,12 +2166,19 @@ function HomeScreenV3({
       }
       firstName={firstName}
       insight={
-        dashboard?.feed[0]?.title ?? "Your sideout game is becoming an edge."
+        dashboard?.feed[0]?.title ??
+        "Ask Duna about your next game or recent progress."
       }
       moreOpenGamesCount={Math.max(0, openGameCandidates.length - 2)}
       notificationCount={messaging.unreadCount}
       onNotifications={() => onAction("messages")}
-      onOpenInsight={() => messaging.open(true)}
+      onOpenInsight={() =>
+        onAskDuna(
+          dashboard?.feed[0]?.title
+            ? `Help me understand this update: ${dashboard.feed[0].title}`
+            : "Help me understand my recent matches and plan my next game.",
+        )
+      }
       onOpenMap={() => onAction("find-match")}
       onOpenMatches={onOpenPerformance}
       onOpenMoreGames={() => onAction("find-match")}
@@ -2220,6 +2235,7 @@ function HomeScreenV3({
       ratingHistory={ratingHistory}
       recentMatches={recentMatches}
       upcoming={upcoming}
+      nextUp={nextUp}
     />
   );
 }
@@ -14237,9 +14253,9 @@ function TabBar({
       >
         <View style={styles.tabIconWrap}>
           <DunaIcon
-            color={isSelected ? colors.aquaDeep : rgba(colors.accentRgb, 0.68)}
+            color={isSelected ? dunaAppColors.ink : dunaAppColors.textSecondary}
             name={icon}
-            size={24}
+            size={20}
             strokeWidth={isSelected ? 1.75 : 1.45}
           />
           {destination === "messages" && unreadCount > 0 && (
@@ -14266,7 +14282,7 @@ function TabBar({
           borderColor={rgba(colors.whiteRgb, 0.82)}
           cornerRadius={mobileGrid[7]}
           fallbackColor={rgba(colors.whiteRgb, 0.82)}
-          tint="#edf4f8"
+          tint={dunaAppColors.card}
         />
         {destinationButton("home", "Home", "home")}
         {destinationButton("calendar", "Calendar", "calendar")}
@@ -14281,7 +14297,7 @@ function TabBar({
           style={styles.tabAiButton}
         >
           <View style={styles.tabAiHalo}>
-            <DunaMark size={mobileGrid[7]} />
+            <DunaMark size={mobileGrid[5]} />
           </View>
         </Pressable>
         <Pressable
@@ -14295,9 +14311,9 @@ function TabBar({
           style={styles.tabItem}
         >
           <DunaIcon
-            color={rgba(colors.accentRgb, 0.78)}
+            color={dunaAppColors.ink}
             name="plus"
-            size={25}
+            size={20}
             strokeWidth={1.55}
           />
         </Pressable>
@@ -14672,6 +14688,7 @@ function DunaApp() {
   const theme: ThemeName = "light";
   const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<Tab>("home");
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string>();
   const [aiReturnTab, setAiReturnTab] = useState<Tab>("home");
   const [performanceReturnTab, setPerformanceReturnTab] = useState<
     "home" | "you"
@@ -15161,6 +15178,11 @@ function DunaApp() {
             >
               {tab === "home" && (
                 <HomeScreenV3
+                  onAskDuna={(prompt) => {
+                    setAiInitialPrompt(prompt);
+                    setAiReturnTab("home");
+                    setTab("ai");
+                  }}
                   onAction={openHomeAction}
                   onOpenBooking={setBookingId}
                   onOpenEvent={openExternalEventDetail}
@@ -15263,37 +15285,38 @@ function DunaApp() {
                   onWallet={() => setTab("wallet")}
                 />
               )}
-              {tab === "ai" && (
-                <PlayerDunaAiScreen
-                  onClose={() =>
-                    setTab(aiReturnTab === "ai" ? "home" : aiReturnTab)
-                  }
-                  onOpenBooking={setBookingId}
-                  onOpenEvent={openAiEvent}
-                  onOpenMatch={openAiMatch}
-                  onOpenMessages={() => {
-                    setMessagesConversationId(undefined);
-                    setMessagesOpenToSupport(false);
-                    setTab("messages");
-                  }}
-                  onOpenPath={openDunaHref}
-                  onOpenVenue={(venueId) => setOrganizationVenueId(venueId)}
-                  palette={{
-                    canvas: colors.canvas,
-                    surface: colors.depth,
-                    surfaceAlt: colors.navyLift,
-                    border: rgba(colors.overlayRgb, 0.12),
-                    text: colors.bone,
-                    muted: colors.muted,
-                    accent: colors.aqua,
-                    onAccent: colors.onAccent,
-                    positive: colors.positive,
-                    warning: colors.warning,
-                    danger: colors.danger,
-                  }}
-                  pathname="/app/ai"
-                />
-              )}
+              <PlayerDunaAiScreen
+                active={tab === "ai"}
+                initialPrompt={aiInitialPrompt}
+                onInitialPromptConsumed={() => setAiInitialPrompt(undefined)}
+                onClose={() =>
+                  setTab(aiReturnTab === "ai" ? "home" : aiReturnTab)
+                }
+                onOpenBooking={setBookingId}
+                onOpenEvent={openAiEvent}
+                onOpenMatch={openAiMatch}
+                onOpenMessages={() => {
+                  setMessagesConversationId(undefined);
+                  setMessagesOpenToSupport(false);
+                  setTab("messages");
+                }}
+                onOpenPath={openDunaHref}
+                onOpenVenue={(venueId) => setOrganizationVenueId(venueId)}
+                palette={{
+                  canvas: dunaAppColors.card,
+                  surface: dunaAppColors.card,
+                  surfaceAlt: dunaAppColors.subtle,
+                  border: dunaAppColors.hairline,
+                  text: dunaAppColors.ink,
+                  muted: dunaAppColors.textSecondary,
+                  accent: dunaAppColors.ink,
+                  onAccent: dunaAppColors.card,
+                  positive: colors.positive,
+                  warning: colors.warning,
+                  danger: colors.danger,
+                }}
+                pathname="/app/ai"
+              />
               {tab === "messages" && (
                 <PlayerMessagingScreen
                   initialConversationId={messagesConversationId}

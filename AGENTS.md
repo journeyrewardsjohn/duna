@@ -3,6 +3,13 @@
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
 and data truth always take precedence over visual novelty.
 
+## October 4 Player direction
+
+`docs/design/duna-player-focus-20261004.md` records the subsequent Player
+request: a simpler task-first Home and contextual assistant entry. It supersedes
+the older four-actions-first Home ordering while preserving all destinations,
+account boundaries, review gates, live semantics, and native device validation.
+
 ## October 4 public website direction
 
 `docs/design/duna-public-website-20261004.md` supersedes older public navigation,

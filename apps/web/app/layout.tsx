@@ -6,6 +6,8 @@ import "./design-v3.css";
 import "./design-v4.css";
 import "@duna/ui/public-website.css";
 import "./public-website.css";
+import "@duna/ui/player-workspace.css";
+import "./player-focus.css";
 
 import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";

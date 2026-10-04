@@ -357,7 +357,7 @@ test("player home puts useful actions and the personal calendar first", async ({
 }) => {
   await page.goto("/app");
   await expect(
-    page.getByRole("heading", { name: /Ready to play/ }),
+    page.getByRole("heading", { name: "What would you like to do?" }),
   ).toBeVisible();
   const quickActions = page.getByRole("navigation", {
     name: "Player quick actions",
@@ -369,11 +369,11 @@ test("player home puts useful actions and the personal calendar first", async ({
     quickActions.getByRole("link", { name: /Host pickup/ }),
   ).toBeVisible();
   await expect(page.getByText("Next up", { exact: true })).toBeVisible();
-  const actionCenter = page.getByRole("navigation", {
-    name: "Duna action center",
-  });
-  await expect(actionCenter).toBeVisible();
-  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  const aiTrigger = page
+    .getByRole("button", { name: "Open Duna AI", exact: true })
+    .filter({ visible: true });
+  await expect(aiTrigger).toBeVisible();
+  await aiTrigger.click();
   const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
   await expect(dunaAi).toBeVisible();
   await expect(
@@ -383,7 +383,10 @@ test("player home puts useful actions and the personal calendar first", async ({
     dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
   ).toBeVisible();
   await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
-  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
+  await page
+    .getByRole("button", { name: "Search Duna", exact: true })
+    .filter({ visible: true })
+    .click();
   const command = page.getByRole("dialog", { name: "Search Duna Player" });
   await expect(command).toBeVisible();
   await expect(command.getByText("Go anywhere")).toBeVisible();

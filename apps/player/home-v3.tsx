@@ -14,7 +14,10 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { DunaIcon, type DunaIconName } from "./duna-icon";
-import { FellixText as Text } from "./satoshi-text";
+import {
+  SatoshiText as Text,
+  SatoshiTextInput as TextInput,
+} from "./satoshi-text";
 
 const dunaMark = require("./assets/duna-mark.png") as ImageSourcePropType;
 const c = dunaAppColors;
@@ -99,6 +102,7 @@ export interface HomeV3Match {
 }
 
 export interface HomeV3Props {
+  readonly onAskDuna: (prompt: string) => void;
   readonly firstName: string;
   readonly contextLine: string;
   readonly notificationCount: number;
@@ -110,6 +114,7 @@ export interface HomeV3Props {
     readonly onPress: () => void;
   };
   readonly upcoming: readonly HomeV3UpcomingItem[];
+  readonly nextUp?: HomeV3UpcomingItem;
   readonly openGames: readonly HomeV3OpenGame[];
   readonly moreOpenGamesCount: number;
   readonly recentMatches: readonly HomeV3Match[];
@@ -220,14 +225,12 @@ function QuickAction({
     progress.stopAnimation();
     progress.setValue(0);
     if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.timing(progress, {
-        duration: 2_400,
-        easing: Easing.linear,
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-    );
+    const loop = Animated.timing(progress, {
+      duration: 2_400,
+      easing: Easing.linear,
+      toValue: 1,
+      useNativeDriver: true,
+    });
     loop.start();
     return () => loop.stop();
   }, [progress, reduceMotion]);
@@ -278,9 +281,9 @@ function QuickAction({
       <View style={styles.quickActionTile}>
         <Animated.View style={iconMotion}>
           <DunaIcon
-            color={action.color}
+            color={c.ink}
             name={action.icon}
-            size={action.icon === "ball" ? 27 : 26}
+            size={21}
             strokeWidth={action.icon === "ball" ? 1.35 : 1.55}
           />
         </Animated.View>
@@ -600,6 +603,9 @@ function RatingSparkline({ data }: { readonly data: readonly number[] }) {
 }
 
 export function HomeV3Screen(props: HomeV3Props) {
+  const [prompt, setPrompt] = useState("");
+  const [exploreOpen, setExploreOpen] = useState(false);
+  const promptInput = useRef<import("react-native").TextInput>(null);
   const [activeTab, setActiveTab] = useState<HomeV3Tab>("all");
   const reduceMotion = useReducedMotion();
   const tabs: readonly { key: HomeV3Tab; label: string }[] = [
@@ -621,12 +627,15 @@ export function HomeV3Screen(props: HomeV3Props) {
 
   return (
     <ScrollView
+      automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.content}
+      keyboardDismissMode="interactive"
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.greeting}>Good morning, {props.firstName}.</Text>
+          <Text style={styles.greeting}>Hello, {props.firstName}.</Text>
           <Text style={styles.context}>{props.contextLine}</Text>
         </View>
         <View style={styles.headerActions}>
@@ -663,6 +672,78 @@ export function HomeV3Screen(props: HomeV3Props) {
         </View>
       </View>
 
+      <View style={styles.taskSection}>
+        <Text accessibilityRole="header" style={styles.taskTitle}>
+          What would you like to do?
+        </Text>
+        <View style={styles.taskComposer}>
+          <TextInput
+            accessibilityLabel="What would you like Duna to do?"
+            ref={promptInput}
+            multiline
+            maxLength={4000}
+            onChangeText={setPrompt}
+            placeholder="Ask Duna, or describe what you need…"
+            placeholderTextColor={c.textSecondary}
+            style={styles.taskInput}
+            value={prompt}
+          />
+          <View style={styles.taskTools}>
+            <View style={styles.taskIdentity}>
+              <Image source={dunaMark} style={styles.taskMark} />
+              <Text style={styles.taskLabel}>Duna AI</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Send to Duna"
+              accessibilityRole="button"
+              disabled={!prompt.trim()}
+              onPress={() => {
+                if (prompt.trim()) {
+                  props.onAskDuna(prompt.trim());
+                  setPrompt("");
+                }
+              }}
+              style={[
+                styles.taskSend,
+                !prompt.trim() && styles.taskSendDisabled,
+              ]}
+            >
+              <DunaIcon
+                name="arrow-right"
+                color={c.card}
+                size={20}
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              />
+            </Pressable>
+          </View>
+        </View>
+        <View style={styles.taskSuggestions}>
+          {[
+            {
+              label: "Find a game",
+              prompt: "Help me find a game that fits my level and schedule.",
+            },
+            { label: "My week", prompt: "What is on my calendar this week?" },
+            {
+              label: "My progress",
+              prompt: "Help me understand my recent matches and Sand Rating.",
+            },
+          ].map((item) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => {
+                setPrompt(item.prompt);
+                promptInput.current?.focus();
+              }}
+              style={styles.taskSuggestion}
+            >
+              <Text style={styles.taskSuggestionText}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.quickActions}
         horizontal
@@ -677,205 +758,329 @@ export function HomeV3Screen(props: HomeV3Props) {
         ))}
       </ScrollView>
 
-      <View style={styles.tabs}>
-        {tabs.map((tab) => {
-          const active = tab.key === activeTab;
-          return (
-            <Pressable
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
-              style={styles.tab}
-            >
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
-              <View
-                style={[
-                  styles.tabIndicator,
-                  active && styles.tabIndicatorActive,
-                ]}
-              />
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {showCrew ? (
-        <View style={styles.sectionInset}>
-          <Pressable
-            accessibilityLabel={showCrew.message}
-            accessibilityRole="button"
-            onPress={showCrew.onPress}
-            style={({ pressed }) => [
-              styles.crewCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <AvatarStack
-              avatars={showCrew.avatars}
-              overflowCount={showCrew.overflowCount}
-              size={32}
-            />
-            <Text style={styles.crewMessage}>{showCrew.message}</Text>
-            <DunaIcon
-              color={c.ink}
-              name="arrow-right"
-              size={18}
-              strokeWidth={1.4}
-            />
+      <View style={styles.sectionInset}>
+        <SectionHeader
+          title="Next up"
+          action="See schedule"
+          onAction={props.onOpenSchedule}
+        />
+        {props.nextUp ? (
+          <UpcomingCard item={props.nextUp} />
+        ) : (
+          <Pressable onPress={props.onOpenSchedule} style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Your schedule is open.</Text>
+            <Text style={styles.emptyBody}>
+              Open your calendar or ask Duna to find a game.
+            </Text>
           </Pressable>
-        </View>
-      ) : null}
+        )}
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: exploreOpen }}
+        onPress={() => setExploreOpen((value) => !value)}
+        style={styles.exploreToggle}
+      >
+        <Text style={styles.exploreLabel}>Explore your game</Text>
+        <DunaIcon
+          name="chevron-right"
+          color={c.ink}
+          size={18}
+          style={{ transform: [{ rotate: exploreOpen ? "90deg" : "0deg" }] }}
+        />
+      </Pressable>
+      {exploreOpen && (
+        <>
+          <View style={styles.tabs}>
+            {tabs.map((tab) => {
+              const active = tab.key === activeTab;
+              return (
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  key={tab.key}
+                  onPress={() => setActiveTab(tab.key)}
+                  style={styles.tab}
+                >
+                  <Text
+                    style={[styles.tabLabel, active && styles.tabLabelActive]}
+                  >
+                    {tab.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.tabIndicator,
+                      active && styles.tabIndicatorActive,
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
 
-      {showUpcoming ? (
-        <View style={styles.sectionInset}>
-          <SectionHeader
-            action="See schedule"
-            onAction={props.onOpenSchedule}
-            title="Next up"
-          />
-          <View style={styles.cardList}>
-            {visibleUpcoming.length > 0 ? (
-              visibleUpcoming
-                .slice(0, 3)
-                .map((item) => <UpcomingCard item={item} key={item.id} />)
-            ) : (
+          {showCrew ? (
+            <View style={styles.sectionInset}>
               <Pressable
-                onPress={props.onSearch}
+                accessibilityLabel={showCrew.message}
+                accessibilityRole="button"
+                onPress={showCrew.onPress}
                 style={({ pressed }) => [
-                  styles.emptyCard,
+                  styles.crewCard,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.emptyTitle}>Your schedule is open.</Text>
-                <Text style={styles.emptyBody}>
-                  Find a game, court, or training session nearby.
-                </Text>
+                <AvatarStack
+                  avatars={showCrew.avatars}
+                  overflowCount={showCrew.overflowCount}
+                  size={32}
+                />
+                <Text style={styles.crewMessage}>{showCrew.message}</Text>
+                <DunaIcon
+                  color={c.ink}
+                  name="arrow-right"
+                  size={18}
+                  strokeWidth={1.4}
+                />
               </Pressable>
-            )}
-          </View>
-        </View>
-      ) : null}
-
-      {showOpen ? (
-        <View style={styles.openSection}>
-          <View style={styles.openSectionHeading}>
-            <View style={styles.openSectionCopy}>
-              <Text style={styles.openSectionTitle}>Open games tonight</Text>
-              <Text style={styles.openSectionMeta}>
-                Matched to your {props.rating} · nearby
-              </Text>
             </View>
-            <Pressable hitSlop={10} onPress={props.onOpenMap}>
-              <Text style={styles.openSectionMap}>Map</Text>
-            </Pressable>
-          </View>
-          <View style={styles.openGamesList}>
-            {props.openGames.length > 0 ? (
-              props.openGames
-                .slice(0, 2)
-                .map((game) => <OpenGameCard game={game} key={game.id} />)
-            ) : (
+          ) : null}
+
+          {showUpcoming ? (
+            <View style={styles.sectionInset}>
+              <SectionHeader
+                action="See schedule"
+                onAction={props.onOpenSchedule}
+                title="Upcoming sessions"
+              />
+              <View style={styles.cardList}>
+                {visibleUpcoming.length > 0 ? (
+                  visibleUpcoming
+                    .slice(0, 3)
+                    .map((item) => <UpcomingCard item={item} key={item.id} />)
+                ) : (
+                  <Pressable
+                    onPress={props.onSearch}
+                    style={({ pressed }) => [
+                      styles.emptyCard,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.emptyTitle}>
+                      Your schedule is open.
+                    </Text>
+                    <Text style={styles.emptyBody}>
+                      Find a game, court, or training session nearby.
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          ) : null}
+
+          {showOpen ? (
+            <View style={styles.openSection}>
+              <View style={styles.openSectionHeading}>
+                <View style={styles.openSectionCopy}>
+                  <Text style={styles.openSectionTitle}>
+                    Open games tonight
+                  </Text>
+                  <Text style={styles.openSectionMeta}>
+                    Matched to your {props.rating} · nearby
+                  </Text>
+                </View>
+                <Pressable hitSlop={10} onPress={props.onOpenMap}>
+                  <Text style={styles.openSectionMap}>Map</Text>
+                </Pressable>
+              </View>
+              <View style={styles.openGamesList}>
+                {props.openGames.length > 0 ? (
+                  props.openGames
+                    .slice(0, 2)
+                    .map((game) => <OpenGameCard game={game} key={game.id} />)
+                ) : (
+                  <Pressable
+                    onPress={props.onOpenMoreGames}
+                    style={styles.openEmpty}
+                  >
+                    <Text style={styles.openEmptyTitle}>
+                      No open runs tonight yet.
+                    </Text>
+                    <Text style={styles.openEmptyBody}>
+                      See nearby games or start one for your circle.
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
               <Pressable
                 onPress={props.onOpenMoreGames}
-                style={styles.openEmpty}
+                style={styles.moreOpenGames}
               >
-                <Text style={styles.openEmptyTitle}>
-                  No open runs tonight yet.
-                </Text>
-                <Text style={styles.openEmptyBody}>
-                  See nearby games or start one for your circle.
+                <Text style={styles.moreOpenGamesText}>
+                  {props.moreOpenGamesCount > 0
+                    ? `${props.moreOpenGamesCount} more open tonight →`
+                    : "See all open games →"}
                 </Text>
               </Pressable>
-            )}
-          </View>
-          <Pressable
-            onPress={props.onOpenMoreGames}
-            style={styles.moreOpenGames}
-          >
-            <Text style={styles.moreOpenGamesText}>
-              {props.moreOpenGamesCount > 0
-                ? `${props.moreOpenGamesCount} more open tonight →`
-                : "See all open games →"}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
+            </View>
+          ) : null}
 
-      {showMatches ? (
-        <View style={styles.sectionInset}>
-          <SectionHeader
-            action="See all"
-            onAction={props.onOpenMatches}
-            title="Recent matches"
-          />
-          <View style={styles.cardList}>
-            {props.recentMatches.length > 0 ? (
-              props.recentMatches
-                .slice(0, 3)
-                .map((match) => <MatchCard key={match.id} match={match} />)
-            ) : (
-              <Pressable onPress={props.onOpenMatches} style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No verified matches yet.</Text>
-                <Text style={styles.emptyBody}>
-                  Completed results and rating changes will appear here.
-                </Text>
+          {showMatches ? (
+            <View style={styles.sectionInset}>
+              <SectionHeader
+                action="See all"
+                onAction={props.onOpenMatches}
+                title="Recent matches"
+              />
+              <View style={styles.cardList}>
+                {props.recentMatches.length > 0 ? (
+                  props.recentMatches
+                    .slice(0, 3)
+                    .map((match) => <MatchCard key={match.id} match={match} />)
+                ) : (
+                  <Pressable
+                    onPress={props.onOpenMatches}
+                    style={styles.emptyCard}
+                  >
+                    <Text style={styles.emptyTitle}>
+                      No verified matches yet.
+                    </Text>
+                    <Text style={styles.emptyBody}>
+                      Completed results and rating changes will appear here.
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+              <Pressable
+                onPress={props.onOpenMatches}
+                style={styles.ratingStrip}
+              >
+                <Text style={styles.ratingLabel}>SAND RATING</Text>
+                <RatingSparkline data={props.ratingHistory} />
+                <View style={styles.ratingValues}>
+                  <Text style={styles.ratingValue}>{props.rating}</Text>
+                  <Text
+                    style={[
+                      styles.ratingDelta,
+                      props.ratingDelta.startsWith("-") &&
+                        styles.ratingDeltaNegative,
+                    ]}
+                  >
+                    {props.ratingDelta}
+                  </Text>
+                </View>
               </Pressable>
-            )}
-          </View>
-          <Pressable onPress={props.onOpenMatches} style={styles.ratingStrip}>
-            <Text style={styles.ratingLabel}>SAND RATING</Text>
-            <RatingSparkline data={props.ratingHistory} />
-            <View style={styles.ratingValues}>
-              <Text style={styles.ratingValue}>{props.rating}</Text>
-              <Text
-                style={[
-                  styles.ratingDelta,
-                  props.ratingDelta.startsWith("-") &&
-                    styles.ratingDeltaNegative,
+            </View>
+          ) : null}
+
+          {showInsight ? (
+            <View style={styles.insightInset}>
+              <Pressable
+                accessibilityLabel="Open this insight in Duna AI"
+                accessibilityRole="button"
+                onPress={props.onOpenInsight}
+                style={({ pressed }) => [
+                  styles.insightCard,
+                  pressed && styles.pressed,
                 ]}
               >
-                {props.ratingDelta}
-              </Text>
+                <Image source={dunaMark} style={styles.insightMark} />
+                <View style={styles.insightCopy}>
+                  <Text style={styles.insightEyebrow}>DUNA INSIGHT</Text>
+                  <Text numberOfLines={2} style={styles.insightText}>
+                    {props.insight}
+                  </Text>
+                </View>
+                <DunaIcon color={c.navyLift} name="arrow-right" size={18} />
+              </Pressable>
             </View>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {showInsight ? (
-        <View style={styles.insightInset}>
-          <Pressable
-            accessibilityLabel="Open this insight in Duna AI"
-            accessibilityRole="button"
-            onPress={props.onOpenInsight}
-            style={({ pressed }) => [
-              styles.insightCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Image source={dunaMark} style={styles.insightMark} />
-            <View style={styles.insightCopy}>
-              <Text style={styles.insightEyebrow}>DUNA INSIGHT</Text>
-              <Text numberOfLines={2} style={styles.insightText}>
-                {props.insight}
-              </Text>
-            </View>
-            <DunaIcon color={c.navyLift} name="arrow-right" size={18} />
-          </Pressable>
-        </View>
-      ) : null}
+          ) : null}
+        </>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  taskSection: {
+    paddingHorizontal: mobileGrid[4],
+    paddingTop: mobileGrid[5],
+    gap: mobileGrid[3],
+  },
+  taskTitle: {
+    color: c.ink,
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: "400",
+    letterSpacing: -0.5,
+  },
+  taskComposer: {
+    borderColor: c.hairline,
+    borderWidth: 1,
+    borderRadius: mobileGrid[4],
+    padding: mobileGrid[3],
+    gap: mobileGrid[2],
+  },
+  taskInput: {
+    color: c.ink,
+    fontSize: 16,
+    lineHeight: 23,
+    minHeight: 65,
+    maxHeight: 150,
+    textAlignVertical: "top",
+    padding: 0,
+  },
+  taskTools: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  taskIdentity: {
+    flexDirection: "row",
+    gap: mobileGrid[2],
+    alignItems: "center",
+  },
+  taskMark: { width: 20, height: 20, resizeMode: "contain" },
+  taskLabel: { color: c.textSecondary, fontSize: 14 },
+  taskSend: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: c.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskSendDisabled: { opacity: 0.35 },
+  taskSuggestions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: mobileGrid[1],
+  },
+  taskSuggestion: {
+    flex: 1,
+    backgroundColor: c.subtle,
+    borderRadius: 10,
+    minHeight: 50,
+    padding: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskSuggestionText: { color: c.ink, fontSize: 14, textAlign: "center" },
+  exploreToggle: {
+    marginHorizontal: mobileGrid[4],
+    marginTop: mobileGrid[4],
+    borderTopColor: c.hairline,
+    borderTopWidth: 1,
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  exploreLabel: { color: c.ink, fontSize: 16, fontWeight: "500" },
   content: {
-    backgroundColor: c.page,
+    backgroundColor: c.card,
     paddingBottom: 138,
   },
-  pressed: { opacity: 0.76, transform: [{ scale: 0.988 }] },
+  pressed: { opacity: 0.76 },
   header: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -887,8 +1092,8 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, minWidth: 0 },
   greeting: {
     color: c.ink,
-    fontSize: 28,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "500",
     letterSpacing: -0.6,
     lineHeight: 31,
     maxWidth: 245,
@@ -906,10 +1111,10 @@ const styles = StyleSheet.create({
     borderColor: c.hairline,
     borderRadius: dunaAppShape.pillRadius,
     borderWidth: 1,
-    height: 42,
+    height: 50,
     justifyContent: "center",
     position: "relative",
-    width: 42,
+    width: 50,
   },
   notificationDot: {
     backgroundColor: c.navyLift,
@@ -925,17 +1130,17 @@ const styles = StyleSheet.create({
   quickActions: {
     gap: mobileGrid[2],
     paddingHorizontal: mobileGrid[3] + 1,
-    paddingTop: mobileGrid[6],
+    paddingTop: mobileGrid[4],
   },
   quickAction: { alignItems: "center", width: 82 },
   quickActionTile: {
     alignItems: "center",
     backgroundColor: c.subtle,
     borderRadius: dunaAppShape.actionTileRadius,
-    height: 64,
+    height: 50,
     justifyContent: "center",
     position: "relative",
-    width: 82,
+    width: 60,
   },
   quickActionLabel: {
     color: c.ink,
@@ -1243,7 +1448,7 @@ const styles = StyleSheet.create({
   rosterDivider: {
     alignSelf: "center",
     backgroundColor: c.hairline,
-    height: 64,
+    height: 50,
     width: 1,
   },
   openPlayer: { alignItems: "center", minWidth: 56 },

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { useFonts } from "expo-font";
+import type { Ref } from "react";
 import {
   StyleSheet,
   Text as NativeText,
@@ -131,7 +132,10 @@ export function DunaNumericText({
   );
 }
 
-export function SatoshiTextInput({ style, ...props }: TextInputProps) {
+export function SatoshiTextInput({
+  style,
+  ...props
+}: TextInputProps & { readonly ref?: Ref<NativeTextInput> }) {
   return (
     <NativeTextInput
       {...props}

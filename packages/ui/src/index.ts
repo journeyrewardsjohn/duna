@@ -1,5 +1,6 @@
 export * from "./brand";
 export * from "./duna-action-center";
+export * from "./duna-task-prompt";
 export * from "./form-controls";
 export * from "./mobile";
 export * from "./smart-date-range";
