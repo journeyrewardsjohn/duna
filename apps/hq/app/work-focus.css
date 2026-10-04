@@ -808,13 +808,16 @@ body[data-zone="operator"] .hq-shell--focused .hq-work-prompt h1 {
     display: block;
     margin: 5px 0;
   }
-  .hq-shell--focused .hq-work-navigation-more {
-    display: none;
-  }
   .hq-shell--focused .duna-action-center__chat {
     width: calc(100vw - 20px);
     max-height: calc(100svh - 20px);
     bottom: 10px;
+  }
+}
+
+@media (max-width: 899px) {
+  .hq-shell--focused .hq-work-navigation-more {
+    display: none;
   }
 }
 
