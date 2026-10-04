@@ -30594,7 +30594,7 @@ html {
   letter-spacing: -0.03em;
   line-height: 0.92;
   margin: clamp(2.5rem, 7vw, 5rem) 0 1.15rem;
-  max-width: 11ch;
+  max-width: 13ch;
   text-wrap: balance;
   word-spacing: 0.03em;
 }

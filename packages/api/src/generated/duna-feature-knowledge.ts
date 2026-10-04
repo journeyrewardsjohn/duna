@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "c1ff74af340131844d52ba936488a4b6bf1cddd00a96df416485ab3283c89660",
+    "010f05d7a64877ccca80b6708b80d57fc6a779352e89955682ca79bf4cc9cf01",
   modules: [
     {
       id: "M1",
@@ -553,6 +553,7 @@ export const generatedDunaFeatureKnowledge = {
       summary:
         "`apps/hq` is the calm, dense browser workspace for owners, managers, coaches, front-desk staff, scorekeepers, and accountants. It deploys as Vercel project `suttonx/duna-hq`, project root `apps/hq`, with the connected domain `https://hq.duna.coach`.",
       capabilities: [
+        "Approved workspace design",
         "Operator navigation",
         "Runtime and data path",
         "Vercel and migrations",

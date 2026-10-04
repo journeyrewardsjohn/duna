@@ -15,7 +15,7 @@ export function AdminShell({
   readonly children: ReactNode;
 }) {
   return (
-    <div className="hq-shell admin-shell">
+    <div className="hq-shell hq-shell--focused admin-shell">
       <aside className="hq-sidebar">
         <Link className="hq-sidebar__brand" href="/admin">
           <DunaMark />

@@ -267,6 +267,16 @@ test("public club pages keep the hero readable and the section rail useful", asy
     expect(heroBox.width).toBeGreaterThanOrEqual(viewport.width - 2);
     expect(heroBox.height).toBeLessThanOrEqual(720);
     expect(navBox.y + navBox.height).toBeLessThanOrEqual(viewport.height + 2);
+    if (viewport.width === 1440) {
+      // A delayed webfont must not add a third headline line and bury the rail.
+      await heading.evaluate((element) => {
+        element.style.fontFamily = "Arial, sans-serif";
+      });
+      expect((await getBox(hero)).height).toBeLessThanOrEqual(720);
+      await heading.evaluate((element) => {
+        element.style.removeProperty("font-family");
+      });
+    }
     await expectNoHorizontalOverflow(page);
   }
 
@@ -994,16 +1004,24 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
-    page.getByRole("heading", { name: "Good morning." }),
+    page.getByRole("heading", { name: "What would you like to get done?" }),
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Here’s what is happening across South Bay Volleyball Club.",
+      "Ask Duna to find answers, plan your day, or prepare a change.",
     ),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
   ).toHaveCount(0);
+  await page
+    .locator(".hq-work-details > summary")
+    .filter({ hasText: "More tools" })
+    .click();
+  await page
+    .locator(".hq-work-details > summary")
+    .filter({ hasText: "Business overview" })
+    .click();
   const aiAnalyst = page.locator(".hq-ai-analyst");
   await expect(aiAnalyst).toBeVisible();
   const aiAnalystColors = await aiAnalyst.evaluate((rail) => {
@@ -1019,9 +1037,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     };
   });
   expect(aiAnalystColors).toEqual({
-    action: "rgb(169, 196, 99)",
-    heading: "rgb(232, 242, 212)",
-    signalHeading: "rgb(232, 242, 212)",
+    action: "rgb(25, 25, 25)",
+    heading: "rgb(25, 25, 25)",
+    signalHeading: "rgb(25, 25, 25)",
   });
   await expect(page.getByText("Payments are connected.")).toHaveCount(0);
   await expect(

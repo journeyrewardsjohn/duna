@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { quickActions } from "./navigation";
+import { HqWorkPrompt } from "./hq-work-prompt";
 import { OrganizationAiInsights } from "./organization-ai-insights";
 import { VenueMatchOperations } from "./venue-match-operations";
 
@@ -101,169 +102,31 @@ export function OperatorOverview({
 
   return (
     <main className="hq-page hq-overview-page">
-      <header className="hq-page-heading hq-overview-heading">
-        <div>
-          <span className="hq-eyebrow">{today}</span>
-          <h1>Good morning.</h1>
-          <p>Here’s what is happening across {dashboard.organization.name}.</p>
-        </div>
-        <div>
-          <Link className="hq-button hq-button--secondary" href="/calendar">
-            <CalendarPlus aria-hidden size={17} /> Schedule
-          </Link>
-          <Link className="hq-button hq-button--primary" href="/events/create">
-            Create event <ChevronRight aria-hidden size={17} />
-          </Link>
-        </div>
-      </header>
-
-      <section className="hq-setup-strip" data-complete={setup.complete}>
-        <span className="hq-setup-strip__icon">
-          {setup.complete ? (
-            <Check aria-hidden size={19} />
-          ) : (
-            <ClipboardCheck aria-hidden size={19} />
-          )}
-        </span>
-        <div className="hq-setup-strip__copy">
-          <span className="hq-eyebrow">Organization setup</span>
-          <strong>
-            {nextSetupStep?.label ?? "Your essential setup is complete."}
-          </strong>
-          <small>
-            {nextSetupStep?.detail ??
-              "Review the checklist whenever the organization changes."}
-          </small>
-        </div>
-        <div className="hq-setup-strip__progress">
-          <span>
-            {setup.completedCount} of {setup.totalCount}
-          </span>
-          <progress
-            aria-label={`${setup.completedCount} of ${setup.totalCount} setup steps complete`}
-            max={setup.totalCount}
-            value={setup.completedCount}
-          />
-        </div>
-        <Link className="hq-button hq-button--secondary" href="/setup">
-          {setup.complete ? "Review setup" : "Continue setup"}
-          <ArrowRight aria-hidden size={16} />
+      <HqWorkPrompt date={today} />
+      <nav className="hq-work-actions" aria-label="Common tasks">
+        <Link href="/calendar">
+          <CalendarPlus size={17} aria-hidden />
+          Schedule
         </Link>
-        {!setup.complete && (
-          <DunaActionTrigger className="hq-setup-strip__ai" panel="chat">
-            <Sparkles aria-hidden size={15} /> Ask Duna
-          </DunaActionTrigger>
-        )}
-      </section>
-
+        <Link href="/events/create">
+          <ChevronRight size={17} aria-hidden />
+          Create event
+        </Link>
+        <Link href="/members">
+          <UsersRound size={17} aria-hidden />
+          People
+        </Link>
+        <Link href="/payments">
+          <CreditCard size={17} aria-hidden />
+          Money
+        </Link>
+      </nav>
       <div className="hq-overview-layout">
         <div className="hq-overview-main">
-          <section className="hq-analytics-board">
-            <header>
-              <div>
-                <span className="hq-eyebrow">Operating overview</span>
-                <h2>Analytics</h2>
-              </div>
-              <div className="hq-analytics-board__filters">
-                <span>This week</span>
-                <span>All venues</span>
-              </div>
-            </header>
-
-            {leadMetric ? (
-              <article className="hq-lead-metric">
-                <span>{leadMetric.label}</span>
-                <div>
-                  <Numeric>{leadMetric.value}</Numeric>
-                  {leadMetric.change && (
-                    <Badge
-                      tone={
-                        leadMetric.trend === "down" ? "warning" : "positive"
-                      }
-                    >
-                      {leadMetric.change}
-                    </Badge>
-                  )}
-                </div>
-                <small>Connected data for the current organization</small>
-              </article>
-            ) : (
-              <article className="hq-lead-metric">
-                <span>Connected data</span>
-                <div>
-                  <Numeric>—</Numeric>
-                </div>
-                <small>No operating metrics are available yet.</small>
-              </article>
-            )}
-
-            <div className="hq-analytics-metrics">
-              {supportingMetrics.map((metric, index) => {
-                const Icon = metricIcons[(index + 1) % metricIcons.length]!;
-                const paymentSetup = metric.label === "Payments";
-                const cardContent = (
-                  <>
-                    <span>
-                      {metric.label}
-                      <Icon aria-hidden size={16} />
-                    </span>
-                    {paymentSetup ? (
-                      <strong className="hq-analytics-metric__status">
-                        {metric.value}
-                      </strong>
-                    ) : (
-                      <Numeric>{metric.value}</Numeric>
-                    )}
-                    <small>{metric.change ?? "Connected now"}</small>
-                    {metric.label === "Members" && members.length > 0 && (
-                      <div className="metric-avatars">
-                        {members.slice(0, 4).map((person) => (
-                          <span key={person.id}>{person.initials}</span>
-                        ))}
-                        {members.length > 4 && (
-                          <small>+{members.length - 4}</small>
-                        )}
-                      </div>
-                    )}
-                    {paymentSetup && (
-                      <span className="hq-analytics-metric__action">
-                        Open secure setup <ArrowRight aria-hidden size={15} />
-                      </span>
-                    )}
-                  </>
-                );
-
-                if (paymentSetup) {
-                  return (
-                    <Link
-                      className="hq-analytics-metric hq-analytics-metric--link"
-                      data-tone={metric.tone}
-                      href="/payments/setup"
-                      key={metric.label}
-                    >
-                      {cardContent}
-                    </Link>
-                  );
-                }
-
-                return (
-                  <article
-                    className="hq-analytics-metric"
-                    data-tone={metric.tone}
-                    key={metric.label}
-                  >
-                    {cardContent}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
           <section className="hq-card hq-schedule-board">
             <header className="hq-card-heading">
               <div>
-                <span className="hq-eyebrow">Live operations</span>
-                <h2>Today’s schedule</h2>
+                <h2>Today</h2>
               </div>
               <Link href="/calendar">
                 Full calendar <ArrowRight aria-hidden size={15} />
@@ -368,7 +231,174 @@ export function OperatorOverview({
             matches={matches}
             timezone={dashboard.organization.timezone}
           />
+        </div>
 
+        <aside className="hq-work-attention">
+          <section aria-labelledby="hq-attention-title">
+            <h2 id="hq-attention-title">Needs attention</h2>
+            {dashboard.alerts.length ? (
+              dashboard.alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.id === "stripe" ? "/payments/setup" : "/calendar"}
+                >
+                  <span>
+                    <strong>{alert.title}</strong>
+                    <small>{alert.detail}</small>
+                  </span>
+                  <ArrowRight size={16} aria-hidden />
+                </Link>
+              ))
+            ) : (
+              <p>No operating alerts right now.</p>
+            )}
+          </section>
+          <section className="hq-setup-strip" data-complete={setup.complete}>
+            <span className="hq-setup-strip__icon">
+              {setup.complete ? (
+                <Check aria-hidden size={19} />
+              ) : (
+                <ClipboardCheck aria-hidden size={19} />
+              )}
+            </span>
+            <div className="hq-setup-strip__copy">
+              <span className="hq-eyebrow">Organization setup</span>
+              <strong>
+                {nextSetupStep?.label ?? "Your essential setup is complete."}
+              </strong>
+              <small>
+                {nextSetupStep?.detail ??
+                  "Review the checklist whenever the organization changes."}
+              </small>
+            </div>
+            <div className="hq-setup-strip__progress">
+              <span>
+                {setup.completedCount} of {setup.totalCount}
+              </span>
+              <progress
+                aria-label={`${setup.completedCount} of ${setup.totalCount} setup steps complete`}
+                max={setup.totalCount}
+                value={setup.completedCount}
+              />
+            </div>
+            <Link className="hq-button hq-button--secondary" href="/setup">
+              {setup.complete ? "Review setup" : "Continue setup"}
+              <ArrowRight aria-hidden size={16} />
+            </Link>
+            {!setup.complete && (
+              <DunaActionTrigger className="hq-setup-strip__ai" panel="chat">
+                <Sparkles aria-hidden size={15} /> Ask Duna
+              </DunaActionTrigger>
+            )}
+          </section>
+        </aside>
+      </div>
+      <details className="hq-work-details">
+        <summary>
+          Business overview <span>Metrics and upcoming events</span>
+        </summary>
+        <div>
+          {" "}
+          <section className="hq-analytics-board">
+            <header>
+              <div>
+                <span className="hq-eyebrow">Operating overview</span>
+                <h2>Analytics</h2>
+              </div>
+              <div className="hq-analytics-board__filters">
+                <span>This week</span>
+                <span>All venues</span>
+              </div>
+            </header>
+
+            {leadMetric ? (
+              <article className="hq-lead-metric">
+                <span>{leadMetric.label}</span>
+                <div>
+                  <Numeric>{leadMetric.value}</Numeric>
+                  {leadMetric.change && (
+                    <Badge
+                      tone={
+                        leadMetric.trend === "down" ? "warning" : "positive"
+                      }
+                    >
+                      {leadMetric.change}
+                    </Badge>
+                  )}
+                </div>
+                <small>Connected data for the current organization</small>
+              </article>
+            ) : (
+              <article className="hq-lead-metric">
+                <span>Connected data</span>
+                <div>
+                  <Numeric>—</Numeric>
+                </div>
+                <small>No operating metrics are available yet.</small>
+              </article>
+            )}
+
+            <div className="hq-analytics-metrics">
+              {supportingMetrics.map((metric, index) => {
+                const Icon = metricIcons[(index + 1) % metricIcons.length]!;
+                const paymentSetup = metric.label === "Payments";
+                const cardContent = (
+                  <>
+                    <span>
+                      {metric.label}
+                      <Icon aria-hidden size={16} />
+                    </span>
+                    {paymentSetup ? (
+                      <strong className="hq-analytics-metric__status">
+                        {metric.value}
+                      </strong>
+                    ) : (
+                      <Numeric>{metric.value}</Numeric>
+                    )}
+                    <small>{metric.change ?? "Connected now"}</small>
+                    {metric.label === "Members" && members.length > 0 && (
+                      <div className="metric-avatars">
+                        {members.slice(0, 4).map((person) => (
+                          <span key={person.id}>{person.initials}</span>
+                        ))}
+                        {members.length > 4 && (
+                          <small>+{members.length - 4}</small>
+                        )}
+                      </div>
+                    )}
+                    {paymentSetup && (
+                      <span className="hq-analytics-metric__action">
+                        Open secure setup <ArrowRight aria-hidden size={15} />
+                      </span>
+                    )}
+                  </>
+                );
+
+                if (paymentSetup) {
+                  return (
+                    <Link
+                      className="hq-analytics-metric hq-analytics-metric--link"
+                      data-tone={metric.tone}
+                      href="/payments/setup"
+                      key={metric.label}
+                    >
+                      {cardContent}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <article
+                    className="hq-analytics-metric"
+                    data-tone={metric.tone}
+                    key={metric.label}
+                  >
+                    {cardContent}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
           <section className="hq-card hq-events-board">
             <header className="hq-card-heading">
               <div>
@@ -416,7 +446,14 @@ export function OperatorOverview({
               )}
             </div>
           </section>
-
+        </div>
+      </details>
+      <details className="hq-work-details">
+        <summary>
+          More tools <span>Insights and quick actions</span>
+        </summary>
+        <div>
+          {" "}
           <section className="hq-quick-actions">
             <div>
               <span className="hq-eyebrow">Quick actions</span>
@@ -437,55 +474,55 @@ export function OperatorOverview({
               })}
             </div>
           </section>
-        </div>
-
-        <OrganizationAiInsights
-          eventCount={dashboard.events.length}
-          initial={{
-            headline: topAlert
-              ? topAlert.title
-              : nearlyFull[0]
-                ? `${nearlyFull[0].title} is filling up.`
-                : "Everything connected looks steady.",
-            summary:
-              "Connected schedule, event, member, and payment context is ready for Duna AI analysis.",
-            signals: topAlert
-              ? [
-                  {
-                    kind: "attention",
-                    label: "Needs attention",
-                    title: topAlert.title,
-                    detail: topAlert.detail,
-                    href:
-                      topAlert.id === "stripe"
-                        ? "/payments/setup"
-                        : "/calendar",
-                  },
-                ]
-              : nearlyFull[0]
+          <OrganizationAiInsights
+            autoRefresh={false}
+            eventCount={dashboard.events.length}
+            initial={{
+              headline: topAlert
+                ? topAlert.title
+                : nearlyFull[0]
+                  ? `${nearlyFull[0].title} is filling up.`
+                  : "Everything connected looks steady.",
+              summary:
+                "Connected schedule, event, member, and payment context is ready for Duna AI analysis.",
+              signals: topAlert
                 ? [
                     {
-                      kind: "demand",
-                      label: "Demand signal",
-                      title: nearlyFull[0].title,
-                      detail: `${nearlyFull[0].spotsRemaining} spots remain. Review capacity, waitlist, or another session while interest is active.`,
-                      href: "/events",
+                      kind: "attention",
+                      label: "Needs attention",
+                      title: topAlert.title,
+                      detail: topAlert.detail,
+                      href:
+                        topAlert.id === "stripe"
+                          ? "/payments/setup"
+                          : "/calendar",
                     },
                   ]
-                : [
-                    {
-                      kind: "steady",
-                      label: "All clear",
-                      title: "No urgent operating alert.",
-                      detail:
-                        "Duna will keep checking connected organization context for meaningful changes.",
-                      href: "/reports",
-                    },
-                  ],
-          }}
-          scheduleCount={dashboard.schedule.length}
-        />
-      </div>
+                : nearlyFull[0]
+                  ? [
+                      {
+                        kind: "demand",
+                        label: "Demand signal",
+                        title: nearlyFull[0].title,
+                        detail: `${nearlyFull[0].spotsRemaining} spots remain. Review capacity, waitlist, or another session while interest is active.`,
+                        href: "/events",
+                      },
+                    ]
+                  : [
+                      {
+                        kind: "steady",
+                        label: "All clear",
+                        title: "No urgent operating alert.",
+                        detail:
+                          "Duna will keep checking connected organization context for meaningful changes.",
+                        href: "/reports",
+                      },
+                    ],
+            }}
+            scheduleCount={dashboard.schedule.length}
+          />
+        </div>
+      </details>
     </main>
   );
 }

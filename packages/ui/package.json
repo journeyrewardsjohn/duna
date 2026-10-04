@@ -9,7 +9,9 @@
     "./mobile": "./src/mobile.ts",
     "./theme": "./src/theme.ts",
     "./theme-toggle": "./src/theme-toggle.tsx",
-    "./tokens": "./src/tokens.ts"
+    "./tokens": "./src/tokens.ts",
+    "./hq-workspace.css": "./src/hq-workspace.css",
+    "./particle-loader": "./src/particle-loader.tsx"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

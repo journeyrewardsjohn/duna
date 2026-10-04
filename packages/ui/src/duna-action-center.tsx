@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -117,6 +118,12 @@ type Panel = "actions" | "chat" | "search" | null;
 const actionEvent = "duna:action-center";
 const maximumAttachmentBytes = 4 * 1024 * 1024;
 const maximumAttachments = 3;
+
+export function openDunaAi(prompt: string) {
+  window.dispatchEvent(
+    new CustomEvent(actionEvent, { detail: { panel: "chat", prompt } }),
+  );
+}
 
 function dispatchAction(panel: Exclude<Panel, null>) {
   window.dispatchEvent(new CustomEvent(actionEvent, { detail: panel }));
@@ -411,10 +418,35 @@ export function DunaActionCenter({
     return [...groups.entries()];
   }, [searchResults]);
 
+  const receivePrompt = useEffectEvent((prompt: string) => {
+    if (!prompt.trim()) return;
+    setPanel("chat");
+    if (pending) {
+      setQuery(prompt);
+      setNotice(
+        "Your next question is ready. Send it when this response finishes.",
+      );
+      return;
+    }
+    void submit(prompt, []);
+  });
+
   useEffect(() => {
     const receive = (event: Event) => {
-      const requested = (event as CustomEvent<Exclude<Panel, null>>).detail;
-      setPanel((current) => (current === requested ? null : requested));
+      const requested = (
+        event as CustomEvent<
+          Exclude<Panel, null> | { panel: "chat"; prompt: string }
+        >
+      ).detail;
+      if (
+        typeof requested === "object" &&
+        requested?.panel === "chat" &&
+        typeof requested.prompt === "string"
+      ) {
+        receivePrompt(requested.prompt);
+      } else if (typeof requested === "string") {
+        setPanel((current) => (current === requested ? null : requested));
+      }
     };
     const keyboard = (event: globalThis.KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -688,14 +720,13 @@ export function DunaActionCenter({
     }
   }
 
-  async function submit(value = query) {
+  async function submit(value = query, sentAttachments = attachments) {
     const trimmed = value.trim();
-    if ((!trimmed && attachments.length === 0) || pending) return;
+    if ((!trimmed && sentAttachments.length === 0) || pending) return;
     const effectiveMessage = trimmed || "Please review the attached file.";
     const previous = messages
       .slice(-8)
       .map(({ role, body }) => ({ role, body }));
-    const sentAttachments = attachments;
     setMessages((current) => [
       ...current,
       {

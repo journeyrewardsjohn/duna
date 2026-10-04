@@ -109,7 +109,7 @@
   align-items: center;
   background: var(--hq-core);
   border-radius: 999px;
-  color: var(--hq-deep);
+  color: var(--hq-text);
   display: inline-flex;
   font-family: var(--font-data);
   font-size: 0.75rem;
@@ -152,7 +152,7 @@
   background: var(--hq-tint);
   border: 1px solid color-mix(in srgb, var(--hq-core) 22%, var(--hq-border));
   border-radius: 999px;
-  color: var(--hq-deep);
+  color: var(--hq-text);
   display: flex;
   flex: 0 0 auto;
   font-size: 0.75rem;
@@ -246,7 +246,7 @@
   align-items: center;
   background: var(--hq-tint);
   border-bottom: 1px solid var(--hq-border);
-  color: var(--hq-deep);
+  color: var(--hq-text);
   display: flex;
   font-size: 0.75rem;
   gap: 0.4rem;
@@ -638,7 +638,7 @@
 .specificPeople > div button[aria-pressed="true"] .personSelectionMark {
   background: var(--hq-core);
   border-color: var(--hq-core);
-  color: var(--hq-deep);
+  color: var(--hq-text);
 }
 
 .specificPeople strong,
@@ -798,7 +798,7 @@
   background: var(--hq-tint);
   border: 1px solid color-mix(in srgb, var(--hq-core) 20%, var(--hq-border));
   border-radius: 0.8rem;
-  color: var(--hq-deep);
+  color: var(--hq-text);
   display: flex;
   font-size: 0.75rem;
   gap: 0.55rem;
