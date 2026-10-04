@@ -267,6 +267,16 @@ test("public club pages keep the hero readable and the section rail useful", asy
     expect(heroBox.width).toBeGreaterThanOrEqual(viewport.width - 2);
     expect(heroBox.height).toBeLessThanOrEqual(720);
     expect(navBox.y + navBox.height).toBeLessThanOrEqual(viewport.height + 2);
+    if (viewport.width === 1440) {
+      // A delayed webfont must not add a third headline line and bury the rail.
+      await heading.evaluate((element) => {
+        element.style.fontFamily = "Arial, sans-serif";
+      });
+      expect((await getBox(hero)).height).toBeLessThanOrEqual(720);
+      await heading.evaluate((element) => {
+        element.style.removeProperty("font-family");
+      });
+    }
     await expectNoHorizontalOverflow(page);
   }
 
