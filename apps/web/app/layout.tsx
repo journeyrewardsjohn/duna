@@ -4,6 +4,8 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./design-v3.css";
 import "./design-v4.css";
+import "@duna/ui/public-website.css";
+import "./public-website.css";
 
 import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";

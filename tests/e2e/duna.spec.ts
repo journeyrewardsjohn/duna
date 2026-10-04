@@ -253,7 +253,7 @@ test("public club pages keep the hero readable and the section rail useful", asy
 
     await expect(hero).toHaveAttribute("data-hero-kind", "gradient");
     await expect(heading).toBeVisible();
-    await expect(heading).toHaveCSS("color", "rgb(24, 24, 27)");
+    await expect(heading).toHaveCSS("color", "rgb(32, 32, 32)");
     await expect(sectionNav).toBeVisible();
     await expect(
       sectionNav.getByRole("link", { name: "Events" }),
@@ -301,14 +301,14 @@ test("public club pages keep the hero readable and the section rail useful", asy
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(".club-profile")).toHaveCSS(
     "background-color",
-    "rgb(16, 24, 36)",
+    "rgb(25, 25, 25)",
   );
   await expect(
     page.getByRole("heading", {
       level: 1,
       name: "South Bay Volleyball Club",
     }),
-  ).toHaveCSS("color", "rgb(250, 246, 242)");
+  ).toHaveCSS("color", "rgb(245, 245, 243)");
   await expectNoHorizontalOverflow(page);
 });
 

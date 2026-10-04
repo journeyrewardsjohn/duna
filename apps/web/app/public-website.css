@@ -1,0 +1,440 @@
+/* October 2026 public-site direction: quiet navigation and readable content. */
+body:has(.site-header) {
+  font-family: var(--public-font);
+  background: var(--public-ground);
+}
+
+main:has(> .site-header),
+.site-header,
+.site-footer,
+.site-mobile-sheet {
+  --font-display: var(--public-font);
+  --font-body: var(--public-font);
+  --font-heading: var(--public-font);
+  --font-ui: var(--public-font);
+  --font-mono: var(--public-font);
+}
+
+/* An event-specific absolute rule previously made this shrink to its contents. */
+.site-header,
+main > .site-header,
+main[data-zone] > .site-header {
+  position: sticky;
+  inset: 0 0 auto;
+  z-index: 100;
+  width: 100%;
+  height: var(--public-nav-height);
+  padding: 0;
+  border-bottom: 1px solid var(--public-line);
+  background: var(--public-ground);
+  color: var(--public-ink);
+}
+
+:root .site-header.site-header--simple .site-header__inner {
+  width: min(100%, calc(var(--public-content-width) + 48px));
+  min-height: var(--public-nav-height);
+  margin-inline: auto;
+  padding: 0 24px;
+  gap: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root .site-header.site-header--simple .site-header__brand .duna-mark__logo {
+  height: 30px;
+}
+
+:root .site-header.site-header--simple .site-header__nav {
+  justify-self: end;
+  gap: 2px;
+}
+
+:root
+  .site-header.site-header--simple
+  :is(.club-feature-menu > summary, .site-header__nav > a) {
+  min-height: 48px;
+  padding: 12px;
+  color: var(--public-ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+:root .site-header.site-header--simple .site-header__actions {
+  grid-column: 3;
+  gap: 12px;
+}
+
+:root
+  .site-header.site-header--simple
+  :is(.theme-toggle, .site-header__operator, .site-header__enter) {
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:root .site-header.site-header--simple .site-header__operator {
+  gap: 6px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--public-muted);
+}
+
+:root .site-header.site-header--simple .site-header__enter {
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--public-ink);
+  color: var(--public-ground);
+  transform: none;
+}
+
+:root .site-header.site-header--simple .theme-toggle {
+  border-color: transparent;
+  background: transparent;
+}
+
+:root .site-header.site-header--simple .club-feature-menu__panel {
+  top: var(--public-nav-height);
+  width: min(100%, calc(var(--public-content-width) + 48px));
+  max-height: calc(100dvh - var(--public-nav-height) - 16px);
+  padding: 24px 28px;
+  border: 1px solid var(--public-line);
+  border-radius: 0 0 16px 16px;
+  background: var(--public-ground);
+  color: var(--public-ink);
+  box-shadow: 0 18px 36px rgb(0 0 0 / 8%);
+}
+
+:root .site-header.site-header--simple .club-feature-menu__backdrop {
+  inset-block-start: var(--public-nav-height);
+  backdrop-filter: none;
+  background: rgb(0 0 0 / 12%);
+}
+
+:root .site-header.site-header--simple .site-experience-menu__featured {
+  border: 1px solid var(--public-line);
+  background: var(--public-soft);
+  color: var(--public-ink);
+}
+
+:root
+  .site-header.site-header--simple
+  .site-experience-menu__featured
+  :is(span, p, b) {
+  color: var(--public-muted);
+}
+
+:root body:has(.site-header) main :is(h1, h2, h3) {
+  font-family: var(--public-font);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+main:has(> .site-header) :is(.section__eyebrow, .page-eyebrow) {
+  color: var(--public-muted);
+  font-family: var(--public-font);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+:root body .club-profile .club-hero h1 {
+  max-width: 18ch;
+  margin-block: 28px 18px;
+  font-family: var(--club-heading, var(--public-font));
+  font-size: clamp(2.5rem, 5.2vw, 4.75rem);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.event-public {
+  background: var(--public-ground);
+  color: var(--public-ink);
+}
+
+.event-public .event-public__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  align-items: center;
+  gap: 48px;
+  width: min(calc(100% - 48px), var(--public-content-width));
+  max-width: var(--public-content-width);
+  min-height: 0;
+  margin-inline: auto;
+  padding: 56px 0 48px;
+}
+
+.event-public .event-public__hero-copy {
+  padding: 0;
+}
+
+.event-public .event-public__badges {
+  margin-bottom: 16px;
+}
+
+.event-public .event-public__host {
+  margin-bottom: 12px;
+  color: var(--public-muted);
+  font-size: 14px;
+}
+
+.event-public .event-public__host strong {
+  color: var(--public-ink);
+  font-weight: 500;
+}
+
+.event-public .event-public__hero h1 {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(2.5rem, 4.2vw, 3.75rem);
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.event-public .event-public__hero-copy > p {
+  max-width: 52ch;
+  margin-top: 18px;
+  color: var(--public-muted);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.event-public .event-public__facts {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.event-public .event-public__facts > span {
+  grid-template-columns: 20px 52px minmax(0, 1fr);
+  align-items: start;
+  min-height: 0;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.event-public .event-public__facts svg {
+  grid-row: auto;
+  color: var(--public-muted);
+}
+
+.event-public .event-public__facts :is(small, strong) {
+  font-size: 14px;
+  line-height: 1.45;
+  text-transform: none;
+}
+
+.event-public .event-public__facts strong {
+  color: var(--public-ink);
+  font-weight: 500;
+}
+
+.event-public .event-public__visual {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: 400px;
+  aspect-ratio: 4 / 3;
+  border: 0;
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.event-public .event-public__visual::after {
+  content: none;
+}
+
+:root .event-public .event-public__availability {
+  min-width: 190px;
+  max-width: calc(100% - 32px);
+  width: max-content;
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  padding: 12px;
+  border-color: var(--public-line);
+  border-radius: 12px;
+  background: var(--public-ground);
+  color: var(--public-ink);
+  box-shadow: none;
+}
+
+:root .event-public .event-public__availability > small {
+  color: var(--public-muted);
+}
+
+:root .event-public .event-section-nav {
+  top: var(--public-nav-height);
+  z-index: 30;
+  background: var(--public-ground);
+  border-color: var(--public-line);
+}
+
+.event-public .event-section-nav__inner {
+  width: min(calc(100% - 48px), var(--public-content-width));
+  max-width: var(--public-content-width);
+  margin-inline: auto;
+  padding: 0;
+}
+
+.event-public .event-section-nav__links a {
+  min-height: 48px;
+  color: var(--public-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.event-public .event-section-nav__links a[aria-current="location"] {
+  background: var(--public-soft);
+  border-color: transparent;
+  color: var(--public-ink);
+}
+
+.event-public .event-public__layout {
+  width: min(calc(100% - 48px), var(--public-content-width));
+  max-width: var(--public-content-width);
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 64px;
+  padding: 40px 0 72px;
+}
+
+.event-public .event-public__content {
+  gap: 40px;
+}
+
+.event-public .event-public__intro h2,
+.event-public .event-public__section > header h2 {
+  margin-top: 8px;
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.event-public .event-public__booking {
+  top: calc(var(--public-nav-height) + 80px);
+  padding: 20px;
+  border: 1px solid var(--public-line);
+  border-radius: 16px;
+  box-shadow: none;
+  background: var(--public-ground);
+}
+
+.event-public .event-public__booking-label {
+  border: 0;
+  border-radius: 10px;
+  background: var(--public-soft);
+  color: var(--public-ink);
+}
+
+.event-public .event-public__booking > h2 {
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.event-public .event-public__booking > p {
+  font-size: 14px;
+}
+
+.event-public [id] {
+  scroll-margin-top: calc(var(--public-nav-height) + 88px);
+}
+
+.site-footer {
+  background: var(--public-soft);
+  color: var(--public-ink);
+  border-top: 1px solid var(--public-line);
+}
+
+.site-footer :is(.site-footer__top, .site-footer__bottom) {
+  max-width: var(--public-content-width);
+}
+
+.site-footer .site-footer__links :is(strong, a),
+.site-footer .site-footer__top > div:first-child > p,
+.site-footer .site-footer__bottom {
+  color: var(--public-muted);
+}
+
+.site-footer .duna-mark__logo--blue {
+  display: block;
+}
+
+.site-footer .duna-mark__logo--white {
+  display: none;
+}
+
+:root[data-theme="dark"] .site-footer .duna-mark__logo--blue {
+  display: none;
+}
+
+:root[data-theme="dark"] .site-footer .duna-mark__logo--white {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .event-public .event-public__hero {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    padding-block: 36px;
+  }
+
+  .event-public .event-public__layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 28px;
+  }
+}
+
+@media (max-width: 720px) {
+  :root .site-header.site-header--simple .site-header__inner {
+    padding-inline: 16px;
+  }
+
+  :root .site-header.site-header--simple .site-header__menu {
+    width: 48px;
+    height: 48px;
+    border: 0;
+    background: transparent;
+  }
+
+  .event-public .event-public__hero,
+  .event-public .event-public__layout,
+  .event-public .event-section-nav__inner {
+    width: calc(100% - 32px);
+    grid-template-columns: 1fr;
+  }
+
+  .event-public .event-public__hero {
+    gap: 24px;
+    padding-block: 28px;
+  }
+
+  .event-public .event-public__hero h1 {
+    font-size: clamp(2rem, 9vw, 2.75rem);
+    max-width: none;
+  }
+
+  .event-public .event-public__hero-copy > p {
+    font-size: 16px;
+  }
+
+  .event-public .event-public__visual {
+    aspect-ratio: 16 / 9;
+    max-height: 240px;
+    border-radius: 16px;
+  }
+
+  .event-public .event-public__layout {
+    padding-top: 24px;
+  }
+
+  .event-public .event-public__booking {
+    position: static;
+    grid-row: 1;
+  }
+}

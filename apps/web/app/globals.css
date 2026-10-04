@@ -24690,10 +24690,6 @@ html {
   min-height: 100vh;
 }
 
-.event-public > .site-header {
-  position: absolute;
-}
-
 .event-public__hero {
   align-items: stretch;
   display: grid;

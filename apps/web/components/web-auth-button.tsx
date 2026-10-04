@@ -12,13 +12,8 @@ function OpenDunaLink({ href }: { readonly href: string }) {
       href={href}
       prefetch
     >
-      <span>
-        <small>Player app</small>
-        <strong>Duna Player</strong>
-      </span>
-      <i>
-        <ArrowUpRight aria-hidden size={16} />
-      </i>
+      Duna Player
+      <ArrowUpRight aria-hidden size={16} />
     </Link>
   );
 }

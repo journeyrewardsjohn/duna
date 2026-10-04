@@ -403,7 +403,14 @@ export default async function EventPage({
             <span>
               <UsersRound aria-hidden size={18} />
               <strong>
-                <Numeric>{event.spotsRemaining}</Numeric> player spots
+                {lifecyclePhase === "completed" ||
+                lifecyclePhase === "cancelled" ? (
+                  "Final field"
+                ) : (
+                  <>
+                    <Numeric>{event.spotsRemaining}</Numeric> player spots
+                  </>
+                )}
               </strong>
             </span>
             <div>

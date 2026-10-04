@@ -7,6 +7,10 @@ Live Activities, transactional UI, and product media.
 
 ## Primary-family system
 
+October 4 public-site amendment: `duna-public-website-20261004.md` records the
+requested Acid Grotesk typography and its pending licensed asset. Public pages
+currently retain Satoshi at a lighter scale. Product surfaces remain Satoshi.
+
 Duna uses **Satoshi** for every product word and number. The family is the
 single source of typographic character across product surfaces; hierarchy comes
 from its weight, size, spacing, and numeric treatment. The only public-web

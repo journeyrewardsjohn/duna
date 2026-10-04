@@ -11,7 +11,8 @@
     "./theme-toggle": "./src/theme-toggle.tsx",
     "./tokens": "./src/tokens.ts",
     "./hq-workspace.css": "./src/hq-workspace.css",
-    "./particle-loader": "./src/particle-loader.tsx"
+    "./particle-loader": "./src/particle-loader.tsx",
+    "./public-website.css": "./src/public-website.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
