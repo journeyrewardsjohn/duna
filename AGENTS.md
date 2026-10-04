@@ -3,6 +3,13 @@
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
 and data truth always take precedence over visual novelty.
 
+## October 4 public website direction
+
+`docs/design/duna-public-website-20261004.md` supersedes older public navigation,
+headline weight, and detail-page density guidance. The requested Acid Grotesk
+font awaits the owner's licensed webfont files; Satoshi is the explicit interim
+font. HQ, authenticated Player, and native font contracts remain unchanged.
+
 ## October 4 HQ direction
 
 `docs/design/duna-hq-focus-20261004.md` records the approved white, black, and

@@ -1,0 +1,54 @@
+/* Public website only. Authenticated Player, HQ, and native keep their tokens. */
+:root:has(.site-header),
+.site-mobile-sheet {
+  --public-ground: #fff;
+  --public-soft: #f7f7f5;
+  --public-ink: #202020;
+  --public-muted: #636363;
+  --public-line: #e5e5e3;
+  --public-content-width: 1216px;
+  --public-nav-height: 76px;
+  /* Acid Grotesk delivery is pending the owner's licensed webfont files. */
+  --public-font: "Satoshi", "Helvetica Neue", Arial, sans-serif;
+  --duna-web-snow: var(--public-ground);
+  --duna-web-white: var(--public-ground);
+  --duna-web-charcoal: var(--public-ink);
+  --duna-web-grey-600: var(--public-muted);
+  --duna-web-grey-500: var(--public-muted);
+  --duna-web-hairline: var(--public-line);
+  --duna-web-border: var(--public-line);
+  --duna-web-surface-grey: var(--public-soft);
+  --duna-web-content-max: var(--public-content-width);
+  --duna-web-nav-height: var(--public-nav-height);
+  --duna-web-radius-band: 24px;
+  --duna-web-radius-media: 20px;
+  --duna-web-radius-card: 16px;
+  --duna-web-font-mono: var(--public-font);
+  --duna-web-shadow-hero: none;
+  --duna-web-grad-nav: var(--public-ground);
+  --duna-web-grad-hero:
+    radial-gradient(
+      ellipse at 50% 24%,
+      rgb(211 227 240 / 42%),
+      transparent 66%
+    ),
+    var(--public-ground);
+}
+
+:root[data-theme="dark"]:has(.site-header),
+:root[data-theme="dark"] .site-mobile-sheet {
+  --public-ground: #191919;
+  --public-soft: #242424;
+  --public-ink: #f5f5f3;
+  --public-muted: #b8b8b4;
+  --public-line: #383836;
+  --duna-web-grad-hero:
+    radial-gradient(ellipse at 50% 24%, rgb(74 90 108 / 18%), transparent 66%),
+    var(--public-ground);
+}
+
+@media (max-width: 720px) {
+  :root:has(.site-header) {
+    --public-nav-height: 64px;
+  }
+}

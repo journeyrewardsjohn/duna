@@ -21,7 +21,7 @@ export function SiteHeader({ authConfigured }: SiteHeaderProps = {}) {
   const configured =
     authConfigured === undefined ? isWorkOSAuthKitConfigured() : authConfigured;
   return (
-    <header className="site-header">
+    <header className="site-header site-header--simple">
       <div className="site-header__inner">
         <Link
           aria-label="Duna home"
@@ -43,13 +43,8 @@ export function SiteHeader({ authConfigured }: SiteHeaderProps = {}) {
             className="site-header__operator"
             href={DUNA_HQ_URL}
           >
-            <span>
-              <small>For business</small>
-              <strong>Duna HQ</strong>
-            </span>
-            <i>
-              <ArrowUpRight aria-hidden size={14} />
-            </i>
+            Duna HQ
+            <ArrowUpRight aria-hidden size={14} />
           </a>
           <WebAuthButton configured={configured} />
           <SiteMobileMenu configured={configured} hqUrl={DUNA_HQ_URL} />
