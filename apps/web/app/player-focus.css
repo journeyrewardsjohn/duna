@@ -38,6 +38,42 @@
   line-height: 1.15;
   letter-spacing: -0.025em;
 }
+:root .player-shell .page-eyebrow {
+  color: var(--player-muted);
+}
+:root .player-shell .date-pill-filter {
+  background: var(--player-surface);
+  color: var(--player-text);
+  border-color: var(--player-line);
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 18px;
+}
+:root .player-shell .date-pill-filter > header strong {
+  font-size: 20px;
+  font-weight: 500;
+}
+:root .player-shell .date-pill-filter > header > span,
+:root .player-shell .date-pill-filter > header > div > span {
+  color: var(--player-muted);
+}
+:root .player-shell .date-pill-filter__rail a {
+  background: var(--player-soft);
+  border-color: var(--player-line);
+  border-radius: 14px;
+  color: var(--player-text);
+  min-height: 68px;
+  box-shadow: none;
+  transform: none;
+}
+:root .player-shell .date-pill-filter__rail a[aria-current="date"],
+:root .player-shell .calendar-picker__pill[aria-current="date"],
+:root .player-shell .calendar-month__grid button[aria-current="date"] {
+  background: var(--player-text);
+  border-color: var(--player-text);
+  color: var(--player-ground);
+  box-shadow: none;
+}
 .player-sidebar__settings {
   display: flex;
   align-items: center;
