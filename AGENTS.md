@@ -3,6 +3,13 @@
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
 and data truth always take precedence over visual novelty.
 
+## October 4 HQ direction
+
+`docs/design/duna-hq-focus-20261004.md` records the approved white, black, and
+grey HQ workspace and AI-first task flow. It supersedes older HQ accent and
+layout direction while preserving functionality, roles, and accessibility.
+Player and native design changes remain separately reviewed.
+
 ## Required design references
 
 Read the relevant reference before changing any user-facing surface:

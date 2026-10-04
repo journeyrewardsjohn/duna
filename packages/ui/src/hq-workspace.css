@@ -1,0 +1,79 @@
+/* HQ semantic palette. Imported only by the operator application. */
+body[data-zone="operator"],
+html[data-theme] body[data-zone="operator"] {
+  --hq-ground: #fff;
+  --hq-surface: #fff;
+  --hq-soft: #f7f7f7;
+  --hq-text: #191919;
+  --hq-muted: #646464;
+  --hq-line: #e6e6e6;
+  --hq-border: var(--hq-line);
+  --hq-tint: var(--hq-soft);
+  --hq-core: #d6d6d6;
+  --hq-ink: var(--hq-text);
+  --hq-deep: #191919;
+  --hq-text-on-deep: #fff;
+  --hq-action-on-deep: #fff;
+  --hq-text-on-deep-muted: #d6d6d6;
+  --hq-line-on-deep: #555;
+  --hq-surface-on-deep: #2b2b2b;
+  --hq-focus: #3d6bd6;
+  --ground: var(--hq-ground);
+  --ground-warm: var(--hq-ground);
+  --ground-cool: var(--hq-soft);
+  --surface-1: var(--hq-surface);
+  --surface-2: var(--hq-soft);
+  --surface-3: var(--hq-surface);
+  --text-1: var(--hq-text);
+  --text-2: var(--hq-muted);
+  --text-3: var(--hq-muted);
+  --hairline: var(--hq-line);
+  --hairline-strong: var(--hq-core);
+  --color-canvas: var(--hq-ground);
+  --color-canvas-soft: var(--hq-soft);
+  --color-surface: var(--hq-surface);
+  --color-surface-raised: var(--hq-surface);
+  --color-line: var(--hq-line);
+  --color-line-strong: var(--hq-core);
+  --color-ink: var(--hq-text);
+  --color-depth: var(--hq-surface);
+  --color-navy: var(--hq-soft);
+  --color-navy-lift: var(--hq-soft);
+  --color-sand-light: var(--hq-soft);
+  --color-aqua: var(--hq-text);
+  --color-aqua-deep: var(--hq-text);
+  --btn-primary-bg: var(--hq-text);
+  --btn-primary-fg: var(--hq-ground);
+  --btn-primary-hover: var(--hq-muted);
+  --btn-ghost-border: var(--hq-line);
+  --focus-ring: var(--hq-focus);
+  --dissolve: var(--hq-ground);
+  --shadow-small: none;
+  --shadow-large: 0 20px 60px
+    color-mix(in srgb, var(--hq-text) 10%, transparent);
+  background: var(--hq-ground);
+  color: var(--hq-text);
+}
+html[data-theme="dark"] body[data-zone="operator"] {
+  --hq-ground: #191919;
+  --hq-surface: #222;
+  --hq-soft: #2b2b2b;
+  --hq-text: #f5f5f5;
+  --hq-muted: #b8b8b8;
+  --hq-line: #3b3b3b;
+  --hq-core: #737373;
+  --hq-deep: #191919;
+}
+.duna-particle-loader {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 20px;
+  min-height: 65svh;
+  color: var(--hq-muted);
+  background: var(--hq-ground);
+}
+.duna-particle-loader > span {
+  font: inherit;
+  font-size: 14px;
+}

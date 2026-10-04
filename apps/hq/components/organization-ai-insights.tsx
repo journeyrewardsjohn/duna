@@ -38,10 +38,12 @@ const signalIcon = {
 } as const;
 
 export function OrganizationAiInsights({
+  autoRefresh = true,
   eventCount,
   initial,
   scheduleCount,
 }: {
+  readonly autoRefresh?: boolean;
   readonly eventCount: number;
   readonly initial: Insights;
   readonly scheduleCount: number;
@@ -85,8 +87,8 @@ export function OrganizationAiInsights({
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (autoRefresh) void refresh();
+  }, [autoRefresh, refresh]);
 
   return (
     <aside

@@ -8,6 +8,14 @@ front-desk staff, scorekeepers, and accountants. It deploys as Vercel project
 Duna Admin is implemented in the same application but has a separate role and
 navigation boundary; see [`ADMIN.md`](ADMIN.md).
 
+## Approved workspace design
+
+HQ uses the approved [focused workspace](../design/duna-hq-focus-20261004.md):
+a white canvas, black and grey text, an AI-first Home, and compact contextual
+AI inputs on task pages. Primary navigation keeps the frequent modules visible;
+More tools retains every secondary module. Business metrics and extra insights
+remain available through disclosures on Home.
+
 ## Operator navigation
 
 `apps/hq/components/navigation.ts` is the navigation source of truth.

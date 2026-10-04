@@ -39,7 +39,8 @@ describe("business onboarding experience", () => {
   });
 
   it("makes payment readiness a clear action that opens secure setup", () => {
-    expect(overview.match(/\/payments\/setup/g)).toHaveLength(2);
+    // Metrics and the new attention list all lead to the same secure setup.
+    expect(overview.match(/\/payments\/setup/g)).toHaveLength(3);
     expect(overview).toContain("hq-analytics-metric__status");
     expect(overview).toContain("Open secure setup");
     expect(overview).not.toContain("Action required");

@@ -1,5 +1,5 @@
-import { DunaLoader } from "@duna/ui";
+import { DunaParticleLoader } from "@duna/ui/particle-loader";
 
 export default function Loading() {
-  return <DunaLoader label="Opening your day" />;
+  return <DunaParticleLoader label="Opening your workspace" />;
 }
