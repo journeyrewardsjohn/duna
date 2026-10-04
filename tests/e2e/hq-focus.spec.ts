@@ -138,6 +138,13 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
   });
   await assistant.getByRole("button", { name: "Close Duna AI" }).click();
   const more = page.locator(".hq-work-navigation-more");
+  if ((page.viewportSize()?.width ?? 1440) <= 1100) {
+    await page.getByRole("button", { name: "Search HQ", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Search Duna HQ" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
   const menu = (await more.isVisible())
     ? more
     : page.locator(".hq-mobile-navigation-more");

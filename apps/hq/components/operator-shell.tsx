@@ -245,6 +245,13 @@ export async function OperatorShell({
             <kbd>⌘ K</kbd>
           </DunaActionTrigger>
           <div>
+            <DunaActionTrigger
+              className="icon-button hq-compact-search"
+              panel="search"
+            >
+              <Search aria-hidden size={18} />
+              <span className="sr-only">Search HQ</span>
+            </DunaActionTrigger>
             <ThemeToggle />
             <DunaActionTrigger className="hq-ai-button" panel="chat">
               <Sparkles aria-hidden size={16} /> Duna AI
