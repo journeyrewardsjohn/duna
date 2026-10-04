@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import {
   ActivityIndicator,
   Image,
@@ -9,13 +10,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { dunaWebUrl, type PlayerDunaAiResponse } from "./mobile-api";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
 import { usePlayerRuntime } from "./runtime";
+import { DunaIcon } from "./duna-icon";
+const dunaMark = require("./assets/duna-mark.png");
 
 export interface PlayerDunaAiPalette {
   readonly canvas: string;
@@ -100,6 +103,9 @@ function cardKey(card: PlayerDunaAiCard, index: number): string {
 }
 
 export function PlayerDunaAiScreen({
+  active,
+  initialPrompt,
+  onInitialPromptConsumed,
   onClose,
   onOpenBooking,
   onOpenEvent,
@@ -110,6 +116,9 @@ export function PlayerDunaAiScreen({
   palette,
   pathname,
 }: {
+  readonly active: boolean;
+  readonly initialPrompt?: string;
+  readonly onInitialPromptConsumed: () => void;
   readonly onClose: () => void;
   readonly onOpenBooking: (bookingId: string) => void;
   readonly onOpenEvent: (
@@ -135,44 +144,27 @@ export function PlayerDunaAiScreen({
     {
       id: "welcome",
       role: "assistant",
-      body: "I’m Duna AI for your game. Ask me to find and compare places to play, explain your matches, check your calendar, gather booking details, or prepare an account action for review.",
+      body: "What would you like to do? I can help find a game, plan your week, or understand your progress.",
     },
   ]);
   const getSuggestions = runtime.getDunaAiSuggestions;
 
   useEffect(() => {
-    if (!getSuggestions) return;
-    let active = true;
+    if (!active || !getSuggestions) return;
+    let subscribed = true;
     void getSuggestions({
       pathname,
       pageTitle: "Duna Player copilot",
     })
       .then((response) => {
-        if (!active) return;
+        if (!subscribed) return;
         setSuggestions([...response.suggestions]);
-        if (response.cards.length > 0) {
-          setTurns((current) =>
-            current.some(
-              (turn) => turn.id === "player-context" || turn.role === "user",
-            )
-              ? current
-              : [
-                  ...current,
-                  {
-                    id: "player-context",
-                    role: "assistant",
-                    body: response.reply,
-                    response,
-                  },
-                ],
-          );
-        }
       })
       .catch(() => undefined);
     return () => {
-      active = false;
+      subscribed = false;
     };
-  }, [getSuggestions, pathname]);
+  }, [active, getSuggestions, pathname]);
 
   const ask = async (text: string) => {
     const value = text.trim();
@@ -222,6 +214,21 @@ export function PlayerDunaAiScreen({
       );
     }
   };
+
+  const consumeInitialPrompt = useEffectEvent((prompt: string) => {
+    onInitialPromptConsumed();
+    void ask(prompt);
+  });
+  const receivedPrompt = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!initialPrompt) {
+      receivedPrompt.current = undefined;
+      return;
+    }
+    if (!active || busy || receivedPrompt.current === initialPrompt) return;
+    receivedPrompt.current = initialPrompt;
+    consumeInitialPrompt(initialPrompt);
+  }, [active, busy, initialPrompt]);
 
   const approve = async (card: ApprovalCard) => {
     if (!runtime.confirmDunaAiAction || busy) return;
@@ -526,6 +533,8 @@ export function PlayerDunaAiScreen({
     );
   };
 
+  if (!active) return null;
+
   return (
     <SafeAreaView edges={["bottom"]} style={styles.safe}>
       <KeyboardAvoidingView
@@ -534,7 +543,7 @@ export function PlayerDunaAiScreen({
       >
         <View style={styles.header}>
           <View style={styles.aiMark}>
-            <Text style={styles.aiMarkText}>✦</Text>
+            <Image source={dunaMark} style={{ width: 22, height: 22 }} />
           </View>
           <View style={styles.modeSwitch}>
             <View style={[styles.modeOption, styles.modeOptionSelected]}>
@@ -559,7 +568,7 @@ export function PlayerDunaAiScreen({
             onPress={onClose}
             style={styles.close}
           >
-            <Text style={styles.closeText}>×</Text>
+            <DunaIcon name="close" color={palette.text} size={20} />
           </Pressable>
         </View>
 
@@ -613,7 +622,7 @@ export function PlayerDunaAiScreen({
                 accessibilityRole="button"
                 disabled={busy}
                 key={suggestion}
-                onPress={() => void ask(suggestion)}
+                onPress={() => setMessage(suggestion)}
                 style={styles.suggestion}
               >
                 <Text style={styles.suggestionText}>{suggestion}</Text>
@@ -641,13 +650,16 @@ export function PlayerDunaAiScreen({
                 (!message.trim() || busy) && styles.sendDisabled,
               ]}
             >
-              <Text style={styles.sendText}>↑</Text>
+              <DunaIcon
+                name="arrow-right"
+                color={palette.onAccent}
+                size={20}
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              />
             </Pressable>
           </View>
           <Text style={styles.safety}>
-            Duna reads only the account context your permissions allow.
-            Purchases, cancellations, and other consequential actions require
-            the exact checkout or review shown here.
+            You review purchases and important changes before they happen.
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -670,11 +682,11 @@ function createStyles(palette: PlayerDunaAiPalette) {
     },
     aiMark: {
       alignItems: "center",
-      backgroundColor: palette.accent,
-      borderRadius: 22,
-      height: 44,
+      backgroundColor: palette.surface,
+      borderRadius: 25,
+      height: 50,
       justifyContent: "center",
-      width: 44,
+      width: 50,
     },
     aiMarkText: { color: palette.onAccent, fontSize: 17, fontWeight: "700" },
     modeSwitch: {
@@ -690,7 +702,7 @@ function createStyles(palette: PlayerDunaAiPalette) {
       borderRadius: 20,
       flex: 1,
       justifyContent: "center",
-      minHeight: 40,
+      minHeight: 50,
       paddingHorizontal: 10,
     },
     modeOptionSelected: { backgroundColor: palette.surface },
@@ -704,9 +716,9 @@ function createStyles(palette: PlayerDunaAiPalette) {
       alignItems: "center",
       backgroundColor: palette.surfaceAlt,
       borderRadius: 24,
-      height: 48,
+      height: 50,
       justifyContent: "center",
-      width: 48,
+      width: 50,
     },
     closeText: { color: palette.text, fontSize: 27, lineHeight: 29 },
     conversation: { gap: 12, padding: 16, paddingBottom: 24 },
@@ -714,22 +726,21 @@ function createStyles(palette: PlayerDunaAiPalette) {
     aiBubble: {
       alignSelf: "flex-start",
       backgroundColor: palette.surface,
-      borderColor: palette.border,
-      borderWidth: 1,
+      paddingHorizontal: 0,
     },
     userBubble: {
       alignSelf: "flex-end",
-      backgroundColor: palette.accent,
+      backgroundColor: palette.surfaceAlt,
       maxWidth: "86%",
     },
     bubbleLabel: {
-      color: palette.warning,
+      color: palette.muted,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 1,
     },
-    bubbleText: { color: palette.text, fontSize: 15, lineHeight: 22 },
-    userBubbleText: { color: palette.onAccent },
+    bubbleText: { color: palette.text, fontSize: 16, lineHeight: 24 },
+    userBubbleText: { color: palette.text },
     card: {
       backgroundColor: palette.surfaceAlt,
       borderColor: palette.border,
@@ -752,9 +763,9 @@ function createStyles(palette: PlayerDunaAiPalette) {
       justifyContent: "space-between",
     },
     cardEyebrow: {
-      color: palette.warning,
+      color: palette.muted,
       fontSize: 12,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: 0.9,
     },
     cardTitle: { color: palette.text, fontSize: 16, fontWeight: "900" },
@@ -816,7 +827,7 @@ function createStyles(palette: PlayerDunaAiPalette) {
     score: {
       color: palette.accent,
       fontSize: 20,
-      fontWeight: "900",
+      fontWeight: "500",
       letterSpacing: -0.4,
     },
     delta: { fontSize: 14, fontWeight: "900" },
@@ -858,7 +869,7 @@ function createStyles(palette: PlayerDunaAiPalette) {
     primaryActionText: {
       color: palette.onAccent,
       fontSize: 14,
-      fontWeight: "900",
+      fontWeight: "500",
       textAlign: "center",
     },
     secondaryAction: {
@@ -939,9 +950,9 @@ function createStyles(palette: PlayerDunaAiPalette) {
       alignItems: "center",
       backgroundColor: palette.accent,
       borderRadius: 24,
-      height: 48,
+      height: 50,
       justifyContent: "center",
-      width: 48,
+      width: 50,
     },
     sendDisabled: { opacity: 0.35 },
     sendText: { color: palette.onAccent, fontSize: 23, fontWeight: "900" },

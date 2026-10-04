@@ -1,0 +1,393 @@
+/* Player composition; public pages and HQ own their separate presentation. */
+:root .player-shell[data-zone="athletic"] {
+  background: var(--player-ground);
+}
+:root .player-shell .player-sidebar,
+:root .player-shell .player-topbar,
+:root .player-shell .player-bottom-nav {
+  background: var(--player-surface);
+  border-color: var(--player-line);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+:root .player-shell .player-sidebar nav a {
+  color: var(--player-muted);
+  font-weight: 500;
+}
+:root .player-shell .player-sidebar nav a.active {
+  background: var(--player-soft);
+  color: var(--player-text);
+  box-shadow: none;
+}
+:root .player-shell .player-sidebar__record {
+  background: var(--player-text);
+  color: var(--player-ground);
+  border-color: var(--player-text);
+}
+:root .player-shell .player-sidebar__plus {
+  background: var(--player-soft);
+  border-color: var(--player-line);
+  color: var(--player-text);
+}
+:root .player-shell .player-content {
+  padding-top: 28px;
+}
+:root .player-shell .player-content h1:not([data-zone="live"] *) {
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+:root .player-shell .page-eyebrow {
+  color: var(--player-muted);
+}
+:root .player-shell .date-pill-filter {
+  background: var(--player-surface);
+  color: var(--player-text);
+  border-color: var(--player-line);
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 18px;
+}
+:root .player-shell .date-pill-filter > header strong {
+  font-size: 20px;
+  font-weight: 500;
+}
+:root .player-shell .date-pill-filter > header > span,
+:root .player-shell .date-pill-filter > header > div > span {
+  color: var(--player-muted);
+}
+:root .player-shell .date-pill-filter__rail a {
+  background: var(--player-soft);
+  border-color: var(--player-line);
+  border-radius: 14px;
+  color: var(--player-text);
+  min-height: 68px;
+  box-shadow: none;
+  transform: none;
+}
+:root .player-shell .calendar-picker__pill {
+  flex-basis: 60px;
+  min-height: 76px;
+  border-radius: 14px;
+  animation: none;
+  transform: none;
+  box-shadow: none;
+}
+:root .player-shell .calendar-picker__rail {
+  scroll-behavior: auto;
+}
+:root .player-shell .calendar-picker__pill[aria-current="date"] > strong {
+  color: inherit;
+}
+:root .player-shell .date-pill-filter__rail a[aria-current="date"],
+:root .player-shell .calendar-picker__pill[aria-current="date"],
+:root .player-shell .calendar-month__grid button[aria-current="date"] {
+  background: var(--player-text);
+  border-color: var(--player-text);
+  color: var(--player-ground);
+  box-shadow: none;
+}
+.player-sidebar__settings {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  min-height: 48px;
+  color: var(--player-muted);
+  font-size: 14px;
+}
+:root .player-shell .player-topbar__actions > button {
+  min-width: 48px;
+  min-height: 48px;
+  background: transparent;
+  color: var(--player-text);
+  border: 0;
+  border-radius: 12px;
+}
+:root .player-shell .player-ai-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding-inline: 12px;
+  font-size: 14px;
+}
+:root .player-shell .player-ai-trigger .duna-mark__icon,
+.duna-task-prompt .duna-mark__icon,
+:root .player-shell .player-bottom-nav__ai .duna-mark__icon {
+  width: 22px;
+  height: 22px;
+}
+.duna-task-prompt {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.duna-task-prompt header {
+  margin-bottom: 22px;
+}
+.duna-task-prompt header p {
+  color: var(--player-muted);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+.duna-task-prompt header p:first-child {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+:root .player-shell .duna-task-prompt h1 {
+  max-width: none;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.duna-task-prompt form {
+  border: 1px solid var(--player-line);
+  border-radius: 20px;
+  background: var(--player-surface);
+  padding: 14px;
+}
+.duna-task-prompt form:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.duna-task-prompt textarea {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: var(--player-text);
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 4px 4px 12px;
+  resize: vertical;
+  min-height: 68px;
+  max-height: 200px;
+  outline: none;
+}
+.duna-task-prompt textarea::placeholder {
+  color: var(--player-muted);
+}
+.duna-task-prompt__tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.duna-task-prompt__tools > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.duna-task-prompt__tools button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--player-text);
+  color: var(--player-ground);
+  min-width: 56px;
+  min-height: 56px;
+  cursor: pointer;
+}
+.duna-task-prompt__tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.duna-task-prompt__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.duna-task-prompt__suggestions button {
+  border: 0;
+  border-radius: 12px;
+  background: var(--player-soft);
+  color: var(--player-text);
+  font: inherit;
+  font-size: 14px;
+  min-height: 48px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.duna-task-prompt--compact {
+  max-width: none;
+  margin-bottom: 24px;
+}
+.duna-task-prompt--compact form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+.duna-task-prompt--compact textarea {
+  min-height: 48px;
+  height: 48px;
+  padding: 12px 0;
+  resize: none;
+}
+.duna-task-prompt--compact .duna-task-prompt__tools > span {
+  display: none;
+}
+:root .player-shell .duna-action-center__launcher {
+  display: none;
+}
+:root
+  .player-shell[data-zone="athletic"]
+  .duna-action-center[data-surface="player"] {
+  display: block;
+  --dac-accent: var(--player-text);
+  --dac-sand: var(--player-soft);
+}
+:root .player-shell .duna-action-center__chat {
+  animation: none;
+  left: auto;
+  transform: none;
+  background: var(--player-ground);
+  color: var(--player-text);
+  border-color: var(--player-line);
+  width: min(620px, calc(100vw - 40px));
+  height: min(800px, calc(100dvh - 100px));
+  max-height: calc(100dvh - 100px);
+  bottom: 20px;
+  right: 20px;
+  border-radius: 20px;
+  box-shadow: 0 12px 60px
+    color-mix(in srgb, var(--player-text) 12%, transparent);
+}
+:root .player-shell .duna-action-center__avatar {
+  background: var(--player-soft);
+  box-shadow: none;
+}
+:root .player-shell .duna-action-center__avatar img {
+  width: 24px;
+  height: 24px;
+}
+:root .player-shell .duna-action-center__chat-header > button {
+  width: 48px;
+  height: 48px;
+}
+:root .player-shell .duna-action-center__chat-header,
+:root .player-shell .duna-action-center__composer {
+  background: var(--player-ground);
+  border-color: var(--player-line);
+}
+:root .player-shell .duna-action-center__message--assistant {
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+}
+:root .player-shell .duna-action-center__message--user {
+  background: var(--player-soft);
+  color: var(--player-text);
+  border: 0;
+}
+:root .player-shell .duna-action-center__messages {
+  padding: 20px;
+}
+:root .player-shell .duna-action-center__starters button {
+  background: var(--player-soft);
+  color: var(--player-text);
+  border-color: var(--player-line);
+}
+:root .player-shell .duna-action-center__chat-header small i {
+  background: var(--player-muted);
+}
+:root .player-shell .duna-action-center__composer textarea {
+  color: var(--player-text);
+}
+:root
+  .player-shell
+  .duna-action-center__composer-tools
+  .duna-action-center__send {
+  background: var(--player-text);
+  color: var(--player-ground);
+}
+@media (min-width: 721px) and (max-width: 1120px) {
+  .player-sidebar__settings {
+    justify-content: center;
+  }
+  .player-sidebar__settings span {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  :root .player-shell .player-topbar {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  :root .player-shell .player-topbar__brand {
+    display: none;
+  }
+  :root .player-shell .player-topbar__actions .player-search-trigger {
+    display: grid;
+    place-items: center;
+  }
+  :root .player-shell .player-organization-switcher {
+    max-width: 100%;
+    min-width: 0;
+  }
+  :root .player-shell .player-content {
+    padding: 20px 16px 110px;
+  }
+  :root .player-shell .player-topbar__actions .player-ai-trigger {
+    display: none;
+  }
+  :root .player-shell .player-topbar__actions > a {
+    display: none;
+  }
+  :root .player-shell .player-bottom-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  :root .player-shell .player-bottom-nav :is(a, button) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: transparent;
+    border: 0;
+    color: var(--player-muted);
+    min-height: 56px;
+    padding: 6px 2px;
+    font: inherit;
+    font-size: 12px;
+  }
+  :root .player-shell .player-bottom-nav a.active {
+    color: var(--player-text);
+    background: var(--player-soft);
+    border-radius: 12px;
+  }
+  :root .player-shell .player-bottom-nav__ai {
+    color: var(--player-text);
+  }
+  .duna-task-prompt header {
+    margin-bottom: 16px;
+  }
+  .duna-task-prompt__suggestions {
+    gap: 6px;
+  }
+  .duna-task-prompt__suggestions button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+  :root .player-shell .duna-action-center__chat {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

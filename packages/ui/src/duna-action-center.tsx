@@ -132,14 +132,17 @@ function dispatchAction(panel: Exclude<Panel, null>) {
 export function DunaActionTrigger({
   children,
   className,
+  label,
   panel,
 }: {
   readonly children: React.ReactNode;
   readonly className?: string;
+  readonly label?: string;
   readonly panel: Exclude<Panel, null>;
 }) {
   return (
     <button
+      aria-label={label}
       className={className}
       onClick={() => dispatchAction(panel)}
       type="button"
@@ -509,7 +512,7 @@ export function DunaActionCenter({
           readonly suggestions?: readonly string[];
         };
         if (result.suggestions?.length) setSuggestions(result.suggestions);
-        if (result.cards?.length)
+        if (surface === "hq" && result.cards?.length)
           setMessages((current) =>
             current.some(({ role }) => role === "user")
               ? current

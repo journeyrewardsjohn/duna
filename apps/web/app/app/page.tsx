@@ -3,24 +3,24 @@ import {
   formatVenueTime,
   type EventSummary,
 } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, DunaTaskPrompt, Numeric } from "@duna/ui";
 import {
   ArrowRight,
   CalendarDays,
   CalendarPlus,
+  Clapperboard,
+  MessageCircle,
   ChevronRight,
   MapPin,
   Plus,
   Radio,
   Search,
   Sparkles,
-  Trophy,
 } from "lucide-react";
 import Link from "next/link";
 import { EventCard } from "@/components/event-card";
 import { MatchCard } from "@/components/match-card";
 import { PredictionDiscoverySection } from "@/components/prediction-discovery";
-import { RatingOrbit } from "@/components/rating-orbit";
 import { getServerCaller } from "@/lib/api";
 import styles from "./player-dashboard.module.css";
 
@@ -96,11 +96,6 @@ export default async function PlayerDashboard() {
   ].slice(0, 10);
   const latestMatch = dashboard.recentMatches[0];
   const firstName = player.displayName.split(" ")[0] ?? player.displayName;
-  const dateLabel = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  }).format(new Date());
 
   const quickActions = [
     {
@@ -127,68 +122,44 @@ export default async function PlayerDashboard() {
       label: "Record a match",
       detail: "Add a result or score live",
     },
+    {
+      href: "/app/video",
+      icon: Clapperboard,
+      label: "Videos",
+      detail: "Watch, record, or upload",
+    },
+    {
+      href: "/app/messages",
+      icon: MessageCircle,
+      label: "Messages",
+      detail: "Talk with your people",
+    },
   ] as const;
 
   return (
     <main className={styles.home}>
-      <header className={styles.intro}>
-        <div>
-          <span className={styles.eyebrow}>{dateLabel}</span>
-          <h1>Ready to play, {firstName}?</h1>
-          <p>Your next game, nearby play, and recent form—without the noise.</p>
-        </div>
-        <Link className={styles.historyLink} href="/app/matches">
-          <Trophy aria-hidden size={18} /> Match history
-        </Link>
-      </header>
-
-      {livePlayers.length > 0 && (
-        <section aria-label="Players live now" className={styles.liveRail}>
-          <header>
-            <span>
-              <Radio aria-hidden size={15} /> Live now
-            </span>
-            <small>Tap a player to watch</small>
-          </header>
-          <div>
-            {livePlayers.map((video) => (
-              <article key={video.id}>
-                <Link
-                  aria-label={`Watch ${video.owner.displayName} live`}
-                  className={styles.liveAvatar}
-                  href={`/watch/${video.id}`}
-                >
-                  <span>
-                    {video.owner.avatarUrl ? (
-                      <img alt="" src={video.owner.avatarUrl} />
-                    ) : (
-                      video.owner.initials
-                    )}
-                  </span>
-                  <b>Live</b>
-                </Link>
-                <Link
-                  href={
-                    video.owner.publicPath ?? `/players/${video.owner.handle}`
-                  }
-                >
-                  {video.owner.displayName.split(" ")[0]}
-                </Link>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
+      <DunaTaskPrompt
+        context={`Hello, ${firstName}`}
+        suggestions={[
+          {
+            label: "Find a game",
+            prompt: "Help me find a game that fits my level and schedule.",
+          },
+          {
+            label: "Plan my week",
+            prompt:
+              "What is on my calendar this week, and where could I fit in a game?",
+          },
+          {
+            label: "Review my progress",
+            prompt: "Help me understand my recent matches and Sand Rating.",
+          },
+        ]}
+      />
 
       <nav aria-label="Player quick actions" className={styles.quickActions}>
-        {quickActions.map(({ detail, href, icon: Icon, label }, index) => (
-          <Link
-            className={
-              index === 0 ? styles.quickActionPrimary : styles.quickAction
-            }
-            href={href}
-            key={href}
-          >
+        {quickActions.map(({ detail, href, icon: Icon, label }) => (
+          <Link className={styles.quickAction} href={href} key={href}>
             <span className={styles.quickActionIcon}>
               <Icon aria-hidden size={21} />
             </span>
@@ -231,28 +202,30 @@ export default async function PlayerDashboard() {
               }
               src={nextImage}
             />
-            <div className={styles.nextUpMediaTopline}>
-              <Badge
-                tone={
-                  nextBooking?.status === "needs-action"
-                    ? "warning"
-                    : "positive"
-                }
-              >
-                {nextBooking?.status === "needs-action"
-                  ? "Action needed"
-                  : nextOpenSpots !== undefined && nextOpenSpots > 0
-                    ? `${nextOpenSpots} ${nextOpenSpots === 1 ? "spot" : "spots"} available`
-                    : nextPersonalEvent
-                      ? "Match full"
-                      : nextPersonal
-                        ? "Confirmed"
-                        : "Calendar open"}
-              </Badge>
-              <span>{nextKind.replace("-", " ")}</span>
-            </div>
           </div>
           <div className={styles.nextUpBody}>
+            {nextPersonal && (
+              <div className={styles.nextUpMediaTopline}>
+                <Badge
+                  tone={
+                    nextBooking?.status === "needs-action"
+                      ? "warning"
+                      : "positive"
+                  }
+                >
+                  {nextBooking?.status === "needs-action"
+                    ? "Action needed"
+                    : nextOpenSpots !== undefined && nextOpenSpots > 0
+                      ? `${nextOpenSpots} ${nextOpenSpots === 1 ? "spot" : "spots"} available`
+                      : nextPersonalEvent
+                        ? "Match full"
+                        : nextPersonal
+                          ? "Confirmed"
+                          : "Calendar open"}
+                </Badge>
+                <span>{nextKind.replace("-", " ")}</span>
+              </div>
+            )}
             <span className={styles.eyebrow}>Next up</span>
             <div className={styles.nextUpHeading}>
               <time className={styles.nextUpDate} dateTime={nextStartsAt}>
@@ -318,12 +291,7 @@ export default async function PlayerDashboard() {
             <Badge tone="positive">{player.rating.confidence}</Badge>
           </div>
           <div className={styles.ratingBody}>
-            <RatingOrbit
-              compact
-              confidence={player.rating.confidence}
-              delta={player.rating.delta}
-              value={player.rating.display}
-            />
+            <Numeric tier="block">{player.rating.display.toFixed(2)}</Numeric>
             <div className={styles.ratingInsight}>
               <small>{latestMatch ? "Latest movement" : "Rating state"}</small>
               <strong>
@@ -355,134 +323,183 @@ export default async function PlayerDashboard() {
         </article>
       </section>
 
-      <PredictionDiscoverySection discovery={predictionDiscovery} />
-
-      <section className={styles.section}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <span className={styles.eyebrow}>Made for you</span>
-            <h2>Play next</h2>
-          </div>
-          <Link href="/discover">
-            See all <ArrowRight aria-hidden size={15} />
-          </Link>
-        </div>
-        <div className={styles.eventGrid}>
-          {futureEvents.slice(0, 3).map((event) => (
-            <EventCard event={event} key={event.id} />
-          ))}
-          {futureEvents.length === 0 && (
-            <article className={styles.emptyState}>
-              <h3>Nothing published nearby yet.</h3>
-              <p>Host a pickup and give your community somewhere to play.</p>
-              <Link href="/app/pickup/new">Host a pickup</Link>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <section className={styles.lowerGrid}>
-        <div className={styles.section}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <span className={styles.eyebrow}>Recent results</span>
-              <h2>Match history</h2>
-            </div>
-            <Link href="/app/matches">
-              All matches <ArrowRight aria-hidden size={15} />
-            </Link>
-          </div>
-          <div className={styles.matchList}>
-            {dashboard.recentMatches.slice(0, 2).map((match) => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                viewerId={dashboard.player.id}
-              />
-            ))}
-            {dashboard.recentMatches.length === 0 && (
-              <article className={styles.emptyState}>
-                <p>No connected matches yet.</p>
-              </article>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <span className={styles.eyebrow}>On your calendar</span>
-              <h2>Coming up</h2>
-            </div>
-            <Link href="/app/play">Full calendar</Link>
-          </div>
-          <div className={styles.bookingList}>
-            {futureBookings.slice(0, 4).map((booking) => (
-              <Link href="/app/play" key={booking.id}>
-                <time
-                  className={styles.bookingDate}
-                  dateTime={booking.startsAt}
-                >
-                  <small>
-                    {formatVenueTime(
-                      booking.startsAt,
-                      "America/Los_Angeles",
-                      "en-US",
-                      {
-                        month: "short",
-                        day: undefined,
-                        hour: undefined,
-                        minute: undefined,
-                      },
-                    )}
-                  </small>
-                  <Numeric tier="block">
-                    {formatVenueTime(
-                      booking.startsAt,
-                      "America/Los_Angeles",
-                      "en-US",
-                      {
-                        month: undefined,
-                        day: "numeric",
-                        hour: undefined,
-                        minute: undefined,
-                      },
-                    )}
-                  </Numeric>
-                </time>
-                <span className={styles.bookingCopy}>
-                  <strong>{booking.title}</strong>
-                  <small>
-                    {formatVenueTime(
-                      booking.startsAt,
-                      "America/Los_Angeles",
-                      "en-US",
-                      {
-                        month: undefined,
-                        day: undefined,
-                        hour: "numeric",
-                        minute: "2-digit",
-                      },
-                    )}{" "}
-                    · {booking.venueName}
-                  </small>
+      <details className={styles.more}>
+        <summary>
+          Explore your game <ChevronRight aria-hidden size={18} />
+        </summary>
+        <div className={styles.moreContent}>
+          {livePlayers.length > 0 && (
+            <section aria-label="Players live now" className={styles.liveRail}>
+              <header>
+                <span>
+                  <Radio aria-hidden size={15} /> Live now
                 </span>
-                <Badge
-                  tone={booking.status === "confirmed" ? "positive" : "warning"}
-                >
-                  {booking.status.replace("-", " ")}
-                </Badge>
+                <small>Tap a player to watch</small>
+              </header>
+              <div>
+                {livePlayers.map((video) => (
+                  <article key={video.id}>
+                    <Link
+                      aria-label={`Watch ${video.owner.displayName} live`}
+                      className={styles.liveAvatar}
+                      href={`/watch/${video.id}`}
+                    >
+                      <span>
+                        {video.owner.avatarUrl ? (
+                          <img alt="" src={video.owner.avatarUrl} />
+                        ) : (
+                          video.owner.initials
+                        )}
+                      </span>
+                      <b>Live</b>
+                    </Link>
+                    <Link
+                      href={
+                        video.owner.publicPath ??
+                        `/players/${video.owner.handle}`
+                      }
+                    >
+                      {video.owner.displayName.split(" ")[0]}
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          <PredictionDiscoverySection discovery={predictionDiscovery} />
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <span className={styles.eyebrow}>Made for you</span>
+                <h2>Play next</h2>
+              </div>
+              <Link href="/discover">
+                See all <ArrowRight aria-hidden size={15} />
               </Link>
-            ))}
-            {futureBookings.length === 0 && (
-              <article className={styles.emptyState}>
-                <p>Your calendar is open.</p>
-                <Link href="/discover">Find something to play</Link>
-              </article>
-            )}
-          </div>
+            </div>
+            <div className={styles.eventGrid}>
+              {futureEvents.slice(0, 3).map((event) => (
+                <EventCard event={event} key={event.id} />
+              ))}
+              {futureEvents.length === 0 && (
+                <article className={styles.emptyState}>
+                  <h3>Nothing published nearby yet.</h3>
+                  <p>
+                    Host a pickup and give your community somewhere to play.
+                  </p>
+                  <Link href="/app/pickup/new">Host a pickup</Link>
+                </article>
+              )}
+            </div>
+          </section>
+
+          <section className={styles.lowerGrid}>
+            <div className={styles.section}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.eyebrow}>Recent results</span>
+                  <h2>Match history</h2>
+                </div>
+                <Link href="/app/matches">
+                  All matches <ArrowRight aria-hidden size={15} />
+                </Link>
+              </div>
+              <div className={styles.matchList}>
+                {dashboard.recentMatches.slice(0, 2).map((match) => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    viewerId={dashboard.player.id}
+                  />
+                ))}
+                {dashboard.recentMatches.length === 0 && (
+                  <article className={styles.emptyState}>
+                    <p>No connected matches yet.</p>
+                  </article>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.section}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.eyebrow}>On your calendar</span>
+                  <h2>Coming up</h2>
+                </div>
+                <Link href="/app/play">Full calendar</Link>
+              </div>
+              <div className={styles.bookingList}>
+                {futureBookings.slice(0, 4).map((booking) => (
+                  <Link href="/app/play" key={booking.id}>
+                    <time
+                      className={styles.bookingDate}
+                      dateTime={booking.startsAt}
+                    >
+                      <small>
+                        {formatVenueTime(
+                          booking.startsAt,
+                          "America/Los_Angeles",
+                          "en-US",
+                          {
+                            month: "short",
+                            day: undefined,
+                            hour: undefined,
+                            minute: undefined,
+                          },
+                        )}
+                      </small>
+                      <Numeric tier="block">
+                        {formatVenueTime(
+                          booking.startsAt,
+                          "America/Los_Angeles",
+                          "en-US",
+                          {
+                            month: undefined,
+                            day: "numeric",
+                            hour: undefined,
+                            minute: undefined,
+                          },
+                        )}
+                      </Numeric>
+                    </time>
+                    <span className={styles.bookingCopy}>
+                      <strong>{booking.title}</strong>
+                      <small>
+                        {formatVenueTime(
+                          booking.startsAt,
+                          "America/Los_Angeles",
+                          "en-US",
+                          {
+                            month: undefined,
+                            day: undefined,
+                            hour: "numeric",
+                            minute: "2-digit",
+                          },
+                        )}{" "}
+                        · {booking.venueName}
+                      </small>
+                    </span>
+                    <Badge
+                      tone={
+                        booking.status === "confirmed" ? "positive" : "warning"
+                      }
+                    >
+                      {booking.status.replace("-", " ")}
+                    </Badge>
+                  </Link>
+                ))}
+                {futureBookings.length === 0 && (
+                  <article className={styles.emptyState}>
+                    <p>Your calendar is open.</p>
+                    <Link href="/discover">Find something to play</Link>
+                  </article>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </details>
     </main>
   );
 }

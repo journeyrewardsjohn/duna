@@ -357,7 +357,7 @@ test("player home puts useful actions and the personal calendar first", async ({
 }) => {
   await page.goto("/app");
   await expect(
-    page.getByRole("heading", { name: /Ready to play/ }),
+    page.getByRole("heading", { name: "What would you like to do?" }),
   ).toBeVisible();
   const quickActions = page.getByRole("navigation", {
     name: "Player quick actions",
@@ -369,11 +369,11 @@ test("player home puts useful actions and the personal calendar first", async ({
     quickActions.getByRole("link", { name: /Host pickup/ }),
   ).toBeVisible();
   await expect(page.getByText("Next up", { exact: true })).toBeVisible();
-  const actionCenter = page.getByRole("navigation", {
-    name: "Duna action center",
-  });
-  await expect(actionCenter).toBeVisible();
-  await actionCenter.getByRole("button", { name: "Open Duna AI" }).click();
+  const aiTrigger = page
+    .getByRole("button", { name: "Open Duna AI", exact: true })
+    .filter({ visible: true });
+  await expect(aiTrigger).toBeVisible();
+  await aiTrigger.click();
   const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
   await expect(dunaAi).toBeVisible();
   await expect(
@@ -383,7 +383,10 @@ test("player home puts useful actions and the personal calendar first", async ({
     dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
   ).toBeVisible();
   await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
-  await actionCenter.getByRole("button", { name: "Search Duna" }).click();
+  await page
+    .getByRole("button", { name: "Search Duna", exact: true })
+    .filter({ visible: true })
+    .click();
   const command = page.getByRole("dialog", { name: "Search Duna Player" });
   await expect(command).toBeVisible();
   await expect(command.getByText("Go anywhere")).toBeVisible();
@@ -838,6 +841,17 @@ test("player planning keeps selection in place and extends its date rail", async
   await expect
     .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
     .toBeGreaterThan(0);
+  // Bring the calendar above the fixed phone navigation before measuring.
+  // Otherwise click's automatic scrolling can move both axes while trying to
+  // uncover a day beneath the navigation, before selection is dispatched.
+  await rail.evaluate((element) =>
+    element.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "instant",
+    }),
+  );
+  await expect(nextPill).toBeInViewport({ ratio: 1 });
   const scrollPosition = await rail.evaluate((element) =>
     Math.round(element.scrollLeft),
   );
@@ -976,6 +990,7 @@ test("settings use the available desktop width and collapse cleanly", async ({
 }) => {
   await page.setViewportSize({ width: 1800, height: 1100 });
   await page.goto("/app/settings");
+  await expect(page.locator(".settings-layout")).toBeVisible();
 
   const [layoutBox, navigationBox, contentBox] = await Promise.all([
     getBox(page.locator(".settings-layout")),
