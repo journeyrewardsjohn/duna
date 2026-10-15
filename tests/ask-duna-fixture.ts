@@ -6,6 +6,7 @@ export async function installAskDunaFixture(
   options: { creationFails?: boolean } = {},
 ) {
   const writes: { path: string; body: Record<string, unknown> }[] = [];
+  const turns: Record<string, unknown>[] = [];
   const conversation = {
     id: askConversationId,
     sessionId: "test-eve-session",
@@ -97,11 +98,13 @@ export async function installAskDunaFixture(
     });
   });
   await page.route("**/eve/v1/**", async (route) => {
-    if (route.request().method() === "POST")
+    if (route.request().method() === "POST") {
+      turns.push(route.request().postDataJSON());
       return route.fulfill({
         status: 202,
         json: { sessionId: "test-eve-session", deliveryId: "delivery-test" },
       });
+    }
     const events = [
       { type: "session.started", data: {} },
       { type: "turn.started", data: { sequence: 0, turnId: "turn-test" } },
@@ -160,5 +163,5 @@ export async function installAskDunaFixture(
       body: events.map((event) => JSON.stringify(event)).join("\n") + "\n",
     });
   });
-  return { writes, conversation };
+  return { writes, turns, conversation };
 }

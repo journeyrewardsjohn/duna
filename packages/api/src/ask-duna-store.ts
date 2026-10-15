@@ -90,7 +90,7 @@ export function assertConversationOwner(
   }
 }
 
-export function requireAskDunaStorage() {
+export function requireAskDunaStorage(): ReturnType<typeof getDatabase> {
   if (!isDatabaseConfigured())
     throw new TRPCError({
       code: "PRECONDITION_FAILED",

@@ -33,6 +33,8 @@ effort levels, streaming responses, stop/reconnect, and explicit action review.
   exposes no shell, filesystem, network or subagent tool. Text/CSV attachments
   become clearly delimited user text; validated inline image/PDF bytes are
   staged by Eve. Remote file URLs and client-supplied runtime context are denied.
+  Inline attachments are limited to 1.5 MB each and 2.5 MB combined; serialized
+  requests stay below 4 MB to fit [Vercel's request limit](https://vercel.com/docs/functions/limitations#request-body-size).
 
 This follows the current [Eve Next.js integration](https://eve.dev/docs/guides/frontend/nextjs),
 [Eve authentication model](https://eve.dev/docs/guides/auth-and-route-protection),
@@ -64,6 +66,8 @@ idempotency key, rechecks permissions and the global controls, then calls the
 owning procedure. Unknown outcomes remain uncertain and cannot automatically
 retry. Executions without a receipt after two minutes are displayed as uncertain
 while retaining their original claim.
+After review, HQ prompts the agent to read the saved outcome and continue the
+remaining task. A declined action stays declined unless the operator revises it.
 
 Coverage includes events, calendars, courts, people, training, audiences,
 catalog/inventory, business settings, money and draft communications, subject to

@@ -51,6 +51,21 @@ test("Ask Duna composer supports references, files, effort and accessible respon
   await expect(
     page.getByRole("button", { name: "Remove Devon Parker" }),
   ).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles([
+    {
+      name: "one.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.alloc(1_400_000),
+    },
+    {
+      name: "two.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.alloc(1_400_000),
+    },
+  ]);
+  await expect(page.locator(".ask-duna-dock").getByRole("alert")).toContainText(
+    "combined file size under 2.5 MB",
+  );
   await page.locator('input[type="file"]').setInputFiles({
     name: "schedule.txt",
     mimeType: "text/plain",
@@ -90,7 +105,7 @@ test("Ask Duna composer supports references, files, effort and accessible respon
 test("Ask Duna resumes a thread and only executes a reviewed proposal after an explicit click", async ({
   page,
 }, testInfo) => {
-  const { writes } = await installAskDunaFixture(page);
+  const { writes, turns } = await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/ask/${askConversationId}`);
   await expect(
     page.getByText("I’ve prepared the change for your review.", {
@@ -113,6 +128,13 @@ test("Ask Duna resumes a thread and only executes a reviewed proposal after an e
   await page.getByRole("button", { name: "Approve change" }).click();
   await expect(page.getByText("Action receipt", { exact: true })).toBeVisible();
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(1);
+  await expect
+    .poll(() => turns)
+    .toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining("I approved proposal"),
+      }),
+    ]);
   await page.reload();
   await expect(page.getByText("Action receipt", { exact: true })).toBeVisible();
   await page

@@ -1,6 +1,7 @@
 import { eveChannel } from "eve/channels/eve";
 import { ForbiddenError } from "eve/channels/auth";
 import {
+  ASK_DUNA_MAX_TURN_BYTES,
   assertAskDunaAdmin,
   assertAskDunaEnabled,
   consumeRateLimit,
@@ -83,7 +84,7 @@ export default eveChannel({
           });
         // Bound the actual received bytes, including requests without Content-Length.
         validateAskDunaSessionBody(
-          await readAskDunaJson(request.clone(), 8 * 1024 * 1024),
+          await readAskDunaJson(request.clone(), ASK_DUNA_MAX_TURN_BYTES),
           match[2],
         );
       }

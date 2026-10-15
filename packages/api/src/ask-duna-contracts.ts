@@ -55,3 +55,7 @@ export const ASK_DUNA_EFFORTS = [
 
 export const ASK_DUNA_MODEL = "openai/gpt-6.1-sol";
 export const ASK_DUNA_FAST_MODEL = "openai/gpt-6-luna";
+
+// Inline uploads must leave room for base64 and JSON below the platform limit.
+export const ASK_DUNA_MAX_TURN_BYTES = 4_000_000;
+export const ASK_DUNA_MAX_ATTACHMENT_BYTES = 2_500_000;

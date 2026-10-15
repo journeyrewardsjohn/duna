@@ -2,6 +2,8 @@
 
 import {
   ASK_DUNA_EFFORTS,
+  ASK_DUNA_MAX_ATTACHMENT_BYTES,
+  ASK_DUNA_MAX_TURN_BYTES,
   type AskDunaEffort,
 } from "@duna/api/ask-duna-contracts";
 import { DunaMark } from "@duna/ui";
@@ -522,6 +524,15 @@ function AskDunaThread({
       });
       await loadActions();
       onChanged();
+      try {
+        await agent.send(
+          `I ${decision === "approve" ? "approved" : "declined"} proposal ${action.id}. Check its saved outcome with change_results and continue my request. Do not repeat the reviewed action.`,
+        );
+      } catch {
+        setError(
+          "Your review was saved. Reconnect to continue the conversation; the action receipt is available above.",
+        );
+      }
     } catch (failure) {
       setError((failure as Error).message);
     } finally {
@@ -743,7 +754,7 @@ function AskDunaThread({
                 </small>
                 <button
                   type="button"
-                  disabled={reviewing !== null || archived}
+                  disabled={reviewing !== null || archived || busy || resuming}
                   onClick={() => void review(action, "decline")}
                 >
                   Decline
@@ -751,7 +762,7 @@ function AskDunaThread({
                 <button
                   className="ask-duna-primary"
                   type="button"
-                  disabled={reviewing !== null || archived}
+                  disabled={reviewing !== null || archived || busy || resuming}
                   onClick={() => void review(action, "approve")}
                 >
                   {reviewing === action.id ? "Saving…" : "Approve change"}
@@ -911,6 +922,15 @@ function AskDunaComposer({
         if (item.size > 1_500_000)
           throw new Error("Each file must be smaller than 1.5 MB.");
         if (
+          [...attachments, ...next].reduce(
+            (total, attached) => total + attached.size,
+            item.size,
+          ) > ASK_DUNA_MAX_ATTACHMENT_BYTES
+        )
+          throw new Error(
+            "Keep the combined file size under 2.5 MB per message.",
+          );
+        if (
           ![
             "image/jpeg",
             "image/png",
@@ -987,6 +1007,16 @@ function AskDunaComposer({
       },
       ...parts,
     ];
+    if (
+      new TextEncoder().encode(JSON.stringify({ message: content }))
+        .byteLength >
+      ASK_DUNA_MAX_TURN_BYTES - 1024
+    ) {
+      setError(
+        "This message is too large. Remove a file or shorten its contents.",
+      );
+      return;
+    }
     try {
       await onSend(content, text);
       setAttachments([]);
@@ -1020,7 +1050,7 @@ function AskDunaComposer({
                 <FileText size={18} aria-hidden />
                 <span>
                   Attach a photo or file
-                  <small>Images, PDF, text · up to 1.5 MB</small>
+                  <small>Images, PDF, text · 1.5 MB each, 2.5 MB total</small>
                 </span>
               </button>
               <button
