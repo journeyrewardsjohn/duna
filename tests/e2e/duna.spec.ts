@@ -1314,16 +1314,16 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
 
   await page.goto(`${hqBaseUrl}/ai`);
-  await expect(page).toHaveURL(/\?duna=ask$/);
-  const centralAi = page.getByRole("region", { name: "Duna AI assistant" });
-  await expect(centralAi).toBeVisible({ timeout: navigationTimeout });
+  await expect(page).toHaveURL(/\/ask$/);
   await expect(
-    centralAi.getByText(/Sensitive changes always require your review/i),
+    page.getByRole("heading", { name: /What can I take off your plate/ }),
+  ).toBeVisible({ timeout: navigationTimeout });
+  await expect(
+    page.getByText(/Review changes before they happen/),
   ).toBeVisible();
   await expect(
-    centralAi.getByRole("button", { name: "Web research off" }),
+    page.getByRole("button", { name: "Add files or references" }),
   ).toBeVisible();
-  await centralAi.getByRole("button", { name: "Close Duna AI" }).click();
   await page.keyboard.press("Meta+K");
   await expect(
     page.getByRole("dialog", { name: "Search Duna HQ" }),

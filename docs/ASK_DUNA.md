@@ -139,8 +139,8 @@ tests do not prove a live Gateway call, deployed database migration, production
 identity, external side effect or native runtime.
 
 Local validation on October 15, 2026: 472 API tests, 92 HQ tests and 11 shared UI
-tests passed; 24 desktop/tablet/phone browser checks passed. The HQ production
-build and Eve agent build passed, along with API/UI type checks, targeted lint,
+tests passed; 27 desktop/tablet/phone browser checks passed, including the existing
+HQ regression flow. The HQ, Eve and API declaration builds passed, along with API/UI type checks, targeted lint,
 repository formatting and the design/readable-type/knowledge checks. The Super
 Admin component was also inspected in light and dark themes at desktop and phone
 sizes using a temporary local fixture harness; that harness is not shipped.
