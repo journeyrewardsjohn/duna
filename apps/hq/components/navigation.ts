@@ -192,6 +192,7 @@ export const operatorNavigationChildren: Partial<
 };
 
 export const adminModules = [
+  { slug: "ask-duna", label: "Ask Duna", icon: Bot, group: "Platform" },
   { slug: "overview", label: "Network", icon: Waves, group: "Network" },
   {
     slug: "organizations",

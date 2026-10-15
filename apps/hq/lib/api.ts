@@ -1,4 +1,5 @@
 import {
+  activeOrganizationIdFromCookie,
   createApiContextFromRequest,
   createApiContextFromWorkOSSession,
   createCaller,
@@ -17,7 +18,7 @@ function requestUrl(headersValue: Headers): string {
   return `${protocol}://${host}/`;
 }
 
-export const getServerCaller = cache(async () => {
+export const getServerContext = cache(async () => {
   const incoming = await headers();
   const requestHeaders = new Headers();
   incoming.forEach((value, key) => requestHeaders.set(key, value));
@@ -39,9 +40,16 @@ export const getServerCaller = cache(async () => {
           organizationId: workosSession?.organizationId,
           role: workosSession?.role,
           roles: workosSession?.roles,
+          dunaOrganizationId: activeOrganizationIdFromCookie(
+            requestHeaders.get("cookie"),
+          ),
         },
         contextInput,
       )
     : await createApiContextFromRequest(request, contextInput);
-  return createCaller(context);
+  return context;
 });
+
+export const getServerCaller = cache(async () =>
+  createCaller(await getServerContext()),
+);

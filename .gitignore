@@ -9,6 +9,9 @@ dist/
 build/
 coverage/
 .turbo/
+.eve/
+.output/
+.workflow-data/
 playwright-report/
 test-results/
 *.tsbuildinfo

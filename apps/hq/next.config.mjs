@@ -1,3 +1,5 @@
+import { withEve } from "eve/next";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
@@ -18,4 +20,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withEve(nextConfig);

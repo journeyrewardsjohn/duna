@@ -11947,6 +11947,99 @@ export const webhookEvents = pgTable(
   ],
 );
 
+// Ask Duna owns access, history indexing and mutation receipts. Eve owns the
+// resumable execution transcript. These records always use the primary DB.
+export const askDunaConversations = pgTable(
+  "ask_duna_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").unique(),
+    title: text("title").notNull().default("New conversation"),
+    preview: text("preview").notNull().default(""),
+    effort: text("effort").notNull().default("medium"),
+    page: text("page").notNull().default("/ask"),
+    status: text("status").notNull().default("ready"),
+    archivedAt: timestamp("archived_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("ask_duna_history_idx").on(
+      table.organizationId,
+      table.personId,
+      table.updatedAt,
+    ),
+    check(
+      "ask_duna_effort_valid",
+      sql`${table.effort} in ('fast', 'medium', 'high', 'max', 'ultra')`,
+    ),
+  ],
+);
+
+export const askDunaActions = pgTable(
+  "ask_duna_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => askDunaConversations.id, { onDelete: "cascade" }),
+    operation: text("operation").notNull(),
+    input: jsonb("input").notNull().$type<Record<string, unknown>>(),
+    summary: text("summary").notNull(),
+    status: text("status").notNull().default("pending"),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("ask_duna_action_conversation_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    check(
+      "ask_duna_action_status_valid",
+      sql`${table.status} in ('pending', 'executing', 'succeeded', 'failed', 'declined', 'uncertain')`,
+    ),
+  ],
+);
+
+export const askDunaEvents = pgTable(
+  "ask_duna_events",
+  {
+    id: text("id").primaryKey(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => askDunaConversations.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    data: jsonb("data").notNull().$type<Record<string, unknown>>(),
+    createdAt,
+  },
+  (table) => [
+    index("ask_duna_event_conversation_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const askDunaControls = pgTable("ask_duna_controls", {
+  id: text("id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  mutationsEnabled: boolean("mutations_enabled").notNull().default(true),
+  updatedBy: uuid("updated_by").references(() => people.id),
+  updatedAt,
+});
+
 export const agentDrafts = pgTable("agent_drafts", {
   id: uuid("id").primaryKey().defaultRandom(),
   personId: uuid("person_id")

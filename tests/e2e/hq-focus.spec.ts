@@ -1,46 +1,15 @@
 import { expect, test } from "@playwright/test";
+import { askConversationId, installAskDunaFixture } from "../ask-duna-fixture";
 
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
-test("HQ Home hands a task to the governed assistant without approving it", async ({
+test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   page,
 }, testInfo) => {
-  const requests: {
-    mode: string;
-    message?: string;
-    attachments?: unknown[];
-    surface?: string;
-  }[] = [];
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  const { writes } = await installAskDunaFixture(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.route("**/api/duna-ai", async (route) => {
-    const request = route.request().postDataJSON();
-    requests.push(request);
-    await route.fulfill({
-      json:
-        request.mode === "ask"
-          ? {
-              reply: "Here is the draft for your review.",
-              cards: [
-                {
-                  kind: "approval",
-                  title: "Review event draft",
-                  detail: "Nothing has been published.",
-                  changes: ["Create the proposed event"],
-                  draft: {
-                    id: "review-only",
-                    riskTier: "confirm-always",
-                    confirmationNonce: "test-only",
-                  },
-                },
-              ],
-            }
-          : { suggestions: [] },
-    });
-  });
   await page.goto(hqBaseUrl);
   await expect(
     page.getByRole("heading", { name: "What would you like to get done?" }),
@@ -49,11 +18,6 @@ test("HQ Home hands a task to the governed assistant without approving it", asyn
     "background-color",
     "rgb(255, 255, 255)",
   );
-  await page.screenshot({
-    path: testInfo.outputPath("hq-home.png"),
-    style: "nextjs-portal { display: none; }",
-  });
-
   const input = page.getByRole("textbox", {
     name: "What would you like Duna to do?",
   });
@@ -63,36 +27,27 @@ test("HQ Home hands a task to the governed assistant without approving it", asyn
   await expect(input).toHaveValue(
     "Help me plan a new event. Ask me what you need before preparing a draft.",
   );
-  expect(requests).toHaveLength(0);
+  expect(writes).toHaveLength(0);
   await input.fill("Prepare a draft clinic for next week.");
   await input.press("Enter");
-  const assistant = page.getByRole("region", { name: "Duna AI assistant" });
-  await expect(assistant).toBeVisible();
+  await expect(page).toHaveURL(`${hqBaseUrl}/ask/${askConversationId}`);
   await expect(
-    assistant.getByRole("textbox", { name: "Ask Duna AI a question" }),
-  ).toBeFocused();
-  await expect(
-    assistant.getByRole("button", { name: "Approve changes" }),
+    page.getByRole("button", { name: "Approve change" }),
   ).toBeVisible();
-  await expect(
-    assistant.getByText("Nothing has been published."),
-  ).toBeVisible();
-  expect(requests.filter((request) => request.mode === "ask")).toEqual([
+  expect(writes.filter((row) => row.path === "conversations")).toEqual([
     expect.objectContaining({
-      message: "Prepare a draft clinic for next week.",
-      surface: "hq",
-      attachments: [],
+      body: expect.objectContaining({
+        title: "Prepare a draft clinic for next week.",
+        page: "/",
+      }),
     }),
   ]);
-  expect(requests.filter((request) => request.mode === "confirm")).toHaveLength(
-    0,
-  );
+  expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await page.screenshot({
-    path: testInfo.outputPath("hq-ai-review.png"),
+    path: testInfo.outputPath("hq-ask-duna-review.png"),
     style: "nextjs-portal { display: none; }",
   });
-  await assistant.getByRole("button", { name: "Close Duna AI" }).click();
-
+  await page.goto(hqBaseUrl);
   await page
     .locator(".hq-work-details > summary")
     .filter({ hasText: "Business overview" })
@@ -110,33 +65,24 @@ test("HQ Home hands a task to the governed assistant without approving it", asyn
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   ).toBe(true);
-  expect(errors).toEqual([]);
 });
 
 test("HQ page tasks retain context and secondary navigation stays reachable", async ({
   page,
 }) => {
-  let sent: { page?: string; message?: string } | undefined;
-  await page.route("**/api/duna-ai", async (route) => {
-    const body = route.request().postDataJSON();
-    if (body.mode === "ask") sent = body;
-    await route.fulfill({
-      json: { reply: "Duna is unavailable. Nothing changed." },
-    });
-  });
+  const { writes } = await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/members`);
   const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
   await prompt.fill("Find the people who need a follow-up.");
   await prompt.press("Enter");
-  const assistant = page.getByRole("region", { name: "Duna AI assistant" });
-  await expect(
-    assistant.getByText("Duna is unavailable. Nothing changed."),
-  ).toBeVisible();
-  expect(sent).toMatchObject({
+  await expect(page).toHaveURL(`${hqBaseUrl}/ask/${askConversationId}`);
+  expect(
+    writes.find((row) => row.path === "conversations")?.body,
+  ).toMatchObject({
     page: "/members",
-    message: "Find the people who need a follow-up.",
+    title: "Find the people who need a follow-up.",
   });
-  await assistant.getByRole("button", { name: "Close Duna AI" }).click();
+  await page.goto(`${hqBaseUrl}/members`);
   const more = page.locator(".hq-work-navigation-more");
   if ((page.viewportSize()?.width ?? 1440) <= 1100) {
     await page.getByRole("button", { name: "Search HQ", exact: true }).click();

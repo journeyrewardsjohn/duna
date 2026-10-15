@@ -757,6 +757,13 @@
       "when": 1788786943421,
       "tag": "0107_shallow_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1792086272245,
+      "tag": "0108_magical_spot",
+      "breakpoints": true
     }
   ]
 }

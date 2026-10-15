@@ -81,6 +81,11 @@ const copy: Record<
     readonly description: string;
   }
 > = {
+  "ask-duna": {
+    eyebrow: "Agent operations",
+    title: "Ask Duna",
+    description: "Conversations, reviewed actions, and runtime controls.",
+  },
   organizations: {
     eyebrow: "Tenants + capabilities",
     title: "Organizations",

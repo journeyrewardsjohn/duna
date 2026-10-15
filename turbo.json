@@ -1,6 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["EXPO_PUBLIC_*", "NEXT_PUBLIC_*"],
+  "globalEnv": [
+    "DUNA_AI_SESSION_SECRET",
+    "DUNA_ASK_AGENT_ORIGIN",
+    "DUNA_ASK_FAST_MODEL",
+    "DUNA_ASK_MODEL",
+    "DUNA_ASK_ULTRA_MODEL",
+    "EXPO_PUBLIC_*",
+    "NEXT_PUBLIC_*",
+    "VERCEL_AUTOMATION_BYPASS_SECRET"
+  ],
   "globalPassThroughEnv": [
     "AI_GATEWAY_API_KEY",
     "AI_GATEWAY_AVP_MODEL",

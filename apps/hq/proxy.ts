@@ -10,6 +10,15 @@ import { isPublicHqRoute, routeMatches } from "./lib/public-routes";
 
 export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  // These routes validate bearer credentials and tenant ownership themselves.
+  // Eve also serves same-origin cookie clients through its signed session token.
+  if (
+    routeMatches(pathname, "/eve/v1") ||
+    (routeMatches(pathname, "/api/ask-duna") &&
+      request.headers.get("authorization")?.startsWith("Bearer "))
+  ) {
+    return NextResponse.next();
+  }
   if (!isWorkOSAuthKitConfigured()) {
     if (
       isPublicHqRoute(pathname) ||
