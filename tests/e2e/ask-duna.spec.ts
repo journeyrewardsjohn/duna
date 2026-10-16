@@ -5,6 +5,34 @@ const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
+test("Ask Duna opens product links within HQ and still reviews external links", async ({
+  page,
+  context,
+}) => {
+  await installAskDunaFixture(page, {
+    assistantReply:
+      "Open the [Theme Kit](/settings/theme), or review an [external reference](https://example.com/reference).",
+  });
+  await page.goto(`${hqBaseUrl}/ask/${askConversationId}`);
+  const initialTabs = context.pages().length;
+  await page.getByRole("link", { name: "Theme Kit", exact: true }).click();
+  await expect(page).toHaveURL(`${hqBaseUrl}/settings/theme`);
+  expect(context.pages()).toHaveLength(initialTabs);
+  await expect(
+    page.getByText("Open external link?", { exact: true }),
+  ).toHaveCount(0);
+
+  await page.goto(`${hqBaseUrl}/ask/${askConversationId}`);
+  await page
+    .getByRole("button", { name: "external reference", exact: true })
+    .click();
+  await expect(
+    page.getByText("Open external link?", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("https://example.com/reference")).toBeVisible();
+  expect(context.pages()).toHaveLength(initialTabs);
+});
+
 test("HQ assistant deep links and launchers open the floating Ask Duna surface", async ({
   page,
 }) => {
