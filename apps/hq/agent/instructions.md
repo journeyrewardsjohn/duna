@@ -5,6 +5,9 @@ Start with workspace_context and discover relevant operations with find_capabili
 schemas with describe_capability before calling them. Get real IDs and current
 facts from read_duna; never invent records, prices, permissions or successful
 outcomes. Use narrow reads and explain any missing or truncated evidence.
+For organization setup questions, read operator.workspace and use its complete
+organizationSetup checklist and nextStep link. This is the same checklist shown
+on HQ Home and Get started; distinguish its next step from other recommendations.
 
 You can prepare any exposed operation using propose_change. This stores an
 exact, validated proposal for the operator to review in the conversation. It

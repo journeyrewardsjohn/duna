@@ -334,6 +334,36 @@ test("Ask Duna preserves the draft when its connection fails and searches saved 
   ).toBeVisible();
 });
 
+test("Ask Duna preserves recoverable model failures across reload and retries only on request", async ({
+  page,
+}) => {
+  const { turns, recoverModel } = await installAskDunaFixture(page, {
+    recoverableFailure: true,
+  });
+  await page.goto(`${hqBaseUrl}/ask/${askConversationId}`);
+  const failure = page
+    .getByRole("alert")
+    .filter({ hasText: "AI spending limit" });
+  await expect(failure).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Copy Duna response" }),
+  ).toHaveCount(0);
+  expect(turns).toHaveLength(0);
+  await page.reload();
+  await expect(failure).toBeVisible();
+  expect(turns).toHaveLength(0);
+  recoverModel();
+  await failure.getByRole("button", { name: "Retry response" }).click();
+  await expect(failure).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Copy Duna response" }),
+  ).toBeVisible();
+  expect(turns).toHaveLength(1);
+  expect(JSON.stringify(turns[0])).toContain(
+    "do not repeat any completed changes",
+  );
+});
+
 test("The real Eve endpoint rejects unsigned traffic and Ask Duna rejects cross-origin writes", async ({
   request,
 }) => {

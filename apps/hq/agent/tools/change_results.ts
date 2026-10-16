@@ -10,6 +10,14 @@ export default defineTool({
   label: { start: () => "Checking saved action results" },
   async execute(_input, ctx) {
     const { actor, conversationId } = await operatorForSession(ctx);
-    return listAskDunaActions(actor, conversationId);
+    const actions = await listAskDunaActions(actor, conversationId);
+    // Eve persists tool output as JSON and rejects Date instances, even though
+    // the HTTP route's JSON response would serialize those dates automatically.
+    return actions.map((action) => ({
+      ...action,
+      createdAt: action.createdAt.toISOString(),
+      updatedAt: action.updatedAt.toISOString(),
+      expiresAt: action.expiresAt.toISOString(),
+    }));
   },
 });
