@@ -3,7 +3,11 @@ import type { Page } from "@playwright/test";
 export const askConversationId = "30000000-0000-4000-8000-000000000001";
 export async function installAskDunaFixture(
   page: Page,
-  options: { creationFails?: boolean; recoverableFailure?: boolean } = {},
+  options: {
+    creationFails?: boolean;
+    recoverableFailure?: boolean;
+    assistantReply?: string;
+  } = {},
 ) {
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const turns: Record<string, unknown>[] = [];
@@ -150,6 +154,7 @@ export async function installAskDunaFixture(
                 stepIndex: 0,
                 finishReason: "stop",
                 message:
+                  options.assistantReply ??
                   "I’ve prepared the change for your review. **Court 2** will be added when you approve it.",
               },
             },

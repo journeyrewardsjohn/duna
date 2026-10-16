@@ -30,13 +30,30 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
+import { defaultComponents, Streamdown, type Components } from "streamdown";
+import { getAskDunaInternalHref } from "../lib/ask-duna-links";
 import {
   askDunaFetch,
   notifyAskDunaHistory,
   type AskAction,
   type AskConversation,
 } from "./ask-duna-client";
+
+const DefaultMarkdownLink = defaultComponents.a;
+const markdownComponents: Components = {
+  a: ({ href, title, children, ...props }) => {
+    const internalHref = getAskDunaInternalHref(href);
+    return internalHref ? (
+      <Link href={internalHref} title={title} prefetch={false}>
+        {children}
+      </Link>
+    ) : (
+      <DefaultMarkdownLink href={href} title={title} {...props}>
+        {children}
+      </DefaultMarkdownLink>
+    );
+  },
+};
 
 type Reference = { id: string; label: string; kind: "members" | "events" };
 type Attachment = {
@@ -701,6 +718,7 @@ export function AskDunaThread({
                         skipHtml
                         disallowedElements={["img"]}
                         controls={false}
+                        components={markdownComponents}
                       >
                         {part.text}
                       </Streamdown>
