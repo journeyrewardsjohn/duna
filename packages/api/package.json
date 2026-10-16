@@ -15,7 +15,8 @@
     "./organization-setup": "./src/organization-setup.ts",
     "./system-workspace-service": "./src/system-workspace-service.ts",
     "./training-contracts": "./src/training-contracts.ts",
-    "./webhooks": "./src/webhooks.ts"
+    "./webhooks": "./src/webhooks.ts",
+    "./ask-duna-contracts": "./src/ask-duna-contracts.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

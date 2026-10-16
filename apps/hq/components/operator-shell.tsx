@@ -2,7 +2,15 @@ import type { OrganizationSummary } from "@duna/core";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { DunaActionTrigger, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
-import { Bell, Menu, Search, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Bell,
+  History,
+  Menu,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { loadWorkspaceOptions } from "@/lib/workspace-options";
@@ -17,6 +25,8 @@ import { AuthControls } from "./auth-controls";
 import { DunaActionCenter } from "./duna-action-center";
 import { HqPagePrompt } from "./hq-work-prompt";
 import { OrganizationSwitcher } from "./organization-switcher";
+import { AskDunaSidebar } from "./ask-duna-sidebar";
+import { getServerContext } from "@/lib/api";
 
 const mobilePrimaryModules = [
   "overview",
@@ -40,12 +50,14 @@ export async function OperatorShell({
   readonly immersive?: boolean;
   /** Keeps immersive chrome while allowing the document to extend beyond the viewport. */
   readonly immersiveScrollable?: boolean;
-  readonly organization: OrganizationSummary;
+  readonly organization: Pick<OrganizationSummary, "id" | "name" | "plan">;
   readonly messageDraftCount?: number;
   readonly messageUnreadCount?: number;
   readonly activeChild?: ProductNavigationSlug | EventNavigationSlug;
 }) {
   const workspaces = await loadWorkspaceOptions();
+  const { actor } = await getServerContext();
+  const askScopeKey = `${actor?.personId ?? "anonymous"}:${organization.id}`;
   const navigableModules = operatorModules.filter(
     (item) => !("hiddenFromNavigation" in item && item.hiddenFromNavigation),
   );
@@ -63,7 +75,7 @@ export async function OperatorShell({
   );
   return (
     <div
-      className={`hq-shell hq-shell--focused${active === "overview" ? " hq-shell--home" : ""}${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
+      className={`hq-shell hq-shell--focused${active === "ai" ? " hq-shell--ask" : ""}${active === "overview" ? " hq-shell--home" : ""}${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
     >
       <aside className="hq-sidebar">
         <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
@@ -126,10 +138,11 @@ export async function OperatorShell({
               </Fragment>
             );
           })}
+          <AskDunaSidebar key={askScopeKey} scopeKey={askScopeKey} />
           {
             <details
               className="hq-work-navigation-more"
-              open={!focusedModules.has(active)}
+              open={!focusedModules.has(active) && active !== "ai"}
             >
               <summary>
                 <Menu size={18} aria-hidden />
@@ -137,7 +150,10 @@ export async function OperatorShell({
               </summary>
               <div>
                 {navigableModules
-                  .filter((item) => !focusedModules.has(item.slug))
+                  .filter(
+                    (item) =>
+                      !focusedModules.has(item.slug) && item.slug !== "ai",
+                  )
                   .map((item) => {
                     const Icon = item.icon;
                     return (
@@ -198,6 +214,17 @@ export async function OperatorShell({
                 <strong>All HQ tools</strong>
                 <small>Choose where you want to work.</small>
               </header>
+              <Link
+                href="/ask"
+                className={active === "ai" ? "active" : undefined}
+              >
+                <MessageCircle aria-hidden size={18} />
+                <span>Ask Duna</span>
+              </Link>
+              <Link href="/ask/history">
+                <History aria-hidden size={18} />
+                <span>Conversation history</span>
+              </Link>
               {navigableModules
                 .filter(
                   (item) =>
@@ -268,7 +295,7 @@ export async function OperatorShell({
           </div>
         </header>
         <div className="hq-content">
-          {active !== "overview" && !immersive && (
+          {active !== "overview" && active !== "ai" && !immersive && (
             <HqPagePrompt
               label={
                 operatorModules.find((item) => item.slug === active)?.label ??
@@ -279,7 +306,14 @@ export async function OperatorShell({
           {children}
         </div>
       </div>
-      <DunaActionCenter />
+      <DunaActionCenter
+        scopeKey={askScopeKey}
+        organizationName={organization.name}
+        pageLabel={
+          operatorModules.find((item) => item.slug === active)?.label ??
+          "Workspace"
+        }
+      />
     </div>
   );
 }

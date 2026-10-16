@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+ignoredOptionalDependencies:
+  - "@mongodb-js/zstd"
+  - node-liblzma
 allowBuilds:
   "@livekit/local-inference": false
   "@stripe/stripe-terminal-react-native": true
@@ -58,3 +61,7 @@ minimumReleaseAgeExclude:
   - "@vercel/cli-config@0.2.3"
   - "@vercel/functions@3.9.3"
   - "@vercel/oidc@3.8.4"
+  - "@ai-sdk/gateway@4.0.114"
+  - "@ai-sdk/provider-utils@5.0.60"
+  - ai@7.0.141
+  - eve@0.79.2

@@ -355,6 +355,7 @@ function MessageBody({ body }: { readonly body: string }) {
 
 export function DunaActionCenter({
   aiEndpoint = "/api/duna-ai",
+  onOpenChat,
   pathname,
   quickActions,
   searchEndpoint = "/api/search",
@@ -363,6 +364,8 @@ export function DunaActionCenter({
   transcriptionEndpoint = "/api/duna-ai/transcribe",
 }: {
   readonly aiEndpoint?: string;
+  /** Let a product use its persistent conversation surface for every chat entry. */
+  readonly onOpenChat?: (prompt?: string) => void;
   readonly pathname: string;
   readonly quickActions: readonly DunaQuickAction[];
   readonly searchEndpoint?: string;
@@ -423,6 +426,11 @@ export function DunaActionCenter({
 
   const receivePrompt = useEffectEvent((prompt: string) => {
     if (!prompt.trim()) return;
+    if (onOpenChat) {
+      setPanel(null);
+      onOpenChat(prompt);
+      return;
+    }
     setPanel("chat");
     if (pending) {
       setQuery(prompt);
@@ -432,6 +440,13 @@ export function DunaActionCenter({
       return;
     }
     void submit(prompt, []);
+  });
+
+  const openChat = useEffectEvent(() => {
+    if (onOpenChat) {
+      setPanel(null);
+      onOpenChat();
+    } else setPanel((current) => (current === "chat" ? null : "chat"));
   });
 
   useEffect(() => {
@@ -447,6 +462,8 @@ export function DunaActionCenter({
         typeof requested.prompt === "string"
       ) {
         receivePrompt(requested.prompt);
+      } else if (requested === "chat") {
+        openChat();
       } else if (typeof requested === "string") {
         setPanel((current) => (current === requested ? null : requested));
       }
@@ -469,7 +486,7 @@ export function DunaActionCenter({
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("duna");
-    if (requested === "ask") setPanel("chat");
+    if (requested === "ask") openChat();
     if (requested === "search") setPanel("search");
     if (requested === "actions") setPanel("actions");
   }, []);
@@ -1363,9 +1380,12 @@ export function DunaActionCenter({
           aria-label={panel === "chat" ? "Close Duna AI" : "Open Duna AI"}
           aria-pressed={panel === "chat"}
           className="duna-action-center__duna-button"
-          onClick={() =>
-            setPanel((current) => (current === "chat" ? null : "chat"))
-          }
+          onClick={() => {
+            if (onOpenChat) {
+              setPanel(null);
+              onOpenChat();
+            } else setPanel((current) => (current === "chat" ? null : "chat"));
+          }}
           type="button"
         >
           <img alt="" src="/brand/duna-icon.png" />

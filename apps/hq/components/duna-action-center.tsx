@@ -1,7 +1,12 @@
 "use client";
 
 import { DunaActionCenter as SharedDunaActionCenter } from "@duna/ui";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect } from "react";
+import {
+  useAskDunaFloating,
+  type AskDunaSurface,
+} from "./ask-duna-floating-provider";
 
 const quickActions = [
   {
@@ -42,11 +47,58 @@ const starters = [
   "How is the business performing?",
 ] as const;
 
-export function DunaActionCenter() {
+export function DunaActionCenter(surface: AskDunaSurface) {
+  const { scopeKey } = surface;
   const pathname = usePathname();
+  const router = useRouter();
+  const openFloating = useAskDunaFloating(surface);
+  const openChat = useCallback(
+    (prompt?: string) => {
+      if (
+        pathname === "/ask/history" ||
+        (pathname !== "/ask" && !pathname.startsWith("/ask/"))
+      ) {
+        openFloating(prompt);
+        return;
+      }
+      if (!prompt) {
+        const composer = document.querySelector<HTMLTextAreaElement>(
+          ".hq-shell--ask textarea",
+        );
+        if (composer) {
+          composer.focus();
+          return;
+        }
+      }
+      if (prompt) {
+        try {
+          sessionStorage.setItem(
+            `ask-duna:draft:${scopeKey}`,
+            JSON.stringify({ prompt, page: pathname, submit: true }),
+          );
+        } catch {
+          /* Navigation still works without draft storage. */
+        }
+      }
+      window.dispatchEvent(new Event("ask-duna:new"));
+      router.push("/ask");
+    },
+    [pathname, router, scopeKey, openFloating],
+  );
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        openChat();
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, [openChat]);
   return (
     <SharedDunaActionCenter
       pathname={pathname}
+      onOpenChat={openChat}
       quickActions={quickActions}
       starters={starters}
       surface="hq"

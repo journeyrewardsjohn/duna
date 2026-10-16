@@ -25,7 +25,7 @@ export default async function OperatorModulePage({
   const { draft, stripe } = await searchParams;
   const item = operatorModules.find((entry) => entry.slug === module);
   if (!item || module === "overview") notFound();
-  if (module === "ai") redirect("/?duna=ask");
+  if (module === "ai") redirect("/ask");
   const caller = await getServerCaller();
   if (module === "payments" && stripe === "return") {
     try {

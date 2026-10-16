@@ -6,14 +6,20 @@ import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { adminModules, type AdminModule } from "./navigation";
 import { AuthControls } from "./auth-controls";
+import { DunaActionCenter } from "./duna-action-center";
+import { getServerCaller, getServerContext } from "@/lib/api";
 
-export function AdminShell({
+export async function AdminShell({
   active,
   children,
 }: {
   readonly active: AdminModule;
   readonly children: ReactNode;
 }) {
+  const { actor } = await getServerContext();
+  const workspace = actor?.organizationId
+    ? await (await getServerCaller()).operator.workspace().catch(() => null)
+    : null;
   return (
     <div className="hq-shell hq-shell--focused admin-shell">
       <aside className="hq-sidebar">
@@ -80,6 +86,17 @@ export function AdminShell({
         </header>
         <div className="hq-content">{children}</div>
       </div>
+      {actor && (
+        <DunaActionCenter
+          scopeKey={`${actor.personId}:${actor.organizationId ?? "no-organization"}`}
+          organizationName={
+            workspace?.organization.name ?? "Choose an organization"
+          }
+          pageLabel={`Admin · ${adminModules.find((item) => item.slug === active)?.label ?? "Overview"}`}
+          canAsk={Boolean(workspace)}
+          admin
+        />
+      )}
     </div>
   );
 }

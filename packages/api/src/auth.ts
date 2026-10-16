@@ -2,7 +2,15 @@ import { TRPCError, initTRPC } from "@trpc/server";
 import type { ApiContext } from "./context";
 import { consumeRateLimit } from "./rate-limit";
 
-export const t = initTRPC.context<ApiContext>().create();
+export interface ProcedurePolicy {
+  requiredScope?: string;
+  organizationScoped?: boolean;
+}
+
+export const t = initTRPC
+  .context<ApiContext>()
+  .meta<ProcedurePolicy>()
+  .create();
 
 export const router = t.router;
 export const createCallerFactory = t.createCallerFactory;
@@ -97,6 +105,7 @@ export function requireScope(scope: string) {
 
 export function organizationProcedure(scope: string) {
   return protectedProcedure
+    .meta({ requiredScope: scope, organizationScoped: true })
     .use(requireScope(scope))
     .use(
       rateLimitMiddleware({
