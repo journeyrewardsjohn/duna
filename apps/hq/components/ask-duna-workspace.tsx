@@ -44,7 +44,7 @@ const markdownComponents: Components = {
   a: ({ href, title, children, ...props }) => {
     const internalHref = getAskDunaInternalHref(href);
     return internalHref ? (
-      <Link href={internalHref} title={title}>
+      <Link href={internalHref} title={title} prefetch={false}>
         {children}
       </Link>
     ) : (
