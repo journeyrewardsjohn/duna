@@ -3,6 +3,10 @@
 import { DunaActionCenter as SharedDunaActionCenter } from "@duna/ui";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect } from "react";
+import {
+  useAskDunaFloating,
+  type AskDunaSurface,
+} from "./ask-duna-floating-provider";
 
 const quickActions = [
   {
@@ -43,11 +47,29 @@ const starters = [
   "How is the business performing?",
 ] as const;
 
-export function DunaActionCenter({ scopeKey }: { scopeKey: string }) {
+export function DunaActionCenter(surface: AskDunaSurface) {
+  const { scopeKey } = surface;
   const pathname = usePathname();
   const router = useRouter();
+  const openFloating = useAskDunaFloating(surface);
   const openChat = useCallback(
     (prompt?: string) => {
+      if (
+        pathname === "/ask/history" ||
+        (pathname !== "/ask" && !pathname.startsWith("/ask/"))
+      ) {
+        openFloating(prompt);
+        return;
+      }
+      if (!prompt) {
+        const composer = document.querySelector<HTMLTextAreaElement>(
+          ".hq-shell--ask textarea",
+        );
+        if (composer) {
+          composer.focus();
+          return;
+        }
+      }
       if (prompt) {
         try {
           sessionStorage.setItem(
@@ -61,7 +83,7 @@ export function DunaActionCenter({ scopeKey }: { scopeKey: string }) {
       window.dispatchEvent(new Event("ask-duna:new"));
       router.push("/ask");
     },
-    [pathname, router, scopeKey],
+    [pathname, router, scopeKey, openFloating],
   );
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {

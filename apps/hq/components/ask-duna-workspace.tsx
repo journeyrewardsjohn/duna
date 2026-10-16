@@ -64,6 +64,19 @@ const suggestions = [
   },
 ];
 
+function operatorMessageLabel(text: string) {
+  const review =
+    /^I (approved|declined) proposal [0-9a-f-]{36}\. Check its saved outcome with change_results and continue my request\. Do not repeat the reviewed action\.$/i.exec(
+      text,
+    );
+  if (review)
+    return review[1] === "approved"
+      ? "Approved this change."
+      : "Declined this change.";
+  const page = /^Current Duna page: \/[^\n]*\nPage label: (.+)$/.exec(text);
+  return page ? `From ${page[1]}` : text;
+}
+
 export function AskDunaWorkspace({
   conversationId,
   history = false,
@@ -423,18 +436,28 @@ function ConversationList({
   );
 }
 
-function AskDunaThread({
+export function AskDunaThread({
   conversation,
   initialMessage,
   organizationName,
   onChanged,
   recents,
+  floating = false,
+  pageContext,
+  pageLabel,
+  visible = true,
+  onBusy,
 }: {
   conversation: AskConversation;
   initialMessage: UserContent | null;
   organizationName: string;
   onChanged: () => void;
   recents: AskConversation[];
+  floating?: boolean;
+  pageContext?: string;
+  pageLabel?: string;
+  visible?: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [text, setText] = useState("");
   const [title, setTitle] = useState(conversation.title);
@@ -445,6 +468,8 @@ function AskDunaThread({
   const [archived, setArchived] = useState(Boolean(conversation.archivedAt));
   const sentInitial = useRef(false);
   const end = useRef<HTMLDivElement>(null);
+  const transcript = useRef<HTMLDivElement>(null);
+  const wasVisible = useRef(visible);
   const agent = useEveAgent({
     initialSession: conversation.sessionId
       ? { sessionId: conversation.sessionId, streamIndex: 0 }
@@ -470,6 +495,33 @@ function AskDunaThread({
   });
   const busy = agent.status === "submitted" || agent.status === "streaming";
   const resuming = agent.status === "resuming";
+  useEffect(() => {
+    onBusy?.(busy || resuming || reviewing !== null);
+  }, [busy, resuming, reviewing, onBusy]);
+  useEffect(() => {
+    // The full workspace can update this same conversation while the floating
+    // surface is hidden. Reconnect on return without resending a user turn.
+    const abort = new AbortController();
+    if (visible && !wasVisible.current && !busy) {
+      void loadActions();
+      void askDunaFetch<{ conversation: AskConversation }>(
+        `conversations/${conversation.id}`,
+        { signal: abort.signal },
+      )
+        .then(async ({ conversation: saved }) => {
+          if (abort.signal.aborted) return;
+          setArchived(Boolean(saved.archivedAt));
+          setTitle(saved.title);
+          setEffort(saved.effort);
+          if (!saved.archivedAt) await agent.resume();
+        })
+        .catch((failure: Error) => {
+          if (!abort.signal.aborted) setError(failure.message);
+        });
+    }
+    wasVisible.current = visible;
+    return () => abort.abort();
+  }, [visible]);
   async function loadActions() {
     try {
       setActions(
@@ -495,8 +547,11 @@ function AskDunaThread({
     }
   }, [initialMessage, agent]);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "instant", block: "end" });
-  }, [agent.data.messages.length]);
+    if (!visible) return;
+    if (floating && transcript.current) {
+      transcript.current.scrollTop = transcript.current.scrollHeight;
+    } else end.current?.scrollIntoView({ behavior: "instant", block: "end" });
+  }, [agent.data.messages.length, floating, visible]);
   async function update(input: {
     effort?: AskDunaEffort;
     title?: string;
@@ -541,46 +596,49 @@ function AskDunaThread({
   }
   return (
     <section className="ask-duna ask-duna--thread" data-zone="editorial">
-      <header className="ask-duna-header">
-        <details className="ask-duna-title-editor">
-          <summary>{title}</summary>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void update({ title });
-            }}
-          >
-            <input
-              aria-label="Conversation title"
-              value={title}
-              maxLength={120}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <button type="submit">Save title</button>
-          </form>
-        </details>
-        <div>
-          <button
-            type="button"
-            onClick={() => void update({ archived: !archived })}
-            disabled={busy}
-            aria-label={
-              archived ? "Restore conversation" : "Archive conversation"
-            }
-          >
-            <Archive size={17} aria-hidden />
-            {archived ? "Restore" : "Archive"}
-          </button>
-          <Link
-            href="/ask"
-            onClick={() => window.dispatchEvent(new Event("ask-duna:new"))}
-          >
-            <Plus size={17} aria-hidden />
-            New conversation
-          </Link>
-        </div>
-      </header>
+      {!floating && (
+        <header className="ask-duna-header">
+          <details className="ask-duna-title-editor">
+            <summary>{title}</summary>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void update({ title });
+              }}
+            >
+              <input
+                aria-label="Conversation title"
+                value={title}
+                maxLength={120}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+              <button type="submit">Save title</button>
+            </form>
+          </details>
+          <div>
+            <button
+              type="button"
+              onClick={() => void update({ archived: !archived })}
+              disabled={busy}
+              aria-label={
+                archived ? "Restore conversation" : "Archive conversation"
+              }
+            >
+              <Archive size={17} aria-hidden />
+              {archived ? "Restore" : "Archive"}
+            </button>
+            <Link
+              href="/ask"
+              onClick={() => window.dispatchEvent(new Event("ask-duna:new"))}
+            >
+              <Plus size={17} aria-hidden />
+              New conversation
+            </Link>
+          </div>
+        </header>
+      )}
       <div
+        ref={transcript}
         className="ask-duna-transcript"
         role="log"
         aria-label="Conversation messages"
@@ -609,7 +667,7 @@ function AskDunaThread({
                         {part.text}
                       </Streamdown>
                     ) : (
-                      part.text
+                      operatorMessageLabel(part.text)
                     )}
                   </div>
                 );
@@ -803,6 +861,7 @@ function AskDunaThread({
             void update({ effort: value });
           }}
           organizationName={organizationName}
+          pageLabel={pageLabel}
           busy={busy}
           disabled={resuming || !conversation.sessionId}
           recents={recents}
@@ -813,7 +872,19 @@ function AskDunaThread({
           }}
           onSend={async (message) => {
             setError("");
-            await agent.send(message);
+            await agent.send(
+              pageContext
+                ? [
+                    {
+                      type: "text",
+                      text: `Current Duna page: ${pageContext}\nPage label: ${pageLabel ?? "your workspace"}`,
+                    },
+                    ...(typeof message === "string"
+                      ? [{ type: "text" as const, text: message }]
+                      : message),
+                  ]
+                : message,
+            );
           }}
         />
       )}
@@ -821,12 +892,13 @@ function AskDunaThread({
   );
 }
 
-function AskDunaComposer({
+export function AskDunaComposer({
   text,
   onText,
   effort,
   onEffort,
   organizationName,
+  pageLabel,
   busy,
   disabled,
   onSend,
@@ -838,6 +910,7 @@ function AskDunaComposer({
   effort: AskDunaEffort;
   onEffort: (effort: AskDunaEffort) => void;
   organizationName: string;
+  pageLabel?: string;
   busy: boolean;
   disabled?: boolean;
   onSend: (content: UserContent, text: string) => Promise<void>;
@@ -868,7 +941,12 @@ function AskDunaComposer({
         setMenu(null);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (
+        event.key === "Escape" &&
+        box.current?.contains(document.activeElement) &&
+        menu
+      ) {
+        event.stopImmediatePropagation();
         setMenu(null);
         input.current?.focus();
       }
@@ -879,7 +957,7 @@ function AskDunaComposer({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", escape);
     };
-  }, []);
+  }, [menu]);
   useEffect(() => {
     if (menu !== "references") return;
     const abort = new AbortController();
@@ -1223,7 +1301,9 @@ function AskDunaComposer({
         <div className="ask-duna-context">
           <span>
             <MessageCircle size={12} aria-hidden />
-            {organizationName}
+            {pageLabel
+              ? `${pageLabel} · ${organizationName}`
+              : organizationName}
           </span>
           {references.map((reference) => (
             <span className="ask-duna-reference" key={reference.id}>

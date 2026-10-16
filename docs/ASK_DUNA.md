@@ -2,9 +2,20 @@
 
 Ask Duna is the operator's persistent assistant in HQ. `/ask` starts a chat,
 `/ask/:conversationId` resumes one, and `/ask/history` searches saved messages,
-including archived conversations. HQ Home and contextual page prompts carry
-their task and originating page into this surface. The sidebar exposes recent
-conversations and the complete history.
+including archived conversations. A floating composer is available throughout
+operator HQ and authorized administration pages. HQ Home and contextual page
+prompts open it in place. Drafts, files, and the active conversation survive
+navigation, including loading boundaries; switching operator or organization
+resets that in-memory state. The current page accompanies subsequent messages
+as user context, never authority. Minimize it to work underneath, reopen with
+Cmd/Ctrl+J, or expand a saved conversation into `/ask/:conversationId`. The
+sidebar exposes recent conversations and the complete history. The full Ask
+workspace hides the floating surface and shares the same durable conversation.
+
+Administration pages use the selected organization and the operator's existing
+permissions. Without an operator workspace, the floating surface links back to
+club HQ to choose one. It does not operate across organizations or inherit the
+authority of a transcript being inspected.
 
 The supplied Ask Journey export is a visual reference. Duna retains its Satoshi
 type, HQ tokens, organization context, permissions and business rules. The
@@ -139,8 +150,10 @@ tests do not prove a live Gateway call, deployed database migration, production
 identity, external side effect or native runtime.
 
 Local validation on October 15, 2026: 472 API tests, 92 HQ tests and 11 shared UI
-tests passed; 27 desktop/tablet/phone browser checks passed, including the existing
-HQ regression flow. The HQ, Eve and API declaration builds passed, along with API/UI type checks, targeted lint,
+tests passed; 33 desktop/tablet/phone browser checks passed, including floating
+draft/file persistence across navigation, in-place approval, expand/return,
+history, keyboard focus, protected pages, and the existing HQ regression flow.
+The HQ, Eve and API declaration builds passed, along with API/UI type checks, targeted lint,
 repository formatting and the design/readable-type/knowledge checks. The Super
 Admin component was also inspected in light and dark themes at desktop and phone
 sizes using a temporary local fixture harness; that harness is not shipped.

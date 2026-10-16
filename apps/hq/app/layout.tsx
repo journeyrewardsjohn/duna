@@ -11,6 +11,7 @@ import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaAuthProvider } from "@/components/auth-provider";
+import { AskDunaFloatingProvider } from "@/components/ask-duna-floating-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -49,7 +50,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body data-zone="operator">
-        <DunaAuthProvider>{children}</DunaAuthProvider>
+        <DunaAuthProvider>
+          <AskDunaFloatingProvider>{children}</AskDunaFloatingProvider>
+        </DunaAuthProvider>
       </body>
     </html>
   );

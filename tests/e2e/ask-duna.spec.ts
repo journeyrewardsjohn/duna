@@ -5,27 +5,162 @@ const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
-test("HQ assistant deep links and launchers use the persistent Ask Duna surface", async ({
+test("HQ assistant deep links and launchers open the floating Ask Duna surface", async ({
   page,
 }) => {
   await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/?duna=ask`);
-  await expect(page).toHaveURL(`${hqBaseUrl}/ask`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/?duna=ask`);
   await expect(
-    page.getByRole("heading", { name: /What can I take off your plate/ }),
+    page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
   await page.goto(`${hqBaseUrl}/members`);
-  if ((page.viewportSize()?.width ?? 1440) <= 1100) {
-    const more = page.locator(".hq-mobile-navigation-more");
-    await more.locator("summary").click();
-    await more.getByRole("link", { name: "Ask Duna", exact: true }).click();
-  } else {
+  await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page.getByRole("button", { name: "Duna AI", exact: true }).click();
+  } else {
+    await page.keyboard.press("Control+j");
   }
-  await expect(page).toHaveURL(`${hqBaseUrl}/ask`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Ask Duna anything" }),
+  ).toBeFocused();
   await expect(
     page.getByRole("region", { name: "Duna AI assistant" }),
   ).toHaveCount(0);
+});
+
+test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ pages", async ({
+  page,
+}, testInfo) => {
+  const { writes, turns } = await installAskDunaFixture(page);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${hqBaseUrl}/members`);
+  const floating = page.getByRole("region", { name: "Floating Ask Duna" });
+  const input = floating.getByRole("textbox", { name: "Ask Duna anything" });
+  await expect(floating).toBeVisible();
+  await input.fill("Help plan next week");
+  await floating.locator('input[type="file"]').setInputFiles({
+    name: "courts.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Two courts available"),
+  });
+  await page
+    .getByRole("link", { name: "Schedule", exact: true })
+    .first()
+    .click();
+  await expect(page).toHaveURL(`${hqBaseUrl}/calendar`);
+  await expect(input).toHaveValue("Help plan next week");
+  await expect(floating.getByText("courts.txt", { exact: true })).toBeVisible();
+  await expect(floating.locator(".ask-duna-context")).toContainText("Schedule");
+  await page.screenshot({
+    path: testInfo.outputPath("floating-ask-duna.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  const box = await floating.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(box!.y + box!.height).toBeLessThan(page.viewportSize()!.height);
+  await floating.getByRole("button", { name: "Send message" }).click();
+  await expect(
+    floating.getByText("Ready for your review", { exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(`${hqBaseUrl}/calendar`);
+  expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
+  expect(writes.find((row) => row.path === "conversations")?.body.page).toBe(
+    "/calendar",
+  );
+  expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
+  await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  await expect(floating).toBeHidden();
+  await page.getByRole("link", { name: "People", exact: true }).first().click();
+  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
+  await page
+    .getByRole("button", { name: "Open Ask Duna", exact: true })
+    .click();
+  await expect(input).toBeEnabled();
+  await input.fill("Use the people on this page");
+  await floating.getByRole("button", { name: "Send message" }).click();
+  await expect
+    .poll(() =>
+      turns.some((turn) =>
+        JSON.stringify(turn.message).includes("Current Duna page: /members"),
+      ),
+    )
+    .toBe(true);
+  await floating.getByRole("button", { name: "Approve change" }).click();
+  await expect(
+    floating.getByText("Action receipt", { exact: true }),
+  ).toBeVisible();
+  expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(1);
+  await floating.getByRole("link", { name: "Expand conversation" }).click();
+  await expect(page).toHaveURL(`${hqBaseUrl}/ask/${askConversationId}`);
+  await expect(floating).toBeHidden();
+  await expect(
+    page.locator(".hq-shell--ask").getByText("Action receipt", { exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(floating).toBeVisible();
+  await expect(
+    floating.getByText("Action receipt", { exact: true }),
+  ).toBeVisible();
+  expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
+  await expect(input).toBeEnabled();
+  await page
+    .getByRole("button", {
+      name: "Color theme: Match device. Activate for Light.",
+    })
+    .click();
+  await page
+    .getByRole("button", { name: "Color theme: Light. Activate for Dark." })
+    .click();
+  await expect(floating).toHaveCSS("background-color", "rgb(34, 34, 34)");
+  await page.screenshot({
+    path: testInfo.outputPath("floating-ask-duna-thread-dark.png"),
+    style: "nextjs-portal { display: none; }",
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 1,
+    ),
+  ).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test("Floating Ask Duna respects protected pages and its menus dismiss accessibly", async ({
+  page,
+}) => {
+  await installAskDunaFixture(page);
+  await page.goto(`${hqBaseUrl}/members`);
+  const floating = page.getByRole("region", { name: "Floating Ask Duna" });
+  await expect(floating).toBeVisible();
+  await expect(floating.locator(".ask-duna-context")).toContainText("People");
+  await floating.getByRole("button", { name: "Duna Medium" }).click();
+  await page.keyboard.press("Escape");
+  await expect(floating.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    floating.getByRole("textbox", { name: "Ask Duna anything" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(floating).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open Ask Duna", exact: true }),
+  ).toBeFocused();
+  if ((page.viewportSize()?.width ?? 1440) > 1100) {
+    await page
+      .getByRole("link", { name: "Open Duna Admin", exact: true })
+      .click();
+  } else await page.goto(`${hqBaseUrl}/admin`);
+  await expect(
+    page.getByRole("heading", {
+      name: "Platform administration access required.",
+    }),
+  ).toBeVisible();
+  await expect(floating).toBeHidden();
 });
 
 test("Ask Duna composer supports references, files, effort and accessible responsive themes", async ({
@@ -188,6 +323,9 @@ test("Ask Duna preserves the draft when its connection fails and searches saved 
     "could not start",
   );
   await page.goto(`${hqBaseUrl}/ask/history`);
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeVisible();
   await page
     .getByRole("textbox", { name: "Search conversations", exact: true })
     .fill("unmatched search");

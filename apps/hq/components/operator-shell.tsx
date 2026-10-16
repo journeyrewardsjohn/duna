@@ -306,7 +306,14 @@ export async function OperatorShell({
           {children}
         </div>
       </div>
-      <DunaActionCenter scopeKey={askScopeKey} />
+      <DunaActionCenter
+        scopeKey={askScopeKey}
+        organizationName={organization.name}
+        pageLabel={
+          operatorModules.find((item) => item.slug === active)?.label ??
+          "Workspace"
+        }
+      />
     </div>
   );
 }

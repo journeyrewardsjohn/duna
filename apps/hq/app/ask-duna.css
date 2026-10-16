@@ -1139,6 +1139,205 @@
   margin: 16px 0;
 }
 
+/* One persistent assistant above route changes; page dialogs remain above it. */
+.ask-duna-floating {
+  position: fixed;
+  z-index: 40;
+  left: calc(50% + 124px);
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 296px));
+  color: var(--hq-text);
+  pointer-events: none;
+}
+.ask-duna-floating [hidden],
+.ask-duna-floating[hidden] {
+  display: none !important;
+}
+.ask-duna-floating-panel {
+  pointer-events: auto;
+  position: relative;
+  border: 1px solid var(--hq-core);
+  background: var(--hq-surface);
+  border-radius: 19px;
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--hq-text) 12%, transparent);
+}
+.ask-duna-floating-header,
+.ask-duna-floating-header > span,
+.ask-duna-floating-header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ask-duna-floating-header {
+  justify-content: space-between;
+  padding: 0 10px 0 18px;
+  min-height: 48px;
+  font-size: 14px;
+}
+.ask-duna-floating-header strong {
+  font-weight: 500;
+}
+.ask-duna-floating-header a,
+.ask-duna-floating-header button,
+.ask-duna-floating-launcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--hq-text);
+  font: inherit;
+  cursor: pointer;
+}
+.ask-duna-floating-header button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+.ask-duna-floating-header a:hover,
+.ask-duna-floating-header button:hover {
+  background: var(--hq-soft);
+}
+.ask-duna-floating-header :focus-visible,
+.ask-duna-floating-launcher:focus-visible {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}
+.ask-duna-floating .ask-duna {
+  min-height: 0;
+  max-height: min(640px, calc(100dvh - 156px));
+  padding: 0 12px;
+  background: transparent;
+}
+.ask-duna-floating .ask-duna-transcript {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  padding: 18px 10px;
+  border-top: 1px solid var(--hq-line);
+  scrollbar-gutter: stable;
+}
+.ask-duna-floating .ask-duna-dock {
+  position: relative;
+  bottom: auto;
+  background: transparent;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.ask-duna-floating .ask-duna-composer {
+  box-shadow: none;
+  border-color: var(--hq-line);
+  border-radius: 13px;
+}
+.ask-duna-floating .ask-duna-input-row textarea {
+  min-height: 48px;
+  max-height: 140px;
+}
+.ask-duna-floating .ask-duna-composer-note {
+  margin: 8px 0 10px;
+}
+.ask-duna-floating .ask-duna-popover {
+  max-height: min(420px, calc(100dvh - 360px));
+  overflow-y: auto;
+}
+.ask-duna-floating > .ask-duna-floating-launcher {
+  pointer-events: auto;
+  display: flex;
+  margin-left: auto;
+  gap: 10px;
+  padding: 0 18px;
+  border: 1px solid var(--hq-core);
+  border-radius: 16px;
+  background: var(--hq-surface);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--hq-text) 10%, transparent);
+  font-size: 14px;
+}
+.ask-duna-floating-launcher svg {
+  width: 22px;
+  height: 22px;
+}
+.ask-duna-floating-launcher small {
+  font-size: 12px;
+  color: var(--hq-muted);
+}
+.ask-duna-floating-unavailable {
+  font-size: 16px;
+  padding: 0 18px 12px;
+  line-height: 1.6;
+}
+.ask-duna-floating-panel > .ask-duna-error {
+  margin: 10px 12px;
+}
+.ask-duna-floating-panel:has(.ask-duna-floating-new) .ask-duna-floating-header {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 13;
+  padding: 0;
+}
+.ask-duna-floating-panel:has(.ask-duna-floating-new)
+  .ask-duna-floating-header
+  > span {
+  display: none;
+}
+.ask-duna-floating .ask-duna-floating-new {
+  padding-top: 8px;
+}
+.ask-duna-floating-new .ask-duna-context {
+  padding-right: 108px;
+  min-height: 40px;
+}
+.ask-duna-floating-new .ask-duna-composer {
+  border-color: transparent;
+}
+body.ask-duna-floating-visible .ask-duna--history {
+  padding-bottom: calc(
+    var(--ask-duna-clearance, 290px) + 104px + env(safe-area-inset-bottom)
+  );
+}
+body.ask-duna-floating-visible
+  .hq-shell--focused:not(.hq-shell--ask):not(.hq-shell--immersive)
+  .hq-content {
+  padding-bottom: calc(var(--ask-duna-clearance, 290px) + 32px);
+}
+@media (max-width: 1100px) {
+  .ask-duna-floating {
+    left: 50%;
+    width: min(760px, calc(100vw - 24px));
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+  .ask-duna-floating .ask-duna {
+    max-height: calc(100dvh - 216px - env(safe-area-inset-bottom));
+  }
+  .ask-duna-floating .ask-duna-popover {
+    max-height: min(420px, calc(100dvh - 430px));
+  }
+  body.ask-duna-floating-visible
+    .hq-shell--focused:not(.hq-shell--ask):not(.hq-shell--immersive)
+    .hq-content {
+    padding-bottom: calc(
+      var(--ask-duna-clearance, 290px) + 104px + env(safe-area-inset-bottom)
+    );
+  }
+}
+@media (max-width: 700px) {
+  .ask-duna-floating .ask-duna {
+    padding: 0 8px;
+  }
+  .ask-duna-floating .ask-duna-composer {
+    padding: 8px;
+  }
+  .ask-duna-floating .ask-duna-transcript {
+    padding: 14px 4px;
+  }
+  .ask-duna-floating > .ask-duna-floating-launcher {
+    min-height: 56px;
+  }
+}
+
 .hq-shell--ask .hq-content {
   padding: 0;
   min-width: 0;

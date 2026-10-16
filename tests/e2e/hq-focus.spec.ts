@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { askConversationId, installAskDunaFixture } from "../ask-duna-fixture";
+import { installAskDunaFixture } from "../ask-duna-fixture";
 
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
@@ -21,6 +21,9 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   const input = page.getByRole("textbox", {
     name: "What would you like Duna to do?",
   });
+  if ((page.viewportSize()?.width ?? 1440) <= 700) {
+    await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  }
   await page
     .getByRole("button", { name: "Plan an event", exact: true })
     .click();
@@ -30,7 +33,7 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   expect(writes).toHaveLength(0);
   await input.fill("Prepare a draft clinic for next week.");
   await input.press("Enter");
-  await expect(page).toHaveURL(`${hqBaseUrl}/ask/${askConversationId}`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/`);
   await expect(
     page.getByRole("button", { name: "Approve change" }),
   ).toBeVisible();
@@ -75,7 +78,10 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
   const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
   await prompt.fill("Find the people who need a follow-up.");
   await prompt.press("Enter");
-  await expect(page).toHaveURL(`${hqBaseUrl}/ask/${askConversationId}`);
+  await expect(
+    page.getByRole("button", { name: "Approve change" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
   expect(
     writes.find((row) => row.path === "conversations")?.body,
   ).toMatchObject({
