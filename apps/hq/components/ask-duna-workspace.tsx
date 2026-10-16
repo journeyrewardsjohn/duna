@@ -64,7 +64,11 @@ const suggestions = [
   },
 ];
 
+const retryLastRequest =
+  "Please retry my last request. Check saved action receipts first and do not repeat any completed changes.";
+
 function operatorMessageLabel(text: string) {
+  if (text === retryLastRequest) return "Retry my last request.";
   const review =
     /^I (approved|declined) proposal [0-9a-f-]{36}\. Check its saved outcome with change_results and continue my request\. Do not repeat the reviewed action\.$/i.exec(
       text,
@@ -495,6 +499,40 @@ export function AskDunaThread({
   });
   const busy = agent.status === "submitted" || agent.status === "streaming";
   const resuming = agent.status === "resuming";
+  // A recoverable model failure is followed by session.waiting, which can clear
+  // the transport error. Keep the durable turn failure visible until a new turn.
+  const lastTurnEvent = agent.events.findLast((event) =>
+    [
+      "turn.started",
+      "turn.completed",
+      "turn.cancelled",
+      "turn.failed",
+      "session.failed",
+    ].includes(event.type),
+  );
+  const turnFailure =
+    lastTurnEvent?.type === "turn.failed" ||
+    lastTurnEvent?.type === "session.failed"
+      ? lastTurnEvent
+      : null;
+  const terminalFailure =
+    turnFailure?.type === "session.failed" ||
+    (turnFailure?.type === "turn.failed" && turnFailure.data.terminal === true);
+  const spendingLimitReached =
+    turnFailure &&
+    /budget.*exceeded|quota_for_entity_exceeded|insufficient.*credits/i.test(
+      turnFailure.data.message,
+    );
+  const visibleMessages = agent.data.messages.filter(
+    (message) =>
+      message.role !== "assistant" ||
+      message.parts.some(
+        (part) =>
+          (part.type === "text" && part.text.trim()) ||
+          part.type === "file" ||
+          part.type === "dynamic-tool",
+      ),
+  );
   useEffect(() => {
     onBusy?.(busy || resuming || reviewing !== null);
   }, [busy, resuming, reviewing, onBusy]);
@@ -643,7 +681,7 @@ export function AskDunaThread({
         role="log"
         aria-label="Conversation messages"
       >
-        {agent.data.messages.map((message) => (
+        {visibleMessages.map((message) => (
           <article
             key={message.id}
             className={`ask-duna-message ask-duna-message--${message.role}`}
@@ -697,27 +735,30 @@ export function AskDunaThread({
                 );
               return null;
             })}
-            {message.role === "assistant" && (
-              <button
-                className="ask-duna-copy"
-                type="button"
-                aria-label="Copy Duna response"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(
-                      message.parts
-                        .filter((part) => part.type === "text")
-                        .map((part) => part.text)
-                        .join("\n"),
-                    )
-                    .catch(() =>
-                      setError("Copy is unavailable in this browser."),
-                    );
-                }}
-              >
-                <Copy size={15} aria-hidden />
-              </button>
-            )}
+            {message.role === "assistant" &&
+              message.parts.some(
+                (part) => part.type === "text" && part.text.trim(),
+              ) && (
+                <button
+                  className="ask-duna-copy"
+                  type="button"
+                  aria-label="Copy Duna response"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(
+                        message.parts
+                          .filter((part) => part.type === "text")
+                          .map((part) => part.text)
+                          .join("\n"),
+                      )
+                      .catch(() =>
+                        setError("Copy is unavailable in this browser."),
+                      );
+                  }}
+                >
+                  <Copy size={15} aria-hidden />
+                </button>
+              )}
           </article>
         ))}
         {resuming && (
@@ -831,7 +872,30 @@ export function AskDunaThread({
         ))}
         <div ref={end} />
       </div>
-      {(error || agent.error) && (
+      {turnFailure && !busy && !resuming && (
+        <p className="ask-duna-error" role="alert">
+          {spendingLimitReached
+            ? "Ask Duna has reached its AI spending limit. A Super Admin needs to update the Gateway budget. Your conversation is saved."
+            : "Duna could not finish this response. Your conversation and completed changes are saved."}
+          {terminalFailure ? (
+            <Link href="/ask">Start a new conversation</Link>
+          ) : (
+            <button
+              type="button"
+              disabled={archived || reviewing !== null}
+              onClick={() => {
+                setError("");
+                void agent
+                  .send(retryLastRequest)
+                  .catch((failure: Error) => setError(failure.message));
+              }}
+            >
+              Retry response
+            </button>
+          )}
+        </p>
+      )}
+      {(error || (agent.error && !turnFailure)) && (
         <p className="ask-duna-error" role="alert">
           {error ||
             "Duna could not finish this response. Your saved conversation is still here."}

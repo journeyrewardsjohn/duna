@@ -3,10 +3,11 @@ import type { Page } from "@playwright/test";
 export const askConversationId = "30000000-0000-4000-8000-000000000001";
 export async function installAskDunaFixture(
   page: Page,
-  options: { creationFails?: boolean } = {},
+  options: { creationFails?: boolean; recoverableFailure?: boolean } = {},
 ) {
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const turns: Record<string, unknown>[] = [];
+  let modelRecovered = false;
   const conversation = {
     id: askConversationId,
     sessionId: "test-eve-session",
@@ -105,6 +106,7 @@ export async function installAskDunaFixture(
         json: { sessionId: "test-eve-session", deliveryId: "delivery-test" },
       });
     }
+    const failed = options.recoverableFailure && !modelRecovered;
     const events = [
       { type: "session.started", data: {} },
       { type: "turn.started", data: { sequence: 0, turnId: "turn-test" } },
@@ -126,18 +128,36 @@ export async function installAskDunaFixture(
           modelId: "test-model",
         },
       },
-      {
-        type: "message.completed",
-        data: {
-          sequence: 3,
-          turnId: "turn-test",
-          stepIndex: 0,
-          finishReason: "stop",
-          message:
-            "I’ve prepared the change for your review. **Court 2** will be added when you approve it.",
-        },
-      },
-      { type: "turn.completed", data: { sequence: 4, turnId: "turn-test" } },
+      ...(failed
+        ? [
+            {
+              type: "turn.failed",
+              data: {
+                sequence: 3,
+                turnId: "turn-test",
+                code: "MODEL_CALL_FAILED",
+                message: "The AI Gateway project budget has been exceeded.",
+                terminal: false,
+              },
+            },
+          ]
+        : [
+            {
+              type: "message.completed",
+              data: {
+                sequence: 3,
+                turnId: "turn-test",
+                stepIndex: 0,
+                finishReason: "stop",
+                message:
+                  "I’ve prepared the change for your review. **Court 2** will be added when you approve it.",
+              },
+            },
+            {
+              type: "turn.completed",
+              data: { sequence: 4, turnId: "turn-test" },
+            },
+          ]),
       {
         type: "session.waiting",
         data: {
@@ -148,7 +168,7 @@ export async function installAskDunaFixture(
     ].map((event, index) => ({
       ...event,
       meta: {
-        id: `event-${index}`,
+        id: `${options.recoverableFailure ? (failed ? "failed-" : "recovered-") : ""}event-${index}`,
         at: new Date().toISOString(),
         deliveryIds: ["delivery-test"],
       },
@@ -163,5 +183,12 @@ export async function installAskDunaFixture(
       body: events.map((event) => JSON.stringify(event)).join("\n") + "\n",
     });
   });
-  return { writes, turns, conversation };
+  return {
+    writes,
+    turns,
+    conversation,
+    recoverModel: () => {
+      modelRecovered = true;
+    },
+  };
 }
