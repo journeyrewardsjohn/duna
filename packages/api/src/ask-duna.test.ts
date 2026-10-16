@@ -38,6 +38,8 @@ import {
   reviewAskDunaOperation,
 } from "./ask-duna-tools";
 import * as apiRouter from "./router";
+import { loadDemoOperatorWorkspace } from "./operator-service";
+import { getOrganizationSetupReadiness } from "./organization-setup";
 
 const harness = vi.hoisted(() => ({ db: undefined as unknown }));
 vi.mock("@duna/db", async (importOriginal) => ({
@@ -468,6 +470,41 @@ describe("Ask Duna approvals", () => {
 });
 
 describe("Ask Duna capability boundaries", () => {
+  it("keeps the shared HQ setup checklist complete when workspace records are truncated", async () => {
+    const base = loadDemoOperatorWorkspace(
+      "10000000-0000-4000-8000-000000000001",
+    );
+    const workspace = {
+      ...base,
+      organization: { ...base.organization, id: organizationId },
+      people: Array.from({ length: 1_000 }, () => base.people[0]!),
+      theme: {
+        ...base.theme,
+        publishedAt: undefined,
+        logoUrl: undefined,
+        markUrl: undefined,
+      },
+    };
+    const read = vi.fn().mockResolvedValue(workspace);
+    const caller = vi.spyOn(apiRouter, "createCaller").mockReturnValue({
+      operator: { workspace: read },
+    } as unknown as ReturnType<typeof apiRouter.createCaller>);
+
+    const result = await readAskDunaOperation(operator, "operator.workspace");
+
+    expect(result).toMatchObject({
+      organizationSetup: getOrganizationSetupReadiness(workspace),
+      workspace: { truncated: true },
+    });
+    expect(JSON.stringify(result)).toContain("/settings/theme");
+    expect(caller.mock.calls[0]![0]).toMatchObject({ actor: operator });
+    expect(read).toHaveBeenCalledTimes(1);
+    await expect(
+      readAskDunaOperation({ ...operator, scopes: [] }, "operator.workspace"),
+    ).rejects.toThrow("does not permit");
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it("provides describable reviewed capabilities, with no admin, device, health or confirmation tools", () => {
     const catalog = askDunaOperationCatalog(operator);
     expect(catalog.length).toBeGreaterThan(100);

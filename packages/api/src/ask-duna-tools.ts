@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { appRouter, createCaller } from "./router";
 import type { ApiActor } from "./context";
+import type { OperatorWorkspace } from "./contracts";
+import { getOrganizationSetupReadiness } from "./organization-setup";
 import { askDunaActionInput } from "./ask-duna-contracts";
 import { ASK_DUNA_CAPABILITIES } from "./ask-duna-capabilities";
 import {
@@ -159,14 +161,23 @@ export async function readAskDunaOperation(
 ) {
   await assertAskDunaEnabled();
   const procedure = operationEntry(actor, name, "query");
-  return boundedResult(
-    await callOperation(
-      actor,
-      name,
-      validateInput(procedure, input),
-      crypto.randomUUID(),
-    ),
+  const result = await callOperation(
+    actor,
+    name,
+    validateInput(procedure, input),
+    crypto.randomUUID(),
   );
+  if (name === "operator.workspace") {
+    // Keep HQ's small, authoritative checklist intact even when the underlying
+    // workspace is too large to send to the model in full.
+    return {
+      organizationSetup: boundedResult(
+        getOrganizationSetupReadiness(result as OperatorWorkspace),
+      ),
+      workspace: boundedResult(result),
+    };
+  }
+  return boundedResult(result);
 }
 
 export async function readAskDunaReferences(
