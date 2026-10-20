@@ -348,7 +348,10 @@
       "promptIntent": "Wide sunny Southern California doubles rally with anonymous adult players, complete natural hands and anatomy, palms, white tents and softly focused spectator stands. Keep the ball and featured hands clear of the net and frame edges; omit logos and website graphics.",
       "sourceReferences": ["/media/duna-hero-poster.webp"],
       "permissions": "User supplied the existing Duna hero as a visual reference and approved the generated replacement for the main duna.coach homepage. No specific real athlete likeness was requested; synthetic atmosphere is not evidence of an actual event, venue or participant.",
-      "outputNames": ["/media/brand/duna-home-tournament-hero-v1.webp"],
+      "outputNames": [
+        "/media/brand/duna-home-tournament-hero-v1.avif",
+        "/media/brand/duna-home-tournament-hero-v1.webp"
+      ],
       "dimensions": {
         "width": 3840,
         "height": 1648
