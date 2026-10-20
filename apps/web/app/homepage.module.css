@@ -1424,6 +1424,10 @@
   .heroLive {
     top: auto;
     bottom: 20px;
+    max-width: calc(100% - 340px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .chapterLayout,
