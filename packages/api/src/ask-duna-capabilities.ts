@@ -132,6 +132,8 @@ export const ASK_DUNA_CAPABILITIES = new Set([
   "updateVenueProfile",
   "updateCourtBookingConfiguration",
   "draftCourtSchedule",
+  "previewCourtScheduleChange",
+  "changeCourtSchedule",
   "replaceCourtSchedule",
   "blockCourtTime",
   "activateCourt",

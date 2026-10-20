@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "010f05d7a64877ccca80b6708b80d57fc6a779352e89955682ca79bf4cc9cf01",
+    "17eca3c0c5f888f29497982ae49cc51a5ac4172d18d4ed6c761e81fd0e0a8cfd",
   modules: [
     {
       id: "M1",
@@ -168,6 +168,7 @@ export const generatedDunaFeatureKnowledge = {
     "catalogItemVersions",
     "catalogOfferEligibility",
     "catalogRecommendations",
+    "changeCourtSchedule",
     "checkoutStatus",
     "claimMatchNoteShare",
     "claimMatchParticipantInvitation",
@@ -325,6 +326,7 @@ export const generatedDunaFeatureKnowledge = {
     "predictionWallet",
     "prepareSuperAdminRefund",
     "previewAudience",
+    "previewCourtScheduleChange",
     "previewSandProfileMerge",
     "proCoverage",
     "proEvent",

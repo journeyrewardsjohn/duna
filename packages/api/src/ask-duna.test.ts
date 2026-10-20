@@ -38,7 +38,12 @@ import {
   reviewAskDunaOperation,
 } from "./ask-duna-tools";
 import * as apiRouter from "./router";
-import { loadDemoOperatorWorkspace } from "./operator-service";
+import {
+  loadDemoOperatorWorkspace,
+  changeCourtSchedule,
+  previewCourtScheduleChange,
+  replaceCourtSchedule,
+} from "./operator-service";
 import { getOrganizationSetupReadiness } from "./organization-setup";
 
 const harness = vi.hoisted(() => ({ db: undefined as unknown }));
@@ -76,12 +81,18 @@ beforeAll(async () => {
     schema.organizationMemberships,
     schema.adminRoles,
     schema.auditLog,
+    schema.venues,
+    schema.courts,
+    schema.schedules,
+    schema.scheduleBlocks,
+    schema.scheduleOverrides,
+    schema.courtBookings,
+    schema.idempotencyRecords,
+    schema.rateLimitBuckets,
   ]) {
     const config = getTableConfig(table);
     const columns = config.columns.map((column) => {
-      const type = ["person_status", "org_role"].includes(column.getSQLType())
-        ? "text"
-        : column.getSQLType();
+      const type = column.enumValues?.length ? "text" : column.getSQLType();
       let defaultSql = "";
       if (column.default instanceof SQL)
         defaultSql = dialect
@@ -99,6 +110,9 @@ beforeAll(async () => {
     await pg.exec(`create table "${config.name}" (${columns.join(",")})`);
   }
   await pg.exec(
+    "create unique index idempotency_procedure_key_unique on idempotency_records (procedure, key)",
+  );
+  await pg.exec(
     await readFile(
       new URL("../../db/drizzle/0108_magical_spot.sql", import.meta.url),
       "utf8",
@@ -108,7 +122,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await pg.exec(
-    "truncate ask_duna_events, ask_duna_actions, ask_duna_conversations, ask_duna_controls, audit_log, organization_memberships, admin_roles, people, organizations cascade",
+    "truncate ask_duna_events, ask_duna_actions, ask_duna_conversations, ask_duna_controls, audit_log, organization_memberships, admin_roles, people, organizations, venues, courts, schedules, schedule_blocks, schedule_overrides, court_bookings, idempotency_records cascade",
   );
   await db.insert(schema.people).values([
     {
@@ -137,7 +151,186 @@ beforeEach(async () => {
 afterAll(async () => {
   await pg.close();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe("Ask Duna court availability", () => {
+  const venueId = "50000000-0000-4000-8000-000000000001";
+  const courtId = "50000000-0000-4000-8000-000000000002";
+  const scheduleId = "50000000-0000-4000-8000-000000000003";
+  const changes = [1, 2, 3, 4, 5].map((weekday) => ({
+    weekday,
+    startsAtMinute: 540,
+    endsAtMinute: 720,
+    mode: "blocked" as const,
+  }));
+  beforeEach(async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://isolated-test");
+    await db.insert(schema.venues).values({
+      id: venueId,
+      organizationId,
+      name: "Test venue",
+      slug: "test-venue",
+      timezone: "America/New_York",
+    });
+    await db.insert(schema.courts).values({
+      id: courtId,
+      venueId,
+      name: "Court 3",
+      surface: "sand",
+      qrToken: "test-court-3",
+    });
+    await db.insert(schema.schedules).values({
+      id: scheduleId,
+      organizationId,
+      resourceId: courtId,
+      resourceType: "court",
+      name: "Court hours",
+      timezone: "America/New_York",
+    });
+    await db.insert(schema.scheduleBlocks).values(
+      Array.from({ length: 7 }, (_, weekday) => ({
+        scheduleId,
+        weekday,
+        startsAtMinute: 480,
+        endsAtMinute: 1320,
+        mode: "rentals-only" as const,
+      })),
+    );
+    await db.insert(schema.scheduleOverrides).values({
+      scheduleId,
+      startsAt: new Date("2026-10-26T15:00:00Z"),
+      endsAt: new Date("2026-10-26T16:00:00Z"),
+      mode: "blocked",
+      reason: "Existing blackout",
+    });
+    await pg.exec(
+      `insert into court_bookings (id, court_id, status) values ('60000000-0000-4000-8000-000000000001', '${courtId}', 'confirmed')`,
+    );
+  });
+
+  it("previews without writing, then executes one approved change with protected bookings and blackouts", async () => {
+    const before = await db.select().from(schema.scheduleBlocks);
+    const bookings = await db.select().from(schema.courtBookings);
+    const overrides = await db.select().from(schema.scheduleOverrides);
+    const plan = await previewCourtScheduleChange({
+      actor: operator,
+      courtId,
+      changes,
+    });
+    expect(plan).toMatchObject({
+      courtName: "Court 3",
+      timezone: "America/New_York",
+    });
+    expect(plan.proposed).toHaveLength(17);
+    expect(await db.select().from(schema.scheduleBlocks)).toEqual(before);
+    const conversation = await createAskDunaConversation(operator, {});
+    const action = await proposeAskDunaOperation(operator, conversation.id, {
+      operation: "operator.changeCourtSchedule",
+      input: {
+        courtId,
+        changes,
+        expectedVersion: plan.expectedVersion,
+        reason: "Morning sessions",
+        confirmed: true,
+      },
+      summary: "Block Court 3 Monday–Friday 9 am–noon, America/New_York.",
+    });
+    expect(await db.select().from(schema.scheduleBlocks)).toEqual(before);
+    const receipt = await reviewAskDunaOperation(
+      operator,
+      conversation.id,
+      action.id,
+      "approve",
+    );
+    expect(receipt).toMatchObject({ status: "succeeded" });
+    expect(await db.select().from(schema.scheduleBlocks)).toHaveLength(17);
+    expect(await db.select().from(schema.courtBookings)).toEqual(bookings);
+    expect(await db.select().from(schema.scheduleOverrides)).toEqual(overrides);
+    expect(
+      (await db.select().from(schema.auditLog)).filter(
+        (row) => row.action === "court.schedule_changed",
+      ),
+    ).toHaveLength(1);
+    await expect(
+      reviewAskDunaOperation(operator, conversation.id, action.id, "approve"),
+    ).rejects.toThrow("already reviewed");
+  });
+
+  it("rejects a stale proposal after a manual save without undoing that save", async () => {
+    const plan = await previewCourtScheduleChange({
+      actor: operator,
+      courtId,
+      changes,
+    });
+    await replaceCourtSchedule({
+      actor: operator,
+      courtId,
+      blocks: [
+        {
+          weekday: 6,
+          startsAtMinute: 600,
+          endsAtMinute: 900,
+          mode: "open",
+          effectiveFrom: "2026-11-01",
+          effectiveTo: "2026-12-01",
+        },
+      ],
+      confirmed: true,
+      now: new Date(),
+      requestId: crypto.randomUUID(),
+    });
+    const before = await db.select().from(schema.scheduleBlocks);
+    expect(before[0]).toMatchObject({
+      effectiveFrom: "2026-11-01",
+      effectiveTo: "2026-12-01",
+    });
+    await expect(
+      changeCourtSchedule({
+        actor: operator,
+        courtId,
+        changes,
+        expectedVersion: plan.expectedVersion,
+        reason: "Morning sessions",
+        confirmed: true,
+        now: new Date(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow("changed after");
+    expect(await db.select().from(schema.scheduleBlocks)).toEqual(before);
+  });
+
+  it("denies another organization, missing scope and unconfirmed writes", async () => {
+    await expect(
+      previewCourtScheduleChange({
+        actor: { ...operator, organizationId: otherOrganizationId },
+        courtId,
+        changes,
+      }),
+    ).rejects.toThrow("another organization");
+    expect(() =>
+      describeAskDunaOperation(
+        { ...operator, scopes: [] },
+        "operator.changeCourtSchedule",
+      ),
+    ).toThrow("role");
+    await expect(
+      changeCourtSchedule({
+        actor: operator,
+        courtId,
+        changes,
+        expectedVersion: "untrusted",
+        reason: "Morning sessions",
+        confirmed: false,
+        now: new Date(),
+        requestId: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow("confirm");
+    expect(await db.select().from(schema.scheduleBlocks)).toHaveLength(7);
+  });
+});
 
 describe("Ask Duna permissions and durable storage", () => {
   it("isolates the same person's other organization and another operator", async () => {

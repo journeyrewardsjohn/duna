@@ -2,7 +2,7 @@
 
 import type { OperatorWorkspace } from "@duna/api";
 import { COURT_SURFACE_OPTIONS, formatMoney } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge, Numeric, openDunaAi } from "@duna/ui";
 import { upload } from "@vercel/blob/client";
 import {
   ArrowLeft,
@@ -26,7 +26,6 @@ import { useActionState, useState } from "react";
 import {
   activateCourtAction,
   blockCourtTimeAction,
-  draftCourtScheduleAction,
   replaceCourtScheduleAction,
   updateCourtBookingConfigurationAction,
   type OperatorActionState,
@@ -77,6 +76,7 @@ function ActionNotice({ state }: { readonly state: OperatorActionState }) {
 }
 
 function minuteToTime(minute: number): string {
+  if (minute === 1440) return "00:00";
   return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(
     minute % 60,
   ).padStart(2, "0")}`;
@@ -642,10 +642,9 @@ function CourtAvailabilityEditor({
   const [blocks, setBlocks] = useState<readonly ScheduleBlock[]>(
     court.schedule,
   );
-  const [draftState, draftAction, draftPending] = useActionState(
-    draftCourtScheduleAction,
-    initialState,
-  );
+  const [request, setRequest] = useState("");
+  const hasUnsavedHours =
+    JSON.stringify(blocks) !== JSON.stringify(court.schedule);
   const [saveState, saveAction, savePending] = useActionState(
     replaceCourtScheduleAction,
     initialState,
@@ -669,6 +668,49 @@ function CourtAvailabilityEditor({
 
   return (
     <div className="court-availability-workspace">
+      <section className="court-schedule-copilot hq-card">
+        <header>
+          <span>
+            <Sparkles aria-hidden size={18} />
+            <strong>Update availability with Duna AI</strong>
+          </span>
+        </header>
+        <p>
+          Describe the hours to open or block on {court.name}. Duna prepares the
+          change for your approval, keeping other hours and existing bookings.
+          Times use {timezone}.
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!request.trim() || hasUnsavedHours) return;
+            openDunaAi(`${request.trim()}\n\nFor ${court.name} (${timezone}).`);
+            setRequest("");
+          }}
+        >
+          <textarea
+            aria-label="Describe the court availability change"
+            placeholder="Block Monday to Friday 9 am to noon for morning sessions"
+            value={request}
+            onChange={(event) => setRequest(event.target.value)}
+            maxLength={2000}
+            required
+            rows={3}
+          />
+          <button
+            className="hq-button hq-button--primary"
+            disabled={!request.trim() || hasUnsavedHours}
+            type="submit"
+          >
+            <Sparkles aria-hidden size={15} /> Ask Duna to update hours
+          </button>
+        </form>
+        {hasUnsavedHours && (
+          <p role="status">
+            Save your manual changes before asking Duna to update hours.
+          </p>
+        )}
+      </section>
       <AvailabilityCalendar
         description="See recurring court hours and saved closures together. Select an open day to prepare a new all-day blackout below."
         getDay={(date, dateKey) => {
@@ -777,7 +819,10 @@ function CourtAvailabilityEditor({
                           aria-label={`${day} end time`}
                           onChange={(event) =>
                             updateBlock(index, {
-                              endsAtMinute: timeToMinute(event.target.value),
+                              endsAtMinute:
+                                event.target.value === "00:00"
+                                  ? 1440
+                                  : timeToMinute(event.target.value),
                             })
                           }
                           type="time"
@@ -820,6 +865,12 @@ function CourtAvailabilityEditor({
                         >
                           <Trash2 aria-hidden size={15} />
                         </button>
+                        {(block.effectiveFrom || block.effectiveTo) && (
+                          <small className="court-schedule-date-range">
+                            {block.effectiveFrom ?? "Any start date"} –{" "}
+                            {block.effectiveTo ?? "No end date"}
+                          </small>
+                        )}
                       </article>
                     ))}
                   </div>
@@ -837,12 +888,23 @@ function CourtAvailabilityEditor({
             name="blocks"
             type="hidden"
             value={JSON.stringify(
-              blocks.map(({ weekday, startsAtMinute, endsAtMinute, mode }) => ({
-                weekday,
-                startsAtMinute,
-                endsAtMinute,
-                mode,
-              })),
+              blocks.map(
+                ({
+                  weekday,
+                  startsAtMinute,
+                  endsAtMinute,
+                  mode,
+                  effectiveFrom,
+                  effectiveTo,
+                }) => ({
+                  weekday,
+                  startsAtMinute,
+                  endsAtMinute,
+                  mode,
+                  effectiveFrom,
+                  effectiveTo,
+                }),
+              ),
             )}
           />
           <input name="confirmed" type="hidden" value="true" />
@@ -855,53 +917,6 @@ function CourtAvailabilityEditor({
             {savePending ? "Saving schedule…" : "Save weekly availability"}
           </button>
         </form>
-      </section>
-
-      <section className="court-schedule-copilot hq-card">
-        <header>
-          <span>
-            <Sparkles aria-hidden size={18} />
-            <strong>Draft hours with Duna AI</strong>
-          </span>
-          <small>Proposal only</small>
-        </header>
-        <form action={draftAction}>
-          <textarea
-            defaultValue="Open weekdays from 8am to 10pm and weekends from 7am to 8pm for court rentals."
-            name="prompt"
-            required
-            rows={4}
-          />
-          <button
-            className="hq-button hq-button--secondary"
-            disabled={draftPending}
-            type="submit"
-          >
-            <Sparkles aria-hidden size={15} />
-            {draftPending ? "Drafting…" : "Draft schedule"}
-          </button>
-        </form>
-        <ActionNotice state={draftState} />
-        {draftState.scheduleProposal && (
-          <div className="court-schedule-proposal">
-            <strong>{draftState.scheduleProposal.summary}</strong>
-            <p>{draftState.scheduleProposal.assumptions[0]}</p>
-            <button
-              className="hq-button hq-button--secondary"
-              onClick={() =>
-                setBlocks(
-                  draftState.scheduleProposal!.blocks.map((block, index) => ({
-                    id: `proposal-${index}`,
-                    ...block,
-                  })),
-                )
-              }
-              type="button"
-            >
-              Load proposal for review
-            </button>
-          </div>
-        )}
       </section>
 
       <section className="court-blackout-editor hq-card">
@@ -1138,6 +1153,7 @@ export function CourtManagementWorkspace({
         />
       ) : section === "availability" ? (
         <CourtAvailabilityEditor
+          key={JSON.stringify(court.schedule)}
           court={court}
           membershipConfigured={membershipConfigured}
           timezone={venue.timezone}

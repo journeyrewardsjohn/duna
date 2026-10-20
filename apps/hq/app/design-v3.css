@@ -8762,6 +8762,18 @@ body[data-zone="operator"] :is(h1, h2, h3) {
   resize: vertical;
 }
 
+.court-schedule-copilot > p {
+  color: var(--hq-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.court-schedule-date-range {
+  grid-column: 1 / -1;
+  color: var(--hq-ink);
+  font-size: 0.875rem;
+}
+
 .court-schedule-copilot form > button {
   justify-self: end;
 }
