@@ -19,6 +19,10 @@ import {
 } from "@duna/league-engine";
 import { z } from "zod";
 import {
+  courtScheduleChangesSchema,
+  courtScheduleWindowSchema,
+} from "./court-schedule-changes";
+import {
   adultProcedure,
   adminProcedure,
   createCallerFactory,
@@ -587,6 +591,8 @@ import {
   createRatePlan,
   createVenue,
   draftCourtScheduleFromPrompt,
+  previewCourtScheduleChange,
+  changeCourtSchedule,
   loadDemoOperatorWorkspace,
   loadEventDraft,
   loadOperatorWorkspace,
@@ -12901,6 +12907,61 @@ const operatorRouter = router({
         },
       }),
     ),
+  previewCourtScheduleChange: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        changes: courtScheduleChangesSchema,
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        return await previewCourtScheduleChange({
+          ...input,
+          actor: ctx.actor!,
+        });
+      } catch (error) {
+        return throwDomainError(error);
+      }
+    }),
+  changeCourtSchedule: organizationProcedure("sessions:write")
+    .input(
+      z.object({
+        courtId: z.string().uuid(),
+        changes: courtScheduleChangesSchema,
+        expectedVersion: z
+          .string()
+          .min(1)
+          .describe(
+            "Copy the exact version from previewCourtScheduleChange. Re-preview if the schedule has changed.",
+          ),
+        reason: z.string().trim().min(3).max(500),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(operatorMutationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.changeCourtSchedule",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await changeCourtSchedule({
+              ...input,
+              actor: ctx.actor!,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   draftCourtSchedule: organizationProcedure("sessions:write")
     .input(z.object({ prompt: z.string().trim().min(8).max(2_000) }))
     .output(courtScheduleProposalSchema)
@@ -12909,26 +12970,7 @@ const operatorRouter = router({
     .input(
       z.object({
         courtId: z.string().uuid(),
-        blocks: z
-          .array(
-            z.object({
-              weekday: z.number().int().min(0).max(6),
-              startsAtMinute: z.number().int().min(0).max(1_439),
-              endsAtMinute: z.number().int().min(1).max(1_440),
-              mode: z.enum([
-                "open",
-                "rentals-only",
-                "members-only",
-                "private-lessons-only",
-                "group-only",
-                "league-reserved",
-                "maintenance",
-                "blocked",
-              ]),
-            }),
-          )
-          .min(1)
-          .max(64),
+        blocks: z.array(courtScheduleWindowSchema).min(1).max(256),
         confirmed: z.literal(true),
         idempotencyKey: z.string().uuid(),
       }),

@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { defaultComponents, Streamdown, type Components } from "streamdown";
 import { getAskDunaInternalHref } from "../lib/ask-duna-links";
@@ -480,6 +481,7 @@ export function AskDunaThread({
   visible?: boolean;
   onBusy?: (busy: boolean) => void;
 }) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [title, setTitle] = useState(conversation.title);
   const [effort, setEffort] = useState<AskDunaEffort>(conversation.effort);
@@ -628,12 +630,24 @@ export function AskDunaThread({
     setReviewing(action.id);
     setError("");
     try {
-      await askDunaFetch(`conversations/${conversation.id}/review`, {
-        method: "POST",
-        body: JSON.stringify({ actionId: action.id, decision }),
-      });
+      const reviewed = await askDunaFetch<{ action: AskAction }>(
+        `conversations/${conversation.id}/review`,
+        {
+          method: "POST",
+          body: JSON.stringify({ actionId: action.id, decision }),
+        },
+      );
       await loadActions();
       onChanged();
+      if (
+        reviewed.action.status === "succeeded" &&
+        [
+          "operator.changeCourtSchedule",
+          "operator.replaceCourtSchedule",
+          "operator.blockCourtTime",
+        ].includes(action.operation)
+      )
+        router.refresh();
       try {
         await agent.send(
           `I ${decision === "approve" ? "approved" : "declined"} proposal ${action.id}. Check its saved outcome with change_results and continue my request. Do not repeat the reviewed action.`,

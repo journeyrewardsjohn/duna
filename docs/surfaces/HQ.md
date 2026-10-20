@@ -39,6 +39,15 @@ Specialized routes supplement the module routes:
 
 ## Runtime and data path
 
+Court availability accepts natural-language requests through the shared Ask
+Duna conversation with the selected court and venue timezone. Recurring changes
+use `operator.previewCourtScheduleChange` followed by an approved
+`operator.changeCourtSchedule`: only requested day/time/date windows change,
+other hours are preserved, and existing bookings and dated overrides remain.
+The server rejects stale proposals, serializes saves with manual edits, and
+records an audit entry. Blocking hours does not create sessions. Manual edits
+must be saved before starting a court AI request.
+
 HQ server components call `getServerCaller()` in `apps/hq/lib/api.ts`, which
 resolves the WorkOS organization session and invokes the shared `AppRouter` in
 process. Operator procedures require both an organization context and the

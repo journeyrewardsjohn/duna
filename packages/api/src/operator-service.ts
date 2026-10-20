@@ -51,6 +51,11 @@ import type { KobCompetitionConfig } from "@duna/core";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
+  applyCourtScheduleChanges,
+  courtScheduleVersion,
+  type CourtScheduleWindow,
+} from "./court-schedule-changes";
+import {
   eventDraftSmartRulesSchema,
   eventFeatureSchema,
   eventLocationSchema,
@@ -5403,15 +5408,168 @@ export function draftCourtScheduleFromPrompt(prompt: string) {
   };
 }
 
+async function readCourtScheduleRows(
+  database: Pick<ReturnType<typeof getTransactionalDatabase>, "select">,
+  courtId: string,
+) {
+  const courtSchedules = await database
+    .select()
+    .from(schedules)
+    .where(
+      and(
+        eq(schedules.resourceType, "court"),
+        eq(schedules.resourceId, courtId),
+      ),
+    );
+  if (courtSchedules.length > 1) {
+    throw new OperatorServiceError(
+      "INVALID_SCHEDULE",
+      "This court has multiple schedules. Resolve them before changing recurring hours.",
+    );
+  }
+  const ids = courtSchedules.map((schedule) => schedule.id);
+  const rows = ids.length
+    ? await database
+        .select()
+        .from(scheduleBlocks)
+        .where(inArray(scheduleBlocks.scheduleId, ids))
+    : [];
+  return {
+    schedules: courtSchedules,
+    blocks:
+      courtSchedules.length === 0
+        ? Array.from({ length: 7 }, (_, weekday) => ({
+            weekday,
+            startsAtMinute: 480,
+            endsAtMinute: 1320,
+            mode: "rentals-only" as const,
+          }))
+        : rows.map((block) => ({
+            weekday: block.weekday,
+            startsAtMinute: block.startsAtMinute,
+            endsAtMinute: block.endsAtMinute,
+            mode: block.mode,
+            effectiveFrom: block.effectiveFrom ?? undefined,
+            effectiveTo: block.effectiveTo ?? undefined,
+          })),
+  };
+}
+
+export async function previewCourtScheduleChange(input: {
+  actor: ApiActor;
+  courtId: string;
+  changes: readonly CourtScheduleWindow[];
+}) {
+  requireDatabase();
+  const { court, venue } = await ownedCourt(input.actor, input.courtId);
+  const current = await readCourtScheduleRows(
+    getTransactionalDatabase(),
+    court.id,
+  );
+  const proposed = applyCourtScheduleChanges(current.blocks, input.changes);
+  return {
+    courtId: court.id,
+    courtName: court.name,
+    venueName: venue.name,
+    timezone: venue.timezone,
+    path: `/locations/${venue.id}/courts/${court.id}`,
+    expectedVersion: courtScheduleVersion(
+      venue.timezone,
+      current.schedules.map((schedule) => schedule.id),
+      current.blocks,
+    ),
+    changes: input.changes,
+    current: current.blocks,
+    proposed,
+    notice:
+      "Only the requested windows change. Existing bookings and dated blackouts remain in place. This does not create or cancel sessions.",
+  };
+}
+
+export async function changeCourtSchedule(input: {
+  actor: ApiActor;
+  courtId: string;
+  changes: readonly CourtScheduleWindow[];
+  expectedVersion: string;
+  reason: string;
+  confirmed: boolean;
+  requestId: string;
+  ipAddress?: string;
+  now: Date;
+}): Promise<OperatorMutationResult> {
+  requireDatabase();
+  if (!input.confirmed) {
+    throw new OperatorServiceError(
+      "PUBLISH_CONFIRMATION_REQUIRED",
+      "Review and confirm the court availability change.",
+    );
+  }
+  const { court, venue, organizationId } = await ownedCourt(
+    input.actor,
+    input.courtId,
+  );
+  if (input.changes.some((block) => block.mode === "members-only")) {
+    await requireActiveMembershipOffer(organizationId);
+  }
+  return getTransactionalDatabase().transaction(async (transaction) => {
+    // Shared with manual replacement: serialize all changes to this court.
+    await transaction
+      .select({ id: courts.id })
+      .from(courts)
+      .where(eq(courts.id, court.id))
+      .for("update");
+    const current = await readCourtScheduleRows(transaction, court.id);
+    const version = courtScheduleVersion(
+      venue.timezone,
+      current.schedules.map((schedule) => schedule.id),
+      current.blocks,
+    );
+    if (version !== input.expectedVersion) {
+      throw new OperatorServiceError(
+        "INVALID_SCHEDULE",
+        "Court hours changed after this proposal. Ask Duna to refresh the proposal before approving.",
+      );
+    }
+    const proposed = applyCourtScheduleChanges(current.blocks, input.changes);
+    const scheduleId = current.schedules[0]?.id ?? crypto.randomUUID();
+    if (!current.schedules.length) {
+      await transaction.insert(schedules).values({
+        id: scheduleId,
+        organizationId,
+        name: `${court.name} availability`,
+        timezone: venue.timezone,
+        resourceType: "court",
+        resourceId: court.id,
+      });
+    }
+    await transaction
+      .delete(scheduleBlocks)
+      .where(eq(scheduleBlocks.scheduleId, scheduleId));
+    await transaction
+      .insert(scheduleBlocks)
+      .values(proposed.map((block) => ({ ...block, scheduleId })));
+    await transaction.insert(auditLog).values({
+      organizationId,
+      actorPersonId: input.actor.personId,
+      actorType: "person",
+      action: "court.schedule_changed",
+      entityType: "schedule",
+      entityId: scheduleId,
+      beforeHash: stableHash(current.blocks),
+      afterHash: stableHash(proposed),
+      reason: input.reason,
+      traceId: input.requestId,
+      ipAddress: input.ipAddress,
+      createdAt: input.now,
+    });
+    return { id: scheduleId, entity: "schedule", status: "active" };
+  });
+}
+
 export async function replaceCourtSchedule(input: {
   readonly actor: ApiActor;
   readonly courtId: string;
-  readonly blocks: readonly {
-    readonly weekday: number;
-    readonly startsAtMinute: number;
-    readonly endsAtMinute: number;
-    readonly mode: ScheduleMode;
-  }[];
+  readonly blocks: readonly CourtScheduleWindow[];
   readonly confirmed: boolean;
   readonly requestId: string;
   readonly ipAddress?: string;
@@ -5447,51 +5605,57 @@ export async function replaceCourtSchedule(input: {
   if (input.blocks.some((block) => block.mode === "members-only")) {
     await requireActiveMembershipOffer(organizationId);
   }
-  const database = getDatabase();
-  let schedule = await database.query.schedules.findFirst({
-    where: and(
-      eq(schedules.resourceType, "court"),
-      eq(schedules.resourceId, court.id),
-    ),
-  });
-  if (!schedule) {
-    const id = crypto.randomUUID();
-    await database.insert(schedules).values({
-      id,
-      organizationId,
-      name: `${court.name} availability`,
-      timezone: venue.timezone,
-      resourceType: "court",
-      resourceId: court.id,
+  return getTransactionalDatabase().transaction(async (database) => {
+    await database
+      .select({ id: courts.id })
+      .from(courts)
+      .where(eq(courts.id, court.id))
+      .for("update");
+    let schedule = await database.query.schedules.findFirst({
+      where: and(
+        eq(schedules.resourceType, "court"),
+        eq(schedules.resourceId, court.id),
+      ),
     });
-    schedule = await database.query.schedules.findFirst({
-      where: eq(schedules.id, id),
-    });
-  }
-  if (!schedule) {
-    throw new OperatorServiceError(
-      "INVALID_SCHEDULE",
-      "The court schedule could not be initialized.",
-    );
-  }
-  const previous = await database
-    .select()
-    .from(scheduleBlocks)
-    .where(eq(scheduleBlocks.scheduleId, schedule.id));
-  await database.batch([
-    database
+    if (!schedule) {
+      const id = crypto.randomUUID();
+      await database.insert(schedules).values({
+        id,
+        organizationId,
+        name: `${court.name} availability`,
+        timezone: venue.timezone,
+        resourceType: "court",
+        resourceId: court.id,
+      });
+      schedule = await database.query.schedules.findFirst({
+        where: eq(schedules.id, id),
+      });
+    }
+    if (!schedule) {
+      throw new OperatorServiceError(
+        "INVALID_SCHEDULE",
+        "The court schedule could not be initialized.",
+      );
+    }
+    const previous = await database
+      .select()
+      .from(scheduleBlocks)
+      .where(eq(scheduleBlocks.scheduleId, schedule.id));
+    await database
       .delete(scheduleBlocks)
-      .where(eq(scheduleBlocks.scheduleId, schedule.id)),
-    database.insert(scheduleBlocks).values(
+      .where(eq(scheduleBlocks.scheduleId, schedule.id));
+    await database.insert(scheduleBlocks).values(
       input.blocks.map((block) => ({
         scheduleId: schedule.id,
         weekday: block.weekday,
         startsAtMinute: block.startsAtMinute,
         endsAtMinute: block.endsAtMinute,
         mode: block.mode,
+        effectiveFrom: block.effectiveFrom,
+        effectiveTo: block.effectiveTo,
       })),
-    ),
-    database.insert(auditLog).values({
+    );
+    await database.insert(auditLog).values({
       organizationId,
       actorPersonId: input.actor.personId,
       actorType: "person",
@@ -5504,9 +5668,9 @@ export async function replaceCourtSchedule(input: {
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
-    }),
-  ]);
-  return { id: schedule.id, entity: "schedule", status: "active" };
+    });
+    return { id: schedule.id, entity: "schedule", status: "active" };
+  });
 }
 
 export async function blockCourtTime(input: {

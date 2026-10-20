@@ -2768,6 +2768,8 @@ export async function replaceCourtScheduleAction(
       weekday: number;
       startsAtMinute: number;
       endsAtMinute: number;
+      effectiveFrom?: string;
+      effectiveTo?: string;
       mode:
         | "open"
         | "rentals-only"
