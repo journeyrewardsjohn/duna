@@ -142,7 +142,7 @@
 
 .heroMedia > img {
   object-fit: cover;
-  object-position: center 54%;
+  object-position: center 25%;
 }
 
 .heroLive {
@@ -1421,6 +1421,11 @@
     min-height: 240px;
   }
 
+  .heroLive {
+    top: auto;
+    bottom: 20px;
+  }
+
   .chapterLayout,
   .nowGrid,
   .intelligenceGrid,
@@ -1513,11 +1518,12 @@
   }
 
   .heroMedia > img {
-    object-position: 62% center;
+    object-position: 45% center;
   }
 
   .heroLive {
-    top: 14px;
+    top: auto;
+    bottom: 108px;
     left: 14px;
     max-width: calc(100% - 28px);
     overflow: hidden;

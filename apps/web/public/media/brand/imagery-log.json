@@ -8,7 +8,8 @@
     "Higgsfield Seedance 2.0",
     "Higgsfield Soul Location",
     "Higgsfield GPT Image 2",
-    "Higgsfield Recraft V4.1"
+    "Higgsfield Recraft V4.1",
+    "Higgsfield GPT Image 2.5"
   ],
   "policy": {
     "identity": "No real player likenesses or identifiable public figures.",
@@ -337,6 +338,21 @@
         "/media/brand/duna-result-return-v1.webp",
         "apps/player/assets/duna-result-return-v1.png"
       ]
+    },
+    {
+      "name": "duna-home-tournament-hero-v1",
+      "createdAt": "2026-10-20",
+      "jobId": "9fc89550-8a43-4e16-aa84-d1a21b43b33d",
+      "model": "Higgsfield GPT Image 2.5",
+      "intent": "User-approved homepage tournament hero with complete hands and clear athletic action.",
+      "promptIntent": "Wide sunny Southern California doubles rally with anonymous adult players, complete natural hands and anatomy, palms, white tents and softly focused spectator stands. Keep the ball and featured hands clear of the net and frame edges; omit logos and website graphics.",
+      "sourceReferences": ["/media/duna-hero-poster.webp"],
+      "permissions": "User supplied the existing Duna hero as a visual reference and approved the generated replacement for the main duna.coach homepage. No specific real athlete likeness was requested; synthetic atmosphere is not evidence of an actual event, venue or participant.",
+      "outputNames": ["/media/brand/duna-home-tournament-hero-v1.webp"],
+      "dimensions": {
+        "width": 3840,
+        "height": 1648
+      }
     }
   ],
   "motionAssets": [

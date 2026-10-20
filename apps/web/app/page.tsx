@@ -33,7 +33,7 @@ import {
 import styles from "./homepage.module.css";
 
 const homeMedia = {
-  hero: "/media/duna-hero-poster.webp",
+  hero: "/media/brand/duna-home-tournament-hero-v1.webp",
   rally: "/media/brand/duna-home-rally-v3.webp",
   operator: "/media/brand/duna-club-hero-v1.webp",
 } as const;
