@@ -157,7 +157,14 @@ export default async function PlayerDashboard() {
         ]}
       />
 
-      <nav aria-label="Player quick actions" className={styles.quickActions}>
+      <nav aria-label="Dashboard sections" className={styles.homeTabs}>
+        <a href="#today"><CalendarDays aria-hidden size={16} /> Today</a>
+        <a href="#play"><Search aria-hidden size={16} /> Play</a>
+        <a href="#progress"><ArrowRight aria-hidden size={16} /> Progress</a>
+        <a href="#explore"><Sparkles aria-hidden size={16} /> Explore</a>
+      </nav>
+
+      <nav id="play" aria-label="Player quick actions" className={styles.quickActions}>
         {quickActions.map(({ detail, href, icon: Icon, label }) => (
           <Link className={styles.quickAction} href={href} key={href}>
             <span className={styles.quickActionIcon}>
@@ -191,7 +198,7 @@ export default async function PlayerDashboard() {
         </Link>
       )}
 
-      <section className={styles.todayGrid} aria-label="Your day">
+      <section id="today" className={styles.todayGrid} aria-label="Your day">
         <Link className={styles.nextUp} href={nextHref}>
           <div className={styles.nextUpMedia}>
             <img
@@ -282,7 +289,7 @@ export default async function PlayerDashboard() {
           </div>
         </Link>
 
-        <article className={styles.ratingCard}>
+        <article id="progress" className={styles.ratingCard}>
           <div className={styles.cardHeading}>
             <div>
               <span className={styles.eyebrow}>Your performance</span>
@@ -323,7 +330,7 @@ export default async function PlayerDashboard() {
         </article>
       </section>
 
-      <details className={styles.more}>
+      <details id="explore" className={styles.more}>
         <summary>
           Explore your game <ChevronRight aria-hidden size={18} />
         </summary>
