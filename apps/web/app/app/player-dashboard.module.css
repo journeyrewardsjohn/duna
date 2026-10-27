@@ -984,3 +984,58 @@
     flex-wrap: wrap;
   }
 }
+
+
+/* Compact, labeled section navigation for the player home. */
+.homeTabs {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 0.35rem;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  width: 100%;
+}
+
+.homeTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.homeTabs > a {
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.65rem 0.65rem 0 0;
+  color: var(--text-2);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.875rem;
+  font-weight: 500;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 0.85rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.homeTabs > a:hover {
+  background: var(--surface-2);
+  border-bottom-color: var(--text-1);
+  color: var(--text-1);
+}
+
+.homeTabs > a:focus-visible {
+  outline: 3px solid var(--signal-text);
+  outline-offset: -3px;
+}
+
+.home :is(#today, #play, #progress, #explore) {
+  scroll-margin-top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .homeTabs > a {
+    transition: none;
+  }
+}
