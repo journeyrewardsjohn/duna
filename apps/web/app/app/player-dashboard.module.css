@@ -985,7 +985,6 @@
   }
 }
 
-
 /* Compact, labeled section navigation for the player home. */
 .homeTabs {
   align-items: center;
@@ -1016,7 +1015,10 @@
   padding: 0 0.85rem;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
 }
 
 .homeTabs > a:hover {

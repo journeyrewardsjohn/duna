@@ -20,16 +20,18 @@ function OpenDunaLink({ href }: { readonly href: string }) {
 
 export function WebAuthButton({
   configured,
+  compact = false,
 }: {
   readonly configured: boolean;
+  readonly compact?: boolean;
 }) {
   if (!configured) {
-    return <OpenDunaLink href="/app" />;
+    return compact ? null : <OpenDunaLink href="/app" />;
   }
-  return <ConfiguredWebAuthButton />;
+  return <ConfiguredWebAuthButton compact={compact} />;
 }
 
-function ConfiguredWebAuthButton() {
+function ConfiguredWebAuthButton({ compact }: { readonly compact: boolean }) {
   const { loading, signOut, user } = useAuth();
   if (loading) return null;
   const initials = user
@@ -40,7 +42,7 @@ function ConfiguredWebAuthButton() {
     <>
       {user ? (
         <>
-          <OpenDunaLink href="/app" />
+          {!compact && <OpenDunaLink href="/app" />}
           <details className="site-header-account">
             <summary aria-label="Open account menu">
               <span className="site-header__avatar">
@@ -80,7 +82,7 @@ function ConfiguredWebAuthButton() {
             </div>
           </details>
         </>
-      ) : (
+      ) : compact ? null : (
         <OpenDunaLink href="/sign-in" />
       )}
     </>

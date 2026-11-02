@@ -45,7 +45,9 @@ const iconByKey: Readonly<Record<string, LucideIcon>> = {
   "duna-pro-watch": Watch,
 };
 
-export function ClubFeaturesMenu() {
+export function ClubFeaturesMenu({
+  label = "For clubs + coaches",
+}: { readonly label?: string } = {}) {
   const menuRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export function ClubFeaturesMenu() {
   return (
     <details className="club-feature-menu" ref={menuRef}>
       <summary>
-        For clubs + coaches <ChevronDown aria-hidden size={14} />
+        {label} <ChevronDown aria-hidden size={14} />
       </summary>
       <div className="club-feature-menu__backdrop" />
       <div className="club-feature-menu__panel">

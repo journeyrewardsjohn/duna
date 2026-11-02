@@ -3,6 +3,15 @@
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
 and data truth always take precedence over visual novelty.
 
+## November 2 public website direction
+
+`docs/design/duna-public-audiences-20261102.md` supersedes earlier homepage
+composition and public navigation requirements. The homepage leads with Clubs;
+`/players` is the player landing page. Keep the audience toggle visible at every
+viewport, Duna's existing colors, layered product visuals, and plain-language
+features. Use finite purposeful motion, with static reduced-motion/data-saving
+fallbacks, to demonstrate capabilities alongside court photography.
+
 ## October 4 Player direction
 
 `docs/design/duna-player-focus-20261004.md` records the subsequent Player
@@ -148,22 +157,16 @@ When the documents appear to conflict, preserve these invariants:
 
 ## Homepage creative direction
 
-- The homepage opens on a nearly white editorial ground. Its signature is one
-  persistent, scroll-driven procedural sand world that moves through the Play,
-  Compete, and Operate value chapters; do not replace it with a card hero,
-  generic stock loop, or a collection of competing ambient effects.
-- The sand canvas is progressive enhancement. All copy, links, proof, and
-  chapter order remain complete when WebGL is unavailable, reduced motion is
-  requested, or data saving is enabled. In those states, render a composed
-  static sand frame instead of removing the atmosphere. Software-rendered
-  WebGL must also use the low-resolution static path so motion never blocks
-  navigation or theme controls on constrained devices.
-- After the opening world, return to crisp `--surface-1` sections with measured
-  editorial type and one purposeful plane break. Dark ground is reserved for
-  the live Apple Watch / match-control chapter.
-- Reference sites may inform pacing and spatial behavior, never assets,
-  geometry, shaders, copy, or brand motifs. Duna's motion subject is wind-shaped
-  sand, court lines, and the connected game.
+- `/` is the club landing page. `/players` is the player landing page.
+- Public navigation offers a persistent For Clubs / For Players selector with
+  route-based active state, and audience-specific desktop navigation.
+- Use a simple editorial hero, restrained existing imagery, clear feature
+  summaries, grouped access to the full platform, FAQs, and a relevant action.
+- Keep Duna's existing palette and public typography. All content and links
+  work without animation; do not restore the legacy ticker or sand world.
+- Club features and pricing remain at their existing `/run-your-club` URLs.
+- Reference sites may inform hierarchy and pacing; do not copy their assets,
+  copy, brand names, product claims, or customer proof.
 
 ## Imagery and generated media
 

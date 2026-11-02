@@ -1,0 +1,244 @@
+.scene {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--duna-web-sky-2);
+  color: var(--public-ink);
+  isolation: isolate;
+  margin-bottom: 22px;
+}
+.scene > div {
+  transition: translate 0.35s ease;
+}
+a:hover .scene > div,
+a:focus-visible .scene > div {
+  translate: 0 -4px;
+}
+.scene1,
+.scene5 {
+  background: var(--duna-web-cream);
+}
+.scene3 {
+  background: var(--public-soft);
+}
+.scene4 {
+  background: var(--duna-web-cream);
+}
+.court {
+  position: absolute;
+  left: 14%;
+  top: 22px;
+  width: 72%;
+  height: 145px;
+  border: 2px solid var(--duna-web-sky-ink);
+  border-radius: 2px;
+  transform: rotate(-12deg) skew(10deg);
+  opacity: 0.55;
+}
+.court i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 32%;
+  border-top: 1px solid var(--duna-web-sky-ink);
+}
+.court i:nth-child(2) {
+  top: 68%;
+}
+.court > span {
+  position: absolute;
+  left: 50%;
+  top: -8%;
+  bottom: -8%;
+  border-left: 2px solid var(--duna-web-sky-ink);
+}
+.floating,
+.event {
+  position: absolute;
+  bottom: 26px;
+  left: 7%;
+  width: 86%;
+  background: var(--public-ground);
+  border: 1px solid var(--public-line);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: var(--duna-web-shadow-card);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.floating > span,
+.event > span:nth-child(2) {
+  flex: 1;
+}
+.scene small {
+  display: block;
+  margin-top: 5px;
+  color: var(--public-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.photo {
+  object-fit: cover;
+}
+.date {
+  display: grid;
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--duna-web-sky-2);
+  border-radius: 6px;
+}
+.date big {
+  font-size: 22px;
+}
+.pass {
+  position: absolute;
+  inset: 27px 12% 38px;
+  padding: 20px;
+  border: 1px solid var(--duna-web-sky-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--public-ground);
+  box-shadow: var(--duna-web-shadow-card);
+  transform: rotate(-7deg);
+}
+.pass > span:first-child {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.pass strong {
+  font-size: 22px;
+  font-weight: 400;
+}
+.pass > span:last-child {
+  font-size: 12px;
+  color: var(--public-muted);
+}
+.pill {
+  position: absolute;
+  bottom: 24px;
+  right: 6%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--duna-web-navy);
+  color: var(--duna-web-on-navy);
+  border-radius: 24px;
+  padding: 12px 16px;
+  font-size: 12px;
+}
+.roster {
+  position: absolute;
+  top: 22px;
+  left: 12%;
+  right: 12%;
+  border: 1px solid var(--public-line);
+  border-radius: 10px;
+  background: var(--public-ground);
+  padding: 15px;
+  box-shadow: var(--duna-web-shadow-card);
+}
+.roster > span {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.roster > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 8px;
+  border-top: 1px solid var(--public-line);
+  font-size: 12px;
+}
+.roster img {
+  border-radius: 50%;
+}
+.roster > div > span {
+  flex: 1;
+}
+.roster small {
+  margin-top: 2px;
+}
+.message {
+  position: absolute;
+  inset: 25px 16% 40px 9%;
+  border: 1px solid var(--public-line);
+  border-radius: 12px 12px 12px 2px;
+  background: var(--public-ground);
+  padding: 18px;
+  box-shadow: var(--duna-web-shadow-card);
+}
+.message > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--public-muted);
+}
+.message strong {
+  display: block;
+  margin-top: 14px;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.15;
+  white-space: pre-line;
+}
+.messageReply {
+  position: absolute;
+  bottom: 22px;
+  right: 7%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--duna-web-sky);
+  color: var(--public-ink);
+  font-size: 12px;
+  border-radius: 10px 10px 2px 10px;
+}
+.play {
+  position: absolute;
+  top: 60px;
+  left: calc(50% - 24px);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--public-ground);
+}
+.videoNote {
+  position: absolute;
+  bottom: 18px;
+  left: 7%;
+  right: 7%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--public-ground);
+  font-size: 12px;
+  box-shadow: var(--duna-web-shadow-card);
+}
+.videoNote span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene > div {
+    transition: none;
+  }
+  a:hover .scene > div,
+  a:focus-visible .scene > div {
+    translate: none;
+  }
+}

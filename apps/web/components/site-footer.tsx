@@ -12,19 +12,21 @@ export function SiteFooter() {
         </div>
         <div className="site-footer__links">
           <div>
-            <strong>Play</strong>
+            <strong>For Players</strong>
+            <Link href="/players">Player overview</Link>
             <Link href="/discover">Discover</Link>
-            <Link href="/events">Events</Link>
+            <Link href="/discover">Events</Link>
             <Link href="/app/matches">Record a match</Link>
           </div>
           <div>
             <strong>Watch</strong>
             <Link href="/pro">Pro tour</Link>
-            <Link href="/live">Live</Link>
+            <Link href="/pro#latest-match-updates">Live</Link>
             <Link href="/rankings">World rankings</Link>
           </div>
           <div>
-            <strong>Run</strong>
+            <strong>For Clubs</strong>
+            <Link href="/">Club overview</Link>
             <a href={DUNA_HQ_URL}>Duna HQ</a>
             <Link href="/run-your-club">For clubs + coaches</Link>
             <Link href="/run-your-club/features">All features</Link>

@@ -2682,3 +2682,12 @@
     border: 2px solid CanvasText;
   }
 }
+
+/* Keep the secondary navigation below the shared audience header. */
+.page .productNav,
+.page[data-scrolled="true"] .productNav {
+  top: calc(var(--public-nav-height) + 12px);
+}
+.page section[id] {
+  scroll-margin-top: calc(var(--public-nav-height) + 84px);
+}

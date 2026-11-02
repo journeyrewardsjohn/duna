@@ -3219,3 +3219,65 @@
     transition: none;
   }
 }
+
+/* Keep the secondary navigation below the shared audience header. */
+.page .productNav,
+.page[data-scrolled="true"] .productNav {
+  top: calc(var(--public-nav-height) + 12px);
+}
+.page section[id] {
+  scroll-margin-top: calc(var(--public-nav-height) + 84px);
+}
+
+/* Keep feature explanations and previews in their own columns. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 40px;
+  min-height: 0;
+  padding: 112px max(24px, calc((100vw - 1216px) / 2)) 48px;
+}
+.heroCopy {
+  grid-column: 1;
+  grid-row: 1;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.heroCopy h1 {
+  max-width: 20ch;
+  font-size: clamp(34px, 4vw, 56px);
+}
+.heroProduct {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  transform: none;
+}
+.outcomeShelf {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  transform: none;
+}
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+    padding: 96px 20px 32px;
+  }
+  .heroProduct {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .outcomeShelf {
+    grid-row: 3;
+  }
+}

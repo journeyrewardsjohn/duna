@@ -16,6 +16,12 @@ import type {
   PublicWorldRankings,
   VenueSummary,
 } from "@duna/api";
+import {
+  clubHighlights,
+  playerHighlights,
+  clubFaqs,
+  playerFaqs,
+} from "./audience-pages";
 import { clubFeatures } from "./club-features";
 import { absolutePublicUrl } from "./pro-seo";
 
@@ -31,14 +37,31 @@ export const publicMarkdownHeaders = {
 export const staticPublicPages = [
   {
     path: "/",
-    title: "Duna",
+    title: "Duna for Clubs — Your club. All together.",
     description:
-      "The player network and operating system for beach volleyball: play, professional coverage, Sand Rating, and club operations.",
+      "Bookings, programs, payments, and people. Everything you need to run your volleyball club, in one place.",
     sections: [
-      "Find and join beach volleyball events, clinics, leagues, lessons, open play, and court time.",
-      "Follow professional events, players, teams, schedules, results, broadcasts, and tournament statistics.",
-      "Understand form through Duna Sand Rating and its published methodology.",
-      "Run a club or coaching business with Duna HQ.",
+      ...clubHighlights.map(
+        (item) =>
+          `${item.title}: ${item.description} Learn more: /run-your-club/features/${item.key}`,
+      ),
+      "Built for indoor, beach, and combined volleyball clubs, independent coaches, facilities, leagues, and event organizers.",
+      ...clubFaqs.map((item) => `${item.question} ${item.answer}`),
+      "Explore all features at /run-your-club/features and current pricing at /run-your-club#plans. Players start at /players.",
+    ],
+  },
+  {
+    path: "/players",
+    title: "Duna for Players — More play. More possibility.",
+    description:
+      "Find your next game, build your skills, and stay close to the sport. Your volleyball life, all in Duna.",
+    sections: [
+      ...playerHighlights.map(
+        (item) => `${item.title}: ${item.description} Explore: ${item.href}`,
+      ),
+      "Create an event at /create, explore Duna for Apple Watch at /apps/apple-watch, and manage private health and training load at /app/health.",
+      ...playerFaqs.map((item) => `${item.question} ${item.answer}`),
+      "Club operators start at /. Booking, registration, and account actions require sign-in.",
     ],
   },
   {
