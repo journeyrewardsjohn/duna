@@ -35,7 +35,8 @@ Motion is a finite, coordinated reveal when the hero enters view and when a
 visitor selects or replays a scene. It finishes within three seconds; there is
 no automatic carousel or background video download. Reduced motion and data
 saving retain complete static previews. The selectors work with keyboard arrows,
-Home, End, and touch. Content remains visible without JavaScript.
+Home, End, and touch. Content remains visible without JavaScript. The hero serves existing compressed
+WebPs directly; production-build mobile QA covers cold-cache image loading.
 
 ## Validation
 

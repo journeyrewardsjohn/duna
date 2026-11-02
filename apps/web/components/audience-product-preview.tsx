@@ -287,8 +287,11 @@ export function AudienceProductPreview({
       data-motion={motion ? "on" : "off"}
     >
       <div className={styles.stage}>
+        {/* Brand WebPs are already compressed. Direct loading avoids a runtime
+            image-transform dependency during responsive preview changes. */}
         <Image
           className={styles.backdrop}
+          unoptimized
           src={
             audience === "clubs"
               ? "/media/brand/duna-club-hero-v1.webp"

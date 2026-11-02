@@ -203,22 +203,31 @@ test("club feature explanations stay clear of product previews at every width", 
     await page.goto(`/run-your-club/features/${feature}`);
     for (const width of [390, 820, 973, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      const hero = page.locator("[data-feature-hero]");
-      const copy = await hero.locator('[class*="heroCopy"]').boundingBox();
-      const preview = await hero
-        .locator('[aria-label$="product preview"]')
-        .boundingBox();
-      const overlaps =
-        copy!.x < preview!.x + preview!.width &&
-        copy!.x + copy!.width > preview!.x &&
-        copy!.y < preview!.y + preview!.height &&
-        copy!.y + copy!.height > preview!.y;
-      expect(overlaps, `${feature} at ${width}px`).toBe(false);
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth - window.innerWidth,
-        ),
-      ).toBeLessThanOrEqual(2);
+      // Resize and font substitution can settle on different frames in CI.
+      // Measure both regions in one layout read, then require a clear layout.
+      await expect(async () => {
+        const layout = await page
+          .locator("[data-feature-hero]")
+          .evaluate((hero) => {
+            const copy = hero
+              .querySelector('[class*="heroCopy"]')!
+              .getBoundingClientRect();
+            const preview = hero
+              .querySelector('[aria-label$="product preview"]')!
+              .getBoundingClientRect();
+            return {
+              overlaps:
+                copy.x < preview.right &&
+                copy.right > preview.x &&
+                copy.y < preview.bottom &&
+                copy.bottom > preview.y,
+              overflow:
+                document.documentElement.scrollWidth - window.innerWidth,
+            };
+          });
+        expect(layout.overlaps, `${feature} at ${width}px`).toBe(false);
+        expect(layout.overflow).toBeLessThanOrEqual(2);
+      }).toPass({ timeout: 5000 });
     }
   }
 });
