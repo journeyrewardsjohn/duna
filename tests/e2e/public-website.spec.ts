@@ -187,3 +187,38 @@ test("club feature menu, FAQ, and mobile audience links work with the keyboard",
   await expect(page).toHaveURL(/\/players$/);
   await expect(sheet).toBeHidden();
 });
+
+test("club feature explanations stay clear of product previews at every width", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const feature of [
+    "venues",
+    "events",
+    "products/plans",
+    "people",
+    "messaging",
+    "coach-video",
+  ]) {
+    await page.goto(`/run-your-club/features/${feature}`);
+    for (const width of [390, 820, 973, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const hero = page.locator("[data-feature-hero]");
+      const copy = await hero.locator('[class*="heroCopy"]').boundingBox();
+      const preview = await hero
+        .locator('[aria-label$="product preview"]')
+        .boundingBox();
+      const overlaps =
+        copy!.x < preview!.x + preview!.width &&
+        copy!.x + copy!.width > preview!.x &&
+        copy!.y < preview!.y + preview!.height &&
+        copy!.y + copy!.height > preview!.y;
+      expect(overlaps, `${feature} at ${width}px`).toBe(false);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      ).toBeLessThanOrEqual(2);
+    }
+  }
+});
