@@ -73,19 +73,30 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) violations.push(`${file} is missing`);
 }
 
-const homepageSource = readFileSync(
-  join(root, "apps/web/app/page.tsx"),
-  "utf8",
-);
-for (const contract of [
-  "The sand keeps score now.",
-  "styles.heroMedia",
-  "styles.heroProof",
-  "styles.ticker",
-  'data-zone="live"',
+for (const [file, contracts] of [
+  ["apps/web/app/page.tsx", ['audience="clubs"', 'canonical: "/"']],
+  [
+    "apps/web/app/players/page.tsx",
+    ['audience="players"', 'canonical: "/players"'],
+  ],
+  [
+    "apps/web/components/site-audience-header.tsx",
+    ["For Clubs", "For Players", 'aria-label="Choose your Duna experience"'],
+  ],
+  [
+    "apps/web/components/audience-home.tsx",
+    [
+      'data-zone="editorial"',
+      'id="features"',
+      "clubFeatureGroups",
+      "SiteFooter",
+    ],
+  ],
 ] as const) {
-  if (!homepageSource.includes(contract)) {
-    violations.push(`apps/web/app/page.tsx must preserve ${contract}`);
+  const source = readFileSync(join(root, file), "utf8");
+  for (const contract of contracts) {
+    if (!source.includes(contract))
+      violations.push(`${file} must preserve ${contract}`);
   }
 }
 

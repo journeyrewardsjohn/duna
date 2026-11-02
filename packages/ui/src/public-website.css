@@ -52,3 +52,15 @@
     --public-nav-height: 64px;
   }
 }
+
+/* Audience navigation includes a persistent 48px selector above the main row. */
+:root:has(.site-header--audience) {
+  --public-nav-height: 124px;
+  --public-nav-row-height: 76px;
+}
+@media (max-width: 720px) {
+  :root:has(.site-header--audience) {
+    --public-nav-height: 112px;
+    --public-nav-row-height: 64px;
+  }
+}

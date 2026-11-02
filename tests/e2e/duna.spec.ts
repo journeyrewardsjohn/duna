@@ -39,40 +39,21 @@ async function getBox(locator: Locator) {
 test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Your club.All together.",
+  );
+  await page
+    .getByRole("navigation", { name: "Choose your Duna experience" })
+    .getByRole("link", { name: "For Players" })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "The sand keeps score now." }),
+    page.getByRole("link", { name: "Find a game", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /Find a game/ })).toBeVisible();
   await expect(
     page.getByRole("img", {
-      name: "Beach volleyball players competing on a packed center court",
+      name: "Beach volleyball on a tournament center court",
     }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Duna HQ" }).first(),
-  ).toHaveAttribute("href", /.+/);
-  await expect(
-    page.getByRole("heading", { name: "What happens next?" }),
-  ).toBeVisible();
-
-  const predictionCards = page.locator(
-    ".homepage-predictions .prediction-discovery-card",
-  );
-  if ((await predictionCards.count()) > 0) {
-    const overflowingCards = await predictionCards.evaluateAll((cards) =>
-      cards.flatMap((card, index) => {
-        const overflowingChoice = Array.from(
-          card.querySelectorAll(".prediction-discovery-card__sides > span"),
-        ).some((choice) => choice.scrollWidth > choice.clientWidth + 1);
-
-        return card.scrollWidth > card.clientWidth + 1 || overflowingChoice
-          ? [index]
-          : [];
-      }),
-    );
-
-    expect(overflowingCards).toEqual([]);
-  }
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/app/discover");
@@ -156,11 +137,13 @@ test("wide, short homepages keep the hero clear of fixed navigation", async ({
 
     const header = page.locator(".site-header");
     const heading = page.getByRole("heading", {
-      name: "The sand keeps score now.",
+      name: "Your club. All together.",
     });
-    const primaryAction = page.getByRole("link", { name: /Find a game/ });
+    const primaryAction = page
+      .getByRole("link", { name: "Get started", exact: true })
+      .last();
     const secondaryAction = page.getByRole("link", {
-      name: "Claim your rating",
+      name: "Explore the features",
     });
 
     await expect(heading).toBeVisible();
@@ -421,23 +404,14 @@ test("public pickup pages keep their story and booking rail contained", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("homepage ticker respects the reduced-motion preference", async ({
-  page,
-}) => {
+test("landing pages remain usable with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
-
-  const ticker = page.locator('[role="status"][aria-label*="CONNECTED"]');
-  await expect(ticker).toBeVisible();
-  await expect
-    .poll(() =>
-      ticker.locator("div").evaluate((element) => {
-        return getComputedStyle(element).animationPlayState;
-      }),
-    )
-    .toBe("paused");
-
-  await expectNoHorizontalOverflow(page);
+  for (const path of ["/", "/players"]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.locator("#features")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  }
 });
 
 test("public coach profiles stay bookable and responsive", async ({ page }) => {

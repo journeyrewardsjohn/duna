@@ -59,6 +59,17 @@ describe("public Markdown representations", () => {
     );
   });
 
+  it("separates Clubs and Players in canonical Markdown and the public index", () => {
+    const clubs = renderStaticPageMarkdown("/");
+    const players = renderStaticPageMarkdown("/players");
+    expect(clubs).toContain("Duna for Clubs");
+    expect(clubs).toContain("Courts & scheduling");
+    expect(players).toContain("Duna for Players");
+    expect(players).toContain("Find your next game");
+    expect(players).toContain("https://duna.coach/players");
+    expect(markdownPathForCanonical("/players")).toBe("/players.md");
+  });
+
   it("preserves event geography, timezone, pricing, and action links", () => {
     const markdown = renderConsumerEventMarkdown(event);
     expect(markdown).toContain('entity_type: "sports_event"');
