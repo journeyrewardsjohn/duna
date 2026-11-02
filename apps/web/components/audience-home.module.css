@@ -40,10 +40,10 @@
 }
 .hero {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 0.9fr 1.1fr;
   align-items: center;
   gap: 64px;
-  padding-block: 56px 64px;
+  padding-block: 48px 56px;
 }
 .heroCopy > p {
   max-width: 440px;
@@ -83,8 +83,7 @@
 .primary:hover {
   background: var(--duna-web-navy-2);
 }
-.secondary:hover,
-.feature:hover {
+.secondary:hover {
   background: var(--public-soft);
 }
 .heroNote {
@@ -94,40 +93,8 @@
   line-height: 1.5;
   color: var(--public-muted);
 }
-.heroVisual {
-  overflow: hidden;
-  border-radius: 16px;
-  background: var(--duna-web-cream);
-}
-.heroImage {
-  height: 340px;
-  position: relative;
-}
-.heroImage img,
 .bridgeImage img {
   object-fit: cover;
-}
-.heroImage::after {
-  content: "";
-  position: absolute;
-  inset: 70% 0 0;
-  background: linear-gradient(transparent, var(--duna-web-cream));
-  pointer-events: none;
-}
-.visualCaption {
-  position: relative;
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  color: var(--public-ink);
-  font-size: 16px;
-}
-.visualCaption span:last-child {
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
 }
 .featureSection {
   border-top: 1px solid var(--public-line);
@@ -152,20 +119,21 @@
 .features {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0 32px;
+  gap: 32px 24px;
 }
 .feature {
   display: flex;
   flex-direction: column;
   align-items: start;
-  border-top: 1px solid var(--public-line);
-  padding: 26px 8px 28px;
+  padding: 0 0 24px;
   text-decoration: none;
   color: var(--public-ink);
 }
-.feature > svg {
-  color: var(--public-muted);
+.previewLabel {
+  display: block;
   margin-bottom: 18px;
+  color: var(--public-muted);
+  font-size: 12px;
 }
 .feature h3 {
   margin-bottom: 12px;
@@ -336,9 +304,6 @@
   .hero {
     gap: 32px;
   }
-  .heroImage {
-    height: 300px;
-  }
   .visualCaption {
     flex-direction: column;
     align-items: start;
@@ -367,9 +332,6 @@
   }
   .heroCopy > p {
     font-size: 18px;
-  }
-  .heroImage {
-    height: 240px;
   }
   .visualCaption {
     flex-direction: row;
@@ -424,14 +386,8 @@
     grid-template-columns: 1fr;
   }
   .feature {
-    padding: 24px 0;
-    display: grid;
-    grid-template-columns: 28px 1fr;
-    column-gap: 16px;
-  }
-  .feature > svg {
-    grid-row: 1 / 4;
-    margin: 2px 0 0;
+    padding: 0 0 12px;
+    display: flex;
   }
   .feature h3 {
     font-size: 21px;

@@ -222,3 +222,106 @@ test("club feature explanations stay clear of product previews at every width", 
     }
   }
 });
+
+test("product previews support keyboard selection and reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const path of ["/", "/players"]) {
+    await page.goto(path);
+    const tabs = page.getByRole("tablist", {
+      name: /Explore (club|player) capabilities/,
+    });
+    await tabs.getByRole("tab").first().focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.getByRole("tab").nth(1)).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(tabs.getByRole("tab").nth(1)).toBeFocused();
+    await expect(page.getByRole("tabpanel")).toContainText(
+      path === "/" ? "Memberships" : "Your match history",
+    );
+    await page.keyboard.press("End");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice review");
+    await expect(
+      page.getByRole("button", { name: "Replay product preview" }),
+    ).toHaveCount(0);
+    expect(
+      await page
+        .getByRole("tabpanel")
+        .evaluate((panel) => panel.getAnimations({ subtree: true }).length),
+    ).toBe(0);
+    await page.keyboard.press("Home");
+    await expect(page.getByRole("tabpanel")).toContainText(
+      path === "/" ? "Club calendar" : "Your next session",
+    );
+    for (const width of [360, 390, 820, 973, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const control of await tabs.getByRole("tab").all()) {
+        const bounds = await control.boundingBox();
+        expect(bounds!.height).toBeGreaterThanOrEqual(48);
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - innerWidth,
+        ),
+      ).toBeLessThanOrEqual(2);
+    }
+  }
+});
+
+test("product motion is finite, replayable, and disabled for data saving", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const panel = page.getByRole("tabpanel");
+  await panel.scrollIntoViewIfNeeded();
+  const replay = page.getByRole("button", { name: "Replay product preview" });
+  await expect(replay).toBeVisible();
+  await replay.click();
+  const timings = await panel.evaluate((element) =>
+    element
+      .getAnimations({ subtree: true })
+      .map((animation) => animation.effect!.getComputedTiming()),
+  );
+  expect(timings.length).toBeGreaterThan(0);
+  for (const timing of timings) {
+    expect(timing.iterations).toBe(1);
+    expect(timing.endTime).toBeLessThanOrEqual(3000);
+  }
+  await expect
+    .poll(() =>
+      panel.evaluate(
+        (element) =>
+          element
+            .getAnimations({ subtree: true })
+            .filter((animation) => animation.playState === "running").length,
+      ),
+    )
+    .toBe(0);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: {
+        saveData: true,
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    }),
+  );
+  await page.reload();
+  await page.getByRole("tabpanel").scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-motion="off"]')).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Replay product preview" }),
+  ).toHaveCount(0);
+  expect(
+    await page
+      .getByRole("tabpanel")
+      .evaluate((element) => element.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+});

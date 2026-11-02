@@ -8,7 +8,9 @@ and data truth always take precedence over visual novelty.
 `docs/design/duna-public-audiences-20261102.md` supersedes earlier homepage
 composition and public navigation requirements. The homepage leads with Clubs;
 `/players` is the player landing page. Keep the audience toggle visible at every
-viewport, Duna's existing colors, compact imagery, and plain-language features.
+viewport, Duna's existing colors, layered product visuals, and plain-language
+features. Use finite purposeful motion, with static reduced-motion/data-saving
+fallbacks, to demonstrate capabilities alongside court photography.
 
 ## October 4 Player direction
 

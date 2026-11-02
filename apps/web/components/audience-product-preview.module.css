@@ -1,0 +1,512 @@
+.productStory {
+  min-width: 0;
+}
+.stage {
+  position: relative;
+  height: 540px;
+  isolation: isolate;
+  border-radius: 24px;
+  background: var(--duna-web-sky-2);
+}
+.backdrop {
+  object-fit: cover;
+  border-radius: inherit;
+  object-position: center 40%;
+}
+.stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--duna-web-navy) 20%, transparent),
+    transparent 40%,
+    color-mix(in srgb, var(--duna-web-sky) 90%, transparent)
+  );
+}
+.brandStamp {
+  position: absolute;
+  left: 28px;
+  top: 24px;
+  z-index: 1;
+  color: var(--public-ink);
+  background: var(--public-ground);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -1.5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brandStamp > span {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  border-left: 1px solid currentColor;
+  padding-left: 12px;
+}
+.composition {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.productPanel {
+  position: absolute;
+  top: 132px;
+  left: 5%;
+  width: 84%;
+  background: var(--public-ground);
+  border: 1px solid var(--public-line);
+  border-radius: 14px;
+  box-shadow: var(--duna-web-shadow-card);
+  overflow: hidden;
+  transform: rotate(-3deg);
+}
+.appBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--public-line);
+}
+.appBar > span:first-child {
+  font-size: 23px;
+  letter-spacing: -1px;
+  color: var(--public-ink);
+}
+.appBar small {
+  font-size: 12px;
+  letter-spacing: 1px;
+  margin-left: 6px;
+}
+.appBar > span:last-child {
+  font-size: 12px;
+  color: var(--public-muted);
+}
+.panelHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+  font-size: 17px;
+  color: var(--public-ink);
+}
+.calendarLabels {
+  display: grid;
+  grid-template-columns: 54px 1fr 1fr;
+  margin: 0 18px;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--public-muted);
+  padding-bottom: 10px;
+}
+.calendarLabels span:first-child {
+  font-size: 12px;
+}
+.calendarGrid {
+  display: grid;
+  grid-template-columns: 54px 1fr 1fr;
+  gap: 8px;
+  padding: 0 18px;
+  height: 148px;
+  background: repeating-linear-gradient(
+    transparent 0 47px,
+    var(--public-line) 47px 48px
+  );
+}
+.times {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  color: var(--public-muted);
+  font-size: 12px;
+}
+.courtColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.session,
+.sessionSand,
+.newSession {
+  padding: 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--duna-web-sky-2);
+  border-left: 2px solid var(--duna-web-sky-ink);
+  color: var(--public-ink);
+  font-size: 12px;
+}
+.sessionSand {
+  background: var(--duna-web-cream);
+  border-color: var(--public-muted);
+}
+.newSession {
+  background: var(--duna-web-navy);
+  color: var(--duna-web-on-navy);
+  position: relative;
+  border: 0;
+}
+.newSession > svg {
+  position: absolute;
+  right: 8px;
+  top: 9px;
+}
+.newSession > span {
+  padding-right: 13px;
+}
+.courtColumn small {
+  font-size: 12px;
+}
+.panelFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--public-line);
+  font-size: 12px;
+  color: var(--public-muted);
+}
+.avatarStack {
+  display: flex;
+  padding-left: 4px;
+}
+.avatarStack i {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  margin-left: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--public-ground);
+  background: var(--duna-web-sky);
+  color: var(--public-ink);
+  font-size: 12px;
+  font-style: normal;
+}
+.notification {
+  position: absolute;
+  top: 75px;
+  right: -12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--public-ground);
+  border: 1px solid var(--public-line);
+  border-radius: 12px;
+  box-shadow: var(--duna-web-shadow-card);
+  z-index: 2;
+  transform: rotate(3deg);
+}
+.notificationIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--duna-web-sky-2);
+  color: var(--public-ink);
+}
+.notification strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--public-ink);
+}
+.notification div > span {
+  display: block;
+  font-size: 12px;
+  color: var(--public-muted);
+  margin-top: 5px;
+}
+.notificationCheck {
+  color: var(--public-ink);
+  margin-left: 12px;
+}
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 22px;
+}
+.tabs {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--public-line);
+  border-radius: 40px;
+  background: var(--public-soft);
+}
+.tabs button,
+.replay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 48px;
+  min-width: 48px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--public-muted);
+  background: transparent;
+  border-radius: 30px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.tabs button[aria-selected="true"] {
+  background: var(--public-ground);
+  color: var(--public-ink);
+  box-shadow: var(--duna-web-shadow-card);
+}
+.replay {
+  border: 1px solid var(--public-line);
+  padding: 10px;
+}
+.tabs button:focus-visible,
+.replay:focus-visible,
+.composition:focus-visible {
+  outline: 2px solid var(--public-ink);
+  outline-offset: 4px;
+}
+.sceneCaption {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 52px;
+}
+.sceneCaption strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+.sceneCaption > span {
+  color: var(--public-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.memberPass {
+  background: var(--duna-web-sky-2);
+  color: var(--public-ink);
+  border: 1px solid var(--duna-web-sky-border);
+  border-radius: 10px;
+  margin: 0 18px 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.memberPass > span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+.memberPass strong {
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.12;
+  white-space: pre-line;
+}
+.memberRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  font-size: 12px;
+  color: var(--public-ink);
+  border-top: 1px solid var(--public-line);
+}
+.memberRow small {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--public-muted);
+}
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.videoStill {
+  position: relative;
+  height: 166px;
+  margin: 0 18px;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.videoStill img {
+  object-fit: cover;
+}
+.playGlyph {
+  position: absolute;
+  top: calc(50% - 23px);
+  left: calc(50% - 23px);
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  background: var(--public-ground);
+  color: var(--public-ink);
+  border-radius: 50%;
+}
+.clipLabel {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--public-ground);
+  color: var(--public-ink);
+  font-size: 12px;
+}
+.timeline {
+  display: flex;
+  gap: 3px;
+  position: relative;
+  margin: 12px 18px;
+  height: 24px;
+}
+.timeline > span {
+  flex: 1;
+  background: var(--duna-web-sky);
+  border-radius: 3px;
+}
+.timeline > span:nth-child(2n) {
+  background: var(--duna-web-sky-2);
+}
+.timeline i {
+  position: absolute;
+  left: 64%;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--public-ink);
+}
+[data-motion="on"] .productPanel {
+  animation: panel-arrive 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+[data-motion="on"] .notification {
+  animation: notice-arrive 0.9s 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+[data-motion="on"] .newSession {
+  animation: booking-arrive 0.7s 0.35s both;
+}
+[data-motion="on"] .timeline i {
+  animation: review-progress 2.6s ease-out both;
+}
+@keyframes panel-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(28px) rotate(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-3deg);
+  }
+}
+@keyframes notice-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(20px) rotate(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(3deg);
+  }
+}
+@keyframes booking-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes review-progress {
+  from {
+    transform: translateX(-120px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@media (max-width: 1050px) {
+  .stage {
+    height: 540px;
+  }
+  .productPanel {
+    width: 91%;
+    left: 2%;
+  }
+  .notification {
+    right: -5px;
+    padding: 12px;
+    gap: 8px;
+  }
+  .notificationCheck {
+    margin-left: 0;
+  }
+  .tabs button {
+    padding-inline: 11px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 760px) {
+  .stage {
+    height: 540px;
+    margin-inline: 4px;
+  }
+  .productPanel {
+    width: 90%;
+    left: 3%;
+    top: 130px;
+  }
+  .notification {
+    top: 66px;
+    right: -4px;
+  }
+  .sceneCaption {
+    min-height: 48px;
+  }
+}
+@media (max-width: 380px) {
+  .calendarGrid,
+  .calendarLabels {
+    grid-template-columns: 36px 1fr 1fr;
+    gap: 5px;
+    margin-inline: 0;
+  }
+  .calendarLabels {
+    padding-inline: 18px;
+  }
+  .session,
+  .sessionSand,
+  .newSession {
+    padding: 8px;
+    font-size: 12px;
+  }
+  .tabs button {
+    padding-inline: 10px;
+  }
+  .tabs button svg {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .productStory *,
+  .productStory *::before,
+  .productStory *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

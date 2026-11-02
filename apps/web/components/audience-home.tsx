@@ -1,17 +1,8 @@
-import {
-  ArrowRight,
-  CalendarDays,
-  ChartNoAxesCombined,
-  MapPin,
-  Radio,
-  CreditCard,
-  MessageSquare,
-  Trophy,
-  Users,
-  Video,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { AudienceFeatureVisual } from "./audience-feature-visual";
+import { AudienceProductPreview } from "./audience-product-preview";
 import { SiteHeader } from "./site-header";
 import { SiteFooter } from "./site-footer";
 import { clubFeatureByKey, clubFeatureGroups } from "@/lib/club-features";
@@ -23,23 +14,6 @@ import {
 } from "@/lib/audience-pages";
 import { DUNA_HQ_SIGNUP_URL } from "@/lib/site-urls";
 import styles from "./audience-home.module.css";
-
-const clubIcons = [
-  CalendarDays,
-  Trophy,
-  CreditCard,
-  Users,
-  MessageSquare,
-  Video,
-];
-const playerIcons = [
-  MapPin,
-  CalendarDays,
-  ChartNoAxesCombined,
-  Trophy,
-  Video,
-  Radio,
-];
 
 export function AudienceHome({
   audience,
@@ -108,33 +82,7 @@ export function AudienceHome({
               : "Courts, community, and a game that goes with you."}
           </span>
         </div>
-        <div className={styles.heroVisual}>
-          <div className={styles.heroImage}>
-            <Image
-              alt={
-                clubs
-                  ? "Volleyball courts ready for a day of club play"
-                  : "Beach volleyball on a tournament center court"
-              }
-              fill
-              priority
-              sizes="(max-width: 760px) 100vw, 50vw"
-              src={
-                clubs
-                  ? "/media/brand/duna-club-hero-v1.webp"
-                  : "/media/brand/duna-home-tournament-hero-v1.webp"
-              }
-            />
-          </div>
-          <div className={styles.visualCaption}>
-            <span>
-              {clubs
-                ? "Less admin. More time on court."
-                : "Your next game starts here."}
-            </span>
-            <span>{clubs ? "Duna HQ" : "Duna Player"}</span>
-          </div>
-        </div>
+        <AudienceProductPreview audience={audience} />
       </section>
 
       <section
@@ -160,16 +108,18 @@ export function AudienceHome({
                 : "A place to play, a way to improve, and a community to share it with."}
             </p>
           </div>
+          <span className={styles.previewLabel}>
+            Illustrative product previews
+          </span>
           <div className={styles.features}>
             {highlights.map((item, index) => {
-              const Icon = (clubs ? clubIcons : playerIcons)[index]!;
               return (
                 <Link
                   className={styles.feature}
                   href={item.href}
                   key={item.title}
                 >
-                  <Icon aria-hidden size={24} strokeWidth={1.5} />
+                  <AudienceFeatureVisual index={index} players={!clubs} />
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                   <span>
