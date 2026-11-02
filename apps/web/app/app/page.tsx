@@ -158,13 +158,25 @@ export default async function PlayerDashboard() {
       />
 
       <nav aria-label="Dashboard sections" className={styles.homeTabs}>
-        <a href="#today"><CalendarDays aria-hidden size={16} /> Today</a>
-        <a href="#play"><Search aria-hidden size={16} /> Play</a>
-        <a href="#progress"><ArrowRight aria-hidden size={16} /> Progress</a>
-        <a href="#explore"><Sparkles aria-hidden size={16} /> Explore</a>
+        <a href="#today">
+          <CalendarDays aria-hidden size={16} /> Today
+        </a>
+        <a href="#play">
+          <Search aria-hidden size={16} /> Play
+        </a>
+        <a href="#progress">
+          <ArrowRight aria-hidden size={16} /> Progress
+        </a>
+        <a href="#explore">
+          <Sparkles aria-hidden size={16} /> Explore
+        </a>
       </nav>
 
-      <nav id="play" aria-label="Player quick actions" className={styles.quickActions}>
+      <nav
+        id="play"
+        aria-label="Player quick actions"
+        className={styles.quickActions}
+      >
         {quickActions.map(({ detail, href, icon: Icon, label }) => (
           <Link className={styles.quickAction} href={href} key={href}>
             <span className={styles.quickActionIcon}>
