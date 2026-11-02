@@ -5,7 +5,7 @@ import { DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { DUNA_HQ_URL } from "@/lib/site-urls";
+import { DUNA_HQ_URL, DUNA_HQ_SIGNUP_URL } from "@/lib/site-urls";
 import {
   playNavigation,
   watchNavigation,
@@ -79,10 +79,7 @@ export function SiteAudienceHeader({
           </a>
           <WebAuthButton configured={configured} compact={forClubs} />
           {forClubs ? (
-            <a
-              className="site-header__club-start"
-              href={`${DUNA_HQ_URL}/sign-up`}
-            >
+            <a className="site-header__club-start" href={DUNA_HQ_SIGNUP_URL}>
               Get started <ArrowUpRight aria-hidden size={16} />
             </a>
           ) : null}

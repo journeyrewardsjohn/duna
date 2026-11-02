@@ -1,6 +1,9 @@
 import {
   ArrowRight,
   CalendarDays,
+  ChartNoAxesCombined,
+  MapPin,
+  Radio,
   CreditCard,
   MessageSquare,
   Trophy,
@@ -18,10 +21,25 @@ import {
   clubFaqs,
   playerFaqs,
 } from "@/lib/audience-pages";
-import { DUNA_HQ_URL } from "@/lib/site-urls";
+import { DUNA_HQ_SIGNUP_URL } from "@/lib/site-urls";
 import styles from "./audience-home.module.css";
 
-const icons = [CalendarDays, Trophy, CreditCard, Users, MessageSquare, Video];
+const clubIcons = [
+  CalendarDays,
+  Trophy,
+  CreditCard,
+  Users,
+  MessageSquare,
+  Video,
+];
+const playerIcons = [
+  MapPin,
+  CalendarDays,
+  ChartNoAxesCombined,
+  Trophy,
+  Video,
+  Radio,
+];
 
 export function AudienceHome({
   audience,
@@ -69,7 +87,7 @@ export function AudienceHome({
           </p>
           <div className={styles.actions}>
             {clubs ? (
-              <a className={styles.primary} href={`${DUNA_HQ_URL}/sign-up`}>
+              <a className={styles.primary} href={DUNA_HQ_SIGNUP_URL}>
                 Get started <ArrowRight aria-hidden size={18} />
               </a>
             ) : (
@@ -144,7 +162,7 @@ export function AudienceHome({
           </div>
           <div className={styles.features}>
             {highlights.map((item, index) => {
-              const Icon = icons[index]!;
+              const Icon = (clubs ? clubIcons : playerIcons)[index]!;
               return (
                 <Link
                   className={styles.feature}
@@ -345,7 +363,7 @@ export function AudienceHome({
             </p>
           </div>
           {clubs ? (
-            <a className={styles.primary} href={`${DUNA_HQ_URL}/sign-up`}>
+            <a className={styles.primary} href={DUNA_HQ_SIGNUP_URL}>
               Get started with Duna <ArrowRight aria-hidden size={18} />
             </a>
           ) : (
