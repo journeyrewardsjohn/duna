@@ -77,3 +77,76 @@ html[data-theme="dark"] body[data-zone="operator"] {
   font: inherit;
   font-size: 14px;
 }
+
+/* Compact operator lists share one accessible table treatment. */
+.hq-data-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+}
+.hq-data-scroll:focus-visible {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}
+.hq-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+  color: var(--hq-text);
+  font-variant-numeric: tabular-nums;
+}
+.hq-data-table :is(th, td) {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--hq-line);
+  vertical-align: middle;
+}
+.hq-data-table thead th {
+  height: 44px;
+  color: var(--hq-muted);
+  background: var(--hq-soft);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.hq-data-table tbody th {
+  font-weight: 500;
+}
+.hq-data-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.hq-data-table tbody tr:hover {
+  background: var(--hq-soft);
+}
+.hq-data-table a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--hq-text);
+}
+.hq-data-table a:focus-visible {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}
+.hq-data-table a:hover {
+  text-decoration: underline;
+}
+.hq-data-table small {
+  display: block;
+  color: var(--hq-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.hq-summary-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  color: var(--hq-muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.hq-summary-line strong {
+  color: var(--hq-text);
+  font-weight: 500;
+}

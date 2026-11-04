@@ -993,12 +993,10 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   test.slow();
   await page.goto(`${hqBaseUrl}/`);
   await expect(
-    page.getByRole("heading", { name: "What would you like to get done?" }),
+    page.getByRole("heading", { name: "Today", level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "Ask Duna to find answers, plan your day, or prepare a change.",
-    ),
+    page.getByRole("textbox", { name: "What would you like Duna to do?" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
@@ -1232,7 +1230,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/calendar`);
-  await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
   await expect(
     page.getByText("Championship Court", { exact: true }),
   ).toBeVisible();

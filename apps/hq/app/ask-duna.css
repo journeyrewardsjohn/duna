@@ -1379,3 +1379,9 @@ body.ask-duna-floating-visible
     margin-top: 20px;
   }
 }
+/* Desktop already has a persistent assistant action in the topbar. */
+@media (min-width: 1101px) {
+  .ask-duna-floating > .ask-duna-floating-launcher {
+    display: none;
+  }
+}

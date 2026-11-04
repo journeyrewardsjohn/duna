@@ -33,8 +33,7 @@ export function HqWorkPrompt({ date }: { readonly date: string }) {
   return (
     <section className="hq-work-prompt" aria-labelledby="hq-work-title">
       <p className="hq-work-date">{date}</p>
-      <h1 id="hq-work-title">What would you like to get done?</h1>
-      <p>Ask Duna to find answers, plan your day, or prepare a change.</p>
+      <h1 id="hq-work-title">Today</h1>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -46,7 +45,7 @@ export function HqWorkPrompt({ date }: { readonly date: string }) {
           aria-label="What would you like Duna to do?"
           placeholder="Ask about your club, or describe a task…"
           value={value}
-          rows={2}
+          rows={1}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
             if (

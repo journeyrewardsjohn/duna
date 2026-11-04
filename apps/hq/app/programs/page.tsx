@@ -23,10 +23,7 @@ export default async function ProgramsPage() {
         <header className={styles.heading}>
           <div>
             <h1>Programs & camps</h1>
-            <p>
-              Connect enrollment, coaching and the sessions that make progress
-              happen.
-            </p>
+            <p>Manage enrollment, pricing and scheduled sessions.</p>
           </div>
           <Link
             href="/products/create"
@@ -62,10 +59,8 @@ export default async function ProgramsPage() {
         </section>
         <section className={styles.footer}>
           <div>
-            <h2>Build the season behind your offering.</h2>
-            <p>
-              Plan coaching phases, manage sessions and keep your team ready.
-            </p>
+            <h2>Program operations</h2>
+            <p>Training plans, attendance and player records.</p>
           </div>
           <nav aria-label="Program operations">
             <Link href="/training/programs/create">

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUp,
-  Check,
   ExternalLink,
   Globe2,
   History,
@@ -11,7 +10,6 @@ import {
   Monitor,
   Plus,
   Smartphone,
-  Sparkles,
 } from "lucide-react";
 import styles from "./website-studio.module.css";
 
@@ -144,6 +142,11 @@ export function WebsiteStudio({
   const deploying =
     detail?.site.provisioningStatus === "deploying" ||
     detail?.revisions.some((revision) => revision.status === "deploying");
+  useEffect(() => {
+    if (!detail) return;
+    if (notice.startsWith("Duna is building") && !activeRevision) setNotice("");
+    if (notice.startsWith("Publishing started") && !deploying) setNotice("");
+  }, [detail, activeRevision, deploying, notice]);
   const preview = detail?.revisions.find(
     (revision) => revision.id === selectedRevision,
   );
@@ -251,12 +254,7 @@ export function WebsiteStudio({
     <main className={`hq-page ${styles.workspace}`}>
       <header className={styles.header}>
         <div>
-          <span className="hq-eyebrow">Your club. Your website.</span>
-          <h1>Bring your club to life.</h1>
-          <p>
-            Tell Duna what you imagine. We’ll build it around the club you
-            already run.
-          </p>
+          <h1>Website</h1>
         </div>
         {sites.length > 0 && (
           <div className={styles.switcher}>
@@ -339,13 +337,10 @@ export function WebsiteStudio({
               });
             }}
           >
-            <span className={styles.orb}>
-              <Sparkles size={28} aria-hidden />
-            </span>
-            <h2>Start with a conversation.</h2>
+            <h2>Create a website</h2>
             <p>
-              A new look, more bookings, your next big season. What should your
-              website do for your club?
+              Describe the pages and design you need. Duna uses your club’s
+              configured programs, bookings and account links.
             </p>
             <label htmlFor="site-name">Website name</label>
             <input
@@ -368,7 +363,7 @@ export function WebsiteStudio({
               placeholder="A welcoming website for our beach volleyball club. Lead with youth programs, make court booking easy, and use large photos with a clean, warm feel."
             />
             <details className={styles.references}>
-              <summary>Bring an existing website or inspiration</summary>
+              <summary>Existing website and design references</summary>
               <label htmlFor="site-source">
                 Your current website <span>Optional</span>
               </label>
@@ -380,7 +375,7 @@ export function WebsiteStudio({
                 onChange={(e) => setSource(e.target.value)}
               />
               <label htmlFor="site-inspiration">
-                Websites you love <span>Up to 3, one per line</span>
+                Design references <span>Up to 3, one per line</span>
               </label>
               <textarea
                 id="site-inspiration"
@@ -399,8 +394,8 @@ export function WebsiteStudio({
               disabled={Boolean(busy) || demo}
               type="submit"
             >
-              {busy ? <LoaderCircle size={18} /> : <Sparkles size={18} />}{" "}
-              {busy ? "Starting your website…" : "Create my free preview"}
+              {busy && <LoaderCircle size={18} />}{" "}
+              {busy ? "Starting your website…" : "Create preview"}
             </button>
             <small>
               No payment to preview. Review your site before subscribing or
@@ -408,40 +403,12 @@ export function WebsiteStudio({
             </small>
           </form>
           <aside className={styles.promise}>
-            <div className={styles.siteIllustration} aria-hidden>
-              <div className={styles.mockNav}>
-                <span>{clubName}</span>
-                <span>Play · Learn · Join</span>
-              </div>
-              <div className={styles.mockHero}>
-                <span>More than a club.</span>
-                <strong>
-                  Your next
-                  <br />
-                  great season.
-                </strong>
-                <span className={styles.mockCta}>Find your game ↗</span>
-              </div>
-              <div className={styles.mockCards}>
-                <span>Programs</span>
-                <span>Courts</span>
-                <span>Lessons</span>
-              </div>
-            </div>
-            <h2>A website that’s part of your club.</h2>
+            <h2>Hosting and editing</h2>
             <ul>
-              <li>
-                <Check size={18} /> Programs, leagues, tournaments and lessons
-              </li>
-              <li>
-                <Check size={18} /> Real Duna booking, sign-in and wallet
-              </li>
-              <li>
-                <Check size={18} /> Your own hosted site and domain
-              </li>
-              <li>
-                <Check size={18} /> Updates by talking to Duna
-              </li>
+              <li>Programs, leagues, tournaments and lessons</li>
+              <li>Duna booking, sign-in and wallet links</li>
+              <li>Hosted website with a custom domain option</li>
+              <li>AI edits with preview and version history</li>
             </ul>
             <div className={styles.price}>
               <strong>
@@ -506,8 +473,7 @@ export function WebsiteStudio({
           <section className={styles.studio} aria-label="Website studio">
             <div className={styles.conversation}>
               <div className={styles.conversationHeading}>
-                <Sparkles size={19} />
-                <h2>Build with Duna</h2>
+                <h2>Edit website</h2>
               </div>
               <div className={styles.messages}>
                 <div className={styles.assistant}>
@@ -911,7 +877,7 @@ export function WebsiteStudio({
                 });
               }}
             >
-              <h2>Make it your own.</h2>
+              <h2>Domain</h2>
               <p>
                 Your hosted address is created when you publish. Connect a
                 domain or subdomain you own when you’re ready.
@@ -1046,7 +1012,7 @@ export function WebsiteStudio({
               >
                 <ArrowLeft size={16} /> Back to preview
               </button>
-              <h2 id="publish-title">Ready to go live?</h2>
+              <h2 id="publish-title">Publish website?</h2>
               {error && (
                 <p role="alert" className={styles.alert}>
                   {error}

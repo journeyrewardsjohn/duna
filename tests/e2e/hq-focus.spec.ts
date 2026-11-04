@@ -12,7 +12,7 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(hqBaseUrl);
   await expect(
-    page.getByRole("heading", { name: "What would you like to get done?" }),
+    page.getByRole("heading", { name: "Today", level: 1 }),
   ).toBeVisible();
   await expect(page.locator(".hq-shell--focused")).toHaveCSS(
     "background-color",
@@ -21,9 +21,6 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   const input = page.getByRole("textbox", {
     name: "What would you like Duna to do?",
   });
-  if ((page.viewportSize()?.width ?? 1440) <= 700) {
-    await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
-  }
   await page
     .getByRole("button", { name: "Plan an event", exact: true })
     .click();
@@ -75,6 +72,7 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
 }) => {
   const { writes } = await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/members`);
+  await page.getByText("Ask Duna about this page", { exact: true }).click();
   const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
   await prompt.fill("Find the people who need a follow-up.");
   await prompt.press("Enter");

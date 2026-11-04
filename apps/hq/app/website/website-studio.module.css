@@ -1,7 +1,7 @@
 .workspace {
   max-width: 1580px;
   margin-inline: auto;
-  padding-block: 28px 64px;
+  padding-block: 0 32px;
   color: var(--hq-text);
 }
 .header {
@@ -9,14 +9,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 .header h1 {
   font-size: clamp(30px, 3.2vw, 44px);
   font-weight: 500;
   letter-spacing: -0.025em;
   line-height: 1.15;
-  margin: 10px 0;
+  margin: 0;
 }
 .header p,
 .brief > p,
@@ -139,8 +139,8 @@
 .start {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: clamp(32px, 5vw, 88px);
-  padding: 28px 0;
+  gap: 32px;
+  padding: 8px 0;
   align-items: start;
 }
 .brief {
@@ -159,7 +159,7 @@
   font-size: 28px;
   letter-spacing: -0.02em;
   font-weight: 500;
-  margin: 24px 0 12px;
+  margin: 0 0 12px;
 }
 .brief > p {
   margin: 0 0 24px;
@@ -706,4 +706,32 @@
 }
 .publishReview::backdrop {
   background: color-mix(in srgb, var(--hq-text) 35%, transparent);
+}
+
+@media (min-width: 761px) {
+  .studio {
+    height: clamp(520px, calc(100svh - 290px), 760px);
+    min-height: 0;
+  }
+  .conversation,
+  .previewPanel {
+    min-height: 0;
+  }
+  .conversationHeading,
+  .previewToolbar {
+    min-height: 64px;
+    flex-shrink: 0;
+  }
+  .messages {
+    min-height: 80px;
+  }
+  .previewCanvas {
+    min-height: 0;
+    padding: 12px;
+  }
+  .desktopPreview,
+  .mobilePreview {
+    min-height: 0;
+    height: 100%;
+  }
 }

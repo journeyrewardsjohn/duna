@@ -254,17 +254,12 @@ export default async function OrganizationMessagesPage({
         <MessagingLiveRefresh conversationId={detail?.conversation.id} />
         <header className={styles.pageHeader}>
           <div>
-            <span className="hq-eyebrow">Relationship communication</span>
             <h1>Inbox</h1>
             <p>
               Conversations with your players, families, and activity groups.
             </p>
           </div>
           <div>
-            <span className={styles.policyNote}>
-              <ShieldCheck aria-hidden size={17} />
-              Service communication only · blocks always respected
-            </span>
             <Link className={styles.newButton} href="/messages?compose=new">
               <Plus aria-hidden size={17} /> New message
             </Link>

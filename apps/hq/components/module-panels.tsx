@@ -19,11 +19,9 @@ import {
   PackageCheck,
   ShoppingBag,
   MapPinned,
-  MessageSquareText,
   Plus,
   ShieldCheck,
   Trophy,
-  UsersRound,
   Waves,
 } from "lucide-react";
 import Link from "next/link";
@@ -66,9 +64,8 @@ const moduleCopy: Record<
   },
   calendar: {
     eyebrow: "Sessions + facilities",
-    title: "Calendar",
-    description:
-      "Published sessions, venue time, capacity, and live operating state.",
+    title: "Schedule",
+    description: "Sessions, court bookings and coach availability.",
   },
   locations: {
     eyebrow: "Facility operations",
@@ -79,8 +76,7 @@ const moduleCopy: Record<
   members: {
     eyebrow: "Community + relationships",
     title: "People",
-    description:
-      "Members, players, parents, purchases, credits, and participation signals scoped to this organization.",
+    description: "Players, parents, memberships and purchase history.",
   },
   audiences: {
     eyebrow: "People + reusable groups",
@@ -115,8 +111,7 @@ const moduleCopy: Record<
   leagues: {
     eyebrow: "Structured play",
     title: "Leagues",
-    description:
-      "League sessions and the operational surfaces that support standings and scoring.",
+    description: "League sessions, standings and scoring.",
   },
   payments: {
     eyebrow: "Earnings + payouts",
@@ -1266,25 +1261,6 @@ export function ModulePanel({
 }) {
   if (module === "overview" || module === "messages") return null;
   const copy = pageCopy ?? moduleCopy[module];
-  const icon =
-    module === "calendar"
-      ? CalendarDays
-      : module === "locations"
-        ? MapPinned
-        : module === "members"
-          ? UsersRound
-          : module === "team"
-            ? UsersRound
-            : module === "products"
-              ? ShoppingBag
-              : module === "payments"
-                ? CreditCard
-                : module === "marketing"
-                  ? MessageSquareText
-                  : module === "ai"
-                    ? Bot
-                    : Trophy;
-  const Icon = icon;
   const createAction =
     module === "events" && eventKinds?.[0]
       ? {
@@ -1317,11 +1293,10 @@ export function ModulePanel({
     >
       <header className="hq-page-heading">
         <div>
-          <span className="hq-eyebrow">{copy.eyebrow}</span>
           <h1>{copy.title}</h1>
           <p>{copy.description}</p>
         </div>
-        {createAction && (
+        {createAction && module !== "calendar" && (
           <Link
             className="hq-button hq-button--primary"
             href={createAction.href}
@@ -1330,19 +1305,6 @@ export function ModulePanel({
           </Link>
         )}
       </header>
-
-      <section className="module-context-strip">
-        <Icon size={19} />
-        <span>
-          <strong>{dashboard.organization.name}</strong>
-          <small>
-            {dashboard.organization.plan} · {dashboard.organization.timezone}
-          </small>
-        </span>
-        <Link href="/">
-          Overview <ArrowRight size={15} />
-        </Link>
-      </section>
 
       {(module === "events" ||
         module === "leagues" ||

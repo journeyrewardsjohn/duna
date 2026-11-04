@@ -13,7 +13,9 @@ test("court availability hands natural language and the selected court to Ask Du
   const { writes, turns } = await installAskDunaFixture(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`${hq}/locations/${venueId}/courts/${courtId}`);
-  await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
   await page.getByRole("button", { name: "Availability", exact: true }).click();
   const mondayBefore = await page.getByLabel("Monday start time").inputValue();
   const request = "Block Monday to Friday 9 am to noon for morning sessions";
@@ -65,7 +67,9 @@ test("unsaved manual hours stay protected before an AI request", async ({
 }) => {
   await installAskDunaFixture(page);
   await page.goto(`${hq}/locations/${venueId}/courts/${courtId}`);
-  await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
   await page.getByRole("button", { name: "Availability", exact: true }).click();
   await page.getByLabel("Monday start time").fill("10:00");
   await page

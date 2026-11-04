@@ -1193,3 +1193,203 @@ body[data-zone="operator"]
   color: var(--hq-ground);
   background: var(--hq-text);
 }
+
+/* Task-first operator workspace: controls and records precede explanation. */
+.hq-shell--focused .hq-content {
+  padding-inline: clamp(16px, 2.5vw, 36px);
+}
+body[data-zone="operator"] .hq-shell--focused .hq-content h1 {
+  font-size: 28px;
+  margin-block: 0 8px;
+}
+body[data-zone="operator"] .hq-shell--focused .hq-content h2 {
+  font-size: 20px;
+}
+body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
+  margin-bottom: 16px;
+}
+.hq-context-assistant {
+  margin-bottom: 8px;
+}
+.hq-context-assistant > summary {
+  width: fit-content;
+  min-height: 48px;
+  align-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--hq-muted);
+}
+.hq-context-assistant .hq-page-prompt {
+  margin-bottom: 12px;
+}
+.hq-work-prompt {
+  max-width: none;
+  margin: 0 0 16px;
+}
+.hq-work-prompt > .hq-work-date {
+  margin-bottom: 4px;
+}
+.hq-work-prompt form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.hq-work-prompt textarea {
+  min-height: 48px;
+  padding-block: 12px;
+}
+.hq-work-prompt__tools {
+  margin: 0;
+}
+.hq-work-prompt__tools > span {
+  display: none;
+}
+.hq-work-prompts {
+  margin-top: 8px;
+}
+.hq-work-prompts button {
+  min-height: 48px;
+  padding: 8px 12px;
+}
+.hq-work-prompt > small {
+  margin-top: 6px;
+}
+.hq-work-actions {
+  justify-content: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+}
+.hq-work-actions a > svg {
+  display: none;
+}
+.hq-shell--focused .money-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--hq-line);
+  margin-bottom: 16px;
+}
+body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
+  display: inline-flex;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.hq-shell--focused .money-subnav > a strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.hq-shell--focused .people-command-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.hq-shell--focused .people-command-rail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.hq-shell--focused .people-privacy-note {
+  grid-column: 1 / -1;
+}
+.hq-shell--focused .people-directory {
+  border: 0;
+  padding: 0;
+}
+.hq-shell--focused .people-directory__header {
+  padding: 0 0 12px;
+  border: 0;
+}
+.hq-shell--focused .people-search {
+  display: flex;
+  margin: 0;
+  width: min(100%, 480px);
+  min-width: 0;
+}
+.hq-shell--focused .people-search input {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 48px;
+  font-size: 16px;
+}
+.hq-shell--focused .people-search:focus-within {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}
+.hq-shell--focused .people-filter-row {
+  padding: 0 0 8px;
+}
+.hq-shell--focused .people-filter-row button {
+  min-height: 48px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.hq-shell--focused .people-directory__result-count {
+  padding: 8px 0;
+  font-size: 14px;
+}
+.hq-shell--focused .people-directory__list {
+  padding: 0;
+}
+.hq-person-link {
+  gap: 10px;
+  min-width: 220px;
+}
+.hq-person-link strong {
+  font-weight: 500;
+}
+.hq-data-table .people-directory__avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.hq-shell--focused .people-directory .hq-data-table {
+  min-width: 850px;
+}
+.hq-shell--focused .people-directory .hq-data-table td:last-child {
+  max-width: 210px;
+}
+@media (max-width: 720px) {
+  .hq-shell--focused .people-command-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hq-shell--focused .money-subnav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .hq-shell--focused .money-subnav > a {
+    flex-shrink: 0;
+  }
+}
+
+.hq-shell--focused .refund-policy-form > h3 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.hq-shell--focused .refund-policy-page .hq-card-heading h2 {
+  max-width: none;
+}
+.hq-shell--focused .refund-policy-page .hq-card-heading > svg {
+  display: none;
+}
+.hq-shell--focused .refund-policy-form > div {
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 110px);
+}
+.hq-shell--focused .refund-policy-form :is(label, input, select, textarea) {
+  min-width: 0;
+}
+.hq-shell--focused
+  .refund-policy-form
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  width: 100%;
+  box-sizing: border-box;
+}

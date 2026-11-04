@@ -1,4 +1,5 @@
 import type { OrganizationSummary } from "@duna/core";
+import { HqPagePrompt } from "./hq-work-prompt";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { DunaActionTrigger, DunaMark } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
@@ -23,7 +24,6 @@ import {
 } from "./navigation";
 import { AuthControls } from "./auth-controls";
 import { DunaActionCenter } from "./duna-action-center";
-import { HqPagePrompt } from "./hq-work-prompt";
 import { OrganizationSwitcher } from "./organization-switcher";
 import { AskDunaSidebar } from "./ask-duna-sidebar";
 import { getServerContext } from "@/lib/api";
@@ -307,18 +307,21 @@ export async function OperatorShell({
           </div>
         </header>
         <div className="hq-content">
+          {children}
           {active !== "overview" &&
             active !== "ai" &&
             active !== "website" &&
             !immersive && (
-              <HqPagePrompt
-                label={
-                  operatorModules.find((item) => item.slug === active)?.label ??
-                  "your workspace"
-                }
-              />
+              <details className="hq-context-assistant">
+                <summary>Ask Duna about this page</summary>
+                <HqPagePrompt
+                  label={
+                    operatorModules.find((item) => item.slug === active)
+                      ?.label ?? "your workspace"
+                  }
+                />
+              </details>
             )}
-          {children}
         </div>
       </div>
       <DunaActionCenter

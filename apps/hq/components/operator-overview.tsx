@@ -457,7 +457,7 @@ export function OperatorOverview({
           <section className="hq-quick-actions">
             <div>
               <span className="hq-eyebrow">Quick actions</span>
-              <h2>Keep moving.</h2>
+              <h2>Quick links</h2>
             </div>
             <div>
               {quickActions.map((action) => {

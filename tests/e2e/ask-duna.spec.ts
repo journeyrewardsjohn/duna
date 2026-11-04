@@ -1,9 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { askConversationId, installAskDunaFixture } from "../ask-duna-fixture";
 
 const hqBaseUrl =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
+
+async function openFloating(page: Page) {
+  await floatingReturnTarget(page).click();
+}
+
+function floatingReturnTarget(page: Page) {
+  return page.getByRole("button", {
+    name:
+      (page.viewportSize()?.width ?? 1440) > 1100 ? "Duna AI" : "Open Ask Duna",
+    exact: true,
+  });
+}
 
 test("Ask Duna opens product links within HQ and still reviews external links", async ({
   page,
@@ -43,7 +55,16 @@ test("HQ assistant deep links and launchers open the floating Ask Duna surface",
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
   await page.goto(`${hqBaseUrl}/members`);
-  await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
+  const launcher = page.getByRole("button", {
+    name: "Open Ask Duna",
+    exact: true,
+  });
+  if ((page.viewportSize()?.width ?? 1440) > 1100)
+    await expect(launcher).toBeHidden();
+  else await expect(launcher).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page.getByRole("button", { name: "Duna AI", exact: true }).click();
   } else {
@@ -70,6 +91,9 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await page.goto(`${hqBaseUrl}/members`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   const input = floating.getByRole("textbox", { name: "Ask Duna anything" });
+  await expect(floating).toBeHidden();
+  expect(writes).toHaveLength(0);
+  await openFloating(page);
   await expect(floating).toBeVisible();
   await input.fill("Help plan next week");
   await floating.locator('input[type="file"]').setInputFiles({
@@ -105,6 +129,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();
   await expect(floating).toBeHidden();
+  await expect(floatingReturnTarget(page)).toBeFocused();
   const peopleLink = page
     .getByRole("link", { name: "People", exact: true })
     .first();
@@ -115,9 +140,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
     .filter({ visible: true })
     .click();
   await expect(page).toHaveURL(`${hqBaseUrl}/members`);
-  await page
-    .getByRole("button", { name: "Open Ask Duna", exact: true })
-    .click();
+  await openFloating(page);
   await expect(input).toBeEnabled();
   await input.fill("Use the people on this page");
   await floating.getByRole("button", { name: "Send message" }).click();
@@ -173,6 +196,8 @@ test("Floating Ask Duna respects protected pages and its menus dismiss accessibl
   await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/members`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
+  await expect(floating).toBeHidden();
+  await openFloating(page);
   await expect(floating).toBeVisible();
   await expect(floating.locator(".ask-duna-context")).toContainText("People");
   await floating.getByRole("button", { name: "Duna Medium" }).click();
@@ -183,9 +208,7 @@ test("Floating Ask Duna respects protected pages and its menus dismiss accessibl
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(floating).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: "Open Ask Duna", exact: true }),
-  ).toBeFocused();
+  await expect(floatingReturnTarget(page)).toBeFocused();
   if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page
       .getByRole("link", { name: "Open Duna Admin", exact: true })
@@ -359,6 +382,10 @@ test("Ask Duna preserves the draft when its connection fails and searches saved 
     "could not start",
   );
   await page.goto(`${hqBaseUrl}/ask/history`);
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
+  await openFloating(page);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();

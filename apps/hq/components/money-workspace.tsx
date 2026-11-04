@@ -1118,8 +1118,7 @@ export function MoneyWorkspace({
         <section className="hq-card hq-card--inset refund-policy-card refund-policy-page">
           <header className="hq-card-heading">
             <div>
-              <span className="hq-eyebrow">Refund policies</span>
-              <h2>Protect players and payout timing with one rule.</h2>
+              <h2>Policies</h2>
               <p>
                 Refundable funds stay held until the cutoff. Non-refundable
                 funds become eligible after Stripe clears them.
@@ -1155,10 +1154,9 @@ export function MoneyWorkspace({
               ))}
             </div>
             <form action={policyAction} className="refund-policy-form">
-              <span className="hq-eyebrow">New policy</span>
-              <h3>Create the rule in a few choices.</h3>
+              <h3>New policy</h3>
               <label>
-                <span>What should your team call it?</span>
+                <span>Policy name</span>
                 <input name="name" placeholder="Flexible · 48 hours" required />
               </label>
               <fieldset className="refund-policy-choices">

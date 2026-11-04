@@ -1,14 +1,3 @@
-import {
-  ArrowRight,
-  CalendarDays,
-  Dumbbell,
-  Flag,
-  Network,
-  Package,
-  Ticket,
-  Trophy,
-  UsersRound,
-} from "lucide-react";
 import Link from "next/link";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
@@ -18,34 +7,26 @@ export const metadata = { title: "Activities" };
 const activities = [
   {
     title: "Programs & camps",
-    description:
-      "Build a season of progress. Manage offers, training plans and recurring sessions.",
+    description: "Enrollment, training plans and recurring sessions.",
     href: "/programs",
-    icon: Flag,
     action: "Open programs",
   },
   {
     title: "Tournaments",
-    description:
-      "From registration to the final point. Divisions, brackets, courts and scoring.",
+    description: "Registration, divisions, brackets and scoring.",
     href: "/events/types/tournaments",
-    icon: Trophy,
     action: "Manage tournaments",
   },
   {
     title: "Leagues",
-    description:
-      "Run the whole season. Teams, fixtures, standings and playoffs.",
+    description: "Teams, fixtures, standings and playoffs.",
     href: "/leagues",
-    icon: Network,
     action: "Manage leagues",
   },
   {
     title: "Courts & rentals",
-    description:
-      "See available courts, manage bookings and keep your facilities moving.",
+    description: "Court availability, reservations and rentals.",
     href: "/calendar",
-    icon: CalendarDays,
     action: "Open schedule",
   },
   {
@@ -53,23 +34,18 @@ const activities = [
     description:
       "Group and private sessions, coach availability and bookable services.",
     href: "/products/types/services",
-    icon: Dumbbell,
     action: "Manage lessons",
   },
   {
     title: "Open play & clinics",
-    description:
-      "Bring players together with simple registration, rosters and check-in.",
+    description: "Registration, rosters and check-in.",
     href: "/events",
-    icon: UsersRound,
     action: "Open events",
   },
   {
     title: "Memberships & packs",
-    description:
-      "Give players a reason to return with memberships and session credits.",
+    description: "Memberships, session packs and credits.",
     href: "/products/types/plans",
-    icon: Ticket,
     action: "Manage memberships",
   },
   {
@@ -77,7 +53,6 @@ const activities = [
     description:
       "Manage merchandise, equipment, inventory and rental products.",
     href: "/products/types/goods",
-    icon: Package,
     action: "Open shop",
   },
 ] as const;
@@ -89,36 +64,49 @@ export default async function ActivitiesPage() {
       <main className={`hq-page ${styles.workspace}`}>
         <header className={styles.heading}>
           <div>
-            <span className="hq-eyebrow">Run your club</span>
-            <h1>Make more happen.</h1>
-            <p>One place for everything your players come here to do.</p>
+            <h1>Activities</h1>
+            <p>Manage programs, competitions, bookings and products.</p>
           </div>
           <Link className="hq-button hq-button--secondary" href="/calendar">
-            <CalendarDays size={18} aria-hidden /> View schedule
+            View schedule
           </Link>
         </header>
-        <section className={styles.grid} aria-label="Activity workspaces">
-          {activities.map(
-            ({ title, description, href, icon: Icon, action }) => (
-              <Link href={href} className={styles.card} key={title}>
-                <Icon size={24} aria-hidden />
-                <h2>{title}</h2>
-                <p>{description}</p>
-                <span>
-                  {action}
-                  <ArrowRight size={18} aria-hidden />
-                </span>
-              </Link>
-            ),
-          )}
-        </section>
+        <div
+          className="hq-data-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Activity workspaces"
+        >
+          <table className="hq-data-table">
+            <caption className="sr-only">Activity workspaces</caption>
+            <thead>
+              <tr>
+                <th scope="col">Activity</th>
+                <th scope="col">Manage</th>
+                <th scope="col">
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {activities.map(({ title, description, href, action }) => (
+                <tr key={title}>
+                  <th scope="row">
+                    <Link href={href}>{title}</Link>
+                  </th>
+                  <td>{description}</td>
+                  <td>
+                    <Link href={href}>{action}</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <section className={styles.footer}>
           <div>
-            <h2>Your team, ready to go.</h2>
-            <p>
-              Manage coaches and facilities, or build the practice behind your
-              next session.
-            </p>
+            <h2>Related tools</h2>
+            <p>Staff, venues, training plans and the full catalog.</p>
           </div>
           <nav aria-label="Supporting activity tools">
             <Link href="/team">Staff</Link>
