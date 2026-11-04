@@ -28,6 +28,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 const publicErrors = new Set([
+  "Website hosting connection could not be verified. Contact Duna before starting your subscription.",
   "Website publishing could not finish. Check publishing status to resume safely.",
   "Website hosting is not connected yet. Contact Duna to finish hosting setup.",
   "Activate your website subscription before publishing.",
