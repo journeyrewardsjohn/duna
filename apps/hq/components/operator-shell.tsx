@@ -307,6 +307,7 @@ export async function OperatorShell({
           </div>
         </header>
         <div className="hq-content">
+          {children}
           {active !== "overview" &&
             active !== "ai" &&
             active !== "website" &&
@@ -321,7 +322,6 @@ export async function OperatorShell({
                 />
               </details>
             )}
-          {children}
         </div>
       </div>
       <DunaActionCenter

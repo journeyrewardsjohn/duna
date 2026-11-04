@@ -21,9 +21,6 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   const input = page.getByRole("textbox", {
     name: "What would you like Duna to do?",
   });
-  if ((page.viewportSize()?.width ?? 1440) <= 700) {
-    await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
-  }
   await page
     .getByRole("button", { name: "Plan an event", exact: true })
     .click();

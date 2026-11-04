@@ -36,7 +36,7 @@ export function AskDunaFloating({
   request?: AskDunaRequest;
   onRequestHandled: (id: number) => void;
 }) {
-  const [minimized, setMinimized] = useState(false);
+  const [minimized, setMinimized] = useState(true);
   const [conversation, setConversation] = useState<AskConversation | null>(
     null,
   );
