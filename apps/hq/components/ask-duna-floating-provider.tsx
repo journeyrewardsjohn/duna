@@ -61,7 +61,8 @@ export function AskDunaFloatingProvider({ children }: { children: ReactNode }) {
   const fullWorkspace =
     pathname === "/ask" ||
     (pathname.startsWith("/ask/") && pathname !== "/ask/history") ||
-    pathname === "/ai";
+    pathname === "/ai" ||
+    pathname === "/website";
   useEffect(() => {
     if (!fullWorkspace && surface) setRetainedScope(surface.scopeKey);
   }, [fullWorkspace, surface?.scopeKey]);

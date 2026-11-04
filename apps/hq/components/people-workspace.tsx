@@ -18,7 +18,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type PeopleFilter =
-  "all" | "upcoming" | "members" | "credits" | "attention" | "minors";
+  | "all"
+  | "upcoming"
+  | "members"
+  | "credits"
+  | "attention"
+  | "minors"
+  | "guardians";
 
 const filters: readonly {
   readonly id: PeopleFilter;
@@ -28,8 +34,9 @@ const filters: readonly {
   { id: "upcoming", label: "Coming up" },
   { id: "members", label: "Active plans" },
   { id: "credits", label: "Has credits" },
-  { id: "attention", label: "Needs attention" },
-  { id: "minors", label: "Minors" },
+  { id: "attention", label: "Retention follow-up" },
+  { id: "minors", label: "Junior players" },
+  { id: "guardians", label: "Parents & guardians" },
 ];
 
 function initials(name: string): string {
@@ -72,6 +79,7 @@ function matchesFilter(
   if (filter === "credits") return person.creditBalance > 0;
   if (filter === "attention") return person.churnRisk.level !== "low";
   if (filter === "minors") return person.isMinor;
+  if (filter === "guardians") return person.roles.includes("guardian");
   return true;
 }
 
@@ -158,7 +166,7 @@ export function PeopleWorkspace({
           <CircleAlert aria-hidden size={20} />
           <span>
             <Numeric>{needsAttention.length}</Numeric>
-            <small>need attention</small>
+            <small>retention follow-up</small>
           </span>
         </article>
       </section>
@@ -188,16 +196,15 @@ export function PeopleWorkspace({
           </header>
           <div
             className="people-filter-row"
-            role="tablist"
+            role="group"
             aria-label="Filter people"
           >
             {filters.map((item) => (
               <button
-                aria-selected={filter === item.id}
+                aria-pressed={filter === item.id}
                 className={filter === item.id ? "active" : undefined}
                 key={item.id}
                 onClick={() => setFilter(item.id)}
-                role="tab"
                 type="button"
               >
                 {item.label}

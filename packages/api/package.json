@@ -18,7 +18,11 @@
     "./webhooks": "./src/webhooks.ts",
     "./ask-duna-contracts": "./src/ask-duna-contracts.ts",
     "./sendblue-ingress": "./src/sendblue-ingress.ts",
-    "./website-billing": "./src/website-billing.ts"
+    "./website-billing": "./src/website-billing.ts",
+    "./sendblue-outbox": "./src/sendblue-outbox.ts",
+    "./website-service": "./src/website-service.ts",
+    "./website-document": "./src/website-document.ts",
+    "./website-provisioning": "./src/website-provisioning.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -40,6 +44,7 @@
     "@duna/scheduling": "workspace:*",
     "@mendable/firecrawl-js": "4.32.0",
     "@mux/mux-node": "14.1.1",
+    "@neondatabase/serverless": "^1.1.0",
     "@openai/agents": "0.15.0",
     "@trpc/server": "^11.18.0",
     "@vercel/functions": "3.9.3",

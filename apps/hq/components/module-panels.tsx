@@ -47,6 +47,17 @@ const moduleCopy: Record<
     readonly description: string;
   }
 > = {
+  activities: {
+    eyebrow: "Club operations",
+    title: "Activities",
+    description:
+      "Programs, competitions, lessons and everything your club offers.",
+  },
+  website: {
+    eyebrow: "Your club online",
+    title: "Website",
+    description: "Build and manage your club website with Duna AI.",
+  },
   setup: {
     eyebrow: "Organization readiness",
     title: "Get started",
