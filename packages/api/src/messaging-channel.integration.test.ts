@@ -20,15 +20,13 @@ vi.mock("@duna/db", async () => ({
   getTransactionalDatabase: () => database,
 }));
 vi.mock("./messaging-service", () => ({
-  loadConversation: vi
-    .fn()
-    .mockImplementation(async () => ({
-      conversation: {
-        participants: [],
-        context: { organizationId: "20000000-0000-4000-8000-000000000001" },
-      },
-      permissions: { canPost: true },
-    })),
+  loadConversation: vi.fn().mockImplementation(async () => ({
+    conversation: {
+      participants: [],
+      context: { organizationId: "20000000-0000-4000-8000-000000000001" },
+    },
+    permissions: { canPost: true },
+  })),
   sendConversationMessage: vi.fn(),
   MessagingError: class extends Error {},
 }));
@@ -74,16 +72,14 @@ afterAll(async () => {
 });
 describe("phone channel database invariants", () => {
   it("disconnect serializes with a concurrent consume and invalidates old codes", async () => {
-    await database
-      .insert(schema.messagingChannelChallenges)
-      .values({
-        codeHash: channelLinkCodeHash(command.slice(5)),
-        personId,
-        organizationId,
-        conversationId,
-        endpoint,
-        expiresAt: new Date(now.getTime() + 600000),
-      });
+    await database.insert(schema.messagingChannelChallenges).values({
+      codeHash: channelLinkCodeHash(command.slice(5)),
+      personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      expiresAt: new Date(now.getTime() + 600000),
+    });
     await Promise.all([
       consumeMessagingChannelLink(command, senderPhone, endpoint, now),
       revokeMessagingChannelLinks({
@@ -104,26 +100,22 @@ describe("phone channel database invariants", () => {
     ).toBe(false);
   });
   it("STOP invalidates previously issued codes as well as the active binding", async () => {
-    await database
-      .insert(schema.messagingChannelBindings)
-      .values({
-        personId,
-        organizationId,
-        conversationId,
-        endpoint,
-        senderPhone,
-        verifiedAt: now,
-      });
-    await database
-      .insert(schema.messagingChannelChallenges)
-      .values({
-        codeHash: channelLinkCodeHash(command.slice(5)),
-        personId,
-        organizationId,
-        conversationId,
-        endpoint,
-        expiresAt: new Date(now.getTime() + 600000),
-      });
+    await database.insert(schema.messagingChannelBindings).values({
+      personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      senderPhone,
+      verifiedAt: now,
+    });
+    await database.insert(schema.messagingChannelChallenges).values({
+      codeHash: channelLinkCodeHash(command.slice(5)),
+      personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      expiresAt: new Date(now.getTime() + 600000),
+    });
     expect(
       await processVerifiedChannelInbound({
         senderPhone,

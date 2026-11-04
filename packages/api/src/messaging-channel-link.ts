@@ -77,16 +77,14 @@ export async function beginMessagingChannelLink(
       .from(people)
       .where(eq(people.id, actor.personId))
       .for("update");
-    await transaction
-      .insert(messagingChannelChallenges)
-      .values({
-        codeHash: channelLinkCodeHash(code),
-        personId: actor.personId,
-        organizationId,
-        conversationId,
-        endpoint,
-        expiresAt,
-      });
+    await transaction.insert(messagingChannelChallenges).values({
+      codeHash: channelLinkCodeHash(code),
+      personId: actor.personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      expiresAt,
+    });
   });
   return {
     command: `DUNA ${code}`,
