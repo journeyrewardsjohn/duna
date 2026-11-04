@@ -707,3 +707,31 @@
 .publishReview::backdrop {
   background: color-mix(in srgb, var(--hq-text) 35%, transparent);
 }
+
+@media (min-width: 761px) {
+  .studio {
+    height: clamp(520px, calc(100svh - 290px), 760px);
+    min-height: 0;
+  }
+  .conversation,
+  .previewPanel {
+    min-height: 0;
+  }
+  .conversationHeading,
+  .previewToolbar {
+    min-height: 64px;
+    flex-shrink: 0;
+  }
+  .messages {
+    min-height: 80px;
+  }
+  .previewCanvas {
+    min-height: 0;
+    padding: 12px;
+  }
+  .desktopPreview,
+  .mobilePreview {
+    min-height: 0;
+    height: 100%;
+  }
+}

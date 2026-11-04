@@ -222,6 +222,9 @@ export function PeopleWorkspace({
                             <small>
                               {person.roles.join(", ").replaceAll("-", " ")}
                               {person.isMinor ? " · minor" : ""}
+                              {person.status !== "active"
+                                ? ` · ${person.status}`
+                                : ""}
                             </small>
                           </span>
                         </Link>

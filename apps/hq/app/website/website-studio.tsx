@@ -142,6 +142,11 @@ export function WebsiteStudio({
   const deploying =
     detail?.site.provisioningStatus === "deploying" ||
     detail?.revisions.some((revision) => revision.status === "deploying");
+  useEffect(() => {
+    if (!detail) return;
+    if (notice.startsWith("Duna is building") && !activeRevision) setNotice("");
+    if (notice.startsWith("Publishing started") && !deploying) setNotice("");
+  }, [detail, activeRevision, deploying, notice]);
   const preview = detail?.revisions.find(
     (revision) => revision.id === selectedRevision,
   );
