@@ -359,6 +359,7 @@ export default async function MessagesPage({
           <ShieldCheck aria-hidden size={18} />
           <span>
             <strong>Relationship protected</strong>
+            <Link href="/app/messages/connect">Connect your phone</Link>
             <small>No unsolicited organization marketing</small>
           </span>
         </div>
@@ -459,6 +460,7 @@ export default async function MessagesPage({
                 <ShieldCheck aria-hidden size={17} />
                 <span>
                   <strong>Relationship protected</strong>
+                  <Link href="/app/messages/connect">Connect your phone</Link>
                   <small>
                     Direct messages require a mutual follow. Duna adds verified
                     guardians and safety screening whenever a minor is included.

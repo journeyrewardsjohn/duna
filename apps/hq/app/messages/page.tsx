@@ -22,7 +22,14 @@ import { MessageComposer } from "./message-composer";
 import { MessagingActionForm } from "./messaging-action-form";
 import styles from "./messaging.module.css";
 
-export const metadata = { title: "Messages" };
+export const metadata = { title: "Inbox" };
+
+import {
+  eligibleInitialRecipient,
+  filterInbox,
+  inboxFilters,
+  parseInboxFilter,
+} from "./inbox-filters";
 
 function initials(name: string) {
   return name
@@ -119,9 +126,14 @@ export default async function OrganizationMessagesPage({
     thread?: string;
     compose?: string;
     view?: string;
+    filter?: string;
+    q?: string;
+    recipient?: string;
   }>;
 }) {
-  const { compose, thread, view } = await searchParams;
+  const { compose, thread, view, filter, q, recipient } = await searchParams;
+  const activeFilter = parseInboxFilter(filter);
+  const query = (q ?? "").slice(0, 200);
   const caller = await getServerCaller();
   const [dashboard, workspace, events, inbox, trainingWorkspace] =
     await Promise.all([
@@ -131,9 +143,14 @@ export default async function OrganizationMessagesPage({
       caller.messaging.inbox({ asPrincipal: "organization" }),
       caller.operator.trainingWorkspace(),
     ]);
+  const visibleConversations = filterInbox(
+    inbox.conversations,
+    activeFilter,
+    query,
+  );
   const selected =
-    inbox.conversations.find((conversation) => conversation.id === thread) ??
-    inbox.conversations[0];
+    visibleConversations.find((conversation) => conversation.id === thread) ??
+    visibleConversations[0];
   const detail =
     selected && compose !== "new" && view !== "inbox"
       ? await caller.messaging.conversation({
@@ -141,6 +158,17 @@ export default async function OrganizationMessagesPage({
           asPrincipal: "organization",
         })
       : undefined;
+  const phoneReplies = detail
+    ? await caller.messaging.phoneReplyOptions({
+        conversationId: detail.conversation.id,
+      })
+    : { options: [], deliveries: [] };
+  const phoneStatus = new Map(
+    phoneReplies.deliveries.map((delivery) => [
+      delivery.sourceMessageId,
+      delivery.status,
+    ]),
+  );
   const sendId = crypto.randomUUID();
   const creationId = crypto.randomUUID();
   const activePeople = workspace.people.filter(
@@ -227,10 +255,9 @@ export default async function OrganizationMessagesPage({
         <header className={styles.pageHeader}>
           <div>
             <span className="hq-eyebrow">Relationship communication</span>
-            <h1>Messages</h1>
+            <h1>Inbox</h1>
             <p>
-              Send useful information to people connected to your events,
-              leagues, lessons, rentals, or organization.
+              Conversations with your players, families, and activity groups.
             </p>
           </div>
           <div>
@@ -253,15 +280,52 @@ export default async function OrganizationMessagesPage({
               <strong>Inbox</strong>
               {inbox.totalUnread > 0 && <i>{inbox.totalUnread}</i>}
             </header>
+            <form
+              action="/messages"
+              className={styles.inboxSearch}
+              role="search"
+            >
+              <input type="hidden" name="filter" value={activeFilter} />
+              <input type="hidden" name="view" value="inbox" />
+              <input
+                aria-label="Search conversations"
+                name="q"
+                type="search"
+                defaultValue={query}
+                placeholder="Search people or activities"
+                maxLength={200}
+              />
+              <button type="submit">Search</button>
+            </form>
+            <div
+              className={styles.inboxFilters}
+              aria-label="Filter conversations"
+            >
+              {inboxFilters.map((item) => (
+                <Link
+                  key={item}
+                  aria-current={activeFilter === item ? "page" : undefined}
+                  href={`/messages?view=inbox&filter=${item}&q=${encodeURIComponent(query)}`}
+                >
+                  {item === "all"
+                    ? "All"
+                    : item === "unread"
+                      ? "Unread"
+                      : item === "families"
+                        ? "Families"
+                        : "Activities"}
+                </Link>
+              ))}
+            </div>
             <nav aria-label="Organization conversations">
-              {inbox.conversations.map((conversation) => (
+              {visibleConversations.map((conversation) => (
                 <Link
                   className={
                     conversation.id === selected?.id && compose !== "new"
                       ? styles.active
                       : undefined
                   }
-                  href={`/messages?thread=${conversation.id}`}
+                  href={`/messages?thread=${conversation.id}&filter=${activeFilter}&q=${encodeURIComponent(query)}`}
                   key={conversation.id}
                 >
                   <span className={styles.avatar}>
@@ -282,6 +346,15 @@ export default async function OrganizationMessagesPage({
                   )}
                 </Link>
               ))}
+              {visibleConversations.length === 0 && (
+                <p className={styles.noResults}>
+                  {query
+                    ? "No conversations match your search."
+                    : activeFilter === "unread"
+                      ? "You’re all caught up."
+                      : "No conversations in this view yet."}
+                </p>
+              )}
             </nav>
             <div className={styles.inboxFoot}>
               <ShieldCheck aria-hidden size={16} />
@@ -303,7 +376,20 @@ export default async function OrganizationMessagesPage({
                   <strong>Start with who needs the update.</strong>
                 </span>
               </header>
+              {recipient &&
+                !eligibleInitialRecipient(relatedPeople, recipient) && (
+                  <p role="alert" className={styles.safetyBar}>
+                    This person is not available to message in this club. Choose
+                    an eligible recipient below.
+                  </p>
+                )}
               <MessageComposer
+                key={recipient ?? "new"}
+                initialRecipientId={eligibleInitialRecipient(
+                  relatedPeople,
+                  recipient,
+                )}
+                startWithSpecificPeople={Boolean(recipient)}
                 audiences={audiences}
                 clientMessageId={creationId}
                 organizationId={dashboard.organization.id}
@@ -339,7 +425,8 @@ export default async function OrganizationMessagesPage({
                 <span className={styles.threadTitle}>
                   <strong>{detail.conversation.title}</strong>
                   <small>
-                    {detail.participants.length} people ·{" "}
+                    {dashboard.organization.name} · {detail.participants.length}{" "}
+                    people ·{" "}
                     {detail.conversation.context?.label ?? "Organization"}
                   </small>
                 </span>
@@ -383,6 +470,16 @@ export default async function OrganizationMessagesPage({
                             minute: "2-digit",
                           }).format(new Date(message.createdAt))}
                         </time>
+                        {phoneStatus.has(message.id) && (
+                          <small className={styles.phoneStatus}>
+                            Phone:{" "}
+                            {phoneStatus.get(message.id) === "unknown"
+                              ? "Outcome unknown — check provider before sending again"
+                              : phoneStatus.get(message.id) === "dispatching"
+                                ? "Sending"
+                                : phoneStatus.get(message.id)}
+                          </small>
+                        )}
                       </div>
                     </article>
                   );
@@ -405,6 +502,19 @@ export default async function OrganizationMessagesPage({
                   type="hidden"
                   value={String(detail.conversation.announcementOnly)}
                 />
+                {phoneReplies.options.length > 0 && (
+                  <label className={styles.phoneChannel}>
+                    Reply channel
+                    <select name="phoneBindingId" defaultValue="">
+                      <option value="">Duna only</option>
+                      {phoneReplies.options.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          Duna + {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <textarea
                   aria-label="Message"
                   maxLength={10_000}

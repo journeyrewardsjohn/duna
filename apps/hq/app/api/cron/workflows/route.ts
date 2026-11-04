@@ -1,3 +1,4 @@
+import { drainPhoneReplies } from "@duna/api/sendblue-outbox";
 import { recoverReadyWorkflowJobs } from "@duna/api";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -22,8 +23,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const results = await recoverReadyWorkflowJobs({ limit: 100 });
+  const phoneReplies = await drainPhoneReplies();
   return NextResponse.json({
     status: "ok",
+    phoneReplies,
     processed: results.length,
     succeeded: results.filter((result) => result.status === "succeeded").length,
     retrying: results.filter((result) => result.status === "retry").length,

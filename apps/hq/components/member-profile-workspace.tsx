@@ -136,15 +136,7 @@ export function MemberProfileWorkspace({
   const nextSession = upcomingSessions.toSorted((left, right) =>
     left.startsAt.localeCompare(right.startsAt),
   )[0];
-  const reminderHref = person.phoneE164
-    ? `sms:${person.phoneE164}?body=${encodeURIComponent(
-        `Hi ${person.displayName.split(" ")[0]}, a quick reminder from ${workspace.organization.name}.`,
-      )}`
-    : person.email
-      ? `mailto:${person.email}?subject=${encodeURIComponent(
-          `A reminder from ${workspace.organization.name}`,
-        )}`
-      : undefined;
+  const reminderHref = `/messages?compose=new&recipient=${encodeURIComponent(person.personId)}`;
   const sharedNotes = profile.notes.filter(
     (note) => note.status === "published",
   );
@@ -195,15 +187,10 @@ export function MemberProfileWorkspace({
           </span>
         </div>
         <div className="member-profile-hero__actions">
-          {reminderHref ? (
-            <a className="hq-button hq-button--secondary" href={reminderHref}>
-              <MessageCircle aria-hidden size={16} /> Send reminder
-            </a>
-          ) : (
-            <button className="hq-button hq-button--secondary" disabled>
-              <MessageCircle aria-hidden size={16} /> No contact method
-            </button>
-          )}
+          <a className="hq-button hq-button--secondary" href={reminderHref}>
+            <MessageCircle aria-hidden size={16} /> Message
+            {person.isMinor ? " family" : " player"}
+          </a>
           <button
             className="hq-button hq-button--primary"
             onClick={() => setPanel("register")}

@@ -51,6 +51,18 @@ import {
   unregisterMessagingPushDevice,
 } from "./messaging-notifications";
 
+import {
+  beginMessagingChannelLink,
+  loadMessagingChannelStatus,
+  revokeMessagingChannelLinks,
+} from "./messaging-channel-link";
+import {
+  dispatchPhoneReply,
+  enqueuePhoneReply,
+  loadPhoneReplyOptions,
+} from "./sendblue-outbox";
+import { resolveClubDestination } from "./club-conversation-routing";
+
 const principalModeSchema = z.enum(["user", "organization"]).default("user");
 
 function messagingFailure(error: unknown): never {
@@ -88,6 +100,132 @@ const messagingUploadProcedure = protectedProcedure.use(
 );
 
 export const messagingRouter = router({
+  phoneReplyOptions: messagingReadProcedure
+    .input(z.object({ conversationId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      try {
+        return await loadPhoneReplyOptions(ctx.actor!, input.conversationId);
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  sendPhoneReply: messagingWriteProcedure
+    .input(
+      z.object({
+        bindingId: z.string().uuid(),
+        message: sendMessageInputSchema,
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const options = await loadPhoneReplyOptions(
+          ctx.actor!,
+          input.message.conversationId,
+        );
+        if (
+          !options.options.some((option) => option.id === input.bindingId) ||
+          input.message.widgets.length ||
+          input.message.attachmentUploadIds.length ||
+          input.message.kind !== "text"
+        )
+          throw new MessagingError(
+            "BAD_REQUEST",
+            "Choose an available phone destination and send plain text only.",
+          );
+        const message = await sendConversationMessage({
+          actor: ctx.actor!,
+          asPrincipal: "organization",
+          message: input.message,
+          requestId: ctx.requestId,
+          now: ctx.now,
+        });
+        const queued = await enqueuePhoneReply(
+          ctx.actor!,
+          input.message.conversationId,
+          message.id,
+          input.bindingId,
+        );
+        const status = await dispatchPhoneReply(queued.id);
+        return { id: message.id, status };
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  channelStatus: messagingReadProcedure.query(async ({ ctx }) => {
+    try {
+      return await loadMessagingChannelStatus(ctx.actor!);
+    } catch (error) {
+      return messagingFailure(error);
+    }
+  }),
+  beginChannelLink: messagingWriteProcedure
+    .input(z.object({ conversationId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await beginMessagingChannelLink(
+          ctx.actor!,
+          input.conversationId,
+          ctx.now,
+        );
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  revokeChannelLinks: messagingWriteProcedure.mutation(async ({ ctx }) => {
+    try {
+      return await revokeMessagingChannelLinks(ctx.actor!);
+    } catch (error) {
+      return messagingFailure(error);
+    }
+  }),
+  resolveClub: messagingReadProcedure
+    .input(
+      z.object({
+        conversationId: z.string().uuid().optional(),
+        selectedOrganizationId: z.string().uuid().optional(),
+        message: z.string().max(4000).optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      try {
+        const inbox = await loadMessagingInbox({
+          actor: ctx.actor!,
+          asPrincipal: "user",
+          now: ctx.now,
+        });
+        const destinations = new Map<
+          string,
+          { organizationId: string; label: string; conversationIds: string[] }
+        >();
+        for (const conversation of inbox.conversations) {
+          const organization = conversation.participants.find(
+            (participant) => participant.type === "organization",
+          );
+          const organizationId =
+            conversation.context?.organizationId ?? organization?.id;
+          if (
+            !organizationId ||
+            !organization ||
+            organization.id !== organizationId
+          )
+            continue;
+          const existing = destinations.get(organizationId);
+          if (existing) existing.conversationIds.push(conversation.id);
+          else
+            destinations.set(organizationId, {
+              organizationId,
+              label: organization.displayName,
+              conversationIds: [conversation.id],
+            });
+        }
+        return resolveClubDestination({
+          ...input,
+          destinations: [...destinations.values()],
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
   composeOptions: messagingReadProcedure
     .output(messagingComposeOptionsSchema)
     .query(async ({ ctx }) => {

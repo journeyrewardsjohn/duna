@@ -12906,3 +12906,47 @@ export const messagingChannelBindings = pgTable(
     index("messaging_channel_person_idx").on(table.personId),
   ],
 );
+
+export const messagingChannelOutbox = pgTable(
+  "messaging_channel_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceMessageId: uuid("source_message_id")
+      .notNull()
+      .unique()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    bindingId: uuid("binding_id")
+      .notNull()
+      .references(() => messagingChannelBindings.id),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    actorPersonId: uuid("actor_person_id")
+      .notNull()
+      .references(() => people.id),
+    recipientPersonId: uuid("recipient_person_id")
+      .notNull()
+      .references(() => people.id),
+    endpoint: varchar("endpoint", { length: 24 }).notNull(),
+    recipientPhone: varchar("recipient_phone", { length: 24 }).notNull(),
+    body: text("body").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    providerMessageHandle: varchar("provider_message_handle", {
+      length: 192,
+    }).unique(),
+    error: text("error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("messaging_channel_outbox_status_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);

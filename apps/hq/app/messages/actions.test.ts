@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
   revalidatePath: vi.fn(),
   send: vi.fn(),
+  sendPhoneReply: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
@@ -14,6 +15,7 @@ vi.mock("@/lib/api", () => ({
     messaging: {
       create: mocks.create,
       send: mocks.send,
+      sendPhoneReply: mocks.sendPhoneReply,
     },
   }),
 }));
@@ -58,6 +60,24 @@ describe("HQ messaging actions", () => {
       message: "Choose at least one eligible recipient.",
     });
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("only sends to a phone when staff explicitly select a binding", async () => {
+    const form = new FormData();
+    form.set("conversationId", "40000000-0000-4000-8000-000000000001");
+    form.set("clientMessageId", "50000000-0000-4000-8000-000000000001");
+    form.set("body", "Your lesson starts at 4 PM.");
+    form.set("phoneBindingId", "60000000-0000-4000-8000-000000000001");
+    await sendOrganizationMessage(initialState, form);
+    expect(mocks.sendPhoneReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bindingId: "60000000-0000-4000-8000-000000000001",
+        message: expect.objectContaining({
+          body: "Your lesson starts at 4 PM.",
+        }),
+      }),
+    );
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it("keeps a send error inside the active thread", async () => {
