@@ -88,7 +88,10 @@ async function install(
         ? '\\"demo\\":false,\\"canManageBilling\\":true'
         : '\\"demo\\":false,\\"canManageBilling\\":false',
     );
-    expect(html).not.toEqual(original);
+    // Production Next prefetches metadata-only RSC responses that contain no
+    // component props. Assert fixture activation only on the document request.
+    if (route.request().isNavigationRequest())
+      expect(html).not.toEqual(original);
     await route.fulfill({ response, body: html });
   });
   await page.route(`${base}/api/websites**`, async (route) => {
