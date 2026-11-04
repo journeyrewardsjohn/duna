@@ -14,8 +14,10 @@ import {
   sendConversationMessage,
 } from "./messaging-service";
 
-export function channelEndpoints() {
-  return (process.env.SENDBLUE_PHONE_NUMBERS ?? "")
+export function channelEndpoints(): string[] {
+  const configured: unknown = process.env.SENDBLUE_PHONE_NUMBERS;
+  const endpoints = typeof configured === "string" ? configured : "";
+  return endpoints
     .split(",")
     .map((number) => number.trim())
     .filter((number) => /^\+[1-9]\d{7,14}$/.test(number));
