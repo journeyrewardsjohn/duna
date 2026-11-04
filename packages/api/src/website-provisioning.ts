@@ -28,7 +28,7 @@ const providerKeys = [
   "DUNA_SITES_NEON_ORG_ID",
 ] as const;
 export function websiteHostingReadiness() {
-  const missing = providerKeys.filter((k) => !process.env[k]);
+  const missing = providerKeys.filter((k) => !process.env[k]?.trim());
   return { configured: missing.length === 0, missing };
 }
 function configuration() {
@@ -38,10 +38,10 @@ function configuration() {
       "Website hosting is not connected yet. Contact Duna to finish hosting setup.",
     );
   return {
-    vercelToken: process.env.DUNA_SITES_VERCEL_TOKEN!,
-    teamId: process.env.DUNA_SITES_VERCEL_TEAM_ID!,
-    neonKey: process.env.DUNA_SITES_NEON_API_KEY!,
-    neonOrg: process.env.DUNA_SITES_NEON_ORG_ID!,
+    vercelToken: process.env.DUNA_SITES_VERCEL_TOKEN!.trim(),
+    teamId: process.env.DUNA_SITES_VERCEL_TEAM_ID!.trim(),
+    neonKey: process.env.DUNA_SITES_NEON_API_KEY!.trim(),
+    neonOrg: process.env.DUNA_SITES_NEON_ORG_ID!.trim(),
   };
 }
 class ProviderError extends Error {

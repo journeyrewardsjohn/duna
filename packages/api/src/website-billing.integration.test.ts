@@ -5,6 +5,7 @@ import {
   beforeAll,
   beforeEach,
   afterAll,
+  afterEach,
   describe,
   expect,
   it,
@@ -18,15 +19,19 @@ const state = vi.hoisted(() => ({
   subscription: vi.fn(),
   updateSubscription: vi.fn(),
   invoice: vi.fn(),
+  stripeClient: vi.fn(),
 }));
 vi.mock("./payments", () => ({
-  getStripeClient: () => ({
-    subscriptions: {
-      retrieve: state.subscription,
-      update: state.updateSubscription,
-    },
-    invoices: { retrieve: state.invoice },
-  }),
+  getStripeClient: () => {
+    state.stripeClient();
+    return {
+      subscriptions: {
+        retrieve: state.subscription,
+        update: state.updateSubscription,
+      },
+      invoices: { retrieve: state.invoice },
+    };
+  },
   createBillingPortalSession: vi.fn(),
 }));
 vi.mock("@duna/db", async (importOriginal) => ({
@@ -35,6 +40,7 @@ vi.mock("@duna/db", async (importOriginal) => ({
   getTransactionalDatabase: () => state.db,
 }));
 import {
+  startWebsiteCheckout,
   cancelWebsiteSubscription,
   reserveWebsiteCredits,
   settleWebsiteCredits,
@@ -378,3 +384,41 @@ describe("owner website cancellation", () => {
     expect(await db.select().from(schema.auditLog)).toHaveLength(1);
   });
 });
+
+// Real owner/site authorization and actual connection validator precede all Stripe access.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+it.each(["vercel.com", "neon.tech"])(
+  "blocks checkout before Stripe when %s rejects runtime credentials",
+  async (host) => {
+    vi.stubEnv("DUNA_SITES_VERCEL_TOKEN", "test-invalid");
+    vi.stubEnv("DUNA_SITES_VERCEL_TEAM_ID", "team_expected");
+    vi.stubEnv("DUNA_SITES_NEON_API_KEY", "test-invalid");
+    vi.stubEnv("DUNA_SITES_NEON_ORG_ID", "org_expected");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes(host)
+          ? new Response("denied", { status: 401 })
+          : Response.json(
+              url.includes("/teams/")
+                ? { id: "team_expected" }
+                : { projects: [] },
+            ),
+      ),
+    );
+    state.stripeClient.mockClear();
+    await expect(
+      startWebsiteCheckout({
+        actor,
+        siteId,
+        successUrl: "https://hq.duna.coach/website",
+        cancelUrl: "https://hq.duna.coach/website",
+        idempotencyKey: "blocked-checkout",
+      }),
+    ).rejects.toThrow("Website hosting connection could not be verified");
+    expect(state.stripeClient).not.toHaveBeenCalled();
+  },
+);

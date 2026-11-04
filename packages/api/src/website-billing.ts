@@ -13,6 +13,8 @@ import type Stripe from "stripe";
 import type { ApiActor } from "./context";
 import { getStripeClient, createBillingPortalSession } from "./payments";
 
+import { assertWebsiteHostingConnection } from "./website-hosting-connection";
+
 export const WEBSITE_MONTHLY_PRICE_MINOR = 20_000;
 export const WEBSITE_MONTHLY_CREDITS = 1_000;
 export const WEBSITE_PRICE_LOOKUP_KEY = "duna-website-monthly-v1";
@@ -154,6 +156,7 @@ export async function startWebsiteCheckout(input: {
   const db = getDatabase();
   const successUrl = safeReturnUrl(input.successUrl),
     cancelUrl = safeReturnUrl(input.cancelUrl);
+  await assertWebsiteHostingConnection();
   const priceId = await resolveWebsitePriceId();
   const stripe = getStripeClient();
   const org = await db.query.organizations.findFirst({
