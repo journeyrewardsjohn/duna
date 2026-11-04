@@ -43,7 +43,12 @@ test("HQ assistant deep links and launchers open the floating Ask Duna surface",
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
   await page.goto(`${hqBaseUrl}/members`);
-  await page.getByRole("button", { name: "Minimize Ask Duna" }).click();
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open Ask Duna", exact: true }),
+  ).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page.getByRole("button", { name: "Duna AI", exact: true }).click();
   } else {
@@ -70,6 +75,11 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await page.goto(`${hqBaseUrl}/members`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   const input = floating.getByRole("textbox", { name: "Ask Duna anything" });
+  await expect(floating).toBeHidden();
+  expect(writes).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Open Ask Duna", exact: true })
+    .click();
   await expect(floating).toBeVisible();
   await input.fill("Help plan next week");
   await floating.locator('input[type="file"]').setInputFiles({
@@ -173,6 +183,10 @@ test("Floating Ask Duna respects protected pages and its menus dismiss accessibl
   await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/members`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
+  await expect(floating).toBeHidden();
+  await page
+    .getByRole("button", { name: "Open Ask Duna", exact: true })
+    .click();
   await expect(floating).toBeVisible();
   await expect(floating.locator(".ask-duna-context")).toContainText("People");
   await floating.getByRole("button", { name: "Duna Medium" }).click();
@@ -359,6 +373,12 @@ test("Ask Duna preserves the draft when its connection fails and searches saved 
     "could not start",
   );
   await page.goto(`${hqBaseUrl}/ask/history`);
+  await expect(
+    page.getByRole("region", { name: "Floating Ask Duna" }),
+  ).toBeHidden();
+  await page
+    .getByRole("button", { name: "Open Ask Duna", exact: true })
+    .click();
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
