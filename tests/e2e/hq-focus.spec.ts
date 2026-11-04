@@ -12,7 +12,7 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(hqBaseUrl);
   await expect(
-    page.getByRole("heading", { name: "What would you like to get done?" }),
+    page.getByRole("heading", { name: "Today", level: 1 }),
   ).toBeVisible();
   await expect(page.locator(".hq-shell--focused")).toHaveCSS(
     "background-color",
@@ -75,6 +75,7 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
 }) => {
   const { writes } = await installAskDunaFixture(page);
   await page.goto(`${hqBaseUrl}/members`);
+  await page.getByText("Ask Duna about this page", { exact: true }).click();
   const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
   await prompt.fill("Find the people who need a follow-up.");
   await prompt.press("Enter");

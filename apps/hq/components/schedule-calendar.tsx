@@ -638,6 +638,7 @@ export function ScheduleCalendar({
             <span className="segmented-control">
               {(["day", "week", "month", "quarter"] as const).map((option) => (
                 <button
+                  aria-pressed={view === option}
                   className={view === option ? "active" : ""}
                   key={option}
                   onClick={() => setView(option)}
@@ -649,6 +650,7 @@ export function ScheduleCalendar({
             </span>
             <span className="segmented-control">
               <button
+                aria-pressed={resourceView === "court"}
                 className={resourceView === "court" ? "active" : ""}
                 onClick={() => setResourceView("court")}
                 type="button"
@@ -656,6 +658,7 @@ export function ScheduleCalendar({
                 <Rows3 size={14} /> Courts
               </button>
               <button
+                aria-pressed={resourceView === "coach"}
                 className={resourceView === "coach" ? "active" : ""}
                 onClick={() => setResourceView("coach")}
                 type="button"

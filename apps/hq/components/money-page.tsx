@@ -1,11 +1,3 @@
-import {
-  ArrowRight,
-  Landmark,
-  ReceiptText,
-  Scale,
-  ShieldCheck,
-  WalletCards,
-} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MoneyWorkspace, type MoneyView } from "@/components/money-workspace";
@@ -17,7 +9,6 @@ const moneyNavigation: readonly {
   href: string;
   label: string;
   description: string;
-  icon: typeof WalletCards;
   tone: string;
 }[] = [
   {
@@ -25,7 +16,6 @@ const moneyNavigation: readonly {
     href: "/payments",
     label: "Balance",
     description: "Balances, earnings, and activity",
-    icon: WalletCards,
     tone: "aqua",
   },
   {
@@ -33,7 +23,6 @@ const moneyNavigation: readonly {
     href: "/payments/transactions",
     label: "Transactions",
     description: "Search payments and follow every event",
-    icon: ReceiptText,
     tone: "violet",
   },
   {
@@ -41,7 +30,6 @@ const moneyNavigation: readonly {
     href: "/payments/disputes",
     label: "Disputes",
     description: "Review and respond in Stripe",
-    icon: Scale,
     tone: "coral",
   },
   {
@@ -49,7 +37,6 @@ const moneyNavigation: readonly {
     href: "/payments/payout-settings",
     label: "Payout Settings",
     description: "Schedule, minimums, and bank descriptors",
-    icon: Landmark,
     tone: "gold",
   },
   {
@@ -57,34 +44,30 @@ const moneyNavigation: readonly {
     href: "/payments/refund-policies",
     label: "Refund Policies",
     description: "One default and clear purchase rules",
-    icon: ShieldCheck,
     tone: "green",
   },
 ];
 
 const pageCopy: Record<MoneyView, { title: string; description: string }> = {
   balance: {
-    title: "Know where every dollar is.",
-    description:
-      "See Duna eligibility beside Stripe’s available, pending, payout, and activity truth.",
+    title: "Balance",
+    description: "Available funds, pending payments and payouts.",
   },
   transactions: {
     title: "Transactions",
-    description:
-      "Read-only payment evidence, fees, refunds, disputes, and timelines.",
+    description: "Payments, fees, refunds and payment history.",
   },
   disputes: {
-    title: "Handle disputes before the deadline.",
-    description:
-      "Review connected-account cases here, then open the secure Stripe workflow with context intact.",
+    title: "Disputes",
+    description: "Review cases and respond in Stripe.",
   },
   "payout-settings": {
-    title: "Choose when money reaches your bank.",
+    title: "Payout settings",
     description:
       "Set a simple weekly or monthly rhythm, a minimum amount, and recognizable statement labels.",
   },
   "refund-policies": {
-    title: "Make refund rules easy to choose.",
+    title: "Refund policies",
     description:
       "Create clear policies, protect cancellable funds, and keep exactly one default for new purchases.",
   },
@@ -130,7 +113,6 @@ export async function MoneyPageContent({
         </header>
         <nav aria-label="Money sections" className="money-subnav">
           {moneyNavigation.map((item) => {
-            const Icon = item.icon;
             return (
               <Link
                 aria-current={item.view === view ? "page" : undefined}
@@ -139,12 +121,9 @@ export async function MoneyPageContent({
                 href={item.href}
                 key={item.href}
               >
-                <Icon size={18} />
                 <span>
                   <strong>{item.label}</strong>
-                  <small>{item.description}</small>
                 </span>
-                <ArrowRight className="money-subnav__arrow" size={16} />
               </Link>
             );
           })}

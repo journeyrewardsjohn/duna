@@ -155,7 +155,7 @@ test("website UI fixture: selected version, modal keyboard/error, and responsive
   const fixture = await install(page);
   await page.goto(`${base}/website`);
   await expect(
-    page.getByRole("heading", { name: "Build with Duna" }),
+    page.getByRole("heading", { name: "Edit website" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Versions", exact: true }).click();
   await page
@@ -235,7 +235,7 @@ test("website UI fixture: delayed old-site response cannot overwrite selected si
   const fixture = await install(page);
   await page.goto(`${base}/website`);
   await expect(
-    page.getByRole("heading", { name: "Build with Duna" }),
+    page.getByRole("heading", { name: "Edit website" }),
   ).toBeVisible();
   await page.getByLabel("Choose website").selectOption(two);
   await expect(page.locator("main")).toContainText("Second Club");
@@ -243,7 +243,7 @@ test("website UI fixture: delayed old-site response cannot overwrite selected si
   await page.getByLabel("Choose website").selectOption(one);
   await page.getByLabel("Choose website").selectOption(two);
   await expect(
-    page.getByRole("heading", { name: "Build with Duna" }),
+    page.getByRole("heading", { name: "Edit website" }),
   ).toBeVisible();
   await page.waitForTimeout(900);
   await expect(page.getByLabel("Choose website")).toHaveValue(two);

@@ -2,18 +2,8 @@
 
 import type { OperatorWorkspace } from "@duna/api";
 import { formatMoney, formatVenueTime } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
-import {
-  ArrowRight,
-  CalendarCheck2,
-  CircleAlert,
-  Coins,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  UserRoundCheck,
-  UsersRound,
-} from "lucide-react";
+import { Badge } from "@duna/ui";
+import { ArrowRight, Coins, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -137,61 +127,34 @@ export function PeopleWorkspace({
 
   return (
     <div className="people-workspace people-command-center">
-      <section className="people-command-metrics" aria-label="People overview">
-        <article className="people-command-metrics__primary">
-          <span className="people-command-metrics__icon">
-            <UsersRound aria-hidden size={21} />
-          </span>
-          <span>
-            <small>Connected people</small>
-            <Numeric>{workspace.people.length}</Numeric>
-          </span>
-          <p>Every relationship, purchase, session, balance, and note.</p>
-        </article>
-        <article>
-          <UserRoundCheck aria-hidden size={20} />
-          <span>
-            <Numeric>{activePlans}</Numeric>
-            <small>active plans</small>
-          </span>
-        </article>
-        <article>
-          <CalendarCheck2 aria-hidden size={20} />
-          <span>
-            <Numeric>{upcomingPeople}</Numeric>
-            <small>coming up</small>
-          </span>
-        </article>
-        <article>
-          <CircleAlert aria-hidden size={20} />
-          <span>
-            <Numeric>{needsAttention.length}</Numeric>
-            <small>retention follow-up</small>
-          </span>
-        </article>
-      </section>
+      <div className="hq-summary-line" aria-label="People overview">
+        <span>
+          <strong>{workspace.people.length}</strong> people
+        </span>
+        <span>
+          <strong>{activePlans}</strong> active plans
+        </span>
+        <span>
+          <strong>{upcomingPeople}</strong> with upcoming sessions
+        </span>
+        <span>
+          <strong>{needsAttention.length}</strong> need follow-up
+        </span>
+      </div>
 
       <section className="people-command-layout">
         <div className="hq-card people-directory">
           <header className="people-directory__header">
-            <div>
-              <span className="hq-eyebrow">Find anyone fast</span>
-              <h2>People directory</h2>
-              <p>
-                Open a person to see their full relationship with your
-                organization and take care of the next job.
-              </p>
-            </div>
             <label className="people-search">
               <Search aria-hidden size={18} />
               <input
+                aria-label="Search people"
                 autoComplete="off"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Name, email, phone, role, plan…"
                 type="search"
                 value={query}
               />
-              <kbd>⌘ K</kbd>
             </label>
           </header>
           <div
@@ -216,81 +179,100 @@ export function PeopleWorkspace({
             {normalizedQuery ? ` matching “${query.trim()}”` : ""}
           </div>
           <div className="people-directory__list">
-            {people.map((person) => (
-              <Link href={`/members/${person.personId}`} key={person.personId}>
-                <span className="people-directory__avatar">
-                  {person.avatarUrl ? (
-                    <img alt="" src={person.avatarUrl} />
-                  ) : (
-                    initials(person.displayName)
-                  )}
-                  <i data-state={person.status} />
-                </span>
-                <span className="people-directory__identity">
-                  <strong>{person.displayName}</strong>
-                  <small>
-                    {person.email ??
-                      person.phoneE164 ??
-                      "Contact details missing"}
-                  </small>
-                  <span>
-                    {person.roles.slice(0, 2).map((role) => (
-                      <em key={role}>{role.replaceAll("-", " ")}</em>
-                    ))}
-                    {person.isMinor && <em>minor</em>}
-                  </span>
-                </span>
-                <span className="people-directory__relationship">
-                  <small>Relationship</small>
-                  <strong>{person.membershipName ?? "No active plan"}</strong>
-                  <span>
-                    {person.creditBalance} credits · {person.upcomingCount}{" "}
-                    upcoming
-                  </span>
-                </span>
-                <span className="people-directory__activity">
-                  <small>Last activity</small>
-                  <strong>
-                    {person.churnRisk.lastActivityAt
-                      ? formatVenueTime(
-                          person.churnRisk.lastActivityAt,
-                          workspace.organization.timezone,
-                          "en-US",
-                          { month: "short", day: "numeric" },
-                        )
-                      : "No activity yet"}
-                  </strong>
-                  <span>
-                    {formatMoney(
-                      person.lifetimeSpendMinor,
-                      workspace.organization.currency,
-                    )}{" "}
-                    lifetime
-                  </span>
-                </span>
-                <span className="people-directory__signal">
-                  <Badge
-                    tone={
-                      person.churnRisk.level === "high"
-                        ? "warning"
-                        : person.churnRisk.level === "low"
-                          ? "positive"
-                          : "neutral"
-                    }
-                  >
-                    {person.churnRisk.level === "high"
-                      ? "follow up"
-                      : person.churnRisk.level}
-                  </Badge>
-                  <small>{person.churnRisk.score}/100 signal</small>
-                </span>
-                <ArrowRight
-                  aria-hidden
-                  className="people-directory__arrow"
-                  size={18}
-                />
-              </Link>
-            ))}
+            <div
+              className="hq-data-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="People directory"
+            >
+              <table className="hq-data-table">
+                <caption className="sr-only">People directory</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Person</th>
+                    <th scope="col">Plan & credits</th>
+                    <th scope="col">Upcoming</th>
+                    <th scope="col">Last activity</th>
+                    <th scope="col">Lifetime spend</th>
+                    <th scope="col">Follow-up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {people.map((person) => (
+                    <tr key={person.personId}>
+                      <th scope="row">
+                        <Link
+                          className="hq-person-link"
+                          href={`/members/${person.personId}`}
+                        >
+                          <span className="people-directory__avatar">
+                            {person.avatarUrl ? (
+                              <img alt="" src={person.avatarUrl} />
+                            ) : (
+                              initials(person.displayName)
+                            )}
+                          </span>
+                          <span>
+                            <strong>{person.displayName}</strong>
+                            <small>
+                              {person.email ??
+                                person.phoneE164 ??
+                                "Contact details missing"}
+                            </small>
+                            <small>
+                              {person.roles.join(", ").replaceAll("-", " ")}
+                              {person.isMinor ? " · minor" : ""}
+                            </small>
+                          </span>
+                        </Link>
+                      </th>
+                      <td>
+                        {person.membershipName ?? "No active plan"}
+                        <small>{person.creditBalance} credits</small>
+                      </td>
+                      <td>{person.upcomingCount}</td>
+                      <td>
+                        {person.churnRisk.lastActivityAt
+                          ? formatVenueTime(
+                              person.churnRisk.lastActivityAt,
+                              workspace.organization.timezone,
+                              "en-US",
+                              { month: "short", day: "numeric" },
+                            )
+                          : "No activity"}
+                      </td>
+                      <td>
+                        {formatMoney(
+                          person.lifetimeSpendMinor,
+                          workspace.organization.currency,
+                        )}
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            person.churnRisk.level === "high"
+                              ? "warning"
+                              : person.churnRisk.level === "low"
+                                ? "positive"
+                                : "neutral"
+                          }
+                        >
+                          {person.churnRisk.level === "high"
+                            ? "Follow up"
+                            : person.churnRisk.level === "low"
+                              ? "Low risk"
+                              : "Review"}
+                        </Badge>
+                        <small>
+                          {person.churnRisk.reasons[0] ??
+                            `${person.churnRisk.score}/100 signal`}
+                        </small>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {people.length === 0 && (
               <div className="hq-empty people-directory__empty">
                 <Search aria-hidden size={22} />
@@ -314,12 +296,8 @@ export function PeopleWorkspace({
         <aside className="people-command-rail">
           <section className="hq-card people-attention-card">
             <header>
-              <span className="people-command-rail__mark">
-                <Sparkles aria-hidden size={17} />
-              </span>
               <span>
-                <small>Duna signal</small>
-                <strong>Worth your attention</strong>
+                <strong>Follow-up</strong>
               </span>
             </header>
             <div>
@@ -340,7 +318,7 @@ export function PeopleWorkspace({
                 </Link>
               ))}
               {needsAttention.length === 0 && (
-                <p>Everyone has a healthy recent relationship signal.</p>
+                <p>No retention follow-up flagged.</p>
               )}
             </div>
           </section>
@@ -377,7 +355,7 @@ export function PeopleWorkspace({
           <section className="people-privacy-note">
             <ShieldCheck aria-hidden size={19} />
             <span>
-              <strong>Private by design</strong>
+              <strong>Privacy</strong>
               Health summaries appear only after a player grants this
               organization access. Private coach notes never appear to players.
             </span>
