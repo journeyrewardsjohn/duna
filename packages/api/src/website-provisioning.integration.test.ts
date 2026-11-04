@@ -280,4 +280,33 @@ describe("durable website publication", () => {
       ),
     ).toBe(false);
   });
+  it("assigns the full managed hostname and waits for alias propagation before publishing", async () => {
+    await publishWebsiteRevision(actor, siteId, revisionId, pages);
+    const original = providerFetch.getMockImplementation() as (
+      input: string | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
+    let assigned = false;
+    providerFetch.mockImplementation(async (input, init) => {
+      const path = new URL(input).pathname;
+      if (path.startsWith("/v4/aliases/") && !assigned)
+        return Response.json({ error: "not_found" }, { status: 404 });
+      if (path.endsWith("/aliases") && init?.method === "POST") {
+        assigned = true;
+        return Response.json({ alias: `duna-club-${siteId}.vercel.app` });
+      }
+      return original(input, init);
+    });
+    expect((await readPublishStatus(actor, siteId)).status).toBe("deploying");
+    expect(assigned).toBe(true);
+    const pending = await db.query.websiteRevisions.findFirst({
+      where: eq(schema.websiteRevisions.id, revisionId),
+    });
+    expect(pending?.leaseExpiresAt?.getTime()).toBeGreaterThan(Date.now());
+    await db
+      .update(schema.websiteRevisions)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(schema.websiteRevisions.id, revisionId));
+    expect((await readPublishStatus(actor, siteId)).status).toBe("published");
+  });
 });
