@@ -171,3 +171,19 @@
 .workspace :global(.hq-data-table) td:last-child {
   white-space: nowrap;
 }
+@media (max-width: 600px) {
+  .workspace :global(.hq-data-table) {
+    min-width: 0;
+    table-layout: fixed;
+  }
+  .workspace :global(.hq-data-table) th:first-child {
+    width: 42%;
+  }
+  .workspace :global(.hq-data-table) :is(th, td) {
+    padding-inline: 10px;
+    overflow-wrap: anywhere;
+  }
+  .workspace :global(.hq-data-table) tr > :last-child {
+    display: none;
+  }
+}

@@ -1305,10 +1305,17 @@ body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
   border: 0;
 }
 .hq-shell--focused .people-search {
+  display: flex;
+  margin: 0;
   width: min(100%, 480px);
   min-width: 0;
 }
 .hq-shell--focused .people-search input {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   min-height: 48px;
   font-size: 16px;
 }
@@ -1361,4 +1368,28 @@ body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
   .hq-shell--focused .money-subnav > a {
     flex-shrink: 0;
   }
+}
+
+.hq-shell--focused .refund-policy-form > h3 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.hq-shell--focused .refund-policy-page .hq-card-heading h2 {
+  max-width: none;
+}
+.hq-shell--focused .refund-policy-page .hq-card-heading > svg {
+  display: none;
+}
+.hq-shell--focused .refund-policy-form > div {
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 110px);
+}
+.hq-shell--focused .refund-policy-form :is(label, input, select, textarea) {
+  min-width: 0;
+}
+.hq-shell--focused
+  .refund-policy-form
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  width: 100%;
+  box-sizing: border-box;
 }

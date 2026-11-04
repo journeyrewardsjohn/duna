@@ -77,7 +77,9 @@ export function AskDunaFloating({
     const measure = () => {
       const dock = panel.current?.querySelector(".ask-duna-dock");
       const height = minimized
-        ? 72
+        ? window.matchMedia("(min-width: 1101px)").matches
+          ? 0
+          : 72
         : (dock?.getBoundingClientRect().height ?? 220) + 68;
       document.body.style.setProperty("--ask-duna-clearance", `${height}px`);
     };
@@ -105,7 +107,15 @@ export function AskDunaFloating({
       focusTarget === "launcher"
         ? launcher.current
         : panel.current?.querySelector<HTMLTextAreaElement>("textarea");
-    target?.focus({ preventScroll: true });
+    const fallback = document.querySelector<HTMLButtonElement>(".hq-ai-button");
+    const visibleTarget = target?.getClientRects().length
+      ? target
+      : fallback?.getClientRects().length
+        ? fallback
+        : document.querySelector<HTMLTextAreaElement>(
+            ".hq-work-prompt textarea",
+          );
+    visibleTarget?.focus({ preventScroll: true });
     setFocusTarget(null);
   }, [focusTarget, minimized, visible]);
   async function start(message: UserContent, title: string) {

@@ -6,14 +6,18 @@ const hqBaseUrl =
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
 async function openFloating(page: Page) {
-  const launcher = page.getByRole("button", { name: "Open Ask Duna", exact: true });
+  const launcher = page.getByRole("button", {
+    name: "Open Ask Duna",
+    exact: true,
+  });
   if (await launcher.isVisible()) await launcher.click();
   else await page.getByRole("button", { name: "Duna AI", exact: true }).click();
 }
 
 function floatingReturnTarget(page: Page) {
   return page.getByRole("button", {
-    name: (page.viewportSize()?.width ?? 1440) > 1100 ? "Duna AI" : "Open Ask Duna",
+    name:
+      (page.viewportSize()?.width ?? 1440) > 1100 ? "Duna AI" : "Open Ask Duna",
     exact: true,
   });
 }
@@ -59,7 +63,10 @@ test("HQ assistant deep links and launchers open the floating Ask Duna surface",
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
-  const launcher = page.getByRole("button", { name: "Open Ask Duna", exact: true });
+  const launcher = page.getByRole("button", {
+    name: "Open Ask Duna",
+    exact: true,
+  });
   if ((page.viewportSize()?.width ?? 1440) > 1100)
     await expect(launcher).toBeHidden();
   else await expect(launcher).toBeVisible();

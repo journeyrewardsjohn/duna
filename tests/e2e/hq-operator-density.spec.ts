@@ -4,6 +4,18 @@ const base =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
+// The synthetic local client IP belongs to localhost, not font providers.
+test.beforeEach(async ({ page }) => {
+  await page.route(
+    /^https:\/\/(?:api|cdn)\.fontshare\.com\//,
+    async (route) => {
+      const headers = route.request().headers();
+      delete headers["x-forwarded-for"];
+      await route.continue({ headers });
+    },
+  );
+});
+
 async function clearAssistant(page: Page) {
   const minimize = page.getByRole("button", {
     name: "Minimize Ask Duna",
@@ -37,7 +49,9 @@ test("compact Activities keeps every operational destination and accessible tabl
     exact: true,
   });
   await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(3);
+  await expect(table.getByRole("columnheader")).toHaveCount(
+    (page.viewportSize()?.width ?? 1440) <= 600 ? 2 : 3,
+  );
   await expect(table.getByRole("rowheader")).toHaveCount(8);
   const destinations = [
     ["Programs & camps", "/programs"],
@@ -65,6 +79,10 @@ test("compact Activities keeps every operational destination and accessible tabl
     expect(box!.y).toBeLessThan(360);
   }
   await expectContainedPage(page);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    window.scrollTo(0, 0);
+  });
   await page.screenshot({
     path: info.outputPath("activities-compact.png"),
     fullPage: true,
@@ -119,6 +137,10 @@ test("compact People retains search, family filters and keyboard profile access"
   await region.focus();
   await expect(region).toBeFocused();
   await expectContainedPage(page);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    window.scrollTo(0, 0);
+  });
   await page.screenshot({
     path: info.outputPath("people-compact.png"),
     fullPage: true,
@@ -152,6 +174,10 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
   await expect(page).toHaveURL(`${base}/payments/refund-policies`);
   await expect(refunds).toHaveAttribute("aria-current", "page");
   await expectContainedPage(page);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    window.scrollTo(0, 0);
+  });
   await page.screenshot({
     path: info.outputPath("money-compact-dark.png"),
     fullPage: true,
