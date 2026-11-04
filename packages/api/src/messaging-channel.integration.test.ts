@@ -20,13 +20,23 @@ vi.mock("@duna/db", async () => ({
   getTransactionalDatabase: () => database,
 }));
 vi.mock("./messaging-service", () => ({
-  loadConversation: vi.fn(),
+  loadConversation: vi
+    .fn()
+    .mockImplementation(async () => ({
+      conversation: {
+        participants: [],
+        context: { organizationId: "20000000-0000-4000-8000-000000000001" },
+      },
+      permissions: { canPost: true },
+    })),
   sendConversationMessage: vi.fn(),
   MessagingError: class extends Error {},
 }));
 import {
   channelLinkCodeHash,
   consumeMessagingChannelLink,
+  revokeMessagingChannelLinks,
+  processVerifiedChannelInbound,
 } from "./messaging-channel-link";
 const personId = "10000000-0000-4000-8000-000000000001";
 const organizationId = "20000000-0000-4000-8000-000000000001";
@@ -38,7 +48,7 @@ const command = `DUNA ${"A".repeat(24)}`;
 const now = new Date("2026-11-04T12:00:00Z");
 beforeAll(async () => {
   await pg.exec(
-    `CREATE TABLE people (id uuid PRIMARY KEY); CREATE TABLE organizations (id uuid PRIMARY KEY); CREATE TABLE messaging_conversations (id uuid PRIMARY KEY); CREATE TABLE conversation_messages (id uuid PRIMARY KEY);`,
+    `CREATE TABLE people (id uuid PRIMARY KEY, is_minor boolean NOT NULL DEFAULT false, status text NOT NULL DEFAULT 'active', display_name text NOT NULL DEFAULT 'Adult'); CREATE TABLE organizations (id uuid PRIMARY KEY); CREATE TABLE messaging_conversations (id uuid PRIMARY KEY); CREATE TABLE conversation_messages (id uuid PRIMARY KEY);`,
   );
   for (const migration of [
     "0110_ancient_fenris.sql",
@@ -51,7 +61,7 @@ beforeAll(async () => {
       ),
     );
   await pg.exec(
-    `INSERT INTO people VALUES ('${personId}'); INSERT INTO organizations VALUES ('${organizationId}'); INSERT INTO messaging_conversations VALUES ('${conversationId}'); INSERT INTO conversation_messages VALUES ('${messageId}');`,
+    `INSERT INTO people (id) VALUES ('${personId}'); INSERT INTO organizations VALUES ('${organizationId}'); INSERT INTO messaging_conversations VALUES ('${conversationId}'); INSERT INTO conversation_messages VALUES ('${messageId}');`,
   );
 });
 beforeEach(async () => {
@@ -63,7 +73,7 @@ afterAll(async () => {
   await pg.close();
 });
 describe("phone channel database invariants", () => {
-  it("consumes a challenge only once under concurrent deliveries", async () => {
+  it("disconnect serializes with a concurrent consume and invalidates old codes", async () => {
     await database
       .insert(schema.messagingChannelChallenges)
       .values({
@@ -74,6 +84,75 @@ describe("phone channel database invariants", () => {
         endpoint,
         expiresAt: new Date(now.getTime() + 600000),
       });
+    await Promise.all([
+      consumeMessagingChannelLink(command, senderPhone, endpoint, now),
+      revokeMessagingChannelLinks({
+        personId,
+        displayName: "Adult",
+        ageBand: "adult",
+        roles: ["player"],
+        scopes: [],
+        isDemo: false,
+      }),
+    ]);
+    const bindings = await database
+      .select()
+      .from(schema.messagingChannelBindings);
+    expect(bindings.every((binding) => binding.revokedAt !== null)).toBe(true);
+    expect(
+      await consumeMessagingChannelLink(command, senderPhone, endpoint, now),
+    ).toBe(false);
+  });
+  it("STOP invalidates previously issued codes as well as the active binding", async () => {
+    await database
+      .insert(schema.messagingChannelBindings)
+      .values({
+        personId,
+        organizationId,
+        conversationId,
+        endpoint,
+        senderPhone,
+        verifiedAt: now,
+      });
+    await database
+      .insert(schema.messagingChannelChallenges)
+      .values({
+        codeHash: channelLinkCodeHash(command.slice(5)),
+        personId,
+        organizationId,
+        conversationId,
+        endpoint,
+        expiresAt: new Date(now.getTime() + 600000),
+      });
+    expect(
+      await processVerifiedChannelInbound({
+        senderPhone,
+        endpoint,
+        content: "STOP",
+        clientMessageId: messageId,
+        optedOut: true,
+        group: false,
+        media: false,
+      }),
+    ).toBe("opted-out");
+    expect(
+      await consumeMessagingChannelLink(command, senderPhone, endpoint, now),
+    ).toBe(false);
+    expect(
+      (await database.select().from(schema.messagingChannelBindings))[0]
+        ?.revokedAt,
+    ).not.toBeNull();
+  });
+
+  it("consumes a challenge only once under concurrent deliveries", async () => {
+    await database.insert(schema.messagingChannelChallenges).values({
+      codeHash: channelLinkCodeHash(command.slice(5)),
+      personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      expiresAt: new Date(now.getTime() + 600000),
+    });
     const results = await Promise.all([
       consumeMessagingChannelLink(command, senderPhone, endpoint, now),
       consumeMessagingChannelLink(command, senderPhone, endpoint, now),
@@ -92,16 +171,14 @@ describe("phone channel database invariants", () => {
     });
   });
   it("cannot consume an expired or wrong-endpoint challenge", async () => {
-    await database
-      .insert(schema.messagingChannelChallenges)
-      .values({
-        codeHash: channelLinkCodeHash(command.slice(5)),
-        personId,
-        organizationId,
-        conversationId,
-        endpoint,
-        expiresAt: now,
-      });
+    await database.insert(schema.messagingChannelChallenges).values({
+      codeHash: channelLinkCodeHash(command.slice(5)),
+      personId,
+      organizationId,
+      conversationId,
+      endpoint,
+      expiresAt: now,
+    });
     expect(
       await consumeMessagingChannelLink(command, senderPhone, endpoint, now),
     ).toBe(false);

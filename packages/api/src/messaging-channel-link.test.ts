@@ -34,11 +34,28 @@ vi.mock("@duna/db", () => ({
   getTransactionalDatabase: () => ({
     transaction: (callback: (transaction: unknown) => unknown) =>
       callback({
+        query: {
+          messagingChannelChallenges: {
+            findFirst: async () => ({
+              personId: "parent",
+              organizationId: "club",
+              conversationId: "thread",
+            }),
+          },
+        },
+        select: () => ({
+          from: () => ({
+            where: () => ({ for: async () => [await mocks.person()] }),
+          }),
+        }),
         update: () => ({
           set: () => ({ where: () => ({ returning: mocks.challenge }) }),
         }),
         insert: () => ({
-          values: () => ({ onConflictDoUpdate: mocks.upsert }),
+          values: (value: unknown) => {
+            mocks.insert(value);
+            return { onConflictDoUpdate: mocks.upsert };
+          },
         }),
       }),
   }),

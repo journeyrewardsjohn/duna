@@ -67,20 +67,27 @@ export async function beginMessagingChannelLink(
       "FORBIDDEN",
       "Choose a club conversation you can reply to.",
     );
-  // No outbound phone delivery is enabled by linking. Guardian-visible web/app
-  // conversations remain authoritative, including all replies and attachments.
+  // Linking permits explicitly selected eligible service replies. Guardian-visible
+  // web/app conversations remain authoritative; no automatic sends are enabled.
   const code = randomBytes(12).toString("hex").toUpperCase();
   const expiresAt = new Date(now.getTime() + 10 * 60_000);
-  await getDatabase()
-    .insert(messagingChannelChallenges)
-    .values({
-      codeHash: channelLinkCodeHash(code),
-      personId: actor.personId,
-      organizationId,
-      conversationId,
-      endpoint,
-      expiresAt,
-    });
+  await getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.id, actor.personId))
+      .for("update");
+    await transaction
+      .insert(messagingChannelChallenges)
+      .values({
+        codeHash: channelLinkCodeHash(code),
+        personId: actor.personId,
+        organizationId,
+        conversationId,
+        endpoint,
+        expiresAt,
+      });
+  });
   return {
     command: `DUNA ${code}`,
     endpoint,
@@ -98,6 +105,27 @@ export async function consumeMessagingChannelLink(
   const code = parseChannelLinkCode(command);
   if (!code) return false;
   return getTransactionalDatabase().transaction(async (transaction) => {
+    const candidate =
+      await transaction.query.messagingChannelChallenges.findFirst({
+        where: and(
+          eq(messagingChannelChallenges.codeHash, channelLinkCodeHash(code)),
+          eq(messagingChannelChallenges.endpoint, endpoint),
+        ),
+      });
+    if (!candidate) return false;
+    // All link, disconnect and STOP operations lock this person first, so an
+    // old challenge cannot race a revocation and silently re-enable delivery.
+    const [person] = await transaction
+      .select({
+        id: people.id,
+        isMinor: people.isMinor,
+        status: people.status,
+        displayName: people.displayName,
+      })
+      .from(people)
+      .where(eq(people.id, candidate.personId))
+      .for("update");
+    if (!person || person.isMinor || person.status !== "active") return false;
     const [challenge] = await transaction
       .update(messagingChannelChallenges)
       .set({ consumedAt: now })
@@ -111,6 +139,32 @@ export async function consumeMessagingChannelLink(
       )
       .returning();
     if (!challenge) return false;
+    try {
+      const actor: ApiActor = {
+        personId: person.id,
+        displayName: person.displayName,
+        organizationId: challenge.organizationId,
+        roles: ["player"],
+        scopes: ["messages:read", "messages:write"],
+        ageBand: "adult",
+        isDemo: false,
+      };
+      const detail = await loadConversation({
+        actor,
+        conversationId: challenge.conversationId,
+        asPrincipal: "user",
+      });
+      const clubId =
+        detail.conversation.context?.organizationId ??
+        detail.conversation.participants.find(
+          (participant) => participant.type === "organization",
+        )?.id;
+      if (!detail.permissions.canPost || clubId !== challenge.organizationId)
+        return false;
+    } catch (error) {
+      if (error instanceof MessagingError) return false;
+      throw error;
+    }
     await transaction
       .insert(messagingChannelBindings)
       .values({
@@ -140,27 +194,71 @@ export async function consumeMessagingChannelLink(
 
 export async function revokeMessagingChannelLinks(actor: ApiActor) {
   if (actor.isDemo) return { revoked: 0 };
-  const rows = await getDatabase()
-    .update(messagingChannelBindings)
-    .set({ revokedAt: new Date() })
-    .where(
-      and(
-        eq(messagingChannelBindings.personId, actor.personId),
-        isNull(messagingChannelBindings.revokedAt),
+  return getTransactionalDatabase().transaction(async (transaction) => {
+    await transaction
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.id, actor.personId))
+      .for("update");
+    const now = new Date();
+    const rows = await transaction
+      .update(messagingChannelBindings)
+      .set({ revokedAt: now })
+      .where(
+        and(
+          eq(messagingChannelBindings.personId, actor.personId),
+          isNull(messagingChannelBindings.revokedAt),
+        ),
+      )
+      .returning({ id: messagingChannelBindings.id });
+    await transaction
+      .update(messagingChannelChallenges)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(messagingChannelChallenges.personId, actor.personId),
+          isNull(messagingChannelChallenges.consumedAt),
+        ),
+      );
+    return { revoked: rows.length };
+  });
+}
+
+async function optOutChannelSender(endpoint: string, senderPhone: string) {
+  return getTransactionalDatabase().transaction(async (transaction) => {
+    const binding = await transaction.query.messagingChannelBindings.findFirst({
+      where: and(
+        eq(messagingChannelBindings.endpoint, endpoint),
+        eq(messagingChannelBindings.senderPhone, senderPhone),
       ),
-    )
-    .returning({ id: messagingChannelBindings.id });
-  // Outstanding codes must also be invalidated when disconnecting.
-  await getDatabase()
-    .update(messagingChannelChallenges)
-    .set({ consumedAt: new Date() })
-    .where(
-      and(
-        eq(messagingChannelChallenges.personId, actor.personId),
-        isNull(messagingChannelChallenges.consumedAt),
-      ),
-    );
-  return { revoked: rows.length };
+    });
+    if (!binding) return;
+    await transaction
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.id, binding.personId))
+      .for("update");
+    const now = new Date();
+    await transaction
+      .update(messagingChannelBindings)
+      .set({ revokedAt: now })
+      .where(
+        and(
+          eq(messagingChannelBindings.endpoint, endpoint),
+          eq(messagingChannelBindings.senderPhone, senderPhone),
+        ),
+      );
+    await transaction
+      .update(messagingChannelChallenges)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(messagingChannelChallenges.personId, binding.personId),
+          eq(messagingChannelChallenges.endpoint, endpoint),
+          isNull(messagingChannelChallenges.consumedAt),
+        ),
+      );
+  });
 }
 
 export async function processVerifiedChannelInbound(input: {
@@ -174,15 +272,7 @@ export async function processVerifiedChannelInbound(input: {
 }) {
   const database = getDatabase();
   if (input.optedOut) {
-    await database
-      .update(messagingChannelBindings)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(messagingChannelBindings.endpoint, input.endpoint),
-          eq(messagingChannelBindings.senderPhone, input.senderPhone),
-        ),
-      );
+    await optOutChannelSender(input.endpoint, input.senderPhone);
     return "opted-out";
   }
   if (input.group) return "group-review";
