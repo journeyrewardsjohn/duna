@@ -4,6 +4,14 @@ const base =
   process.env.PLAYWRIGHT_HQ_BASE_URL ??
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
+async function clearAssistant(page: Page) {
+  const minimize = page.getByRole("button", {
+    name: "Minimize Ask Duna",
+    exact: true,
+  });
+  if (await minimize.isVisible()) await minimize.click();
+}
+
 async function expectContainedPage(page: Page) {
   expect(
     await page.evaluate(
@@ -23,6 +31,7 @@ test("compact Activities keeps every operational destination and accessible tabl
   page,
 }, info) => {
   await page.goto(`${base}/activities`);
+  await clearAssistant(page);
   const table = page.getByRole("table", {
     name: "Activity workspaces",
     exact: true,
@@ -84,6 +93,7 @@ test("compact People retains search, family filters and keyboard profile access"
   page,
 }, info) => {
   await page.goto(`${base}/members`);
+  await clearAssistant(page);
   const table = page.getByRole("table", {
     name: "People directory",
     exact: true,
@@ -126,6 +136,7 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
   await page.addInitScript(() => localStorage.setItem("duna-theme", "dark"));
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto(`${base}/payments`);
+  await clearAssistant(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const nav = page.getByRole("navigation", { name: "Money sections" });
   await expect(nav.getByRole("link")).toHaveCount(5);
