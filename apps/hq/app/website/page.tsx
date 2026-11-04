@@ -16,6 +16,7 @@ export default async function WebsitePage({
   return (
     <OperatorShell active="website" organization={dashboard.organization}>
       <WebsiteStudio
+        key={`${dashboard.organization.id}:${query.site || "default"}`}
         clubName={dashboard.organization.name}
         initialSiteId={query.site}
         demo={Boolean(context.actor?.isDemo)}

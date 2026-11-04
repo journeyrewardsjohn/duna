@@ -89,6 +89,13 @@ export function WebsiteStudio({
     activeSiteId.current = id;
     setDetail(null);
     setSiteId(id);
+    setPublishReview(false);
+    setCancelReview(false);
+    window.history.replaceState(
+      null,
+      "",
+      id ? `/website?site=${encodeURIComponent(id)}` : "/website",
+    );
   }
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(!demo);
@@ -105,6 +112,12 @@ export function WebsiteStudio({
   const [mobile, setMobile] = useState(false);
   const [history, setHistory] = useState(false);
   const [publishReview, setPublishReview] = useState(false);
+  const [cancelReview, setCancelReview] = useState(false);
+  const cancelDialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (cancelReview) cancelDialogRef.current?.showModal();
+    else cancelDialogRef.current?.close();
+  }, [cancelReview]);
   const [domain, setDomain] = useState("");
   const [domainResult, setDomainResult] = useState<{
     message?: string;
@@ -801,6 +814,19 @@ export function WebsiteStudio({
               </p>
               {detail.billing.active ? (
                 <>
+                  {canManageBilling && !detail.billing.cancelAtPeriodEnd && (
+                    <button
+                      type="button"
+                      className={styles.textButton}
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        setError("");
+                        setCancelReview(true);
+                      }}
+                    >
+                      Cancel website plan
+                    </button>
+                  )}
                   <p>
                     <strong>
                       {detail.billing.creditsAvailable.toLocaleString()} credits
@@ -950,6 +976,61 @@ export function WebsiteStudio({
               )}
             </form>
           </section>
+          {cancelReview && (
+            <dialog
+              ref={cancelDialogRef}
+              onCancel={() => setCancelReview(false)}
+              className={styles.publishReview}
+              aria-labelledby="cancel-website-title"
+            >
+              <button
+                type="button"
+                className={styles.textButton}
+                onClick={() => setCancelReview(false)}
+              >
+                Keep my plan
+              </button>
+              <h2 id="cancel-website-title">
+                Cancel the website subscription?
+              </h2>
+              <p>
+                Your $200/month website plan will not renew. Paid access
+                continues through{" "}
+                {detail.billing.periodEndsAt
+                  ? new Date(detail.billing.periodEndsAt).toLocaleDateString()
+                  : "the end of the current billing period"}
+                . This does not cancel your club’s Duna plan, player
+                memberships, or bookings.
+              </p>
+              {error && (
+                <p role="alert" className={styles.alert}>
+                  {error}
+                </p>
+              )}
+              <button
+                type="button"
+                className={styles.primary}
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void act("cancel-subscription", async () => {
+                    await api("/api/websites", {
+                      action: "cancel-subscription",
+                      siteId,
+                    });
+                    await refresh(siteId);
+                    setCancelReview(false);
+                    setNotice(
+                      "Your website plan will end after this billing period and will not renew.",
+                    );
+                  })
+                }
+              >
+                {busy === "cancel-subscription"
+                  ? "Updating subscription…"
+                  : "Cancel at period end"}
+              </button>
+            </dialog>
+          )}
           {publishReview && (
             <dialog
               ref={publishDialogRef}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getServerContext } from "@/lib/api";
 import {
   assertWebsiteActor,
+  cancelWebsiteSubscription,
   openWebsiteBillingPortal,
   startWebsiteCheckout,
 } from "@duna/api/website-billing";
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
   }
 }
 const actionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("cancel-subscription"), siteId: z.uuid() }),
   z.object({
     action: z.literal("references"),
     siteId: z.uuid(),
@@ -190,6 +192,10 @@ export async function POST(request: Request) {
     const body = actionSchema.parse(JSON.parse(raw));
     const origin = new URL(request.url).origin;
     switch (body.action) {
+      case "cancel-subscription":
+        return NextResponse.json(
+          await cancelWebsiteSubscription({ actor, siteId: body.siteId }),
+        );
       case "references":
         return NextResponse.json({
           site: await updateWebsiteBrief(actor, body),
