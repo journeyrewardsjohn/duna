@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-const base = process.env.PLAYWRIGHT_HQ_BASE_URL ?? "http://127.0.0.1:3001";
+const base =
+  process.env.PLAYWRIGHT_HQ_BASE_URL ??
+  `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 const one = "10000000-0000-4000-8000-000000000001",
   two = "10000000-0000-4000-8000-000000000002";
 const newest = "20000000-0000-4000-8000-000000000001",
