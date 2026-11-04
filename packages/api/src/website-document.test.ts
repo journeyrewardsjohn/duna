@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   renderWebsitePage,
   validateWebsiteDocument,
   type WebsiteDocument,
   websiteImageUrl,
+  websiteDocumentSchema,
 } from "./website-document";
 const document: WebsiteDocument = {
   title: "Our Club",
@@ -45,6 +47,12 @@ const context = {
   ],
 };
 describe("website document security and preview", () => {
+  it("converts the model output schema to JSON Schema without unsupported transforms", () => {
+    const schema = z.toJSONSchema(websiteDocumentSchema);
+    expect(schema.type).toBe("object");
+    expect(schema.properties).toHaveProperty("pages");
+    expect(schema.properties).toHaveProperty("headline");
+  });
   it("escapes owner, source, and model text instead of executing markup", () => {
     const html = renderWebsitePage({
       document: {

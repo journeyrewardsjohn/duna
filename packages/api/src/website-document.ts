@@ -7,8 +7,7 @@ export function websitePlainCopy(value: string): string {
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/__([^_\n]+)__/g, "$1");
 }
-const text = (max: number) =>
-  z.string().trim().min(1).max(max).transform(websitePlainCopy);
+const text = (max: number) => z.string().trim().min(1).max(max);
 export const websiteDocumentSchema = z.object({
   title: text(100),
   description: text(240),
@@ -107,7 +106,24 @@ export function validateWebsiteDocument(value: unknown): WebsiteDocument {
     throw new Error(
       "The website needs one home page and unique page addresses.",
     );
-  return doc;
+  return {
+    ...doc,
+    title: websitePlainCopy(doc.title),
+    description: websitePlainCopy(doc.description),
+    headline: websitePlainCopy(doc.headline),
+    introduction: websitePlainCopy(doc.introduction),
+    actionLabel: websitePlainCopy(doc.actionLabel),
+    changeSummary: websitePlainCopy(doc.changeSummary),
+    pages: doc.pages.map((page) => ({
+      ...page,
+      title: websitePlainCopy(page.title),
+      sections: page.sections.map((section) => ({
+        ...section,
+        heading: websitePlainCopy(section.heading),
+        body: websitePlainCopy(section.body),
+      })),
+    })),
+  };
 }
 export function websitePagePath(slug: string) {
   return slug === "home" ? "/" : `/${slug}`;
