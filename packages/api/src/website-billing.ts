@@ -6,6 +6,7 @@ import {
   websiteCreditGrants,
   websiteCreditReservations,
   organizations,
+  auditLog,
 } from "@duna/db";
 import { and, eq, gt, desc, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -232,6 +233,89 @@ export async function openWebsiteBillingPortal(input: {
   return createBillingPortalSession({
     customerId: row.stripeCustomerId,
     returnUrl: safeReturnUrl(input.returnUrl),
+  });
+}
+/** Website-only cancellation; shared membership portal policy is unchanged. */
+export async function cancelWebsiteSubscription(input: {
+  actor: ApiActor;
+  siteId: string;
+}) {
+  const site = await ownedSite(input.actor, input.siteId, true);
+  return getTransactionalDatabase().transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(websiteSubscriptions)
+      .where(
+        and(
+          eq(websiteSubscriptions.siteId, site.id),
+          eq(websiteSubscriptions.organizationId, site.organizationId),
+        ),
+      )
+      .for("update");
+    if (!current?.stripeSubscriptionId || !current.stripeCustomerId)
+      throw new Error("Website billing is not active yet.");
+    const stripe = getStripeClient();
+    const verify = (subscription: Stripe.Subscription) => {
+      const customer =
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : subscription.customer.id;
+      if (
+        subscription.id !== current.stripeSubscriptionId ||
+        customer !== current.stripeCustomerId ||
+        subscription.metadata.product !== "duna-website" ||
+        subscription.metadata.dunaWebsiteId !== site.id ||
+        subscription.metadata.dunaOrganizationId !== site.organizationId
+      )
+        throw new Error("Website subscription ownership does not match.");
+    };
+    let subscription = await stripe.subscriptions.retrieve(
+      current.stripeSubscriptionId,
+    );
+    verify(subscription);
+    const terminal = ["canceled", "incomplete_expired"].includes(
+      subscription.status,
+    );
+    if (!terminal && !subscription.cancel_at_period_end) {
+      subscription = await stripe.subscriptions.update(
+        subscription.id,
+        { cancel_at_period_end: true },
+        { idempotencyKey: `website-cancel:${site.id}:${subscription.id}` },
+      );
+      verify(subscription);
+      if (!subscription.cancel_at_period_end)
+        throw new Error(
+          "Website cancellation is not confirmed yet. Check billing before trying again.",
+        );
+    }
+    const end = subscription.items.data[0]?.current_period_end;
+    const periodEndsAt = end ? new Date(end * 1000) : current.periodEndsAt;
+    await tx
+      .update(websiteSubscriptions)
+      .set({
+        status: subscription.status,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        periodEndsAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(websiteSubscriptions.siteId, site.id));
+    if (!terminal && !current.cancelAtPeriodEnd)
+      await tx.insert(auditLog).values({
+        organizationId: site.organizationId,
+        actorPersonId: input.actor.personId,
+        actorType: "person",
+        action: "website.subscription_cancellation_scheduled",
+        entityType: "website_subscription",
+        entityId: subscription.id,
+        reason:
+          "Club owner canceled website renewal; service remains active through the paid period.",
+        traceId: `website-cancel:${site.id}:${subscription.id}`,
+      });
+    return {
+      status: subscription.status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      periodEndsAt: periodEndsAt?.toISOString() ?? null,
+    };
   });
 }
 export function validateCreditAmount(credits: number) {
