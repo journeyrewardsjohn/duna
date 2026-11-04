@@ -13,7 +13,7 @@ Apply migrations through 0112 before enabling phone channels. Web and HQ need th
 
 Register an inbound receive webhook at `https://duna.coach/api/sendblue/webhook`, scoped to the Duna phone number. Configure the signing secret for status callbacks as well (global signing secret is supported by Sendblue). Each outgoing message supplies `https://duna.coach/api/sendblue/status?id=<receipt-id>` as its status callback. Do not replace unrelated account webhook subscriptions.
 
-No endpoint has been provisioned or messaged by this implementation work. Provider activation and real delivery validation remain separate release evidence.
+No endpoint has been provisioned or messaged by this implementation work. Provider activation and real delivery validation remain separate release evidence. On November 4, the owner explicitly deferred both until a separate Duna Sendblue account is created. Do not configure Journey account credentials or purchase a line as part of this release.
 
 ## Identity and routing
 

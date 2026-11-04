@@ -8,8 +8,9 @@ The Website workspace adds a separate $200 USD monthly subscription per site. It
 2. Duna uses the current public offerings and club brand knowledge to generate structured pages. External content is untrusted reference material; it cannot invoke business actions.
 3. Review desktop/mobile previews and individual pages. Saved versions remain accessible. Further edits require the website subscription and available credits.
 4. Activate the subscription through Stripe Checkout. Billing status is confirmed by signed Stripe webhook processing, not by a successful return URL.
-5. Select a completed version, review it, and explicitly publish. Publication uses that exact revision. Deployment acceptance is not publication success: the live pointer advances after the provider reports READY.
-6. Restore a previous design by previewing and publishing that completed version. Attach a domain or subdomain and complete the displayed DNS verification instructions.
+5. Select a completed version, review it, and explicitly publish. Publication uses that exact revision. Deployment acceptance is not publication success: the live pointer advances after the provider reports READY, the stable alias is assigned, and an ordinary visitor receives the exact published revision.
+6. Owners can cancel renewal from the website billing section after reviewing a confirmation. Access continues through the paid period; other club and player subscriptions remain unchanged.
+7. Restore a previous design by previewing and publishing that completed version. Attach a domain or subdomain and complete the displayed DNS verification instructions.
 
 The generated site uses controlled layouts and escaped content, not arbitrary generated server code. Its booking, account, and wallet links open the secure canonical Duna experience. Embedded custom-domain identity and unrestricted application generation are not part of this release.
 
@@ -24,7 +25,7 @@ The generated site uses controlled layouts and escaped content, not arbitrary ge
 
 ## Configuration
 
-Existing HQ variables: database, Stripe, cron, AI Gateway and Firecrawl credentials. Generation without reference URLs does not require Firecrawl. New website provisioning variables are listed by the provisioning module and must be configured independently of the existing main HQ/web deployment credentials.
+Existing HQ variables: database, Stripe, cron, AI Gateway and Firecrawl credentials. Generation without reference URLs does not require Firecrawl. Website provisioning requires `DUNA_SITES_VERCEL_TOKEN`, `DUNA_SITES_VERCEL_TEAM_ID`, `DUNA_SITES_NEON_API_KEY`, and `DUNA_SITES_NEON_ORG_ID`. Keep these separate from the existing HQ/web database credentials. Every club receives a dedicated Vercel project and Neon project; marketplace-created prefixed database variables do not replace the HQ `DATABASE_URL`.
 
 Stripe uses `STRIPE_WEBSITE_MONTHLY_PRICE_ID` when configured; otherwise it finds or idempotently creates `duna-website-monthly-v1`, validating an active $200 USD monthly price before checkout. Existing signed Stripe webhook handling reconciles paid invoices and subscriptions. Credits are invoice-idempotent, concurrency-safe and expire at the invoice period end. Spending all AI credits does not stop published pages or Duna bookings.
 
