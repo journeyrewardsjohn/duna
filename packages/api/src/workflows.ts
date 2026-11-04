@@ -1,3 +1,5 @@
+import { processWebsiteStripeEvent } from "./website-billing";
+import type Stripe from "stripe";
 import {
   appliedFees,
   auditLog,
@@ -1384,6 +1386,8 @@ async function processStripeWorkflow(
     where: eq(webhookEvents.id, webhookEventId),
   });
   if (!webhook) throw new Error("Persisted Stripe webhook was not found");
+  if (!webhook.signatureVerified)
+    throw new Error("Stripe webhook signature was not verified");
 
   const action = stringField(payload, "action");
   const eventPayload = webhook.payload as {
@@ -1398,7 +1402,11 @@ async function processStripeWorkflow(
       ? new Date(eventPayload.created * 1_000)
       : new Date();
 
-  if (action === "membership.synchronized") {
+  if (
+    await processWebsiteStripeEvent(webhook.payload as unknown as Stripe.Event)
+  ) {
+    // Website add-ons never flow into organization plans or player membership benefits.
+  } else if (action === "membership.synchronized") {
     await synchronizeSubscription({
       object,
       occurredAt,

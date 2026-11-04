@@ -16,7 +16,9 @@
     "./system-workspace-service": "./src/system-workspace-service.ts",
     "./training-contracts": "./src/training-contracts.ts",
     "./webhooks": "./src/webhooks.ts",
-    "./ask-duna-contracts": "./src/ask-duna-contracts.ts"
+    "./ask-duna-contracts": "./src/ask-duna-contracts.ts",
+    "./sendblue-ingress": "./src/sendblue-ingress.ts",
+    "./website-billing": "./src/website-billing.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
