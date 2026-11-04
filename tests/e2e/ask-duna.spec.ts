@@ -105,7 +105,15 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();
   await expect(floating).toBeHidden();
-  await page.getByRole("link", { name: "People", exact: true }).first().click();
+  const peopleLink = page
+    .getByRole("link", { name: "People", exact: true })
+    .first();
+  if (!(await peopleLink.isVisible()))
+    await page.locator(".hq-mobile-navigation-more > summary").click();
+  await page
+    .getByRole("link", { name: "People", exact: true })
+    .filter({ visible: true })
+    .click();
   await expect(page).toHaveURL(`${hqBaseUrl}/members`);
   await page
     .getByRole("button", { name: "Open Ask Duna", exact: true })

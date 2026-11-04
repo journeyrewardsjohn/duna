@@ -85,7 +85,11 @@ export function MessageComposer({
   people,
   practicePlans,
   sessions,
+  initialRecipientId,
+  startWithSpecificPeople = false,
 }: {
+  readonly initialRecipientId?: string;
+  readonly startWithSpecificPeople?: boolean;
   readonly audiences: readonly Audience[];
   readonly clientMessageId: string;
   readonly organizationId: string;
@@ -93,9 +97,18 @@ export function MessageComposer({
   readonly practicePlans: readonly Resource[];
   readonly sessions: readonly Resource[];
 }) {
-  const [audience, setAudience] = useState(audiences[0]?.value ?? "");
+  const [audience, setAudience] = useState(
+    startWithSpecificPeople
+      ? "specific::::Selected people"
+      : (audiences[0]?.value ?? ""),
+  );
   const [search, setSearch] = useState("");
-  const [selectedPeople, setSelectedPeople] = useState<readonly string[]>([]);
+  const [selectedPeople, setSelectedPeople] = useState<readonly string[]>(
+    initialRecipientId &&
+      people.some((person) => person.personId === initialRecipientId)
+      ? [initialRecipientId]
+      : [],
+  );
   const [widgets, setWidgets] = useState<readonly ComposerWidget[]>([]);
   const specific = audience.startsWith("specific::");
   const visiblePeople = people.filter((person) =>

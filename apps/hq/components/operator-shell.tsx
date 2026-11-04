@@ -30,9 +30,9 @@ import { getServerContext } from "@/lib/api";
 
 const mobilePrimaryModules = [
   "overview",
-  "setup",
   "calendar",
-  "members",
+  "activities",
+  "messages",
 ] as const;
 
 export async function OperatorShell({
@@ -63,16 +63,27 @@ export async function OperatorShell({
   );
   const focusedModules = new Set([
     "overview",
-    "setup",
     "calendar",
+    "activities",
     "members",
-    "events",
+    "website",
     "messages",
     "payments",
   ]);
-  const primaryModules = navigableModules.filter((item) =>
-    focusedModules.has(item.slug),
-  );
+  const primaryOrder = [
+    "overview",
+    "calendar",
+    "activities",
+    "members",
+    "messages",
+    "payments",
+    "website",
+  ];
+  const primaryModules = navigableModules
+    .filter((item) => focusedModules.has(item.slug))
+    .sort(
+      (a, b) => primaryOrder.indexOf(a.slug) - primaryOrder.indexOf(b.slug),
+    );
   return (
     <div
       className={`hq-shell hq-shell--focused${active === "ai" ? " hq-shell--ask" : ""}${active === "overview" ? " hq-shell--home" : ""}${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
@@ -107,6 +118,7 @@ export async function OperatorShell({
                   <Link
                     className={active === item.slug ? "active" : undefined}
                     href={item.slug === "overview" ? "/" : `/${item.slug}`}
+                    aria-current={active === item.slug ? "page" : undefined}
                     title={item.label}
                   >
                     <Icon aria-hidden size={18} />
@@ -295,14 +307,17 @@ export async function OperatorShell({
           </div>
         </header>
         <div className="hq-content">
-          {active !== "overview" && active !== "ai" && !immersive && (
-            <HqPagePrompt
-              label={
-                operatorModules.find((item) => item.slug === active)?.label ??
-                "your workspace"
-              }
-            />
-          )}
+          {active !== "overview" &&
+            active !== "ai" &&
+            active !== "website" &&
+            !immersive && (
+              <HqPagePrompt
+                label={
+                  operatorModules.find((item) => item.slug === active)?.label ??
+                  "your workspace"
+                }
+              />
+            )}
           {children}
         </div>
       </div>

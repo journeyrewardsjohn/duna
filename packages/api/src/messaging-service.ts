@@ -1,3 +1,4 @@
+import { verifiedGuardianMembership } from "./messaging-guardian-access";
 import {
   createConversationInputSchema,
   decideMessagingPermission,
@@ -136,6 +137,7 @@ async function conversationYouthSafetyState(
         eq(messagingConversationParticipants.conversationId, conversationId),
         eq(messagingConversationParticipants.principalType, "user"),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     );
   const minorPersonIds = activePeople
@@ -352,6 +354,7 @@ async function syncActiveUserParticipants(input: {
         ),
         eq(messagingConversationParticipants.principalType, "user"),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     );
   const activeByPersonId = new Map(
@@ -439,6 +442,7 @@ async function markLatePublishedMessageUnread(input: {
           input.message.conversationId,
         ),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
         sql`NOT (${messagingConversationParticipants.principalType} = ${input.message.senderPrincipalType} AND ${messagingConversationParticipants.principalId} = ${input.message.senderPrincipalId})`,
       ),
     );
@@ -948,6 +952,7 @@ export async function loadMessagingInbox(input: {
       and(
         membershipFilter,
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
         eq(messagingConversations.status, "open"),
       ),
     )
@@ -998,6 +1003,7 @@ export async function loadMessagingInbox(input: {
           eq(conversationMessages.status, "published"),
           membershipFilter,
           isNull(messagingConversationParticipants.leftAt),
+          verifiedGuardianMembership(),
           sql`${conversationMessages.sequence} > ${messagingConversationParticipants.lastReadSequence}`,
         ),
       )
@@ -1116,6 +1122,7 @@ async function requireConversationMembership(input: {
           input.identity.principalId,
         ),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     });
   if (!participant) {
@@ -1507,6 +1514,7 @@ export async function loadConversation(input: {
           input.conversationId,
         ),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     )
     .orderBy(asc(messagingConversationParticipants.joinedAt))
@@ -2276,6 +2284,7 @@ export async function createMessagingConversation(input: {
             identity.principalId,
           ),
           isNull(messagingConversationParticipants.leftAt),
+          verifiedGuardianMembership(),
         ),
       )
       .limit(1);
@@ -2469,6 +2478,7 @@ export async function createMessagingConversation(input: {
               ),
               eq(messagingConversationParticipants.principalType, "user"),
               isNull(messagingConversationParticipants.leftAt),
+              verifiedGuardianMembership(),
             ),
           );
         const currentRecipientIds = new Set(recipientPersonIds);
@@ -2713,6 +2723,7 @@ export async function sendConversationMessage(input: {
                 identity.principalId,
               ),
               isNull(messagingConversationParticipants.leftAt),
+              verifiedGuardianMembership(),
             ),
           )
           .limit(1);
@@ -2845,6 +2856,7 @@ export async function sendConversationMessage(input: {
                 ),
                 eq(messagingConversationParticipants.principalType, "user"),
                 isNull(messagingConversationParticipants.leftAt),
+                verifiedGuardianMembership(),
               ),
             );
           const recipientPersonIds = activeMembers.flatMap((member) =>
@@ -3451,6 +3463,7 @@ export async function appendAgentConversationMessage(input: {
               "duna-ai-support",
             ),
             isNull(messagingConversationParticipants.leftAt),
+            verifiedGuardianMembership(),
           ),
         )
         .limit(1);
@@ -3612,6 +3625,7 @@ export async function markConversationRead(input: {
         ),
         eq(messagingConversationParticipants.principalId, identity.principalId),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     )
     .returning({ id: messagingConversationParticipants.id });
@@ -3930,6 +3944,7 @@ export async function loadDunaSupportQueue(input: {
             conversationIds,
           ),
           isNull(messagingConversationParticipants.leftAt),
+          verifiedGuardianMembership(),
         ),
       ),
     database

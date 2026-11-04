@@ -12847,3 +12847,106 @@ export const messagingAgentRuns = pgTable(
     ),
   ],
 );
+
+export * from "./website-schema";
+
+// Phone ownership is proven by a one-use code issued inside an authenticated
+// Duna conversation, never inferred from an editable profile phone number.
+export const messagingChannelChallenges = pgTable(
+  "messaging_channel_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    codeHash: varchar("code_hash", { length: 64 }).notNull().unique(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    endpoint: varchar("endpoint", { length: 24 }).notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+  },
+);
+
+export const messagingChannelBindings = pgTable(
+  "messaging_channel_bindings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    endpoint: varchar("endpoint", { length: 24 }).notNull(),
+    senderPhone: varchar("sender_phone", { length: 24 }).notNull(),
+    verifiedAt: timestamp("verified_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("messaging_channel_endpoint_sender_unique").on(
+      table.endpoint,
+      table.senderPhone,
+    ),
+    index("messaging_channel_person_idx").on(table.personId),
+  ],
+);
+
+export const messagingChannelOutbox = pgTable(
+  "messaging_channel_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceMessageId: uuid("source_message_id")
+      .notNull()
+      .unique()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    bindingId: uuid("binding_id")
+      .notNull()
+      .references(() => messagingChannelBindings.id),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    actorPersonId: uuid("actor_person_id")
+      .notNull()
+      .references(() => people.id),
+    recipientPersonId: uuid("recipient_person_id")
+      .notNull()
+      .references(() => people.id),
+    endpoint: varchar("endpoint", { length: 24 }).notNull(),
+    recipientPhone: varchar("recipient_phone", { length: 24 }).notNull(),
+    body: text("body").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("queued"),
+    providerMessageHandle: varchar("provider_message_handle", {
+      length: 192,
+    }).unique(),
+    error: text("error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+    createdAt,
+  },
+  (table) => [
+    index("messaging_channel_outbox_status_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);

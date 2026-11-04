@@ -41,6 +41,10 @@
     {
       "path": "/api/cron/sand?mode=elite-stats",
       "schedule": "17 * * * *"
+    },
+    {
+      "path": "/api/cron/websites",
+      "schedule": "* * * * *"
     }
   ]
 }

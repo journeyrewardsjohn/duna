@@ -61,18 +61,26 @@ export async function sendOrganizationMessage(
   try {
     conversationId = required(formData, "conversationId");
     const caller = await getServerCaller();
-    await caller.messaging.send({
-      asPrincipal: "organization",
-      message: {
-        conversationId,
-        clientMessageId: required(formData, "clientMessageId"),
-        kind:
-          formData.get("announcementOnly") === "true" ? "announcement" : "text",
-        body: required(formData, "body"),
-        widgets: widgets(formData),
-        attachmentUploadIds: [],
-      },
-    });
+    const message = {
+      conversationId,
+      clientMessageId: required(formData, "clientMessageId"),
+      kind:
+        formData.get("announcementOnly") === "true"
+          ? ("announcement" as const)
+          : ("text" as const),
+      body: required(formData, "body"),
+      widgets: widgets(formData),
+      attachmentUploadIds: [],
+    };
+    const phoneBindingId = formData.get("phoneBindingId");
+    if (typeof phoneBindingId === "string" && phoneBindingId) {
+      await caller.messaging.sendPhoneReply({
+        bindingId: phoneBindingId,
+        message,
+      });
+    } else {
+      await caller.messaging.send({ asPrincipal: "organization", message });
+    }
   } catch (error) {
     return actionError(error, "The message could not be sent. Try again.");
   }

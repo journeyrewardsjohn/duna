@@ -1,5 +1,6 @@
 import {
   Activity,
+  Globe,
   BadgeDollarSign,
   Bot,
   BrainCircuit,
@@ -40,7 +41,7 @@ import type { LucideIcon } from "lucide-react";
 export const operatorModules = [
   {
     slug: "overview",
-    label: "Home",
+    label: "Today",
     icon: LayoutDashboard,
     group: "Today",
   },
@@ -51,6 +52,8 @@ export const operatorModules = [
     group: "Today",
   },
   { slug: "calendar", label: "Schedule", icon: CalendarDays, group: "Today" },
+  { slug: "activities", label: "Activities", icon: Trophy, group: "Today" },
+  { slug: "website", label: "Website", icon: Globe, group: "Grow" },
   { slug: "locations", label: "Venues", icon: MapPinned, group: "Run" },
   { slug: "members", label: "People", icon: UsersRound, group: "Run" },
   { slug: "team", label: "Staff", icon: UserRoundSearch, group: "Run" },
@@ -66,7 +69,7 @@ export const operatorModules = [
   },
   {
     slug: "messages",
-    label: "Messages",
+    label: "Inbox",
     icon: MessageSquareText,
     group: "Run",
   },

@@ -1,0 +1,63 @@
+.page {
+  color: var(--text-1);
+  margin: 0 auto;
+  max-width: 46rem;
+  padding: 2rem 1rem;
+}
+.page h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+}
+.page p {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.page > a {
+  align-items: center;
+  display: inline-flex;
+  min-height: 3rem;
+}
+.form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+.form select,
+.form button {
+  border: 1px solid var(--hairline);
+  border-radius: 0.5rem;
+  font: inherit;
+  font-size: 1rem;
+  min-height: 3.5rem;
+  padding: 0.75rem;
+  width: 100%;
+}
+.form select {
+  background: var(--surface-1);
+  color: var(--text-1);
+}
+.form button {
+  background: var(--text-1);
+  color: var(--surface-1);
+  cursor: pointer;
+}
+.form button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.form .secondary {
+  background: var(--surface-1);
+  color: var(--text-1);
+}
+.instructions {
+  border: 1px solid var(--hairline);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.instructions code {
+  display: block;
+  font: inherit;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}

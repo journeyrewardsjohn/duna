@@ -17,6 +17,11 @@ describe("HQ public routes", () => {
     expect(isPublicHqRoute("/api/cron/vision-improvement/other")).toBe(false);
   });
 
+  it("lets only the exact bearer-protected workflow cron reach its handler", () => {
+    expect(isPublicHqRoute("/api/cron/workflows")).toBe(true);
+    expect(isPublicHqRoute("/api/cron/workflows/other")).toBe(false);
+  });
+
   it("keeps unrelated API routes behind WorkOS", () => {
     expect(isPublicHqRoute("/api/media/upload")).toBe(false);
     expect(isPublicHqRoute("/api/places/details")).toBe(false);

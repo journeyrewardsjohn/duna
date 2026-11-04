@@ -1,3 +1,4 @@
+import { verifiedGuardianMembership } from "./messaging-guardian-access";
 import {
   demoConversationDetail,
   demoMessagingInbox,
@@ -109,6 +110,7 @@ function parseStateCursor(value: string | undefined): KeysetCursor {
 
 function membershipFilter(identity: DeliveryIdentity) {
   return and(
+    verifiedGuardianMembership(),
     eq(messagingConversationParticipants.principalType, identity.principalType),
     eq(messagingConversationParticipants.principalId, identity.principalId),
   );

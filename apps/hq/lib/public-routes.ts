@@ -8,6 +8,8 @@ export function isPublicHqRoute(pathname: string): boolean {
     routeMatches(pathname, "/sign-up") ||
     routeMatches(pathname, "/auth/callback") ||
     pathname === "/api/cron/sand" ||
+    pathname === "/api/cron/websites" ||
+    pathname === "/api/cron/workflows" ||
     pathname === "/api/cron/event-operations" ||
     pathname === "/api/cron/vision-improvement" ||
     routeMatches(pathname, "/api/health")
