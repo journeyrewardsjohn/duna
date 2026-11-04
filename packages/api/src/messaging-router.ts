@@ -61,6 +61,11 @@ import {
   enqueuePhoneReply,
   loadPhoneReplyOptions,
 } from "./sendblue-outbox";
+import {
+  clubContactInput,
+  createClubServiceConversation,
+  loadClubContact,
+} from "./club-service-contact";
 import { resolveClubDestination } from "./club-conversation-routing";
 
 const principalModeSchema = z.enum(["user", "organization"]).default("user");
@@ -221,6 +226,30 @@ export const messagingRouter = router({
         return resolveClubDestination({
           ...input,
           destinations: [...destinations.values()],
+        });
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  clubContact: messagingReadProcedure
+    .input(z.object({ club: z.string().trim().min(1).max(64) }))
+    .query(async ({ input }) => {
+      try {
+        return await loadClubContact(input.club);
+      } catch (error) {
+        return messagingFailure(error);
+      }
+    }),
+  contactClub: messagingWriteProcedure
+    .input(clubContactInput)
+    .output(messagingActionResultSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await createClubServiceConversation({
+          ...input,
+          actor: ctx.actor!,
+          requestId: ctx.requestId,
+          now: ctx.now,
         });
       } catch (error) {
         return messagingFailure(error);

@@ -1,3 +1,4 @@
+import { verifiedGuardianMembership } from "./messaging-guardian-access";
 import type {
   MessageWidget,
   MessagingActionResult,
@@ -308,6 +309,7 @@ export async function dispatchMessagingPushNotifications(
       and(
         eq(messagingConversationParticipants.conversationId, conversation.id),
         isNull(messagingConversationParticipants.leftAt),
+        verifiedGuardianMembership(),
       ),
     );
 

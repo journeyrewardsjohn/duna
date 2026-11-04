@@ -1,5 +1,6 @@
 "use server";
 
+import { TRPCError } from "@trpc/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerCaller } from "@/lib/api";
@@ -119,4 +120,36 @@ export async function createPlayerConversation(formData: FormData) {
   });
   revalidatePath("/app/messages");
   redirect(`/app/messages?thread=${result.id}`);
+}
+
+export async function contactClub(
+  _state: { error: string },
+  formData: FormData,
+) {
+  let conversationId: string;
+  try {
+    const caller = await getServerCaller();
+    const result = await caller.messaging.contactClub({
+      club: required(formData, "club"),
+      body: required(formData, "body"),
+      clientMessageId: required(formData, "clientMessageId"),
+    });
+    conversationId = result.id;
+  } catch (error) {
+    return {
+      error:
+        error instanceof TRPCError &&
+        [
+          "BAD_REQUEST",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "PRECONDITION_FAILED",
+          "TOO_MANY_REQUESTS",
+        ].includes(error.code)
+          ? error.message
+          : "We could not send this message. Please try again.",
+    };
+  }
+  revalidatePath("/app/messages");
+  redirect(`/app/messages?thread=${conversationId}`);
 }

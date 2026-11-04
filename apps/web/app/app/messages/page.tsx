@@ -31,6 +31,7 @@ import {
   recordPlayerMessageAction,
   sendPlayerMessage,
 } from "./actions";
+import { ClubContactForm } from "./club-contact-form";
 import { MessagingLiveRefresh } from "./live-refresh";
 import styles from "./messaging.module.css";
 
@@ -318,20 +319,24 @@ export default async function MessagesPage({
   readonly searchParams: Promise<{
     thread?: string;
     compose?: string;
+    club?: string;
     view?: string;
   }>;
 }) {
-  const { compose, thread, view } = await searchParams;
+  const { compose, thread, view, club } = await searchParams;
   const caller = await getServerCaller();
-  const [inbox, composeOptions] = await Promise.all([
+  const [inbox, composeOptions, clubContact] = await Promise.all([
     caller.messaging.inbox({ asPrincipal: "user" }),
     caller.messaging.composeOptions(),
+    club
+      ? caller.messaging.clubContact({ club }).catch(() => null)
+      : Promise.resolve(undefined),
   ]);
   const selected =
     inbox.conversations.find((conversation) => conversation.id === thread) ??
     inbox.conversations[0];
   const detail =
-    selected && compose !== "new" && view !== "inbox"
+    selected && !club && compose !== "new" && view !== "inbox"
       ? await caller.messaging.conversation({
           conversationId: selected.id,
           asPrincipal: "user",
@@ -367,7 +372,7 @@ export default async function MessagesPage({
 
       <section
         className={styles.workspace}
-        data-has-thread={Boolean(detail) || compose === "new"}
+        data-has-thread={Boolean(detail) || compose === "new" || Boolean(club)}
       >
         <aside className={styles.inbox}>
           <header>
@@ -433,7 +438,38 @@ export default async function MessagesPage({
           )}
         </aside>
 
-        {compose === "new" ? (
+        {club ? (
+          <section className={styles.thread}>
+            <header>
+              <Link aria-label="Back to inbox" href="/app/messages?view=inbox">
+                <ArrowLeft aria-hidden size={20} />
+              </Link>
+              <span>
+                <strong>
+                  {clubContact
+                    ? `Contact ${clubContact.name}`
+                    : "Club contact unavailable"}
+                </strong>
+                <small>Your message stays with the club you choose.</small>
+              </span>
+            </header>
+            {clubContact ? (
+              <ClubContactForm
+                club={clubContact.slug}
+                name={clubContact.name}
+                clientMessageId={sendId}
+              />
+            ) : (
+              <div className={styles.newConversation}>
+                <p>
+                  This club has not published a contact page, or is no longer
+                  available. No message has been sent.
+                </p>
+                <Link href="/app/messages?view=inbox">Return to messages</Link>
+              </div>
+            )}
+          </section>
+        ) : compose === "new" ? (
           <section className={styles.thread}>
             <header>
               <Link aria-label="Back to inbox" href="/app/messages?view=inbox">
