@@ -68,6 +68,7 @@ async function install(
   credits = 1000,
   hosting = true,
   active = true,
+  owner = true,
 ) {
   if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
     throw new Error("Website fixture is local-only");
@@ -76,13 +77,16 @@ async function install(
     .grantPermissions(["local-network-access"], { origin: base });
   const writes: Record<string, unknown>[] = [];
   let failPublish = false;
+  let failCancel = false;
   let slowOne = false;
   await page.route(`${base}/website**`, async (route) => {
     const response = await route.fetch();
     const original = await response.text();
     const html = original.replaceAll(
       '\\"demo\\":true,\\"canManageBilling\\":false',
-      '\\"demo\\":false,\\"canManageBilling\\":true',
+      owner
+        ? '\\"demo\\":false,\\"canManageBilling\\":true'
+        : '\\"demo\\":false,\\"canManageBilling\\":false',
     );
     expect(html).not.toEqual(original);
     await route.fulfill({ response, body: html });
@@ -96,6 +100,15 @@ async function install(
         await route.fulfill({
           status: 400,
           json: { error: "Hosting is temporarily unavailable. Try again." },
+        });
+        return;
+      }
+      if (body.action === "cancel-subscription" && failCancel) {
+        await route.fulfill({
+          status: 400,
+          json: {
+            error: "Cancellation could not be confirmed. Please check billing.",
+          },
         });
         return;
       }
@@ -122,6 +135,9 @@ async function install(
     writes,
     setFailure: () => {
       failPublish = true;
+    },
+    setCancelFailure: () => {
+      failCancel = true;
     },
     setSlow: () => {
       slowOne = true;
@@ -245,4 +261,62 @@ test("website UI fixture: disconnected hosting blocks subscription and publishin
   await expect(
     page.getByText("Hosting setup is in progress.", { exact: false }),
   ).toBeVisible();
+});
+
+test("website UI fixture: cancellation requires review, Escape is safe and failures stay visible", async ({
+  page,
+}) => {
+  const fixture = await install(page);
+  await page.goto(`${base}/website`);
+  await page
+    .getByRole("button", { name: "Cancel website plan", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Cancel the website subscription?",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(
+    "This does not cancel your club’s Duna plan",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Keep my plan" }),
+  ).toBeFocused();
+  expect(fixture.writes).toHaveLength(0);
+  await dialog.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  expect(fixture.writes).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Cancel website plan", exact: true })
+    .click();
+  fixture.setCancelFailure();
+  await dialog
+    .getByRole("button", { name: "Cancel at period end", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Cancellation could not be confirmed",
+  );
+  expect(fixture.writes).toEqual([
+    { action: "cancel-subscription", siteId: one },
+  ]);
+  await dialog.getByRole("button", { name: "Keep my plan" }).click();
+  await expect(dialog).not.toBeVisible();
+});
+test("website UI fixture: managers can edit but cannot publish, change domains or cancel billing", async ({
+  page,
+}) => {
+  const fixture = await install(page, 1000, true, true, false);
+  await page.goto(`${base}/website`);
+  await expect(
+    page.getByRole("button", { name: "Generate website preview" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Review & publish" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Connect domain" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Cancel website plan", exact: true }),
+  ).not.toBeVisible();
+  expect(fixture.writes).toHaveLength(0);
 });
