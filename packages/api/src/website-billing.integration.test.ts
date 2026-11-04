@@ -393,6 +393,7 @@ afterEach(() => {
 it.each(["vercel.com", "neon.tech"])(
   "blocks checkout before Stripe when %s rejects runtime credentials",
   async (host) => {
+    vi.stubEnv("NEXT_PUBLIC_HQ_URL", "https://hq.duna.coach");
     vi.stubEnv("DUNA_SITES_VERCEL_TOKEN", "test-invalid");
     vi.stubEnv("DUNA_SITES_VERCEL_TEAM_ID", "team_expected");
     vi.stubEnv("DUNA_SITES_NEON_API_KEY", "test-invalid");
