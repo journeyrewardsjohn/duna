@@ -996,9 +996,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("heading", { name: "Today", level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "Ask Duna to find answers, plan your day, or prepare a change.",
-    ),
+    page.getByRole("textbox", { name: "What would you like Duna to do?" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Matches on your courts" }),
