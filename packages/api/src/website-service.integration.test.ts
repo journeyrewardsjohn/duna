@@ -190,6 +190,24 @@ describe("website generation durable lifecycle", () => {
       "queued",
     );
   });
+  it("keeps edits billable after a completed preview fails during publishing", async () => {
+    await revision({
+      status: "failed",
+      document: { ...doc, creditCost: 0 },
+    });
+    await db
+      .update(schema.websiteSites)
+      .set({ draft: doc })
+      .where(eq(schema.websiteSites.id, siteId));
+    const next = await requestWebsiteRevision(actor, {
+      siteId,
+      prompt: "Please refine our homepage",
+      operationId: crypto.randomUUID(),
+    });
+    expect(
+      (next.document as { creditCost: number }).creditCost,
+    ).toBeGreaterThan(0);
+  });
   it("freezes the approved public context across preview, publication and rollback", async () => {
     const r = await revision();
     await processWebsiteRevision(r.id);

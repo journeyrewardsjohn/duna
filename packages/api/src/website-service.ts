@@ -258,11 +258,11 @@ export async function requestWebsiteRevision(
       throw new Error(
         "An edit is already in progress. Review it before starting another.",
       );
-    const cost = prior.some((r) =>
-      ["draft", "published", "deploying"].includes(r.status),
-    )
-      ? WEBSITE_EDIT_CREDITS
-      : 0;
+    const cost =
+      Boolean(site.draft || site.publishedRevisionId) ||
+      prior.some((r) => ["draft", "published", "deploying"].includes(r.status))
+        ? WEBSITE_EDIT_CREDITS
+        : 0;
     if (
       !cost &&
       prior.filter(
