@@ -6,12 +6,7 @@ const hqBaseUrl =
   `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
 
 async function openFloating(page: Page) {
-  const launcher = page.getByRole("button", {
-    name: "Open Ask Duna",
-    exact: true,
-  });
-  if (await launcher.isVisible()) await launcher.click();
-  else await page.getByRole("button", { name: "Duna AI", exact: true }).click();
+  await floatingReturnTarget(page).click();
 }
 
 function floatingReturnTarget(page: Page) {
