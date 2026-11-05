@@ -1937,7 +1937,6 @@ export function GuidedProductBuilder({
                       : undefined
                 }
                 disabled={!editing && index > step}
-                aria-current={index === step ? "step" : undefined}
                 key={name}
                 onClick={() => setStep(index)}
                 type="button"
