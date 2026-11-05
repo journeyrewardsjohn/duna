@@ -150,3 +150,195 @@ html[data-theme="dark"] body[data-zone="operator"] {
   color: var(--hq-text);
   font-weight: 500;
 }
+
+/* Shared AI-first creation entry. Examples are editable drafts, never actions. */
+.hq-creation {
+  color: var(--hq-text);
+  min-width: 0;
+}
+.hq-creation__header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--hq-line);
+}
+.hq-creation__header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--hq-muted);
+  font-size: 14px;
+}
+.hq-creation__header h1 {
+  margin: 0;
+}
+.hq-creation__start {
+  max-width: 680px;
+  margin: clamp(24px, 5vh, 56px) auto;
+  display: grid;
+  gap: 24px;
+}
+.hq-creation__start h2 {
+  margin: 0 0 8px;
+}
+.hq-creation__start p {
+  margin: 0;
+  color: var(--hq-muted);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.hq-creation__composer {
+  border: 1px solid var(--hq-core);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  background: var(--hq-ground);
+}
+.hq-creation__composer label {
+  font-size: 14px;
+  font-weight: 500;
+}
+.hq-creation__composer textarea {
+  min-width: 0;
+  width: 100%;
+  resize: vertical;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--hq-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.hq-creation__submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.hq-creation__submit span {
+  font-size: 12px;
+  color: var(--hq-muted);
+}
+.hq-creation__submit button {
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid var(--hq-text);
+  border-radius: 8px;
+  background: var(--hq-text);
+  color: var(--hq-ground);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.hq-creation__submit button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.hq-creation__examples {
+  display: grid;
+  gap: 8px;
+}
+.hq-creation__examples > span {
+  font-size: 12px;
+  color: var(--hq-muted);
+}
+.hq-creation__examples button {
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--hq-text);
+  background: var(--hq-ground);
+  cursor: pointer;
+}
+.hq-creation__examples button:hover {
+  background: var(--hq-soft);
+}
+.hq-creation__manual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--hq-line);
+  padding-top: 12px;
+}
+.hq-creation__manual span {
+  color: var(--hq-muted);
+  font-size: 14px;
+}
+.hq-creation__manual button {
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--hq-text);
+  background: var(--hq-ground);
+  cursor: pointer;
+}
+.hq-creation :is(a, button, textarea):focus-visible {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .hq-creation__header {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .hq-creation__start {
+    margin: 24px auto;
+    gap: 20px;
+  }
+  .hq-creation__submit button {
+    width: 100%;
+    min-height: 56px;
+  }
+  .hq-creation__manual {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.hq-directory-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  background: var(--hq-soft);
+}
+.hq-directory-pagination label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+.hq-directory-pagination :is(select, button) {
+  min-height: 48px;
+  border: 1px solid var(--hq-line);
+  border-radius: 6px;
+  background: var(--hq-ground);
+  color: var(--hq-text);
+  font: inherit;
+  padding: 8px 12px;
+}
+.hq-directory-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.hq-directory-pagination :is(select, button):focus-visible {
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}

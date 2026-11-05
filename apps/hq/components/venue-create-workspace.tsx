@@ -36,7 +36,7 @@ const steps = [
   },
   {
     label: "Venue details",
-    detail: "Name the place and shape its player-facing story.",
+    detail: "Add the name and venue details.",
   },
   {
     label: "Features",
@@ -136,12 +136,11 @@ export function VenueCreateWorkspace({
           <ArrowLeft aria-hidden size={19} />
         </Link>
         <div>
-          <span className="hq-eyebrow">Venues · guided setup</span>
-          <h1>Create a place players can find.</h1>
+          <span className="hq-eyebrow">Venues</span>
+          <h1>Add venue</h1>
           <p>
-            Start with the real-world location. Duna keeps venue identity,
-            courts, pricing, and availability in focused workspaces after this
-            draft is created.
+            Add the location and venue details. Configure courts and
+            availability after saving the draft.
           </p>
         </div>
       </header>

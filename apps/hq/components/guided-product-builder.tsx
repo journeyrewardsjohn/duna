@@ -1719,16 +1719,15 @@ export function GuidedProductBuilder({
       <header className="guided-product-builder__header">
         <div className="guided-product-builder__intro">
           <span className="guided-product-builder__label">
-            <Sparkles aria-hidden size={14} /> Guided offer studio
+            <Sparkles aria-hidden size={14} /> Offer details
           </span>
           <h2>
             {editing
               ? `Edit ${initialItem?.title ?? "offer"}`
-              : "Build an offer people understand."}
+              : "Offer details"}
           </h2>
           <p>
-            Start with the customer outcome. Duna will guide you through only
-            the story, delivery, pricing, and controls that belong to it.
+            Set the details, availability and pricing. Review before publishing.
           </p>
           <div className="guided-product-builder__trust">
             <span>
@@ -1763,7 +1762,7 @@ export function GuidedProductBuilder({
             <Target aria-hidden size={18} />
           </span>
           <div>
-            <span className="hq-eyebrow">Start with the outcome</span>
+            <span className="hq-eyebrow">Offer type</span>
             <strong>What are you creating?</strong>
           </div>
           <small>The questions adapt to your choice.</small>
@@ -1938,6 +1937,7 @@ export function GuidedProductBuilder({
                       : undefined
                 }
                 disabled={!editing && index > step}
+                aria-current={index === step ? "step" : undefined}
                 key={name}
                 onClick={() => setStep(index)}
                 type="button"
@@ -1973,7 +1973,7 @@ export function GuidedProductBuilder({
               <p>
                 {type === "good"
                   ? "Inventory tracking and selling are separate choices. Turn on one or both."
-                  : "Start with the outcome instead of configuring a generic product type."}
+                  : "Offer type instead of configuring a generic product type."}
               </p>
               {type !== "good" ? (
                 <ChoiceGrid>

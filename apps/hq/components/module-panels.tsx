@@ -87,8 +87,7 @@ const moduleCopy: Record<
   team: {
     eyebrow: "Coaches + operators",
     title: "Team",
-    description:
-      "Roles, availability, sessions, compensation setup, personal goals, and organization-controlled worker classifications.",
+    description: "Staff roles, schedules and compensation.",
   },
   training: {
     eyebrow: "Coaching + athlete development",

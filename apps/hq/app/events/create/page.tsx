@@ -1,3 +1,4 @@
+import { HqCreationFlow } from "@duna/ui";
 import type { Metadata } from "next";
 import { EventBuilder } from "@/components/event-builder";
 import { OperatorShell } from "@/components/operator-shell";
@@ -44,20 +45,43 @@ export default async function CreateEventPage({
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
-      <EventBuilder
-        initialDraft={eventDraft}
-        initialKind={type === "league" ? "league" : "tournament"}
-        initialStartsAt={
-          starts && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(starts)
-            ? starts
-            : undefined
-        }
-        initialSummary={summary?.slice(0, 180)}
-        initialTitle={title?.slice(0, 140)}
-        initialVenueName={venue?.slice(0, 180)}
-        waivers={waivers}
-        workspace={workspace}
-      />
+      <HqCreationFlow
+        key={JSON.stringify([
+          dashboard.organization.id,
+          draftId,
+          type,
+          title,
+          summary,
+          venue,
+          starts,
+        ])}
+        title={type === "league" ? "Create league" : "Create event"}
+        noun={type === "league" ? "league" : "event"}
+        backHref={type === "league" ? "/leagues" : "/events"}
+        backLabel={type === "league" ? "Leagues" : "Events"}
+        initialManual={Boolean(
+          eventDraft || title || summary || venue || starts,
+        )}
+        examples={[
+          "Plan a doubles tournament with two divisions and a waitlist.",
+          "Set up a weekly league using our available courts.",
+        ]}
+      >
+        <EventBuilder
+          initialDraft={eventDraft}
+          initialKind={type === "league" ? "league" : "tournament"}
+          initialStartsAt={
+            starts && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(starts)
+              ? starts
+              : undefined
+          }
+          initialSummary={summary?.slice(0, 180)}
+          initialTitle={title?.slice(0, 140)}
+          initialVenueName={venue?.slice(0, 180)}
+          waivers={waivers}
+          workspace={workspace}
+        />
+      </HqCreationFlow>
     </OperatorShell>
   );
 }
