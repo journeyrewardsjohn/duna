@@ -80,6 +80,8 @@ html[data-theme="dark"] body[data-zone="operator"] {
 
 /* Compact operator lists share one accessible table treatment. */
 .hq-data-scroll {
+  /* Keep visually hidden table labels inside the horizontal scrollport. */
+  position: relative;
   max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--hq-line);
