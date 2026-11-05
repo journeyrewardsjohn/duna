@@ -331,3 +331,65 @@
 .hq-shell--focused :is(.people-filter-row, .team-filter-row) button {
   border-radius: 6px;
 }
+
+.hq-shell--focused .venue-create-preview {
+  background: var(--hq-soft);
+  color: var(--hq-text);
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  min-height: 0;
+  padding: 20px;
+  align-self: start;
+}
+.hq-shell--focused .venue-create-preview::before,
+.hq-shell--focused .venue-create-preview::after,
+.hq-shell--focused .venue-create-preview__mark {
+  display: none;
+}
+.hq-shell--focused .venue-create-preview > :is(small, span) {
+  color: var(--hq-muted);
+}
+@media (max-width: 760px) {
+  /* Keep the assistant above, rather than on top of, the fixed form actions. */
+  body:has(.guided-product-footer)
+    .ask-duna-floating:has(> .ask-duna-floating-launcher) {
+    bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+}
+
+body[data-zone="operator"]
+  .hq-shell--focused
+  .operator-create-page__heading
+  .operator-create-page__copy {
+  align-items: flex-start;
+  text-align: left;
+}
+body[data-zone="operator"]
+  .hq-shell--focused
+  .operator-create-page__copy
+  :is(h1, p) {
+  text-align: left;
+  margin-left: 0;
+}
+body[data-zone="operator"] .hq-shell--focused .guided-product-stage {
+  min-height: 0;
+  padding: 20px;
+}
+body[data-zone="operator"] .hq-shell--focused .guided-product-stage h3 {
+  font-size: 20px;
+  line-height: 1.3;
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(.guided-choice, .guided-product-type-row > button) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 12px;
+}
+.hq-shell--focused .guided-product-builder .guided-choice {
+  background: var(--hq-ground);
+}
+.hq-shell--focused .guided-product-builder .guided-choice.active {
+  background: var(--hq-soft);
+}

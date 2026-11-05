@@ -2156,14 +2156,6 @@ export function EventBuilder({
                   sections.
                 </p>
               )}
-              <article>
-                <Badge>Coming next</Badge>
-                <h3>Clinic, camp, open play + more</h3>
-                <p>
-                  These use the same clean foundation with lighter type-specific
-                  setup.
-                </p>
-              </article>
               {kind === "tournament" && (
                 <section className="event-format-first">
                   <header>
