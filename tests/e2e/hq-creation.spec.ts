@@ -113,6 +113,19 @@ for (const [path, heading, builder] of [
           .map((node) => node.getAttribute("name") ?? node.tagName),
       );
     expect(outside).toEqual([]);
+    if (path === "/products/create" && info.project.name === "mobile") {
+      const clearance = await page.evaluate(() => {
+        const footer = document.querySelector(".guided-product-footer")!;
+        const navigation = document.querySelector(".hq-sidebar")!;
+        return {
+          footerBottom: footer.getBoundingClientRect().bottom,
+          navigationTop: navigation.getBoundingClientRect().top,
+        };
+      });
+      expect(clearance.footerBottom).toBeLessThanOrEqual(
+        clearance.navigationTop,
+      );
+    }
     await page.evaluate(async () => {
       await document.fonts.ready;
       window.scrollTo(0, 0);

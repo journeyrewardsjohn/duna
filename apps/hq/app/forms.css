@@ -350,6 +350,9 @@
   color: var(--hq-muted);
 }
 @media (max-width: 760px) {
+  .hq-shell--focused .guided-product-builder .guided-product-footer {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
   /* Keep the assistant above, rather than on top of, the fixed form actions. */
   body:has(.guided-product-footer)
     .ask-duna-floating:has(> .ask-duna-floating-launcher) {
