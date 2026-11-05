@@ -2024,17 +2024,17 @@ export function EventBuilder({
           </span>
           <h1>
             {isPublishedEdit
-              ? "Edit every part of this event."
+              ? "Edit event"
               : initialDraft
-                ? "Make this event impossible to miss."
-                : "Create something players remember."}
+                ? "Edit draft"
+                : "Create event"}
           </h1>
           <p>
             {isPublishedEdit
               ? "Update divisions, team structure, competition format, pricing, tickets, rules, and the player experience. Paid registrations keep the exact price they already accepted."
               : initialDraft
-                ? "Refine the story, schedule, registration, and player experience. Nothing goes live until you publish."
-                : "One clear flow. Duna changes the setup when you choose the event type."}
+                ? "Update the details, schedule and registration. Changes stay private until published."
+                : "Choose a type, enter the details, then review your draft."}
           </p>
         </div>
         <div className="event-builder__status">
@@ -2065,6 +2065,7 @@ export function EventBuilder({
                       ? "complete"
                       : undefined
                 }
+                aria-current={index === step ? "step" : undefined}
                 key={definition.key}
                 onClick={() => setStep(index)}
                 type="button"
@@ -2155,14 +2156,6 @@ export function EventBuilder({
                   sections.
                 </p>
               )}
-              <article>
-                <Badge>Coming next</Badge>
-                <h3>Clinic, camp, open play + more</h3>
-                <p>
-                  These use the same clean foundation with lighter type-specific
-                  setup.
-                </p>
-              </article>
               {kind === "tournament" && (
                 <section className="event-format-first">
                   <header>

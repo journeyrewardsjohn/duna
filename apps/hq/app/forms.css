@@ -1,0 +1,413 @@
+/* A restrained shared frame and consistent form controls for operator work. */
+.hq-shell--focused:not(.hq-shell--immersive) .hq-workspace {
+  background: var(--hq-ground);
+  border: 1px solid var(--hq-line);
+  border-radius: 12px;
+  margin: 8px 8px 8px 0;
+  min-height: calc(100svh - 16px);
+}
+.hq-shell--focused:not(.hq-shell--immersive) .hq-topbar {
+  border-radius: 12px 12px 0 0;
+}
+.hq-shell--focused:not(.hq-shell--immersive) .hq-content {
+  max-width: 1480px;
+}
+.hq-shell--focused
+  :is(
+    .hq-card,
+    .hq-analytics-board,
+    .operator-control-surface,
+    .event-builder__canvas,
+    .guided-product-stage,
+    .venue-create-stage
+  ) {
+  border-radius: 10px;
+  box-shadow: none;
+}
+.hq-shell--focused
+  :is(
+    .hq-button,
+    .operator-create-page__back,
+    .guided-choice,
+    .venue-kind-choices label
+  ) {
+  border-radius: 8px;
+}
+.hq-shell--focused
+  :is(
+    .operator-form,
+    .guided-product-form,
+    .event-builder__canvas,
+    .venue-create-studio
+  )
+  :is(
+    input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="hidden"]
+    ),
+    select,
+    textarea
+  ) {
+  background: var(--hq-ground);
+  color: var(--hq-text);
+  border: 1px solid var(--hq-line);
+  border-radius: 6px;
+  min-height: 48px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  box-shadow: none;
+}
+.hq-shell--focused
+  :is(
+    .operator-form,
+    .guided-product-form,
+    .event-builder__canvas,
+    .venue-create-studio
+  )
+  :is(input, select, textarea):focus-visible {
+  border-color: var(--hq-core);
+  outline: 2px solid var(--hq-focus);
+  outline-offset: 2px;
+}
+.hq-shell--focused
+  :is(
+    .operator-form,
+    .guided-product-form,
+    .event-builder__canvas,
+    .venue-create-studio
+  )
+  :is(input, textarea)::placeholder {
+  color: var(--hq-muted);
+}
+.hq-shell--focused
+  :is(
+    .operator-form,
+    .guided-product-form,
+    .event-builder__canvas,
+    .venue-create-studio
+  )
+  label {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.hq-shell--focused .operator-form label > span:first-child {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--hq-text);
+}
+.hq-shell--focused .event-builder__header {
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.hq-shell--focused .event-builder__header a {
+  margin-bottom: 8px;
+  min-height: 48px;
+  font-size: 14px;
+}
+.hq-shell--focused .event-builder__header h1 {
+  line-height: 1.25;
+  margin: 8px 0;
+}
+.hq-shell--focused .event-builder__status {
+  border-radius: 8px;
+  background: var(--hq-ground);
+}
+.hq-shell--focused .event-builder__steps button {
+  grid-template-columns: 24px minmax(0, 1fr);
+  font-size: 14px;
+  border-radius: 6px;
+}
+.hq-shell--focused .event-builder__steps button > span {
+  display: none;
+}
+.hq-shell--focused .event-builder__steps button strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.hq-shell--focused .event-builder__steps button.active {
+  background: var(--hq-soft);
+  color: var(--hq-text);
+}
+.hq-shell--focused :is(.event-builder-panel, .event-review, .event-type-grid) {
+  min-height: 0;
+  padding: 24px;
+}
+.hq-shell--focused .event-builder-panel > header > span:first-child {
+  display: none;
+}
+.hq-shell--focused .guided-product-builder {
+  --color-bone: var(--hq-text);
+  --color-bone-muted: var(--hq-muted);
+  --color-canvas: var(--hq-ground);
+  --color-canvas-soft: var(--hq-soft);
+  --color-positive: var(--hq-text);
+  --color-depth: var(--hq-ground);
+  --color-surface: var(--hq-ground);
+  --color-line: var(--hq-line);
+  --color-line-strong: var(--hq-core);
+  --color-ink: var(--hq-text);
+  --color-aqua: var(--hq-text);
+  --color-aqua-deep: var(--hq-text);
+  --color-on-primary: var(--hq-ground);
+  background: var(--hq-ground);
+  border-color: var(--hq-line);
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(
+    .guided-product-builder__header,
+    .guided-event-link,
+    .guided-product-form,
+    .guided-product-guide,
+    .guided-product-stage,
+    .guided-offer-preview__card,
+    .guided-product-footer
+  ) {
+  background: var(--hq-ground);
+  border-color: var(--hq-line);
+  box-shadow: none;
+}
+.hq-shell--focused .guided-product-builder__header {
+  padding: 20px;
+}
+.hq-shell--focused
+  :is(
+    .guided-product-builder__trust,
+    .guided-product-builder__label,
+    .guided-product-paths__icon,
+    .guided-product-type-row__icon,
+    .guided-choice__icon,
+    .guided-product-assist
+  ) {
+  display: none;
+}
+.hq-shell--focused .guided-product-paths {
+  padding: 20px;
+}
+.hq-shell--focused .guided-product-paths > header {
+  margin-bottom: 16px;
+}
+.hq-shell--focused .guided-product-builder .guided-product-type-row > button {
+  background: var(--hq-ground);
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 16px;
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(
+    .guided-product-type-row > button.active,
+    .guided-product-steps > button.active,
+    .guided-choice.active
+  ) {
+  background: var(--hq-soft);
+  border-color: var(--hq-core);
+  box-shadow: none;
+  color: var(--hq-text);
+}
+.hq-shell--focused .guided-product-builder .hq-button--primary {
+  background: var(--hq-text);
+  border-color: var(--hq-text);
+  color: var(--hq-ground);
+}
+.hq-shell--focused .guided-product-builder .operator-money-input small {
+  color: var(--hq-text);
+  font-weight: 500;
+}
+.hq-shell--focused .guided-product-builder .guided-offer-preview__price {
+  background: var(--hq-soft);
+  border-color: var(--hq-line);
+}
+.hq-shell--focused
+  .guided-product-builder
+  .guided-offer-preview__price
+  :is(svg, small, strong) {
+  color: var(--hq-text);
+}
+.hq-shell--focused .venue-create-page__header {
+  margin-bottom: 24px;
+}
+.hq-shell--focused .venue-create-stage {
+  padding: 24px;
+}
+.hq-shell--focused .hq-work-prompts button {
+  border-radius: 6px;
+}
+@media (max-width: 760px) {
+  .hq-shell--focused:not(.hq-shell--immersive) .hq-workspace {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .hq-shell--focused:not(.hq-shell--immersive) .hq-topbar {
+    border-radius: 0;
+  }
+  .hq-shell--focused
+    :is(
+      .event-builder-panel,
+      .event-review,
+      .event-type-grid,
+      .venue-create-stage
+    ) {
+    padding: 16px;
+  }
+  .hq-shell--focused .event-builder__steps button {
+    display: flex;
+  }
+}
+
+.hq-shell--focused .hq-content:has(.hq-creation) > .hq-context-assistant {
+  display: none;
+}
+.hq-shell--focused .hq-work-prompt form {
+  max-width: 900px;
+  border-radius: 8px;
+}
+
+.hq-shell--focused .team-workspace {
+  min-width: 0;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+.hq-shell--focused .team-directory {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.hq-shell--focused .team-directory__header {
+  padding: 16px;
+  border-bottom: 1px solid var(--hq-line);
+}
+.hq-shell--focused .team-directory__header h2 {
+  margin: 0;
+}
+.hq-shell--focused .team-directory__tools {
+  padding: 16px 16px 8px;
+}
+.hq-shell--focused .team-filter-row {
+  padding: 0 16px 12px;
+  flex-wrap: wrap;
+}
+.hq-shell--focused .team-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 6px;
+}
+.hq-shell--focused .team-search input {
+  min-width: 0;
+  width: 100%;
+  font-size: 16px;
+}
+.hq-shell--focused .team-directory > .hq-data-scroll {
+  min-width: 0;
+  width: 100%;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.hq-shell--focused .team-data-table {
+  min-width: 850px;
+}
+.hq-shell--focused .team-data-table td {
+  font-size: 14px;
+}
+.hq-shell--focused .team-data-table small {
+  display: block;
+  font-size: 12px;
+  color: var(--hq-muted);
+  font-weight: 400;
+}
+.hq-shell--focused .team-data-table .team-table__identity {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.hq-shell--focused .team-data-table .team-avatar {
+  flex-shrink: 0;
+}
+.hq-shell--focused .people-directory__header {
+  max-width: 480px;
+}
+.hq-shell--focused :is(.people-filter-row, .team-filter-row) button {
+  border-radius: 6px;
+}
+
+.hq-shell--focused .venue-create-preview {
+  background: var(--hq-soft);
+  color: var(--hq-text);
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  min-height: 0;
+  padding: 20px;
+  align-self: start;
+}
+.hq-shell--focused .venue-create-preview::before,
+.hq-shell--focused .venue-create-preview::after,
+.hq-shell--focused .venue-create-preview__mark {
+  display: none;
+}
+.hq-shell--focused .venue-create-preview > :is(small, span) {
+  color: var(--hq-muted);
+}
+@media (max-width: 760px) {
+  .hq-shell--focused .guided-product-builder .guided-product-footer {
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+  /* Keep the assistant above, rather than on top of, the fixed form actions. */
+  body:has(.guided-product-footer)
+    .ask-duna-floating:has(> .ask-duna-floating-launcher) {
+    bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+  /* Validation can expand the footer; the header still provides Ask Duna. */
+  body:has(.guided-product-footer--blocked)
+    .ask-duna-floating:has(> .ask-duna-floating-launcher) {
+    display: none;
+  }
+}
+
+body[data-zone="operator"]
+  .hq-shell--focused
+  .operator-create-page__heading
+  .operator-create-page__copy {
+  align-items: flex-start;
+  text-align: left;
+}
+body[data-zone="operator"]
+  .hq-shell--focused
+  .operator-create-page__copy
+  :is(h1, p) {
+  text-align: left;
+  margin-left: 0;
+}
+body[data-zone="operator"] .hq-shell--focused .guided-product-stage {
+  min-height: 0;
+  padding: 20px;
+}
+body[data-zone="operator"] .hq-shell--focused .guided-product-stage h3 {
+  font-size: 20px;
+  line-height: 1.3;
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(.guided-choice, .guided-product-type-row > button) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 12px;
+}
+.hq-shell--focused .guided-product-builder .guided-choice {
+  background: var(--hq-ground);
+}
+.hq-shell--focused .guided-product-builder .guided-choice.active {
+  background: var(--hq-soft);
+}

@@ -215,17 +215,17 @@ const productTypes = [
 ];
 
 const stepNames: Record<ProductType, readonly string[]> = {
-  service: ["Shape", "Story", "Booking", "Price", "Review"],
-  plan: ["Plan type", "Value", "Structure", "Price", "Review"],
-  good: ["Purpose", "Variants", "Story + media", "Stock + price", "Review"],
+  service: ["Type", "Details", "Availability", "Pricing", "Review"],
+  plan: ["Type", "Details", "Benefits", "Pricing", "Review"],
+  good: ["Type", "Variants", "Details & media", "Stock & pricing", "Review"],
 };
 
 const virtualServiceSteps = [
-  "Shape",
-  "Story",
-  "Booking",
+  "Type",
+  "Details",
+  "Availability",
   "Virtual delivery",
-  "Price",
+  "Pricing",
   "Review",
 ] as const;
 
@@ -473,7 +473,6 @@ function ChoiceCard({
   badge,
   detail,
   disabled = false,
-  icon,
   label,
   onClick,
 }: {
@@ -493,7 +492,6 @@ function ChoiceCard({
       onClick={onClick}
       type="button"
     >
-      {icon && <span className="guided-choice__icon">{icon}</span>}
       <span className="guided-choice__copy">
         <strong>
           {label}
@@ -1719,16 +1717,15 @@ export function GuidedProductBuilder({
       <header className="guided-product-builder__header">
         <div className="guided-product-builder__intro">
           <span className="guided-product-builder__label">
-            <Sparkles aria-hidden size={14} /> Guided offer studio
+            <Sparkles aria-hidden size={14} /> Offer details
           </span>
           <h2>
             {editing
               ? `Edit ${initialItem?.title ?? "offer"}`
-              : "Build an offer people understand."}
+              : "Offer details"}
           </h2>
           <p>
-            Start with the customer outcome. Duna will guide you through only
-            the story, delivery, pricing, and controls that belong to it.
+            Set the details, availability and pricing. Review before publishing.
           </p>
           <div className="guided-product-builder__trust">
             <span>
@@ -1763,14 +1760,13 @@ export function GuidedProductBuilder({
             <Target aria-hidden size={18} />
           </span>
           <div>
-            <span className="hq-eyebrow">Start with the outcome</span>
+            <span className="hq-eyebrow">Offer type</span>
             <strong>What are you creating?</strong>
           </div>
           <small>The questions adapt to your choice.</small>
         </header>
         <div className="guided-product-type-row">
-          {productTypes.map((productType, index) => {
-            const Icon = productType.icon;
+          {productTypes.map((productType) => {
             const active = type === productType.value;
             return (
               <button
@@ -1781,13 +1777,7 @@ export function GuidedProductBuilder({
                 onClick={() => chooseType(productType.value)}
                 type="button"
               >
-                <span className="guided-product-type-row__icon">
-                  <Icon aria-hidden size={21} />
-                </span>
                 <span className="guided-product-type-row__copy">
-                  <small>
-                    0{index + 1} · {productType.kicker}
-                  </small>
                   <strong>{productType.label}</strong>
                   <span>{productType.detail}</span>
                 </span>
@@ -1973,7 +1963,7 @@ export function GuidedProductBuilder({
               <p>
                 {type === "good"
                   ? "Inventory tracking and selling are separate choices. Turn on one or both."
-                  : "Start with the outcome instead of configuring a generic product type."}
+                  : "Offer type instead of configuring a generic product type."}
               </p>
               {type !== "good" ? (
                 <ChoiceGrid>

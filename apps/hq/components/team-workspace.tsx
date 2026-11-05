@@ -2,15 +2,13 @@
 
 import type { OperatorWorkspace } from "@duna/api";
 import { formatMoney } from "@duna/core";
-import { Badge, Numeric } from "@duna/ui";
+import { Badge } from "@duna/ui";
 import {
   ArrowRight,
-  CalendarDays,
   LayoutGrid,
   ListFilter,
   Search,
   SlidersHorizontal,
-  UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -86,6 +84,8 @@ export function TeamWorkspace({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [view, setView] = useState<View>("table");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [sort, setSort] = useState<Sort>("name");
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const team = useMemo(() => {
@@ -128,6 +128,12 @@ export function TeamWorkspace({
       return left.displayName.localeCompare(right.displayName);
     });
   }, [filter, normalizedQuery, sort, workspace.staff]);
+  const pageCount = Math.max(1, Math.ceil(team.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleTeam = team.slice(
+    currentPage * pageSize,
+    (currentPage + 1) * pageSize,
+  );
   const active = workspace.staff.filter((person) => person.active);
   const upcoming = workspace.staff.reduce(
     (sum, person) => sum + person.upcomingSessions,
@@ -140,68 +146,38 @@ export function TeamWorkspace({
 
   return (
     <div className="team-workspace">
-      <section className="team-command-metrics" aria-label="Team overview">
-        <article className="team-command-metrics__primary">
-          <span className="team-command-metrics__icon">
-            <UsersRound aria-hidden size={21} />
-          </span>
-          <span>
-            <small>Active team</small>
-            <Numeric>{active.length}</Numeric>
-          </span>
-          <p>
-            {workspace.staff.length} connected people across coaching and
-            operations.
-          </p>
-        </article>
-        <article>
-          <CalendarDays aria-hidden size={19} />
-          <span>
-            <Numeric>{upcoming}</Numeric>
-            <small>upcoming sessions</small>
-          </span>
-        </article>
-        <article>
-          <span>
-            <Numeric>
-              {workspace.staff.reduce(
-                (sum, person) => sum + person.sessionsRun30d,
-                0,
-              )}
-            </Numeric>
-            <small>sessions · 30 days</small>
-          </span>
-        </article>
-        <article>
-          <span>
-            <Numeric>{ready}</Numeric>
-            <small>profiles ready</small>
-          </span>
-          <small>role, pay + address</small>
-        </article>
-      </section>
+      <div className="hq-summary-line" aria-label="Team overview">
+        <span>
+          <strong>{active.length}</strong> active staff
+        </span>
+        <span>
+          <strong>{upcoming}</strong> upcoming sessions
+        </span>
+        <span>
+          <strong>
+            {workspace.staff.reduce(
+              (sum, person) => sum + person.sessionsRun30d,
+              0,
+            )}
+          </strong>{" "}
+          sessions · 30 days
+        </span>
+        <span>
+          <strong>{ready}</strong> profiles ready
+        </span>
+      </div>
 
       <section className="hq-card team-directory">
-        <header className="team-directory__header">
-          <div>
-            <span className="hq-eyebrow">Team directory</span>
-            <h2>Who is ready to cover what?</h2>
-            <p>
-              Search the roster, compare workload, and open the full profile
-              when you need to make a change.
-            </p>
-          </div>
-          <Link className="hq-button hq-button--primary" href="/team/invite">
-            Invite team member <ArrowRight aria-hidden size={16} />
-          </Link>
-        </header>
-
         <div className="team-directory__tools">
           <label className="team-search">
             <Search aria-hidden size={18} />
             <input
+              aria-label="Search staff"
               autoComplete="off"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(0);
+              }}
               placeholder="Search name, email, role…"
               type="search"
               value={query}
@@ -212,7 +188,10 @@ export function TeamWorkspace({
             <span>Sort</span>
             <select
               aria-label="Sort team"
-              onChange={(event) => setSort(event.target.value as Sort)}
+              onChange={(event) => {
+                setSort(event.target.value as Sort);
+                setPage(0);
+              }}
               value={sort}
             >
               <option value="name">Name</option>
@@ -241,18 +220,16 @@ export function TeamWorkspace({
             </button>
           </div>
         </div>
-        <div
-          className="team-filter-row"
-          role="tablist"
-          aria-label="Filter team"
-        >
+        <div className="team-filter-row" role="group" aria-label="Filter team">
           {filters.map((item) => (
             <button
-              aria-selected={filter === item.id}
+              aria-pressed={filter === item.id}
               className={filter === item.id ? "active" : undefined}
               key={item.id}
-              onClick={() => setFilter(item.id)}
-              role="tab"
+              onClick={() => {
+                setFilter(item.id);
+                setPage(0);
+              }}
               type="button"
             >
               {item.label}
@@ -270,73 +247,89 @@ export function TeamWorkspace({
           </div>
         ) : view === "table" ? (
           <div
-            className="team-table"
-            role="table"
-            aria-label="Team performance directory"
+            className="hq-data-scroll"
+            role="region"
+            aria-label="Staff directory"
+            tabIndex={0}
           >
-            <div className="team-table__heading" role="row">
-              <span>Team member</span>
-              <span>Role + readiness</span>
-              <span>Sessions</span>
-              <span>Compensation</span>
-              <span>Goal</span>
-              <span aria-label="Open profile" />
-            </div>
-            {team.map((person) => (
-              <Link
-                href={`/team/${person.personId}`}
-                key={person.id}
-                role="row"
-              >
-                <span className="team-table__identity">
-                  <Avatar person={person} />
-                  <span>
-                    <strong>{person.displayName}</strong>
-                    <small>
-                      {person.email ??
-                        person.phoneE164 ??
-                        "Contact details missing"}
-                    </small>
-                  </span>
-                </span>
-                <span>
-                  <Badge tone={person.active ? "positive" : "neutral"}>
-                    {person.active ? "active" : "inactive"}
-                  </Badge>
-                  <small>
-                    {person.isOwner
-                      ? "Owner · Director"
-                      : roleName(person.role)}{" "}
-                    · {person.workerClassification.replaceAll("-", " ")}
-                  </small>
-                </span>
-                <span>
-                  <strong>{person.sessionsRun30d}</strong>
-                  <small>{person.upcomingSessions} coming up</small>
-                </span>
-                <span>
-                  <strong>{compensationLabel(person)}</strong>
-                  <small>Posted earnings not tracked yet</small>
-                </span>
-                <span>
-                  <strong>
-                    {person.incomeGoalMinor === undefined
-                      ? "No goal"
-                      : formatMoney(person.incomeGoalMinor, person.currency)}
-                  </strong>
-                  <small>
-                    {person.incomeGoalPeriod
-                      ? `per ${person.incomeGoalPeriod}`
-                      : "set a period"}
-                  </small>
-                </span>
-                <ArrowRight aria-hidden size={17} />
-              </Link>
-            ))}
+            <table className="hq-data-table team-data-table">
+              <caption className="sr-only">Staff directory</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Staff member</th>
+                  <th scope="col">Role & status</th>
+                  <th scope="col">Sessions · 30d</th>
+                  <th scope="col">Compensation</th>
+                  <th scope="col">Income goal</th>
+                  <th scope="col">
+                    <span className="sr-only">Action</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTeam.map((person) => (
+                  <tr key={person.id}>
+                    <th scope="row">
+                      <Link
+                        className="team-table__identity"
+                        href={`/team/${person.personId}`}
+                      >
+                        <Avatar person={person} />
+                        <span>
+                          <strong>{person.displayName}</strong>
+                          <small>
+                            {person.email ??
+                              person.phoneE164 ??
+                              "Contact details missing"}
+                          </small>
+                        </span>
+                      </Link>
+                    </th>
+                    <td>
+                      <span>
+                        {person.isOwner
+                          ? "Owner · Director"
+                          : roleName(person.role)}
+                      </span>
+                      <small>
+                        {person.workerClassification.replaceAll("-", " ")}
+                      </small>
+                      <Badge tone={person.active ? "positive" : "neutral"}>
+                        {person.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </td>
+                    <td>
+                      {person.sessionsRun30d}
+                      <small>{person.upcomingSessions} upcoming</small>
+                    </td>
+                    <td>
+                      {compensationLabel(person)}
+                      <small>Posted earnings not tracked yet</small>
+                    </td>
+                    <td>
+                      {person.incomeGoalMinor === undefined
+                        ? "Not set"
+                        : formatMoney(person.incomeGoalMinor, person.currency)}
+                      {person.incomeGoalPeriod && (
+                        <small>per {person.incomeGoalPeriod}</small>
+                      )}
+                    </td>
+                    <td>
+                      <Link
+                        href={`/team/${person.personId}`}
+                        aria-label={`Manage ${person.displayName}`}
+                      >
+                        Manage
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="team-card-grid">
-            {team.map((person) => (
+            {visibleTeam.map((person) => (
               <Link href={`/team/${person.personId}`} key={person.id}>
                 <header>
                   <Avatar large person={person} />
@@ -379,6 +372,46 @@ export function TeamWorkspace({
             ))}
           </div>
         )}
+        <footer className="hq-directory-pagination">
+          <label>
+            Rows per page{" "}
+            <select
+              aria-label="Staff rows per page"
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setPage(0);
+              }}
+            >
+              {[25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span aria-live="polite">
+            {team.length ? currentPage * pageSize + 1 : 0}–
+            {Math.min((currentPage + 1) * pageSize, team.length)} of{" "}
+            {team.length}
+          </span>
+          <button
+            type="button"
+            aria-label="Previous staff page"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            aria-label="Next staff page"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Next
+          </button>
+        </footer>
       </section>
     </div>
   );

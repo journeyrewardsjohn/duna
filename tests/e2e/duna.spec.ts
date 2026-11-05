@@ -620,7 +620,7 @@ test("public event creation carries a clean starter into guided HQ", async ({
   await page.goto(localHqHandoff.href);
   await expect(
     page.getByRole("heading", {
-      name: "Create something players remember.",
+      name: "Create event",
     }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Continue/ }).click();
@@ -1217,9 +1217,12 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/locations/create`);
-  await expect(
-    page.getByRole("heading", { name: "Create a place players can find." }),
-  ).toBeVisible({ timeout: navigationTimeout });
+  await page
+    .getByRole("button", { name: "Create manually →", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "Add venue" })).toBeVisible({
+    timeout: navigationTimeout,
+  });
   await expect(
     page.getByRole("radio", { name: /Public location/ }),
   ).toBeChecked();
@@ -1278,8 +1281,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("link", { name: /Create league/ }),
     /\/events\/create\?type=league$/,
   );
+  await page
+    .getByRole("button", { name: "Create manually →", exact: true })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Create something players remember." }),
+    page.getByRole("heading", { name: "Create event" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "League", exact: true }),
