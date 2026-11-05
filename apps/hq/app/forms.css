@@ -355,6 +355,11 @@
     .ask-duna-floating:has(> .ask-duna-floating-launcher) {
     bottom: calc(160px + env(safe-area-inset-bottom));
   }
+  /* Validation can expand the footer; the header still provides Ask Duna. */
+  body:has(.guided-product-footer--blocked)
+    .ask-duna-floating:has(> .ask-duna-floating-launcher) {
+    display: none;
+  }
 }
 
 body[data-zone="operator"]
