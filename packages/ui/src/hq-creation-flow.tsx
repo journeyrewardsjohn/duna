@@ -80,6 +80,12 @@ export function HqCreationFlow({
             </button>
           </div>
         </form>
+        <div className="hq-creation__manual">
+          <span>Prefer to fill in the details?</span>
+          <button type="button" onClick={() => setManual(true)}>
+            Create manually →
+          </button>
+        </div>
         <div className="hq-creation__examples" aria-label="Example briefs">
           <span>Try an example</span>
           {examples.map((example) => (
@@ -94,12 +100,6 @@ export function HqCreationFlow({
               {example}
             </button>
           ))}
-        </div>
-        <div className="hq-creation__manual">
-          <span>Prefer to fill in the details?</span>
-          <button type="button" onClick={() => setManual(true)}>
-            Create manually →
-          </button>
         </div>
       </section>
     </main>
