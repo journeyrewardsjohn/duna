@@ -203,6 +203,10 @@ test("Team directory preserves filters, layouts, pagination and keyboard profile
   await expect(table).toBeVisible();
   await expect(table.getByRole("columnheader")).toHaveCount(6);
   await expect(table.getByRole("rowheader")).toHaveCount(25);
+  await contained(page);
+  expect(await page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(
+    page.viewportSize()!.width + 1,
+  );
   await page
     .getByRole("button", { name: "Next staff page", exact: true })
     .click();

@@ -270,7 +270,15 @@
   border-radius: 8px;
 }
 
+.hq-shell--focused .team-workspace {
+  min-width: 0;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
 .hq-shell--focused .team-directory {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding: 0;
   overflow: hidden;
 }
@@ -301,6 +309,8 @@
   font-size: 16px;
 }
 .hq-shell--focused .team-directory > .hq-data-scroll {
+  min-width: 0;
+  width: 100%;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
@@ -351,7 +361,7 @@
 }
 @media (max-width: 760px) {
   .hq-shell--focused .guided-product-builder .guided-product-footer {
-    bottom: calc(82px + env(safe-area-inset-bottom));
+    bottom: calc(86px + env(safe-area-inset-bottom));
   }
   /* Keep the assistant above, rather than on top of, the fixed form actions. */
   body:has(.guided-product-footer)
