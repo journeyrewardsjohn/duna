@@ -339,12 +339,14 @@ export function EventsTable({
           role="group"
           aria-label="Event views"
         >
-          {[
-            ["all", "All events"],
-            ["upcoming", "Upcoming"],
-            ["draft", "Drafts"],
-            ["past", "Past"],
-          ].map(([value, title]) => (
+          {(
+            [
+              ["all", "All events"],
+              ["upcoming", "Upcoming"],
+              ["draft", "Drafts"],
+              ["past", "Past"],
+            ] as const
+          ).map(([value, title]) => (
             <button
               type="button"
               key={value}
