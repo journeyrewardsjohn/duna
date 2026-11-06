@@ -16,6 +16,10 @@ test("HQ Home hands a task to Ask Duna without approving its changes", async ({
   ).toBeVisible();
   await expect(page.locator(".hq-shell--focused")).toHaveCSS(
     "background-color",
+    "rgb(248, 248, 248)",
+  );
+  await expect(page.locator(".hq-workspace")).toHaveCSS(
+    "background-color",
     "rgb(255, 255, 255)",
   );
   const input = page.getByRole("textbox", {

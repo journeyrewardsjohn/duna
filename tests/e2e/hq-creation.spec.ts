@@ -48,6 +48,9 @@ test("creation examples wait for explicit AI submission and preserve review", as
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open Ask Duna", exact: true }),
+  ).toBeHidden();
   await contained(page);
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -64,10 +67,17 @@ test("creation examples wait for explicit AI submission and preserve review", as
     floating.getByText("Ready for your review", { exact: true }),
   ).toBeVisible();
   expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
-  expect(turns).toHaveLength(1);
+  await expect.poll(() => turns.length).toBe(1);
   expect(JSON.stringify(turns[0])).toContain("two divisions and a waitlist");
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await expect(page).toHaveURL(`${base}/events/create`);
+  await floating
+    .getByRole("textbox", { name: "Ask Duna anything" })
+    .press("Escape");
+  await expect(floating).toBeHidden();
+  await expect(
+    page.locator(".hq-ai-button:focus, .hq-creation__composer textarea:focus"),
+  ).toHaveCount(1);
 });
 
 for (const [path, heading, builder] of [
