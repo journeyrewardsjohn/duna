@@ -422,7 +422,7 @@ body[data-zone="operator"] .hq-shell--focused .guided-product-stage h3 {
 /* Surface depth identifies the workspace, controls, and temporary overlays. */
 body[data-zone="operator"] .hq-shell--focused .hq-card,
 .hq-shell--focused .hq-data-scroll,
-.hq-shell--focused .guided-product-builder {
+body[data-zone="operator"] .hq-shell--focused .guided-product-builder {
   border-color: var(--hq-line);
   box-shadow: var(--hq-shadow-control);
 }
@@ -520,8 +520,8 @@ body[data-zone="operator"]
   border-color: var(--hq-muted);
   box-shadow: var(--hq-shadow-inset);
 }
-.hq-shell--focused .guided-product-builder__header,
-.hq-shell--focused .guided-product-guide {
+.hq-shell--focused .guided-product-builder .guided-product-builder__header,
+.hq-shell--focused .guided-product-builder .guided-product-guide {
   background: var(--hq-soft);
 }
 .hq-shell--focused .hq-auth-menu__panel,
