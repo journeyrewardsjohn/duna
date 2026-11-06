@@ -113,7 +113,7 @@ export function AskDunaFloating({
       : fallback?.getClientRects().length
         ? fallback
         : document.querySelector<HTMLTextAreaElement>(
-            ".hq-work-prompt textarea",
+            ".hq-creation__composer textarea, .hq-work-prompt textarea",
           );
     visibleTarget?.focus({ preventScroll: true });
     setFocusTarget(null);

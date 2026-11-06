@@ -71,6 +71,11 @@ test("creation examples wait for explicit AI submission and preserve review", as
   expect(JSON.stringify(turns[0])).toContain("two divisions and a waitlist");
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await expect(page).toHaveURL(`${base}/events/create`);
+  await page.keyboard.press("Escape");
+  await expect(floating).toBeHidden();
+  await expect(
+    page.locator(".hq-ai-button:focus, .hq-creation__composer textarea:focus"),
+  ).toHaveCount(1);
 });
 
 for (const [path, heading, builder] of [
