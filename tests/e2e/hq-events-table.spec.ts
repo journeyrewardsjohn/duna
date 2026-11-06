@@ -5,14 +5,19 @@ const base =
 const draftId = "89000000-0000-4000-8000-000000000001";
 
 async function fixture(page: Page) {
+  if (!["localhost", "127.0.0.1"].includes(new URL(base).hostname))
+    throw new Error("Event fixtures are local-only");
   const sessions = Array.from({ length: 30 }, (_, index) => ({
     id: `89000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     title: `QA Event ${String(index + 1).padStart(2, "0")}`,
     slug: `qa-event-${index + 1}`,
     kind: index % 2 ? "clinic" : "tournament",
-    status: index === 0 ? "draft" : "registration-open",
-    startsAt: "2035-07-10T18:00:00.000Z",
-    endsAt: "2035-07-10T20:00:00.000Z",
+    status:
+      index === 0 ? "draft" : index === 29 ? "completed" : "registration-open",
+    startsAt:
+      index === 29 ? "2020-07-10T18:00:00.000Z" : "2035-07-10T18:00:00.000Z",
+    endsAt:
+      index === 29 ? "2020-07-10T20:00:00.000Z" : "2035-07-10T20:00:00.000Z",
     timezone: "America/New_York",
     capacity: 16,
     venueName: "QA Beach Courts",
@@ -60,6 +65,9 @@ test("events table searches, sorts and paginates without stacked empty summaries
   await fixture(page);
   const table = page.getByRole("table", { name: "Events", exact: true });
   await expect(table).toBeVisible();
+  expect(await page.evaluate(() => innerWidth)).toBeLessThanOrEqual(
+    page.viewportSize()!.width + 1,
+  );
   await expect(table.getByRole("columnheader")).toHaveCount(7);
   const search = page.getByRole("searchbox", { name: "Search events" });
   await search.fill("QA Event");
@@ -103,6 +111,18 @@ test("events table searches, sorts and paginates without stacked empty summaries
   await page
     .getByRole("combobox", { name: "Event type", exact: true })
     .selectOption("all");
+  for (const [name, count] of [
+    ["Upcoming", 28],
+    ["Past", 1],
+    ["Drafts", 1],
+    ["All events", 30],
+  ] as const) {
+    await page
+      .getByRole("group", { name: "Event views" })
+      .getByRole("button", { name: new RegExp(`^${name}`) })
+      .click();
+    await expect(table.locator("tbody tr")).toHaveCount(count);
+  }
   await page
     .getByRole("combobox", { name: "Events per page" })
     .selectOption("25");
@@ -154,6 +174,7 @@ test("event inventory supports dark theme and keeps real published listings", as
 }, info) => {
   await page.addInitScript(() => localStorage.setItem("duna-theme", "dark"));
   await page.goto(`${base}/events`);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const table = page.getByRole("table", { name: "Events", exact: true });
   await expect(table).toBeVisible();
   await expect(table.locator("tbody tr").first()).toBeVisible();
