@@ -28,6 +28,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { OperatorModule } from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
+import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
 import { PeopleWorkspace } from "./people-workspace";
 import { TeamWorkspace } from "./team-workspace";
@@ -104,8 +105,7 @@ const moduleCopy: Record<
   events: {
     eyebrow: "Competition + community",
     title: "Events",
-    description:
-      "Published events, prices, locations, capacity, and player-facing pages.",
+    description: "Manage events, registration and drafts.",
   },
   leagues: {
     eyebrow: "Structured play",
@@ -1296,12 +1296,19 @@ export function ModulePanel({
           <p>{copy.description}</p>
         </div>
         {createAction && module !== "calendar" && (
-          <Link
-            className="hq-button hq-button--primary"
-            href={createAction.href}
-          >
-            <Plus size={17} /> {createAction.label}
-          </Link>
+          <div className="hq-page-heading__actions">
+            {module === "events" && (
+              <Link className="hq-button" href="/calendar">
+                Schedule
+              </Link>
+            )}
+            <Link
+              className="hq-button hq-button--primary"
+              href={createAction.href}
+            >
+              <Plus size={17} /> {createAction.label}
+            </Link>
+          </div>
         )}
       </header>
 
@@ -1328,29 +1335,17 @@ export function ModulePanel({
       ) : module === "products" ? (
         <ProductCatalogPanel scope={productScope} workspace={workspace} />
       ) : module === "events" ? (
-        <>
-          <SessionDraftManager
-            focusedDraftId={focusedDraftId}
-            kinds={
-              eventKinds ?? ["tournament", "clinic", "open-play", "pickup"]
-            }
-            workspace={workspace}
-          />
-          <EventHistoryWorkspace
-            kinds={
-              eventKinds ?? [
-                "tournament",
-                "clinic",
-                "open-play",
-                "pickup",
-                "private-lesson",
-                "court-rental",
-              ]
-            }
-            workspace={workspace}
-          />
-          <EventInventory dashboard={dashboard} kinds={eventKinds} />
-        </>
+        <EventsTable
+          dashboard={dashboard}
+          workspace={workspace}
+          kinds={eventKinds}
+          focusedDraftId={focusedDraftId}
+          publicWebUrl={
+            process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+            process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+            "https://duna.coach"
+          }
+        />
       ) : module === "leagues" ? (
         <>
           <SessionDraftManager
