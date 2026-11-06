@@ -611,3 +611,20 @@ export function SessionDraftManager({
     </section>
   );
 }
+
+export function SessionDraftReview({
+  session,
+  workspace,
+}: {
+  readonly session: DraftSession;
+  readonly workspace: OperatorWorkspace;
+}) {
+  return (
+    <DraftPublicationCard
+      key={session.id}
+      focused
+      session={session}
+      workspace={workspace}
+    />
+  );
+}
