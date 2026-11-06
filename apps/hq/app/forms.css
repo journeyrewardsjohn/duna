@@ -1,10 +1,15 @@
 /* A restrained shared frame and consistent form controls for operator work. */
+.hq-shell--focused,
+.hq-shell--focused .hq-sidebar {
+  background: var(--hq-rail);
+}
 .hq-shell--focused:not(.hq-shell--immersive) .hq-workspace {
   background: var(--hq-ground);
   border: 1px solid var(--hq-line);
   border-radius: 12px;
   margin: 8px 8px 8px 0;
   min-height: calc(100svh - 16px);
+  box-shadow: var(--hq-shadow-panel);
 }
 .hq-shell--focused:not(.hq-shell--immersive) .hq-topbar {
   border-radius: 12px 12px 0 0;
@@ -22,7 +27,7 @@
     .venue-create-stage
   ) {
   border-radius: 10px;
-  box-shadow: none;
+  box-shadow: var(--hq-shadow-control);
 }
 .hq-shell--focused
   :is(
@@ -59,7 +64,7 @@
   font-family: var(--font-body);
   font-size: 16px;
   font-weight: 400;
-  box-shadow: none;
+  box-shadow: var(--hq-shadow-inset);
 }
 .hq-shell--focused
   :is(
@@ -244,6 +249,7 @@
     margin: 0;
     border: 0;
     border-radius: 0;
+    box-shadow: none;
   }
   .hq-shell--focused:not(.hq-shell--immersive) .hq-topbar {
     border-radius: 0;
@@ -268,6 +274,7 @@
 .hq-shell--focused .hq-work-prompt form {
   max-width: 900px;
   border-radius: 8px;
+  box-shadow: var(--hq-shadow-control);
 }
 
 .hq-shell--focused .team-workspace {
@@ -410,4 +417,117 @@ body[data-zone="operator"] .hq-shell--focused .guided-product-stage h3 {
 }
 .hq-shell--focused .guided-product-builder .guided-choice.active {
   background: var(--hq-soft);
+}
+
+/* Surface depth identifies the workspace, controls, and temporary overlays. */
+body[data-zone="operator"] .hq-shell--focused .hq-card,
+.hq-shell--focused .hq-data-scroll,
+.hq-shell--focused .guided-product-builder {
+  border-color: var(--hq-line);
+  box-shadow: var(--hq-shadow-control);
+}
+body[data-zone="operator"] .hq-shell--focused .hq-overview-page .hq-card {
+  box-shadow: none;
+}
+.hq-shell--focused .hq-sidebar nav a.active {
+  background: var(--hq-ground);
+  box-shadow: var(--hq-shadow-control);
+}
+.hq-shell--focused :is(.hq-search--trigger, .hq-ai-button) {
+  border: 1px solid var(--hq-line);
+  border-radius: 8px;
+  background: var(--hq-ground);
+  box-shadow: var(--hq-shadow-control);
+}
+.hq-shell--focused .hq-button,
+.hq-shell--focused .guided-product-builder .hq-button,
+.hq-shell--focused .operator-create-page__back {
+  box-shadow: var(--hq-shadow-control);
+}
+.hq-shell--focused .hq-button:not(.hq-button--primary):not(.hq-button--danger) {
+  background: var(--hq-ground);
+  border-color: var(--hq-edge);
+}
+.hq-shell--focused .hq-button:not(.hq-button--danger):not(:disabled):hover {
+  border-color: var(--hq-muted);
+}
+.hq-shell--focused :is(.team-sort, .team-search, .people-search) {
+  border: 1px solid var(--hq-edge);
+  border-radius: 8px;
+  background: var(--hq-ground);
+  box-shadow: var(--hq-shadow-inset);
+}
+.hq-shell--focused .team-directory__tools {
+  border-top: 0;
+  margin-top: 0;
+}
+.hq-shell--focused .team-view-toggle {
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  border-color: var(--hq-line);
+  background: var(--hq-soft);
+  box-shadow: var(--hq-shadow-inset);
+}
+.hq-shell--focused .team-view-toggle button {
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--hq-muted);
+}
+.hq-shell--focused .team-view-toggle button[aria-pressed="true"],
+.hq-shell--focused :is(.team-filter-row, .people-filter-row) button.active {
+  border-color: var(--hq-line);
+  background: var(--hq-ground);
+  color: var(--hq-text);
+  box-shadow: var(--hq-shadow-control);
+}
+.hq-shell--focused .team-filter-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--hq-line);
+  background: var(--hq-soft);
+}
+.hq-shell--focused :is(.team-filter-row, .people-filter-row) button {
+  min-height: 48px;
+  border: 1px solid transparent;
+}
+.hq-shell--focused .hq-data-table tbody td:last-child > a {
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--hq-line);
+  border-radius: 6px;
+  background: var(--hq-ground);
+  box-shadow: var(--hq-shadow-control);
+  text-decoration: none;
+}
+.hq-shell--focused .hq-data-table tbody td:last-child > a:hover {
+  border-color: var(--hq-edge);
+  background: var(--hq-soft);
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(.guided-product-type-row > button, .guided-choice) {
+  box-shadow: var(--hq-shadow-control);
+}
+.hq-shell--focused
+  .guided-product-builder
+  :is(.guided-product-type-row > button.active, .guided-choice.active) {
+  border-color: var(--hq-muted);
+  box-shadow: var(--hq-shadow-inset);
+}
+.hq-shell--focused .guided-product-builder__header,
+.hq-shell--focused .guided-product-guide {
+  background: var(--hq-soft);
+}
+.hq-shell--focused .hq-auth-menu__panel,
+.ask-duna-floating-panel {
+  border-color: var(--hq-edge);
+  border-radius: 12px;
+  box-shadow: var(--hq-shadow-popover);
+}
+.hq-shell--focused .hq-button:disabled,
+.hq-creation__submit button:disabled,
+.hq-directory-pagination button:disabled {
+  box-shadow: none;
 }

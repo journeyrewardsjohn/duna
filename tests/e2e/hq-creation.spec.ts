@@ -64,7 +64,7 @@ test("creation examples wait for explicit AI submission and preserve review", as
     floating.getByText("Ready for your review", { exact: true }),
   ).toBeVisible();
   expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
-  expect(turns).toHaveLength(1);
+  await expect.poll(() => turns.length).toBe(1);
   expect(JSON.stringify(turns[0])).toContain("two divisions and a waitlist");
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await expect(page).toHaveURL(`${base}/events/create`);
