@@ -1,6 +1,6 @@
 /* A restrained shared frame and consistent form controls for operator work. */
 .hq-shell--focused,
-.hq-shell--focused .hq-sidebar {
+body[data-zone="operator"] .hq-shell--focused:not(.admin-shell) .hq-sidebar {
   background: var(--hq-rail);
 }
 .hq-shell--focused:not(.hq-shell--immersive) .hq-workspace {
@@ -429,7 +429,11 @@ body[data-zone="operator"] .hq-shell--focused .hq-card,
 body[data-zone="operator"] .hq-shell--focused .hq-overview-page .hq-card {
   box-shadow: none;
 }
-.hq-shell--focused .hq-sidebar nav a.active {
+body[data-zone="operator"]
+  .hq-shell--focused:not(.admin-shell)
+  .hq-sidebar
+  nav
+  a.active {
   background: var(--hq-ground);
   box-shadow: var(--hq-shadow-control);
 }
