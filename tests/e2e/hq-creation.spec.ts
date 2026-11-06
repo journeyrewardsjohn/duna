@@ -48,6 +48,9 @@ test("creation examples wait for explicit AI submission and preserve review", as
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open Ask Duna", exact: true }),
+  ).toBeHidden();
   await contained(page);
   await page.evaluate(async () => {
     await document.fonts.ready;

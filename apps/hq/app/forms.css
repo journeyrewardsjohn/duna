@@ -535,3 +535,8 @@ body[data-zone="operator"]
 .hq-directory-pagination button:disabled {
   box-shadow: none;
 }
+
+/* The creation prompt already opens Duna; keep its actions unobstructed. */
+body[data-zone="operator"]:has(.hq-creation) .ask-duna-floating-launcher {
+  display: none;
+}
