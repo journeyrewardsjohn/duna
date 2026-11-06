@@ -1252,15 +1252,16 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await page.goto(`${hqBaseUrl}/events`);
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
   await expect(
-    page.getByRole("heading", {
-      name: "No drafts awaiting publication",
-    }),
+    page.getByRole("table", { name: "Events", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "Every saved draft stays here until you explicitly review it and open registration.",
-    ),
+    page
+      .getByRole("group", { name: "Event views" })
+      .getByRole("button", { name: /^Drafts/ }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Draft publication review" }),
+  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
