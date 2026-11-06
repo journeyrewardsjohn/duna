@@ -94,6 +94,11 @@ test("events table searches, sorts and paginates without stacked empty summaries
     .getByRole("combobox", { name: "Events per page" })
     .selectOption("50");
   await expect(table.locator("tbody tr")).toHaveCount(30);
+  const completedRow = table
+    .getByRole("row")
+    .filter({ hasText: "QA Event 30" });
+  await expect(completedRow).toContainText("Closed");
+  await expect(completedRow).not.toContainText("spots left");
   await page
     .getByRole("button", { name: "Sort by Event", exact: true })
     .click();

@@ -236,7 +236,9 @@ export function EventsTable({
               <span>{row.original.capacity} capacity</span>
             ) : (
               <span>
-                {row.original.available} spots left
+                {["completed", "cancelled"].includes(row.original.status)
+                  ? "Closed"
+                  : `${row.original.available} spots left`}
                 <small>{row.original.capacity} capacity</small>
               </span>
             ),

@@ -754,3 +754,8 @@ body[data-zone="operator"]:has(.hq-creation) .ask-duna-floating-launcher {
   font-weight: 400;
   background: var(--hq-ground);
 }
+
+.events-table time {
+  display: block;
+  white-space: nowrap;
+}
