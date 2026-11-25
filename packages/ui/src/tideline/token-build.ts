@@ -36,6 +36,37 @@ export interface TidelineTokenSource {
   [group: string]: unknown;
 }
 
+/**
+ * Adds the code-side additions to the design source. A token or type style
+ * the source already names is left alone: the published file always wins.
+ */
+export function mergeTidelineAdditions(
+  source: TidelineTokenSource,
+  additions: Partial<TidelineTokenSource> | undefined,
+): TidelineTokenSource {
+  if (!additions) return source;
+  const merged = structuredClone(source);
+  for (const [groupName, group] of Object.entries(additions)) {
+    if (!isTokenGroup(group)) continue;
+    const target = merged[groupName];
+    if (!isTokenGroup(target)) continue;
+    const known = new Set(target.tokens.map((token) => token.name));
+    target.tokens.push(
+      ...group.tokens.filter((token) => !known.has(token.name)),
+    );
+  }
+  const styles = new Set(
+    merged.type.groups.flatMap((group) =>
+      group.styles.map((style) => style.name),
+    ),
+  );
+  for (const group of additions.type?.groups ?? []) {
+    const fresh = group.styles.filter((style) => !styles.has(style.name));
+    if (fresh.length > 0) merged.type.groups.push({ ...group, styles: fresh });
+  }
+  return merged;
+}
+
 /** Prefix for every generated custom property. */
 export const TIDELINE_PREFIX = "td";
 /** Root class that scopes tokens and styles. */

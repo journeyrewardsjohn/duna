@@ -5,7 +5,8 @@
  *   pnpm tideline:tokens --check   exit 1 when the generated files are stale
  *
  * To take a new design revision, replace
- * `packages/ui/src/tideline/tokens.json` and run the first command.
+ * `packages/ui/src/tideline/tokens.json` and run the first command. Names the
+ * code needs before design publishes them live in `tokens.additions.json`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -13,6 +14,7 @@ import { format } from "prettier";
 import {
   buildTidelineTokensCss,
   buildTidelineTokensTs,
+  mergeTidelineAdditions,
   type TidelineTokenSource,
 } from "../packages/ui/src/tideline/token-build";
 
@@ -23,11 +25,17 @@ async function main() {
   const check = process.argv.includes("--check");
 
   const rawSource = readFileSync(sourcePath, "utf8");
-  const source = JSON.parse(rawSource) as TidelineTokenSource;
+  const additionsPath = join(directory, "tokens.additions.json");
+  const rawAdditions = readFileSync(additionsPath, "utf8");
+  const source = mergeTidelineAdditions(
+    JSON.parse(rawSource) as TidelineTokenSource,
+    JSON.parse(rawAdditions) as Partial<TidelineTokenSource>,
+  );
 
   const outputs: Array<[path: string, content: string]> = [
     // The design export is minified differently on each drop; keep it stable.
     [sourcePath, await format(rawSource, { parser: "json" })],
+    [additionsPath, await format(rawAdditions, { parser: "json" })],
     [
       join(directory, "tokens.css"),
       await format(buildTidelineTokensCss(source), { parser: "css" }),

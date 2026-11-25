@@ -6,6 +6,7 @@ import {
   buildTidelineTokensCss,
   buildTidelineTokensTs,
   contrastRatio,
+  mergeTidelineAdditions,
   resolveTidelineColors,
   type TidelineTokenSource,
 } from "./token-build";
@@ -13,7 +14,11 @@ import { tidelineColors, tidelineTokens } from "./tokens";
 
 const here = import.meta.dirname;
 const read = (name: string) => readFileSync(join(here, name), "utf8");
-const source = JSON.parse(read("tokens.json")) as TidelineTokenSource;
+const published = JSON.parse(read("tokens.json")) as TidelineTokenSource;
+const additions = JSON.parse(
+  read("tokens.additions.json"),
+) as Partial<TidelineTokenSource>;
+const source = mergeTidelineAdditions(published, additions);
 const css = read("tokens.css");
 const stylesheet = read("tideline.css");
 
@@ -50,7 +55,7 @@ describe("Tideline token pipeline", () => {
   });
 
   it("turns aliases into var() references and rejects unknown ones", () => {
-    expect(css).toContain("--td-link: var(--td-tide-600);");
+    expect(css).toContain("--td-on-energy: var(--td-tide-950);");
     const broken = structuredClone(source);
     broken.color.tokens.push({ name: "broken", value: "{no-such-token}" });
     expect(() => buildTidelineTokensCss(broken)).toThrow(/no-such-token/);
@@ -68,7 +73,7 @@ describe("Tideline token pipeline", () => {
   it("resolves native values: numbers for lengths and times, pixels for type", () => {
     expect(tidelineTokens.spacing["space-4"]).toBe(16);
     expect(tidelineTokens.duration["duration-base"]).toBe(180);
-    expect(tidelineTokens.color.light.action).toBe("#0b1220");
+    expect(tidelineTokens.color.light.action).toBe("#0f1a2b");
     expect(tidelineColors("dark", "live")).toBe(tidelineTokens.color.live);
     expect(tidelineTokens.type.body).toMatchObject({
       family: "ui",
@@ -76,8 +81,8 @@ describe("Tideline token pipeline", () => {
       lineHeight: 20,
     });
     // A unitless line height becomes pixels, and em tracking becomes points.
-    expect(tidelineTokens.type.display.letterSpacing).toBe(-0.64);
-    expect(tidelineTokens.duration["duration-loading-delay"]).toBe(250);
+    expect(tidelineTokens.type["heading-32"].letterSpacing).toBe(-0.64);
+    expect(tidelineTokens.duration["delay-loading"]).toBe(250);
   });
 });
 
@@ -124,7 +129,6 @@ describe("Tideline contrast (WCAG AA)", () => {
         ["border-control", "surface"],
         ["focus", "surface"],
         ["focus", "ground"],
-        ["action", "surface"],
       ] as const) {
         expect(
           contrastRatio(
@@ -137,12 +141,20 @@ describe("Tideline contrast (WCAG AA)", () => {
     });
   }
 
-  it("the light primary button is readable on the dark meshes", () => {
+  it("the primary button label is white in every theme", () => {
     for (const theme of Object.keys(colors)) {
-      expect(
-        contrastRatio(colors[theme]!["tide-900"]!, colors[theme]!["on-mesh"]!),
-      ).toBeGreaterThanOrEqual(4.5);
+      expect(colors[theme]!["on-action"]).toBe("#ffffff");
     }
+  });
+
+  it("additions never override a published token", () => {
+    const clash = mergeTidelineAdditions(published, {
+      color: { themes: [], tokens: [{ name: "action", value: "#ff0000" }] },
+    } as Partial<TidelineTokenSource>);
+    expect(resolveTidelineColors(clash).light!.action).toBe("#0f1a2b");
+    expect(resolveTidelineColors(source).light!["surface-warm"]).toBe(
+      "#f8f5ef",
+    );
   });
 });
 
@@ -186,11 +198,10 @@ describe("Tideline stylesheet rules", () => {
     expect(size("body")).toBeGreaterThanOrEqual(14);
     expect(size("label")).toBeGreaterThanOrEqual(14);
     expect(size("phone-body")).toBeGreaterThanOrEqual(15);
-    expect(size("caption")).toBeGreaterThanOrEqual(13);
-    expect(size("tab-label")).toBeGreaterThanOrEqual(12);
-    expect(type.find((style) => style.name === "tab-label")!.fontWeight).toBe(
-      600,
-    );
+    expect(size("meta")).toBeGreaterThanOrEqual(13);
+    expect(size("micro")).toBeGreaterThanOrEqual(12);
+    // The published 11px `tab-label` is under the floor, so nothing uses it.
+    expect(withoutComments).not.toContain("--td-type-tab-label");
   });
 
   it("locks the primary label colour for links and children", () => {

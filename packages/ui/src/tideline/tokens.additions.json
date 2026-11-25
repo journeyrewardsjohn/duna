@@ -1,0 +1,42 @@
+{
+  "note": "Tokens the code needs that the published tokens.json does not carry yet. The token build merges them in; a token of the same name in tokens.json always wins, so each entry disappears from effect once design publishes it.",
+  "color": {
+    "tokens": [
+      {
+        "name": "surface-warm",
+        "value": {
+          "light": "{sand-50}",
+          "dark": "{surface-raised}",
+          "live": "{surface-raised}"
+        },
+        "usage": "The warm off-white of a summary panel on a comfortable page."
+      }
+    ]
+  },
+  "radius": {
+    "tokens": [
+      {
+        "name": "radius-panel",
+        "value": "24px",
+        "usage": "Comfortable scale: summary panels and large containers."
+      }
+    ]
+  },
+  "type": {
+    "groups": [
+      {
+        "name": "Code additions",
+        "family": "ui",
+        "styles": [
+          {
+            "name": "micro",
+            "fontSize": "12px",
+            "lineHeight": "16px",
+            "fontWeight": 500,
+            "usage": "Chips, badges and counts: the 12px floor."
+          }
+        ]
+      }
+    ]
+  }
+}
