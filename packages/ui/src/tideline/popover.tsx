@@ -21,7 +21,7 @@ import {
   TooltipTrigger as UiTooltipTrigger,
 } from "@ui-sdk/react/tooltip";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
-import { buttonClassName, type ButtonStyleOptions } from "./button";
+import { buttonClassName, type ButtonStyleOptions } from "./button-style";
 import { cx } from "./cx";
 
 type Styled<Props> = Omit<Props, "className"> & { className?: string };

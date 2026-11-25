@@ -38,9 +38,9 @@ export function Tideline({
   );
 }
 
-/** Archivo (display, numerals) and Instrument Sans (UI), both OFL on Google Fonts. */
+/** Geist (product UI and headings) and Geist Mono (codes), both OFL on Google Fonts. */
 export const TIDELINE_FONT_HREF =
-  "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap";
+  "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap";
 
 /**
  * Loads the two Tideline families. Render it once on a page that uses

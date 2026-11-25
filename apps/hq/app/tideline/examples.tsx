@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AddPlayers,
   Button,
   Calendar,
   Checkbox,
@@ -16,7 +15,6 @@ import {
   DialogContent,
   DialogTrigger,
   Field,
-  filterPlayers,
   FilterChip,
   Icon,
   Input,
@@ -30,8 +28,6 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
-  SearchField,
-  type SearchStatus,
   Segmented,
   Select,
   Sheet,
@@ -49,15 +45,14 @@ import {
   Toaster,
   Tooltip,
   IconButton,
-  useDebouncedValue,
 } from "@duna/ui/tideline";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import styles from "./gallery.module.css";
 
 /** The gallery's fixed "today", so server and browser render the same page. */
 export const GALLERY_TODAY = "2026-11-25";
 
-const people: PlayerSummary[] = [
+export const people: PlayerSummary[] = [
   { id: "p1", name: "Sam Rivera", level: "4.2", detail: "Demo Beach Club" },
   {
     id: "p2",
@@ -71,7 +66,7 @@ const people: PlayerSummary[] = [
   { id: "p6", name: "Ana Duarte", level: "4.0", detail: "Demo Beach Club" },
   { id: "p7", name: "Tom Becker", level: "2.9", detail: "New to Duna" },
 ];
-const me: PlayerSummary = { id: "me", name: "Lee Novak", level: "3.9" };
+export const me: PlayerSummary = { id: "me", name: "Lee Novak", level: "3.9" };
 
 export function SwitchExample() {
   const [on, setOn] = useState(true);
@@ -286,7 +281,7 @@ export function PopoverMenuExample() {
           </MenuContent>
         </Menu>
         <Tooltip content="Add a player">
-          <IconButton label="Add a player" variant="tonal">
+          <IconButton label="Add a player" variant="outline">
             <Icon name="user-plus" />
           </IconButton>
         </Tooltip>
@@ -425,167 +420,6 @@ export function DayStripExample() {
   );
 }
 
-/** A stand-in for a request: the gallery connects to nothing. */
-function useFakeSearch() {
-  const [status, setStatus] = useState<SearchStatus>("idle");
-  const [results, setResults] = useState<PlayerSummary[]>([]);
-  const [searches, setSearches] = useState(0);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const lastQuery = useRef("");
-
-  const search = (query: string) => {
-    clearTimeout(timer.current);
-    lastQuery.current = query;
-    if (query === "") {
-      setStatus("idle");
-      setResults([]);
-      return;
-    }
-    setSearches((count) => count + 1);
-    setStatus("searching");
-    timer.current = setTimeout(() => {
-      if (query.toLowerCase() === "error") {
-        setStatus("error");
-        return;
-      }
-      const found = filterPlayers(people, query);
-      setResults(found);
-      setStatus(found.length > 0 ? "results" : "empty");
-    }, 600);
-  };
-
-  return {
-    status,
-    results,
-    searches,
-    search,
-    retry: () => search(lastQuery.current),
-  };
-}
-
-export function SearchExample() {
-  const { status, results, searches, search, retry } = useFakeSearch();
-  return (
-    <div className={styles.stack}>
-      <SearchField
-        label="Search players"
-        onRetry={retry}
-        onSearch={search}
-        placeholder="Try “sa”, “zz” or “error”"
-        resultCount={results.length}
-        status={status}
-      >
-        <ul className="td-list">
-          {results.map((player) => (
-            <li className="td-listrow" key={player.id}>
-              <span className="td-listrow__main">
-                <span className="td-listrow__title">{player.name}</span>
-                <span className="td-listrow__meta">{player.detail}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </SearchField>
-      <p className="td-meta" data-testid="search-count">
-        Searches started: {searches}
-      </p>
-    </div>
-  );
-}
-
-const noSearch = () => undefined;
-
-/** Each state, forced, so the gallery shows them side by side. */
-export function SearchStatesExample() {
-  return (
-    <div className={styles.grid}>
-      <SearchField label="Idle" onSearch={noSearch} placeholder="Idle" />
-      <SearchField
-        defaultValue="sa"
-        label="Typing"
-        onSearch={noSearch}
-        state="typing"
-      />
-      <SearchField
-        defaultValue="sam"
-        label="Searching"
-        onSearch={noSearch}
-        state="searching"
-      />
-      <SearchField
-        defaultValue="sam"
-        label="Results"
-        onSearch={noSearch}
-        resultCount={1}
-        state="results"
-      >
-        <ul className="td-list">
-          <li className="td-listrow">
-            <span className="td-listrow__main">
-              <span className="td-listrow__title">Sam Rivera</span>
-              <span className="td-listrow__meta">Demo Beach Club</span>
-            </span>
-          </li>
-        </ul>
-      </SearchField>
-      <SearchField
-        defaultValue="zz"
-        label="No results"
-        onSearch={noSearch}
-        state="empty"
-      />
-      <SearchField
-        defaultValue="sam"
-        label="Error"
-        onRetry={noSearch}
-        onSearch={noSearch}
-        state="error"
-      />
-      <SearchField
-        defaultValue="sam"
-        label="Offline"
-        onSearch={noSearch}
-        state="offline"
-      />
-    </div>
-  );
-}
-
-export function DebouncedValueExample() {
-  const [text, setText] = useState("");
-  const settled = useDebouncedValue(text, 400);
-  return (
-    <div className={styles.stack}>
-      <Field
-        hint="The line below updates 400ms after you stop."
-        label="Club name"
-      >
-        <Input onValueChange={setText} value={text} />
-      </Field>
-      <p className="td-meta">Debounced value: {settled || "empty"}</p>
-    </div>
-  );
-}
-
-export function AddPlayersExample() {
-  const [selected, setSelected] = useState<PlayerSummary[]>([me, people[0]!]);
-  const { status, results, search, retry } = useFakeSearch();
-  return (
-    <AddPlayers
-      capacity={4}
-      contacts={people.slice(3)}
-      lockedIds={[me.id]}
-      onRetrySearch={retry}
-      onSearch={search}
-      onSelectedChange={(next) => setSelected(next)}
-      searchResults={results}
-      searchStatus={status}
-      selected={selected}
-      suggestions={people.slice(0, 4)}
-    />
-  );
-}
-
 export function FilterChipsExample() {
   return (
     <div className={styles.row}>
@@ -593,17 +427,5 @@ export function FilterChipsExample() {
       <FilterChip>Mixed</FilterChip>
       <FilterChip>Evenings</FilterChip>
     </div>
-  );
-}
-
-export function LoadingButtonExample() {
-  return (
-    <Button
-      onClick={() => new Promise((resolve) => setTimeout(resolve, 1500))}
-      pendingAnnouncement="Saving"
-      variant="primary"
-    >
-      Save (waits 1.5s)
-    </Button>
   );
 }

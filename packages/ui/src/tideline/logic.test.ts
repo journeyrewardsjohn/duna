@@ -26,7 +26,6 @@ import {
   toIsoDate,
   weekdayOf,
 } from "./date-utils";
-import { resolveSearchState } from "./search-state";
 
 describe("date math", () => {
   it("accepts only real calendar dates", () => {
@@ -211,41 +210,5 @@ describe("AddPlayers selection rules", () => {
     expect(initialsOf("  noor ")).toBe("N");
     expect(initialsOf("Ana Maria Duarte")).toBe("AD");
     expect(initialsOf("")).toBe("");
-  });
-});
-
-describe("SearchField state", () => {
-  it("is idle until there is enough text, whatever the data says", () => {
-    expect(
-      resolveSearchState({ query: "", pending: false, status: "results" }),
-    ).toBe("idle");
-    expect(
-      resolveSearchState({
-        query: " a ",
-        pending: true,
-        status: "idle",
-        minLength: 2,
-      }),
-    ).toBe("idle");
-  });
-
-  it("shows typing over stale results while the debounce waits", () => {
-    expect(
-      resolveSearchState({ query: "sam", pending: true, status: "results" }),
-    ).toBe("typing");
-  });
-
-  it("then follows the caller's status", () => {
-    for (const status of ["searching", "results", "empty", "error"] as const) {
-      expect(resolveSearchState({ query: "sam", pending: false, status })).toBe(
-        status,
-      );
-    }
-  });
-
-  it("shows offline before anything else", () => {
-    expect(
-      resolveSearchState({ query: "", pending: true, status: "offline" }),
-    ).toBe("offline");
   });
 });

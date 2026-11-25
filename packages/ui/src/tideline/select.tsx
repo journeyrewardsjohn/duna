@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Combobox as UiCombobox,
   ComboboxClear as UiComboboxClear,
@@ -169,19 +171,21 @@ export function Combobox({
       </div>
       <UiComboboxContent className="td-popup td-listbox" sideOffset={6}>
         <UiComboboxList className="td-listbox__list">
-          {items.map((item) => (
-            <UiComboboxItem
-              className="td-option"
-              disabled={item.disabled}
-              key={item.value}
-              value={item.value}
-            >
-              <span className="td-option__label">{item.label}</span>
-              <UiComboboxItemIndicator className="td-option__check">
-                <Icon name="check" />
-              </UiComboboxItemIndicator>
-            </UiComboboxItem>
-          ))}
+          {(state) =>
+            (state.items as SelectOption[]).map((item) => (
+              <UiComboboxItem
+                className="td-option"
+                disabled={item.disabled}
+                key={item.value}
+                value={item.value}
+              >
+                <span className="td-option__label">{item.label}</span>
+                <UiComboboxItemIndicator className="td-option__check">
+                  <Icon name="check" />
+                </UiComboboxItemIndicator>
+              </UiComboboxItem>
+            ))
+          }
         </UiComboboxList>
         <UiComboboxEmpty className="td-listbox__empty">
           {emptyText}

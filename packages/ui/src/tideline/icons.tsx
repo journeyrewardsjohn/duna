@@ -23,6 +23,10 @@ const paths = {
   more: "M6 12h.01M12 12h.01M18 12h.01",
   "user-plus":
     "M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 20a7 7 0 0 1 11.5-5.4M18 14v6M15 17h6",
+  command:
+    "M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6z",
+  sort: "M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3",
+  filter: "M4 6h16M7 12h10M10 18h4",
   users:
     "M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 20a7 7 0 0 1 14 0M16 4.3a4 4 0 0 1 0 7.4M18.5 14.5A7 7 0 0 1 22 20",
 } as const;
@@ -31,8 +35,8 @@ export type IconName = keyof typeof paths;
 
 export interface IconProps extends Omit<ComponentProps<"svg">, "children"> {
   name: IconName;
-  /** 20px by default; `lg` is 24px with a lighter stroke. */
-  size?: "md" | "lg";
+  /** 18px by default; `sm` is 16px and `lg` is 20px. */
+  size?: "sm" | "md" | "lg";
 }
 
 /** A decorative line icon. Name the control it sits in, not the icon. */
@@ -40,7 +44,7 @@ export function Icon({ name, size = "md", className, ...props }: IconProps) {
   return (
     <svg
       aria-hidden="true"
-      className={cx("td-icon", size === "lg" && "td-icon--lg", className)}
+      className={cx("td-icon", size !== "md" && `td-icon--${size}`, className)}
       focusable="false"
       viewBox="0 0 24 24"
       {...props}

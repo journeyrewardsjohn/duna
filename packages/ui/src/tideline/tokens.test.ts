@@ -50,7 +50,7 @@ describe("Tideline token pipeline", () => {
   });
 
   it("turns aliases into var() references and rejects unknown ones", () => {
-    expect(css).toContain("--td-action: var(--td-tide-700);");
+    expect(css).toContain("--td-link: var(--td-tide-600);");
     const broken = structuredClone(source);
     broken.color.tokens.push({ name: "broken", value: "{no-such-token}" });
     expect(() => buildTidelineTokensCss(broken)).toThrow(/no-such-token/);
@@ -67,17 +67,17 @@ describe("Tideline token pipeline", () => {
 
   it("resolves native values: numbers for lengths and times, pixels for type", () => {
     expect(tidelineTokens.spacing["space-4"]).toBe(16);
-    expect(tidelineTokens.duration["duration-base"]).toBe(240);
-    expect(tidelineTokens.color.light.action).toBe("#1d3f6b");
+    expect(tidelineTokens.duration["duration-base"]).toBe(180);
+    expect(tidelineTokens.color.light.action).toBe("#0b1220");
     expect(tidelineColors("dark", "live")).toBe(tidelineTokens.color.live);
     expect(tidelineTokens.type.body).toMatchObject({
       family: "ui",
-      fontSize: 16,
-      lineHeight: 24,
+      fontSize: 14,
+      lineHeight: 20,
     });
     // A unitless line height becomes pixels, and em tracking becomes points.
-    expect(tidelineTokens.type.display.lineHeight).toBe(48);
-    expect(tidelineTokens.type["display-xl"].letterSpacing).toBe(-1.8);
+    expect(tidelineTokens.type.display.letterSpacing).toBe(-0.64);
+    expect(tidelineTokens.duration["duration-loading-delay"]).toBe(250);
   });
 });
 
@@ -182,7 +182,9 @@ describe("Tideline stylesheet rules", () => {
     const type = source.type.groups.flatMap((group) => group.styles);
     const size = (name: string) =>
       Number.parseInt(type.find((style) => style.name === name)!.fontSize, 10);
-    expect(size("body-sm")).toBeGreaterThanOrEqual(15);
+    // Tideline 3: 14 body and controls on desktop, 15 and up on phones.
+    expect(size("body")).toBeGreaterThanOrEqual(14);
+    expect(size("label")).toBeGreaterThanOrEqual(14);
     expect(size("phone-body")).toBeGreaterThanOrEqual(15);
     expect(size("caption")).toBeGreaterThanOrEqual(13);
     expect(size("tab-label")).toBeGreaterThanOrEqual(12);
@@ -208,11 +210,10 @@ describe("Tideline stylesheet rules", () => {
     );
     expect(animated).toEqual(
       new Set([
-        "td-orbit",
+        "td-spin",
         "td-pulse",
         "td-sunrise",
-        "td-tide",
-        "td-ripple",
+        "td-sweep",
         "td-shimmer",
         "td-tide-sweep",
       ]),
@@ -221,10 +222,9 @@ describe("Tideline stylesheet rules", () => {
       withoutComments.lastIndexOf("@media (prefers-reduced-motion: reduce)"),
     );
     for (const selector of [
-      ".td-sunspot i",
-      ".td-sunrise__sun",
-      ".td-sunrise__tide",
-      ".td-ripple__art path",
+      ".td-spinner",
+      ".td-sunrise__arc",
+      ".td-sweep::after",
       ".td-skel",
       ".td-chip--live::before",
       ".td-progress__fill[data-indeterminate]",

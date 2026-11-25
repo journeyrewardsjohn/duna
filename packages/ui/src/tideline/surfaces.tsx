@@ -233,8 +233,6 @@ export interface EmptyStateProps {
   /** The next action: empty states invite one. */
   actions?: ReactNode;
   icon?: IconName;
-  /** Sits on the Dune mesh by default; `plain` uses the current surface. */
-  plain?: boolean;
   className?: string;
 }
 
@@ -244,16 +242,12 @@ export function EmptyState({
   description,
   actions,
   icon = "info",
-  plain = false,
   className,
 }: EmptyStateProps) {
   return (
-    <div
-      className={cx("td-empty", className)}
-      data-surface={plain ? undefined : "dune"}
-    >
+    <div className={cx("td-empty", className)}>
       <span aria-hidden="true" className="td-empty__glyph">
-        <Icon name={icon} size="lg" />
+        <Icon name={icon} />
       </span>
       <p className="td-empty__title">{title}</p>
       {description ? (
@@ -262,4 +256,9 @@ export function EmptyState({
       {actions ? <div className="td-empty__actions">{actions}</div> : null}
     </div>
   );
+}
+
+/** A keyboard key, for showing a shortcut. */
+export function Kbd({ className, ...props }: ComponentProps<"kbd">) {
+  return <kbd className={cx("td-kbd", className)} {...props} />;
 }

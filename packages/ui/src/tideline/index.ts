@@ -18,13 +18,15 @@ export { Icon, type IconName, type IconProps } from "./icons";
 
 // Core controls
 export {
-  Button,
   buttonClassName,
-  IconButton,
-  type ButtonProps,
   type ButtonSize,
   type ButtonStyleOptions,
   type ButtonVariant,
+} from "./button-style";
+export {
+  Button,
+  IconButton,
+  type ButtonProps,
   type IconButtonProps,
 } from "./button";
 export {
@@ -189,7 +191,7 @@ export {
   type RemovePlayerResult,
 } from "./add-players-logic";
 
-// Debounce and search
+// Interaction quality: debounce, search, loading, optimistic updates
 export { createDebouncer, type Debouncer } from "./debouncer";
 export {
   useDebouncedCallback,
@@ -197,30 +199,60 @@ export {
   type DebouncedCallback,
 } from "./debounce";
 export {
+  createAsyncSearch,
+  createDelayedLoading,
+  LOADING_DELAY_MS,
+  LOADING_MIN_MS,
+  runOptimisticAction,
+  SEARCH_DEBOUNCE_MS,
+  withViewTransition,
+  type AsyncSearch,
+  type AsyncSearchOptions,
+  type AsyncSearchState,
+  type AsyncSearchStatus,
+  type DelayedLoading,
+  type DelayedLoadingOptions,
+  type OptimisticActionOptions,
+} from "./interaction-core";
+export {
+  useAsyncSearch,
+  useDelayedLoading,
+  useOptimisticAction,
+  type OptimisticMessages,
+  type UseAsyncSearch,
+  type UseOptimisticActionOptions,
+} from "./interactions";
+export {
   SearchField,
   type SearchFieldMessages,
   type SearchFieldProps,
+  type SearchFieldStatus,
 } from "./search-field";
 export {
-  resolveSearchState,
-  type SearchFieldState,
-  type SearchStateInput,
-  type SearchStatus,
-} from "./search-state";
+  CommandPalette,
+  type CommandPaletteItem,
+  type CommandPaletteProps,
+} from "./command-palette";
 
-// Loading: the sand and sun family
+// Loading
 export {
+  LoadingBoundary,
+  TopProgress,
+  type LoadingBoundaryProps,
+  type TopProgressProps,
+} from "./feedback";
+export {
+  HorizonSweep,
   PageLoader,
-  Ripple,
   Skeleton,
+  Spinner,
   Sunrise,
-  Sunspot,
+  type HorizonSweepProps,
   type LoaderSize,
   type PageLoaderProps,
-  type RippleProps,
   type SkeletonProps,
+  type SpinnerProps,
   type SunriseProps,
-  type SunspotProps,
 } from "./loaders";
 
 // Feedback and layout
@@ -230,6 +262,7 @@ export {
   Chip,
   EmptyState,
   FilterChip,
+  Kbd,
   Notice,
   Surface,
   type BadgeProps,

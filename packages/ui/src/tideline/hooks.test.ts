@@ -64,7 +64,11 @@ const runtime = vi.hoisted(() => {
         const { cell: current, fresh } = cell();
         if (fresh) {
           current.value = initial;
-          current.setter = (next) => {
+          current.setter = (update) => {
+            const next =
+              typeof update === "function"
+                ? (update as (previous: unknown) => unknown)(current.value)
+                : update;
             if (Object.is(next, current.value)) return;
             current.value = next;
             requestRender();
@@ -120,10 +124,21 @@ const runtime = vi.hoisted(() => {
   };
 });
 
+const toastMock = vi.hoisted(() => {
+  const toast = Object.assign(vi.fn(), { error: vi.fn() });
+  return { toast };
+});
+
 vi.mock("react", () => runtime.react);
+vi.mock("@ui-sdk/react/toast", () => toastMock);
 
 import { useDebouncedCallback, useDebouncedValue } from "./debounce";
 import { createDebouncer } from "./debouncer";
+import {
+  useAsyncSearch,
+  useDelayedLoading,
+  useOptimisticAction,
+} from "./interactions";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -311,5 +326,152 @@ describe("useDebouncedValue", () => {
     );
     hook.rerender("b");
     expect(hook.result.current).toBe("b");
+  });
+});
+
+describe("useDelayedLoading", () => {
+  it("stays false for work shorter than 250ms", () => {
+    const hook = runtime.mount(
+      (loading: boolean) => useDelayedLoading(loading),
+      true,
+    );
+    vi.advanceTimersByTime(249);
+    hook.rerender(false);
+    vi.advanceTimersByTime(1000);
+    expect(hook.result.current).toBe(false);
+  });
+
+  it("turns true at 250ms and holds for 400ms after that", () => {
+    const hook = runtime.mount(
+      (loading: boolean) => useDelayedLoading(loading),
+      true,
+    );
+    vi.advanceTimersByTime(250);
+    expect(hook.result.current).toBe(true);
+    hook.rerender(false);
+    vi.advanceTimersByTime(399);
+    expect(hook.result.current).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(hook.result.current).toBe(false);
+  });
+
+  it("leaves no timer behind on unmount", () => {
+    const hook = runtime.mount(
+      (loading: boolean) => useDelayedLoading(loading),
+      true,
+    );
+    hook.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("useAsyncSearch", () => {
+  it("debounces, reports results, and aborts on unmount", async () => {
+    const signals: AbortSignal[] = [];
+    const search = vi.fn((query: string, signal: AbortSignal) => {
+      signals.push(signal);
+      return Promise.resolve([`${query}-1`]);
+    });
+    const hook = runtime.mount(
+      () => useAsyncSearch<string>({ search, debounceMs: 200 }),
+      null,
+    );
+    expect(hook.result.current.status).toBe("idle");
+    hook.result.current.setQuery("s");
+    hook.result.current.setQuery("sa");
+    expect(hook.result.current).toMatchObject({
+      status: "loading",
+      query: "sa",
+    });
+    expect(search).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(search).toHaveBeenCalledExactlyOnceWith("sa", signals[0]);
+    expect(hook.result.current).toMatchObject({
+      status: "success",
+      results: ["sa-1"],
+    });
+
+    hook.result.current.setQuery("sam");
+    hook.result.current.submit();
+    expect(search).toHaveBeenCalledTimes(2);
+    hook.unmount();
+    expect(signals[1]!.aborted).toBe(true);
+  });
+});
+
+describe("useOptimisticAction", () => {
+  beforeEach(() => {
+    toastMock.toast.mockClear();
+    toastMock.toast.error.mockClear();
+  });
+
+  it("applies at once, then offers Undo in a toast once saved", async () => {
+    let items = ["a"];
+    const undoCommit = vi.fn(() => Promise.resolve());
+    const hook = runtime.mount(
+      () =>
+        useOptimisticAction<[string]>({
+          apply: (item) => {
+            const before = items;
+            items = [...items, item];
+            return () => {
+              items = before;
+            };
+          },
+          commit: () => Promise.resolve(),
+          undo: undoCommit,
+          messages: {
+            success: (item) => `${item} added`,
+            error: (item) => `Could not add ${item}`,
+          },
+        }),
+      null,
+    );
+    const saving = hook.result.current.run("b");
+    expect(items).toEqual(["a", "b"]);
+    expect(hook.result.current.pending).toBe(1);
+    await expect(saving).resolves.toBe(true);
+    expect(hook.result.current.pending).toBe(0);
+    expect(toastMock.toast).toHaveBeenCalledExactlyOnceWith(
+      "b added",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
+
+    const { action } = toastMock.toast.mock.calls[0]![1] as {
+      action: { onAction: () => void };
+    };
+    action.onAction();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(items).toEqual(["a"]);
+    expect(undoCommit).toHaveBeenCalledExactlyOnceWith("b");
+  });
+
+  it("rolls back and raises an error toast when the save fails", async () => {
+    let on = false;
+    const hook = runtime.mount(
+      () =>
+        useOptimisticAction<[boolean]>({
+          apply: (next) => {
+            const before = on;
+            on = next;
+            return () => {
+              on = before;
+            };
+          },
+          commit: () => Promise.reject(new Error("offline")),
+          messages: { error: () => "Could not save. Put back." },
+        }),
+      null,
+    );
+    const saving = hook.result.current.run(true);
+    expect(on).toBe(true);
+    await expect(saving).resolves.toBe(false);
+    expect(on).toBe(false);
+    expect(toastMock.toast.error).toHaveBeenCalledExactlyOnceWith(
+      "Could not save. Put back.",
+    );
+    expect(toastMock.toast).not.toHaveBeenCalled();
   });
 });

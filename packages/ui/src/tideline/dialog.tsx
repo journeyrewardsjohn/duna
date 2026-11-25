@@ -17,7 +17,7 @@ import {
   DrawerTrigger as UiDrawerTrigger,
 } from "@ui-sdk/react/drawer";
 import type { ComponentProps, ReactNode } from "react";
-import { buttonClassName, type ButtonStyleOptions } from "./button";
+import { buttonClassName, type ButtonStyleOptions } from "./button-style";
 import { cx } from "./cx";
 import { Icon } from "./icons";
 

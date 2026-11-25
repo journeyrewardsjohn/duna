@@ -18,8 +18,6 @@ export interface ProgressProps extends Omit<
   label?: ReactNode;
   /** Shows the formatted value beside the label. */
   showValue?: boolean;
-  /** `sun` is for onboarding and milestones. */
-  tone?: "action" | "sun";
 }
 
 /**
@@ -29,19 +27,11 @@ export interface ProgressProps extends Omit<
 export function Progress({
   label,
   showValue = false,
-  tone = "action",
   className,
   ...props
 }: ProgressProps) {
   return (
-    <UiProgress
-      className={cx(
-        "td-progress",
-        tone === "sun" && "td-progress--sun",
-        className,
-      )}
-      {...props}
-    >
+    <UiProgress className={cx("td-progress", className)} {...props}>
       {label || showValue ? (
         <div className="td-progress__meta">
           {label ? (

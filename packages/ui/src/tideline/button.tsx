@@ -1,38 +1,10 @@
+"use client";
+
 import { Button as UiButton } from "@ui-sdk/react/button";
 import type { ComponentProps, ReactNode } from "react";
+import { buttonClassName, type ButtonStyleOptions } from "./button-style";
 import { cx } from "./cx";
-
-/** `light` is the one main action on a dark ground (Tidewater, Night Court). */
-export type ButtonVariant =
-  "primary" | "secondary" | "ghost" | "danger" | "light";
-export type ButtonSize = "sm" | "md" | "lg";
-
-export interface ButtonStyleOptions {
-  /** One `primary` per page, sheet and dialog. */
-  variant?: ButtonVariant;
-  /** `md` is the 48px target; `lg` is the 56px primary mobile action. */
-  size?: ButtonSize;
-  /** Fills the width of its container. */
-  block?: boolean;
-}
-
-/** The classes of a Tideline button, for triggers that render their own element. */
-export function buttonClassName(
-  {
-    variant = "secondary",
-    size = "md",
-    block = false,
-  }: ButtonStyleOptions = {},
-  className?: string,
-) {
-  return cx(
-    "td-btn",
-    `td-btn--${variant}`,
-    size !== "md" && `td-btn--${size}`,
-    block && "td-btn--block",
-    className,
-  );
-}
+import { useDelayedLoading } from "./interactions";
 
 type UiButtonProps = ComponentProps<typeof UiButton>;
 
@@ -57,9 +29,20 @@ export interface ButtonProps
   rel?: string;
 }
 
+const busy = (
+  <span className="td-btn__busy">
+    <span aria-hidden="true" className="td-spinner td-spinner--sm" />
+  </span>
+);
+
 /**
  * Runs an action, or navigates with `href`. Built on UI SDK's Button: pending
  * state, `aria-busy`, the delayed "Loading" announcement and disabled links.
+ *
+ * Loading blocks a second press at once, but the spinner only appears after
+ * 250ms and then stays 400ms (`useDelayedLoading`), so quick saves do not
+ * flicker. The button keeps its width and its label; the spinner takes the
+ * icon's place.
  */
 export function Button({
   variant,
@@ -76,11 +59,13 @@ export function Button({
   rel,
   ...props
 }: ButtonProps) {
+  const spinning = useDelayedLoading(loading);
   return (
     <UiButton
       aria-busy={loading || undefined}
       className={buttonClassName({ variant, size, block }, className)}
       data-loading={loading ? "" : undefined}
+      data-spinning={spinning ? "" : undefined}
       disabled={disabled || loading}
       // A loading button keeps focus and stays in the tab order.
       focusableWhenDisabled={loading || props.focusableWhenDisabled}
@@ -91,11 +76,15 @@ export function Button({
       }
       {...props}
     >
-      <span aria-hidden="true" className="td-sunspot td-btn__spin">
-        <i />
-      </span>
-      {icon ? <span className="td-btn__icon">{icon}</span> : null}
-      {children}
+      {icon ? (
+        <span className="td-btn__icon td-btn__icon--start">
+          {icon}
+          {busy}
+        </span>
+      ) : (
+        busy
+      )}
+      <span className="td-btn__label">{children}</span>
       {iconEnd ? <span className="td-btn__icon">{iconEnd}</span> : null}
     </UiButton>
   );
@@ -126,6 +115,7 @@ export function IconButton({
   disabled,
   ...props
 }: IconButtonProps) {
+  const spinning = useDelayedLoading(loading);
   return (
     <UiButton
       aria-busy={loading || undefined}
@@ -137,13 +127,12 @@ export function IconButton({
         className,
       )}
       data-loading={loading ? "" : undefined}
+      data-spinning={spinning ? "" : undefined}
       disabled={disabled || loading}
       focusableWhenDisabled={loading || props.focusableWhenDisabled}
       {...props}
     >
-      <span aria-hidden="true" className="td-sunspot td-btn__spin">
-        <i />
-      </span>
+      {busy}
       <span className="td-iconbtn__icon">{children}</span>
     </UiButton>
   );

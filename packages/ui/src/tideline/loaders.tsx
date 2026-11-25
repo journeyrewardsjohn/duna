@@ -1,126 +1,96 @@
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 import { cx } from "./cx";
 
 export type LoaderSize = "sm" | "md" | "lg";
 
-/** The wave of the Duna mark, on its 64 by 48 grid. */
-const TIDELINE_CURVE =
-  "M6 36.5C17.5 36.5 22.4 31.7 29.2 26.3C36.3 20.7 45 18.4 58 11.5";
-
-export interface SunspotProps {
+export interface SpinnerProps {
   /** Names the wait. Leave it out inside a control that already says it. */
   label?: string;
+  size?: LoaderSize;
   className?: string;
 }
 
 /**
- * Sunspot: a sun dot orbiting a ring. The inline loader, for inside a
- * loading Button, a searching SearchField or a saving Toast.
+ * The everyday loader: a neutral ring. Use it inside controls and beside
+ * text. Pair it with `useDelayedLoading` so quick work shows no loader.
  */
-export function Sunspot({ label, className }: SunspotProps) {
-  const spot = (
-    <span aria-hidden="true" className={cx("td-sunspot", className)}>
-      <i />
-    </span>
+export function Spinner({ label, size = "md", className }: SpinnerProps) {
+  const ring = (
+    <span
+      aria-hidden="true"
+      className={cx(
+        "td-spinner",
+        size !== "md" && `td-spinner--${size}`,
+        className,
+      )}
+    />
   );
-  if (!label) return spot;
+  if (!label) return ring;
   return (
     <span className="td-loader td-loader--inline" role="status">
-      {spot}
+      {ring}
       <span className="td-sr">{label}</span>
     </span>
   );
 }
 
 export interface SunriseProps {
-  /** What is loading, like "Loading courts". `false` shows no text. */
-  label?: string | false;
-  /** Read by screen readers when `label` is `false`. */
-  accessibleLabel?: string;
-  size?: LoaderSize;
+  /** What is loading, like "Loading your club". */
+  label?: string;
+  size?: "md" | "lg";
   className?: string;
 }
 
 /**
- * Sunrise: the sun rising over the tideline, the curve from the Duna mark.
- * The section loader, for a list or panel whose layout is not known yet, and
- * the core of the page loader. With reduced motion the sun rests risen.
+ * A thin arc rising over a horizon line: the quiet Duna mark for full-page
+ * loading and pull to refresh, not for everyday waits. With reduced motion
+ * the arc rests drawn.
  */
 export function Sunrise({
   label = "Loading",
-  accessibleLabel = "Loading",
   size = "md",
   className,
 }: SunriseProps) {
-  const clipId = useId();
   return (
     <span
-      className={cx("td-loader td-sunrise", `td-sunrise--${size}`, className)}
+      className={cx(
+        "td-loader td-sunrise",
+        size === "lg" && "td-sunrise--lg",
+        className,
+      )}
       role="status"
     >
       <svg
         aria-hidden="true"
         className="td-sunrise__art"
         focusable="false"
-        viewBox="0 0 64 48"
+        viewBox="0 0 64 40"
       >
-        <defs>
-          <clipPath id={clipId}>
-            {/* Everything above the wave, so the sun appears from behind it. */}
-            <path d={`${TIDELINE_CURVE}L64 8V-24H0V36.5Z`} />
-          </clipPath>
-        </defs>
-        <g clipPath={`url(#${clipId})`}>
-          <circle className="td-sunrise__sun" cx="34" cy="19" r="8" />
-        </g>
-        <path className="td-sunrise__line" d="M5 41H59" />
         <path
-          className="td-sunrise__tide"
-          d={TIDELINE_CURVE}
+          className="td-sunrise__arc"
+          d="M16 30a16 16 0 0 1 32 0"
           pathLength={100}
         />
+        <path className="td-sunrise__line" d="M4 30h56" />
       </svg>
-      {label === false ? (
-        <span className="td-sr">{accessibleLabel}</span>
-      ) : (
-        <span className="td-sunrise__label">{label}</span>
-      )}
+      <span className="td-sr">{label}</span>
     </span>
   );
 }
 
-export interface RippleProps {
-  label?: string | false;
-  accessibleLabel?: string;
+export interface HorizonSweepProps {
+  label?: string;
   className?: string;
 }
 
-/**
- * Sand ripple: three raked lines of sand, shifting. A placeholder inside a
- * card that cannot show a skeleton, like a chart or a map.
- */
-export function Ripple({
+/** A thin horizon line with a light passing along it, for a quiet wait. */
+export function HorizonSweep({
   label = "Loading",
-  accessibleLabel = "Loading",
   className,
-}: RippleProps) {
+}: HorizonSweepProps) {
   return (
-    <span className={cx("td-loader td-ripple", className)} role="status">
-      <svg
-        aria-hidden="true"
-        className="td-ripple__art"
-        focusable="false"
-        viewBox="0 0 96 40"
-      >
-        <path d="M6 10C22 4 34 16 50 10S78 4 90 10" />
-        <path d="M6 20C22 14 34 26 50 20S78 14 90 20" />
-        <path d="M6 30C22 24 34 36 50 30S78 24 90 30" />
-      </svg>
-      {label === false ? (
-        <span className="td-sr">{accessibleLabel}</span>
-      ) : (
-        <span className="td-sunrise__label">{label}</span>
-      )}
+    <span className={cx("td-sweep", className)} role="status">
+      <span className="td-sr">{label}</span>
     </span>
   );
 }
@@ -149,9 +119,9 @@ function SkeletonLines({ lines }: { lines: number }) {
 }
 
 /**
- * Tide shimmer: a placeholder in the shape of the content that is coming
- * (text lines, an avatar, a list row or a card). Use it whenever the layout
- * is known. With reduced motion it is a still block.
+ * A placeholder in the shape of the content that is coming: text lines, an
+ * avatar, a list row or a card. Use it whenever the layout is known, inside
+ * `LoadingBoundary` so it only appears for waits worth showing.
  */
 export function Skeleton({
   kind = "lines",
@@ -192,7 +162,7 @@ export function Skeleton({
 }
 
 export interface PageLoaderProps {
-  /** What is loading, shown under the sunrise. */
+  /** What is loading, shown under the mark. */
   label?: string;
   /** A second line, like what happens next. */
   description?: ReactNode;
@@ -201,7 +171,7 @@ export interface PageLoaderProps {
   className?: string;
 }
 
-/** The full-page first load: Sunrise on the First Light ground. */
+/** The full-page first load: the Sunrise mark, a label and one line. */
 export function PageLoader({
   label = "Loading",
   description,
@@ -215,9 +185,11 @@ export function PageLoader({
         fixed && "td-pageloader--fixed",
         className,
       )}
-      data-surface="first-light"
     >
       <Sunrise label={label} size="lg" />
+      <p aria-hidden="true" className="td-pageloader__label">
+        {label}
+      </p>
       {description ? (
         <p className="td-pageloader__description">{description}</p>
       ) : null}

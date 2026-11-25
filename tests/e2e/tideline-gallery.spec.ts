@@ -106,22 +106,24 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(list).toBeVisible();
     await expect(list.getByRole("option")).toHaveCount(5);
 
-    await page.keyboard.press("ArrowDown");
+    // Opening highlights the first option; one step down is the second.
+    await expect(
+      list.getByRole("option", { name: "Beginner" }),
+    ).toHaveAttribute("data-highlighted");
     await page.keyboard.press("ArrowDown");
     await expect(
       list.getByRole("option", { name: "Intermediate" }),
-    ).toHaveAttribute("data-highlighted", "");
+    ).toHaveAttribute("data-highlighted");
 
     // Typeahead jumps to the option that starts with the letter.
     await page.keyboard.press("a");
     await expect(
       list.getByRole("option", { name: "Advanced" }),
-    ).toHaveAttribute("data-highlighted", "");
+    ).toHaveAttribute("data-highlighted");
     await page.keyboard.press("End");
     // The disabled last option is skipped.
     await expect(list.getByRole("option", { name: "Open" })).toHaveAttribute(
       "data-highlighted",
-      "",
     );
     await page.keyboard.press("Home");
     await page.keyboard.press("a");
@@ -162,17 +164,12 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(input).toHaveValue("Court 2, North");
     await expect(input).toBeFocused();
 
-    // Arrow keys open the full list again and move through it.
-    await input.fill("");
-    await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("listbox").getByRole("option")).toHaveCount(4);
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("Enter");
-    await expect(output).not.toHaveText("Court: court-2");
-
-    // Nothing matches: the empty message shows.
+    // Nothing matches: the empty message shows, and Escape restores the label.
     await input.fill("zzz");
-    await expect(page.getByText("No matches")).toBeVisible();
+    await expect(page.getByText("No matches", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("No matches", { exact: true })).toBeHidden();
+    await expect(output).toHaveText("Court: court-2");
   });
 
   test("DatePicker: arrow keys move through the grid and Enter selects", async ({
@@ -180,12 +177,14 @@ test.describe("Tideline gallery, keyboard", () => {
   }) => {
     const input = page.getByRole("textbox", { name: "Match date" });
     const output = page.getByTestId("datepicker-output");
+    const popup = page.getByRole("dialog", { name: "Choose date" });
     await expect(output).toHaveText("Date: 2026-11-25");
 
     await input.focus();
     await page.keyboard.press("Alt+ArrowDown");
-    const grid = page.getByRole("grid", { name: "November 2026" });
-    await expect(grid).toBeVisible();
+    await expect(
+      popup.getByRole("grid", { name: "November 2026" }),
+    ).toBeVisible();
     // Focus lands on the selected date.
     await expect(focused(page)).toHaveAttribute("data-slot", "calendar-day");
     await expect(focused(page)).toHaveAccessibleName(/November 25, 2026/);
@@ -201,11 +200,11 @@ test.describe("Tideline gallery, keyboard", () => {
     await page.keyboard.press("ArrowDown");
     await expect(focused(page)).toHaveAccessibleName(/December 2, 2026/);
     await expect(
-      page.getByRole("grid", { name: "December 2026" }),
+      popup.getByRole("grid", { name: "December 2026" }),
     ).toBeVisible();
 
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("grid")).toBeHidden();
+    await expect(popup).toBeHidden();
     await expect(output).toHaveText("Date: 2026-12-02");
 
     // Escape closes the popup and keeps the value.
@@ -214,17 +213,18 @@ test.describe("Tideline gallery, keyboard", () => {
       .focus();
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("grid", { name: "December 2026" }),
+      popup.getByRole("grid", { name: "December 2026" }),
     ).toBeVisible();
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("grid")).toBeHidden();
+    await expect(popup).toBeHidden();
     await expect(output).toHaveText("Date: 2026-12-02");
   });
 
   test("Switch: Space toggles, Enter does not", async ({ page }) => {
-    const control = page.getByRole("switch", { name: "Match reminders" });
-    const output = page.getByTestId("switch-output");
+    const section = page.locator("section#controls");
+    const control = section.getByRole("switch", { name: "Match reminders" });
+    const output = section.getByTestId("switch-output");
     await expect(control).toHaveAttribute("aria-checked", "true");
     await expect(control).toHaveAccessibleDescription(
       "Players get a reminder two hours before.",
@@ -243,7 +243,7 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(output).toHaveText("Reminders are on.");
 
     await expect(
-      page.getByRole("switch", { name: "Disabled, on" }),
+      section.getByRole("switch", { name: "Disabled, on" }),
     ).toBeDisabled();
   });
 
@@ -279,43 +279,142 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(tabs.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
   });
 
-  test("SearchField debounces to one trailing search", async ({ page }) => {
-    const input = page
-      .getByRole("searchbox", { name: "Search players" })
-      .first();
-    const count = page.getByTestId("search-count");
-    await expect(count).toHaveText("Searches started: 0");
+  test("Search: one debounced request, cancelled when the text changes", async ({
+    page,
+  }) => {
+    const lab = page.locator("section#interactions");
+    const field = lab.locator(".td-search").first();
+    const input = field.getByRole("searchbox", { name: "Search players" });
+    const count = lab.getByTestId("search-count");
+    await expect(count).toHaveText("Requests sent: 0 · cancelled: 0");
 
-    await input.pressSequentially("sam", { delay: 40 });
-    const field = page.locator(".td-search").filter({ has: input });
-    await expect(field).toHaveAttribute("data-state", "typing");
-    await expect(field).toHaveAttribute("data-state", "results");
-    await expect(field.getByRole("status")).toHaveText("1 result.");
+    // Three quick keystrokes become one request; loaded players show at once.
+    await input.pressSequentially("sam", { delay: 30 });
     await expect(field.getByText("Sam Rivera")).toBeVisible();
-    await expect(count).toHaveText("Searches started: 1");
+    await expect(field).toHaveAttribute("data-state", "success");
+    await expect(count).toHaveText("Requests sent: 1 · cancelled: 0");
+    await expect(field.getByRole("status")).toHaveText("1 result.");
 
+    // Typing again while a request is in flight aborts it; the list stays.
+    await input.fill("no");
+    await expect(count).toHaveText("Requests sent: 2 · cancelled: 0");
+    await input.pressSequentially("o");
+    await expect(count).toHaveText(/cancelled: 1/);
+    await expect(field.locator(".td-listrow").first()).toBeVisible();
+    await expect(field).toHaveAttribute("data-state", "success");
+    await expect(field.getByText("Noor Haddad")).toBeVisible();
+
+    // Enter searches at once; clearing goes back to idle and keeps focus.
     await input.fill("zz");
+    await page.keyboard.press("Enter");
     await expect(field).toHaveAttribute("data-state", "empty");
     await field.getByRole("button", { name: "Clear search" }).click();
     await expect(field).toHaveAttribute("data-state", "idle");
     await expect(input).toBeFocused();
   });
 
-  test("AddPlayers caps the slots and recovers focus after a remove", async ({
+  test("Loaders wait 250ms, so fast work shows none", async ({ page }) => {
+    const lab = page.locator("section#interactions");
+    const shown = lab.getByTestId("loader-shown");
+    const refresh = lab.getByRole("button", { name: "Refresh list" });
+
+    await lab.getByRole("radio", { name: "150ms" }).click();
+    await refresh.click();
+    const seen = await page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) => {
+          const element = document.querySelector(
+            '[data-testid="loader-shown"]',
+          );
+          let showed = false;
+          const timer = setInterval(() => {
+            if (element?.textContent?.includes("showing")) showed = true;
+          }, 16);
+          setTimeout(() => {
+            clearInterval(timer);
+            resolve(showed);
+          }, 700);
+        }),
+    );
+    expect(seen).toBe(false);
+
+    await lab.getByRole("radio", { name: "600ms" }).click();
+    await refresh.click();
+    await expect(shown).toHaveText("Loader: showing");
+    await expect(lab.getByText("Loading players")).toBeAttached();
+    await expect(shown).toHaveText("Loader: hidden");
+  });
+
+  test("A loading button keeps its width and ignores a second press", async ({
     page,
   }) => {
-    const root = page.locator(".td-addp");
-    const count = root.locator(".td-addp__count");
-    await expect(count).toHaveText("2 of 4 spots filled");
+    const lab = page.locator("section#interactions");
+    const save = lab.getByRole("button", { name: "Save result" });
+    const width = (await save.boundingBox())!.width;
+    await save.click();
+    await save.click({ force: true });
+    await expect(save).toHaveAttribute("aria-busy", "true");
+    await expect
+      .poll(async () => (await save.boundingBox())!.width)
+      .toBe(width);
+    await expect(lab.getByTestId("save-count")).toHaveText("Saved 1 time");
+    await expect(save).not.toHaveAttribute("aria-busy", "true");
+    await page.waitForTimeout(700);
+    await expect(lab.getByTestId("save-count")).toHaveText("Saved 1 time");
+  });
 
-    const addNoor = root.getByRole("button", { name: "Add Noor Haddad" });
-    await addNoor.focus();
-    await page.keyboard.press("Space");
-    await expect(count).toHaveText("3 of 4 spots filled");
+  test("Optimistic changes apply at once, undo, and roll back on failure", async ({
+    page,
+  }) => {
+    const lab = page.locator("section#interactions");
+    const root = lab.locator(".td-addp");
+    const count = root.locator(".td-addp__count");
+    await lab.getByRole("radio", { name: "2s" }).click();
+
+    // The slot fills before the two-second save finishes.
+    await root.getByRole("button", { name: "Add Noor Haddad" }).click();
+    await expect(count).toHaveText("3 of 4 spots filled", { timeout: 500 });
     await expect(
       root.getByRole("button", { name: "Added Noor Haddad" }),
     ).toHaveAttribute("aria-pressed", "true");
 
+    // Once saved, the toast offers Undo.
+    const saved = page
+      .locator(".td-toast")
+      .filter({ hasText: "Noor Haddad added" });
+    await expect(saved).toBeVisible();
+    await saved.getByRole("button", { name: "Undo" }).click();
+    await expect(count).toHaveText("2 of 4 spots filled");
+
+    // A failed save puts the switch back and says so.
+    await lab.getByRole("radio", { name: "150ms" }).click();
+    await lab.getByRole("switch", { name: "Fail next request" }).click();
+    const reminders = lab.getByRole("switch", { name: "Match reminders" });
+    await reminders.click();
+    await expect(lab.getByTestId("optimistic-switch")).toHaveText(
+      "Reminders are on.",
+    );
+    await expect(lab.getByTestId("optimistic-switch")).toHaveText(
+      "Reminders are off.",
+    );
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await expect(
+      page.getByText("Could not turn reminders on. Put back."),
+    ).toBeVisible();
+  });
+
+  test("AddPlayers caps the slots and recovers focus after a remove", async ({
+    page,
+  }) => {
+    const lab = page.locator("section#interactions");
+    await lab.getByRole("radio", { name: "0ms", exact: true }).click();
+    const root = lab.locator(".td-addp");
+    const count = root.locator(".td-addp__count");
+    await expect(count).toHaveText("2 of 4 spots filled");
+
+    await root.getByRole("button", { name: "Add Noor Haddad" }).focus();
+    await page.keyboard.press("Space");
+    await expect(count).toHaveText("3 of 4 spots filled");
     await root.getByRole("button", { name: "Add Jo Lindqvist" }).click();
     await expect(count).toHaveText("4 of 4 spots filled");
     // Full: the remaining Add buttons are disabled but still focusable.
@@ -328,6 +427,36 @@ test.describe("Tideline gallery, keyboard", () => {
     await page.keyboard.press("Enter");
     await expect(count).toHaveText("3 of 4 spots filled");
     await expectFocusInside(page, root.locator(".td-addp__slots"));
+  });
+
+  test("Command palette opens with Ctrl or Cmd K, runs a command, returns focus", async ({
+    page,
+  }) => {
+    const lab = page.locator("section#interactions");
+    await lab.getByRole("radio", { name: "0ms", exact: true }).click();
+    const trigger = lab.getByRole("button", {
+      name: /Search or run a command/,
+    });
+    await trigger.focus();
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(palette).toBeVisible();
+    await expect(palette.getByRole("combobox")).toBeFocused();
+
+    await page.keyboard.type("book");
+    await expect(palette.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(palette).toBeHidden();
+    await expect(lab.getByTestId("command-output")).toHaveText(
+      "Last command: book-court",
+    );
+    await expect(trigger).toBeFocused();
+
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(palette).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(palette).toBeHidden();
+    await expect(trigger).toBeFocused();
   });
 });
 

@@ -2,9 +2,10 @@
 
 import { Button as UiButton } from "@ui-sdk/react/button";
 import { Toggle as UiToggle } from "@ui-sdk/react/toggle";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import {
   addPlayer,
+  filterPlayers,
   isPlayerSelected,
   openSpots,
   playerSlots,
@@ -14,8 +15,8 @@ import { AvatarLevel, PlayerSlot, type PlayerSummary } from "./avatar";
 import { Button } from "./button";
 import { cx } from "./cx";
 import { Icon } from "./icons";
+import { useAsyncSearch } from "./interactions";
 import { SearchField } from "./search-field";
-import type { SearchStatus } from "./search-state";
 
 export interface AddPlayersChange {
   type: "add" | "remove";
@@ -72,15 +73,17 @@ export interface AddPlayersProps {
   /** The person's own contacts, shown as a list with add and remove. */
   contacts?: ReadonlyArray<PlayerSummary>;
   /**
-   * Called with the debounced search text. The caller fetches and passes back
-   * `searchStatus` and `searchResults`. Leave it out to hide the search box.
+   * Finds players beyond the ones already loaded. The caller owns the
+   * request; honour `signal`, which aborts when the text changes. Suggestions
+   * and contacts are filtered at once while it runs. Leave it out to hide the
+   * search box.
    */
-  onSearch?: (query: string) => void;
-  searchStatus?: SearchStatus;
-  searchResults?: ReadonlyArray<PlayerSummary>;
-  onRetrySearch?: () => void;
-  /** Milliseconds of quiet before `onSearch` runs. */
-  searchDelay?: number;
+  searchPlayers?: (
+    query: string,
+    signal: AbortSignal,
+  ) => Promise<PlayerSummary[]>;
+  /** Quiet time before `searchPlayers` is called. */
+  searchDebounce?: number;
   labels?: Partial<AddPlayersLabels>;
   className?: string;
 }
@@ -114,8 +117,9 @@ function PersonRow({ player, action }: PersonRowProps) {
 /**
  * Fills the places of a match or booking: the selected slots, a debounced
  * search, suggestion cards with Add / Added, and a contact list with add and
- * remove. It is controlled and fetches nothing: the caller owns the selected
- * list, the suggestions, the contacts and the search results. The selection
+ * remove. It is controlled and fetches nothing itself: the caller owns the
+ * selected list, the suggestions, the contacts and the `searchPlayers`
+ * request, which runs through `useAsyncSearch`. The selection
  * rules (capped, no duplicates, locked players) live in
  * `add-players-logic.ts`.
  *
@@ -130,16 +134,28 @@ export function AddPlayers({
   lockedIds = [],
   suggestions = [],
   contacts = [],
-  onSearch,
-  searchStatus = "idle",
-  searchResults = [],
-  onRetrySearch,
-  searchDelay,
+  searchPlayers,
+  searchDebounce,
   labels,
   className,
 }: AddPlayersProps) {
   const text = { ...defaultLabels, ...labels };
   const full = openSpots(selected, capacity) === 0;
+  const loaded = useMemo(() => {
+    const byId = new Map<string, PlayerSummary>();
+    for (const player of [...suggestions, ...contacts]) {
+      byId.set(player.id, player);
+    }
+    return [...byId.values()];
+  }, [suggestions, contacts]);
+  const search = useAsyncSearch<PlayerSummary>({
+    search: (query, signal) =>
+      searchPlayers ? searchPlayers(query, signal) : Promise.resolve([]),
+    items: loaded,
+    filter: (player, query) => filterPlayers([player], query).length > 0,
+    getKey: (player) => player.id,
+    debounceMs: searchDebounce,
+  });
   const slotsRef = useRef<HTMLUListElement>(null);
   const restoreFocus = useRef(false);
 
@@ -241,25 +257,29 @@ export function AddPlayers({
         {full ? <p className="td-addp__note">{text.full}</p> : null}
       </section>
 
-      {onSearch ? (
+      {searchPlayers ? (
         <SearchField
-          debounce={searchDelay}
           label={text.search}
-          onRetry={onRetrySearch}
-          onSearch={onSearch}
+          onRetry={search.submit}
+          onSubmit={search.submit}
+          onValueChange={search.setQuery}
           placeholder={text.searchPlaceholder}
-          resultCount={searchResults.length}
-          status={searchStatus}
+          resultCount={search.results.length}
+          stale={search.stale}
+          status={search.status}
+          value={search.query}
         >
-          <ul className="td-list">
-            {searchResults.map((player) => (
-              <PersonRow
-                action={contactButton(player)}
-                key={player.id}
-                player={player}
-              />
-            ))}
-          </ul>
+          {search.results.length > 0 ? (
+            <ul className="td-list">
+              {search.results.map((player) => (
+                <PersonRow
+                  action={contactButton(player)}
+                  key={player.id}
+                  player={player}
+                />
+              ))}
+            </ul>
+          ) : null}
         </SearchField>
       ) : null}
 
