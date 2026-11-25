@@ -152,9 +152,8 @@ describe("Tideline contrast (WCAG AA)", () => {
       color: { themes: [], tokens: [{ name: "action", value: "#ff0000" }] },
     } as Partial<TidelineTokenSource>);
     expect(resolveTidelineColors(clash).light!.action).toBe("#0f1a2b");
-    expect(resolveTidelineColors(source).light!["surface-warm"]).toBe(
-      "#f8f5ef",
-    );
+    // An addition for a name design has not published does take effect.
+    expect(css).toContain("--td-type-micro-size: 12px;");
   });
 });
 

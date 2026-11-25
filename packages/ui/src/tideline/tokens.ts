@@ -552,7 +552,6 @@ export const tidelineTokens = {
     "radius-pill": 999,
     "radius-card-comfort": 18,
     "radius-panel-comfort": 28,
-    "radius-panel": 24,
   },
   size: {
     "size-control-sm": 32,
