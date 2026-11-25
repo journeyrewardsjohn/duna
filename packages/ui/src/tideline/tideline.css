@@ -1964,66 +1964,6 @@
       scrollbar-width: none;
     }
 
-    .td-day {
-      position: relative;
-      display: grid;
-      flex: none;
-      gap: 2px;
-      align-content: center;
-      justify-items: center;
-      margin: 0;
-      padding: var(--td-space-2) 0;
-      border: 0;
-      border-radius: var(--td-radius-md);
-      background: var(--td-surface);
-      box-shadow: var(--td-shadow-surface);
-      color: var(--td-text);
-      cursor: pointer;
-      scroll-snap-align: start;
-      transition:
-        background-color var(--td-duration-quick) var(--td-ease-ui),
-        color var(--td-duration-quick) var(--td-ease-ui);
-      width: 48px;
-      min-height: 60px;
-
-      &[data-checked] {
-        background: var(--td-action);
-        color: var(--td-on-action);
-
-        :is(.td-day__dow, .td-day__mon) {
-          color: inherit;
-        }
-      }
-
-      &[data-today] .td-day__num {
-        box-shadow: 0 2px 0 var(--td-energy);
-      }
-
-      &[data-disabled] {
-        background: transparent;
-        box-shadow: inset 0 0 0 1px var(--td-line-strong);
-        color: var(--td-text-disabled);
-        cursor: not-allowed;
-
-        :is(.td-day__dow, .td-day__mon) {
-          color: inherit;
-        }
-      }
-    }
-
-    .td-day__dow,
-    .td-day__mon {
-      color: var(--td-text-2);
-      font: var(--td-type-micro);
-    }
-
-    .td-day__num {
-      font-size: 18px;
-      font: var(--td-type-lead);
-      font-weight: var(--td-type-label-weight);
-      font-variant-numeric: tabular-nums;
-    }
-
     .td-slotgrid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
@@ -3296,7 +3236,6 @@
       color: var(--td-danger);
     }
 
-    .td-day,
     .td-tslot {
       box-shadow: inset 0 0 0 1px var(--td-line-strong);
 
@@ -3694,6 +3633,530 @@
       gap: var(--td-space-2);
       justify-content: center;
       margin-top: var(--td-space-3);
+    }
+
+    /* ---------- Comfortable scale ----------
+     * The consumer and conversion scale: larger radii, bolder headings, more
+     * padding. Booking components use it unless the scope says `dense`.
+     */
+    --td-bk-radius: var(--td-radius-card-comfort);
+    --td-bk-pad: var(--td-space-card-comfort);
+    --td-bk-border: var(--td-size-border-comfort);
+    --td-bk-ring: var(--td-size-ring-selected);
+    --td-bk-title: var(--td-type-comfort-title);
+    --td-bk-price: var(--td-type-comfort-price);
+    --td-bk-total: var(--td-type-comfort-total);
+    --td-bk-day: var(--td-type-comfort-day);
+
+    &[data-density="dense"] {
+      --td-bk-radius: var(--td-radius-lg);
+      --td-bk-pad: var(--td-space-4);
+      --td-bk-border: 1px;
+      --td-bk-title: var(--td-type-label);
+      --td-bk-price: var(--td-type-figure-sm);
+      --td-bk-total: var(--td-type-figure);
+      --td-bk-day: var(--td-type-figure-sm);
+    }
+
+    &[data-density="comfortable"] {
+      .td-display {
+        font: var(--td-type-comfort-display);
+        letter-spacing: var(--td-type-comfort-display-tracking);
+      }
+
+      .td-headline {
+        font: var(--td-type-comfort-section);
+        letter-spacing: var(--td-type-comfort-section-tracking);
+      }
+
+      .td-lead {
+        font: var(--td-type-comfort-lead);
+      }
+
+      .td-card {
+        padding: var(--td-space-card-comfort);
+        border-radius: var(--td-radius-card-comfort);
+      }
+
+      /* The one big action is a pill on this scale. */
+      .td-btn--lg {
+        min-height: var(--td-size-target-primary);
+        border-radius: var(--td-radius-pill);
+        font: var(--td-type-lead);
+        font-weight: var(--td-type-label-weight);
+      }
+
+      @media (max-width: 599px) {
+        .td-display {
+          font: var(--td-type-display-sm);
+          font-weight: var(--td-type-comfort-display-weight);
+          letter-spacing: var(--td-type-display-sm-tracking);
+        }
+
+        .td-headline {
+          font: var(--td-type-phone-title-sm);
+          font-weight: var(--td-type-comfort-section-weight);
+        }
+
+        .td-lead {
+          font: var(--td-type-lead);
+        }
+      }
+    }
+
+    /* ---------- Choice cards: PriceChoiceCard, CoachPicker, SlotList ---------- */
+    .td-choices,
+    .td-coaches,
+    .td-slotlist {
+      display: grid;
+      gap: var(--td-space-4);
+      min-width: 0;
+    }
+
+    .td-choices {
+      grid-template-columns: repeat(
+        var(--td-choice-columns, 3),
+        minmax(0, 1fr)
+      );
+    }
+
+    .td-coaches,
+    .td-slotlist {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (max-width: 599px) {
+      .td-choices,
+      .td-coaches,
+      .td-slotlist {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--td-space-3);
+      }
+    }
+
+    .td-choice,
+    .td-coach,
+    .td-slotcard {
+      position: relative;
+      min-width: 0;
+      margin: 0;
+      padding: var(--td-bk-pad);
+      border: 0;
+      border-radius: var(--td-bk-radius);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line-strong);
+      color: var(--td-text);
+      text-align: start;
+      cursor: pointer;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        box-shadow var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+
+      &:hover:not([data-checked], [data-disabled]) {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-border-control);
+      }
+
+      &:active:not([data-disabled]) {
+        scale: calc(1 - 0.01 * var(--td-motion));
+      }
+
+      /* Selected: a tide-blue ring; never colour alone, the radio is checked. */
+      &[data-checked] {
+        box-shadow: inset 0 0 0 var(--td-bk-ring) var(--td-link);
+      }
+
+      &:focus-visible {
+        outline-offset: 3px;
+      }
+    }
+
+    .td-choice {
+      display: grid;
+      gap: var(--td-space-1);
+      align-content: start;
+    }
+
+    .td-choice__title,
+    .td-coach__name {
+      font: var(--td-bk-title);
+      letter-spacing: var(--td-type-comfort-title-tracking);
+    }
+
+    .td-choice__meta,
+    .td-coach__detail {
+      color: var(--td-text-2);
+      font: var(--td-type-lead);
+    }
+
+    .td-choice__price {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 var(--td-space-2);
+      align-items: baseline;
+      margin-top: var(--td-space-5);
+      color: var(--td-text-2);
+      font: var(--td-type-lead);
+
+      b {
+        color: var(--td-text);
+        font: var(--td-bk-price);
+        letter-spacing: var(--td-type-comfort-price-tracking);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+
+    .td-coach {
+      display: flex;
+      gap: var(--td-space-4);
+      align-items: center;
+      padding-block: var(--td-space-4);
+
+      &[data-checked] {
+        background: var(--td-selected);
+      }
+    }
+
+    .td-coach__faces {
+      display: inline-flex;
+      flex: none;
+
+      .td-avatar {
+        --td-avatar-size: 44px;
+
+        box-shadow: 0 0 0 2px var(--td-surface);
+      }
+
+      .td-avatar + .td-avatar {
+        margin-inline-start: -12px;
+      }
+    }
+
+    .td-coach__text {
+      display: grid;
+      min-width: 0;
+    }
+
+    .td-slotcard {
+      display: grid;
+      gap: var(--td-space-3);
+      align-content: start;
+
+      &[data-disabled] {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line);
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+
+        .td-avatar {
+          opacity: 0.5;
+        }
+      }
+    }
+
+    .td-slotcard__time {
+      font: var(--td-bk-title);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-slotcard__coach {
+      display: inline-flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      color: var(--td-text-2);
+      font: var(--td-type-lead);
+    }
+
+    .td-slotcard__status {
+      color: var(--td-positive);
+      font: var(--td-type-label);
+    }
+
+    .td-slotcard[data-disabled] :is(.td-slotcard__coach, .td-slotcard__status) {
+      color: inherit;
+    }
+
+    .td-slotcard--loading {
+      cursor: progress;
+    }
+
+    .td-slotcard__bone {
+      width: 60%;
+      height: 14px;
+    }
+
+    .td-slotcard__bone--short {
+      width: 40%;
+    }
+
+    .td-slotlist__empty {
+      color: var(--td-ink-2);
+      font: var(--td-type-lead);
+    }
+
+    /* ---------- DayStrip ---------- */
+    .td-daystrip {
+      gap: var(--td-space-3);
+    }
+
+    .td-day {
+      position: relative;
+      display: grid;
+      flex: none;
+      gap: 2px;
+      align-content: center;
+      justify-items: center;
+      width: 80px;
+      min-height: 112px;
+      margin: 0;
+      padding: var(--td-space-3) 0;
+      border: 0;
+      border-radius: var(--td-bk-radius);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line-strong);
+      color: var(--td-text);
+      cursor: pointer;
+      scroll-snap-align: start;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        box-shadow var(--td-duration-quick) var(--td-ease-ui),
+        color var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+
+      &:hover:not([data-checked], [data-unavailable]) {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-border-control);
+      }
+
+      &:active:not([data-unavailable]) {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+
+      /* Selected: solid ink, white text. */
+      &[data-checked] {
+        background: var(--td-action);
+        box-shadow: none;
+        color: var(--td-on-action);
+      }
+
+      /* Nothing open: faded, still reachable and announced. */
+      &[data-unavailable] {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line);
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      /* Today: a small dot, not a colour change. */
+      &[data-today]::after {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+    }
+
+    .td-choice__unit {
+      white-space: nowrap;
+    }
+
+    .td-day__dow {
+      font: var(--td-type-code);
+      font-size: var(--td-type-micro-size);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .td-day__num {
+      font: var(--td-bk-day);
+      letter-spacing: var(--td-type-comfort-day-tracking);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-day__mon {
+      font: var(--td-type-meta);
+    }
+
+    /* ---------- BookingSummary ---------- */
+    .td-summary {
+      display: grid;
+      gap: var(--td-space-6);
+      padding: var(--td-space-panel-comfort);
+      border-radius: var(--td-radius-panel-comfort);
+      background: var(--td-surface-warm);
+      color: var(--td-text);
+    }
+
+    .td-summary__details {
+      display: grid;
+      gap: var(--td-space-5);
+    }
+
+    .td-summary__title {
+      font: var(--td-type-heading-24);
+      font-weight: var(--td-type-comfort-section-weight);
+      letter-spacing: var(--td-type-heading-24-tracking);
+    }
+
+    .td-summary__items {
+      display: grid;
+    }
+
+    .td-summary__item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--td-space-1) var(--td-space-4);
+      padding-block: var(--td-space-4);
+      box-shadow: inset 0 -1px 0 var(--td-line-strong);
+
+      &:first-child {
+        padding-top: 0;
+      }
+    }
+
+    .td-summary__name,
+    .td-summary__price {
+      font: var(--td-bk-title);
+    }
+
+    .td-summary__price {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-summary__detail {
+      grid-column: 1 / -1;
+      color: var(--td-text-2);
+      font: var(--td-type-lead);
+    }
+
+    .td-summary__total {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2) var(--td-space-4);
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .td-summary__total-label {
+      font: var(--td-bk-title);
+    }
+
+    .td-summary__total-value {
+      font: var(--td-bk-total);
+      letter-spacing: var(--td-type-comfort-total-tracking);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-summary__toggle {
+      display: none;
+    }
+
+    .td-summary__action {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .td-summary__reason,
+    .td-summary__trust {
+      color: var(--td-text-2);
+      text-align: center;
+    }
+
+    .td-summary__reason {
+      font: var(--td-type-lead);
+
+      &:empty {
+        display: none;
+      }
+    }
+
+    .td-summary__trust {
+      font: var(--td-type-body);
+    }
+
+    /* Below 900px: a bar fixed to the bottom, expandable to the summary. */
+    @media (max-width: 899px) {
+      .td-summary {
+        position: fixed;
+        inset: auto 0 0;
+        z-index: var(--td-z-nav);
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--td-space-2) var(--td-space-4);
+        align-items: center;
+        max-height: 88dvh;
+        padding: var(--td-space-4) var(--td-space-4)
+          max(var(--td-space-4), env(safe-area-inset-bottom));
+        overflow-y: auto;
+        border-radius: var(--td-radius-xl) var(--td-radius-xl) 0 0;
+        box-shadow: var(--td-shadow-floating);
+      }
+
+      .td-summary__details,
+      .td-summary__trust {
+        display: none;
+        grid-column: 1 / -1;
+      }
+
+      .td-summary[data-expanded] :is(.td-summary__details, .td-summary__trust) {
+        display: grid;
+      }
+
+      .td-summary[data-expanded] .td-summary__details {
+        padding-bottom: var(--td-space-4);
+      }
+
+      .td-summary__title {
+        font: var(--td-type-heading-20);
+      }
+
+      .td-summary__total {
+        display: grid;
+        gap: 0;
+        justify-content: start;
+      }
+
+      .td-summary__total-label {
+        color: var(--td-text-2);
+        font: var(--td-type-meta);
+      }
+
+      .td-summary__total-value {
+        font: var(--td-type-heading-24);
+        font-weight: var(--td-type-comfort-total-weight);
+      }
+
+      .td-summary__toggle {
+        display: inline-flex;
+        gap: var(--td-space-1);
+        align-items: center;
+        min-height: var(--td-size-phone-control-sm);
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--td-link);
+        font: var(--td-type-label);
+        cursor: pointer;
+      }
+
+      .td-summary[data-expanded] .td-summary__toggle .td-icon {
+        rotate: 180deg;
+      }
+
+      /* The button and its reason join the bar's own grid. */
+      .td-summary__action {
+        display: contents;
+
+        .td-btn {
+          min-width: 148px;
+        }
+      }
+
+      .td-summary__reason {
+        grid-column: 1 / -1;
+        font: var(--td-type-meta);
+      }
     }
 
     /* ---------- Reduced motion: every loop has a resting state ---------- */

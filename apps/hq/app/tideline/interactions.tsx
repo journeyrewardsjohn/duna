@@ -41,7 +41,7 @@ interface Lab {
 
 const LabContext = createContext<Lab | null>(null);
 
-function useLab(): Lab {
+export function useLab(): Lab {
   const lab = useContext(LabContext);
   if (!lab) throw new Error("Render inside InteractionsLab");
   return lab;

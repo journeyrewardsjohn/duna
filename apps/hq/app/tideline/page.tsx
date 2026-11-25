@@ -275,7 +275,7 @@ export default async function TidelineGalleryPage({
         <Field label="Price per player">
           <NumberInput
             defaultValue={12.5}
-            format={{ style: "currency", currency: "EUR" }}
+            format={{ style: "currency", currency: "USD" }}
             locale="en"
             min={0}
             step={0.5}
@@ -370,7 +370,7 @@ export default async function TidelineGalleryPage({
           <PlayerSlot
             payment="unpaid"
             player={{ id: "c", name: "Noor", level: "3.8" }}
-            price="€6.00"
+            price="$6.00"
           />
           <PlayerSlot />
         </div>
@@ -518,6 +518,12 @@ export default async function TidelineGalleryPage({
           <span className="td-title">Tideline</span>
           <span className="td-meta">Component gallery · development only</span>
         </div>
+        <a
+          className={buttonClassName({ size: "sm", variant: "ghost" })}
+          href={`/tideline/book-lesson?theme=${theme}`}
+        >
+          Book a lesson page
+        </a>
         <nav aria-label="Theme" className={styles.themes}>
           {themes.map((name) => (
             <a

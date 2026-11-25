@@ -129,19 +129,44 @@ pnpm tideline:tokens --check  # fails if they are stale
 `tokens.test.ts` fails when the generated files are stale, when a text pair
 drops below WCAG AA in any theme, or when the stylesheet uses a raw colour.
 
-The file currently holds a **Tideline 3 preview**: the published 2.1 tokens
-with the Tideline 3 foundation decisions applied in code (Geist and Geist Mono,
-near-monochrome neutrals, 6 / 8 / 12 / 16 radii, 32 / 36 / 40 controls with
-44 / 48 / 52 on touch, the motion values above). When the Tideline 3
-`tokens.json` is published, drop it in and reconcile. The stylesheet depends
-on these names beyond 2.1's: `surface-subtle`, `selection`, `on-selection`,
-`size-control*`, `size-control-touch*`, `size-row`, `size-icon-sm`,
-`duration-loading-delay`, `duration-loading-min`, `duration-search-debounce`,
-and the type styles `heading`, `phone-nav` and `code` with the `mono` family.
+`tokens.json` is the published Tideline 3 file, unchanged. Names the code
+needs before design publishes them live in `tokens.additions.json` (today: one
+12px `micro` type style, because the published `tab-label` is 11px, under the
+12px floor). The build merges the additions in, and a token of the same name in
+`tokens.json` always wins, so an addition stops mattering once design ships it.
 
-`border-control` stays a 3:1 grey so input, checkbox and switch edges meet
-WCAG 1.4.11; hairlines (`line`, `line-strong`) are for cards, buttons and
-dividers.
+Following the published system, text fields use the hairline `line-strong`
+border; small indicators (checkbox, radio, switch) keep the 3:1
+`border-control`.
+
+The primary button label is `on-action`, white in every theme. The stylesheet
+locks it with `!important` inside the layer, which outranks every unlayered
+rule a host page has, so no page style for links can turn it dark. A disabled
+primary keeps the white label on `action-disabled`.
+
+## Density
+
+`<Tideline density="comfortable">` is the consumer and conversion scale:
+18px card radius, 28px panels, weight-700 headings (`comfort-*` type styles),
+more padding, pill-shaped large buttons. `density="dense"` is the product
+scale. Without the option each component uses the scale it was designed for:
+the booking components are comfortable, the table toolbar and `TimeSlotGrid`
+are dense. Both scales read tokens; `dense` shrinks the booking components.
+
+## Booking
+
+| Component                            | Built on                         | Notes                                                                                                   |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `ChoiceCardGroup`, `PriceChoiceCard` | UI SDK Radio                     | Single choice as cards; selected is a 2px tide-blue ring                                                |
+| `CoachPicker`                        | UI SDK Radio, Avatar             | Optional "Any coach"; photos fall back to initials                                                      |
+| `DayStrip`                           | UI SDK Radio                     | A day with nothing open is faded, focusable and announced, and its selection is cancelled               |
+| `SlotList`                           | UI SDK Radio                     | Available, booked (disabled), selected, loading (skeleton cards). `TimeSlotGrid` is the dense variant   |
+| `BookingSummary`                     | Button; a hand-rolled disclosure | Line items, add-on row, total, action with `disabledReason`, trust line; a fixed bottom bar below 900px |
+| `booking-state.ts`                   | none (pure)                      | Reducer and selectors for format, coach, day, slot and add-ons; `formatMoney`, `formatTimeRange`        |
+
+`/tideline/book-lesson` in the gallery is a working page on these, wired to
+the interaction layer: slots load through `useDelayedLoading`, choosing a slot
+is a `useOptimisticAction` that rolls back with a toast if the hold fails.
 
 ## Layers and the legacy bridge
 
@@ -173,6 +198,7 @@ TIDELINE_GALLERY=1 pnpm dev:hq
 # http://localhost:3001/tideline            light
 # http://localhost:3001/tideline?theme=dark
 # http://localhost:3001/tideline?theme=live
+# http://localhost:3001/tideline/book-lesson   the booking flow
 ```
 
 ## Tests
@@ -180,7 +206,7 @@ TIDELINE_GALLERY=1 pnpm dev:hq
 - `pnpm --filter @duna/ui test` runs the Vitest suites in
   `packages/ui/src/tideline/`: token generation and contrast
   (`tokens.test.ts`), date math and AddPlayers selection rules
-  (`logic.test.ts`), the interaction cores (`interaction-core.test.ts`), and
+  (`logic.test.ts`), the booking reducer (`booking-state.test.ts`), the interaction cores (`interaction-core.test.ts`), and
   the hooks (`hooks.test.ts`). `packages/ui` has no DOM test environment, so
   the hook tests run on a small stand-in for React's hook runtime; the real
   thing is covered in the browser.
@@ -210,8 +236,6 @@ TIDELINE_GALLERY=1 pnpm dev:hq
   presets, calendar event dots, submenus and checkbox menu items. UI SDK
   supports them; the wrappers do not expose them yet.
 - Contrast conditions (`data-contrast="bright" | "glare"`) and club theming.
-- `tideline.css` still carries the 2.1 rules with a Tideline 3 block after
-  them that wins. Fold the two together when the Tideline 3 tokens land.
 
 ## React Native
 

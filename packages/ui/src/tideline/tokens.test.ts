@@ -12,7 +12,12 @@ import {
 } from "./token-build";
 import { tidelineColors, tidelineTokens } from "./tokens";
 
-const here = import.meta.dirname;
+// The package build also compiles this test into dist/, where the token and
+// style sources are not copied. Always read them from src/.
+const here = import.meta.dirname.replace(
+  /([\\/])dist([\\/]tideline)$/,
+  "$1src$2",
+);
 const read = (name: string) => readFileSync(join(here, name), "utf8");
 const published = JSON.parse(read("tokens.json")) as TidelineTokenSource;
 const additions = JSON.parse(

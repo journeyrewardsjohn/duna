@@ -10,8 +10,12 @@ export interface TidelineProps extends ComponentProps<"div"> {
   zone?: "live";
   /** Paints the theme's ground behind the content. */
   ground?: boolean;
-  /** HQ density: tighter input corners. */
-  density?: "hq";
+  /**
+   * `comfortable` is the consumer and conversion scale: larger radii, bolder
+   * headings, more padding. `dense` is the product scale for tables and
+   * tools. Without it, each component uses the scale it was designed for.
+   */
+  density?: "comfortable" | "dense";
 }
 
 /**

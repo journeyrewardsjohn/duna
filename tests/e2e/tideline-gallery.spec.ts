@@ -487,3 +487,175 @@ test.describe("Tideline gallery, layout", () => {
     await expect(page.locator(".td").first()).not.toHaveAttribute("data-theme");
   });
 });
+
+test.describe("Tideline gallery, Book a lesson", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Runs once, on desktop");
+    await page.goto(`${base}/tideline/book-lesson`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Book a lesson." }),
+    ).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("radio", { name: "0ms", exact: true }).click();
+  });
+
+  test("books a lesson with the keyboard only", async ({ page }) => {
+    const summary = page.getByRole("complementary", { name: "Summary" });
+    const action = summary.getByRole("button", { name: "Continue" });
+    const formats = page.getByRole("radiogroup", { name: "Choose a format." });
+    const coaches = page.getByRole("radiogroup", {
+      name: "Choose your coach.",
+    });
+    const days = page.getByRole("radiogroup", { name: "Pick a day." });
+
+    // Nothing chosen yet: the action is disabled and says why.
+    await expect(action).toHaveAttribute("aria-disabled", "true");
+    await expect(action).toHaveAccessibleDescription(
+      "Choose a time to continue.",
+    );
+    await expect(summary).toContainText("$250.00");
+
+    // A booked session stays visible and cannot be chosen.
+    await expect(page.getByRole("radio", { name: /Booked/ })).toHaveCount(1);
+    await expect(page.getByRole("radio", { name: /Booked/ })).toBeDisabled();
+
+    // Format: arrow keys move and select; the price follows at once.
+    await formats.getByRole("radio", { name: /Private/ }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(formats.getByRole("radio", { name: /^Group/ })).toBeChecked();
+    await expect(summary).toContainText("Group lesson");
+    await expect(summary).toContainText("$200.00");
+    await page.keyboard.press("ArrowLeft");
+    await expect(summary).toContainText("$250.00");
+
+    // Add-on off: the total drops.
+    await summary.getByRole("switch", { name: /Add club membership/ }).focus();
+    await page.keyboard.press("Space");
+    await expect(summary).toContainText("$150.00");
+    await expect(summary).not.toContainText("$250.00");
+
+    // Coach: choosing one filters the day's sessions.
+    await coaches.getByRole("radio", { name: /Any coach/ }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      coaches.getByRole("radio", { name: /Coach Rowan/ }),
+    ).toBeChecked();
+    const slots = page.getByRole("radiogroup", { name: /\./ }).last();
+    await expect(slots.getByRole("radio", { name: /Coach Imani/ })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press("ArrowUp");
+    await expect(
+      coaches.getByRole("radio", { name: /Any coach/ }),
+    ).toBeChecked();
+
+    // Day: Sunday has nothing open. It takes focus and is announced, but
+    // cannot be chosen; the next arrow moves on to Monday.
+    await days.getByRole("radio", { name: /November 26/ }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      days.getByRole("radio", { name: /November 27/ }),
+    ).toBeChecked();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    const sunday = days.getByRole("radio", { name: /November 29/ });
+    await expect(sunday).toBeFocused();
+    await expect(sunday).toHaveAccessibleName(/no open sessions/);
+    await expect(sunday).toHaveAttribute("aria-disabled", "true");
+    await expect(sunday).not.toBeChecked();
+    await expect(
+      days.getByRole("radio", { name: /November 28/ }),
+    ).toBeChecked();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      days.getByRole("radio", { name: /November 30/ }),
+    ).toBeChecked();
+    await expect(page.getByTestId("slots-heading")).toHaveText(
+      "Monday, Nov 30.",
+    );
+
+    // Slot: choosing an open one enables the action.
+    const open = page.getByRole("radio", { name: /3:00–4:00pm/ });
+    await open.focus();
+    await page.keyboard.press("Space");
+    await expect(open).toBeChecked();
+    await expect(summary).toContainText(
+      "Mon, Nov 30 · 3:00–4:00pm · Coach Imani",
+    );
+    await expect(action).not.toHaveAttribute("aria-disabled", "true");
+
+    // Changing the format to one this slot is not offered in clears it.
+    await formats.getByRole("radio", { name: /Private/ }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(action).toHaveAttribute("aria-disabled", "true");
+    await page.keyboard.press("ArrowLeft");
+    await expect(formats.getByRole("radio", { name: /Private/ })).toBeChecked();
+    const again = page.getByRole("radio", { name: /3:00–4:00pm/ });
+    await expect(again).not.toBeChecked();
+    await again.focus();
+    await page.keyboard.press("Space");
+    await expect(again).toBeChecked();
+    await expect(action).not.toHaveAttribute("aria-disabled", "true");
+
+    await action.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Lesson held. Next: payment.")).toBeVisible();
+  });
+
+  test("loads a day with skeleton cards and rolls back a slot that fails", async ({
+    page,
+  }) => {
+    await page.getByRole("radio", { name: "600ms" }).click();
+    await page.getByRole("radio", { name: /November 27/ }).click();
+    await expect(page.getByText("Loading sessions")).toBeAttached();
+    await expect(page.getByText("Loading sessions")).not.toBeAttached();
+    await expect(page.getByTestId("slots-heading")).toHaveText(
+      "Friday, Nov 27.",
+    );
+
+    await page.getByRole("radio", { name: "150ms" }).click();
+    await page.getByRole("switch", { name: "Fail next request" }).click();
+    const slot = page.getByRole("radio", { name: /3:00–4:00pm/ });
+    await slot.click();
+    await expect(slot).toBeChecked();
+    await expect(
+      page.getByText("That time was just taken. Pick another."),
+    ).toBeVisible();
+    await expect(slot).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: "Continue" }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  for (const theme of ["light", "dark", "live"]) {
+    test(`the primary label is white in ${theme}, whatever the page does to links`, async ({
+      page,
+    }) => {
+      await page.goto(`${base}/tideline?theme=${theme}`);
+      await page.waitForLoadState("networkidle");
+      // A hostile host page: every trick short of an inline style.
+      await page.addStyleTag({
+        content: `a, a:link, a:visited, html body .td a, #__next a, button,
+          html body div a.td-btn { color: rgb(0, 0, 128) !important;
+          -webkit-text-fill-color: rgb(0, 0, 128) !important; }`,
+      });
+      const white = "rgb(255, 255, 255)";
+      for (const name of [
+        "Primary link",
+        "Save result",
+        "Full width",
+        "Disabled",
+      ]) {
+        const button = page
+          .locator("section#controls .td-btn--primary")
+          .filter({ hasText: name })
+          .first();
+        await expect(button).toHaveCSS("color", white);
+        await expect(button).toHaveCSS("-webkit-text-fill-color", white);
+      }
+      const link = page.locator("section#controls a.td-btn--primary").first();
+      await link.hover();
+      await expect(link.locator(".td-btn__label")).toHaveCSS("color", white);
+    });
+  }
+});

@@ -159,6 +159,45 @@ export {
   type TimeSlotRange,
 } from "./date-utils";
 
+// Booking (comfortable scale)
+export {
+  BookingSummary,
+  ChoiceCardGroup,
+  CoachPicker,
+  PriceChoiceCard,
+  SlotList,
+  type BookingSummaryItem,
+  type BookingSummaryProps,
+  type ChoiceCardGroupProps,
+  type CoachOption,
+  type CoachPickerProps,
+  type PriceChoiceCardProps,
+  type SlotListProps,
+  type SlotOption,
+} from "./booking";
+export {
+  ANY_COACH,
+  bookingLineItems,
+  bookingReducer,
+  bookingTotalCents,
+  canContinueBooking,
+  formatMoney,
+  formatTimeRange,
+  initialBookingState,
+  matchingSlots,
+  openDays,
+  selectedSlot,
+  slotsForDay,
+  type BookingAction,
+  type BookingAddOn,
+  type BookingCatalog,
+  type BookingLineItem,
+  type BookingState,
+  type LessonCoach,
+  type LessonFormat,
+  type LessonSlot,
+} from "./booking-state";
+
 // People
 export {
   Avatar,

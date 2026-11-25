@@ -197,3 +197,70 @@
     gap: var(--td-space-10);
   }
 }
+
+/* The Book a lesson page: two columns with a sticky summary. */
+.bookLab > div:first-child {
+  width: min(100% - var(--td-space-8), 1296px);
+  margin: var(--td-space-4) auto 0;
+}
+
+.book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 440px;
+  gap: var(--td-space-12);
+  align-items: start;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: var(--td-space-12) var(--td-space-8) var(--td-space-24);
+}
+
+.bookMain {
+  display: grid;
+  gap: var(--td-space-section-comfort);
+  min-width: 0;
+}
+
+.bookHead {
+  display: grid;
+  gap: var(--td-space-4);
+}
+
+.bookSection {
+  display: grid;
+  gap: var(--td-space-5);
+  min-width: 0;
+}
+
+.bookSectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-2) var(--td-space-4);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.bookNote {
+  color: var(--td-text-2);
+  font: var(--td-type-lead);
+}
+
+.bookAside {
+  position: sticky;
+  top: 80px;
+}
+
+@media (max-width: 899px) {
+  .book {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--td-space-8);
+    padding: var(--td-space-8) var(--td-space-4) 200px;
+  }
+
+  .bookMain {
+    gap: var(--td-space-10);
+  }
+
+  .bookAside {
+    position: static;
+  }
+}
