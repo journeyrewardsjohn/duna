@@ -1,0 +1,82 @@
+/* Layout for the Tideline gallery only. Values come from Tideline tokens. */
+.page {
+  min-height: 100vh;
+  padding: var(--td-space-8) var(--td-space-8) var(--td-space-24);
+}
+
+.inner {
+  display: grid;
+  gap: var(--td-space-12);
+  max-width: var(--td-layout-content);
+  margin: 0 auto;
+}
+
+.intro {
+  display: grid;
+  gap: var(--td-space-3);
+}
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-2);
+}
+
+.section {
+  display: grid;
+  gap: var(--td-space-5);
+  min-width: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--td-space-5);
+  align-items: start;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.example {
+  display: grid;
+  gap: var(--td-space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-3);
+  align-items: center;
+}
+
+.stack {
+  display: grid;
+  gap: var(--td-space-3);
+  min-width: 0;
+}
+
+.mesh {
+  display: grid;
+  gap: var(--td-space-4);
+  align-content: start;
+  justify-items: start;
+  padding: var(--td-space-6);
+}
+
+.output {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 599px) {
+  .page {
+    padding: var(--td-space-5) var(--td-space-4) var(--td-space-16);
+  }
+
+  .inner {
+    gap: var(--td-space-10);
+  }
+}

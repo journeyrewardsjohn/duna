@@ -13,7 +13,12 @@
     "./hq-workspace.css": "./src/hq-workspace.css",
     "./particle-loader": "./src/particle-loader.tsx",
     "./public-website.css": "./src/public-website.css",
-    "./player-workspace.css": "./src/player-workspace.css"
+    "./player-workspace.css": "./src/player-workspace.css",
+    "./tideline": "./src/tideline/index.ts",
+    "./tideline/tokens": "./src/tideline/tokens.ts",
+    "./tideline/tideline.css": "./src/tideline/tideline.css",
+    "./tideline/tokens.css": "./src/tideline/tokens.css",
+    "./tideline/legacy-bridge.css": "./src/tideline/legacy-bridge.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -23,6 +28,8 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
+    "@ui-sdk/core": "0.1.0-beta.17",
+    "@ui-sdk/react": "0.1.0-beta.17",
     "react": "^19.2.8"
   },
   "devDependencies": {
