@@ -23,6 +23,9 @@ const hqServerCommand = process.env.CI
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Visual baselines and CSS coverage have their own config and are not part
+  // of the release gate: playwright.hq-visual.config.ts.
+  testIgnore: "**/hq-visual/**",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,

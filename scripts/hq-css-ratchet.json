@@ -1,0 +1,13 @@
+{
+  "description": "Line counts of the legacy HQ global stylesheets at main 1613bba (2026-11-25). Enforced by scripts/verify-hq-css-ratchet.ts; these numbers only go down.",
+  "totalLines": 64156,
+  "sheets": {
+    "apps/hq/app/ask-duna.css": 1387,
+    "apps/hq/app/design-v3.css": 10951,
+    "apps/hq/app/forms.css": 761,
+    "apps/hq/app/globals.css": 41810,
+    "apps/hq/app/training.css": 7467,
+    "apps/hq/app/work-focus.css": 1395,
+    "packages/ui/src/hq-workspace.css": 385
+  }
+}
