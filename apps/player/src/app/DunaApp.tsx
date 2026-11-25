@@ -38,6 +38,7 @@ import { BookingModal } from "../features/events/BookingModal";
 import { PerformanceScreen } from "../features/profile/PerformanceScreen";
 import { type ThemeName, colors, rgba } from "../shared/palette";
 import { useReducedMotion } from "../shared/use-reduced-motion";
+import { parsePlayerDeepLink } from "./deep-links";
 import { MessagingNavigationContext, type Tab } from "./navigation";
 import type { CourtBookingRequest } from "../features/courts/court-types";
 import { VenueBookingModal } from "../features/courts/VenueBookingModal";
@@ -166,58 +167,43 @@ export function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
-      const visionRemote = url?.match(
-        /^duna:\/\/vision\/remote\/([^/?#]+)/,
-      )?.[1];
-      if (visionRemote) {
-        setVisionRemoteToken(decodeURIComponent(visionRemote));
+      const link = parsePlayerDeepLink(url);
+      if (!link) return;
+      if (link.kind === "vision-remote") {
+        setVisionRemoteToken(decodeURIComponent(link.token));
         return;
       }
-      const matchDetailId =
-        url?.match(/^duna:\/\/matches\/([^/?#]+)/)?.[1] ??
-        url?.match(/^https?:\/\/[^/]+\/matches\/([^/?#]+)/)?.[1];
-      if (matchDetailId && url) {
-        let shareToken: string | undefined;
-        try {
-          shareToken = new URL(url).searchParams.get("notes") ?? undefined;
-        } catch {
-          shareToken = undefined;
-        }
+      if (link.kind === "match") {
         setPendingMatchOpen({
-          matchId: decodeURIComponent(matchDetailId),
-          ...(shareToken ? { shareToken } : {}),
+          matchId: decodeURIComponent(link.matchId),
+          ...(link.shareToken ? { shareToken: link.shareToken } : {}),
         });
         return;
       }
-      const matchClaimToken = url?.match(
-        /^duna:\/\/join\/match\/([^/?#]+)/,
-      )?.[1];
-      if (matchClaimToken) {
+      if (link.kind === "match-claim") {
         void WebBrowser.openBrowserAsync(
-          `${dunaWebUrl}/join/match/${encodeURIComponent(decodeURIComponent(matchClaimToken))}`,
+          `${dunaWebUrl}/join/match/${encodeURIComponent(decodeURIComponent(link.token))}`,
         );
         return;
       }
-      if (url?.startsWith("duna://waiver/complete")) {
-        const query = url.split("?")[1] ?? "";
+      if (link.kind === "waiver") {
         // The signed-in app keeps the same secure web completion surface in an
         // in-app browser, while a shared HTTPS link remains usable everywhere.
         void WebBrowser.openBrowserAsync(
-          `${dunaWebUrl}/waivers/complete?${query}`,
+          `${dunaWebUrl}/waivers/complete?${link.query}`,
         );
         return;
       }
-      if (url?.startsWith("duna://ai")) {
+      if (link.kind === "ai") {
         setEventIndex(null);
         setAiReturnTab("home");
         setTab("ai");
         return;
       }
-      if (url?.startsWith("duna://messages")) {
+      if (link.kind === "messages") {
         setEventIndex(null);
-        const conversationId = url.match(/^duna:\/\/messages\/([^/?#]+)/)?.[1];
-        const decoded = conversationId
-          ? decodeURIComponent(conversationId)
+        const decoded = link.conversationId
+          ? decodeURIComponent(link.conversationId)
           : undefined;
         setMessagesOpenToSupport(decoded === "support");
         setMessagesConversationId(
@@ -226,23 +212,14 @@ export function DunaApp() {
         setTab("messages");
         return;
       }
-      const bookingMatch = url?.match(/^duna:\/\/booking\/([^/?#]+)/);
-      if (bookingMatch?.[1]) {
+      if (link.kind === "booking") {
         setEventIndex(null);
-        setBookingId(decodeURIComponent(bookingMatch[1]));
+        setBookingId(decodeURIComponent(link.bookingId));
         setTab("plans");
         return;
       }
-      const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
-      if (!match) return;
       setEventIndex(null);
-      setTab(
-        match[1] === "upload"
-          ? "video"
-          : match[1] === "upcoming"
-            ? "home"
-            : "discover",
-      );
+      setTab(link.tab);
     };
     void Linking.getInitialURL().then(openLiveActivity);
     const subscription = Linking.addEventListener("url", ({ url }) =>
