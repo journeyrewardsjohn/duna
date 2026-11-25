@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // screens can change independently; this budget stops the entry growing back
 // into a monolith. Lower it when the entry shrinks. Never raise it to make room
 // for feature code.
-const appEntryLineBudget = 24_850;
+const appEntryLineBudget = 40;
 
 describe("Player app entry", () => {
   it("stays within its line budget", () => {
