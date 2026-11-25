@@ -70,10 +70,15 @@ import { GalleryShell } from "./shell";
 // Read the flag per request, so one build serves both answers.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Tideline gallery",
-  robots: { index: false, follow: false },
-};
+const enabled = () => process.env.TIDELINE_GALLERY === "1";
+
+// Without the flag the route says nothing about itself, not even a title.
+export function generateMetadata(): Metadata {
+  return {
+    title: enabled() ? "Tideline gallery" : "Not found",
+    robots: { index: false, follow: false },
+  };
+}
 
 const themes = ["light", "dark", "live"] as const;
 type GalleryTheme = (typeof themes)[number];
@@ -107,7 +112,7 @@ export default async function TidelineGalleryPage({
 }: {
   searchParams: Promise<{ theme?: string }>;
 }) {
-  if (process.env.TIDELINE_GALLERY !== "1") notFound();
+  if (!enabled()) notFound();
 
   const requested = (await searchParams).theme;
   const theme: GalleryTheme = themes.includes(requested as GalleryTheme)
