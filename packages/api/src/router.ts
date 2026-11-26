@@ -54,7 +54,10 @@ import {
   bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  catalogSessionBookingResultSchema,
+  catalogSessionCancellationResultSchema,
   operatorCatalogSessionOccurrenceSchema,
+  playerCatalogSessionBookingSchema,
   participationEvaluationSchema,
   customerPaymentScheduleSchema,
   catalogOfferEligibilitySchema,
@@ -255,6 +258,13 @@ import {
   evaluateCatalogSessionParticipation,
   loadOperatorCatalogSessionOccurrences,
 } from "./catalog-participation";
+import {
+  bookCatalogSessions,
+  cancelCatalogSessionBooking,
+  CatalogSessionBookingError,
+  loadPlayerCatalogSessionBookings,
+  MAX_CATALOG_SESSIONS_PER_BOOKING,
+} from "./catalog-session-bookings";
 import {
   approveTicketOrder,
   claimTeamEntry,
@@ -1746,11 +1756,25 @@ function throwDomainError(error: unknown): never {
             : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
+  if (error instanceof CatalogSessionBookingError) {
+    const code =
+      error.code === "BOOKING_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_REQUEST"
+            ? "BAD_REQUEST"
+            : error.code === "DATABASE_REQUIRED"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
   if (error instanceof CatalogCheckoutError) {
     const code =
       error.code === "CATALOG_ITEM_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "MEMBERSHIP_REQUIRED"
+        : error.code === "MEMBERSHIP_REQUIRED" ||
+            error.code === "PARTICIPANT_NOT_ALLOWED"
           ? "FORBIDDEN"
           : error.code === "CHECKOUT_UNAVAILABLE"
             ? "CONFLICT"
@@ -5177,6 +5201,9 @@ const playerRouter = router({
         promoCode: z.string().trim().min(3).max(48).optional(),
         quantity: z.number().int().min(1).max(50),
         catalogSessionOccurrenceId: z.string().uuid().optional(),
+        // Book for a dependent as their verified guardian. Credits only.
+        participantPersonId: z.string().uuid().optional(),
+        creditSource: z.enum(["self", "participant"]).optional(),
         recordingConsentAccepted: z.boolean().optional(),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -5199,6 +5226,122 @@ const playerRouter = router({
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // Book several session occurrences with organization credits in one call,
+  // for the caller or for dependents they are the verified guardian of.
+  bookCatalogSessions: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-booking",
+        capacity: 6,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        bookings: z
+          .array(
+            z.object({
+              catalogItemId: z.string().uuid(),
+              catalogVariantId: z.string().uuid(),
+              catalogSessionOccurrenceId: z.string().uuid(),
+              participantPersonId: z.string().uuid().optional(),
+              quantity: z.number().int().min(1).max(50).default(1),
+            }),
+          )
+          .min(1)
+          .max(MAX_CATALOG_SESSIONS_PER_BOOKING),
+        // Whose wallet pays for a dependent's sessions. Defaults to the
+        // caller's own wallet.
+        creditSource: z.enum(["self", "participant"]).optional(),
+        // True (default): every session is booked, or none remain booked.
+        atomic: z.boolean().default(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionBookingResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.bookCatalogSessions",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await bookCatalogSessions({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // The caller's session schedule, including sessions booked for verified
+  // dependents.
+  catalogSessionBookings: protectedProcedure
+    .input(
+      z
+        .object({
+          scope: z.enum(["upcoming", "past", "all"]).default("upcoming"),
+          includeDependents: z.boolean().default(true),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .default({ scope: "upcoming", includeDependents: true, limit: 50 }),
+    )
+    .output(z.array(playerCatalogSessionBookingSchema).readonly())
+    .query(({ input, ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadPlayerCatalogSessionBookings({
+            actor: ctx.actor!,
+            ...input,
+            now: ctx.now,
+          }),
+    ),
+  cancelCatalogSessionBooking: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-cancel",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        // Required to cancel after the refund window, when nothing returns.
+        acknowledgeNoRefund: z.boolean().default(false),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionCancellationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelCatalogSessionBooking",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelCatalogSessionBooking({
+              actor: ctx.actor!,
+              bookingId: input.bookingId,
+              acknowledgeNoRefund: input.acknowledgeNoRefund,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
           } catch (error) {

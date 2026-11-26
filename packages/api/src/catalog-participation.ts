@@ -664,7 +664,15 @@ async function refundCancelledOccurrenceBookings(input: {
       await database.batch([
         database
           .update(catalogFulfillments)
-          .set({ status: "cancelled", updatedAt: input.now })
+          .set({
+            status: "cancelled",
+            details: {
+              ...booking.fulfillment.details,
+              cancelledAt: input.now.toISOString(),
+              cancellationReason: "minimum-not-met",
+            },
+            updatedAt: input.now,
+          })
           .where(eq(catalogFulfillments.id, booking.fulfillment.id)),
         database
           .update(orders)
@@ -681,7 +689,15 @@ async function refundCancelledOccurrenceBookings(input: {
     if (free) {
       await database
         .update(catalogFulfillments)
-        .set({ status: "cancelled", updatedAt: input.now })
+        .set({
+          status: "cancelled",
+          details: {
+            ...booking.fulfillment.details,
+            cancelledAt: input.now.toISOString(),
+            cancellationReason: "minimum-not-met",
+          },
+          updatedAt: input.now,
+        })
         .where(eq(catalogFulfillments.id, booking.fulfillment.id));
       results.push({ ...base, refundStatus: "released" });
       continue;

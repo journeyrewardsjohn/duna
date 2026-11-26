@@ -11,6 +11,7 @@ export * from "./catalog-service";
 export * from "./catalog-checkout";
 export * from "./catalog-participation";
 export * from "./catalog-participation-rules";
+export * from "./catalog-session-bookings";
 export * from "./court-checkout";
 export * from "./discovery-service";
 export * from "./discovery-search";
