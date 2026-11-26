@@ -134,11 +134,12 @@ export async function seedAcademy(pg: PGlite): Promise<void> {
       VALUES ('${variant}', '${org}', '${item}', 'Group training');
     INSERT INTO catalog_prices (id, organization_id, catalog_item_id, catalog_variant_id, payment_kind, credit_amount)
       VALUES ('${creditPrice}', '${org}', '${item}', '${variant}', 'credit', 2);
-    INSERT INTO catalog_session_occurrences (id, organization_id, catalog_item_id, starts_at, ends_at, timezone, local_date, local_time, coach_person_ids, capacity)
+    INSERT INTO catalog_session_occurrences (id, organization_id, catalog_item_id, starts_at, ends_at, timezone, local_date, local_time, coach_person_ids, capacity, created_at)
       VALUES ${occurrences
         .map(
           ([id, date]) =>
-            `('${id}', '${org}', '${item}', '${date}T17:00:00.000Z', '${date}T18:00:00.000Z', 'UTC', '${date}', '17:00', ARRAY['${coach}']::uuid[], 8)`,
+            // Created well before any cutoff, independent of the wall clock.
+            `('${id}', '${org}', '${item}', '${date}T17:00:00.000Z', '${date}T18:00:00.000Z', 'UTC', '${date}', '17:00', ARRAY['${coach}']::uuid[], 8, '2026-11-01T00:00:00.000Z')`,
         )
         .join(", ")};
   `);

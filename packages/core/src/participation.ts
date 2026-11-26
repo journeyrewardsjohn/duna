@@ -347,11 +347,28 @@ export function reservedCreditsPerPlayer(
   );
 }
 
+/**
+ * When the minimum is checked and the headcount locks.
+ *
+ * `openedAt` is when the session could first be booked under these rules. A
+ * session that opens inside its own cutoff window (created, published, or
+ * given rules shortly before it starts) would otherwise be decided the moment
+ * it appears, before anyone can book. Its decision moves to halfway between
+ * opening and the start instead.
+ */
 export function participationCutoffAt(
   startsAt: Date,
   rules: Pick<ParticipationRules, "cutoffMinutesBeforeStart">,
+  openedAt?: Date,
 ): Date {
-  return new Date(startsAt.getTime() - rules.cutoffMinutesBeforeStart * 60_000);
+  const nominal = new Date(
+    startsAt.getTime() - rules.cutoffMinutesBeforeStart * 60_000,
+  );
+  if (!openedAt || openedAt <= nominal) return nominal;
+  return new Date(
+    openedAt.getTime() +
+      Math.max(0, startsAt.getTime() - openedAt.getTime()) / 2,
+  );
 }
 
 export function decideParticipationMinimum(

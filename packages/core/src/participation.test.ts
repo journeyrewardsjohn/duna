@@ -346,6 +346,35 @@ describe("minimum decisions", () => {
     ).toBe("2026-12-10T15:00:00.000Z");
   });
 
+  it("moves the decision when a session opens inside its cutoff window", () => {
+    const startsAt = new Date("2026-12-10T17:00:00.000Z");
+    const rules = { cutoffMinutesBeforeStart: 1_440 };
+    // Opened well before the cutoff: the cutoff stands.
+    expect(
+      participationCutoffAt(
+        startsAt,
+        rules,
+        new Date("2026-12-01T00:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2026-12-09T17:00:00.000Z");
+    // Opened ten hours before the start: decide five hours before the start.
+    expect(
+      participationCutoffAt(
+        startsAt,
+        rules,
+        new Date("2026-12-10T07:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2026-12-10T12:00:00.000Z");
+    // Opened after the start: never earlier than it opened.
+    expect(
+      participationCutoffAt(
+        startsAt,
+        rules,
+        new Date("2026-12-10T18:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2026-12-10T18:00:00.000Z");
+  });
+
   it("cancels or runs an under-filled session by policy", () => {
     expect(
       decideParticipationMinimum(

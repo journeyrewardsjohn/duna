@@ -58,6 +58,7 @@ import { evaluateCatalogSessionParticipation } from "./catalog-participation";
 import {
   bookingParticipationSnapshot,
   catalogItemParticipationRules,
+  participationOpenedAt,
 } from "./catalog-participation-rules";
 import {
   ensureLedgerAccount,
@@ -834,7 +835,16 @@ export async function startCatalogCheckout(input: {
     occurrence &&
     participationRules &&
     !occurrence.participationOutcome &&
-    input.now >= participationCutoffAt(occurrence.startsAt, participationRules)
+    input.now >=
+      participationCutoffAt(
+        occurrence.startsAt,
+        participationRules,
+        participationOpenedAt({
+          occurrenceCreatedAt: occurrence.createdAt,
+          itemPublishedAt: row.item.publishedAt,
+          configuration: row.item.configuration,
+        }),
+      )
   ) {
     // The cutoff has passed but the schedule has not decided this session
     // yet. Decide first so nobody can book into a session that is about to be

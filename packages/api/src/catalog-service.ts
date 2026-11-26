@@ -85,6 +85,7 @@ import {
   catalogItemParticipationRules,
   normalizeParticipationConfiguration,
   occurrenceParticipationState,
+  participationOpenedAt,
   publicParticipationSummary,
 } from "./catalog-participation-rules";
 import type {
@@ -2225,6 +2226,11 @@ export async function loadPublicOrganizationStorefront(
                   rules,
                   occurrence,
                   bookedCount: booked,
+                  openedAt: participationOpenedAt({
+                    occurrenceCreatedAt: occurrence.createdAt,
+                    itemPublishedAt: item.publishedAt,
+                    configuration: item.configuration,
+                  }),
                 }),
               }
             : {}),
@@ -3565,6 +3571,7 @@ export async function createCatalogItem(
     configuration: normalizedConfiguration,
     allowCredits: input.allowCredits,
     creditCost: input.creditCost,
+    now: input.now,
   });
   const coordinates = variantMatrix(input.options);
   const itemId = crypto.randomUUID();
@@ -4355,6 +4362,8 @@ export async function replaceCatalogItem(
       configuration: input.configuration,
       allowCredits: input.allowCredits,
       creditCost: input.creditCost,
+      previousConfiguration: item.configuration,
+      now: input.now,
     }),
     status: "draft" as const,
     updatedAt: input.now,
@@ -4831,6 +4840,8 @@ export async function updateCatalogItem(input: {
       configuration: normalizedConfiguration,
       allowCredits: item.allowCredits,
       creditCost: creditPrice?.creditAmount ?? undefined,
+      previousConfiguration: item.configuration,
+      now: input.now,
     });
   }
 

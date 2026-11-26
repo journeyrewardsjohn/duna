@@ -23,6 +23,7 @@ import { ACTIVE_CATALOG_BOOKING_STATUSES } from "./catalog-participation";
 import {
   catalogItemParticipationRules,
   occurrenceParticipationState,
+  participationOpenedAt,
   positiveInteger,
   type OccurrenceParticipationState,
 } from "./catalog-participation-rules";
@@ -905,6 +906,11 @@ export async function loadPlayerCatalogSessionBookings(input: {
               rules,
               occurrence,
               bookedCount: bookedByOccurrence.get(occurrence.id) ?? 0,
+              openedAt: participationOpenedAt({
+                occurrenceCreatedAt: occurrence.createdAt,
+                itemPublishedAt: item.publishedAt,
+                configuration: item.configuration,
+              }),
             })
           : undefined,
       cancellable,

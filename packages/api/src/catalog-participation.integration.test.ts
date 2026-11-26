@@ -422,6 +422,44 @@ describe("player minimums", () => {
     }
   });
 
+  it("does not cancel a session the moment it opens inside its cutoff window", async () => {
+    await configure({ minParticipants: 4, minimumPolicy: "cancel" }, 2);
+    // Published the morning of the session, long after the 24-hour cutoff.
+    await pg.exec(
+      `update catalog_session_occurrences set created_at = '2026-12-10T07:00:00.000Z' where id = '${occurrence}'`,
+    );
+    const openedAt = new Date("2026-12-10T07:05:00.000Z");
+    expect(
+      await processDueCatalogParticipation({ now: openedAt }),
+    ).toMatchObject({ cancelled: 0, settled: 0, failed: 0 });
+    // Booking is still possible, and does not trigger an instant cancellation.
+    await book(players[0]!, 1, openedAt);
+    expect((await occurrenceRow()).status).toBe("scheduled");
+    // The decision lands halfway between opening and the start.
+    expect((await evaluate(new Date("2026-12-10T11:59:00.000Z"))).status).toBe(
+      "not-due",
+    );
+    expect((await evaluate(new Date("2026-12-10T12:01:00.000Z"))).status).toBe(
+      "cancelled",
+    );
+    await expectWalletConsistent(players[0]!, 10);
+  });
+
+  it("never cancels automatically once the session has started", async () => {
+    await configure({ minParticipants: 4, minimumPolicy: "cancel" }, 2);
+    await book(players[0]!);
+    // The schedule was paused and first looks after the session began.
+    const evaluation = await evaluate(afterStart);
+    expect(evaluation).toMatchObject({
+      status: "settled",
+      outcome: "run-under-minimum",
+      headcount: 1,
+      cancellations: [],
+    });
+    expect((await occurrenceRow()).status).toBe("scheduled");
+    await expectWalletConsistent(players[0]!, 8);
+  });
+
   it("lets an operator decide before the cutoff", async () => {
     await configure({ minParticipants: 4, minimumPolicy: "cancel" }, 2);
     await book(players[0]!);

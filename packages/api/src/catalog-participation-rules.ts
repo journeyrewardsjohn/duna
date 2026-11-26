@@ -11,6 +11,7 @@ import {
   type ParticipationCreditTier,
   type ParticipationRules,
 } from "@duna/core";
+import { stableHash } from "./canonical";
 
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -33,6 +34,9 @@ export function normalizeParticipationConfiguration(input: {
   readonly configuration: Readonly<Record<string, unknown>>;
   readonly allowCredits: boolean;
   readonly creditCost?: number;
+  /** The configuration being replaced, when the item already exists. */
+  readonly previousConfiguration?: Readonly<Record<string, unknown>>;
+  readonly now: Date;
 }): Readonly<Record<string, unknown>> {
   if (
     input.configuration.participation === undefined ||
@@ -65,7 +69,49 @@ export function normalizeParticipationConfiguration(input: {
   const rest = { ...result.rules } as Record<string, unknown>;
   // The capacity stays in `configuration.capacity`; it is never stored twice.
   delete rest.maxParticipants;
-  return { ...input.configuration, participation: rest };
+  // `effectiveFrom` records when these exact rules took effect. Sessions
+  // already inside their cutoff window when rules are added or changed are
+  // decided later rather than the moment the rules are saved.
+  const previous = record(input.previousConfiguration?.participation);
+  const previousRules = previous ? { ...previous } : undefined;
+  if (previousRules) delete previousRules.effectiveFrom;
+  const unchanged =
+    previousRules !== undefined &&
+    typeof previous?.effectiveFrom === "string" &&
+    stableHash(previousRules) === stableHash(rest);
+  return {
+    ...input.configuration,
+    participation: {
+      ...rest,
+      effectiveFrom: unchanged
+        ? previous.effectiveFrom
+        : input.now.toISOString(),
+    },
+  };
+}
+
+/**
+ * When a session could first be booked under its current rules: the latest of
+ * the session's creation, the offer's first publication, and the rules being
+ * saved. See `participationCutoffAt`.
+ */
+export function participationOpenedAt(input: {
+  readonly occurrenceCreatedAt: Date;
+  readonly itemPublishedAt?: Date | null;
+  readonly configuration: Readonly<Record<string, unknown>>;
+}): Date {
+  const effectiveFrom = record(
+    input.configuration.participation,
+  )?.effectiveFrom;
+  const saved =
+    typeof effectiveFrom === "string" ? new Date(effectiveFrom) : undefined;
+  return new Date(
+    Math.max(
+      input.occurrenceCreatedAt.getTime(),
+      input.itemPublishedAt?.getTime() ?? 0,
+      saved && !Number.isNaN(saved.getTime()) ? saved.getTime() : 0,
+    ),
+  );
 }
 
 export function catalogItemParticipationRules(
@@ -146,6 +192,8 @@ export function occurrenceParticipationState(input: {
     | "participationSettledAt"
   >;
   readonly bookedCount: number;
+  /** See `participationOpenedAt`. Omit to use the configured cutoff as is. */
+  readonly openedAt?: Date;
 }): OccurrenceParticipationState {
   const { rules, occurrence, bookedCount } = input;
   const settledHeadcount = occurrence.participationSettledAt
@@ -159,7 +207,11 @@ export function occurrenceParticipationState(input: {
     minParticipants: rules.minParticipants,
     minimumMet: bookedCount >= rules.minParticipants,
     playersNeeded: Math.max(0, rules.minParticipants - bookedCount),
-    decisionAt: participationCutoffAt(occurrence.startsAt, rules).toISOString(),
+    decisionAt: participationCutoffAt(
+      occurrence.startsAt,
+      rules,
+      input.openedAt,
+    ).toISOString(),
     status:
       occurrence.participationOutcome === "cancel-under-minimum"
         ? "cancelled-under-minimum"

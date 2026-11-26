@@ -138,6 +138,10 @@ Invariants an integration must preserve:
   never charged more than they reserved.
 - `/api/cron/catalog-participation` applies cutoffs. Every step is idempotent;
   do not settle or refund outside `evaluateCatalogSessionParticipation`.
+- A session that opens inside its own cutoff window (created, first published,
+  or given new rules shortly before it starts) is decided halfway between
+  opening and the start, never the moment it appears. A session that has
+  already started is never cancelled automatically.
 - Only an adult with a verified, reviewed guardianship that carries spending
   approval may book for a dependent. The booking belongs to the dependent; the
   order belongs to whoever's wallet paid.

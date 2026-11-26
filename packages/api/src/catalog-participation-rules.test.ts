@@ -4,6 +4,7 @@ import {
   catalogItemParticipationRules,
   normalizeParticipationConfiguration,
   occurrenceParticipationState,
+  participationOpenedAt,
   readBookingSnapshot,
 } from "./catalog-participation-rules";
 
@@ -16,6 +17,7 @@ const schedule = {
   oneOff: [],
   blackoutDates: [],
 };
+const savedAt = new Date("2026-11-20T09:00:00.000Z");
 const tiers = [
   { minParticipants: 1, maxParticipants: 1, creditsPerPlayer: 3 },
   { minParticipants: 2, maxParticipants: 6, creditsPerPlayer: 2 },
@@ -27,6 +29,7 @@ describe("participation configuration on catalog items", () => {
     const configuration = { capacity: 12, sessionSchedule: schedule };
     expect(
       normalizeParticipationConfiguration({
+        now: savedAt,
         type: "service",
         configuration,
         allowCredits: true,
@@ -38,6 +41,7 @@ describe("participation configuration on catalog items", () => {
 
   it("normalizes tiers against the capacity without storing it twice", () => {
     const normalized = normalizeParticipationConfiguration({
+      now: savedAt,
       type: "service",
       configuration: {
         capacity: 12,
@@ -57,12 +61,67 @@ describe("participation configuration on catalog items", () => {
         { minParticipants: 2, maxParticipants: 6, creditsPerPlayer: 2 },
         { minParticipants: 7, maxParticipants: 12, creditsPerPlayer: 1 },
       ],
+      effectiveFrom: "2026-11-20T09:00:00.000Z",
     });
+  });
+
+  it("restamps when the rules took effect only when they change", () => {
+    const save = (
+      participation: Record<string, unknown>,
+      previousConfiguration: Readonly<Record<string, unknown>> | undefined,
+      now: Date,
+    ) =>
+      normalizeParticipationConfiguration({
+        type: "service",
+        configuration: {
+          capacity: 12,
+          sessionSchedule: schedule,
+          participation,
+        },
+        allowCredits: true,
+        creditCost: 3,
+        previousConfiguration,
+        now,
+      });
+    const first = save({ creditTiers: tiers }, undefined, savedAt);
+    const later = new Date("2026-12-01T09:00:00.000Z");
+    // Saving the same rules again (as the builder does on every edit) keeps
+    // the original moment, whatever order the stored keys come back in.
+    const resaved = save(
+      { creditTiers: tiers },
+      JSON.parse(JSON.stringify(first)) as Record<string, unknown>,
+      later,
+    );
+    expect(resaved.participation).toEqual(first.participation);
+    const changed = save(
+      { creditTiers: tiers, minimumPolicy: "cancel", minParticipants: 1 },
+      first,
+      later,
+    );
+    expect(changed.participation).toMatchObject({
+      minimumPolicy: "cancel",
+      effectiveFrom: "2026-12-01T09:00:00.000Z",
+    });
+    expect(
+      participationOpenedAt({
+        occurrenceCreatedAt: new Date("2026-11-01T00:00:00.000Z"),
+        itemPublishedAt: new Date("2026-11-10T00:00:00.000Z"),
+        configuration: changed,
+      }).toISOString(),
+    ).toBe("2026-12-01T09:00:00.000Z");
+    expect(
+      participationOpenedAt({
+        occurrenceCreatedAt: new Date("2026-11-01T00:00:00.000Z"),
+        itemPublishedAt: null,
+        configuration: {},
+      }).toISOString(),
+    ).toBe("2026-11-01T00:00:00.000Z");
   });
 
   it("rejects invalid tiers with the operator-facing reason", () => {
     expect(() =>
       normalizeParticipationConfiguration({
+        now: savedAt,
         type: "service",
         configuration: {
           capacity: 12,
@@ -83,6 +142,7 @@ describe("participation configuration on catalog items", () => {
   it("requires the credit price to be the highest tier", () => {
     expect(() =>
       normalizeParticipationConfiguration({
+        now: savedAt,
         type: "service",
         configuration: {
           capacity: 12,
@@ -98,6 +158,7 @@ describe("participation configuration on catalog items", () => {
   it("requires preset session dates for rules that act on a headcount", () => {
     expect(() =>
       normalizeParticipationConfiguration({
+        now: savedAt,
         type: "service",
         configuration: {
           capacity: 12,
@@ -112,6 +173,7 @@ describe("participation configuration on catalog items", () => {
   it("only applies to services", () => {
     expect(() =>
       normalizeParticipationConfiguration({
+        now: savedAt,
         type: "good",
         configuration: { participation: { minParticipants: 2 } },
         allowCredits: false,
@@ -160,6 +222,17 @@ describe("occurrence participation state", () => {
       bookingCreditsPerPlayer: 2,
       settledHeadcount: undefined,
     });
+  });
+
+  it("reports the later decision time for a session that opened late", () => {
+    expect(
+      occurrenceParticipationState({
+        rules,
+        occurrence,
+        bookedCount: 0,
+        openedAt: new Date("2026-12-10T16:00:00.000Z"),
+      }).decisionAt,
+    ).toBe("2026-12-10T16:30:00.000Z");
   });
 
   it("previews the cheaper tier one more player unlocks", () => {

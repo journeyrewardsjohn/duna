@@ -30,6 +30,7 @@ import { stableHash } from "./canonical";
 import {
   catalogItemParticipationRules,
   occurrenceParticipationState,
+  participationOpenedAt,
   positiveInteger,
   readBookingSnapshot,
   type BookingParticipationSnapshot,
@@ -807,7 +808,16 @@ export async function evaluateCatalogSessionParticipation(input: {
     }
     if (
       !input.force &&
-      input.now < participationCutoffAt(occurrence.startsAt, rules)
+      input.now <
+        participationCutoffAt(
+          occurrence.startsAt,
+          rules,
+          participationOpenedAt({
+            occurrenceCreatedAt: occurrence.createdAt,
+            itemPublishedAt: row.item.publishedAt,
+            configuration: row.item.configuration,
+          }),
+        )
     ) {
       return {
         occurrenceId: occurrence.id,
@@ -820,7 +830,13 @@ export async function evaluateCatalogSessionParticipation(input: {
       occurrence.id,
       input.now,
     );
-    const outcome = decideParticipationMinimum(rules, headcount);
+    const decision = decideParticipationMinimum(rules, headcount);
+    // A session that has already started is never cancelled automatically.
+    // If the decision was missed (a paused schedule, a late rule change) the
+    // session runs under its minimum and an operator can refund by hand.
+    const decidedLate =
+      decision === "cancel-under-minimum" && input.now >= occurrence.startsAt;
+    const outcome = decidedLate ? "run-under-minimum" : decision;
     // Claiming the decision in one statement means two concurrent runs cannot
     // both decide; the loser re-reads what the winner recorded.
     await database
@@ -869,9 +885,11 @@ export async function evaluateCatalogSessionParticipation(input: {
         reason:
           outcome === "cancel-under-minimum"
             ? `Session cancelled with ${headcount} of the ${rules.minParticipants} players it needs.`
-            : outcome === "run-under-minimum"
-              ? `Session runs with ${headcount} players, under its minimum of ${rules.minParticipants}.`
-              : `Session confirmed with ${headcount} players.`,
+            : decidedLate
+              ? `Session had ${headcount} of the ${rules.minParticipants} players it needs, but had already started when this was decided. It was not cancelled automatically.`
+              : outcome === "run-under-minimum"
+                ? `Session runs with ${headcount} players, under its minimum of ${rules.minParticipants}.`
+                : `Session confirmed with ${headcount} players.`,
         traceId: input.requestId,
         createdAt: input.now,
       });
@@ -1214,6 +1232,11 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
               rules,
               occurrence,
               bookedCount: confirmedCount,
+              openedAt: participationOpenedAt({
+                occurrenceCreatedAt: occurrence.createdAt,
+                itemPublishedAt: item.publishedAt,
+                configuration: item.configuration,
+              }),
             }),
             minimumPolicy: rules.minimumPolicy,
             settlementBasis: rules.settlementBasis,
