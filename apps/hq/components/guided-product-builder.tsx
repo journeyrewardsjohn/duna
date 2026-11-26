@@ -48,6 +48,15 @@ import {
   Quote,
   CircleHelp,
 } from "lucide-react";
+import {
+  highestParticipationTierCredits,
+  initialParticipationDraft,
+  participationConfiguration,
+} from "./product-participation-draft";
+import {
+  ParticipationMinimumFields,
+  ParticipationTierFields,
+} from "./product-participation-fields";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -790,6 +799,9 @@ export function GuidedProductBuilder({
       ? serviceConfiguration.capacity
       : 1,
   );
+  const [participationDraft, setParticipationDraft] = useState(() =>
+    initialParticipationDraft(initialConfiguration),
+  );
   const [deliveryMode, setDeliveryMode] = useState<"venue" | "online">(
     initialConfiguration.deliveryMode === "online" ? "online" : "venue",
   );
@@ -1369,10 +1381,25 @@ export function GuidedProductBuilder({
     : isBundle
       ? includedCatalogItemIds.length >= 2
       : true;
+  // Player minimums and group-size pricing act on a session headcount, so
+  // they apply to services with preset dates. A Program is bought whole.
+  const participationAvailable =
+    type === "service" && !isProgram && sessionScheduleMode !== "flexible";
+  const effectiveParticipationDraft = {
+    ...participationDraft,
+    tiersEnabled: participationDraft.tiersEnabled && allowCredits,
+  };
+  const participationRules = participationAvailable
+    ? participationConfiguration(effectiveParticipationDraft, capacity)
+    : undefined;
+  const effectiveCreditCost =
+    (participationAvailable
+      ? highestParticipationTierCredits(effectiveParticipationDraft, capacity)
+      : undefined) ?? creditCost;
   const checkoutReady =
     salePriceMinor !== undefined &&
     (allowCard || allowCash || allowCredits) &&
-    (!allowCredits || creditCost > 0);
+    (!allowCredits || effectiveCreditCost > 0);
   const stepReadiness: readonly boolean[] =
     type === "service"
       ? deliveryMode === "online"
@@ -1444,7 +1471,7 @@ export function GuidedProductBuilder({
             label: isProgram ? "Program promise" : "Session",
             value: isProgram
               ? `${programSessionCount} practices · ${Math.round((programCoachedMinutes / 60) * 10) / 10} coached hours`
-              : `${durationMinutes} min · ${capacity} max`,
+              : `${durationMinutes} min · ${participationRules && Number(participationRules.minParticipants) > 1 ? `${String(participationRules.minParticipants)} to ${capacity} players` : `${capacity} max`}`,
           },
           {
             label: "Delivery",
@@ -1563,6 +1590,7 @@ export function GuidedProductBuilder({
           requiredCoachCount,
           durationMinutes,
           capacity,
+          participation: participationRules,
           sessionSchedule: savedSessionSchedule,
           program: isProgram
             ? {
@@ -1849,7 +1877,7 @@ export function GuidedProductBuilder({
         <input
           name="creditCost"
           type="hidden"
-          value={allowCredits ? String(creditCost) : ""}
+          value={allowCredits ? String(effectiveCreditCost) : ""}
         />
         <input
           name="recurringInterval"
@@ -3359,6 +3387,13 @@ export function GuidedProductBuilder({
                     value={capacity}
                   />
                 </label>
+                {participationAvailable && capacity > 1 && (
+                  <ParticipationMinimumFields
+                    capacity={capacity}
+                    draft={effectiveParticipationDraft}
+                    onChange={setParticipationDraft}
+                  />
+                )}
                 <label>
                   <span>Coaches required</span>
                   <input
@@ -4165,18 +4200,35 @@ export function GuidedProductBuilder({
                   />
                   {allowCredits && (
                     <label>
-                      <span>Credit cost</span>
+                      <span>
+                        {participationRules &&
+                        effectiveParticipationDraft.tiersEnabled
+                          ? "Credits reserved at booking"
+                          : "Credit cost"}
+                      </span>
                       <input
                         min="1"
                         onChange={(event) =>
                           setCreditCost(Math.max(1, Number(event.target.value)))
                         }
+                        readOnly={
+                          participationAvailable &&
+                          effectiveParticipationDraft.tiersEnabled
+                        }
                         type="number"
-                        value={creditCost}
+                        value={effectiveCreditCost}
                       />
                     </label>
                   )}
                 </div>
+                {allowCredits && participationAvailable && capacity > 1 && (
+                  <ParticipationTierFields
+                    capacity={capacity}
+                    creditCost={creditCost}
+                    draft={effectiveParticipationDraft}
+                    onChange={setParticipationDraft}
+                  />
+                )}
                 {!isMembership && allowCard && (
                   <label className="operator-switch">
                     <input
@@ -4665,7 +4717,7 @@ export function GuidedProductBuilder({
                     <strong>
                       {isProgram
                         ? `${programSessionCount} practices · ${Math.round((programCoachedMinutes / 60) * 10) / 10} hours`
-                        : `${durationMinutes} minutes · up to ${capacity}`}
+                        : `${durationMinutes} minutes · ${participationRules && Number(participationRules.minParticipants) > 1 ? `${String(participationRules.minParticipants)} to ${capacity} players` : `up to ${capacity}`}`}
                     </strong>
                     <span>
                       {isProgram
