@@ -2855,6 +2855,20 @@ export const catalogSessionOccurrences = pgTable(
     coachPersonIds: uuid("coach_person_ids").array().notNull().default([]),
     capacity: integer("capacity").notNull(),
     status: varchar("status", { length: 24 }).notNull().default("scheduled"),
+    // Participation rules live on the catalog item. These columns record what
+    // was decided for this occurrence so the minimum check and the headcount
+    // settlement each happen exactly once.
+    participationOutcome: varchar("participation_outcome", { length: 32 }),
+    participationDecidedAt: timestamp("participation_decided_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    decidedHeadcount: integer("decided_headcount"),
+    settledHeadcount: integer("settled_headcount"),
+    participationSettledAt: timestamp("participation_settled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
@@ -2878,6 +2892,18 @@ export const catalogSessionOccurrences = pgTable(
     check(
       "catalog_session_occurrence_status_valid",
       sql`${table.status} IN ('scheduled', 'cancelled', 'complete')`,
+    ),
+    check(
+      "catalog_session_occurrence_participation_outcome_valid",
+      sql`${table.participationOutcome} IS NULL OR ${table.participationOutcome} IN ('minimum-met', 'run-under-minimum', 'cancel-under-minimum')`,
+    ),
+    check(
+      "catalog_session_occurrence_participation_decision_valid",
+      sql`(${table.participationOutcome} IS NULL AND ${table.participationDecidedAt} IS NULL AND ${table.decidedHeadcount} IS NULL) OR (${table.participationOutcome} IS NOT NULL AND ${table.participationDecidedAt} IS NOT NULL AND ${table.decidedHeadcount} >= 0)`,
+    ),
+    check(
+      "catalog_session_occurrence_participation_settlement_valid",
+      sql`(${table.participationSettledAt} IS NULL AND ${table.settledHeadcount} IS NULL) OR (${table.participationSettledAt} IS NOT NULL AND ${table.settledHeadcount} >= 0 AND ${table.participationOutcome} IN ('minimum-met', 'run-under-minimum'))`,
     ),
   ],
 );
@@ -8611,6 +8637,12 @@ export const organizationCreditApplications = pgTable(
     credits: integer("credits").notNull(),
     valueMinor: bigint("value_minor", { mode: "number" }).notNull().default(0),
     currency: varchar("currency", { length: 3 }),
+    // Credits handed back by a headcount settlement while the order stays
+    // paid. A later full restoration only restores what is still redeemed.
+    returnedCredits: integer("returned_credits").notNull().default(0),
+    returnedValueMinor: bigint("returned_value_minor", { mode: "number" })
+      .notNull()
+      .default(0),
     restorationJournalId: uuid("restoration_journal_id").references(
       () => ledgerJournals.id,
       { onDelete: "restrict" },
@@ -8643,6 +8675,79 @@ export const organizationCreditApplications = pgTable(
     check(
       "organization_credit_application_value_valid",
       sql`${table.valueMinor} >= 0 AND ((${table.valueMinor} = 0 AND ${table.currency} IS NULL) OR (${table.valueMinor} > 0 AND ${table.currency} IS NOT NULL AND ${table.currency} = upper(${table.currency})))`,
+    ),
+    check(
+      "organization_credit_application_returned_valid",
+      sql`${table.returnedCredits} >= 0 AND ${table.returnedCredits} <= ${table.credits} AND ${table.returnedValueMinor} >= 0 AND ${table.returnedValueMinor} <= ${table.valueMinor}`,
+    ),
+  ],
+);
+
+// One row per booking whose credit price was settled to the final headcount.
+// The unique fulfillment index is the idempotency guard: a booking can be
+// settled, and its difference returned to the wallet, exactly once.
+export const catalogParticipationSettlements = pgTable(
+  "catalog_participation_settlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    catalogSessionOccurrenceId: uuid("catalog_session_occurrence_id")
+      .notNull()
+      .references(() => catalogSessionOccurrences.id, { onDelete: "restrict" }),
+    catalogFulfillmentId: uuid("catalog_fulfillment_id")
+      .notNull()
+      .references(() => catalogFulfillments.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    payerPersonId: uuid("payer_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    basis: varchar("basis", { length: 24 }).notNull(),
+    headcount: integer("headcount").notNull(),
+    quantity: integer("quantity").notNull(),
+    creditsPerPlayer: integer("credits_per_player").notNull(),
+    reservedCredits: integer("reserved_credits").notNull(),
+    settledCredits: integer("settled_credits").notNull(),
+    returnedCredits: integer("returned_credits").notNull(),
+    returnedValueMinor: bigint("returned_value_minor", { mode: "number" })
+      .notNull()
+      .default(0),
+    creditJournalId: uuid("credit_journal_id").references(
+      () => ledgerJournals.id,
+      { onDelete: "restrict" },
+    ),
+    refundRecordId: uuid("refund_record_id").references(
+      () => refundRecords.id,
+      { onDelete: "restrict" },
+    ),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("catalog_participation_settlement_fulfillment_unique").on(
+      table.catalogFulfillmentId,
+    ),
+    index("catalog_participation_settlement_occurrence_idx").on(
+      table.organizationId,
+      table.catalogSessionOccurrenceId,
+    ),
+    index("catalog_participation_settlement_payer_idx").on(
+      table.payerPersonId,
+      table.createdAt,
+    ),
+    check(
+      "catalog_participation_settlement_basis_valid",
+      sql`${table.basis} IN ('cutoff', 'attendance')`,
+    ),
+    check(
+      "catalog_participation_settlement_amounts_valid",
+      sql`${table.headcount} >= 0 AND ${table.quantity} > 0 AND ${table.creditsPerPlayer} > 0 AND ${table.reservedCredits} >= 0 AND ${table.settledCredits} >= 0 AND ${table.returnedCredits} >= 0 AND ${table.settledCredits} + ${table.returnedCredits} = ${table.reservedCredits} AND ${table.returnedValueMinor} >= 0`,
+    ),
+    check(
+      "catalog_participation_settlement_return_journal",
+      sql`(${table.returnedCredits} = 0 AND ${table.creditJournalId} IS NULL AND ${table.refundRecordId} IS NULL) OR (${table.returnedCredits} > 0 AND ${table.creditJournalId} IS NOT NULL AND ${table.refundRecordId} IS NOT NULL)`,
     ),
   ],
 );
@@ -8991,7 +9096,8 @@ export const refundRecords = pgTable(
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
     paymentId: uuid("payment_id").references(() => payments.id),
-    disposition: varchar("disposition", { length: 24 }).notNull(),
+    // 'organization-credit-restoration' is 31 characters.
+    disposition: varchar("disposition", { length: 48 }).notNull(),
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     creditsIssued: integer("credits_issued"),
