@@ -54,6 +54,8 @@ import {
   bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  operatorCatalogSessionOccurrenceSchema,
+  participationEvaluationSchema,
   customerPaymentScheduleSchema,
   catalogOfferEligibilitySchema,
   consentRecordResultSchema,
@@ -243,10 +245,16 @@ import {
   updateOperatorMemberProfile,
 } from "./people-service";
 import {
+  CatalogCheckoutError,
   getCatalogOfferEligibility,
   getCatalogCheckoutStatus,
   startCatalogCheckout,
 } from "./catalog-checkout";
+import {
+  CatalogParticipationError,
+  evaluateCatalogSessionParticipation,
+  loadOperatorCatalogSessionOccurrences,
+} from "./catalog-participation";
 import {
   approveTicketOrder,
   claimTeamEntry,
@@ -1725,6 +1733,28 @@ function throwDomainError(error: unknown): never {
             : error.code === "EVENT_SEQUENCE_CONFLICT"
               ? "CONFLICT"
               : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogParticipationError) {
+    const code =
+      error.code === "OCCURRENCE_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "INVALID_ATTENDANCE"
+            ? "BAD_REQUEST"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogCheckoutError) {
+    const code =
+      error.code === "CATALOG_ITEM_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MEMBERSHIP_REQUIRED"
+          ? "FORBIDDEN"
+          : error.code === "CHECKOUT_UNAVAILABLE"
+            ? "CONFLICT"
+            : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof SandDataServiceError) {
@@ -11919,6 +11949,64 @@ const operatorRouter = router({
               ...input,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  catalogSessionOccurrences: organizationProcedure("sessions:read")
+    .input(
+      z
+        .object({
+          catalogItemId: z.string().uuid().optional(),
+          from: z.iso.datetime().optional(),
+          to: z.iso.datetime().optional(),
+        })
+        .default({}),
+    )
+    .output(z.array(operatorCatalogSessionOccurrenceSchema).readonly())
+    .query(({ input, ctx }) =>
+      loadOperatorCatalogSessionOccurrences({
+        actor: ctx.actor!,
+        catalogItemId: input.catalogItemId,
+        from: input.from ? new Date(input.from) : undefined,
+        to: input.to ? new Date(input.to) : undefined,
+        now: ctx.now,
+      }),
+    ),
+  settleCatalogSessionOccurrence: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogSessionOccurrenceId: z.string().uuid(),
+        // Bookings that attended. Required when the offer settles on
+        // recorded attendance; ignored when it settles on the booked
+        // headcount at the cutoff.
+        attendedFulfillmentIds: z.array(z.string().uuid()).max(500).optional(),
+        // Decide the minimum and lock the headcount before the cutoff.
+        decideBeforeCutoff: z.boolean().default(false),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(participationEvaluationSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.settleCatalogSessionOccurrence",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await evaluateCatalogSessionParticipation({
+              occurrenceId: input.catalogSessionOccurrenceId,
+              organizationId: ctx.actor!.organizationId!,
+              force: input.decideBeforeCutoff,
+              attendedFulfillmentIds: input.attendedFulfillmentIds,
+              actorPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
               now: ctx.now,
             });
           } catch (error) {

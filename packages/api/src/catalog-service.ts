@@ -81,6 +81,12 @@ import {
   sql,
 } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import {
+  catalogItemParticipationRules,
+  normalizeParticipationConfiguration,
+  occurrenceParticipationState,
+  publicParticipationSummary,
+} from "./catalog-participation-rules";
 import type {
   OperatorMutationResult,
   OperatorWorkspace,
@@ -2191,6 +2197,39 @@ export async function loadPublicOrganizationStorefront(
           occurrence,
         ]),
       );
+      const itemCapacity = Number(item.configuration.capacity ?? 1);
+      const itemParticipationRules =
+        item.type === "service"
+          ? catalogItemParticipationRules(
+              item.configuration,
+              Number.isSafeInteger(itemCapacity) && itemCapacity > 0
+                ? itemCapacity
+                : 1,
+            )
+          : undefined;
+      const occurrenceHeadcount = (
+        occurrence: (typeof occurrenceRows)[number],
+      ) => {
+        const booked = bookedByOccurrence.get(occurrence.id) ?? 0;
+        const rules = catalogItemParticipationRules(
+          item.configuration,
+          occurrence.capacity,
+        );
+        return {
+          capacity: occurrence.capacity,
+          bookedCount: booked,
+          spotsRemaining: Math.max(0, occurrence.capacity - booked),
+          ...(rules
+            ? {
+                participation: occurrenceParticipationState({
+                  rules,
+                  occurrence,
+                  bookedCount: booked,
+                }),
+              }
+            : {}),
+        };
+      };
       const upcomingOccurrences = occurrenceRows
         .filter(
           (occurrence) =>
@@ -2221,6 +2260,7 @@ export async function loadPublicOrganizationStorefront(
                     availableCoaches: assignedCoaches,
                     requiredCoachCount:
                       deliveryConfiguration.requiredCoachCount,
+                    ...occurrenceHeadcount(occurrence),
                   },
                 ]
               : [];
@@ -2233,6 +2273,7 @@ export async function loadPublicOrganizationStorefront(
                 {
                   ...generated,
                   key: occurrence.id,
+                  ...occurrenceHeadcount(occurrence),
                 },
               ]
             : [];
@@ -2256,6 +2297,11 @@ export async function loadPublicOrganizationStorefront(
         membershipRequired: item.membershipRequired,
         defaultFulfillment: item.defaultFulfillment,
         configuration: item.configuration,
+        ...(itemParticipationRules
+          ? {
+              participation: publicParticipationSummary(itemParticipationRules),
+            }
+          : {}),
         upcomingOccurrences,
         variants: (variantsByItem.get(item.id) ?? []).map((variant) => ({
           id: variant.id,
@@ -3514,6 +3560,12 @@ export async function createCatalogItem(
       },
     };
   }
+  normalizedConfiguration = normalizeParticipationConfiguration({
+    type: input.type,
+    configuration: normalizedConfiguration,
+    allowCredits: input.allowCredits,
+    creditCost: input.creditCost,
+  });
   const coordinates = variantMatrix(input.options);
   const itemId = crypto.randomUUID();
   const slug = await uniqueCatalogSlug(organizationId, input.title);
@@ -4298,7 +4350,12 @@ export async function replaceCatalogItem(
     allowCash: input.allowCash,
     allowCredits: input.allowCredits,
     membershipRequired: input.membershipRequired,
-    configuration: input.configuration,
+    configuration: normalizeParticipationConfiguration({
+      type: input.type,
+      configuration: input.configuration,
+      allowCredits: input.allowCredits,
+      creditCost: input.creditCost,
+    }),
     status: "draft" as const,
     updatedAt: input.now,
   };
@@ -4759,6 +4816,22 @@ export async function updateCatalogItem(input: {
       ...normalizedConfiguration,
       membership: { ...membership, subscriptionPolicy },
     };
+  }
+
+  if (normalizedConfiguration.participation !== undefined) {
+    const creditPrice = await database.query.catalogPrices.findFirst({
+      where: and(
+        eq(catalogPrices.catalogItemId, item.id),
+        eq(catalogPrices.paymentKind, "credit"),
+        eq(catalogPrices.active, true),
+      ),
+    });
+    normalizedConfiguration = normalizeParticipationConfiguration({
+      type: item.type,
+      configuration: normalizedConfiguration,
+      allowCredits: item.allowCredits,
+      creditCost: creditPrice?.creditAmount ?? undefined,
+    });
   }
 
   const changes = {
@@ -7807,11 +7880,38 @@ async function restoreRedeemedOrganizationCredits(input: {
     if (originalCreditEntries.length === 0) {
       throw new Error("The original credit redemption journal is missing.");
     }
+    // A headcount settlement may already have handed part of this redemption
+    // back. Only what is still redeemed is restored here.
+    const credits = applications.reduce(
+      (total, application) =>
+        total + application.credits - application.returnedCredits,
+      0,
+    );
+    const valueMinor = applications.reduce(
+      (total, application) =>
+        total + application.valueMinor - application.returnedValueMinor,
+      0,
+    );
+    const redeemedCredits = applications.reduce(
+      (total, application) => total + application.credits,
+      0,
+    );
+    if (credits <= 0) {
+      throw new Error("The organization credits have already been restored.");
+    }
+    if (
+      credits !== redeemedCredits &&
+      originalCreditEntries.some((entry) => entry.amount !== redeemedCredits)
+    ) {
+      throw new Error(
+        "This partially settled redemption cannot be restored automatically. No wallet changes were made.",
+      );
+    }
     const creditPostings = reverseLedgerPostings(
       originalCreditEntries.map((entry): LedgerPosting => ({
         accountId: entry.accountId,
         side: entry.side,
-        amount: entry.amount,
+        amount: credits === redeemedCredits ? entry.amount : credits,
         unit: entry.unit,
         unitKind: entry.unitKind,
         currency: entry.currency ?? undefined,
@@ -7819,6 +7919,8 @@ async function restoreRedeemedOrganizationCredits(input: {
     );
     assertBalancedJournal(creditPostings);
     const creditJournalId = crypto.randomUUID();
+    // The ledger guard only accepts entries on a draft journal, so the journal
+    // is posted after its entries exist.
     await transaction.insert(ledgerJournals).values({
       id: creditJournalId,
       organizationId: input.organizationId,
@@ -7826,11 +7928,10 @@ async function restoreRedeemedOrganizationCredits(input: {
       sourceType: "catalog-credit-restoration",
       sourceId: input.orderId,
       description: `Restore redeemed organization credits · ${input.reason}`,
-      status: "posted",
+      status: "draft",
       reversalOfJournalId: originalCreditJournalId,
       actorPersonId: input.actorPersonId,
       occurredAt: input.now,
-      postedAt: input.now,
       metadata: { orderId: input.orderId },
     });
     await transaction.insert(ledgerEntries).values(
@@ -7842,6 +7943,10 @@ async function restoreRedeemedOrganizationCredits(input: {
         ...posting,
       })),
     );
+    await transaction
+      .update(ledgerJournals)
+      .set({ status: "posted", postedAt: input.now })
+      .where(eq(ledgerJournals.id, creditJournalId));
 
     const moneySourceJournals = await transaction
       .select()
@@ -7862,11 +7967,19 @@ async function restoreRedeemedOrganizationCredits(input: {
         .where(eq(ledgerEntries.journalId, sourceJournal.id))
         .orderBy(asc(ledgerEntries.sequence));
       if (sourceEntries.length === 0) continue;
+      const partiallySettled = credits !== redeemedCredits;
+      // Value already reversed by a headcount settlement stays reversed.
+      if (partiallySettled && valueMinor <= 0) continue;
+      if (partiallySettled && moneySourceJournals.length !== 1) {
+        throw new Error(
+          "This partially settled redemption has an ambiguous value journal. No wallet changes were made.",
+        );
+      }
       const postings = reverseLedgerPostings(
         sourceEntries.map((entry): LedgerPosting => ({
           accountId: entry.accountId,
           side: entry.side,
-          amount: entry.amount,
+          amount: partiallySettled ? valueMinor : entry.amount,
           unit: entry.unit,
           unitKind: entry.unitKind,
           currency: entry.currency ?? undefined,
@@ -7882,11 +7995,10 @@ async function restoreRedeemedOrganizationCredits(input: {
         sourceType: "catalog-credit-value-restoration",
         sourceId: input.orderId,
         description: `Reverse recognized credit value · ${input.reason}`,
-        status: "posted",
+        status: "draft",
         reversalOfJournalId: sourceJournal.id,
         actorPersonId: input.actorPersonId,
         occurredAt: input.now,
-        postedAt: input.now,
         metadata: { orderId: input.orderId },
       });
       await transaction.insert(ledgerEntries).values(
@@ -7898,16 +8010,12 @@ async function restoreRedeemedOrganizationCredits(input: {
           ...posting,
         })),
       );
+      await transaction
+        .update(ledgerJournals)
+        .set({ status: "posted", postedAt: input.now })
+        .where(eq(ledgerJournals.id, journalId));
     }
 
-    const credits = applications.reduce(
-      (total, application) => total + application.credits,
-      0,
-    );
-    const valueMinor = applications.reduce(
-      (total, application) => total + application.valueMinor,
-      0,
-    );
     for (const application of applications) {
       const grant = await transaction.query.organizationCreditGrants.findFirst({
         where: and(
@@ -7919,8 +8027,14 @@ async function restoreRedeemedOrganizationCredits(input: {
         ),
       });
       if (!grant) throw new Error("The original credit grant is missing.");
-      const restoredCredits = grant.remainingCredits + application.credits;
-      const restoredValue = grant.remainingValueMinor + application.valueMinor;
+      const restoredCredits =
+        grant.remainingCredits +
+        application.credits -
+        application.returnedCredits;
+      const restoredValue =
+        grant.remainingValueMinor +
+        application.valueMinor -
+        application.returnedValueMinor;
       if (
         restoredCredits > grant.initialCredits ||
         restoredValue > grant.initialValueMinor
@@ -7944,7 +8058,8 @@ async function restoreRedeemedOrganizationCredits(input: {
       walletCredits.set(
         application.organizationWalletId,
         (walletCredits.get(application.organizationWalletId) ?? 0) +
-          application.credits,
+          application.credits -
+          application.returnedCredits,
       );
     }
     for (const [walletId, restoredCredits] of walletCredits) {

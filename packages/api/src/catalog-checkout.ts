@@ -35,9 +35,12 @@ import {
 import {
   allocateOrganizationCredits,
   assertBalancedJournal,
+  creditTierForHeadcount,
   membershipEntitlementMultiplier,
   membershipSubscriptionDisclosure,
   membershipSubscriptionPolicy,
+  participationCutoffAt,
+  reservedCreditsPerPlayer,
   validateMembershipSubscriptionPolicy,
   type LedgerPosting,
 } from "@duna/core";
@@ -50,6 +53,11 @@ import {
 } from "@duna/pricing";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import { evaluateCatalogSessionParticipation } from "./catalog-participation";
+import {
+  bookingParticipationSnapshot,
+  catalogItemParticipationRules,
+} from "./catalog-participation-rules";
 import {
   ensureLedgerAccount,
   issueOrganizationCredits,
@@ -739,6 +747,53 @@ export async function startCatalogCheckout(input: {
         ),
       })
     : undefined;
+  // Offers without participation rules skip this block entirely and keep
+  // their capacity-only behavior.
+  let participationRules =
+    occurrence && row.item.type === "service"
+      ? catalogItemParticipationRules(
+          row.item.configuration,
+          occurrence.capacity,
+        )
+      : undefined;
+  if (
+    occurrence &&
+    participationRules &&
+    !occurrence.participationOutcome &&
+    input.now >= participationCutoffAt(occurrence.startsAt, participationRules)
+  ) {
+    // The cutoff has passed but the schedule has not decided this session
+    // yet. Decide first so nobody can book into a session that is about to be
+    // cancelled for missing its minimum.
+    await evaluateCatalogSessionParticipation({
+      occurrenceId: occurrence.id,
+      organizationId: row.organization.id,
+      requestId: input.requestId,
+      now: input.now,
+    });
+    occurrence = await database.query.catalogSessionOccurrences.findFirst({
+      where: and(
+        eq(catalogSessionOccurrences.id, occurrence.id),
+        eq(catalogSessionOccurrences.status, "scheduled"),
+      ),
+    });
+    if (!occurrence) participationRules = undefined;
+  }
+  if (input.catalogSessionOccurrenceId && !occurrence) {
+    const unavailable =
+      await database.query.catalogSessionOccurrences.findFirst({
+        where: and(
+          eq(catalogSessionOccurrences.id, input.catalogSessionOccurrenceId),
+          eq(catalogSessionOccurrences.catalogItemId, row.item.id),
+        ),
+      });
+    if (unavailable?.participationOutcome === "cancel-under-minimum") {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "This session was cancelled because it did not reach its minimum number of players.",
+      );
+    }
+  }
   if (fixedSession && !occurrence) {
     throw new CatalogCheckoutError(
       "CATALOG_ITEM_UNAVAILABLE",
@@ -922,9 +977,26 @@ export async function startCatalogCheckout(input: {
   const amountMinor = membershipInclusion
     ? 0
     : checkoutUnitAmountMinor * input.quantity;
+  // Group-size pricing reserves the highest tier that could still apply; the
+  // difference returns to the wallet once the headcount is final. When the
+  // headcount is already final, the booking pays that tier and nothing more.
+  const participationTiers =
+    occurrence && participationRules && input.paymentMethod === "credit"
+      ? participationRules.creditTiers
+      : [];
+  const pricedAtSettledHeadcount =
+    participationTiers.length > 0 && occurrence?.participationSettledAt
+      ? (occurrence.settledHeadcount ?? 0)
+      : undefined;
+  const participationCreditsPerPlayer =
+    pricedAtSettledHeadcount === undefined
+      ? reservedCreditsPerPlayer(participationTiers)
+      : creditTierForHeadcount(participationTiers, pricedAtSettledHeadcount)
+          ?.creditsPerPlayer;
   const creditsApplied = membershipInclusion
     ? 0
-    : (price.creditAmount ?? 0) * input.quantity;
+    : (participationCreditsPerPlayer ?? price.creditAmount ?? 0) *
+      input.quantity;
   if (
     input.paymentMethod === "card" &&
     (!row.item.allowCard || !price.stripePriceId)
@@ -1166,6 +1238,16 @@ export async function startCatalogCheckout(input: {
         membershipIncluded: Boolean(membershipInclusion),
         membershipId: membershipInclusion?.membershipId,
         membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
+        participation:
+          occurrence && participationRules
+            ? bookingParticipationSnapshot({
+                rules: participationRules,
+                creditsPerPlayer: membershipInclusion
+                  ? undefined
+                  : participationCreditsPerPlayer,
+                settledHeadcount: pricedAtSettledHeadcount,
+              })
+            : undefined,
         sessionOccurrenceId: occurrence?.id,
         sessionStartsAt: occurrence?.startsAt.toISOString(),
         sessionEndsAt: occurrence?.endsAt.toISOString(),
