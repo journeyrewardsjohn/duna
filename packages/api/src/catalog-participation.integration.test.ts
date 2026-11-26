@@ -1,9 +1,3 @@
-import { readFileSync } from "node:fs";
-import { PGlite } from "@electric-sql/pglite";
-import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
-import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { drizzle } from "drizzle-orm/pglite";
 import {
   afterAll,
   beforeAll,
@@ -13,8 +7,6 @@ import {
   it,
   vi,
 } from "vitest";
-import * as schema from "@duna/db/schema";
-import type { ApiActor } from "./context";
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock("@duna/db", async (importOriginal) => ({
@@ -23,6 +15,15 @@ vi.mock("@duna/db", async (importOriginal) => ({
   getTransactionalDatabase: () => state.db,
 }));
 
+import {
+  academy,
+  applyAllMigrations,
+  configureParticipation,
+  createCatalogTestDatabase,
+  seedAcademy,
+  testActor as actor,
+  walletState,
+} from "./catalog-booking.test-support";
 import { startCatalogCheckout } from "./catalog-checkout";
 import {
   evaluateCatalogSessionParticipation,
@@ -35,43 +36,9 @@ import {
   refundOrganizationOrder,
 } from "./catalog-service";
 
-const pg = new PGlite({ extensions: { btree_gist, pg_trgm, pgcrypto } });
-const db = drizzle(pg, { schema });
-// The Neon HTTP driver exposes `batch`; PGlite does not. Sequential execution
-// is the closest faithful stand-in for these service-level tests.
-(db as unknown as { batch: unknown }).batch = async (
-  queries: readonly PromiseLike<unknown>[],
-) => {
-  const results: unknown[] = [];
-  for (const query of queries) results.push(await query);
-  return results;
-};
+const { pg, db } = createCatalogTestDatabase();
 state.db = db;
-
-const org = "10000000-0000-4000-8000-000000000001";
-const coach = "20000000-0000-4000-8000-000000000001";
-const owner = "20000000-0000-4000-8000-000000000002";
-const players = [1, 2, 3, 4, 5, 6, 7, 8].map(
-  (index) => `30000000-0000-4000-8000-00000000000${index}`,
-);
-const item = "40000000-0000-4000-8000-000000000001";
-const variant = "40000000-0000-4000-8000-000000000002";
-const creditPrice = "40000000-0000-4000-8000-000000000003";
-const occurrence = "50000000-0000-4000-8000-000000000001";
-const now = new Date("2026-12-01T12:00:00.000Z");
-const startsAt = new Date("2026-12-10T17:00:00.000Z");
-
-function actor(personId: string, organizationId?: string): ApiActor {
-  return {
-    personId,
-    displayName: "Test person",
-    roles: ["player"],
-    organizationId,
-    scopes: [],
-    ageBand: "adult",
-    isDemo: false,
-  };
-}
+const { org, owner, players, item, variant, occurrence, now } = academy;
 
 async function credits(personId: string): Promise<number> {
   const result = await pg.query<{ credits: number }>(
@@ -107,19 +74,10 @@ const academyTiers = [
 const afterCutoff = new Date("2026-12-09T18:00:00.000Z");
 const afterStart = new Date("2026-12-10T18:30:00.000Z");
 
-async function configure(
+const configure = (
   participation: Record<string, unknown>,
   creditCost: number,
-) {
-  await pg.query(
-    `update catalog_items set configuration = configuration || $1::jsonb where id = $2`,
-    [JSON.stringify({ participation }), item],
-  );
-  await pg.query(`update catalog_prices set credit_amount = $1 where id = $2`, [
-    creditCost,
-    creditPrice,
-  ]);
-}
+) => configureParticipation(pg, participation, creditCost);
 
 function evaluate(
   at: Date,
@@ -138,25 +96,7 @@ function evaluate(
 
 /** The wallet cache, its grants, and its ledger account must always agree. */
 async function expectWalletConsistent(personId: string, expected: number) {
-  const result = await pg.query<{
-    cached: number;
-    granted: number;
-    ledger: number;
-  }>(
-    `select
-       w.cached_available_credits as cached,
-       (select coalesce(sum(g.remaining_credits), 0)::int
-          from organization_credit_grants g
-         where g.organization_wallet_id = w.id) as granted,
-       (select coalesce(sum(case when e.side = 'credit' then e.amount else -e.amount end), 0)::int
-          from ledger_entries e
-          join ledger_journals j on j.id = e.journal_id and j.status = 'posted'
-         where e.account_id = w.credit_ledger_account_id) as ledger
-     from organization_wallets w
-    where w.person_id = $1`,
-    [personId],
-  );
-  expect(result.rows[0]).toEqual({
+  expect(await walletState(pg, personId)).toEqual({
     cached: expected,
     granted: expected,
     ledger: expected,
@@ -185,82 +125,9 @@ async function fulfillmentIdFor(orderId: string): Promise<string> {
   return result.rows[0]!.id;
 }
 
-beforeAll(async () => {
-  process.env.DATABASE_URL = "postgres://pglite.invalid/duna";
-  const directory = new URL("../../db/drizzle/", import.meta.url);
-  const journal = JSON.parse(
-    readFileSync(new URL("meta/_journal.json", directory), "utf8"),
-  ) as { readonly entries: readonly { readonly tag: string }[] };
-  for (const entry of journal.entries) {
-    const migration = readFileSync(
-      new URL(`${entry.tag}.sql`, directory),
-      "utf8",
-    );
-    for (const statement of migration.split("--> statement-breakpoint")) {
-      if (statement.trim()) await pg.exec(statement);
-    }
-  }
-}, 120_000);
-
+beforeAll(() => applyAllMigrations(pg), 120_000);
 afterAll(() => pg.close());
-
-beforeEach(async () => {
-  await pg.exec(`
-    TRUNCATE organizations, people CASCADE;
-    INSERT INTO organizations (id, slug, name, currency, timezone)
-      VALUES ('${org}', 'beach-test', 'Beach Test Academy', 'USD', 'UTC');
-    INSERT INTO people (id, display_name, handle)
-      VALUES ('${coach}', 'Coach', 'coach'), ('${owner}', 'Owner', 'owner')
-      ${players.map((id, index) => `, ('${id}', 'Player ${index + 1}', 'player-${index + 1}')`).join("")};
-    INSERT INTO organization_memberships (organization_id, person_id, role)
-      VALUES ('${org}', '${owner}', 'owner'), ('${org}', '${coach}', 'coach');
-    INSERT INTO organization_staff_profiles (organization_id, person_id, staff_role, availability)
-      VALUES ('${org}', '${coach}', 'coach', '${JSON.stringify(
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          startsAt: "00:00",
-          endsAt: "23:59",
-        })),
-      )}'::jsonb);
-    INSERT INTO catalog_items (id, organization_id, type, subtype, slug, title, status, allow_card, allow_credits, configuration)
-      VALUES ('${item}', '${org}', 'service', 'group-lesson', 'group-training', 'Group training', 'active', false, true, '${JSON.stringify(
-        {
-          durationMinutes: 60,
-          capacity: 8,
-          deliveryMode: "online",
-          coachAssignmentMode: "selected",
-          coachPersonIds: [coach],
-          requiredCoachCount: 1,
-          sessionSchedule: {
-            mode: "one-off",
-            timezone: "UTC",
-            weekly: [],
-            oneOff: [{ date: "2026-12-10", startsAt: "17:00" }],
-            blackoutDates: [],
-          },
-        },
-      )}'::jsonb);
-    INSERT INTO catalog_variants (id, organization_id, catalog_item_id, title)
-      VALUES ('${variant}', '${org}', '${item}', 'Group training');
-    INSERT INTO catalog_prices (id, organization_id, catalog_item_id, catalog_variant_id, payment_kind, credit_amount)
-      VALUES ('${creditPrice}', '${org}', '${item}', '${variant}', 'credit', 2);
-    INSERT INTO catalog_session_occurrences (id, organization_id, catalog_item_id, starts_at, ends_at, timezone, local_date, local_time, coach_person_ids, capacity)
-      VALUES ('${occurrence}', '${org}', '${item}', '${startsAt.toISOString()}', '2026-12-10T18:00:00.000Z', 'UTC', '2026-12-10', '17:00', ARRAY['${coach}']::uuid[], 8);
-  `);
-  for (const player of players) {
-    await pg.exec(
-      `INSERT INTO organization_participants (organization_id, person_id, relationship, status) VALUES ('${org}', '${player}', 'player', 'active')`,
-    );
-    await issueOrganizationCredits({
-      actor: actor(owner, org),
-      personId: player,
-      credits: 10,
-      reason: "Test credits",
-      requestId: `grant:${player}`,
-      now,
-    });
-  }
-});
+beforeEach(() => seedAcademy(pg));
 
 describe("catalog session bookings without participation rules", () => {
   it("charges the fixed credit price and restores it on refund", async () => {
@@ -461,9 +328,11 @@ describe("group-size credit pricing", () => {
     const summary = await processDueCatalogParticipation({ now: afterCutoff });
     expect(summary).toMatchObject({ examined: 1, settled: 1, failed: 0 });
     await expectWalletConsistent(players[0]!, 8);
+    // Later ticks may look at next week's session, but never settle twice.
     expect(
       await processDueCatalogParticipation({ now: afterStart }),
-    ).toMatchObject({ examined: 0 });
+    ).toMatchObject({ settled: 0, cancelled: 0, failed: 0 });
+    await expectWalletConsistent(players[0]!, 8);
   });
 });
 
@@ -636,7 +505,8 @@ describe("participation read models", () => {
       "beach-test",
     ).finally(() => vi.useRealTimers());
     const training = storefront?.catalog.find((entry) => entry.id === item);
-    expect(training?.upcomingOccurrences).toEqual([
+    expect(training?.upcomingOccurrences).toHaveLength(3);
+    expect(training?.upcomingOccurrences.slice(0, 1)).toEqual([
       expect.objectContaining({
         key: occurrence,
         capacity: 8,
