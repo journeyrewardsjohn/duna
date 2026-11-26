@@ -55,6 +55,16 @@ export class CatalogParticipationError extends Error {
   }
 }
 
+/**
+ * How long after a session ends an attendance-priced session waits for
+ * attendance before settling on the players who booked instead. Reserved
+ * credits must never stay held indefinitely because nobody recorded
+ * attendance. The booked headcount is never smaller than the attended one, so
+ * with the usual pricing (larger groups pay less each) the fallback favors
+ * the player; with any pricing, nobody pays more than they reserved.
+ */
+export const ATTENDANCE_SETTLEMENT_FALLBACK_MINUTES = 24 * 60;
+
 /** Bookings in these states hold a place in the session. */
 export const ACTIVE_CATALOG_BOOKING_STATUSES = [
   "held",
@@ -922,8 +932,15 @@ export async function evaluateCatalogSessionParticipation(input: {
   ).filter((booking) => booking.confirmed);
   if (!occurrence.participationSettledAt) {
     let headcount = occurrence.decidedHeadcount ?? 0;
-    if (rules.settlementBasis === "attendance") {
-      if (!input.attendedFulfillmentIds) {
+    const attendanceFallbackAt = new Date(
+      occurrence.endsAt.getTime() +
+        ATTENDANCE_SETTLEMENT_FALLBACK_MINUTES * 60_000,
+    );
+    if (
+      rules.settlementBasis === "attendance" &&
+      !input.attendedFulfillmentIds
+    ) {
+      if (input.now < attendanceFallbackAt) {
         return {
           occurrenceId: occurrence.id,
           status: "awaiting-attendance",
@@ -933,13 +950,30 @@ export async function evaluateCatalogSessionParticipation(input: {
           ...empty,
         };
       }
+      // Nobody recorded attendance in time: settle on the players who booked.
+      headcount = bookings.reduce(
+        (total, booking) => total + booking.quantity,
+        0,
+      );
+      await database.insert(auditLog).values({
+        organizationId,
+        actorType: "system",
+        action: "catalog.participation_attendance_fallback",
+        entityType: "catalog-session-occurrence",
+        entityId: occurrence.id,
+        afterHash: stableHash({ headcount, basis: "booked-headcount" }),
+        reason: `No attendance was recorded within ${ATTENDANCE_SETTLEMENT_FALLBACK_MINUTES / 60} hours of the session ending. Settled on the ${headcount} players who booked.`,
+        traceId: input.requestId,
+        createdAt: input.now,
+      });
+    } else if (rules.settlementBasis === "attendance") {
       if (input.now < occurrence.startsAt) {
         throw new CatalogParticipationError(
           "INVALID_ATTENDANCE",
           "Attendance can only be recorded once the session starts.",
         );
       }
-      const attended = new Set(input.attendedFulfillmentIds);
+      const attended = new Set(input.attendedFulfillmentIds ?? []);
       const known = new Set(bookings.map((booking) => booking.fulfillment.id));
       if ([...attended].some((id) => !known.has(id))) {
         throw new CatalogParticipationError(
@@ -992,6 +1026,15 @@ export async function evaluateCatalogSessionParticipation(input: {
   }
 
   const headcount = occurrence.settledHeadcount ?? 0;
+  // An attendance-priced session that fell back to its booked headcount has
+  // no attendance on any booking.
+  const settledBasis =
+    rules.settlementBasis === "attendance" &&
+    bookings.some(
+      (booking) => typeof booking.fulfillment.details.attendance === "string",
+    )
+      ? "attendance"
+      : "cutoff";
   const settlements: ParticipationSettlementResult[] = [];
   for (const booking of bookings) {
     // Only credit bookings that reserved against a tier table are settled.
@@ -1010,7 +1053,7 @@ export async function evaluateCatalogSessionParticipation(input: {
       organizationId,
       occurrenceId: occurrence.id,
       fulfillmentId: booking.fulfillment.id,
-      basis: rules.settlementBasis,
+      basis: settledBasis,
       headcount,
       creditTiers: booking.snapshot.creditTiers,
       actorPersonId: input.actorPersonId,

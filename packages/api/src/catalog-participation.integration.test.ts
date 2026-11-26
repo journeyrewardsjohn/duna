@@ -525,6 +525,36 @@ describe("attendance-based settlement", () => {
   });
 });
 
+describe("attendance that is never recorded", () => {
+  it("settles on the players who booked a day after the session ends", async () => {
+    await configure(
+      { creditTiers: academyTiers, settlementBasis: "attendance" },
+      3,
+    );
+    for (const player of players.slice(0, 3)) await book(player);
+    expect((await evaluate(afterStart)).status).toBe("awaiting-attendance");
+    expect(
+      (await processDueCatalogParticipation({ now: afterStart }))
+        .awaitingAttendance,
+    ).toBe(1);
+    await expectWalletConsistent(players[0]!, 7);
+
+    // 24 hours after the 18:00 finish, the schedule stops waiting.
+    const fallback = new Date("2026-12-11T18:05:00.000Z");
+    expect(
+      await processDueCatalogParticipation({ now: fallback }),
+    ).toMatchObject({ settled: 1, failed: 0 });
+    expect(await occurrenceRow()).toMatchObject({ settled_headcount: 3 });
+    for (const player of players.slice(0, 3)) {
+      await expectWalletConsistent(player, 8);
+    }
+    const basis = await pg.query<{ basis: string }>(
+      `select distinct basis from catalog_participation_settlements`,
+    );
+    expect(basis.rows).toEqual([{ basis: "cutoff" }]);
+  });
+});
+
 describe("participation read models", () => {
   it("shows tiers and live headcount on the public storefront", async () => {
     await configure(

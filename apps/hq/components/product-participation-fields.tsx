@@ -276,6 +276,9 @@ export function ParticipationTierFields({
             Each player reserves {highest} credit{highest === 1 ? "" : "s"} when
             they book. Once the group size is final, Duna returns the difference
             to their wallet automatically. Nobody pays more than they reserved.
+            {draft.settlementBasis === "attendance"
+              ? " If attendance is not recorded within 24 hours of the session ending, Duna uses the players who booked."
+              : ""}
           </p>
         </>
       )}
