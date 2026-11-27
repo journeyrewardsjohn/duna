@@ -13056,3 +13056,20 @@ export const messagingChannelOutbox = pgTable(
     ),
   ],
 );
+
+// R3 domain schema seams. Owned by the wave schema steward; domain agents
+// request tables in docs/plan/schema-requests/<WP>.md instead of editing here.
+export * from "./schema/setup";
+export * from "./schema/pay";
+export * from "./schema/team-availability";
+export * from "./schema/team-pay";
+export * from "./schema/team-payouts";
+export * from "./schema/training-programs";
+export * from "./schema/training-drills";
+export * from "./schema/training-scene-ai";
+export * from "./schema/concierge";
+export * from "./schema/website-workspace";
+export * from "./schema/website-templates";
+export * from "./schema/facility";
+export * from "./schema/search";
+export * from "./schema/conditions";

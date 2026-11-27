@@ -6,6 +6,7 @@ import type {
   FeatureFlagSummary,
 } from "@duna/api";
 import type { OrganizationSummary } from "@duna/core";
+import { featureFlagKeys, featureFlagRegistry } from "@duna/core/flags";
 import { Badge } from "@duna/ui";
 import { Check, CircleAlert, Flag, Plus, ShieldCheck } from "lucide-react";
 import { useActionState } from "react";
@@ -165,11 +166,19 @@ function CreateFlag({
             <span>Flag key</span>
             <input
               disabled={!canManage}
+              list="feature-flag-registry-keys"
               name="key"
-              pattern="[a-z0-9][a-z0-9._-]*"
-              placeholder="wallet.withdrawals"
+              pattern="[a-z0-9][a-zA-Z0-9._\-]*"
+              placeholder="website.workspace"
               required
             />
+            <datalist id="feature-flag-registry-keys">
+              {featureFlagKeys.map((key) => (
+                <option key={key} value={key}>
+                  {featureFlagRegistry[key].description}
+                </option>
+              ))}
+            </datalist>
           </label>
           <label>
             <span>Organization scope</span>
