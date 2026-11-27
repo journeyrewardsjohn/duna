@@ -5519,10 +5519,26 @@ export const healthConnections = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    // H1: last App Store storefront country (ISO 3166-1 alpha-3) the device
+    // reported. A client claim; see docs/HEALTH_PRIVACY.md.
+    storefrontCountry: varchar("storefront_country", { length: 3 }),
+    storefrontReportedAt: timestamp("storefront_reported_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    // H1: set when a minor or guardian withdraws; the retention job deletes
+    // the imported data and clears it.
+    purgeRequestedAt: timestamp("purge_requested_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
   (table) => [
+    index("health_connection_purge_idx")
+      .on(table.purgeRequestedAt)
+      .where(sql`${table.purgeRequestedAt} IS NOT NULL`),
     check(
       "health_connection_provider_valid",
       sql`${table.provider} = 'apple-health'`,
@@ -5663,11 +5679,28 @@ export const healthSharingGrants = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    // H1: adults' grants are 'not-required'; a minor's grant starts 'pending'
+    // and is readable only once a linked adult guardian approves it.
+    approvalStatus: varchar("approval_status", { length: 16 })
+      .notNull()
+      .default("not-required"),
+    approvedByGuardianId: uuid("approved_by_guardian_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    approvedAt: timestamp("approved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt,
     updatedAt,
   },
   (table) => [
     index("health_grant_owner_idx").on(table.ownerPersonId, table.createdAt),
+    check(
+      "health_grant_approval_status_valid",
+      sql`${table.approvalStatus} IN ('not-required', 'pending', 'approved', 'denied')`,
+    ),
     index("health_grant_person_audience_idx").on(
       table.audiencePersonId,
       table.expiresAt,
@@ -13073,3 +13106,4 @@ export * from "./schema/website-templates";
 export * from "./schema/facility";
 export * from "./schema/search";
 export * from "./schema/conditions";
+export * from "./schema/health";

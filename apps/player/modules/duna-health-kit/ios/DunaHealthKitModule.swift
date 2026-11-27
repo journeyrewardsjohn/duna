@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import Foundation
 import HealthKit
+import StoreKit
 
 private struct HealthTypeDefinition {
   let metric: String
@@ -21,6 +22,7 @@ private struct HealthQueryResult {
 private enum DunaHealthKitError: Error {
   case unavailable
   case invalidCategories
+  case invalidMetrics
   case invalidCursor
   case invalidResponse
 }
@@ -87,7 +89,11 @@ private final class DunaHealthStore: @unchecked Sendable {
     return values
   }
 
-  func selectedDefinitions(categoriesJSON: String) throws -> [HealthTypeDefinition] {
+  /// `metricsJSON`, when present, narrows the request to the metric
+  /// allowlist the Duna server returned for this player's age band (for a
+  /// player under 18: heart rate, workouts, active energy, exercise minutes).
+  /// HealthKit is then asked only for those read types.
+  func selectedDefinitions(categoriesJSON: String, metricsJSON: String? = nil) throws -> [HealthTypeDefinition] {
     guard
       let data = categoriesJSON.data(using: .utf8),
       let categories = try JSONSerialization.jsonObject(with: data) as? [String],
@@ -98,7 +104,18 @@ private final class DunaHealthStore: @unchecked Sendable {
     guard selected.isSubset(of: allowed) else {
       throw DunaHealthKitError.invalidCategories
     }
-    return definitions().filter { selected.contains($0.category) }
+    var metricAllowlist: Set<String>?
+    if let metricsJSON, !metricsJSON.isEmpty {
+      guard
+        let metricData = metricsJSON.data(using: .utf8),
+        let metrics = try JSONSerialization.jsonObject(with: metricData) as? [String]
+      else { throw DunaHealthKitError.invalidMetrics }
+      metricAllowlist = Set(metrics)
+    }
+    return definitions().filter { definition in
+      selected.contains(definition.category)
+        && (metricAllowlist?.contains(definition.metric) ?? true)
+    }
   }
 
   func decodeAnchor(_ encoded: String?) throws -> HKQueryAnchor? {
@@ -271,12 +288,22 @@ public final class DunaHealthKitModule: Module {
 
     Function("isAvailable") { HKHealthStore.isHealthDataAvailable() }
 
+    // App Store storefront country (ISO 3166-1 alpha-3, e.g. "USA") from
+    // StoreKit. It follows the Apple Account's region, not the device's
+    // location, and is sent to Duna as a claim with Health calls.
+    AsyncFunction("storefrontCountryCode") { () async -> String? in
+      await Storefront.current?.countryCode
+    }
+
     AsyncFunction("requestAuthorization") {
-      (categoriesJSON: String) async throws -> [String: Any] in
+      (categoriesJSON: String, metricsJSON: String?) async throws -> [String: Any] in
       guard HKHealthStore.isHealthDataAvailable() else {
         throw DunaHealthKitError.unavailable
       }
-      let definitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
+      let definitions = try DunaHealthStore.shared.selectedDefinitions(
+        categoriesJSON: categoriesJSON,
+        metricsJSON: metricsJSON
+      )
       try await DunaHealthStore.shared.store.requestAuthorization(
         toShare: [],
         read: Set(definitions.map(\.sampleType))
@@ -290,7 +317,7 @@ public final class DunaHealthKitModule: Module {
     }
 
     AsyncFunction("readChanges") {
-      (categoriesJSON: String, cursorJSON: String?, recordLimit: Int) async throws -> String in
+      (categoriesJSON: String, cursorJSON: String?, recordLimit: Int, metricsJSON: String?) async throws -> String in
       guard HKHealthStore.isHealthDataAvailable() else {
         throw DunaHealthKitError.unavailable
       }
@@ -306,7 +333,10 @@ public final class DunaHealthKitModule: Module {
       var nextCursors = cursors
       var hasMore = false
       var metricsWithMore: [String] = []
-      let selectedDefinitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
+      let selectedDefinitions = try DunaHealthStore.shared.selectedDefinitions(
+        categoriesJSON: categoriesJSON,
+        metricsJSON: metricsJSON
+      )
       // A single high-volume type (usually heart rate) must never prevent
       // sleep, HRV, workouts, or body history from reaching Duna. Rotate the
       // starting type on every resumable page and reserve a fair share of the
@@ -365,8 +395,11 @@ public final class DunaHealthKitModule: Module {
     }
 
     AsyncFunction("startMonitoring") {
-      (categoriesJSON: String) async throws -> Bool in
-      let definitions = try DunaHealthStore.shared.selectedDefinitions(categoriesJSON: categoriesJSON)
+      (categoriesJSON: String, metricsJSON: String?) async throws -> Bool in
+      let definitions = try DunaHealthStore.shared.selectedDefinitions(
+        categoriesJSON: categoriesJSON,
+        metricsJSON: metricsJSON
+      )
       return await DunaHealthStore.shared.startMonitoring(definitions: definitions)
     }
 
