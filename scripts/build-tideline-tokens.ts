@@ -5,7 +5,7 @@
  *   pnpm tideline:tokens --check   exit 1 when the generated files are stale
  *
  * To take a new design revision, replace
- * `packages/ui/src/tideline/tokens.json` and run the first command. Names the
+ * `packages/ui/src/tideline/tokens/tokens.json` and run the first command. Names the
  * code needs before design publishes them live in `tokens.additions.json`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -16,11 +16,11 @@ import {
   buildTidelineTokensTs,
   mergeTidelineAdditions,
   type TidelineTokenSource,
-} from "../packages/ui/src/tideline/token-build";
+} from "../packages/ui/src/tideline/tokens/token-build";
 
 async function main() {
   const root = resolve(import.meta.dirname, "..");
-  const directory = join(root, "packages/ui/src/tideline");
+  const directory = join(root, "packages/ui/src/tideline/tokens");
   const sourcePath = join(directory, "tokens.json");
   const check = process.argv.includes("--check");
 

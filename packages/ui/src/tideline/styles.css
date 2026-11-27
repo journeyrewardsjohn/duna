@@ -1,0 +1,47 @@
+/*
+ * Tideline component styles: the one stylesheet an app imports.
+ *
+ *   import "@duna/ui/tideline/styles.css";
+ *
+ * This file only imports. Each component family keeps its rules in
+ * `<family>/<family>.css`; add a family by appending one `@import` line at the
+ * end (the file merges with `merge=union`, so parallel branches that each
+ * append a line rebase cleanly). Keep the existing order: later families may
+ * rely on following earlier ones in the cascade.
+ *
+ * Rules of every family stylesheet:
+ *  - everything lives in `@layer tideline` and under the `.td` root class, so
+ *    it cannot reach an existing page;
+ *  - every colour, size, radius, duration and curve is a `--td-*` token from
+ *    tokens/tokens.css (generated from tokens.json). The only literal lengths
+ *    are drawn sizes (a 22px checkbox, a 48 by 28 switch) and layout maxima;
+ *  - state comes from the attributes UI SDK sets (`data-checked`,
+ *    `data-open`, `data-highlighted`…), never from generated ids;
+ *  - no `!important` (styles.test.ts lists the two legacy exceptions);
+ *  - every loop has a `prefers-reduced-motion` resting state in its own file.
+ *
+ * UI SDK injects its own small `ui-sdk` layer at runtime; naming it first
+ * keeps Tideline above it wherever the page loads this file.
+ */
+@layer ui-sdk, tideline;
+@import "./tokens/tokens.css";
+@import "./base/base.css";
+@import "./button/button.css";
+@import "./field/field.css";
+@import "./toggles/toggles.css";
+@import "./segmented/segmented.css";
+@import "./tabs/tabs.css";
+@import "./popover/popover.css";
+@import "./select/select.css";
+@import "./dialog/dialog.css";
+@import "./toast/toast.css";
+@import "./calendar/calendar.css";
+@import "./time/time.css";
+@import "./avatar/avatar.css";
+@import "./add-players/add-players.css";
+@import "./search/search.css";
+@import "./surfaces/surfaces.css";
+@import "./progress/progress.css";
+@import "./loaders/loaders.css";
+@import "./command-palette/command-palette.css";
+@import "./booking/booking.css";

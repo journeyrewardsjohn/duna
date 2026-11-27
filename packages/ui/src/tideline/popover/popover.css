@@ -1,0 +1,142 @@
+/* Tideline popups: Popover, Menu and Tooltip. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Popups: select, combobox, menu, popover, date picker ---------- */
+
+    .td-popup {
+      margin: 0;
+      overflow: auto;
+      border: 0;
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface-raised);
+      font: var(--td-type-body);
+      transform-origin: var(--transform-origin);
+      opacity: 1;
+      padding: var(--td-space-1);
+      box-shadow: var(--td-shadow-raised);
+      transition:
+        opacity var(--td-duration-settle) var(--td-ease-ui),
+        scale var(--td-duration-settle) var(--td-ease-tide);
+
+      &:is([data-starting-style], [data-ending-style]) {
+        opacity: 0;
+        scale: calc(1 - 0.02 * var(--td-motion));
+        translate: none;
+      }
+
+      &[data-ending-style] {
+        transition-timing-function: var(--td-ease-exit);
+      }
+
+      &:focus-visible {
+        outline: none;
+      }
+
+      /* As a sheet on small touch screens. */
+
+      &[data-presentation="sheet"] {
+        width: 100%;
+        max-width: none;
+        max-height: 85dvh;
+        padding: var(--td-space-4) var(--td-space-4)
+          calc(var(--td-space-6) + env(safe-area-inset-bottom));
+        border-radius: var(--td-radius-xl) var(--td-radius-xl) 0 0;
+        opacity: 1;
+        translate: none;
+        scale: 1;
+      }
+    }
+
+    .td-menu {
+      min-width: max(var(--anchor-width, 0px), 200px);
+      max-height: min(var(--available-height, 60vh), 420px);
+    }
+
+    .td-menu__item {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: var(--td-control);
+      padding: var(--td-space-2) var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      color: var(--td-text);
+      text-decoration: none;
+      cursor: pointer;
+      user-select: none;
+
+      &[data-highlighted] {
+        background: var(--td-action-soft);
+        color: var(--td-on-action-soft);
+      }
+
+      &:focus-visible {
+        outline-offset: -2px;
+      }
+
+      &[data-destructive] {
+        color: var(--td-danger);
+
+        &[data-highlighted] {
+          background: var(--td-danger-wash);
+          color: var(--td-danger);
+        }
+      }
+
+      &[data-disabled] {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+    }
+
+    .td-menu__separator {
+      height: 1px;
+      margin: var(--td-space-2) var(--td-space-3);
+      background: var(--td-line);
+    }
+
+    .td-menu__label {
+      padding: var(--td-space-2) var(--td-space-3);
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-popover {
+      display: grid;
+      gap: var(--td-space-3);
+      width: min(360px, calc(100vw - var(--td-space-8)));
+      max-height: var(--available-height, 80vh);
+      padding: var(--td-space-4);
+    }
+
+    .td-popover__title {
+      font: var(--td-type-label);
+    }
+
+    .td-popover__description {
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .td-tooltip {
+      max-width: min(280px, calc(100vw - var(--td-space-8)));
+      margin: 0;
+      overflow: visible;
+      border: 0;
+      background: var(--td-text);
+      color: var(--td-text-inverse);
+      font: var(--td-type-meta);
+      transition: opacity var(--td-duration-quick) var(--td-ease-ui);
+      padding: var(--td-space-1) var(--td-space-2);
+      border-radius: var(--td-radius-sm);
+
+      &:is([data-starting-style], [data-ending-style]) {
+        opacity: 0;
+      }
+    }
+
+    .td-menu__item[data-destructive][data-highlighted] {
+      background: var(--td-danger-wash);
+      color: var(--td-danger);
+    }
+  }
+}
