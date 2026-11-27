@@ -4,6 +4,11 @@ Tideline is Duna's design system. `@duna/ui/tideline` is its component library
 for the web: the look comes from Tideline tokens, and the behaviour (keyboard,
 focus, dismissal, popups, ARIA) comes from Vercel's UI SDK.
 
+**The design contract is
+[`tideline-4.1.1/README.md`](tideline-4.1.1/README.md)** (rules R1–R22, the
+4.1.1 tokens and the component list). This file only describes how the code
+library is built and extended. Where the two differ, the contract wins.
+
 This first version is additive. No existing screen, export or global stylesheet
 uses it yet; later refactors adopt it screen by screen.
 
@@ -11,8 +16,13 @@ uses it yet; later refactors adopt it screen by screen.
 button, dialog, menu, date picker or search box to an app. If a component is
 missing, add it here.
 
-`AGENTS.md` still describes the previous look (Satoshi, the HQ grey palette).
-Tideline supersedes it for these components only.
+**Current state:** the library still carries the published Tideline 3.1
+tokens and the visual details that come with them (tide-blue actions, the
+flare-orange live colour, Geist only with no Jost titles, the motion values
+below).
+Work package F2a replaces them with the 4.1.1 tokens, names and motion verbs
+(Rise, Rally, Cross). Until then, treat any colour, type or motion value
+quoted in this file as the 3.1 value, not the contract.
 
 ## Use it
 
@@ -110,7 +120,11 @@ missing from a list or listed twice.
 - **No `!important`.** Win with the layer and specificity instead. Two legacy
   uses remain until the apps' global CSS is layered (closed UI SDK content in
   `base.css`, the primary label lock in `button.css`); `styles.test.ts`
-  allows exactly those and fails on any new one.
+  allows exactly those and fails on any new one. The Tideline guard in
+  `pnpm verify:design-system` enforces the same rule (plus no retired orange,
+  Solar only on live states, no vendor names in copy); its legacy exemptions
+  for these files are listed in `scripts/design-contracts/shared.ts` and go
+  with F2a.
 - **Keyboard first.** Every interactive part is reachable and operable from
   the keyboard, with the shared focus ring, focus return after overlays and
   roving focus in groups. Add the keyboard path to
@@ -193,8 +207,9 @@ browser supports it and motion is welcome, and just runs it otherwise.
 `Button` loading blocks a second press immediately, keeps its width and its
 label, and puts the spinner where the icon was.
 
-Motion tokens: 80ms press, 120ms hover and toggles, 180ms popovers and tabs,
-260ms sheets and dialogs, one ease-out curve, press scale 0.98. Under
+Motion tokens (3.1, until F2a applies contract rule R10): 80ms press, 120ms
+hover and toggles, 180ms popovers and tabs, 260ms sheets and dialogs, one
+ease-out curve, press scale 0.98. Under
 `prefers-reduced-motion` movement stops and state changes fall back to
 opacity; every loop has a resting state.
 
@@ -252,7 +267,7 @@ are dense. Both scales read tokens; `dense` shrinks the booking components.
 
 | Component                            | Built on                         | Notes                                                                                                   |
 | ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `ChoiceCardGroup`, `PriceChoiceCard` | UI SDK Radio                     | Single choice as cards; selected is a 2px tide-blue ring                                                |
+| `ChoiceCardGroup`, `PriceChoiceCard` | UI SDK Radio                     | Single choice as cards; selected is a 2px action ring                                                   |
 | `CoachPicker`                        | UI SDK Radio, Avatar             | Optional "Any coach"; photos fall back to initials                                                      |
 | `DayStrip`                           | UI SDK Radio                     | A day with nothing open is faded, focusable and announced, and its selection is cancelled               |
 | `SlotList`                           | UI SDK Radio                     | Available, booked (disabled), selected, loading (skeleton cards). `TimeSlotGrid` is the dense variant   |
@@ -333,6 +348,10 @@ TIDELINE_GALLERY=1 pnpm dev:hq
 ## Not included yet
 
 - No existing screen has been refactored.
+- The 4.1.1 components in
+  [`tideline-4.1.1/components.md`](tideline-4.1.1/components.md) that are not
+  listed above (NetScore, RatingRing, ClubMark, Map, TimeRail and others),
+  which later work packages add as families.
 - From the 2.1 component list: MatchCard, ScoreTable, ScoreEntry, ResultCard,
   RatingCard, BottomActionBar, the labelled TabBar, SideNav, AppHeader,
   CourtSchedule, CalendarWeek, DayAgenda, Carousel, PriceDetails, SplitPay,

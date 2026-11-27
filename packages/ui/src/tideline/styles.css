@@ -17,7 +17,7 @@
  *    are drawn sizes (a 22px checkbox, a 48 by 28 switch) and layout maxima;
  *  - state comes from the attributes UI SDK sets (`data-checked`,
  *    `data-open`, `data-highlighted`…), never from generated ids;
- *  - no `!important` (styles.test.ts lists the two legacy exceptions);
+ *  - no important declarations (styles.test.ts lists the legacy exceptions);
  *  - every loop has a `prefers-reduced-motion` resting state in its own file.
  *
  * UI SDK injects its own small `ui-sdk` layer at runtime; naming it first

@@ -16,6 +16,7 @@ builds it is in [`../plan/README.md`](../plan/README.md).
 | [`tideline-4.1.1/ia-hq.md`](tideline-4.1.1/ia-hq.md)           | HQ navigation and route renames                                           |
 | [`tideline-4.1.1/adaptive.md`](tideline-4.1.1/adaptive.md)     | Width classes, iPhone Duo and iPad                                        |
 | [`tideline-4.1.1/assets/`](tideline-4.1.1/assets/)             | Final brand SVGs                                                          |
+| [`tideline-components.md`](tideline-components.md)             | The code library `@duna/ui/tideline`: folders, adding a family, gallery   |
 
 In short: Jost Medium 500 for one title per screen and marketing headlines,
 Geist and Geist Mono for everything else, no serif; Night Court, Salt, Dune,
