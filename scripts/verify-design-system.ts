@@ -183,15 +183,36 @@ for (const contract of [
   }
 }
 
-const playerNativeSource = readFileSync(
-  join(root, "apps/player/App.tsx"),
-  "utf8",
+// Player contracts follow the component, not a file path, so a screen can move
+// within apps/player without weakening the check that protects it.
+const playerSources = sourceFiles(join(root, "apps/player"))
+  .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
+  .map((file) => ({
+    label: relative(root, file),
+    source: readFileSync(file, "utf8"),
+  }));
+function playerSourceDeclaring(declaration: string) {
+  const matches = playerSources.filter(({ source }) =>
+    source.includes(declaration),
+  );
+  if (matches.length === 1 && matches[0]) return matches[0];
+  violations.push(
+    matches.length === 0
+      ? `apps/player must declare ${declaration}`
+      : `apps/player must declare ${declaration} exactly once; found ${matches
+          .map(({ label }) => label)
+          .join(", ")}`,
+  );
+  return { label: "apps/player", source: "" };
+}
+const playerHomeContainer = playerSourceDeclaring("function HomeScreenV3(");
+const playerHomeV3 = playerSourceDeclaring("function HomeV3Screen(");
+const playerDock = playerSourceDeclaring("function TabBar(");
+const playerMessaging = playerSourceDeclaring(
+  "function PlayerMessagingScreen(",
 );
-const playerHomeV3Source = readFileSync(
-  join(root, "apps/player/home-v3.tsx"),
-  "utf8",
-);
-const playerHomeSources = `${playerNativeSource}\n${playerHomeV3Source}`;
+const playerHomeV3Source = playerHomeV3.source;
+const playerHomeSources = `${playerHomeContainer.source}\n${playerHomeV3Source}`;
 for (const contract of [
   "const bookingItems = bookings",
   "new Date(booking.endsAt).getTime() > now",
@@ -233,9 +254,9 @@ for (const contract of [
   "<LiquidGlassSurface",
   "<DunaMark size={mobileGrid[5]} />",
 ] as const) {
-  if (!playerNativeSource.includes(contract)) {
+  if (!playerDock.source.includes(contract)) {
     violations.push(
-      `apps/player/App.tsx must preserve the icon-only glass dock contract: ${contract}`,
+      `${playerDock.label} must preserve the icon-only glass dock contract: ${contract}`,
     );
   }
 }
@@ -244,25 +265,22 @@ for (const retiredThemeContract of [
   'AsyncStorage.getItem("duna-theme")',
   "useColorScheme",
 ] as const) {
-  if (playerNativeSource.includes(retiredThemeContract)) {
+  for (const { label, source } of playerSources) {
+    if (!source.includes(retiredThemeContract)) continue;
     violations.push(
-      `apps/player/App.tsx must not restore the retired global appearance control: ${retiredThemeContract}`,
+      `${label} must not restore the retired global appearance control: ${retiredThemeContract}`,
     );
   }
 }
 
-const playerMessagingSource = readFileSync(
-  join(root, "apps/player/messaging-screen.tsx"),
-  "utf8",
-);
 for (const contract of [
   'accessibilityLabel="Close Duna AI and Messages"',
   'accessibilityHint="Returns to the Player home screen"',
   'accessibilityLabel="Open recent Duna AI chats"',
 ] as const) {
-  if (!playerMessagingSource.includes(contract)) {
+  if (!playerMessaging.source.includes(contract)) {
     violations.push(
-      `apps/player/messaging-screen.tsx must preserve the full-screen chat exit contract: ${contract}`,
+      `${playerMessaging.label} must preserve the full-screen chat exit contract: ${contract}`,
     );
   }
 }
