@@ -4438,6 +4438,237 @@ export const catalogItemVersionSummarySchema = z.object({
   current: z.boolean(),
 });
 
+export const participationMinimumPolicySchema = z.enum(["cancel", "run"]);
+export const participationSettlementBasisSchema = z.enum([
+  "cutoff",
+  "attendance",
+]);
+
+/** "2 to 6 players, 2 credits each" for a partner site or booking page. */
+export const publicParticipationSummarySchema = z.object({
+  minParticipants: z.number().int().positive(),
+  maxParticipants: z.number().int().positive(),
+  minimumPolicy: participationMinimumPolicySchema,
+  cutoffMinutesBeforeStart: z.number().int().nonnegative(),
+  settlementBasis: participationSettlementBasisSchema,
+  // Credits taken at booking; the difference returns once headcount is final.
+  reservedCreditsPerPlayer: z.number().int().positive().optional(),
+  creditTiers: z
+    .array(
+      z.object({
+        minParticipants: z.number().int().positive(),
+        maxParticipants: z.number().int().positive(),
+        creditsPerPlayer: z.number().int().positive(),
+        label: z.string(),
+        description: z.string(),
+      }),
+    )
+    .readonly(),
+});
+
+export const occurrenceParticipationStateSchema = z.object({
+  capacity: z.number().int().positive(),
+  bookedCount: z.number().int().nonnegative(),
+  spotsRemaining: z.number().int().nonnegative(),
+  minParticipants: z.number().int().positive(),
+  minimumMet: z.boolean(),
+  playersNeeded: z.number().int().nonnegative(),
+  decisionAt: z.iso.datetime(),
+  status: z.enum([
+    "open",
+    "confirmed",
+    "running-under-minimum",
+    "cancelled-under-minimum",
+  ]),
+  currentCreditsPerPlayer: z.number().int().positive().optional(),
+  nextCreditsPerPlayer: z.number().int().positive().optional(),
+  bookingCreditsPerPlayer: z.number().int().positive().optional(),
+  settledHeadcount: z.number().int().nonnegative().optional(),
+});
+
+export const operatorCatalogSessionOccurrenceSchema = z.object({
+  id: z.string().uuid(),
+  catalogItemId: z.string().uuid(),
+  title: z.string(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string(),
+  status: z.enum(["scheduled", "cancelled", "complete"]),
+  capacity: z.number().int().positive(),
+  confirmedCount: z.number().int().nonnegative(),
+  participation: occurrenceParticipationStateSchema
+    .extend({
+      minimumPolicy: participationMinimumPolicySchema,
+      settlementBasis: participationSettlementBasisSchema,
+      decidedAt: z.iso.datetime().optional(),
+      settledAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+  bookings: z
+    .array(
+      z.object({
+        fulfillmentId: z.string().uuid(),
+        orderId: z.string().uuid(),
+        personId: z.string().uuid(),
+        displayName: z.string(),
+        payerPersonId: z.string().uuid(),
+        quantity: z.number().int().positive(),
+        paymentMethod: z.string().optional(),
+        confirmed: z.boolean(),
+        reservedCredits: z.number().int().nonnegative(),
+        settledCredits: z.number().int().nonnegative().optional(),
+        returnedCredits: z.number().int().nonnegative().optional(),
+        attendance: z.enum(["attended", "no-show"]).optional(),
+      }),
+    )
+    .readonly(),
+});
+
+export const participationEvaluationSchema = z.object({
+  occurrenceId: z.string().uuid(),
+  status: z.enum([
+    "no-rules",
+    "not-due",
+    "cancelled",
+    "awaiting-attendance",
+    "settled",
+  ]),
+  outcome: z
+    .enum(["minimum-met", "cancel-under-minimum", "run-under-minimum"])
+    .optional(),
+  headcount: z.number().int().nonnegative().optional(),
+  minParticipants: z.number().int().positive().optional(),
+  settlements: z
+    .array(
+      z.object({
+        fulfillmentId: z.string().uuid(),
+        orderId: z.string().uuid(),
+        payerPersonId: z.string().uuid(),
+        quantity: z.number().int().positive(),
+        creditsPerPlayer: z.number().int().positive(),
+        reservedCredits: z.number().int().nonnegative(),
+        settledCredits: z.number().int().nonnegative(),
+        returnedCredits: z.number().int().nonnegative(),
+        applied: z.boolean(),
+      }),
+    )
+    .readonly(),
+  cancellations: z
+    .array(
+      z.object({
+        fulfillmentId: z.string().uuid(),
+        orderId: z.string().uuid(),
+        personId: z.string().uuid(),
+        refundStatus: z.enum([
+          "credits-restored",
+          "refund-submitted",
+          "released",
+          "review-required",
+        ]),
+      }),
+    )
+    .readonly(),
+});
+
+export const catalogSessionBookingResultSchema = z.object({
+  // booked: every session is booked. failed: nothing remains booked.
+  // partial: only when `atomic` is false, or a rollback could not complete.
+  status: z.enum(["booked", "partial", "failed"]),
+  atomic: z.boolean(),
+  totalCreditsApplied: z.number().int().nonnegative(),
+  results: z
+    .array(
+      z.object({
+        index: z.number().int().nonnegative(),
+        catalogSessionOccurrenceId: z.string().uuid(),
+        participantPersonId: z.string().uuid(),
+        status: z.enum(["booked", "failed", "rolled-back", "skipped"]),
+        bookingId: z.string().uuid().optional(),
+        orderId: z.string().uuid().optional(),
+        creditsApplied: z.number().int().nonnegative().optional(),
+        errorCode: z.string().optional(),
+        message: z.string().optional(),
+      }),
+    )
+    .readonly(),
+});
+
+const sessionBookingPersonSchema = z.object({
+  personId: z.string().uuid(),
+  displayName: z.string(),
+  isSelf: z.boolean(),
+});
+
+export const playerCatalogSessionBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+  orderId: z.string().uuid(),
+  status: z.enum([
+    "confirmed",
+    "pending-payment",
+    "attended",
+    "no-show",
+    "cancelled",
+    "refunded",
+  ]),
+  catalogItemId: z.string().uuid(),
+  catalogItemSlug: z.string(),
+  title: z.string(),
+  subtype: z.string(),
+  organization: z.object({
+    id: z.string().uuid(),
+    slug: z.string(),
+    name: z.string(),
+  }),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  timezone: z.string(),
+  sessionStatus: z.enum(["scheduled", "cancelled", "complete"]),
+  sessionCancellationReason: z.literal("minimum-not-met").optional(),
+  deliveryMode: z.enum(["venue", "online"]),
+  venue: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string(),
+      addressLine1: z.string().optional(),
+      locality: z.string().optional(),
+      administrativeArea: z.string().optional(),
+      postalCode: z.string().optional(),
+      countryCode: z.string().length(2),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    })
+    .optional(),
+  coaches: z
+    .array(z.object({ personId: z.string().uuid(), displayName: z.string() }))
+    .readonly(),
+  participant: sessionBookingPersonSchema,
+  bookedBy: sessionBookingPersonSchema,
+  paidByPersonId: z.string().uuid(),
+  quantity: z.number().int().positive(),
+  paymentMethod: z.enum(["card", "credit", "cash"]).optional(),
+  creditsReserved: z.number().int().nonnegative(),
+  creditsSettled: z.number().int().nonnegative().optional(),
+  creditsReturned: z.number().int().nonnegative().optional(),
+  participation: occurrenceParticipationStateSchema.optional(),
+  cancellable: z.boolean(),
+  refundableUntil: z.iso.datetime().optional(),
+  refundIfCancelledNow: z.boolean(),
+  bookedAt: z.iso.datetime(),
+});
+
+export const catalogSessionCancellationResultSchema = z.object({
+  id: z.string().uuid(),
+  status: z.literal("cancelled"),
+  refundStatus: z.enum([
+    "credits-returned",
+    "submitted",
+    "review-required",
+    "not-applicable",
+  ]),
+  creditsReturned: z.number().int().nonnegative(),
+  message: z.string(),
+});
+
 export const publicCatalogPriceSchema = operatorCatalogPriceSchema.pick({
   id: true,
   audience: true,
@@ -4483,6 +4714,8 @@ export const publicCatalogItemSchema = operatorCatalogItemSchema
   })
   .extend({
     variants: z.array(publicCatalogVariantSchema).readonly(),
+    // Present only when the offer has player minimums or group-size pricing.
+    participation: publicParticipationSummarySchema.optional(),
     upcomingOccurrences: z
       .array(
         z.object({
@@ -4501,6 +4734,10 @@ export const publicCatalogItemSchema = operatorCatalogItemSchema
               }),
             )
             .readonly(),
+          capacity: z.number().int().positive().optional(),
+          bookedCount: z.number().int().nonnegative().optional(),
+          spotsRemaining: z.number().int().nonnegative().optional(),
+          participation: occurrenceParticipationStateSchema.optional(),
         }),
       )
       .readonly(),

@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "17eca3c0c5f888f29497982ae49cc51a5ac4172d18d4ed6c761e81fd0e0a8cfd",
+    "fa7972fe771fe2a0338b96587ef10ea8e32cf7d186c37cda3f85535268b9dfe2",
   modules: [
     {
       id: "M1",
@@ -160,14 +160,18 @@ export const generatedDunaFeatureKnowledge = {
     "beginVideoUpload",
     "beginYoutubeChannelConnection",
     "blockCourtTime",
+    "bookCatalogSessions",
     "cancelAccountDeletion",
     "cancelBooking",
     "cancelCalendarSession",
+    "cancelCatalogSessionBooking",
     "cancelPickup",
     "catalogCheckoutStatus",
     "catalogItemVersions",
     "catalogOfferEligibility",
     "catalogRecommendations",
+    "catalogSessionBookings",
+    "catalogSessionOccurrences",
     "changeCourtSchedule",
     "checkoutStatus",
     "claimMatchNoteShare",
@@ -449,6 +453,7 @@ export const generatedDunaFeatureKnowledge = {
     "setProfessionalEventFollow",
     "setTeamSelection",
     "settings",
+    "settleCatalogSessionOccurrence",
     "settlePredictionMarket",
     "settleResolvedPredictionMarkets",
     "smokeTestScraper",

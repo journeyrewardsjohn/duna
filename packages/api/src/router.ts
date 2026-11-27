@@ -54,6 +54,11 @@ import {
   bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  catalogSessionBookingResultSchema,
+  catalogSessionCancellationResultSchema,
+  operatorCatalogSessionOccurrenceSchema,
+  playerCatalogSessionBookingSchema,
+  participationEvaluationSchema,
   customerPaymentScheduleSchema,
   catalogOfferEligibilitySchema,
   consentRecordResultSchema,
@@ -243,10 +248,23 @@ import {
   updateOperatorMemberProfile,
 } from "./people-service";
 import {
+  CatalogCheckoutError,
   getCatalogOfferEligibility,
   getCatalogCheckoutStatus,
   startCatalogCheckout,
 } from "./catalog-checkout";
+import {
+  CatalogParticipationError,
+  evaluateCatalogSessionParticipation,
+  loadOperatorCatalogSessionOccurrences,
+} from "./catalog-participation";
+import {
+  bookCatalogSessions,
+  cancelCatalogSessionBooking,
+  CatalogSessionBookingError,
+  loadPlayerCatalogSessionBookings,
+  MAX_CATALOG_SESSIONS_PER_BOOKING,
+} from "./catalog-session-bookings";
 import {
   approveTicketOrder,
   claimTeamEntry,
@@ -1725,6 +1743,42 @@ function throwDomainError(error: unknown): never {
             : error.code === "EVENT_SEQUENCE_CONFLICT"
               ? "CONFLICT"
               : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogParticipationError) {
+    const code =
+      error.code === "OCCURRENCE_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "INVALID_ATTENDANCE"
+            ? "BAD_REQUEST"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogSessionBookingError) {
+    const code =
+      error.code === "BOOKING_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_REQUEST"
+            ? "BAD_REQUEST"
+            : error.code === "DATABASE_REQUIRED"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogCheckoutError) {
+    const code =
+      error.code === "CATALOG_ITEM_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MEMBERSHIP_REQUIRED" ||
+            error.code === "PARTICIPANT_NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "CHECKOUT_UNAVAILABLE"
+            ? "CONFLICT"
+            : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof SandDataServiceError) {
@@ -5147,6 +5201,9 @@ const playerRouter = router({
         promoCode: z.string().trim().min(3).max(48).optional(),
         quantity: z.number().int().min(1).max(50),
         catalogSessionOccurrenceId: z.string().uuid().optional(),
+        // Book for a dependent as their verified guardian. Credits only.
+        participantPersonId: z.string().uuid().optional(),
+        creditSource: z.enum(["self", "participant"]).optional(),
         recordingConsentAccepted: z.boolean().optional(),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -5169,6 +5226,122 @@ const playerRouter = router({
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // Book several session occurrences with organization credits in one call,
+  // for the caller or for dependents they are the verified guardian of.
+  bookCatalogSessions: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-booking",
+        capacity: 6,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        bookings: z
+          .array(
+            z.object({
+              catalogItemId: z.string().uuid(),
+              catalogVariantId: z.string().uuid(),
+              catalogSessionOccurrenceId: z.string().uuid(),
+              participantPersonId: z.string().uuid().optional(),
+              quantity: z.number().int().min(1).max(50).default(1),
+            }),
+          )
+          .min(1)
+          .max(MAX_CATALOG_SESSIONS_PER_BOOKING),
+        // Whose wallet pays for a dependent's sessions. Defaults to the
+        // caller's own wallet.
+        creditSource: z.enum(["self", "participant"]).optional(),
+        // True (default): every session is booked, or none remain booked.
+        atomic: z.boolean().default(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionBookingResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.bookCatalogSessions",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await bookCatalogSessions({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // The caller's session schedule, including sessions booked for verified
+  // dependents.
+  catalogSessionBookings: protectedProcedure
+    .input(
+      z
+        .object({
+          scope: z.enum(["upcoming", "past", "all"]).default("upcoming"),
+          includeDependents: z.boolean().default(true),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .default({ scope: "upcoming", includeDependents: true, limit: 50 }),
+    )
+    .output(z.array(playerCatalogSessionBookingSchema).readonly())
+    .query(({ input, ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadPlayerCatalogSessionBookings({
+            actor: ctx.actor!,
+            ...input,
+            now: ctx.now,
+          }),
+    ),
+  cancelCatalogSessionBooking: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-cancel",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        // Required to cancel after the refund window, when nothing returns.
+        acknowledgeNoRefund: z.boolean().default(false),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionCancellationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelCatalogSessionBooking",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelCatalogSessionBooking({
+              actor: ctx.actor!,
+              bookingId: input.bookingId,
+              acknowledgeNoRefund: input.acknowledgeNoRefund,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
           } catch (error) {
@@ -11919,6 +12092,64 @@ const operatorRouter = router({
               ...input,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  catalogSessionOccurrences: organizationProcedure("sessions:read")
+    .input(
+      z
+        .object({
+          catalogItemId: z.string().uuid().optional(),
+          from: z.iso.datetime().optional(),
+          to: z.iso.datetime().optional(),
+        })
+        .default({}),
+    )
+    .output(z.array(operatorCatalogSessionOccurrenceSchema).readonly())
+    .query(({ input, ctx }) =>
+      loadOperatorCatalogSessionOccurrences({
+        actor: ctx.actor!,
+        catalogItemId: input.catalogItemId,
+        from: input.from ? new Date(input.from) : undefined,
+        to: input.to ? new Date(input.to) : undefined,
+        now: ctx.now,
+      }),
+    ),
+  settleCatalogSessionOccurrence: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogSessionOccurrenceId: z.string().uuid(),
+        // Bookings that attended. Required when the offer settles on
+        // recorded attendance; ignored when it settles on the booked
+        // headcount at the cutoff.
+        attendedFulfillmentIds: z.array(z.string().uuid()).max(500).optional(),
+        // Decide the minimum and lock the headcount before the cutoff.
+        decideBeforeCutoff: z.boolean().default(false),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(participationEvaluationSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.settleCatalogSessionOccurrence",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await evaluateCatalogSessionParticipation({
+              occurrenceId: input.catalogSessionOccurrenceId,
+              organizationId: ctx.actor!.organizationId!,
+              force: input.decideBeforeCutoff,
+              attendedFulfillmentIds: input.attendedFulfillmentIds,
+              actorPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
               now: ctx.now,
             });
           } catch (error) {

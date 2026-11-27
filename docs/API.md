@@ -101,6 +101,52 @@ replays the projection without the disputed evidence.
 `admin.reviewMatchHistoryDispute` either upholds or rejects the report and
 replays the projection with the reviewed state. Both actions are audited.
 
+## Session participation, family booking, and schedules
+
+Scheduled catalog services (`type: "service"` with one-off or recurring
+`sessionSchedule`) can carry `configuration.participation`. The capacity stays
+in `configuration.capacity`; it is the maximum and is never stored twice.
+
+| Field                      | Meaning                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `minParticipants`          | Players needed for the session to run (default 1)                               |
+| `minimumPolicy`            | `cancel` (cancel and refund) or `run` when the minimum is not met (default)     |
+| `cutoffMinutesBeforeStart` | When the minimum is checked and the headcount locks (default 1440, max 10080)   |
+| `settlementBasis`          | `cutoff` (booked headcount at the cutoff) or `attendance` (recorded attendance) |
+| `creditTiers`              | Optional `{ minParticipants, maxParticipants, creditsPerPlayer }` rows          |
+
+Tiers must start at the minimum, be contiguous and non-overlapping, and end at
+the capacity; the last tier may omit `maxParticipants`. The catalog credit price
+must equal the highest tier. Offers without `participation` behave exactly as
+capacity-only offers always have.
+
+| Procedure                                 | Purpose                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `public.organizationStorefront`           | Each service adds `participation`; each occurrence adds headcount and `participation` state |
+| `player.startCatalogCheckout`             | Optional `participantPersonId` and `creditSource` book for a verified dependent             |
+| `player.bookCatalogSessions`              | Book up to 20 session occurrences with credits; atomic by default, per-session results      |
+| `player.catalogSessionBookings`           | The caller's schedule, including sessions booked for verified dependents                    |
+| `player.cancelCatalogSessionBooking`      | Cancel inside the refund window with credits returned; late cancels need acknowledgement    |
+| `operator.catalogSessionOccurrences`      | Rosters with headcount, minimum decision, and settlement state                              |
+| `operator.settleCatalogSessionOccurrence` | Decide the minimum early, or record attendance and settle an attendance-priced session      |
+
+Invariants an integration must preserve:
+
+- A credit booking reserves the highest tier that could still apply. When the
+  headcount is final, each booking settles to its tier and the difference
+  returns to the wallet that paid, once, through the credit ledger. A player is
+  never charged more than they reserved.
+- `/api/cron/catalog-participation` applies cutoffs. Every step is idempotent;
+  do not settle or refund outside `evaluateCatalogSessionParticipation`.
+- A session that opens inside its own cutoff window (created, first published,
+  or given new rules shortly before it starts) is decided halfway between
+  opening and the start, never the moment it appears. A session that has
+  already started is never cancelled automatically.
+- Only an adult with a verified, reviewed guardianship that carries spending
+  approval may book for a dependent. The booking belongs to the dependent; the
+  order belongs to whoever's wallet paid.
+- A dependent can see a session their guardian booked but cannot cancel it.
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.
