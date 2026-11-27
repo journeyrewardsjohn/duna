@@ -1,21 +1,22 @@
-import "@duna/ui/tideline/tideline.css";
+import "@duna/ui/tideline/styles.css";
 import "@duna/ui/tideline/legacy-bridge.css";
 
 import { buttonClassName, Tideline, TidelineFonts } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import styles from "../gallery.module.css";
+import { isTidelineGalleryEnabled } from "../gallery-guard";
 import { InteractionsLab } from "../interactions";
 import { BookLesson } from "./book-lesson";
 
 // Read the flag per request, so one build serves both answers.
 export const dynamic = "force-dynamic";
 
-const enabled = () => process.env.TIDELINE_GALLERY === "1";
-
 export function generateMetadata(): Metadata {
   return {
-    title: enabled() ? "Book a lesson · Tideline gallery" : "Not found",
+    title: isTidelineGalleryEnabled()
+      ? "Book a lesson · Tideline gallery"
+      : "Not found",
     robots: { index: false, follow: false },
   };
 }
@@ -29,7 +30,7 @@ export default async function BookLessonPage({
 }: {
   searchParams: Promise<{ theme?: string }>;
 }) {
-  if (!enabled()) notFound();
+  if (!isTidelineGalleryEnabled()) notFound();
   const requested = (await searchParams).theme;
   const theme: GalleryTheme = themes.includes(requested as GalleryTheme)
     ? (requested as GalleryTheme)
