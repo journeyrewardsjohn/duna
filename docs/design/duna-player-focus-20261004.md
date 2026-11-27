@@ -1,3 +1,5 @@
+> **Superseded by Tideline 4.1.1** (the Duna Design System, 27 November 2026): see [the contract](tideline-4.1.1/README.md). Kept for history and for behaviour the contract does not change.
+
 # Duna Player task-first interface
 
 The October 4 request extends the approved simple HQ direction to Duna Player:

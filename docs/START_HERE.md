@@ -9,13 +9,17 @@ Read only what the change requires, but do not skip the ownership contract:
 
 1. [`../AGENTS.md`](../AGENTS.md) for product, design, accessibility, and release
    invariants.
-2. [`ARCHITECTURE.md`](ARCHITECTURE.md) for runtime, trust, and data boundaries.
-3. The target guide in [`surfaces/`](surfaces/README.md).
-4. [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md) and
+2. [`design/tideline-4.1.1/README.md`](design/tideline-4.1.1/README.md), the
+   Duna Design System (Tideline 4.1.1) contract, before any user-facing
+   change, and [`plan/README.md`](plan/README.md) when working in the redesign
+   programme.
+3. [`ARCHITECTURE.md`](ARCHITECTURE.md) for runtime, trust, and data boundaries.
+4. The target guide in [`surfaces/`](surfaces/README.md).
+5. [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md) and
    [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md) before using a connected provider.
-5. The specialist guide for messaging, video, health, predictions, pricing,
+6. The specialist guide for messaging, video, health, predictions, pricing,
    professional data, API, or MCP work.
-6. [`BUILD_MATRIX.md`](BUILD_MATRIX.md) and [`OPERATIONS.md`](OPERATIONS.md) when
+7. [`BUILD_MATRIX.md`](BUILD_MATRIX.md) and [`OPERATIONS.md`](OPERATIONS.md) when
    the request includes release, deployment, or readiness.
 
 Treat `BUILD_MATRIX.md` as dated evidence, not a permanent production claim.
