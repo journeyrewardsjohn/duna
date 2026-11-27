@@ -1,50 +1,44 @@
 # Duna design references
 
-“Golden Hour Performance” is Duna’s shared creative system across public web,
-the Player experience, Duna HQ, Super Admin, Duna Players, Duna Pro, Watch,
-Live Activities, video, imagery, and lifecycle media.
+**The Duna Design System (Tideline 4.1.1) is the design contract for every
+surface** (public web, Player web, Duna HQ and Super Admin, Duna Player, Duna
+Pro, Watch, Live Activities and widgets). Start at
+[`tideline-4.1.1/README.md`](tideline-4.1.1/README.md); the programme that
+builds it is in [`../plan/README.md`](../plan/README.md).
 
-The current references are intentionally separate:
+| File                                                           | What it is                                                                |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`tideline-4.1.1/README.md`](tideline-4.1.1/README.md)         | The contract: what overrides what, rules R1–R22, how to verify a screen   |
+| [`tideline-4.1.1/brand-book.md`](tideline-4.1.1/brand-book.md) | Brand Book 2.0: Crest, colour, Jost / Geist, rating ring, motion, loaders |
+| [`tideline-4.1.1/tokens.json`](tideline-4.1.1/tokens.json)     | The 4.1.1 tokens and canonical names                                      |
+| [`tideline-4.1.1/components.md`](tideline-4.1.1/components.md) | Every component the designs use                                           |
+| [`tideline-4.1.1/canvases.md`](tideline-4.1.1/canvases.md)     | Design canvases and the board for each work package                       |
+| [`tideline-4.1.1/ia-hq.md`](tideline-4.1.1/ia-hq.md)           | HQ navigation and route renames                                           |
+| [`tideline-4.1.1/adaptive.md`](tideline-4.1.1/adaptive.md)     | Width classes, iPhone Duo and iPad                                        |
+| [`tideline-4.1.1/assets/`](tideline-4.1.1/assets/)             | Final brand SVGs                                                          |
 
-- `duna-font-usage-guide.md` is the authoritative typography contract for all
-  web, HQ, Player, and Pro surfaces. It supersedes every earlier font rule.
-- `duna-design-system-v4.md` is the active amendment for the public website,
-  including its hero, color families, band geometry, navigation, footer, and
-  tightly scoped DM Mono metadata accent.
-- `duna-design-system-v3.md` is the active amendment for ground inversion,
-  athletic composition, club color, and player identity outside the public-web
-  v4 scope.
-- `duna-hq-component-system.md` is the operational component, content, and
-  responsive usage contract for Duna HQ.
-- `duna-mobile-interface-v4.md` is the current mobile chrome, navigation,
-  messaging, video, recorder, five-point grid, and migration contract. It
-  supersedes conflicting mobile UI direction in the older guide.
-- `duna-implementation-audit.md` records the verified production failures and
-  their acceptance criteria.
-- `duna-design-system.md` defines the core brand and web system.
-- `duna-mobile-design-guide.md` retains the product jobs, sunlight behavior,
-  offline expectations, and Player/Pro separation not amended by v4.
-- `duna-theming-light-dark.md` defines the composable theme, semantic zone, and
-  environmental contrast model.
+In short: Jost Medium 500 for one title per screen and marketing headlines,
+Geist and Geist Mono for everything else, no serif; Night Court, Salt, Dune,
+Hardwood, and Solar for live states only; orange retired; HQ on white.
+
+## Superseded references
+
+Every other file in this folder (`duna-font-usage-guide.md`,
+`duna-design-system*.md`, `duna-mobile-*.md`, `duna-theming-light-dark.md`,
+`duna-implementation-audit.md`, `duna-hq-*.md`, `duna-player-focus-20261004.md`,
+`duna-public-*.md`) carries a "Superseded by Tideline 4.1.1" banner. They are
+kept for history and for product behaviour the contract does not change (for
+example "Next up comes from future bookings only", audience routing, honest
+empty data). Their visual rules (Satoshi, DM Mono, flare orange, `--hq-*`, the
+sand world, the glass dock, Golden Hour Performance) no longer apply.
 
 The repository-wide implementation contract lives in [`AGENTS.md`](../../AGENTS.md).
-Keep the references, shared tokens, and that contract in the same change when a
-future design-system decision is amended.
-
-## Typography assets
-
-Duna ships Satoshi for every product word and number. Public editorial metadata
-may use the tightly scoped DM Mono accent defined by v4. The authoritative
-weights, loading sources, fallbacks, and verification rules live in
-`duna-font-usage-guide.md`. Older licensed or open-source font assets may remain
-in repository history, but they are not an active product typography contract.
+`scripts/verify-design-system.ts` enforces the contract with per-surface files
+in `scripts/design-contracts/`.
 
 ## Generated media
 
-Approved Golden Hour stills and motion plates live in
-`apps/web/public/media/brand`; their provenance and intended use live beside
-them in `imagery-log.json`. The home cinemagraph is progressive enhancement:
-the still remains the canonical frame, and motion is withheld for reduced
-motion, data-saving, and constrained mobile connections. The Player sign-in
-surface reuses the same scene at a mobile-appropriate encode so brand imagery
-does not split across products.
+Approved stills and motion plates live in `apps/web/public/media/brand`; their
+provenance and intended use live beside them in `imagery-log.json`. Motion is
+progressive enhancement: the still is the canonical frame, and motion is
+withheld for reduced motion, data saving and constrained connections.

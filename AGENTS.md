@@ -1,123 +1,139 @@
 # Duna product and design contract
 
 This file applies to the entire Duna monorepo. Product behavior, accessibility,
-and data truth always take precedence over visual novelty.
+safety, and data truth always take precedence over visual novelty.
 
-## November 2 public website direction
+> **Override, 27 November 2026.** The Duna Design System (Tideline 4.1.1,
+> the owner's Brand Book 2.0) is the design contract for every surface:
+> [`docs/design/tideline-4.1.1/README.md`](docs/design/tideline-4.1.1/README.md).
+> It overrides every older design document and every earlier visual rule in
+> this file's history (Satoshi, DM Mono, flare orange, `--hq-*`, the sand
+> world, the glass dock). The redesign programme, its ownership and its agent
+> rules are in [`docs/plan/README.md`](docs/plan/README.md). Nothing in the
+> redesign relaxes the safety, privacy, money, health-data, messaging-consent
+> or confirmation rules below.
 
-`docs/design/duna-public-audiences-20261102.md` supersedes earlier homepage
-composition and public navigation requirements. The homepage leads with Clubs;
-`/players` is the player landing page. Keep the audience toggle visible at every
-viewport, Duna's existing colors, layered product visuals, and plain-language
-features. Use finite purposeful motion, with static reduced-motion/data-saving
-fallbacks, to demonstrate capabilities alongside court photography.
+## Earlier dated directions
 
-## October 4 Player direction
+The November 2 public website, October 4 Player, October 4 public website and
+October 4 HQ directions (`docs/design/duna-public-audiences-20261102.md`,
+`duna-player-focus-20261004.md`, `duna-public-website-20261004.md`,
+`duna-hq-focus-20261004.md`) and the older design references
+(`duna-font-usage-guide.md`, `duna-design-system*.md`, `duna-mobile-*.md`,
+`duna-theming-light-dark.md`, `duna-implementation-audit.md`,
+`duna-hq-component-system.md`) are superseded by Tideline 4.1.1 and carry a
+banner saying so. Their product behaviour still holds where the contract does
+not change it: `/` leads with Clubs and `/players` is the player landing page
+with a visible For Clubs / For Players selector; Player Home is task-first with
+a personal Next up; HQ is calm and AI-first with roles and accessibility intact.
 
-`docs/design/duna-player-focus-20261004.md` records the subsequent Player
-request: a simpler task-first Home and contextual assistant entry. It supersedes
-the older four-actions-first Home ordering while preserving all destinations,
-account boundaries, review gates, live semantics, and native device validation.
+## The Duna Design System (Tideline 4.1.1)
 
-## October 4 public website direction
+Read the contract before changing any user-facing surface. Its rules R1–R22
+are checkable; the essentials:
 
-`docs/design/duna-public-website-20261004.md` supersedes older public navigation,
-headline weight, and detail-page density guidance. The requested Acid Grotesk
-font awaits the owner's licensed webfont files; Satoshi is the explicit interim
-font. HQ, authenticated Player, and native font contracts remain unchanged.
+- **Type.** Jost Medium 500 (tracking −0.015em) for marketing headlines and
+  one title per screen, never below 22px and never on a numeral; club
+  monograms are set in Jost. Geist for every other word; numbers, times,
+  scores and ratings are Geist 600 with tabular figures; Geist Mono for codes,
+  small uppercase labels and NetScore numerals. No serif anywhere. Satoshi,
+  Fellix, Archivo and DM Mono are legacy faces that remain only until each
+  surface migrates; never add new uses. Generic `sans-serif` is a failure
+  fallback only. Never synthesize a font weight. Tracking follows the tokens
+  and is never tighter than `-0.030em` outside Tideline's published display
+  styles. Club-configured fonts stay inside the club's own content and never
+  replace Duna chrome.
+- **Colour.** Night Court `#0E1A22` is ink, actions and the dark ground; Salt
+  `#F4F2EC` is the ground on player surfaces (cards stay white); Dune
+  `#D9C3A0` is the warm signal; Hardwood `#B5814F` is golden hour; Solar
+  `#F2542D` is for live states only (the rating ring's goal tick is the one
+  named exception, pending owner confirmation). Orange (flare, sunburst, the
+  old sun ramp) is retired and is never a CTA, scarcity or brand colour.
+- **HQ** sits on white / cool neutral (`data-zone="hq"`), never Salt, Dune or
+  any sand tone, with a white sidebar and a hairline divider. HQ uses the
+  shared Tideline roles; `--hq-*` variables are legacy aliases that F2b points
+  at Tideline and wave 5 deletes. Navigation follows
+  `docs/design/tideline-4.1.1/ia-hq.md` with no "More tools".
+- **Logo.** The Crest mark, micro mark and drawn wordmark from
+  `docs/design/tideline-4.1.1/assets/`, through `DunaMark` and `DunaLogo`;
+  `Crest` remains the club crest. A brand mark is never larger than 24px
+  inside a control.
+- **Icons** are on a 24 grid with a 1.75 stroke and square ends: 14px in chips
+  and dense rows, 16 inline, 20 in buttons, rows and inputs, 24 in navigation.
+  Chips always contain their content with padding (test "10:30 PM").
+- **Motion** uses Rise, Rally and Cross. Nothing bounces, springs or scales on
+  hover; entrances play once; only loaders and the live indicator loop.
+- **No ornament.** No decorative illustration marks and no left-edge colour
+  stripes as status indicators; use a small icon with a word.
+- **Club identity.** A club's own logo on the colour it chooses, a full-bleed
+  tile it uploads, or a two-character monogram; no white border; pending
+  states never desaturate a club's brand. Brand owns the fill; Duna owns the
+  frame: partner assets are never recoloured outside their approved usage.
+- **Maps** (Mapbox): street map to zoom 16, satellite for the last three zoom
+  levels, a single icon button for the look, zoom-ladder pins (inverted means
+  "yours", Solar only on a live pin), attribution always visible.
+- **Navigation.** Player (web and native) uses Find / Play / Improve /
+  Connect; Pro keeps coach tabs. Native apps use the system tab bar (it
+  becomes the iPhone Duo's vertical bar and the iPad sidebar). No function
+  exists on only one size; surfaces may. Sign-in, sign-up, the organisation
+  switcher (with "Create new organisation") and the personal account stay in
+  every shell and are restyled, never removed.
+- **Score cards** have a hairline net, per-set scores, a green check for the
+  winner (a trophy only for a title match) and one designed state for every
+  `match_status` value.
+- **Watch.** The shipped Apple Watch interaction (swipe up / down for a point,
+  left to undo, right to favourite) never changes; restyle only.
+- **Mobile.** Latest stable Expo (SDK 58 at the time of writing), minimum iOS
+  26, layouts by width class (compact / regular / expanded) with fully
+  designed iPhone Duo open and half-open layouts and iPad layouts; see
+  `docs/design/tideline-4.1.1/adaptive.md`.
 
-## October 4 HQ direction
+## Honesty, flags and confirmation
 
-`docs/design/duna-hq-focus-20261004.md` records the approved white, black, and
-grey HQ workspace and AI-first task flow. It supersedes older HQ accent and
-layout direction while preserving functionality, roles, and accessibility.
-Player and native design changes remain separately reviewed.
-
-## Required design references
-
-Read the relevant reference before changing any user-facing surface:
-
-1. [`docs/design/duna-font-usage-guide.md`](docs/design/duna-font-usage-guide.md)
-   is the authoritative typography contract for every surface. It supersedes
-   all font guidance in the design-system, mobile, theming, and audit files.
-2. [`docs/design/duna-design-system-v4.md`](docs/design/duna-design-system-v4.md)
-   is the current source of truth for the public website's hero, color families,
-   band geometry, navigation, footer, and tightly scoped editorial metadata
-   accent.
-3. [`docs/design/duna-mobile-interface-v4.md`](docs/design/duna-mobile-interface-v4.md)
-   is the current direction for native navigation, chat, video, recording,
-   Satoshi translation, icons, sheets, and the five-point mobile grid.
-4. [`docs/design/duna-design-system-v3.md`](docs/design/duna-design-system-v3.md)
-   is the current source of truth for ground inversion, athletic composition,
-   typography, club color, player identity, and page-level direction. It
-   supersedes only the zoning rule in v2; its typography guidance applies only
-   where the font usage guide does not amend it.
-5. [`docs/design/duna-implementation-audit.md`](docs/design/duna-implementation-audit.md)
-   is the verified correction ledger. Treat an item as closed only when source,
-   computed styles, responsive layout, and live behavior agree.
-6. [`docs/design/duna-design-system.md`](docs/design/duna-design-system.md)
-   remains the source for brand, imagery, motion, voice, and co-branding where
-   v3 does not amend it.
-7. [`docs/design/duna-mobile-design-guide.md`](docs/design/duna-mobile-design-guide.md)
-   extends the system for Duna Players and Duna Pro. It owns mobile navigation,
-   adaptive contrast, sunlight behavior, touch targets, offline states, the
-   Strand, and the Watch.
-8. [`docs/design/duna-theming-light-dark.md`](docs/design/duna-theming-light-dark.md)
-   owns theme architecture. Theme is a preference, zone is meaning, and
-   contrast is an environmental condition.
-
-When the documents appear to conflict, preserve these invariants:
-
-- Light is the default ground for editorial, athletic, browsing, ranking,
-  pre-match, post-match, HQ, and Super Admin surfaces.
-- Dark means a ball is in the air right now. Only live matches, live scoring,
-  and courtside mode use the live zone. A user-selected dark theme remains a
-  preference and does not change a surface's semantic zone.
-- Athletic energy comes from ghost type, blocked numerals, a single accent,
-  density contrast, and one plane break—not a dark background.
-- Energy belongs in athletes and meaningful data, not decorative chrome.
-- Flare is reserved for live, scarce, changing, or exception states. It is not
-  a general CTA or brand color.
-- Brand owns the fill; Duna owns the frame. Partner assets stay inside a Duna
-  container and must never be recolored outside their approved usage.
+- Never invent customers, quotes, claims, prices or policies; use real data or
+  a visible placeholder such as `[club policy]`.
+- A person confirms every send, payment, publish and destructive change. AI
+  may read and propose; it never acts without that confirmation.
+- Owner decision 2026-11-27: features ship switched on. Feature flags default
+  on and are kill switches, not gates. A feature that depends on an outside
+  provider shows an honest "not configured yet" state until production
+  credentials exist; agents never invent, request in chat or enter
+  credentials, and list what production needs in their PR (see
+  `docs/plan/production-readiness.md`). Which Stripe mode runs is decided by
+  the environment's keys, which the owner controls.
+- Product copy never names infrastructure vendors: say "Duna Hosting" and
+  "Duna Database", never Vercel or Neon. "Stripe" appears only where Duna Pay
+  explains verification. Required attributions (Mapbox, weather credit) stay.
 
 ## Shared implementation rules
 
 - Build shared primitives and semantic tokens in `packages/ui` before adding a
   local variant. Raw hex values in product components are defects unless the
-  value belongs to a third-party asset that cannot use Duna tokens.
-- Web surfaces declare `data-zone="editorial"`, `data-zone="athletic"`, or
-  `data-zone="live"`. Native screens declare the equivalent zone through the
-  shared token resolver. Never use the retired `performance` zone.
-- Every theme supports Light, Dark, and Match device. Never hardcode a fog
-  dissolve: it must resolve to the active zone ground.
-- Duna ships Satoshi as its primary product typeface. Use it for every word and
-  number across HQ, Player, and Pro, and for all web product copy and controls;
-  use tabular figures for updating or aligned data. DM Mono is restricted to
-  the short public-editorial metadata accents defined by v4 and never replaces
-  Satoshi in controls, reading copy, scores, HQ, or native apps. No serif,
-  optional monument face, or other brand family may enter a product bundle.
-  Generic `sans-serif` is a failure fallback only.
-  Club-configured theme fonts remain contained tenant content and never replace
-  Duna chrome.
-- Never synthesize a font weight. Tracking follows the v3 size curve and is
-  never tighter than `-0.030em`; display word spacing compensates negative
-  tracking.
-- HQ uses `--hq-*` only. Club Theme Kits accept one submitted color, normalize
-  it in OKLCH, and limit it to the five documented identity slots. Competition
-  surfaces remain neutral.
+  value belongs to a third-party asset that cannot use Duna tokens. Token
+  names keep their roles; values come from
+  `docs/design/tideline-4.1.1/tokens.json`.
+- Web surfaces declare a semantic zone (`data-zone="editorial"`, `"athletic"`,
+  `"live"` or `"hq"`). Native screens declare the equivalent zone through the
+  shared token resolver. Never use the retired `performance` zone. Live means
+  play is in progress; a user-selected dark theme is a preference and does not
+  change a surface's semantic zone.
+- Every theme supports Light, Dark, and Match device. Never hardcode a fade:
+  it must resolve to the active zone ground.
+- Club Theme Kits accept one submitted color, normalize it in OKLCH, and limit
+  it to the documented identity slots. Competition surfaces remain neutral.
 - Players control expressive identity but never verified data. Curated accents,
   photos, biographies, highlights, and sponsor marks obey verification and
   moderation gates.
-- Meaningful numbers use the six Satoshi tiers from the font guide. Score,
-  Hero, Block, Table, and Chip use tabular figures; Monument is deliberately
-  proportional. Never synthesize a font weight. Satoshi is the only product
-  family across web, HQ, Super Admin, and both native apps.
-- Use the four chip classes from the design system. Do not render status,
-  taxonomy, identity, and metrics as undifferentiated badges.
+- Use the four chip kinds (status, taxonomy, identity, metric). Do not render
+  status, taxonomy, identity, and metrics as undifferentiated badges.
 - Do not render misleading empty data such as `0/0`, `0–0`, undifferentiated
   `50% / 50%`, or podium treatment before competition has begun.
 - “Sand Rating” is always two words in user-facing copy.
+- `pnpm verify:design-system` enforces the contract through per-surface files
+  in `scripts/design-contracts/`. A check marked `legacy` pins pre-Tideline
+  code and is deleted by the surface's own work package when it migrates; add
+  migrated paths to that file's `migrated` list so the Tideline guard protects
+  them.
 
 ## Interaction and accessibility
 
@@ -162,8 +178,9 @@ When the documents appear to conflict, preserve these invariants:
   route-based active state, and audience-specific desktop navigation.
 - Use a simple editorial hero, restrained existing imagery, clear feature
   summaries, grouped access to the full platform, FAQs, and a relevant action.
-- Keep Duna's existing palette and public typography. All content and links
-  work without animation; do not restore the legacy ticker or sand world.
+- Use the Duna Design System palette and type (Jost headlines, Geist text).
+  All content and links work without animation; do not restore the legacy
+  ticker or sand world.
 - Club features and pricing remain at their existing `/run-your-club` URLs.
 - Reference sites may inform hierarchy and pacing; do not copy their assets,
   copy, brand names, product claims, or customer proof.
@@ -250,10 +267,14 @@ When the documents appear to conflict, preserve these invariants:
 - Verify the changed experience in light editorial, light athletic, live,
   explicit dark preference, and bright/glare contexts.
 - Verify desktop, tablet, 390px mobile, reduced motion, keyboard navigation,
-  and the native bright/glare conditions relevant to the change.
+  and the native bright/glare conditions relevant to the change. Native work
+  also verifies iPhone Duo (closed, half-open, open) and iPad full and split
+  windows.
 - Run formatting, readable-type, lint, type, unit, build, mobile export, and
   Playwright checks in proportion to the touched surfaces. The repository-wide
-  release gate remains `pnpm verify`.
+  release gate remains `pnpm verify`; in CI, `release-gate` aggregates the
+  parallel `static-checks`, `unit-tests` and `build-and-e2e` jobs, and
+  `mobile-bundles` always reports.
 - A successful build is not a successful release. Verify web, HQ, Player iOS,
   Player Android, Pro iOS, and Pro Android independently, and name any external
   credential, store, provider, or account-owner gate that remains.

@@ -1,3 +1,5 @@
+> **Superseded by Tideline 4.1.1** (the Duna Design System, 27 November 2026): see [the contract](tideline-4.1.1/README.md). Kept for history and for behaviour the contract does not change.
+
 # Duna Design System v3 — Ground Inversion, Club Color, and Player Identity
 
 **Supersedes:** the zoning rule in v2 §1. Everything else in `duna-design-system.md`, `duna-theming-light-dark.md`, and `duna-mobile-design-guide.md` still stands.
