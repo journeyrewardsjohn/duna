@@ -1,4 +1,4 @@
-import type { HealthCategory } from "@duna/api";
+import type { HealthCategory, HealthMetric } from "@duna/api";
 import * as SecureStore from "expo-secure-store";
 import type { DunaApiClient } from "./mobile-api";
 import DunaHealthKit, {
@@ -37,6 +37,8 @@ export type HealthSyncProgress = {
 export type AppleHealthSyncInput = {
   readonly client: DunaApiClient;
   readonly categories: readonly HealthCategory[];
+  /** Server-provided allowlist for the player's age band (H1). */
+  readonly metrics?: readonly HealthMetric[];
   readonly maxPages?: number;
   readonly onProgress?: (progress: HealthSyncProgress) => void;
 };
@@ -94,15 +96,39 @@ export function isAppleHealthAvailable(): boolean {
   return Boolean(DunaHealthKit?.isAvailable());
 }
 
+function metricsJson(metrics?: readonly HealthMetric[]): string | null {
+  return metrics ? JSON.stringify(metrics) : null;
+}
+
+/**
+ * The App Store storefront country StoreKit reports (ISO alpha-3, "USA").
+ * Duna Health is US-only; the server refuses sync, check-ins and new grants
+ * without a US value. This is a device claim, not proof of location.
+ */
+export async function readAppleStorefrontCountry(): Promise<
+  string | undefined
+> {
+  if (!DunaHealthKit?.storefrontCountryCode) return undefined;
+  try {
+    return (await DunaHealthKit.storefrontCountryCode()) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function requestAppleHealthAccess(
   categories: readonly HealthCategory[],
+  metrics?: readonly HealthMetric[],
 ): Promise<HealthKitAuthorizationRequest> {
   if (!DunaHealthKit || !DunaHealthKit.isAvailable()) {
     throw new Error(
       "Apple Health is available only in the installed Duna iPhone app.",
     );
   }
-  return DunaHealthKit.requestAuthorization(JSON.stringify(categories));
+  return DunaHealthKit.requestAuthorization(
+    JSON.stringify(categories),
+    metricsJson(metrics),
+  );
 }
 
 export async function syncAppleHealth(
@@ -133,6 +159,7 @@ async function syncAppleHealthOnce(
   let hasMore = true;
   let remainingMetrics: readonly string[] = [];
   let syncState = await getAppleHealthSyncState();
+  const storefrontCountry = await readAppleStorefrontCountry();
   const startingRecordsProcessed = syncState?.recordsProcessed ?? 0;
   const pageBudget = Math.max(
     1,
@@ -156,6 +183,7 @@ async function syncAppleHealthOnce(
       JSON.stringify(input.categories),
       cursor,
       HEALTHKIT_PAGE_RECORD_LIMIT,
+      metricsJson(input.metrics),
     );
     const changes = parseHealthKitChanges(raw);
     remainingMetrics = changes.metricsWithMore ?? [];
@@ -184,6 +212,7 @@ async function syncAppleHealthOnce(
         earliestAuthorizedAt,
         samples: [...batch.samples],
         deletedExternalIds: [...batch.deletedExternalIds],
+        storefrontCountry,
       });
       if (result.protocolVersion !== 2) {
         throw new Error(
@@ -265,13 +294,17 @@ export async function hasPendingAppleHealthChanges(): Promise<boolean> {
 
 export async function startAppleHealthMonitoring(
   categories: readonly HealthCategory[],
+  metrics?: readonly HealthMetric[],
 ): Promise<(() => void) | undefined> {
   if (!DunaHealthKit || !DunaHealthKit.isAvailable()) return undefined;
   const module = DunaHealthKit;
   const subscription = module.addListener("onHealthDataChanged", () => {
     void SecureStore.setItemAsync(HEALTH_DIRTY_KEY, new Date().toISOString());
   });
-  await module.startMonitoring(JSON.stringify(categories));
+  await module.startMonitoring(
+    JSON.stringify(categories),
+    metricsJson(metrics),
+  );
   return () => {
     subscription.remove();
     module.stopMonitoring();

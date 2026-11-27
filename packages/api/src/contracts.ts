@@ -2531,6 +2531,17 @@ export const healthSampleInputSchema = healthSampleBaseSchema.superRefine(
 export const healthTimelineEntrySchema = healthSampleBaseSchema
   .omit({ externalId: true })
   .extend({ id: z.string().uuid(), category: healthCategorySchema });
+/**
+ * H1: the App Store storefront country StoreKit reports on the device
+ * (ISO 3166-1 alpha-3, for example "USA"). A client claim; optional so older
+ * builds still parse, but Health sync, check-ins and new grants are refused
+ * without a US value.
+ */
+export const healthStorefrontCountrySchema = z
+  .string()
+  .trim()
+  .max(8)
+  .optional();
 export const healthSharingScopeSchema = z.enum([
   "summary",
   "timeline",
@@ -2551,6 +2562,11 @@ export const healthSharingGrantSchema = z.object({
   scopes: z.array(healthSharingScopeSchema).min(1).readonly(),
   expiresAt: z.iso.datetime(),
   createdAt: z.iso.datetime(),
+  /** H1: a minor's grant is readable only once a guardian approves it. */
+  approvalStatus: z
+    .enum(["not-required", "pending", "approved", "denied"])
+    .optional(),
+  approvedAt: z.iso.datetime().optional(),
 });
 export const healthConnectionSchema = z.object({
   provider: z.literal("apple-health"),
@@ -2563,6 +2579,8 @@ export const healthConnectionSchema = z.object({
   importedSampleCount: z.number().int().nonnegative().optional(),
   earliestSampleAt: z.iso.datetime().optional(),
   latestSampleAt: z.iso.datetime().optional(),
+  /** H1: a withdrawal is waiting for the daily purge. */
+  purgePending: z.boolean().optional(),
 });
 export const healthDailySummarySchema = z.object({
   date: z.string(),

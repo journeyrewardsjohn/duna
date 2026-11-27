@@ -51,6 +51,7 @@ import {
   sendConversationMessage,
 } from "./messaging-service";
 import { scheduleConversationWakeUp } from "./messaging-wakeups";
+import { currentAgeBand } from "./age-band";
 
 // Messaging may contain sensitive personal context. Duna stores its own audit
 // digests and disables SDK traces so message bodies and tool results are not
@@ -832,11 +833,7 @@ async function continueDunaSupportAfterSafety(input: {
     }),
   ]);
   if (conversation?.type !== "support" || !person) return;
-  const ageBand = ["unknown", "under-13", "teen", "adult"].includes(
-    person.ageBand,
-  )
-    ? (person.ageBand as ApiActor["ageBand"])
-    : "unknown";
+  const ageBand = currentAgeBand(person, input.now);
   const actor: ApiActor = {
     personId: person.id,
     displayName: person.displayName,

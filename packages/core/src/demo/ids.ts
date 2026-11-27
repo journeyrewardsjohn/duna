@@ -21,6 +21,7 @@ export const demoIdPrefixes = {
   facility: "d00c0000",
   search: "d00d0000",
   conditions: "d00e0000",
+  health: "d00f0000",
 } as const;
 
 export type DemoDomain = keyof typeof demoIdPrefixes;

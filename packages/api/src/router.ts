@@ -68,6 +68,7 @@ import {
   facilityPublicRouter,
 } from "./routers/facility";
 import { searchPlayerRouter, searchPublicRouter } from "./routers/search";
+import { healthPlayerRouter } from "./routers/health";
 import {
   conditionsOperatorRouter,
   conditionsPublicRouter,
@@ -130,6 +131,7 @@ import {
   healthProfileSchema,
   healthSampleInputSchema,
   healthSharingScopeSchema,
+  healthStorefrontCountrySchema,
   matchSummarySchema,
   matchJournalNoteSchema,
   matchJournalWorkspaceSchema,
@@ -1629,11 +1631,13 @@ function throwDomainError(error: unknown): never {
     const code =
       error.code === "HEALTH_NOT_FOUND" || error.code === "GRANT_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "ACCESS_DENIED" || error.code === "ADULT_REQUIRED"
+        : error.code === "ACCESS_DENIED" || error.code === "NOT_ELIGIBLE"
           ? "FORBIDDEN"
           : error.code === "INVALID_GRANT"
             ? "BAD_REQUEST"
-            : "INTERNAL_SERVER_ERROR";
+            : error.code === "POLICY_VERSION_MISMATCH"
+              ? "CONFLICT"
+              : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof PrivacyError) {
@@ -3272,7 +3276,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  healthDashboard: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  healthDashboard: protectedProcedure
     .output(healthDashboardSchema)
     .query(async ({ ctx }) => {
       try {
@@ -3286,7 +3292,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  healthProfile: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  healthProfile: protectedProcedure
     .input(z.object({ personId: z.string().uuid() }))
     .output(healthProfileSchema)
     .query(async ({ input, ctx }) => {
@@ -3302,7 +3310,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  syncHealthSamples: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  syncHealthSamples: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sync",
@@ -3320,12 +3330,14 @@ const playerRouter = router({
         earliestAuthorizedAt: z.iso.datetime().optional(),
         samples: z.array(healthSampleInputSchema).max(500),
         deletedExternalIds: z.array(z.string().uuid()).max(500),
+        storefrontCountry: healthStorefrontCountrySchema,
       }),
     )
     .output(
       z.object({
         imported: z.number().int().nonnegative(),
         deleted: z.number().int().nonnegative(),
+        dropped: z.number().int().nonnegative().optional(),
         protocolVersion: z.literal(2),
       }),
     )
@@ -3340,6 +3352,7 @@ const playerRouter = router({
             : undefined,
           samples: input.samples,
           deletedExternalIds: input.deletedExternalIds,
+          storefront: input.storefrontCountry,
           syncedAt: ctx.now,
           requestId: ctx.requestId,
           ipAddress: ctx.ipAddress,
@@ -3348,7 +3361,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  saveHealthCheckIn: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  saveHealthCheckIn: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-check-in",
@@ -3359,6 +3374,7 @@ const playerRouter = router({
     .input(
       z.object({
         checkIn: healthCheckInInputSchema,
+        storefrontCountry: healthStorefrontCountrySchema,
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -3374,6 +3390,7 @@ const playerRouter = router({
             return await saveHealthCheckIn({
               actor: ctx.actor!,
               checkIn: input.checkIn,
+              storefront: input.storefrontCountry,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3384,7 +3401,9 @@ const playerRouter = router({
         },
       }),
     ),
-  createHealthSharingGrant: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  createHealthSharingGrant: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sharing-grant",
@@ -3401,6 +3420,7 @@ const playerRouter = router({
           categories: z.array(healthCategorySchema).min(1).max(4),
           scopes: z.array(healthSharingScopeSchema).min(1).max(3),
           expiresAt: z.iso.datetime(),
+          storefrontCountry: healthStorefrontCountrySchema,
           idempotencyKey: z.string().uuid(),
         })
         .refine(
@@ -3414,7 +3434,14 @@ const playerRouter = router({
           },
         ),
     )
-    .output(z.object({ id: z.string().uuid() }))
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        approvalStatus: z
+          .enum(["not-required", "pending", "approved", "denied"])
+          .optional(),
+      }),
+    )
     .mutation(({ input, ctx }) =>
       runIdempotentMutation({
         key: input.idempotencyKey,
@@ -3433,6 +3460,7 @@ const playerRouter = router({
               categories: input.categories,
               scopes: input.scopes,
               expiresAt: new Date(input.expiresAt),
+              storefront: input.storefrontCountry,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3443,7 +3471,9 @@ const playerRouter = router({
         },
       }),
     ),
-  revokeHealthSharingGrant: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  revokeHealthSharingGrant: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sharing-revoke",
@@ -3479,7 +3509,9 @@ const playerRouter = router({
         },
       }),
     ),
-  disconnectHealth: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  disconnectHealth: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-disconnect",
@@ -8492,6 +8524,8 @@ const playerRouter = router({
   concierge: conciergePlayerRouter,
   facility: facilityPlayerRouter,
   search: searchPlayerRouter,
+  // H1: Duna Health eligibility, teen opt-in and guardian approval.
+  health: healthPlayerRouter,
 });
 
 const operatorRouter = router({
