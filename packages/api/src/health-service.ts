@@ -84,6 +84,7 @@ import {
   normalizeStorefront,
   organizationViewerRolesFor,
   subtractMonths,
+  type HealthAgeBand,
   type HealthGrantApprovalStatus,
   type HealthPermit,
 } from "./services/health/policy";
@@ -160,6 +161,8 @@ type HealthAccess = {
   readonly scopes: readonly HealthSharingScope[];
   /** Metrics this owner's band may hold; reads filter to them. */
   readonly metrics?: readonly HealthMetric[];
+  /** The owner's age band today (from their birth date). */
+  readonly ownerBand?: HealthAgeBand;
 };
 
 export function healthGrantAllows(input: {
@@ -617,6 +620,7 @@ async function resolveHealthAccess(input: {
       ),
       scopes: ALL_SCOPES,
       metrics: ownerPermit.allowedMetrics,
+      ownerBand: ownerState.band,
     };
   }
   const grants = await getDatabase()
@@ -708,6 +712,7 @@ async function resolveHealthAccess(input: {
       valid.flatMap((grant) => grant.scopes as HealthSharingScope[]),
     ),
     metrics: ownerPermit.allowedMetrics,
+    ownerBand: ownerState.band,
   };
 }
 
@@ -1875,6 +1880,9 @@ async function buildProfile(input: {
     matches,
     timezone,
     now: input.now,
+    // A minor's Readiness and Strain stay visible only to the minor.
+    hideDerivedScores:
+      !access.owner && isMinorBand(access.ownerBand ?? "unknown"),
   });
   if (!access.owner && input.audit !== false) {
     await recordHealthAudit({
@@ -1901,6 +1909,7 @@ function assembleProfile(input: {
   readonly matches: HealthProfile["matches"];
   readonly timezone: string;
   readonly now: Date;
+  readonly hideDerivedScores?: boolean;
 }): HealthProfile {
   const { access, samples, matches, timezone } = input;
   const timeline =
@@ -1920,8 +1929,8 @@ function assembleProfile(input: {
     )
     .reduce((sum, sample) => sum + (sample.value ?? 0), 0);
   const intelligence = buildHealthIntelligence({
-    samples,
-    checkIns: input.checkIns,
+    samples: input.hideDerivedScores ? [] : samples,
+    checkIns: input.hideDerivedScores ? [] : input.checkIns,
     timezone,
     now: input.now,
   });
@@ -1969,7 +1978,9 @@ function assembleProfile(input: {
     daily: buildDaily(samples, timezone),
     timeline,
     matches,
-    correlations: computeHealthCorrelations(matches),
+    correlations: input.hideDerivedScores
+      ? []
+      : computeHealthCorrelations(matches),
     intelligence: intelligenceForViewer,
     disclaimer:
       "Duna Readiness and Strain are individualized performance context—not medical advice, diagnosis, injury prediction, or a direction to train. Wearable sleep stages are estimates. Correlations describe this player's available sample and do not establish cause.",

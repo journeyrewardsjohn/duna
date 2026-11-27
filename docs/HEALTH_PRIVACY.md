@@ -165,7 +165,8 @@ audit entries contain no Health values and are kept as the compliance record.
 | Anonymous or public viewer          | Never                                                                     | Not applicable                                                                                        | None                               |
 
 Readiness, Strain and correlations shown to a grantee are derived only from
-the categories that grantee may see. Public profile status, public video
+the categories that grantee may see; for an owner under 18 they are not shown
+to grantees at all (the minor alone sees them). Public profile status, public video
 status, share links, staff scopes and ordinary club membership never grant
 Health access.
 
