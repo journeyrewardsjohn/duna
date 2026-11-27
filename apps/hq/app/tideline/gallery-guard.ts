@@ -1,10 +1,13 @@
+import type { HqDevOnlyRoutePrefix } from "@duna/core/hq-routes";
+
 /**
  * The Tideline gallery is a development tool. It exists only when HQ runs with
  * `TIDELINE_GALLERY=1`; otherwise `/tideline` and everything under it is a
  * plain 404, answered by the proxy before any page, layout or loading UI runs.
- * Read per request, so one build serves both answers.
+ * Read per request, so one build serves both answers. The path is one of the
+ * route map's `hqDevOnlyRoutePrefixes`, so its route test skips it as well.
  */
-export const TIDELINE_GALLERY_PATH = "/tideline";
+export const TIDELINE_GALLERY_PATH: HqDevOnlyRoutePrefix = "/tideline";
 
 export function isTidelineGalleryEnabled(
   env: Record<string, string | undefined> = process.env,
