@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { format } from "prettier";
 
 async function main() {
@@ -10,9 +10,20 @@ async function main() {
     "packages/api/src/generated/duna-feature-knowledge.ts",
   );
   const surfaceDirectory = join(root, "docs/surfaces");
+  const domainRouterDirectory = join(root, "packages/api/src/routers");
+  // Domain sub-routers (R3 seams) are mounted from router.ts; read them too so
+  // a procedure added in routers/** refreshes the manifest like router.ts does.
+  const domainRouterPaths = (
+    readdirSync(domainRouterDirectory, { recursive: true }) as string[]
+  )
+    .map((name) => name.split(sep).join("/"))
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    .sort()
+    .map((name) => join(domainRouterDirectory, name));
   const sourcePaths = [
     join(root, "docs/BUILD_MATRIX.md"),
     join(root, "packages/api/src/router.ts"),
+    ...domainRouterPaths,
     ...readdirSync(surfaceDirectory)
       .filter((name) => name.endsWith(".md") && name !== "README.md")
       .sort()
@@ -64,6 +75,24 @@ async function main() {
     ),
   ]
     .map((match) => match[1]!)
+    .concat(
+      // Domain procedures are qualified by their file (for example
+      // "conditions.forecast"). The R3 placeholder `status` queries are not
+      // product capabilities, so they are left out.
+      domainRouterPaths.flatMap((path) =>
+        [
+          ...readFileSync(path, "utf8").matchAll(
+            /^\s{2}([A-Za-z][A-Za-z0-9]*):\s+(?:[A-Za-z]*Procedure)\b/gm,
+          ),
+        ]
+          .map((match) => match[1]!)
+          .filter((name) => name !== "status")
+          .map(
+            (name) =>
+              `${relative(domainRouterDirectory, path).replace(/\.ts$/, "").split(sep).join(".")}.${name}`,
+          ),
+      ),
+    )
     .filter((name, index, all) => all.indexOf(name) === index)
     .sort();
 
