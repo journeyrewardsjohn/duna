@@ -36,11 +36,12 @@
 
 ## Feature flags
 
-<!-- Flags added. Every new flag must default to off. Write "none" if there are none. -->
+<!-- Flags added. Flags default ON and exist as kill switches, not gates. Name the kill switch and what the off state shows. Write "none" if there are none. -->
 
 ## Safety statement
 
-- [ ] This change does not activate any provider; Stripe stays in test mode.
+- [ ] Provider-dependent features are on in code and show an honest "not configured yet" state until production credentials exist; no credentials were invented or entered.
+- [ ] A person still confirms every send, payment and publish; no invented customers, claims, prices or policies; product copy names no infrastructure vendors.
 
 ## Follow-ups
 
