@@ -11,6 +11,7 @@ import {
   catalogSessionOccurrences,
   catalogVariants,
   getDatabase,
+  guardianships,
   inventoryMovements,
   inventoryReservations,
   inventoryStockItems,
@@ -35,9 +36,12 @@ import {
 import {
   allocateOrganizationCredits,
   assertBalancedJournal,
+  creditTierForHeadcount,
   membershipEntitlementMultiplier,
   membershipSubscriptionDisclosure,
   membershipSubscriptionPolicy,
+  participationCutoffAt,
+  reservedCreditsPerPlayer,
   validateMembershipSubscriptionPolicy,
   type LedgerPosting,
 } from "@duna/core";
@@ -50,6 +54,12 @@ import {
 } from "@duna/pricing";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import { evaluateCatalogSessionParticipation } from "./catalog-participation";
+import {
+  bookingParticipationSnapshot,
+  catalogItemParticipationRules,
+  participationOpenedAt,
+} from "./catalog-participation-rules";
 import {
   ensureLedgerAccount,
   issueOrganizationCredits,
@@ -175,6 +185,7 @@ export class CatalogCheckoutError extends Error {
       | "PRICE_UNAVAILABLE"
       | "INSUFFICIENT_CREDITS"
       | "INVENTORY_UNAVAILABLE"
+      | "PARTICIPANT_NOT_ALLOWED"
       | "CHECKOUT_UNAVAILABLE",
     message: string,
   ) {
@@ -496,6 +507,45 @@ export async function getCatalogOfferEligibility(input: {
   };
 }
 
+/**
+ * A guardian may book for a dependent under the same rules that let them fund
+ * the dependent's wallet: an adult with a verified, reviewed guardianship
+ * that carries spending approval. Checked on the primary database.
+ */
+export async function assertGuardianCanBookFor(input: {
+  readonly actor: ApiActor;
+  readonly participantPersonId: string;
+}): Promise<void> {
+  if (input.actor.ageBand !== "adult") {
+    throw new CatalogCheckoutError(
+      "PARTICIPANT_NOT_ALLOWED",
+      "Only an adult parent or guardian can book for a family member.",
+    );
+  }
+  const relationship = await getDatabase().query.guardianships.findFirst({
+    where: and(
+      eq(guardianships.guardianId, input.actor.personId),
+      eq(guardianships.minorId, input.participantPersonId),
+    ),
+  });
+  if (!relationship) {
+    throw new CatalogCheckoutError(
+      "PARTICIPANT_NOT_ALLOWED",
+      "This person is not connected to your household.",
+    );
+  }
+  if (
+    !relationship.verified ||
+    relationship.reviewStatus !== "verified" ||
+    !relationship.canApproveSpending
+  ) {
+    throw new CatalogCheckoutError(
+      "PARTICIPANT_NOT_ALLOWED",
+      "Guardian review must be complete before you can book for this family member.",
+    );
+  }
+}
+
 async function holdSaleInventory(input: {
   readonly organizationId: string;
   readonly catalogVariantId: string;
@@ -614,6 +664,13 @@ export async function startCatalogCheckout(input: {
   readonly promoCode?: string;
   readonly quantity: number;
   readonly catalogSessionOccurrenceId?: string;
+  /**
+   * Book for a dependent. The caller must be the dependent's verified
+   * guardian with spending approval; the booking belongs to the dependent.
+   */
+  readonly participantPersonId?: string;
+  /** Whose wallet pays for a dependent's booking. Defaults to the caller's. */
+  readonly creditSource?: "self" | "participant";
   readonly recordingConsentAccepted?: boolean;
   readonly successUrl: string;
   readonly cancelUrl: string;
@@ -697,6 +754,32 @@ export async function startCatalogCheckout(input: {
       "Plans must be purchased one at a time.",
     );
   }
+  const participantPersonId = input.participantPersonId ?? input.actor.personId;
+  const bookingForDependent = participantPersonId !== input.actor.personId;
+  if (input.creditSource === "participant" && !bookingForDependent) {
+    throw new CatalogCheckoutError(
+      "PARTICIPANT_NOT_ALLOWED",
+      "Choose the family member this booking is for.",
+    );
+  }
+  if (bookingForDependent) {
+    await assertGuardianCanBookFor({
+      actor: input.actor,
+      participantPersonId,
+    });
+    if (row.item.type !== "service" || input.paymentMethod !== "credit") {
+      throw new CatalogCheckoutError(
+        "PARTICIPANT_NOT_ALLOWED",
+        "Booking for a family member is available for sessions paid with organization credits.",
+      );
+    }
+  }
+  // The participant attends; the payer's wallet is charged. They differ only
+  // when a guardian pays for a dependent from the guardian's own credits.
+  const payerPersonId =
+    bookingForDependent && input.creditSource !== "participant"
+      ? input.actor.personId
+      : participantPersonId;
   const scheduleConfiguration =
     row.item.configuration.sessionSchedule &&
     typeof row.item.configuration.sessionSchedule === "object" &&
@@ -739,6 +822,62 @@ export async function startCatalogCheckout(input: {
         ),
       })
     : undefined;
+  // Offers without participation rules skip this block entirely and keep
+  // their capacity-only behavior.
+  let participationRules =
+    occurrence && row.item.type === "service"
+      ? catalogItemParticipationRules(
+          row.item.configuration,
+          occurrence.capacity,
+        )
+      : undefined;
+  if (
+    occurrence &&
+    participationRules &&
+    !occurrence.participationOutcome &&
+    input.now >=
+      participationCutoffAt(
+        occurrence.startsAt,
+        participationRules,
+        participationOpenedAt({
+          occurrenceCreatedAt: occurrence.createdAt,
+          itemPublishedAt: row.item.publishedAt,
+          configuration: row.item.configuration,
+        }),
+      )
+  ) {
+    // The cutoff has passed but the schedule has not decided this session
+    // yet. Decide first so nobody can book into a session that is about to be
+    // cancelled for missing its minimum.
+    await evaluateCatalogSessionParticipation({
+      occurrenceId: occurrence.id,
+      organizationId: row.organization.id,
+      requestId: input.requestId,
+      now: input.now,
+    });
+    occurrence = await database.query.catalogSessionOccurrences.findFirst({
+      where: and(
+        eq(catalogSessionOccurrences.id, occurrence.id),
+        eq(catalogSessionOccurrences.status, "scheduled"),
+      ),
+    });
+    if (!occurrence) participationRules = undefined;
+  }
+  if (input.catalogSessionOccurrenceId && !occurrence) {
+    const unavailable =
+      await database.query.catalogSessionOccurrences.findFirst({
+        where: and(
+          eq(catalogSessionOccurrences.id, input.catalogSessionOccurrenceId),
+          eq(catalogSessionOccurrences.catalogItemId, row.item.id),
+        ),
+      });
+    if (unavailable?.participationOutcome === "cancel-under-minimum") {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "This session was cancelled because it did not reach its minimum number of players.",
+      );
+    }
+  }
   if (fixedSession && !occurrence) {
     throw new CatalogCheckoutError(
       "CATALOG_ITEM_UNAVAILABLE",
@@ -796,13 +935,14 @@ export async function startCatalogCheckout(input: {
   }
   // Participation waivers are intentionally collected after a successful
   // purchase. They protect participation, never the ability to pay.
+  // Membership access and member pricing follow the person who attends.
   const isMember = await hasOrganizationMembership(
-    input.actor.personId,
+    participantPersonId,
     row.organization.id,
   );
   const membershipInclusion = isMember
     ? await membershipIncludedOffer({
-        personId: input.actor.personId,
+        personId: participantPersonId,
         organizationId: row.organization.id,
         targetCatalogItemId: row.item.id,
         now: input.now,
@@ -922,9 +1062,26 @@ export async function startCatalogCheckout(input: {
   const amountMinor = membershipInclusion
     ? 0
     : checkoutUnitAmountMinor * input.quantity;
+  // Group-size pricing reserves the highest tier that could still apply; the
+  // difference returns to the wallet once the headcount is final. When the
+  // headcount is already final, the booking pays that tier and nothing more.
+  const participationTiers =
+    occurrence && participationRules && input.paymentMethod === "credit"
+      ? participationRules.creditTiers
+      : [];
+  const pricedAtSettledHeadcount =
+    participationTiers.length > 0 && occurrence?.participationSettledAt
+      ? (occurrence.settledHeadcount ?? 0)
+      : undefined;
+  const participationCreditsPerPlayer =
+    pricedAtSettledHeadcount === undefined
+      ? reservedCreditsPerPlayer(participationTiers)
+      : creditTierForHeadcount(participationTiers, pricedAtSettledHeadcount)
+          ?.creditsPerPlayer;
   const creditsApplied = membershipInclusion
     ? 0
-    : (price.creditAmount ?? 0) * input.quantity;
+    : (participationCreditsPerPlayer ?? price.creditAmount ?? 0) *
+      input.quantity;
   if (
     input.paymentMethod === "card" &&
     (!row.item.allowCard || !price.stripePriceId)
@@ -1103,18 +1260,22 @@ export async function startCatalogCheckout(input: {
           .where(sql`false`)
       : database
           .insert(organizationParticipants)
-          .values({
-            organizationId: row.organization.id,
-            personId: input.actor.personId,
-            relationship: "player",
-            status: "active",
-            addedByPersonId: input.actor.personId,
-          })
+          .values(
+            [...new Set([participantPersonId, payerPersonId])].map(
+              (personId) => ({
+                organizationId: row.organization.id,
+                personId,
+                relationship: "player" as const,
+                status: "active" as const,
+                addedByPersonId: input.actor.personId,
+              }),
+            ),
+          )
           .onConflictDoNothing(),
     database.insert(orders).values({
       id: orderId,
       organizationId: row.organization.id,
-      buyerPersonId: input.actor.personId,
+      buyerPersonId: payerPersonId,
       status: "pending",
       currency: orderCurrency,
       subtotalMinor: priced.subtotalMinor,
@@ -1148,13 +1309,20 @@ export async function startCatalogCheckout(input: {
       catalogItemVersionId,
       catalogVariantId: row.variant.id,
       catalogSessionOccurrenceId: occurrence?.id,
-      personId: input.actor.personId,
+      personId: participantPersonId,
       kind: fulfillmentKind(row.item),
       status: tracksInventory ? "held" : "pending",
       details: {
         paymentMethod: input.paymentMethod,
         creditsApplied,
         quantity: input.quantity,
+        // Present only when someone books for a dependent.
+        bookedByPersonId: bookingForDependent
+          ? input.actor.personId
+          : undefined,
+        creditSource: bookingForDependent
+          ? (input.creditSource ?? "self")
+          : undefined,
         applicationFeeMinor,
         consumerServiceFeeMinor: serviceFeeMinor,
         operatorProcessingFeeMinor: operatorFee?.amountMinor ?? 0,
@@ -1166,6 +1334,16 @@ export async function startCatalogCheckout(input: {
         membershipIncluded: Boolean(membershipInclusion),
         membershipId: membershipInclusion?.membershipId,
         membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
+        participation:
+          occurrence && participationRules
+            ? bookingParticipationSnapshot({
+                rules: participationRules,
+                creditsPerPlayer: membershipInclusion
+                  ? undefined
+                  : participationCreditsPerPlayer,
+                settledHeadcount: pricedAtSettledHeadcount,
+              })
+            : undefined,
         sessionOccurrenceId: occurrence?.id,
         sessionStartsAt: occurrence?.startsAt.toISOString(),
         sessionEndsAt: occurrence?.endsAt.toISOString(),
@@ -1316,7 +1494,7 @@ export async function startCatalogCheckout(input: {
     const wallet = await database.query.organizationWallets.findFirst({
       where: and(
         eq(organizationWallets.organizationId, row.organization.id),
-        eq(organizationWallets.personId, input.actor.personId),
+        eq(organizationWallets.personId, payerPersonId),
         eq(organizationWallets.status, "active"),
       ),
     });
@@ -1355,6 +1533,11 @@ export async function startCatalogCheckout(input: {
         .update(orders)
         .set({ status: "cancelled", updatedAt: input.now })
         .where(eq(orders.id, orderId));
+      // An unpaid booking must not keep holding a place in the session.
+      await database
+        .update(catalogFulfillments)
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(eq(catalogFulfillments.id, fulfillmentId));
       throw new CatalogCheckoutError(
         "INSUFFICIENT_CREDITS",
         `You need ${creditsApplied} ${row.organization.name} credits for this purchase.`,
@@ -1386,8 +1569,8 @@ export async function startCatalogCheckout(input: {
       }),
       ensureLedgerAccount({
         organizationId: row.organization.id,
-        ownerPersonId: input.actor.personId,
-        code: `MEMBER_CREDITS_${input.actor.personId}`,
+        ownerPersonId: payerPersonId,
+        code: `MEMBER_CREDITS_${payerPersonId}`,
         name: "Member credit wallet",
         accountType: "liability",
         normalSide: "credit",
@@ -1424,7 +1607,7 @@ export async function startCatalogCheckout(input: {
       await database.execute(sql`
         SELECT duna_redeem_organization_credits(
           ${row.organization.id}::uuid,
-          ${input.actor.personId}::uuid,
+          ${payerPersonId}::uuid,
           ${orderId}::uuid,
           ${creditsApplied}::integer,
           ${walletAccountId}::uuid,
@@ -1448,6 +1631,10 @@ export async function startCatalogCheckout(input: {
         .update(orders)
         .set({ status: "cancelled", updatedAt: input.now })
         .where(eq(orders.id, orderId));
+      await database
+        .update(catalogFulfillments)
+        .set({ status: "cancelled", updatedAt: input.now })
+        .where(eq(catalogFulfillments.id, fulfillmentId));
       throw new CatalogCheckoutError(
         "INSUFFICIENT_CREDITS",
         error instanceof Error

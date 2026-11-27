@@ -10263,6 +10263,103 @@ body[data-zone="operator"] .product-inventory-receiver > form {
 
 /* Saving a guided draft should explain exactly what remains, rather than
    mixing a generic validation error with a ready state in the sticky bar. */
+/* Group-size pricing: one calm row per tier, readable at a glance. */
+body[data-zone="operator"] .guided-product-builder .guided-participation-tiers {
+  display: grid;
+  gap: 0.75rem;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tiers
+  ol {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tiers
+  li {
+  align-items: end;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(8rem, 1fr) repeat(2, minmax(6rem, 8rem)) auto;
+  padding: 0.65rem 0.75rem;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tier-range {
+  align-self: center;
+  color: var(--hq-deep);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tiers
+  li
+  > button,
+body[data-zone="operator"] .guided-product-builder .guided-participation-add {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  color: var(--hq-deep);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.825rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.75rem;
+}
+
+body[data-zone="operator"] .guided-product-builder .guided-participation-add {
+  justify-self: start;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tiers
+  button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+body[data-zone="operator"]
+  .guided-product-builder
+  .guided-participation-tiers
+  button:focus-visible {
+  outline: 2px solid var(--hq-core);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  body[data-zone="operator"]
+    .guided-product-builder
+    .guided-participation-tiers
+    li {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body[data-zone="operator"]
+    .guided-product-builder
+    .guided-participation-tier-range {
+    grid-column: 1 / -1;
+  }
+}
+
 body[data-zone="operator"] .guided-product-builder .guided-product-note {
   background: color-mix(in srgb, var(--hq-core) 10%, var(--surface-1));
   border: 1px solid color-mix(in srgb, var(--hq-core) 28%, var(--hairline));
