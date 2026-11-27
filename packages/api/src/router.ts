@@ -36,6 +36,42 @@ import {
 } from "./auth";
 import type { ApiContext } from "./context";
 import { messagingRouter } from "./messaging-router";
+import { flagsPublicRouter } from "./routers/flags";
+import { readinessAdminRouter } from "./routers/readiness";
+import { setupOperatorRouter } from "./routers/setup";
+import { payOperatorRouter } from "./routers/pay";
+import { teamAvailabilityOperatorRouter } from "./routers/team-availability";
+import { teamPayOperatorRouter } from "./routers/team-pay";
+import { teamPayoutsOperatorRouter } from "./routers/team-payouts";
+import {
+  trainingProgramsOperatorRouter,
+  trainingProgramsPlayerRouter,
+} from "./routers/training-programs";
+import {
+  trainingDrillsOperatorRouter,
+  trainingDrillsPlayerRouter,
+  trainingDrillsPublicRouter,
+} from "./routers/training-drills";
+import { trainingSceneAiOperatorRouter } from "./routers/training-scene-ai";
+import {
+  conciergeOperatorRouter,
+  conciergePlayerRouter,
+} from "./routers/concierge";
+import { websiteWorkspaceOperatorRouter } from "./routers/website-workspace";
+import {
+  websiteTemplatesOperatorRouter,
+  websiteTemplatesPublicRouter,
+} from "./routers/website-templates";
+import {
+  facilityOperatorRouter,
+  facilityPlayerRouter,
+  facilityPublicRouter,
+} from "./routers/facility";
+import { searchPlayerRouter, searchPublicRouter } from "./routers/search";
+import {
+  conditionsOperatorRouter,
+  conditionsPublicRouter,
+} from "./routers/conditions";
 import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
@@ -2723,6 +2759,13 @@ const publicRouter = router({
       if (!coach) throw new TRPCError({ code: "NOT_FOUND" });
       return coach;
     }),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  flags: flagsPublicRouter,
+  trainingDrills: trainingDrillsPublicRouter,
+  websiteTemplates: websiteTemplatesPublicRouter,
+  facility: facilityPublicRouter,
+  search: searchPublicRouter,
+  conditions: conditionsPublicRouter,
 });
 
 const playerRouter = router({
@@ -8443,6 +8486,12 @@ const playerRouter = router({
         },
       }),
     ),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  trainingPrograms: trainingProgramsPlayerRouter,
+  trainingDrills: trainingDrillsPlayerRouter,
+  concierge: conciergePlayerRouter,
+  facility: facilityPlayerRouter,
+  search: searchPlayerRouter,
 });
 
 const operatorRouter = router({
@@ -13951,6 +14000,20 @@ const operatorRouter = router({
         },
       }),
     ),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  setup: setupOperatorRouter,
+  pay: payOperatorRouter,
+  teamAvailability: teamAvailabilityOperatorRouter,
+  teamPay: teamPayOperatorRouter,
+  teamPayouts: teamPayoutsOperatorRouter,
+  trainingPrograms: trainingProgramsOperatorRouter,
+  trainingDrills: trainingDrillsOperatorRouter,
+  trainingSceneAi: trainingSceneAiOperatorRouter,
+  concierge: conciergeOperatorRouter,
+  websiteWorkspace: websiteWorkspaceOperatorRouter,
+  websiteTemplates: websiteTemplatesOperatorRouter,
+  facility: facilityOperatorRouter,
+  conditions: conditionsOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({
@@ -16184,8 +16247,8 @@ const adminRouter = router({
           .min(2)
           .max(96)
           .regex(
-            /^[a-z0-9][a-z0-9._-]*$/,
-            "Use lowercase letters, numbers, dots, underscores, or hyphens.",
+            /^[a-z0-9][a-zA-Z0-9._-]*$/,
+            "Start with a lowercase letter or number; then use letters, numbers, dots, underscores, or hyphens.",
           ),
         organizationId: z.string().uuid().optional(),
         market: z.string().trim().min(2).max(96).optional(),
@@ -16339,6 +16402,8 @@ const adminRouter = router({
   toolRiskRegistry: adminProcedure
     .output(z.record(z.string(), z.enum(["read", "propose", "confirm-always"])))
     .query(() => toolRiskRegistry),
+  // R3 seam: provider readiness (./routers/readiness.ts).
+  readiness: readinessAdminRouter,
 });
 
 export const appRouter = router({

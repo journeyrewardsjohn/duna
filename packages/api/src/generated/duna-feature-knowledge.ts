@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "e5f1f6dbe736573fe17644c0740616508dd8b1d9704a4c551a6118cc10b22d9c",
+    "f3f1604a56d7b1098c1123cc2365c37d1a91f7718f44cf9984a7851d64eeb5c9",
   modules: [
     {
       id: "M1",
@@ -264,6 +264,7 @@ export const generatedDunaFeatureKnowledge = {
     "finalizePaymentCollection",
     "finishLiveVideo",
     "flagMatchHistory",
+    "flags.enabled",
     "foldScore",
     "generateBracket",
     "generateSchedule",
@@ -357,6 +358,7 @@ export const generatedDunaFeatureKnowledge = {
     "queues",
     "quote",
     "ratingLab",
+    "readiness.providers",
     "reconcileDivisionSelection",
     "recordActivityAttendance",
     "recordBirthDate",
