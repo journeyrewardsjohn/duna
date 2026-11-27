@@ -1143,9 +1143,11 @@ acceptance criteria:
    app uses the light theme; match/live surfaces may still use contextual dark
    treatments. Do not reintroduce a global appearance toggle without a product
    decision and full state coverage.
-10. **Satoshi is the Player type system.** New native Player screens should use
-    the shared Satoshi text/input wrappers and numeric tiers rather than raw,
-    screen-local font choices.
+10. **The Duna Design System (Tideline 4.1.1) is the Player type system.**
+    Jost Medium 500 for one title per screen, Geist and Geist Mono for
+    everything else (see `docs/design/tideline-4.1.1/README.md`). Until the
+    native foundation lands, new screens use the shared text/input wrappers
+    (today `satoshi-text.tsx`) rather than raw, screen-local font choices.
 11. **Venue Finder, Session Arrival, and the reusable Live Activities prompt
     are implemented but currently have no mounted navigation entry.** A
     redesign should reconnect or retire them; it should not assume they are

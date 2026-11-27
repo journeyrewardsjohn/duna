@@ -30,7 +30,7 @@ Get started becomes a contextual checklist until relevant setup is complete. An 
 
 Do not hide a tournament operator's main workspace behind repeated navigation. Allow explicit pins and remember the last activity view without unpredictably reordering navigation. Staff see destinations appropriate to their permissions. Mobile HQ remains responsive and Duna Pro remains the on-the-go operator surface.
 
-Preserve the approved HQ white/black/grey design, Satoshi typography, light/dark preferences, accessible controls, and restrained motion. Website creative freedom lives inside the preview; it does not restyle HQ.
+Preserve the approved HQ white/black/grey design, Duna Design System (Tideline 4.1.1) typography (Jost title, Geist text), light/dark preferences, accessible controls, and restrained motion. Website creative freedom lives inside the preview; it does not restyle HQ.
 
 ## 3. Operations depth that must survive
 

@@ -14,6 +14,12 @@ const ignoredDirectories = new Set([
 const violations: string[] = [];
 const minimumFontSizePx = 12;
 const minimumFontSizeRem = 0.75;
+/**
+ * Native text layers allowed to import React Native's Text and TextInput.
+ * Screens use the shared layer (legacy `satoshi-text.tsx` today; the Duna
+ * Design System's `@duna/ui/native` text components after migration).
+ */
+const nativeTextLayers = ["satoshi-text.tsx", "duna-text.tsx"];
 
 function nativeTextImports(source: string) {
   return [
@@ -60,12 +66,12 @@ for (const file of sourceRoots.flatMap((root) => sourceFiles(root))) {
   if (
     extension === ".tsx" &&
     ["player", "pro"].some((app) => file.includes(join("apps", app))) &&
-    !file.endsWith("satoshi-text.tsx")
+    !nativeTextLayers.some((layer) => file.endsWith(layer))
   ) {
     const nativeBindings = nativeTextImports(source);
     if (nativeBindings.length > 0) {
       violations.push(
-        `${relative(repositoryRoot, file)} imports native ${nativeBindings.join(", ")} instead of the Satoshi translation layer`,
+        `${relative(repositoryRoot, file)} imports native ${nativeBindings.join(", ")} instead of the shared Duna text layer`,
       );
     }
   }

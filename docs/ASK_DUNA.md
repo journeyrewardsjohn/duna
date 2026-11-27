@@ -17,8 +17,8 @@ permissions. Without an operator workspace, the floating surface links back to
 club HQ to choose one. It does not operate across organizations or inherit the
 authority of a transcript being inspected.
 
-The supplied Ask Journey export is a visual reference. Duna retains its Satoshi
-type, HQ tokens, organization context, permissions and business rules. The
+The supplied Ask Journey export is a visual reference. Duna retains the Duna
+Design System (Tideline 4.1.1) type and tokens, organization context, permissions and business rules. The
 composer supports people/event references, uploaded images/PDFs/text/CSV, five
 effort levels, streaming responses, stop/reconnect, and explicit action review.
 
