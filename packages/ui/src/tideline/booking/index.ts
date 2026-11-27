@@ -19,6 +19,7 @@ export {
   bookingLineItems,
   bookingReducer,
   bookingTotalCents,
+  canChooseSlot,
   canContinueBooking,
   formatMoney,
   formatTimeRange,

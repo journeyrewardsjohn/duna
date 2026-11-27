@@ -120,6 +120,21 @@ export function selectedSlot(
   );
 }
 
+/**
+ * Whether choosing `slotId` would be accepted: it is open on the selected day
+ * for the chosen format and coach. A list still showing an earlier day's
+ * sessions while the new day loads offers ids that fail this; refuse them in
+ * the radio's `onValueChange` (`details.cancel()`) instead of dispatching, so
+ * the control never asks for a value the state will not take.
+ */
+export function canChooseSlot(
+  catalog: BookingCatalog,
+  state: BookingState,
+  slotId: string,
+): boolean {
+  return selectedSlot(catalog, { ...state, slotId }) !== undefined;
+}
+
 /** Keeps the day and slot only while they still fit the format and coach. */
 function settle(catalog: BookingCatalog, state: BookingState): BookingState {
   const days = openDays(catalog, state);

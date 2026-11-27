@@ -573,6 +573,9 @@ test.describe("Tideline gallery, Book a lesson", () => {
     await expect(page.getByTestId("slots-heading")).toHaveText(
       "Monday, Nov 30.",
     );
+    // Monday's sessions replace Saturday's once their request settles; until
+    // then the page refuses Saturday's, so wait before choosing.
+    await expect(page.locator('[data-loaded-day="2026-11-30"]')).toBeVisible();
 
     // Slot: choosing an open one enables the action.
     const open = page.getByRole("radio", { name: /3:00–4:00pm/ });
@@ -590,6 +593,12 @@ test.describe("Tideline gallery, Book a lesson", () => {
     await expect(action).toHaveAttribute("aria-disabled", "true");
     await page.keyboard.press("ArrowLeft");
     await expect(formats.getByRole("radio", { name: /Private/ })).toBeChecked();
+    // Group has nothing on Monday, so the day moved to the first open one
+    // (Friday) and stays there; wait for Friday's sessions to load.
+    await expect(page.getByTestId("slots-heading")).toHaveText(
+      "Friday, Nov 27.",
+    );
+    await expect(page.locator('[data-loaded-day="2026-11-27"]')).toBeVisible();
     const again = page.getByRole("radio", { name: /3:00–4:00pm/ });
     await expect(again).not.toBeChecked();
     await again.focus();

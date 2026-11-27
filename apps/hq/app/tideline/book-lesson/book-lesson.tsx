@@ -6,6 +6,7 @@ import {
   type BookingCatalog,
   bookingLineItems,
   bookingReducer,
+  canChooseSlot,
   type BookingState,
   BookingSummary,
   bookingTotalCents,
@@ -252,7 +253,11 @@ export function BookLesson() {
           </p>
         </section>
 
-        <section className={styles.bookSection}>
+        <section
+          className={styles.bookSection}
+          // The day whose sessions are on screen, once its request settles.
+          data-loaded-day={loadedKey === dayKey ? state.date : undefined}
+        >
           <h2
             className="td-headline"
             data-testid="slots-heading"
@@ -265,8 +270,16 @@ export function BookLesson() {
           <SlotList
             aria-labelledby="book-slots"
             loading={loading}
-            onValueChange={(id) => {
-              if (id) void hold.run(id);
+            onValueChange={(id, details) => {
+              if (!id) return;
+              // Until the new day's sessions arrive the list still shows the
+              // previous day; refuse those so a press never asks for a slot
+              // the state will not take.
+              if (!canChooseSlot(catalog, latest.current, id)) {
+                details.cancel();
+                return;
+              }
+              void hold.run(id);
             }}
             slots={shown.map((slot) => ({
               id: slot.id,

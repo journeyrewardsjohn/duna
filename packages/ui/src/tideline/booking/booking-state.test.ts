@@ -5,6 +5,7 @@ import {
   bookingLineItems,
   bookingReducer,
   bookingTotalCents,
+  canChooseSlot,
   canContinueBooking,
   formatMoney,
   formatTimeRange,
@@ -97,6 +98,26 @@ const run = (
   );
 
 describe("booking state", () => {
+  it("refuses a slot left over from an earlier day while the new day loads", () => {
+    // The list still shows the 26th's sessions; the person moved to the 28th.
+    const moved = bookingReducer(catalog, initialBookingState(catalog), {
+      type: "day",
+      date: "2026-11-28",
+    });
+    expect(canChooseSlot(catalog, moved, "s1")).toBe(false);
+    // Dispatching it anyway changes nothing, which is why the list must
+    // cancel the press rather than ask for a value the state will not take.
+    expect(bookingReducer(catalog, moved, { type: "slot", id: "s1" })).toBe(
+      moved,
+    );
+    expect(canChooseSlot(catalog, moved, "s4")).toBe(true);
+    // Booked, unknown and wrong-format sessions are refused too.
+    const first = initialBookingState(catalog);
+    expect(canChooseSlot(catalog, first, "s2")).toBe(false);
+    expect(canChooseSlot(catalog, first, "nope")).toBe(false);
+    expect(canChooseSlot(catalog, first, "s1")).toBe(true);
+  });
+
   it("starts on the first format, any coach and the first open day", () => {
     expect(initialBookingState(catalog)).toEqual({
       formatId: "private",
