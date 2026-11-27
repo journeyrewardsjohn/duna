@@ -214,7 +214,7 @@ async function uploadMessageAttachmentPart(input: {
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     handle.offset = input.offset;
-    bytes = handle.readBytes(input.length);
+    bytes = await handle.readBytes(input.length);
   } finally {
     handle.close();
   }
@@ -824,7 +824,7 @@ export function PlayerMessagingScreen({
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>();
   const [enablingNotifications, setEnablingNotifications] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const threadScroll = useRef<ScrollView>(null);
+  const threadScroll = useRef<import("react-native").ScrollViewInstance>(null);
 
   const loadInbox = useCallback(async () => {
     let nextInbox =

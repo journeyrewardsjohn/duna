@@ -605,7 +605,7 @@ function RatingSparkline({ data }: { readonly data: readonly number[] }) {
 export function HomeV3Screen(props: HomeV3Props) {
   const [prompt, setPrompt] = useState("");
   const [exploreOpen, setExploreOpen] = useState(false);
-  const promptInput = useRef<import("react-native").TextInput>(null);
+  const promptInput = useRef<import("react-native").TextInputInstance>(null);
   const [activeTab, setActiveTab] = useState<HomeV3Tab>("all");
   const reduceMotion = useReducedMotion();
   const tabs: readonly { key: HomeV3Tab; label: string }[] = [

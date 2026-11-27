@@ -4829,7 +4829,7 @@ function ProApp() {
         void refresh();
       }
     };
-    void Linking.getInitialURL().then(openActivity);
+    void Linking.getInitialURL().then((url) => openActivity(url ?? null));
     const subscription = Linking.addEventListener("url", ({ url }) =>
       openActivity(url),
     );
