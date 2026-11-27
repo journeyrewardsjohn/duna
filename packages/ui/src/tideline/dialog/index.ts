@@ -1,0 +1,20 @@
+/** Dialog and Sheet. */
+export {
+  Dialog,
+  DialogActions,
+  DialogClose,
+  DialogContent,
+  DialogTrigger,
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTrigger,
+  type DialogCloseProps,
+  type DialogContentProps,
+  type DialogProps,
+  type DialogTriggerProps,
+  type SheetCloseProps,
+  type SheetContentProps,
+  type SheetProps,
+  type SheetTriggerProps,
+} from "./dialog";

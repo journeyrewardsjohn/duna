@@ -1,0 +1,240 @@
+/* Tideline AddPlayers and its list rows. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    .td-addp {
+      display: grid;
+      gap: var(--td-space-5);
+      min-width: 0;
+    }
+
+    .td-addp__section {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+    }
+
+    .td-addp__head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .td-addp__h {
+      font: var(--td-type-label);
+    }
+
+    .td-addp__count,
+    .td-addp__note {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-addp__count {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-addp__slots {
+      display: flex;
+      gap: var(--td-space-2);
+      justify-content: space-between;
+      padding-top: var(--td-space-2);
+
+      &:focus-visible {
+        border-radius: var(--td-radius-md);
+      }
+    }
+
+    .td-addp__slot {
+      position: relative;
+      display: grid;
+      flex: 1 1 0;
+      justify-items: center;
+      min-width: 0;
+    }
+
+    .td-addp__remove {
+      position: absolute;
+      top: -6px;
+      left: calc(50% + 12px);
+      display: grid;
+      place-items: center;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      background: var(--td-surface);
+      box-shadow:
+        inset 0 0 0 1px var(--td-line-strong),
+        0 1px 2px color-mix(in srgb, var(--td-text) 8%, transparent);
+      color: var(--td-text-2);
+
+      /* A 24px badge with a 48px target. */
+
+      &::after {
+        position: absolute;
+        content: "";
+        inset: -14px;
+      }
+
+      .td-icon {
+        width: 12px;
+        height: 12px;
+        stroke-width: 2;
+      }
+
+      &:hover {
+        color: var(--td-danger);
+      }
+    }
+
+    .td-addp__sugs {
+      position: relative;
+      display: grid;
+      grid-auto-columns: 156px;
+      grid-auto-flow: column;
+      gap: var(--td-space-3);
+      margin: -6px;
+      padding: 6px;
+      overflow-x: auto;
+      scroll-snap-type: x proximity;
+      scrollbar-width: none;
+    }
+
+    .td-sug {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+      justify-items: center;
+      padding: var(--td-space-4) var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+      text-align: center;
+      scroll-snap-align: start;
+    }
+
+    .td-sug__name {
+      max-width: 100%;
+      margin-top: 6px;
+      overflow: hidden;
+      font: var(--td-type-label);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-sug__meta {
+      min-height: 36px;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    /* Add / Added: a toggle, soft at rest and filled once pressed. */
+
+    .td-addbtn {
+      position: relative;
+      display: inline-flex;
+      gap: var(--td-space-1);
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: var(--td-control-sm);
+      margin: 0;
+      padding: 0 var(--td-space-3);
+      border: 0;
+      font: var(--td-type-label);
+      cursor: pointer;
+      border-radius: var(--td-radius-sm);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line-strong);
+      color: var(--td-text);
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        color var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+
+      &[data-pressed] {
+        background: var(--td-selected);
+        box-shadow: none;
+        color: var(--td-on-selected);
+      }
+
+      &[data-disabled]:not([data-pressed]) {
+        background: var(--td-surface-sunken);
+        box-shadow: none;
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      .td-icon {
+        width: 16px;
+        height: 16px;
+      }
+
+      &:hover:not([data-disabled], [data-pressed]) {
+        background: var(--td-surface-subtle);
+      }
+
+      &:active:not([data-disabled]) {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+    }
+
+    /* ---------- List and rows ---------- */
+
+    .td-list {
+      display: grid;
+      overflow: hidden;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+    }
+
+    .td-listrow {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: var(--td-row);
+      padding: var(--td-space-2) var(--td-space-3);
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        opacity var(--td-duration-quick) var(--td-ease-ui);
+
+      & + & {
+        box-shadow: inset 0 1px 0 var(--td-line);
+      }
+
+      &:hover {
+        background: var(--td-surface-subtle);
+      }
+
+      /* Results kept on screen while newer ones load. */
+
+      &[data-stale] {
+        opacity: 0.5;
+      }
+    }
+
+    .td-listrow__main {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .td-listrow__title {
+      overflow: hidden;
+      font: var(--td-type-label);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-listrow__meta {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+  }
+}

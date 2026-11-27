@@ -1,0 +1,142 @@
+/* Tideline Select and Combobox. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    .td-listbox {
+      min-width: max(var(--anchor-width, 0px), 200px);
+      max-width: min(var(--available-width, 100vw), 480px);
+      max-height: min(var(--available-height, 60vh), 360px);
+    }
+
+    .td-listbox__list {
+      display: grid;
+    }
+
+    .td-option {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      justify-content: space-between;
+      min-height: var(--td-control);
+      padding: var(--td-space-2) var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      color: var(--td-text);
+      cursor: pointer;
+      user-select: none;
+
+      &[data-highlighted] {
+        background: var(--td-action-soft);
+        color: var(--td-on-action-soft);
+        outline: none;
+      }
+
+      &[data-selected] {
+        font-weight: var(--td-type-label-weight);
+      }
+
+      &[data-disabled] {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      &[hidden] {
+        display: none;
+      }
+    }
+
+    /* The keyboard highlight is the focus ring here. */
+
+    .td-listbox[data-modality="keyboard"] .td-option[data-highlighted] {
+      outline: 2px solid var(--td-focus-color);
+      outline-offset: -2px;
+    }
+
+    .td-option__check {
+      display: inline-flex;
+      color: var(--td-link);
+    }
+
+    .td-listbox__empty {
+      padding: var(--td-space-3);
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .td-select {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      justify-content: space-between;
+      text-align: start;
+      cursor: pointer;
+
+      &[data-placeholder] .td-select__value {
+        color: var(--td-text-3);
+      }
+    }
+
+    .td-select__value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-select__chevron {
+      color: var(--td-text-2);
+      transition: rotate var(--td-duration-base) var(--td-ease-tide);
+    }
+
+    .td-select[data-open] .td-select__chevron {
+      rotate: 180deg;
+    }
+
+    .td-combobox {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .td-combobox__input {
+      padding-inline-end: calc(var(--td-control-sm) * 2 + var(--td-space-2));
+    }
+
+    .td-combobox__clear {
+      inset-inline-end: calc(var(--td-space-1) + var(--td-control-sm));
+    }
+
+    .td-combobox__toggle {
+      inset-inline-end: var(--td-space-1);
+    }
+
+    .td-combobox__toggle,
+    .td-combobox__clear {
+      position: absolute;
+      display: inline-grid;
+      place-items: center;
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: var(--td-text-2);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--td-surface-sunken);
+      }
+    }
+
+    .td-option,
+    .td-menu__item {
+      padding: var(--td-space-1) var(--td-space-2);
+      border-radius: var(--td-radius-sm);
+
+      &[data-highlighted] {
+        background: var(--td-surface-sunken);
+        color: var(--td-text);
+      }
+    }
+  }
+}

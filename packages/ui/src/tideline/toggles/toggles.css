@@ -1,0 +1,217 @@
+/* Tideline Checkbox, Radio and Switch. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Checkbox, Radio, Switch ---------- */
+
+    .td-check,
+    .td-radio,
+    .td-switch {
+      display: grid;
+      min-width: 0;
+    }
+
+    .td-check__row,
+    .td-radio__row,
+    .td-switch__row {
+      display: inline-flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: var(--td-control);
+      color: var(--td-ink);
+      font: var(--td-type-body);
+      cursor: pointer;
+      letter-spacing: var(--td-type-body-tracking);
+
+      &:has([data-disabled]) {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+    }
+
+    .td-check__description,
+    .td-radio__description,
+    .td-switch__description {
+      margin-top: calc(var(--td-space-2) * -1);
+      padding-bottom: var(--td-space-2);
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-check__description,
+    .td-radio__description {
+      padding-inline-start: calc(18px + var(--td-space-3));
+    }
+
+    .td-switch__description {
+      padding-inline-start: calc(36px + var(--td-space-3));
+    }
+
+    .td-check__box,
+    .td-radio__dot,
+    .td-switch__track {
+      position: relative;
+      flex: none;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      cursor: inherit;
+
+      /* The drawn control is small; the target is not. */
+
+      &::before {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: max(100%, var(--td-size-target));
+        height: var(--td-size-target);
+        translate: -50% -50%;
+        content: "";
+      }
+    }
+
+    .td-check__box {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: var(--td-radius-xs);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 2px var(--td-border-control);
+      color: var(--td-on-action);
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        box-shadow var(--td-duration-quick) var(--td-ease-ui);
+
+      &:is([data-checked], [data-indeterminate]) {
+        background: var(--td-action);
+        box-shadow: none;
+      }
+
+      &[data-disabled] {
+        opacity: 0.45;
+      }
+
+      .td-check__mark {
+        display: inline-flex;
+      }
+
+      .td-icon {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2.5;
+      }
+
+      .td-check__dash {
+        display: none;
+      }
+
+      &[data-indeterminate] {
+        .td-check__tick {
+          display: none;
+        }
+
+        .td-check__dash {
+          display: block;
+        }
+      }
+    }
+
+    .td-radiogroup {
+      display: grid;
+      gap: 0;
+    }
+
+    .td-radiogroup--inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-1) var(--td-space-6);
+    }
+
+    .td-radio__dot {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 2px var(--td-border-control);
+      transition: box-shadow var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-checked] {
+        box-shadow: inset 0 0 0 2px var(--td-action);
+      }
+
+      &[data-disabled] {
+        opacity: 0.45;
+      }
+    }
+
+    .td-radio__mark {
+      border-radius: 50%;
+      background: var(--td-action);
+      width: 8px;
+      height: 8px;
+    }
+
+    .td-switch__track {
+      display: inline-flex;
+      align-items: center;
+      background: var(--td-surface-sunken);
+      transition:
+        background-color var(--td-duration-base) var(--td-ease-ui),
+        box-shadow var(--td-duration-base) var(--td-ease-ui);
+      width: 36px;
+      height: 20px;
+      border-radius: var(--td-radius-pill);
+      box-shadow: inset 0 0 0 1.5px var(--td-border-control);
+      transition-duration: var(--td-duration-quick);
+
+      &[data-checked] {
+        background: var(--td-action);
+        box-shadow: none;
+      }
+
+      &[data-disabled] {
+        opacity: 0.45;
+      }
+    }
+
+    .td-switch__thumb {
+      border-radius: 50%;
+      background: var(--td-text-2);
+      transition:
+        translate var(--td-duration-base) var(--td-ease-tide),
+        background-color var(--td-duration-base) var(--td-ease-ui);
+      width: 14px;
+      height: 14px;
+      margin-inline-start: 3px;
+      transition-duration: var(--td-duration-quick);
+
+      &[data-checked] {
+        background: var(--td-on-action);
+        translate: 16px 0;
+      }
+    }
+
+    [dir="rtl"] .td-switch__thumb[data-checked] {
+      translate: -16px 0;
+    }
+
+    .td-check__box,
+    .td-radio__dot {
+      width: 18px;
+      height: 18px;
+      box-shadow: inset 0 0 0 1.5px var(--td-border-control);
+    }
+
+    .td-check__box .td-icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.25;
+    }
+
+    .td-radio__dot[data-checked] {
+      box-shadow: inset 0 0 0 1.5px var(--td-action);
+    }
+  }
+}

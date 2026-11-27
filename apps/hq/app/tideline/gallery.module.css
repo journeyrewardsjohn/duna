@@ -1,0 +1,266 @@
+/* Layout for the Tideline gallery only. Values come from Tideline tokens. */
+.page {
+  min-height: 100vh;
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: var(--td-z-nav);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-3) var(--td-space-6);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--td-space-3) var(--td-space-8);
+  background: var(--td-ground);
+  box-shadow: inset 0 -1px 0 var(--td-line);
+}
+
+.brand {
+  display: flex;
+  gap: var(--td-space-3);
+  align-items: baseline;
+}
+
+.themes {
+  display: flex;
+  gap: var(--td-space-1);
+}
+
+.intro {
+  display: grid;
+  gap: var(--td-space-2);
+  max-width: var(--td-layout-content);
+  margin: 0 auto;
+  padding: var(--td-space-12) var(--td-space-8) var(--td-space-8);
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--td-space-10);
+  max-width: var(--td-layout-content);
+  margin: 0 auto;
+  padding: 0 var(--td-space-8) var(--td-space-24);
+}
+
+.nav {
+  position: sticky;
+  top: 72px;
+  display: grid;
+  gap: 2px;
+  align-self: start;
+}
+
+.navItem {
+  min-height: var(--td-control-sm);
+  padding: 0 var(--td-space-3);
+  border: 0;
+  border-radius: var(--td-radius-sm);
+  background: none;
+  color: var(--td-text-2);
+  font: var(--td-type-label);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--td-duration-quick) var(--td-ease-ui),
+    color var(--td-duration-quick) var(--td-ease-ui);
+}
+
+.navItem:hover {
+  background: var(--td-surface-sunken);
+  color: var(--td-text);
+}
+
+.navItem[aria-current="true"] {
+  background: var(--td-surface-sunken);
+  color: var(--td-text);
+}
+
+.sections {
+  display: grid;
+  gap: var(--td-space-16);
+  min-width: 0;
+}
+
+.section {
+  display: grid;
+  gap: var(--td-space-5);
+  min-width: 0;
+  scroll-margin-top: 80px;
+}
+
+.section[hidden] {
+  display: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--td-space-4);
+  align-items: start;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.example {
+  display: grid;
+  gap: var(--td-space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.exampleTitle {
+  color: var(--td-text-2);
+  font: var(--td-type-caption);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-2);
+  align-items: center;
+}
+
+.stack {
+  display: grid;
+  gap: var(--td-space-3);
+  min-width: 0;
+}
+
+.mesh {
+  display: grid;
+  gap: var(--td-space-3);
+  align-content: start;
+  justify-items: start;
+  padding: var(--td-space-6);
+}
+
+.lab {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: var(--td-space-3) var(--td-space-8);
+  align-items: center;
+  padding: var(--td-space-3) var(--td-space-4);
+  border-radius: var(--td-radius-lg);
+  background: var(--td-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--td-line);
+}
+
+.labControl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-3);
+  align-items: center;
+}
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  padding-top: var(--td-space-2);
+}
+
+@media (max-width: 899px) {
+  .top {
+    padding-inline: var(--td-space-4);
+  }
+
+  .intro {
+    padding: var(--td-space-8) var(--td-space-4) var(--td-space-6);
+  }
+
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--td-space-6);
+    padding: 0 var(--td-space-4) var(--td-space-16);
+  }
+
+  .nav {
+    position: static;
+    display: flex;
+    gap: var(--td-space-1);
+    margin: 0 calc(var(--td-space-4) * -1);
+    padding: 0 var(--td-space-4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .navItem {
+    flex: none;
+  }
+
+  .sections {
+    gap: var(--td-space-10);
+  }
+}
+
+/* The Book a lesson page: two columns with a sticky summary. */
+.bookLab > div:first-child {
+  width: min(100% - var(--td-space-8), 1296px);
+  margin: var(--td-space-4) auto 0;
+}
+
+.book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 440px;
+  gap: var(--td-space-12);
+  align-items: start;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: var(--td-space-12) var(--td-space-8) var(--td-space-24);
+}
+
+.bookMain {
+  display: grid;
+  gap: var(--td-space-section-comfort);
+  min-width: 0;
+}
+
+.bookHead {
+  display: grid;
+  gap: var(--td-space-4);
+}
+
+.bookSection {
+  display: grid;
+  gap: var(--td-space-5);
+  min-width: 0;
+}
+
+.bookSectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-2) var(--td-space-4);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.bookNote {
+  color: var(--td-text-2);
+  font: var(--td-type-lead);
+}
+
+.bookAside {
+  position: sticky;
+  top: 80px;
+}
+
+@media (max-width: 899px) {
+  .book {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--td-space-8);
+    padding: var(--td-space-8) var(--td-space-4) 200px;
+  }
+
+  .bookMain {
+    gap: var(--td-space-10);
+  }
+
+  .bookAside {
+    position: static;
+  }
+}

@@ -1,0 +1,307 @@
+/* Tideline base: the .td scope, resets, focus ring, type roles, icon and density scales. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* Component-level roles built from tokens. */
+    --td-control: var(--td-size-control);
+    --td-control-lg: var(--td-size-control-lg);
+    --td-control-sm: var(--td-size-control-sm);
+    --td-row: var(--td-size-row);
+
+    /* 1 while things may move, 0 under reduced motion. */
+    --td-motion: 1;
+
+    /*
+     * Contextual ink. A dark mesh swaps these for its own ink; every surface
+     * component (card, dialog, popup…) sets them back, so text rules for a
+     * dark ground never leak into a card placed on it.
+     */
+    --td-ink: var(--td-text);
+    --td-ink-2: var(--td-text-2);
+    --td-ink-3: var(--td-text-3);
+    --td-focus-color: var(--td-focus);
+    color: var(--td-ink);
+    font: var(--td-type-body);
+    letter-spacing: var(--td-type-body-tracking);
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    text-size-adjust: 100%;
+
+    /* Compact controls grow to the 48px target on phones and touch screens. */
+
+    @media (max-width: 599px), (pointer: coarse) {
+      --td-control: var(--td-size-target);
+      --td-control-lg: var(--td-size-target-primary);
+      --td-control-sm: var(--td-size-phone-control-sm);
+      --td-row: var(--td-size-target-primary);
+      font: var(--td-type-phone-body);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      --td-motion: 0;
+      --td-duration-instant: 0ms;
+      --td-duration-base: 0ms;
+      --td-duration-settle: 120ms;
+      --td-duration-sheet: 160ms;
+      --td-duration-reveal: 0ms;
+    }
+
+    &.td--ground {
+      background: var(--td-ground);
+    }
+
+    :where(*, *::before, *::after) {
+      box-sizing: border-box;
+    }
+
+    :where(button, input, select, textarea) {
+      color: inherit;
+      font: inherit;
+      letter-spacing: inherit;
+    }
+
+    :where(h1, h2, h3, h4, p, ul, ol) {
+      margin: 0;
+    }
+
+    :where(ul, ol) {
+      padding: 0;
+      list-style: none;
+    }
+
+    /* Closed UI SDK content stays hidden before its own CSS has loaded. */
+
+    :where([data-slot][hidden]:not([hidden="until-found"])) {
+      display: none !important;
+    }
+
+    /* One focus ring everywhere. */
+
+    :where(
+      a,
+      button,
+      input,
+      select,
+      textarea,
+      [tabindex],
+      [role="option"],
+      [role="menuitem"]
+    ):focus-visible {
+      outline: 2px solid var(--td-focus-color);
+      outline-offset: 2px;
+    }
+
+    /* Surface components own their text colours. */
+
+    :is(
+      .td-card,
+      .td-dialog,
+      .td-sheet,
+      .td-popup,
+      .td-toast,
+      .td-list,
+      .td-sug,
+      .td-notice,
+      .td-skeleton--card,
+      [data-surface="paper"]
+    ) {
+      --td-ink: var(--td-text);
+      --td-ink-2: var(--td-text-2);
+      --td-ink-3: var(--td-text-3);
+      --td-focus-color: var(--td-focus);
+      color: var(--td-ink);
+    }
+
+    .td-sr {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /* ---------- Type roles ---------- */
+
+    .td-display {
+      font-size: var(--td-type-heading-32-size);
+      text-wrap: balance;
+      font: var(--td-type-heading-32);
+      letter-spacing: var(--td-type-heading-32-tracking);
+    }
+
+    .td-headline {
+      text-wrap: balance;
+      font: var(--td-type-heading-24);
+      letter-spacing: var(--td-type-heading-24-tracking);
+    }
+
+    .td-title {
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+
+    /* The phone ramp: Archivo at normal width so names never wrap. */
+
+    @media (max-width: 599px) {
+      .td-headline {
+        font: var(--td-type-phone-title);
+        letter-spacing: var(--td-type-phone-title-tracking);
+      }
+
+      .td-title {
+        font: var(--td-type-phone-title-sm);
+        letter-spacing: var(--td-type-phone-title-sm-tracking);
+      }
+    }
+
+    .td-lead {
+      max-width: 60ch;
+      color: var(--td-ink-2);
+      font: var(--td-type-lead);
+    }
+
+    .td-body {
+      max-width: 66ch;
+      color: var(--td-ink-2);
+      font: var(--td-type-body);
+    }
+
+    .td-meta {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+      letter-spacing: 0;
+    }
+
+    .td-num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Icon ---------- */
+
+    .td-icon {
+      flex: none;
+      width: var(--td-size-icon);
+      height: var(--td-size-icon);
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.5;
+    }
+
+    .td-icon--lg {
+      width: var(--td-size-icon-lg);
+      height: var(--td-size-icon-lg);
+      stroke-width: 1.5;
+    }
+
+    @media (max-width: 599px) {
+      .td-display {
+        font: var(--td-type-phone-title);
+        letter-spacing: var(--td-type-phone-title-tracking);
+      }
+
+      .td-headline {
+        font: var(--td-type-phone-title-sm);
+        letter-spacing: var(--td-type-phone-title-sm-tracking);
+      }
+
+      .td-title {
+        font: var(--td-type-heading-18);
+        letter-spacing: var(--td-type-heading-18-tracking);
+      }
+    }
+
+    .td-heading {
+      font: var(--td-type-heading-20);
+      letter-spacing: var(--td-type-heading-20-tracking);
+    }
+
+    .td-title {
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+
+    .td-code {
+      font: var(--td-type-code);
+      letter-spacing: 0;
+    }
+
+    .td-icon--sm {
+      width: var(--td-size-icon-sm);
+      height: var(--td-size-icon-sm);
+    }
+
+    /* ---------- Comfortable scale ----------
+     * The consumer and conversion scale: larger radii, bolder headings, more
+     * padding. Booking components use it unless the scope says `dense`.
+     */
+    --td-bk-radius: var(--td-radius-card-comfort);
+    --td-bk-pad: var(--td-space-card-comfort);
+    --td-bk-border: var(--td-size-border-comfort);
+    --td-bk-ring: var(--td-size-ring-selected);
+    --td-bk-title: var(--td-type-comfort-title);
+    --td-bk-price: var(--td-type-comfort-price);
+    --td-bk-total: var(--td-type-comfort-total);
+    --td-bk-day: var(--td-type-comfort-day);
+
+    &[data-density="dense"] {
+      --td-bk-radius: var(--td-radius-lg);
+      --td-bk-pad: var(--td-space-4);
+      --td-bk-border: 1px;
+      --td-bk-title: var(--td-type-label);
+      --td-bk-price: var(--td-type-figure-sm);
+      --td-bk-total: var(--td-type-figure);
+      --td-bk-day: var(--td-type-figure-sm);
+    }
+
+    &[data-density="comfortable"] {
+      .td-display {
+        font: var(--td-type-comfort-display);
+        letter-spacing: var(--td-type-comfort-display-tracking);
+      }
+
+      .td-headline {
+        font: var(--td-type-comfort-section);
+        letter-spacing: var(--td-type-comfort-section-tracking);
+      }
+
+      .td-lead {
+        font: var(--td-type-comfort-lead);
+      }
+
+      .td-card {
+        padding: var(--td-space-card-comfort);
+        border-radius: var(--td-radius-card-comfort);
+      }
+
+      /* The one big action is a pill on this scale. */
+      .td-btn--lg {
+        min-height: var(--td-size-target-primary);
+        border-radius: var(--td-radius-pill);
+        font: var(--td-type-lead);
+        font-weight: var(--td-type-label-weight);
+      }
+
+      @media (max-width: 599px) {
+        .td-display {
+          font: var(--td-type-display-sm);
+          font-weight: var(--td-type-comfort-display-weight);
+          letter-spacing: var(--td-type-display-sm-tracking);
+        }
+
+        .td-headline {
+          font: var(--td-type-phone-title-sm);
+          font-weight: var(--td-type-comfort-section-weight);
+        }
+
+        .td-lead {
+          font: var(--td-type-lead);
+        }
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ import {
   hqModuleHref,
   hqOperatorModuleSlugs,
   hqRoutes,
+  isHqDevOnlyRoute,
 } from "./hq-routes";
 
 const hqApp = resolve(import.meta.dirname, "../../../apps/hq/app");
@@ -24,7 +25,12 @@ function pageTemplates(directory: string): string[] {
 }
 
 describe("HQ route map", () => {
-  const filesystem = new Set(pageTemplates(hqApp));
+  // The Tideline gallery (/tideline) is a flag-gated development surface,
+  // served as a 404 in production and deliberately absent from the product
+  // route map. Every other page.tsx must still be mapped.
+  const filesystem = new Set(
+    pageTemplates(hqApp).filter((template) => !isHqDevOnlyRoute(template)),
+  );
   const templates = Object.values(hqRoutes) as string[];
 
   it("points every template at a real page.tsx", () => {
@@ -55,6 +61,14 @@ describe("HQ route map", () => {
         false,
       );
     }
+  });
+
+  it("treats only the gallery as development-only", () => {
+    expect(isHqDevOnlyRoute("/tideline")).toBe(true);
+    expect(isHqDevOnlyRoute("/tideline/book-lesson")).toBe(true);
+    expect(isHqDevOnlyRoute("/tidelines")).toBe(false);
+    expect(isHqDevOnlyRoute("/settings")).toBe(false);
+    expect(templates.some(isHqDevOnlyRoute)).toBe(false);
   });
 
   it("builds encoded concrete paths", () => {

@@ -1,0 +1,83 @@
+/* Tideline Tabs. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Tabs ---------- */
+
+    .td-tabs {
+      display: grid;
+      gap: var(--td-space-4);
+      min-width: 0;
+    }
+
+    .td-tabs__list {
+      position: relative;
+      display: flex;
+      gap: var(--td-space-6);
+      overflow-x: auto;
+      border-bottom: 1px solid var(--td-line);
+      scrollbar-width: none;
+    }
+
+    .td-tab {
+      display: inline-flex;
+      flex: none;
+      gap: var(--td-space-2);
+      align-items: center;
+      min-width: var(--td-control);
+      min-height: var(--td-control);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--td-ink-2);
+      font: var(--td-type-label);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color var(--td-duration-quick) var(--td-ease-ui);
+
+      &:focus-visible {
+        outline-offset: -2px;
+        border-radius: var(--td-radius-xs);
+      }
+
+      &[data-selected] {
+        color: var(--td-ink);
+      }
+
+      &[data-disabled] {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+    }
+
+    .td-tab__count {
+      padding: 2px 7px;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+      color: var(--td-text-2);
+      font: var(--td-type-micro);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-tabs__indicator {
+      position: absolute;
+      bottom: 0;
+      left: var(--tabs-indicator-left, 0);
+      width: var(--tabs-indicator-width, 0);
+      height: 2px;
+      border-radius: 2px;
+      background: var(--td-ink);
+      transition:
+        left var(--td-duration-base) var(--td-ease-tide),
+        width var(--td-duration-base) var(--td-ease-tide);
+    }
+
+    .td-tabs__panel:focus-visible {
+      border-radius: var(--td-radius-sm);
+    }
+
+    .td-tab:hover:not([data-selected], [data-disabled]) {
+      color: var(--td-ink);
+    }
+  }
+}

@@ -88,6 +88,21 @@ export type HqRouteName = keyof typeof hqRoutes;
 export type HqRouteTemplate = (typeof hqRoutes)[HqRouteName];
 
 /**
+ * Development-only HQ surfaces, deliberately absent from the product map above.
+ * `/tideline` is the Tideline component gallery: it exists only when HQ runs
+ * with TIDELINE_GALLERY=1, and apps/hq/proxy.ts answers it with a 404 otherwise.
+ */
+export const hqDevOnlyRoutePrefixes = ["/tideline"] as const;
+export type HqDevOnlyRoutePrefix = (typeof hqDevOnlyRoutePrefixes)[number];
+
+/** True for a path or page template inside a development-only surface. */
+export function isHqDevOnlyRoute(path: string): boolean {
+  return hqDevOnlyRoutePrefixes.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
+/**
  * Operator module slugs that have no page of their own and are served by
  * apps/hq/app/[module]/page.tsx (slugs from apps/hq/components/navigation.ts).
  */
