@@ -1,30 +1,47 @@
-## Outcome
+## Work package
 
-<!-- What user outcome does this branch deliver? -->
+<!-- Programme work-package id (for example R4) and one-line title. -->
 
-## Scope and coordination
+## What changed
 
-- Surfaces changed:
-- Branch or task dependencies:
-- Known overlapping work:
-- Data migration or scheduled-job impact:
+<!-- User-visible and technical outcome. Keep it to what a reviewer must know. -->
 
-## Evidence
+## Files owned
 
-- [ ] Focused tests pass
-- [ ] `pnpm verify` passes
-- [ ] Desktop, tablet, and mobile checks are recorded for UI changes
-- [ ] Connected-data behavior was checked without exposing credentials
-- [ ] New external calls have failure and stale-data behavior
+<!-- Paths this package owns. Note any file touched outside them and why. -->
 
-## Production decision
+## How it was verified
 
-- [ ] No unresolved blocker remains
-- [ ] Required environment variables and schedules are documented
-- [ ] The branch is current with `main`
-- [ ] GitHub checks are green
-- [ ] Safe to merge and promote
+<!-- Commands run and their results. Paste real output summaries, not intentions. -->
 
-Outstanding follow-ups:
+- [ ] Focused tests: `<command>` -> `<result>`
+- [ ] `pnpm verify` (or the CI `release-gate` and `mobile-bundles` checks) is green
+- [ ] Connected-data behaviour checked without exposing credentials
+- [ ] New external calls have failure and stale-data behaviour
 
-<!-- Name account-owner, legal, vendor, data, or later-branch work explicitly. -->
+## UI evidence (UI work only)
+
+<!-- Preview screenshots placed beside the matching design board, at each width. -->
+
+| Width | Preview screenshot | Design board |
+| ----- | ------------------ | ------------ |
+| 1440  |                    |              |
+| 768   |                    |              |
+| 390   |                    |              |
+
+## Schema changes
+
+- [ ] No schema change
+- [ ] Schema change: migration file `<path>`; rehearsed on `<branch or database>` with result `<result>`
+
+## Feature flags
+
+<!-- Flags added. Every new flag must default to off. Write "none" if there are none. -->
+
+## Safety statement
+
+- [ ] This change does not activate any provider; Stripe stays in test mode.
+
+## Follow-ups
+
+<!-- Account-owner, legal, vendor, data, or later-package work, named explicitly. -->
