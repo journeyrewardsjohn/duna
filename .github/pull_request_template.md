@@ -18,6 +18,8 @@
 - [ ] `pnpm verify` (or the CI `release-gate` and `mobile-bundles` checks) is green
 - [ ] Connected-data behaviour checked without exposing credentials
 - [ ] New external calls have failure and stale-data behaviour
+- [ ] Definition of done (docs/plan/definition-of-done.md) met; any line not met is listed under Follow-ups
+- [ ] Persona journeys: pnpm test:personas:coverage -> <paste table>; fixmes removed: <ids>
 
 ## UI evidence (UI work only)
 
