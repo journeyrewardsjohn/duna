@@ -28,6 +28,9 @@ import {
   type MembershipPassData,
   type MembershipStatus,
   NIGHT_COURT,
+  SALT,
+  contrastRatio,
+  parseHexColor,
 } from "@duna/tideline-core";
 
 /** One card in the native wallet: the card plus a stable id. */
@@ -620,4 +623,33 @@ export function alphaHex(hex: string, alpha: number): string {
     .toString(16)
     .padStart(2, "0");
   return `${base}${byte}`;
+}
+
+/**
+ * The plan and fact chips' own backing: the scrim tone at a fixed strength,
+ * so a chip reads wherever the art's light sits (the selected card's light
+ * drifts toward the top-right corner, where the plan chip is).
+ */
+export const CHIP_BACKING = 0.82;
+
+export function chipBacking(contrast: CardContrast): string {
+  return alphaHex(contrast.scrim, CHIP_BACKING);
+}
+
+/** The chip text's contrast over its backing laid on one art tone. */
+export function chipTextContrast(
+  contrast: CardContrast,
+  under: string,
+): number {
+  const scrim = parseHexColor(contrast.scrim)!;
+  const art = parseHexColor(under)!;
+  const mix = (a: number, b: number) =>
+    Math.round(a * CHIP_BACKING + b * (1 - CHIP_BACKING));
+  const ground = {
+    r: mix(scrim.r, art.r),
+    g: mix(scrim.g, art.g),
+    b: mix(scrim.b, art.b),
+  };
+  const ink = parseHexColor(contrast.text === "salt" ? SALT : NIGHT_COURT)!;
+  return contrastRatio(ground, ink);
 }

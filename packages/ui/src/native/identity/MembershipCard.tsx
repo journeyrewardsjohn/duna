@@ -25,6 +25,7 @@ import { CardFlip } from "./CardFlip";
 import { MembershipPass } from "./MembershipPass";
 import { STACK_STRIP_RATIO } from "@duna/tideline-core";
 import {
+  CHIP_BACKING,
   alphaHex,
   cardContrast,
   cardFaceParts,
@@ -78,14 +79,13 @@ function Chip({
   readonly width: number;
 }) {
   const solid = tone === "salt";
+  const backing = alphaHex(scrim, CHIP_BACKING);
   return (
     <View
       style={[
         styles.chip,
         {
-          backgroundColor: solid
-            ? SALT
-            : alphaHex(scrim, tone === "fact" ? 0.5 : 0.55),
+          backgroundColor: solid ? SALT : backing,
           borderColor: solid ? "transparent" : "rgba(255,255,255,0.3)",
           paddingHorizontal: Math.round(width * 0.024),
         },

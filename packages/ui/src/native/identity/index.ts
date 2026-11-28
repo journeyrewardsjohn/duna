@@ -32,6 +32,9 @@ export { WalletBand, type WalletBandProps } from "./Wallet";
 export { CardArrival, type CardArrivalProps } from "./CardArrival";
 export {
   CARD_WIDTHS,
+  CHIP_BACKING,
+  chipBacking,
+  chipTextContrast,
   CAROUSEL_GAP,
   CAROUSEL_MARGIN,
   UPLOAD_CONTRAST,

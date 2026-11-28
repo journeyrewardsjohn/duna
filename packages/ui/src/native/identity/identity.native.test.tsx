@@ -23,6 +23,7 @@ import {
   cardContrast,
   cardFaceParts,
   cardGeometry,
+  chipTextContrast,
   carouselGeometry,
   carouselIndexAt,
   carouselInterpolation,
@@ -473,6 +474,22 @@ describe("the art", () => {
       }
       expect(cardContrast({ art }).ratio).toBeGreaterThanOrEqual(5);
     }
+  });
+
+  it("the chips read wherever the art's light sits (both ends of its drift)", () => {
+    for (const art of sources) {
+      const painting = artPainting(art)!;
+      const contrast = cardContrast({ art });
+      // The drifting light only ever lays the piece's highlight over its
+      // base, so the chip's ground runs from the shadow to the highlight.
+      for (const under of [painting.palette[0], painting.palette[3], "#FFFFFF"])
+        expect(
+          chipTextContrast(contrast, under),
+          `${JSON.stringify(art)} over ${under}`,
+        ).toBeGreaterThanOrEqual(4.5);
+    }
+    const upload = cardContrast({ art: { source: "upload", poster: "x" } });
+    expect(chipTextContrast(upload, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
   });
 
   it("an upload has no painting (its poster is the art)", () => {
