@@ -2354,13 +2354,15 @@ export async function createConnectedAccountPayout(input: {
   readonly status: string;
   readonly expectedArrivalAt?: Date;
 }> {
-  const payout = await getStripeClient().payouts.create(
-    {
-      amount: input.amountMinor,
-      currency: input.currency.toLowerCase(),
-      metadata: { dunaRelease: "eligible-funds-only" },
-    },
-    { stripeAccount: input.accountId, idempotencyKey: input.idempotencyKey },
+  const payout = await withProviderCall("stripe", "payouts.create", () =>
+    getStripeClient().payouts.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        metadata: { dunaRelease: "eligible-funds-only" },
+      },
+      { stripeAccount: input.accountId, idempotencyKey: input.idempotencyKey },
+    ),
   );
   return {
     id: payout.id,
