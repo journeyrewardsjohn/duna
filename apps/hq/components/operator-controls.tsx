@@ -76,7 +76,6 @@ import {
 } from "@/lib/media-storage";
 import type { OperatorPanel } from "./navigation";
 import { CommerceSettingsControls } from "./commerce-controls";
-import { SessionDraftManager } from "./session-draft-manager";
 
 const initialOperatorActionState: OperatorActionState = {
   status: "idle",
@@ -3029,7 +3028,6 @@ export function OperatorControls({
     const kind = module === "leagues" ? "league" : "tournament";
     return (
       <>
-        <SessionDraftManager kinds={[kind]} workspace={workspace} />
         <section className="hq-card guided-create-card">
           <span className="guided-create-card__icon">
             <Sparkles aria-hidden size={24} />
@@ -3053,12 +3051,7 @@ export function OperatorControls({
     );
   }
   if (module === "schedule") {
-    return (
-      <>
-        <SessionDraftManager workspace={workspace} />
-        <SessionComposer workspace={workspace} defaultKind="open-play" />
-      </>
-    );
+    return <SessionComposer workspace={workspace} defaultKind="open-play" />;
   }
   return (
     <section className="hq-card operator-control-card">

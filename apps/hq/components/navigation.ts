@@ -88,7 +88,7 @@ export const operatorModules = [
   {
     slug: "events",
     label: "Events",
-    href: hqModuleHref("events"),
+    href: hqHref("events"),
     icon: "trophy",
     group: "People and play",
   },
@@ -191,62 +191,6 @@ export function operatorPanelHref(panel: OperatorPanel): string {
   if (panel === "leagues") return hqLeaguesPath;
   return operatorModuleHref(panel);
 }
-
-/**
- * Event types, shown as links inside the Events list page until H9 turns them
- * into in-page filters. A league is an event type (`/events?type=league`).
- */
-export const eventNavigationItems = [
-  { slug: "all-events", label: "All events", href: hqModuleHref("events") },
-  {
-    slug: "tournaments",
-    label: "Tournaments",
-    href: hqHref("eventType", { eventType: "tournaments" }),
-    eventKinds: ["tournament"],
-    title: "Tournaments",
-    description:
-      "Brackets, divisions, registrations, and event-day operations.",
-  },
-  {
-    slug: "clinics",
-    label: "Clinics",
-    href: hqHref("eventType", { eventType: "clinics" }),
-    eventKinds: ["clinic"],
-    title: "Clinics",
-    description:
-      "Skill-building sessions, rosters, and coach-ready operations.",
-  },
-  {
-    slug: "open-play",
-    label: "Open play",
-    href: hqHref("eventType", { eventType: "open-play" }),
-    eventKinds: ["open-play"],
-    title: "Open play",
-    description:
-      "Flexible sessions, attendance, and player-facing availability.",
-  },
-  {
-    slug: "pickup",
-    label: "Pickup",
-    href: hqHref("eventType", { eventType: "pickup" }),
-    eventKinds: ["pickup"],
-    title: "Pickup",
-    description:
-      "Community pickup sessions and their live participant operations.",
-  },
-  {
-    slug: "leagues",
-    label: "Leagues",
-    href: hqLeaguesPath,
-    eventKinds: ["league"],
-    title: "Leagues",
-    description:
-      "Seasonal schedules, standings, scoring, and league operations.",
-  },
-] as const;
-
-export type EventNavigationItem = (typeof eventNavigationItems)[number];
-export type EventNavigationSlug = EventNavigationItem["slug"];
 
 export const adminModules = [
   { slug: "ask-duna", label: "Ask Duna", icon: Bot, group: "Platform" },

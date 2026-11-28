@@ -766,18 +766,14 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/events`);
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
   await expect(
-    page.getByRole("table", { name: "Events", exact: true }),
+    page.getByRole("heading", { name: "Events", level: 1 }),
   ).toBeVisible();
   await expect(
     page
-      .getByRole("group", { name: "Event views" })
-      .getByRole("button", { name: /^Drafts/ }),
+      .getByRole("radiogroup", { name: "Events to show" })
+      .or(page.getByRole("group", { name: "Events to show" })),
   ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Draft publication review" }),
-  ).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Create event/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
@@ -790,9 +786,10 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expectNoHorizontalOverflow(page);
 
   await page.goto(`${hqBaseUrl}/events?type=league`);
-  await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Leagues", level: 1 }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
-  await expect(page.getByText(/1 connected/)).toBeVisible();
   await clickAndWaitForUrl(
     page,
     page.getByRole("link", { name: /Create league/ }),

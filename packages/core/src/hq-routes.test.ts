@@ -104,7 +104,7 @@ describe("HQ route map", () => {
         ).toBe(false);
       }
     }
-    expect(hqLeaguesPath.split("?")[0]).toBe(hqModuleHref("events"));
+    expect(hqLeaguesPath.split("?")[0]).toBe(hqHref("events"));
   });
 
   it("treats only the gallery as development-only", () => {
@@ -124,7 +124,7 @@ describe("HQ route map", () => {
     expect(hqHref("ask")).toBe("/ask");
     expect(hqHref("ask", { conversation: "abc" })).toBe("/ask/abc");
     expect(hqHref("schedule")).toBe("/schedule");
-    expect(hqModuleHref("events")).toBe("/events");
+    expect(hqHref("events")).toBe("/events");
     expect(hqHref("place", { venueId: "v1" })).toBe("/setup/places/v1");
     expect(() =>
       hqHref("member", { personId: "" } as { personId: string }),

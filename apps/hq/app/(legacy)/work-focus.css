@@ -1013,10 +1013,6 @@ body[data-zone="operator"]
   :is(h2, h3, strong) {
   color: var(--hq-text);
 }
-.hq-shell--focused :is(.event-history-workspace__filters) button.active {
-  color: var(--hq-ground);
-  background: var(--hq-text);
-}
 
 /* Task-first operator workspace: controls and records precede explanation. */
 .hq-shell--focused .hq-content {
