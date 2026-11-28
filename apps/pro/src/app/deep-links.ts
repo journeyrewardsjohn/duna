@@ -6,7 +6,7 @@
  * - `duna-pro://messages` and `duna-pro://messages/<conversation>`: push
  *   notifications for new messages (`packages/api/src/messaging-notifications.ts`).
  * - `duna-pro://session/<id>`: the coach-day Live Activity
- *   (`live-activities.ts`); opens the session in Schedule's calendar.
+ *   (`live-activities.ts`); opens the session screen (M-R2).
  * - `duna-pro://match/<id>`: Courtside scoring for that match.
  * - `duna-pro://organization/<slug>`: switches to that organisation (when
  *   the person belongs to it) and shows Today.
@@ -71,7 +71,7 @@ export function deepLinkNavigation(link: ProDeepLink): ShellAction {
         ...(link.conversationId ? { conversationId: link.conversationId } : {}),
       };
     case "session":
-      return { type: "open", route: "calendar", entryId: link.sessionId };
+      return { type: "open", route: "session", entryId: link.sessionId };
     case "match":
       return { type: "open", route: "courtside", matchId: link.matchId };
     case "organization":

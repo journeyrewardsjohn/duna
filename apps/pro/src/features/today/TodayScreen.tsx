@@ -35,6 +35,7 @@ import {
 import { usePane } from "@duna/ui/native/layout";
 import { countdownParts, formatCountdown } from "@duna/tideline-core";
 import type { ReactNode } from "react";
+import { AtRiskGroup, useOpenSession } from "../session";
 import { useShell } from "../../app/ShellContext";
 import { PreviewNotice, TopBar } from "../../app/TopBar";
 import { actionColumnsFor, type DayArrangement } from "../../app/layout-plan";
@@ -83,8 +84,7 @@ export const TODAY_ACTIONS: readonly {
 ];
 
 function useOpenEntry() {
-  const shell = useShell();
-  return (entryId: string) => shell.open("calendar", { entryId });
+  return useOpenSession();
 }
 
 function TodayHead({ model }: { readonly model: DayModel }) {
@@ -165,7 +165,7 @@ function UpNextCard({
           {
             label: "Mark attendance",
             icon: "check",
-            onPress: () => openEntry(focus.id),
+            onPress: () => shell.open("attendance", { entryId: focus.id }),
           },
         ]
       : model.focusReason === "live"
@@ -173,7 +173,7 @@ function UpNextCard({
             {
               label: "Check in",
               icon: "pass",
-              onPress: () => shell.open("checkin"),
+              onPress: () => shell.open("attendance", { entryId: focus.id }),
             },
             {
               label: "Open session",
@@ -339,11 +339,14 @@ function NeedsYou({ model }: { readonly model: DayModel }) {
   const shell = useShell();
   const day = useDay();
   const openEntry = useOpenEntry();
-  if (!model.needsYou.length && day.atRiskStatus === "ready") return null;
+  // Sessions under their minimum have their own group ("At risk this week");
+  // its loading and error states stay here, under what needs the coach.
+  const items = model.needsYou.filter((item) => item.kind !== "minimum");
+  if (!items.length && day.atRiskStatus === "ready") return null;
   return (
     <View style={styles.block}>
       <SectionHead title="Needs you" />
-      {model.needsYou.map((item) => (
+      {items.map((item) => (
         <Row
           icon={
             item.kind === "minimum"
@@ -551,6 +554,7 @@ export function TodayPrimary({
   return (
     <DayScroll testID="today-primary" what="Today">
       <TodayHead model={model} />
+      <AtRiskGroup showStates={false} testID="today-at-risk" />
       <LoadingState count={2} loading={loading} skeleton="card">
         <View style={styles.block}>
           <SectionHead
