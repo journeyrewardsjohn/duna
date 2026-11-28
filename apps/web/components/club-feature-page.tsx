@@ -40,9 +40,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { type CSSProperties, useEffect, useRef } from "react";
 import {
-  clubFeatureByKey,
-  clubFeatureGroups,
-  clubFeatures,
   relatedClubFeatures,
   type ClubFeaturePageData,
   type ClubFeatureVisualKind,
@@ -1229,7 +1226,7 @@ function FeatureProductStory({
 function FeatureProductNav() {
   return (
     <nav aria-label="Duna HQ features" className={styles.productNav}>
-      <Link className={styles.productIdentity} href="/run-your-club/features">
+      <Link className={styles.productIdentity} href="/run-your-club#features">
         <span>Duna</span>
         <strong>HQ Features</strong>
       </Link>
@@ -1281,7 +1278,7 @@ export function ClubFeaturePage({
           <div className={styles.breadcrumb}>
             <Link href="/run-your-club">Run your club</Link>
             <span>/</span>
-            <Link href="/run-your-club/features">Features</Link>
+            <Link href="/run-your-club#features">Features</Link>
             <span>/</span>
             <b>{feature.navLabel}</b>
           </div>
@@ -1368,7 +1365,7 @@ export function ClubFeaturePage({
             <strong>Release note</strong>
             <p>{feature.statusNote}</p>
           </span>
-          <Link href="/apps/apple-watch">
+          <Link href="/apps#watch">
             See Duna on Apple Watch <ArrowRight aria-hidden />
           </Link>
         </aside>
@@ -1411,202 +1408,9 @@ export function ClubFeaturePage({
             </a>
             <Link
               className={styles.secondaryAction}
-              href="/run-your-club/features"
+              href="/run-your-club#features"
             >
               Explore all features
-            </Link>
-          </div>
-        </div>
-      </section>
-      <SiteFooter />
-    </main>
-  );
-}
-
-export function ClubFeaturesHub() {
-  const pageRef = useFeaturePageMotion();
-  return (
-    <main
-      className={`${styles.page} ${styles.hub}`}
-      data-accent="signal"
-      data-zone="editorial"
-      ref={pageRef}
-    >
-      <SiteHeader />
-      <nav aria-label="Duna HQ features" className={styles.productNav}>
-        <Link className={styles.productIdentity} href="/run-your-club">
-          <span>Duna</span>
-          <strong>HQ</strong>
-        </Link>
-        <div>
-          {clubFeatureGroups.map((group) => (
-            <a
-              href={`#${group.label.toLowerCase().replaceAll(" ", "-")}`}
-              key={group.label}
-            >
-              {group.label}
-            </a>
-          ))}
-        </div>
-        <a className={styles.productCta} href={DUNA_HQ_URL}>
-          Start for $0
-        </a>
-      </nav>
-
-      <section className={styles.hubHero} data-feature-hero>
-        <div className={styles.hubHeroMedia}>
-          <Image
-            alt="Volleyball courts prepared before a club day begins"
-            fill
-            loading="eager"
-            priority
-            sizes="100vw"
-            src="/media/brand/duna-club-hero-v1.webp"
-          />
-          <div />
-        </div>
-        <div className={styles.hubHeroCopy}>
-          <span className={styles.eyebrow}>Duna HQ features</span>
-          <h1>The whole club. One connected operating story.</h1>
-          <p>
-            Build what you sell. Run the day. Know your people. Grow with
-            control. Every feature shares the same products, places,
-            relationships, permissions, and evidence.
-          </p>
-          <div className={styles.heroActions}>
-            <a className={styles.primaryAction} href={DUNA_HQ_URL}>
-              Start for $0 <ArrowRight aria-hidden />
-            </a>
-            <a className={styles.secondaryAction} href="#build-the-offer">
-              Explore the system <ChevronDown aria-hidden />
-            </a>
-          </div>
-        </div>
-        <div className={styles.hubOrbit} aria-hidden>
-          {clubFeatures.slice(0, 8).map((item) => {
-            const ItemIcon = iconByKey[item.key] ?? PackageOpen;
-            return (
-              <span key={item.key}>
-                <ItemIcon />
-                <b>{item.navLabel}</b>
-              </span>
-            );
-          })}
-          <i>
-            <Store />
-            <strong>Duna HQ</strong>
-            <small>Everything connected</small>
-          </i>
-        </div>
-      </section>
-
-      <section className={styles.hubStatement}>
-        <p>Most software starts with modules.</p>
-        <h2>Duna starts with the work, then keeps the context moving.</h2>
-      </section>
-
-      {clubFeatureGroups.map((group, groupIndex) => {
-        const groupFeatures = group.keys.flatMap((key) => {
-          const item = clubFeatureByKey.get(key);
-          return item ? [item] : [];
-        });
-        return (
-          <section
-            className={styles.featureGroup}
-            data-group={groupIndex}
-            id={group.label.toLowerCase().replaceAll(" ", "-")}
-            key={group.label}
-          >
-            <header data-feature-reveal>
-              <span className={styles.eyebrow}>{group.label}</span>
-              <h2>{group.description}</h2>
-            </header>
-            <div>
-              {groupFeatures.map((item, index) => {
-                const ItemIcon = iconByKey[item.key] ?? PackageOpen;
-                return (
-                  <Link
-                    className={styles.featureCard}
-                    data-feature-reveal
-                    data-wide={index === 0 && groupIndex === 0}
-                    href={item.href}
-                    key={item.key}
-                  >
-                    <div className={styles.featureCardImage}>
-                      <Image
-                        alt=""
-                        fill
-                        sizes="(max-width: 760px) 100vw, 38vw"
-                        src={item.image}
-                      />
-                      <span />
-                    </div>
-                    <div>
-                      <span>
-                        <ItemIcon aria-hidden />
-                        <small>{item.eyebrow}</small>
-                      </span>
-                      <h3>{item.title}</h3>
-                      <p>{item.navDescription}</p>
-                      <strong>
-                        Explore feature <ArrowRight aria-hidden />
-                      </strong>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
-
-      <section className={styles.hubConnection}>
-        <div data-feature-reveal>
-          <span className={styles.eyebrow}>One operating model</span>
-          <h2>
-            A booking can become a relationship, payment, session, video,
-            result, and next decision without being entered again.
-          </h2>
-        </div>
-        <div
-          aria-label="Connected Duna workflow"
-          className={styles.connectionRail}
-        >
-          {[
-            "Product",
-            "Booking",
-            "Person",
-            "Session",
-            "Money",
-            "Next step",
-          ].map((label, index) => (
-            <span key={label}>
-              <b>{index + 1}</b>
-              <strong>{label}</strong>
-              {index < 5 ? (
-                <ArrowRight aria-hidden />
-              ) : (
-                <CheckCircle2 aria-hidden />
-              )}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.closing}>
-        <div data-feature-reveal>
-          <span className={styles.eyebrow}>Duna HQ</span>
-          <h2>Start where the pressure is today.</h2>
-          <p>
-            Add the next part when it helps. The people, places, permissions,
-            and history are already there.
-          </p>
-          <div>
-            <a className={styles.primaryAction} href={DUNA_HQ_URL}>
-              Start for $0 <ArrowRight aria-hidden />
-            </a>
-            <Link className={styles.secondaryAction} href="/run-your-club">
-              See Duna for clubs
             </Link>
           </div>
         </div>

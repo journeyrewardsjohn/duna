@@ -122,7 +122,7 @@ export function ClubFeaturesMenu({
           ))}
         </div>
         <footer>
-          <Link href="/run-your-club/features">
+          <Link href="/run-your-club#features">
             Explore every feature <span aria-hidden>→</span>
           </Link>
           <p>Built for beach, indoor, and combined volleyball organizations.</p>
