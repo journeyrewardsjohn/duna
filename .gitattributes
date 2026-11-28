@@ -5,4 +5,4 @@
 # lines (see docs/design/tideline-components.md).
 packages/ui/src/tideline/index.ts merge=union
 packages/ui/src/tideline/styles.css merge=union
-apps/hq/app/tideline/sections/index.ts merge=union
+apps/hq/app/(next)/tideline/sections/index.ts merge=union

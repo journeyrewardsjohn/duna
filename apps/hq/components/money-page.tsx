@@ -15,35 +15,35 @@ const moneyNavigation: readonly {
 }[] = [
   {
     view: "balance",
-    href: "/payments",
+    href: "/money",
     label: "Balance",
     description: "Balances, earnings, and activity",
     tone: "aqua",
   },
   {
     view: "transactions",
-    href: "/payments/transactions",
+    href: "/money/transactions",
     label: "Transactions",
     description: "Search payments and follow every event",
     tone: "violet",
   },
   {
     view: "disputes",
-    href: "/payments/disputes",
+    href: "/money/disputes",
     label: "Disputes",
     description: "Review and respond in Stripe",
     tone: "coral",
   },
   {
     view: "payout-settings",
-    href: "/payments/payout-settings",
+    href: "/money/payouts",
     label: "Payout Settings",
     description: "Schedule, minimums, and bank descriptors",
     tone: "gold",
   },
   {
     view: "refund-policies",
-    href: "/payments/refund-policies",
+    href: "/money/refund-policies",
     label: "Refund Policies",
     description: "One default and clear purchase rules",
     tone: "green",
@@ -105,7 +105,7 @@ export async function MoneyPageContent({
   const copy = pageCopy[view];
   return (
     <OperatorShell
-      active="payments"
+      active="money"
       messageDraftCount={0}
       organization={dashboard.organization}
     >

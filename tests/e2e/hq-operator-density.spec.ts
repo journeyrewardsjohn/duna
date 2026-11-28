@@ -56,12 +56,12 @@ test("compact Activities keeps every operational destination and accessible tabl
   const destinations = [
     ["Programs & camps", "/programs"],
     ["Tournaments", "/events/types/tournaments"],
-    ["Leagues", "/leagues"],
-    ["Courts & rentals", "/calendar"],
-    ["Lessons & coaching", "/products/types/services"],
+    ["Leagues", "/events?type=league"],
+    ["Courts & rentals", "/schedule"],
+    ["Lessons & coaching", "/offerings/types/services"],
     ["Open play & clinics", "/events"],
-    ["Memberships & packs", "/products/types/plans"],
-    ["Shop & equipment", "/products/types/goods"],
+    ["Memberships & packs", "/offerings/types/plans"],
+    ["Shop & equipment", "/offerings/types/goods"],
   ];
   for (const [name, href] of destinations)
     await expect(
@@ -90,7 +90,7 @@ test("compact Activities keeps every operational destination and accessible tabl
   await table
     .getByRole("link", { name: "Courts & rentals", exact: true })
     .click();
-  await expect(page).toHaveURL(`${base}/calendar`);
+  await expect(page).toHaveURL(`${base}/schedule`);
   await expect(
     page.getByRole("link", { name: "New session", exact: true }),
   ).toHaveCount(1);
@@ -110,7 +110,7 @@ test("compact Activities keeps every operational destination and accessible tabl
 test("compact People retains search, family filters and keyboard profile access", async ({
   page,
 }, info) => {
-  await page.goto(`${base}/members`);
+  await page.goto(`${base}/people`);
   await clearAssistant(page);
   const table = page.getByRole("table", {
     name: "People directory",
@@ -146,10 +146,10 @@ test("compact People retains search, family filters and keyboard profile access"
     fullPage: true,
   });
   const profile = table.getByRole("rowheader").first().getByRole("link");
-  await expect(profile).toHaveAttribute("href", /^\/members\/.+/);
+  await expect(profile).toHaveAttribute("href", /^\/people\/.+/);
   await profile.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/members\/[^/]+$/);
+  await expect(page).toHaveURL(/\/people\/[^/]+$/);
 });
 
 test("compact Money navigation remains usable in dark mode and narrow layouts", async ({
@@ -157,7 +157,7 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
 }, info) => {
   await page.addInitScript(() => localStorage.setItem("duna-theme", "dark"));
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  await page.goto(`${base}/payments`);
+  await page.goto(`${base}/money`);
   await clearAssistant(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const nav = page.getByRole("navigation", { name: "Money sections" });
@@ -171,7 +171,7 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
   });
   await refunds.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(`${base}/payments/refund-policies`);
+  await expect(page).toHaveURL(`${base}/money/refund-policies`);
   await expect(refunds).toHaveAttribute("aria-current", "page");
   await expectContainedPage(page);
   await page.evaluate(async () => {

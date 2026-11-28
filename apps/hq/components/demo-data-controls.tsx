@@ -7,7 +7,7 @@ import { useActionState, useState } from "react";
 import {
   setDemoDataAction,
   type DemoDataActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: DemoDataActionState = { status: "idle", message: "" };
 

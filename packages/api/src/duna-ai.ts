@@ -1078,7 +1078,7 @@ async function searchDunaKnowledge(input: {
         ]
           .filter(Boolean)
           .join(" · "),
-        href: `/members/${person.personId}`,
+        href: `/people/${person.personId}`,
         searchText: `${person.email ?? ""} ${person.phoneE164 ?? ""} ${person.recentPurchases.map(({ description }) => description).join(" ")}`,
       });
     }
@@ -1100,7 +1100,7 @@ async function searchDunaKnowledge(input: {
         id: person.id,
         title: person.displayName,
         detail: `${person.roles.join(", ")} · ${person.homeMarket}`,
-        href: `/members/${person.id}`,
+        href: `/people/${person.id}`,
         searchText: person.handle,
       });
     }
@@ -1123,7 +1123,7 @@ async function searchDunaKnowledge(input: {
         id: entry.id,
         title: entry.title,
         detail: `${entry.startsAt} · ${entry.venueName ?? "Venue not set"} · ${entry.status}`,
-        href: "/calendar",
+        href: "/schedule",
         searchText: `${entry.sourceType} ${entry.kind ?? ""} ${entry.coachName ?? ""} ${entry.courtName ?? ""}`,
       });
     }
@@ -1133,7 +1133,7 @@ async function searchDunaKnowledge(input: {
         id: venue.id,
         title: venue.name,
         detail: `${venue.locality ?? "Location"}${venue.administrativeArea ? `, ${venue.administrativeArea}` : ""} · ${venue.courts.length} courts · ${venue.status}`,
-        href: `/locations/${venue.id}`,
+        href: `/setup/places/${venue.id}`,
         searchText: `${venue.description ?? ""} ${venue.amenities.join(" ")} ${venue.courts.map(({ name }) => name).join(" ")}`,
       });
     }
@@ -1143,7 +1143,7 @@ async function searchDunaKnowledge(input: {
         id: product.id,
         title: product.title,
         detail: `${product.type} · ${product.subtype.replaceAll("-", " ")} · ${product.status} · ${product.visibility}`,
-        href: `/products/${product.id}`,
+        href: `/offerings/${product.id}`,
         searchText: `${product.shortSummary ?? ""} ${product.description ?? ""} ${product.variants.map(({ sku, title }) => `${title} ${sku ?? ""}`).join(" ")}`,
       });
     }
@@ -1160,7 +1160,7 @@ async function searchDunaKnowledge(input: {
         id: transaction.id,
         title: transaction.description,
         detail: `${transaction.customerName} · ${new Intl.NumberFormat("en-US", { style: "currency", currency: transaction.currency }).format(transaction.grossMinor / 100)} · ${transaction.status} · ${transaction.occurredAt}`,
-        href: `/payments?transaction=${encodeURIComponent(transaction.id)}`,
+        href: `/money?transaction=${encodeURIComponent(transaction.id)}`,
         searchText: `${transaction.id} ${transaction.orderId} ${transaction.policyName}`,
       });
     }
@@ -1684,7 +1684,7 @@ function defaultLinkCards(
           kind: "link",
           title: "Calendar",
           detail: "Place approved availability around current sessions.",
-          href: "/calendar",
+          href: "/schedule",
         },
       ];
     if (/event|league|clinic|tournament/.test(value))
@@ -2470,10 +2470,10 @@ const dashboardInsightHref: Record<
   z.infer<typeof dashboardInsightActionSchema>,
   string
 > = {
-  calendar: "/calendar",
+  calendar: "/schedule",
   events: "/events",
-  members: "/members",
-  payments: "/payments",
+  members: "/people",
+  payments: "/money",
   reports: "/reports",
 };
 
@@ -3322,7 +3322,7 @@ export async function confirmDunaAiAction(input: {
       draft.toolName === "events.create"
         ? "/events/create"
         : draft.toolName === "staff.availability.set"
-          ? "/calendar"
+          ? "/schedule"
           : undefined;
     return {
       draft,

@@ -24,9 +24,17 @@ import {
   Trophy,
   Waves,
 } from "lucide-react";
+import { hqRoutes } from "@duna/core/hq-routes";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import type { OperatorModule } from "./navigation";
+import {
+  eventNavigationItems,
+  operatorPanelHref,
+  productNavigationItems,
+  type EventNavigationSlug,
+  type OperatorPanel,
+  type ProductNavigationSlug,
+} from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
@@ -39,19 +47,13 @@ import { VenueMatchOperations } from "./venue-match-operations";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
 const moduleCopy: Record<
-  Exclude<OperatorModule, "overview" | "messages">,
+  Exclude<OperatorPanel, "today" | "inbox">,
   {
     readonly eyebrow: string;
     readonly title: string;
     readonly description: string;
   }
 > = {
-  activities: {
-    eyebrow: "Club operations",
-    title: "Activities",
-    description:
-      "Programs, competitions, lessons and everything your club offers.",
-  },
   website: {
     eyebrow: "Your club online",
     title: "Website",
@@ -63,27 +65,21 @@ const moduleCopy: Record<
     description:
       "The essential steps that connect your business, people, places, brand, payments, and first offering.",
   },
-  calendar: {
+  schedule: {
     eyebrow: "Sessions + facilities",
     title: "Schedule",
     description: "Sessions, court bookings and coach availability.",
   },
-  locations: {
+  places: {
     eyebrow: "Facility operations",
     title: "Venues",
     description:
       "Capacity, court utilization, bookable time, cancellation rules, and player-facing venue stories.",
   },
-  members: {
+  people: {
     eyebrow: "Community + relationships",
     title: "People",
     description: "Players, parents, memberships and purchase history.",
-  },
-  audiences: {
-    eyebrow: "People + reusable groups",
-    title: "Audiences",
-    description:
-      "Saved organization-scoped groups for drafts, marketing, and future automations.",
   },
   team: {
     eyebrow: "Coaches + operators",
@@ -96,7 +92,7 @@ const moduleCopy: Record<
     description:
       "Programs, practice plans, drills, workload, and the athlete handoff in one connected coaching workspace.",
   },
-  products: {
+  offerings: {
     eyebrow: "What your organization offers",
     title: "Products",
     description:
@@ -112,7 +108,7 @@ const moduleCopy: Record<
     title: "Leagues",
     description: "League sessions, standings and scoring.",
   },
-  payments: {
+  money: {
     eyebrow: "Earnings + payouts",
     title: "Money",
     description:
@@ -124,19 +120,13 @@ const moduleCopy: Record<
     description:
       "Campaigns and simple Segment, Trigger, Action flows with consent and guardian-safe routing.",
   },
-  "promo-codes": {
-    eyebrow: "Offers + conversion",
-    title: "Promo codes",
-    description:
-      "Targeted discounts with explicit eligibility, limits, Stripe synchronization, and live redemption performance.",
-  },
   reports: {
     eyebrow: "Operating truth",
     title: "Reports",
     description:
       "Connected inventory, member, facility, payment, and activation signals.",
   },
-  ai: {
+  ask: {
     eyebrow: "Governed assistance",
     title: "Duna AI",
     description:
@@ -519,7 +509,7 @@ export function ProductCatalogPanel({
                 </header>
                 <h2>{group.label}</h2>
                 <p>{group.detail}</p>
-                <Link href={`/products/create?type=${group.type}`}>
+                <Link href={`/offerings/create?type=${group.type}`}>
                   Create a{" "}
                   {group.type === "good" ? "Good" : group.label.slice(0, -1)}{" "}
                   <ArrowRight size={15} />
@@ -570,7 +560,7 @@ export function ProductCatalogPanel({
               return (
                 <article key={item.id}>
                   <header>
-                    <Link href={`/products/${item.id}`}>
+                    <Link href={`/offerings/${item.id}`}>
                       <span>
                         <strong>{item.title}</strong>
                         <small>
@@ -589,7 +579,7 @@ export function ProductCatalogPanel({
                     <div className="product-customer-activity__people">
                       {customers.slice(0, 6).map((customer) => (
                         <Link
-                          href={`/members/${customer.personId}`}
+                          href={`/people/${customer.personId}`}
                           key={customer.personId}
                         >
                           {customer.displayName}
@@ -637,7 +627,7 @@ export function ProductCatalogPanel({
             <Link
               aria-label={`Edit ${item.title}`}
               className="catalog-table__row"
-              href={`/products/${item.id}`}
+              href={`/offerings/${item.id}`}
               key={item.id}
             >
               <span
@@ -753,7 +743,7 @@ function VenuePortfolioPanel({
         </p>
         <Link
           className="hq-button hq-button--primary module-feature-card__action"
-          href="/locations/create#venue-details"
+          href="/setup/places/create#venue-details"
         >
           Set up your first venue <ArrowRight aria-hidden size={16} />
         </Link>
@@ -889,7 +879,7 @@ function VenuePortfolioPanel({
           </div>
           <Link
             className="venue-portfolio-card__manage"
-            href={`/locations/${venue.id}`}
+            href={`/setup/places/${venue.id}`}
           >
             Open venue workspace <ArrowRight aria-hidden size={15} />
           </Link>
@@ -1203,7 +1193,7 @@ function SettingsPanel({
             adaptive assets
           </span>
         </div>
-        <Link className="module-card-action" href="/settings/theme">
+        <Link className="module-card-action" href="/setup/identity">
           Manage Theme Kit + AI knowledge <ArrowRight size={15} />
         </Link>
       </section>
@@ -1236,6 +1226,7 @@ function SettingsPanel({
 }
 
 export function ModulePanel({
+  activeType,
   module,
   dashboard,
   eventKinds,
@@ -1247,7 +1238,9 @@ export function ModulePanel({
   moneyWorkspace,
   ticketApprovals,
 }: {
-  readonly module: OperatorModule;
+  /** The type link shown as current in the Offerings or Events list. */
+  readonly activeType?: ProductNavigationSlug | EventNavigationSlug;
+  readonly module: OperatorPanel;
   readonly dashboard: OperatorDashboard;
   readonly eventKinds?: readonly OperatorWorkspace["sessions"][number]["kind"][];
   readonly focusedDraftId?: string;
@@ -1258,7 +1251,7 @@ export function ModulePanel({
   readonly moneyWorkspace?: OrganizationMoneyWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
-  if (module === "overview" || module === "messages") return null;
+  if (module === "today" || module === "inbox") return null;
   const copy = pageCopy ?? moduleCopy[module];
   const createAction =
     module === "events" && eventKinds?.[0]
@@ -1270,21 +1263,32 @@ export function ModulePanel({
         ? { href: "/events/create?type=tournament", label: "Create event" }
         : module === "leagues"
           ? { href: "/events/create?type=league", label: "Create league" }
-          : module === "products"
-            ? { href: "/products/create", label: "Create product" }
-            : module === "locations"
-              ? { href: "/locations/create", label: "Add venue" }
-              : module === "members"
-                ? { href: "/members/invite", label: "Invite person" }
+          : module === "offerings"
+            ? { href: hqRoutes.offeringCreate, label: "Create product" }
+            : module === "places"
+              ? { href: hqRoutes.placeCreate, label: "Add venue" }
+              : module === "people"
+                ? { href: hqRoutes.memberInvite, label: "Invite person" }
                 : module === "team"
-                  ? { href: "/team/invite", label: "Invite team member" }
+                  ? { href: hqRoutes.teamInvite, label: "Invite team member" }
                   : module === "marketing"
-                    ? { href: "/marketing/create", label: "Create campaign" }
-                    : module === "payments"
-                      ? { href: "/payments/setup", label: "Configure money" }
-                      : module === "calendar"
+                    ? {
+                        href: hqRoutes.marketingCreate,
+                        label: "Create campaign",
+                      }
+                    : module === "money"
+                      ? { href: hqRoutes.moneySetup, label: "Configure money" }
+                      : module === "schedule"
                         ? { href: "/events/create", label: "Add to calendar" }
                         : undefined;
+  // Until H9 turns them into in-page filters, the old sidebar children are a
+  // row of type links inside the Offerings and Events lists.
+  const typeLinks =
+    module === "offerings"
+      ? productNavigationItems
+      : module === "events" || module === "leagues"
+        ? eventNavigationItems
+        : undefined;
 
   return (
     <main
@@ -1295,10 +1299,10 @@ export function ModulePanel({
           <h1>{copy.title}</h1>
           <p>{copy.description}</p>
         </div>
-        {createAction && module !== "calendar" && (
+        {createAction && module !== "schedule" && (
           <div className="hq-page-heading__actions">
             {module === "events" && (
-              <Link className="hq-button" href="/calendar">
+              <Link className="hq-button" href={operatorPanelHref("schedule")}>
                 Schedule
               </Link>
             )}
@@ -1312,13 +1316,29 @@ export function ModulePanel({
         )}
       </header>
 
-      {(module === "events" ||
-        module === "leagues" ||
-        module === "payments") && (
+      {typeLinks && (
+        <nav
+          aria-label={module === "offerings" ? "Offering types" : "Event types"}
+          className="hq-page-heading__actions"
+        >
+          {typeLinks.map((item) => (
+            <Link
+              aria-current={activeType === item.slug ? "page" : undefined}
+              className={`hq-button${activeType === item.slug ? " hq-button--primary" : ""}`}
+              href={item.href}
+              key={item.slug}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {(module === "events" || module === "leagues" || module === "money") && (
         <TicketApprovalQueue approvals={ticketApprovals} />
       )}
 
-      {module === "calendar" ? (
+      {module === "schedule" ? (
         <>
           <VenueMatchOperations
             matches={matches}
@@ -1326,13 +1346,13 @@ export function ModulePanel({
           />
           <ScheduleCalendar workspace={workspace} />
         </>
-      ) : module === "locations" ? (
+      ) : module === "places" ? (
         <VenuePortfolioPanel workspace={workspace} />
-      ) : module === "members" ? (
+      ) : module === "people" ? (
         <PeopleWorkspace workspace={workspace} />
       ) : module === "team" ? (
         <TeamPanel workspace={workspace} />
-      ) : module === "products" ? (
+      ) : module === "offerings" ? (
         <ProductCatalogPanel scope={productScope} workspace={workspace} />
       ) : module === "events" ? (
         <EventsTable
@@ -1356,7 +1376,7 @@ export function ModulePanel({
           <EventHistoryWorkspace kinds={["league"]} workspace={workspace} />
           <EventInventory dashboard={dashboard} kinds={["league"]} />
         </>
-      ) : module === "payments" ? (
+      ) : module === "money" ? (
         moneyWorkspace ? (
           <PaymentsPanel dashboard={dashboard} money={moneyWorkspace} />
         ) : null
@@ -1364,7 +1384,7 @@ export function ModulePanel({
         <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (
         <ReportsPanel dashboard={dashboard} />
-      ) : module === "ai" ? (
+      ) : module === "ask" ? (
         <AiPanel dashboard={dashboard} />
       ) : (
         <SettingsPanel dashboard={dashboard} workspace={workspace} />

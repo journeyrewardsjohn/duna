@@ -1,0 +1,504 @@
+import {
+  HQ_PLAN_OPTIONS,
+  HQ_TERMS_VERSION,
+  type HqPlan,
+  provisionWorkOSOrganization,
+} from "@duna/api";
+import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
+import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
+import { DunaLogo, Numeric } from "@duna/ui";
+import {
+  getWorkOS,
+  switchToOrganization,
+  withAuth,
+} from "@workos-inc/authkit-nextjs";
+import {
+  ArrowRight,
+  Building2,
+  Check,
+  Layers3,
+  Plus,
+  ShieldCheck,
+  Smartphone,
+  SunMedium,
+  Video,
+  Warehouse,
+} from "lucide-react";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+
+const planIds = new Set(HQ_PLAN_OPTIONS.map((plan) => plan.id));
+const pricingPlans = HQ_PLAN_OPTIONS.map((plan) => {
+  const definition = ORGANIZATION_PLANS[plan.id];
+  return {
+    ...plan,
+    definition,
+    annualSavingsPercent:
+      definition.monthlyPriceMinor > 0
+        ? Math.round(
+            (1 -
+              definition.annualPriceMinor /
+                (definition.monthlyPriceMinor * 12)) *
+              100,
+          )
+        : 0,
+  };
+});
+const paidPricingPlans = pricingPlans.filter(
+  (plan) => plan.definition.monthlyPriceMinor > 0,
+);
+const annualSavingsPercent = paidPricingPlans.length
+  ? Math.round(
+      paidPricingPlans.reduce(
+        (total, plan) =>
+          total +
+          (1 -
+            plan.definition.annualPriceMinor /
+              (plan.definition.monthlyPriceMinor * 12)) *
+            100,
+        0,
+      ) / paidPricingPlans.length,
+    )
+  : 0;
+
+async function createWorkspace(formData: FormData) {
+  "use server";
+
+  const { user } = await withAuth();
+  if (!user) redirect("/sign-in?returnTo=/setup/start");
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, 100);
+  if (name.length < 2) redirect("/setup/start?error=name");
+  const plan = String(formData.get("plan") ?? "coach") as HqPlan;
+  const interval = formData.get("interval") === "year" ? "year" : "month";
+  if (!planIds.has(plan)) redirect("/setup/start?error=plan");
+  const volleyballType = String(formData.get("volleyballType") ?? "");
+  if (!["beach", "indoor", "both"].includes(volleyballType)) {
+    redirect("/setup/start?error=volleyballType");
+  }
+  const volleyballTypes =
+    volleyballType === "both"
+      ? (["beach", "indoor"] as const)
+      : volleyballType === "indoor"
+        ? (["indoor"] as const)
+        : (["beach"] as const);
+  const termsAccepted = formData.get("termsAccepted") === "on";
+  if (!termsAccepted) redirect("/setup/start?error=terms");
+
+  const workos = getWorkOS();
+  const organization = await workos.organizations.createOrganization({ name });
+  const requestHeaders = await headers();
+  const publicWebUrl =
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
+  await provisionWorkOSOrganization({
+    user,
+    workosOrganizationId: organization.id,
+    organizationName: organization.name,
+    plan,
+    volleyballTypes,
+    termsAccepted,
+    termsUrl: `${publicWebUrl}/legal/hq-terms`,
+    privacyUrl: `${publicWebUrl}/legal/privacy`,
+    ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim(),
+    userAgent: requestHeaders.get("user-agent") ?? undefined,
+    now: new Date(),
+  });
+  await workos.userManagement.createOrganizationMembership({
+    organizationId: organization.id,
+    roleSlug: "admin",
+    userId: user.id,
+  });
+  await switchToOrganization(organization.id, {
+    returnTo:
+      plan === "coach"
+        ? "/setup"
+        : `/setup/start/complete?plan=${plan}&interval=${interval}&checkoutId=${crypto.randomUUID()}`,
+  });
+}
+
+async function chooseWorkspace(formData: FormData) {
+  "use server";
+
+  const { user } = await withAuth();
+  if (!user) redirect("/sign-in?returnTo=/setup/start");
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const memberships =
+    await getWorkOS().userManagement.listOrganizationMemberships({
+      userId: user.id,
+    });
+  const allowed = memberships.data.some(
+    (membership) => membership.organizationId === organizationId,
+  );
+  if (!allowed) redirect("/setup/start?error=workspace");
+  await switchToOrganization(organizationId, { returnTo: "/" });
+}
+
+export default async function OrganizationOnboardingPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{
+    error?: string;
+    mode?: string;
+    plan?: string;
+    source?: string;
+    interval?: string;
+  }>;
+}) {
+  const query = await searchParams;
+  const createOnly = query.mode === "create";
+  const selectedPlan = planIds.has(query.plan as HqPlan)
+    ? (query.plan as HqPlan)
+    : "coach";
+  const configured = isWorkOSAuthKitConfigured();
+  const auth = configured ? await withAuth() : undefined;
+  const memberships =
+    configured && auth?.user
+      ? await getWorkOS().userManagement.listOrganizationMemberships({
+          userId: auth.user.id,
+        })
+      : undefined;
+  const organizations = memberships
+    ? await Promise.all(
+        memberships.data.map((membership) =>
+          getWorkOS().organizations.getOrganization(membership.organizationId),
+        ),
+      )
+    : [];
+  const publicWebUrl =
+    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
+    "https://duna.coach";
+  const error =
+    query.error === "terms"
+      ? "Accept the Duna HQ Terms and Privacy Policy to create a workspace."
+      : query.error === "volleyballType"
+        ? "Choose whether this organization runs beach volleyball, indoor volleyball, or both."
+        : query.error === "plan"
+          ? "Choose a valid Duna HQ plan."
+          : query.error === "name"
+            ? "Enter a business or club name with at least two characters."
+            : query.error === "workspace"
+              ? "That workspace is not available to this account."
+              : undefined;
+
+  return (
+    <main className="auth-page">
+      <section className="organization-onboarding organization-onboarding--workos">
+        <header>
+          <DunaLogo size={28} />
+          <span>Duna HQ</span>
+        </header>
+        <div className="organization-onboarding__intro">
+          <span className="hq-eyebrow">Your operating workspace</span>
+          <h1>
+            {createOnly
+              ? "Create a new organization."
+              : "Start your Duna workspace."}
+          </h1>
+          <p>
+            {createOnly
+              ? "Start a separate business without mixing members, money, or settings with your current organization."
+              : "Choose an existing workspace or create one in a few clear decisions. After this, Duna guides you through the venue, people, brand, payments, and first offering."}
+          </p>
+        </div>
+
+        {configured ? (
+          <div className="workspace-onboarding-grid">
+            {error && (
+              <p className="workspace-onboarding-error" role="alert">
+                {error}
+              </p>
+            )}
+            {!createOnly && organizations.length > 0 && (
+              <div className="workspace-choice-list">
+                <span className="hq-eyebrow">Your workspaces</span>
+                {organizations.map((organization) => (
+                  <form action={chooseWorkspace} key={organization.id}>
+                    <input
+                      name="organizationId"
+                      type="hidden"
+                      value={organization.id}
+                    />
+                    <button className="workspace-choice" type="submit">
+                      <span>
+                        <Building2 aria-hidden size={20} />
+                        <strong>{organization.name}</strong>
+                      </span>
+                      <ArrowRight aria-hidden size={18} />
+                    </button>
+                  </form>
+                ))}
+              </div>
+            )}
+            <form action={createWorkspace} className="workspace-create-form">
+              <div className="workspace-create-form__heading">
+                <span>
+                  <Layers3 aria-hidden size={20} />
+                </span>
+                <div>
+                  <span className="hq-eyebrow">Create a workspace</span>
+                  <h2>Tell us about the organization.</h2>
+                  <p>
+                    Start with its name and volleyball format. Every workspace
+                    keeps customers, payments, staff, and settings separate.
+                  </p>
+                </div>
+              </div>
+              <label htmlFor="workspace-name">
+                Business, club, or coaching brand
+                <input
+                  autoComplete="organization"
+                  id="workspace-name"
+                  minLength={2}
+                  name="name"
+                  placeholder="Beach Elite Volleyball"
+                  required
+                />
+              </label>
+
+              <fieldset className="workspace-club-type-picker">
+                <legend>
+                  <span className="hq-eyebrow">Your volleyball operation</span>
+                  <strong>Where do your teams play?</strong>
+                  <small>
+                    This shapes your starting workspace. You can add the other
+                    discipline later in Settings.
+                  </small>
+                </legend>
+                <div>
+                  <label>
+                    <input
+                      name="volleyballType"
+                      required
+                      type="radio"
+                      value="beach"
+                    />
+                    <span>
+                      <SunMedium aria-hidden size={19} />
+                      <strong>Beach</strong>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      name="volleyballType"
+                      required
+                      type="radio"
+                      value="indoor"
+                    />
+                    <span>
+                      <Warehouse aria-hidden size={19} />
+                      <strong>Indoor</strong>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      name="volleyballType"
+                      required
+                      type="radio"
+                      value="both"
+                    />
+                    <span>
+                      <Layers3 aria-hidden size={19} />
+                      <strong>Both</strong>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="workspace-plan-picker">
+                <legend>
+                  <span className="hq-eyebrow">Plans + pricing</span>
+                  <strong>Choose how you want to start.</strong>
+                  <small>
+                    Every plan includes the complete Duna HQ platform. Upgrade
+                    only when the lower transaction fee saves your organization
+                    more.
+                  </small>
+                </legend>
+                <fieldset className="workspace-billing-picker">
+                  <legend>Billing cadence</legend>
+                  <label>
+                    <input
+                      defaultChecked={query.interval !== "year"}
+                      name="interval"
+                      type="radio"
+                      value="month"
+                    />
+                    <span>Monthly</span>
+                  </label>
+                  <label>
+                    <input
+                      defaultChecked={query.interval === "year"}
+                      name="interval"
+                      type="radio"
+                      value="year"
+                    />
+                    <span>
+                      Annual prepay <b>Save {annualSavingsPercent}%</b>
+                    </span>
+                  </label>
+                </fieldset>
+                <p className="workspace-billing-note">
+                  Annual prepay includes the same complete Duna HQ platform and
+                  is billed once for the year.
+                </p>
+                <div className="workspace-plan-grid">
+                  {pricingPlans.map((plan) => (
+                    <label
+                      className="workspace-plan-card"
+                      data-featured={plan.id === "coach" ? "true" : undefined}
+                      key={plan.id}
+                      title={plan.description}
+                    >
+                      <input
+                        defaultChecked={plan.id === selectedPlan}
+                        name="plan"
+                        type="radio"
+                        value={plan.id}
+                      />
+                      <span className="workspace-plan-card__check">
+                        <Check aria-hidden size={15} />
+                      </span>
+                      <header>
+                        <span className="workspace-plan-card__tier">
+                          {plan.definition.name}
+                          {plan.id === "coach" && <b>Best place to start</b>}
+                        </span>
+                        <h3>{plan.definition.productName}</h3>
+                        <p>{plan.definition.tagline}</p>
+                      </header>
+                      <div className="workspace-plan-card__price">
+                        <Numeric
+                          className="workspace-plan-card__price-monthly"
+                          tier="hero"
+                        >
+                          {formatMoney(
+                            plan.definition.monthlyPriceMinor,
+                            "USD",
+                          )}
+                        </Numeric>
+                        <Numeric
+                          className="workspace-plan-card__price-annual"
+                          tier="hero"
+                        >
+                          {formatMoney(
+                            Math.round(plan.definition.annualPriceMinor / 12),
+                            "USD",
+                          )}
+                        </Numeric>
+                        <span>/ month</span>
+                      </div>
+                      <small className="workspace-plan-card__billing">
+                        <span className="workspace-plan-card__billing-monthly">
+                          {plan.id === "coach"
+                            ? "No software subscription"
+                            : `${formatMoney(plan.definition.annualPriceMinor, "USD")} with annual prepay`}
+                        </span>
+                        <span className="workspace-plan-card__billing-annual">
+                          {plan.id === "coach"
+                            ? "No software subscription"
+                            : `${formatMoney(plan.definition.annualPriceMinor, "USD")} billed once yearly · save ${plan.annualSavingsPercent}%`}
+                        </span>
+                      </small>
+                      <span className="workspace-plan-card__fee">
+                        Stripe processing averages 2.9%* +{" "}
+                        <Numeric tier="chip">
+                          {plan.definition.defaultCommissionBps / 100}%
+                        </Numeric>{" "}
+                        Duna organization fee
+                      </span>
+                      <ul>
+                        {plan.features.slice(0, 4).map((feature) => (
+                          <li key={feature}>
+                            <Check aria-hidden size={15} /> {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="workspace-plan-card__selection">
+                        <span>
+                          Choose {plan.definition.name}
+                          <ArrowRight aria-hidden size={16} />
+                        </span>
+                        <strong>
+                          <Check aria-hidden size={16} /> Selected
+                        </strong>
+                      </span>
+                      <footer>
+                        <span>
+                          <Video aria-hidden size={16} />
+                          <Numeric tier="chip">
+                            {plan.definition.monthlyUploadSeconds / 60 / 60}
+                          </Numeric>{" "}
+                          uploaded-video hours
+                        </span>
+                        <span>
+                          <Smartphone aria-hidden size={16} />
+                          <Numeric tier="chip">
+                            {plan.definition.monthlyLiveSeconds / 60 / 60}
+                          </Numeric>{" "}
+                          live hours monthly
+                        </span>
+                        {plan.id === "coach" && (
+                          <small>
+                            +10 upload and +2 live hours for every $40 in
+                            organization fees collected that month
+                          </small>
+                        )}
+                      </footer>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="workspace-pricing-note">
+                <ShieldCheck aria-hidden size={18} />
+                <span>
+                  <strong>Every plan starts complete.</strong>
+                  <small>
+                    If you choose a paid plan, secure Stripe checkout is the
+                    next step. Card processing, organization, and player service
+                    fees remain itemized before transactions.
+                  </small>
+                </span>
+              </div>
+
+              <label className="workspace-terms">
+                <input name="termsAccepted" required type="checkbox" />
+                <span>
+                  I am authorized to bind this organization and agree to the{" "}
+                  <a
+                    href={`${publicWebUrl}/legal/hq-terms`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Duna HQ Terms
+                  </a>{" "}
+                  (version {HQ_TERMS_VERSION}) and{" "}
+                  <a
+                    href={`${publicWebUrl}/legal/privacy`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
+              <button className="hq-button hq-button--primary" type="submit">
+                <Plus aria-hidden size={17} />
+                Create workspace
+              </button>
+            </form>
+          </div>
+        ) : (
+          <p className="auth-setup-note">
+            WorkOS is not configured in this preview environment.
+          </p>
+        )}
+      </section>
+    </main>
+  );
+}

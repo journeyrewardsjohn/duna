@@ -45,7 +45,7 @@ import {
   saveProfessionalMatchScheduleAction,
   saveProfessionalWatchOptionAction,
   type SandActionState,
-} from "@/app/admin/sand-actions";
+} from "@/app/(legacy)/admin/sand-actions";
 import {
   createProfessionalEventMediaPath,
   optimizeImageUpload,

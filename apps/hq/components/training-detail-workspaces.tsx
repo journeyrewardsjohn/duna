@@ -259,13 +259,13 @@ export function TrainingProgramDetail({
         </div>
         <div className="training-detail__actions">
           {program.linkedOffer ? (
-            <Link className="hq-button hq-button--secondary" href="/products">
+            <Link className="hq-button hq-button--secondary" href="/offerings">
               <Layers3 aria-hidden size={16} /> View linked offer
             </Link>
           ) : (
             <Link
               className="hq-button hq-button--secondary"
-              href="/products/create?type=service&subtype=program"
+              href="/offerings/create?type=service&subtype=program"
             >
               <Layers3 aria-hidden size={16} /> Create offer
             </Link>

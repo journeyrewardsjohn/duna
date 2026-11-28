@@ -19,6 +19,10 @@ const nextConfig = {
   ],
   experimental: {
     optimizePackageImports: ["lucide-react"],
+    // HQ has two root layouts, app/(legacy) and app/(next)
+    // (docs/design/hq-shell.md), so an unmatched address is answered by
+    // app/global-not-found.tsx.
+    globalNotFound: true,
   },
 };
 

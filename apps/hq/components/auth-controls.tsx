@@ -151,7 +151,7 @@ function ConfiguredAuthControls({
                   </span>
                 </Link>
                 {showOrganization && (
-                  <Link href="/onboarding" onClick={() => setMenuOpen(false)}>
+                  <Link href="/setup/start" onClick={() => setMenuOpen(false)}>
                     <span className="hq-auth-menu__item-icon">
                       {organizationId ? (
                         <ChevronsUpDown aria-hidden size={17} />

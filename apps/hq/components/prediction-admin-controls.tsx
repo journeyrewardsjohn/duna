@@ -24,7 +24,7 @@ import {
   setPredictionMarketTradingStatusAction,
   updatePredictionMarketRulesAction,
   type PredictionAdminActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: PredictionAdminActionState = {
   status: "idle",

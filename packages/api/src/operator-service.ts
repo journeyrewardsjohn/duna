@@ -5472,7 +5472,7 @@ export async function previewCourtScheduleChange(input: {
     courtName: court.name,
     venueName: venue.name,
     timezone: venue.timezone,
-    path: `/locations/${venue.id}/courts/${court.id}`,
+    path: `/setup/places/${venue.id}/courts/${court.id}`,
     expectedVersion: courtScheduleVersion(
       venue.timezone,
       current.schedules.map((schedule) => schedule.id),

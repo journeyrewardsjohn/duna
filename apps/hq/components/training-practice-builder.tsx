@@ -30,7 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState, useTransition, type CSSProperties } from "react";
-import { saveTrainingPracticePlanAction } from "@/app/training/actions";
+import { saveTrainingPracticePlanAction } from "@/app/(legacy)/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 import {
   createQuickPracticeBlock,

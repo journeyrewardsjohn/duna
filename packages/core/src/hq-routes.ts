@@ -1,63 +1,29 @@
 /**
- * Central map of every Duna HQ path, in TODAY's shape.
+ * Central map of every Duna HQ path, in the information architecture of
+ * docs/design/tideline-4.1.1/ia-hq.md (work package S2; the old-to-new table
+ * is docs/plan/s2-route-map.md).
  *
  * Each template mirrors a `page.tsx` under apps/hq/app exactly: `[param]` is a
  * dynamic segment and `[[...param]]` an optional catch-all. `hq-routes.test.ts`
  * fails if a template stops matching a real page, if a page is missing from the
  * map, or if a module slug is no longer served, so the map cannot rot.
  *
- * Work package S2 (HQ information architecture) renames HQ routes HERE, in one
- * place, and then moves the directories. Until S2 lands nothing is required to
- * import this map; new code should prefer `hqHref(...)` over string literals.
+ * New code builds HQ addresses with `hqHref(...)` instead of string literals.
  */
-
 export const hqRoutes = {
-  // Operator workspace (58 pages, including the two dynamic module pages).
+  // Run the day.
   home: "/",
-  account: "/account",
-  activities: "/activities",
+  inbox: "/inbox",
+  inboxCreate: "/inbox/create",
   ask: "/ask/[[...conversation]]",
-  audiences: "/audiences",
-  audienceCreate: "/audiences/create",
-  audience: "/audiences/[audienceId]",
-  eventCreate: "/events/create",
-  event: "/events/[sessionId]",
-  eventDivision: "/events/[sessionId]/divisions/[divisionId]",
-  eventCourtBooking: "/events/court-bookings/[activityId]",
-  eventMatch: "/events/matches/[activityId]",
-  eventType: "/events/types/[eventType]",
-  leagueCreate: "/leagues/create",
-  locationCreate: "/locations/create",
-  location: "/locations/[venueId]",
-  locationLayout: "/locations/[venueId]/layout",
-  locationCourtCreate: "/locations/[venueId]/courts/create",
-  locationCourt: "/locations/[venueId]/courts/[courtId]",
-  marketingCreate: "/marketing/create",
-  memberInvite: "/members/invite",
-  member: "/members/[personId]",
-  memberHealth: "/members/[personId]/health",
-  messages: "/messages",
-  messageCreate: "/messages/create",
-  onboarding: "/onboarding",
-  onboardingComplete: "/onboarding/complete",
-  payments: "/payments",
-  paymentDisputes: "/payments/disputes",
-  paymentPayoutSettings: "/payments/payout-settings",
-  paymentRefundPolicies: "/payments/refund-policies",
-  paymentSetup: "/payments/setup",
-  paymentTransactions: "/payments/transactions",
-  paymentTransaction: "/payments/transactions/[transactionId]",
-  productCreate: "/products/create",
-  product: "/products/[itemId]",
-  productBuilder: "/products/[itemId]/builder",
-  productDraftReady: "/products/[itemId]/draft-ready",
-  productType: "/products/types/[productType]",
-  programs: "/programs",
-  promoCodes: "/promo-codes",
-  settings: "/settings",
-  settingsTheme: "/settings/theme",
-  setup: "/setup",
-  stripeReturn: "/stripe/return",
+  /** Retired by the IA (its cards have homes); package B4 removes it. */
+  activities: "/activities",
+
+  // People and play. People, Team, Events, Offerings, Schedule, Marketing and
+  // Reports lists are served by the generic module page; see hqModuleHref.
+  memberInvite: "/people/invite",
+  member: "/people/[personId]",
+  memberHealth: "/people/[personId]/health",
   teamInvite: "/team/invite",
   teamMember: "/team/[personId]",
   training: "/training",
@@ -69,7 +35,55 @@ export const hqRoutes = {
   trainingPractice: "/training/practices/[eventId]",
   trainingProgramCreate: "/training/programs/create",
   trainingProgram: "/training/programs/[programId]",
+  /** Dropped by the IA in favour of Training › Programs; package B4 removes it. */
+  programs: "/programs",
+  eventCreate: "/events/create",
+  event: "/events/[sessionId]",
+  eventDivision: "/events/[sessionId]/divisions/[divisionId]",
+  eventCourtBooking: "/events/court-bookings/[activityId]",
+  eventMatch: "/events/matches/[activityId]",
+  /** Becomes an in-page filter of Events in package H9. */
+  eventType: "/events/types/[eventType]",
+  offeringCreate: "/offerings/create",
+  offering: "/offerings/[itemId]",
+  offeringBuilder: "/offerings/[itemId]/builder",
+  offeringDraftReady: "/offerings/[itemId]/draft-ready",
+  /** Becomes an in-page filter of Offerings in package H9. */
+  offeringType: "/offerings/types/[productType]",
+
+  // Money and setup.
+  money: "/money",
+  moneyTransactions: "/money/transactions",
+  moneyTransaction: "/money/transactions/[transactionId]",
+  moneyPayouts: "/money/payouts",
+  moneySetup: "/money/setup",
+  moneyRefundPolicies: "/money/refund-policies",
+  moneyDisputes: "/money/disputes",
+  setup: "/setup",
+  setupStart: "/setup/start",
+  setupStartComplete: "/setup/start/complete",
+  setupIdentity: "/setup/identity",
+  places: "/setup/places",
+  placeCreate: "/setup/places/create",
+  place: "/setup/places/[venueId]",
+  placeLayout: "/setup/places/[venueId]/layout",
+  placeCourtCreate: "/setup/places/[venueId]/courts/create",
+  placeCourt: "/setup/places/[venueId]/courts/[courtId]",
+  /** Duna Pay (Stripe Connect) return and refresh address; never rename. */
+  stripeReturn: "/stripe/return",
+
+  // Grow.
   website: "/website",
+  marketingCreate: "/marketing/create",
+  marketingAudiences: "/marketing/audiences",
+  marketingAudienceCreate: "/marketing/audiences/create",
+  marketingAudience: "/marketing/audiences/[audienceId]",
+  marketingPromoCodes: "/marketing/promo-codes",
+
+  // Account menu.
+  settings: "/settings",
+  account: "/account",
+
   /** Generic operator module page; prefer hqModuleHref(slug). */
   module: "/[module]",
 
@@ -83,6 +97,9 @@ export const hqRoutes = {
   /** Generic admin module page; prefer hqAdminModuleHref(slug). */
   adminModule: "/admin/[module]",
 } as const;
+
+/** Leagues are an event type: the Events list filtered to leagues. */
+export const hqLeaguesPath = "/events?type=league";
 
 export type HqRouteName = keyof typeof hqRoutes;
 export type HqRouteTemplate = (typeof hqRoutes)[HqRouteName];
@@ -107,14 +124,12 @@ export function isHqDevOnlyRoute(path: string): boolean {
  * apps/hq/app/[module]/page.tsx (slugs from apps/hq/components/navigation.ts).
  */
 export const hqOperatorModuleSlugs = [
-  "calendar",
   "events",
-  "leagues",
-  "locations",
   "marketing",
-  "members",
-  "products",
+  "offerings",
+  "people",
   "reports",
+  "schedule",
   "team",
 ] as const;
 

@@ -259,7 +259,7 @@ export function CatalogItemEditor({
     <div className="catalog-editor">
       <header className="catalog-editor__hero">
         <div>
-          <Link href="/products">
+          <Link href="/offerings">
             <ArrowLeft aria-hidden size={16} />
             Back to products
           </Link>
@@ -356,7 +356,7 @@ export function CatalogItemEditor({
           )}
           <Link
             className="hq-button hq-button--secondary"
-            href={`/products/${item.id}/builder`}
+            href={`/offerings/${item.id}/builder`}
           >
             <Pencil aria-hidden size={15} /> Edit draft
           </Link>

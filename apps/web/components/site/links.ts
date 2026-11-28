@@ -55,7 +55,7 @@ export const siteNavigation = [
 ] as const;
 
 /**
- * Sign-up for a club plan: HQ's sign-up, returning to onboarding with the
+ * Sign-up for a club plan: HQ's sign-up, returning to HQ setup with the
  * plan and billing period chosen here (the same hand-off the old clubs page
  * used, so onboarding keeps reading it).
  */
@@ -64,6 +64,6 @@ export function clubSignupHref(
   interval: "month" | "year" = "month",
   source = "website",
 ): string {
-  const returnTo = `/onboarding?plan=${planId}&interval=${interval}&source=${source}`;
+  const returnTo = `/setup/start?plan=${planId}&interval=${interval}&source=${source}`;
   return `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent(returnTo)}`;
 }

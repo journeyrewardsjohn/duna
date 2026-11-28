@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useTransition, type CSSProperties } from "react";
-import { startTrainingDrillCheckoutAction } from "@/app/training/actions";
+import { startTrainingDrillCheckoutAction } from "@/app/(legacy)/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 
 type TrainingView =
@@ -518,7 +518,7 @@ function ProgramsView({
             forcing coaches to edit commerce.
           </p>
         </div>
-        <Link href="/products/create?type=service&subtype=program">
+        <Link href="/offerings/create?type=service&subtype=program">
           Create a Program offer <ArrowRight aria-hidden size={16} />
         </Link>
       </section>

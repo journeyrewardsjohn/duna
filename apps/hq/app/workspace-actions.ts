@@ -17,7 +17,7 @@ export async function switchWorkspaceAction(formData: FormData) {
 
   const organizationId = String(formData.get("organizationId") ?? "");
   if (!organizationId || !(await canAccessWorkspace(organizationId))) {
-    redirect("/onboarding?error=workspace");
+    redirect("/setup/start?error=workspace");
   }
 
   await switchToOrganization(organizationId, {

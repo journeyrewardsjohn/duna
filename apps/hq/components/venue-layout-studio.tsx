@@ -320,7 +320,7 @@ function LayoutEmptyState({
         <Link
           aria-label={`Back to ${workspace.venue.name}`}
           className="venue-workspace-back"
-          href={`/locations/${workspace.venue.id}`}
+          href={`/setup/places/${workspace.venue.id}`}
         >
           <ArrowLeft aria-hidden size={19} />
         </Link>
@@ -868,7 +868,7 @@ function AssetInspector({
       {asset.courtId && (
         <Link
           className="venue-layout-inspector__court-link"
-          href={`/locations/${workspace.venue.id}/courts/${asset.courtId}`}
+          href={`/setup/places/${workspace.venue.id}/courts/${asset.courtId}`}
         >
           <Link2 aria-hidden size={15} /> Open full court settings
         </Link>
@@ -1326,8 +1326,8 @@ export function VenueLayoutStudio({
     const nextLayout = workspace.layouts.find((item) => item.id !== layoutId);
     router.replace(
       nextLayout
-        ? `/locations/${workspace.venue.id}/layout?layout=${nextLayout.id}`
-        : `/locations/${workspace.venue.id}/layout`,
+        ? `/setup/places/${workspace.venue.id}/layout?layout=${nextLayout.id}`
+        : `/setup/places/${workspace.venue.id}/layout`,
     );
     router.refresh();
   }, [
@@ -1346,7 +1346,7 @@ export function VenueLayoutStudio({
         openToolboxAfterVersionRef.current = false;
       }
       router.replace(
-        `/locations/${workspace.venue.id}/layout?layout=${versionState.entityId}`,
+        `/setup/places/${workspace.venue.id}/layout?layout=${versionState.entityId}`,
       );
       router.refresh();
     }
@@ -1490,7 +1490,7 @@ export function VenueLayoutStudio({
     setToolboxOpen(options.openToolbox ?? false);
     setOperationsOpen(false);
     router.replace(
-      `/locations/${workspace.venue.id}/layout?layout=${nextLayoutId}`,
+      `/setup/places/${workspace.venue.id}/layout?layout=${nextLayoutId}`,
     );
   }
 
@@ -1576,7 +1576,7 @@ export function VenueLayoutStudio({
         <Link
           aria-label={`Back to ${workspace.venue.name}`}
           className="venue-workspace-back"
-          href={`/locations/${workspace.venue.id}`}
+          href={`/setup/places/${workspace.venue.id}`}
         >
           <ArrowLeft aria-hidden size={19} />
         </Link>

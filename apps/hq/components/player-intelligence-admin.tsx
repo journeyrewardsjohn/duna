@@ -29,7 +29,7 @@ import {
   savePlayerIdentityAction,
   savePlayerPublicProfileAction,
   type PlayerIntelligenceActionState,
-} from "@/app/admin/player-intelligence-actions";
+} from "@/app/(legacy)/admin/player-intelligence-actions";
 
 const initialState: PlayerIntelligenceActionState = {
   status: "idle",
