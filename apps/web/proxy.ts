@@ -1,12 +1,13 @@
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
-import { type NextRequest, NextResponse } from "next/server";
+import { REQUEST_ID_HEADER, resolveEdgeRequestId } from "@duna/observability";
+import { NextRequest, NextResponse } from "next/server";
 
 function isProtectedRoute(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
 }
 
-export default async function proxy(request: NextRequest) {
+async function routeProxy(request: NextRequest): Promise<NextResponse> {
   if (request.nextUrl.pathname.endsWith(".md")) {
     const markdown = request.nextUrl.clone();
     const canonicalPath = request.nextUrl.pathname.slice(0, -".md".length);
@@ -42,7 +43,7 @@ export default async function proxy(request: NextRequest) {
       );
       return NextResponse.redirect(signIn);
     }
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: request.headers } });
   }
 
   const result = await authkit(request, {
@@ -57,6 +58,22 @@ export default async function proxy(request: NextRequest) {
     return handleAuthkitProxy(request, result.headers, { redirect: signIn });
   }
   return handleAuthkitProxy(request, result.headers);
+}
+
+/**
+ * Every request gets one id at the edge (Duna Hosting's own id when present),
+ * forwarded to the app in `x-request-id` and returned in the response
+ * header, so a person's error reference finds the request in the logs.
+ */
+export default async function proxy(request: NextRequest) {
+  const requestId = resolveEdgeRequestId(request.headers);
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+  const response = await routeProxy(
+    new NextRequest(request.url, { method: request.method, headers }),
+  );
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
 }
 
 export const config = {

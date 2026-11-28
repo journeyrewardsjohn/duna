@@ -1,0 +1,17 @@
+{
+  "src/duna-ai.ts": {
+    "no-console": {
+      "count": 7
+    }
+  },
+  "src/feature-flag-evaluator.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "src/video-service.ts": {
+    "no-console": {
+      "count": 8
+    }
+  }
+}

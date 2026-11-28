@@ -41,6 +41,7 @@ export * from "./commerce";
 export * from "./feature-flags";
 export * from "./feature-flag-evaluator";
 export * from "./provider-readiness";
+export * from "./observability";
 export * from "./services/data-source";
 export * from "./demo-data-service";
 export * from "./forms-service";
