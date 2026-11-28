@@ -46,6 +46,7 @@ import { setupOperatorRouter } from "./routers/setup";
 import { payOperatorRouter } from "./routers/pay";
 import { teamAvailabilityOperatorRouter } from "./routers/team-availability";
 import { teamPayOperatorRouter } from "./routers/team-pay";
+import { peopleOperatorRouter } from "./routers/people";
 import { teamPayoutsOperatorRouter } from "./routers/team-payouts";
 import {
   trainingProgramsOperatorRouter,
@@ -14134,6 +14135,9 @@ const operatorRouter = router({
   fees: feesOperatorRouter,
   legal: legalOperatorRouter,
   participation: participationOperatorRouter,
+  // HQ People (PEOPLE-API): import, merge, notes, tags, households,
+  // documents and membership changes.
+  people: peopleOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({

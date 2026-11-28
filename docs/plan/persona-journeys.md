@@ -170,6 +170,16 @@ Added by PART-3 (28 November 2026) from [`participation.md`](participation.md) �
 | CO-15.4 | Cancels a thin session → strong confirmation restates people and refunds; the session shows "Cancelled"                               | HQ      | PART-7   | Main    |
 | CO-15.5 | Asks Duna "make every clinic need 4 players" → a proposal card with before / after and affected sessions; nothing changes until saved | HQ      | PART-6   | Planned |
 
+### CO-16 Look after the club's people
+
+Added by H-PEOPLE (28 November 2026): the owner and front office on People.
+
+| Step    | The person does → expected result                                                       | Surface | Packages | Status |
+| ------- | --------------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CO-16.1 | Finds a member by name or phone and sees what needs attention; segments are addresses   | HQ      | H-PEOPLE | Main   |
+| CO-16.2 | Opens a junior: the guardian is named at the top; the child has no contact of their own | HQ      | H-PEOPLE | Main   |
+| CO-16.3 | Gives credits through a strong confirmation that restates the amount and the person     | HQ      | H-PEOPLE | Main   |
+
 ## Coach (CH)
 
 Teaches sessions, runs practices, scores matches, writes to players and
@@ -205,6 +215,14 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 | CH-8.2 | Opens a program's Roster and Schedule tabs (deep-linkable)                                                         | HQ         | H6, S3          | Planned |
 | CH-9.1 | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Main    |
 | CH-9.2 | Marks attendance with "Everyone's here" and one exception, offline → it sends when back online (spec id CH-7.2)    | Pro        | PART-12         | Native  |
+
+### CH-10 The people I coach
+
+Added by H-PEOPLE (28 November 2026).
+
+| Step    | The person does → expected result                                                          | Surface | Packages | Status |
+| ------- | ------------------------------------------------------------------------------------------ | ------- | -------- | ------ |
+| CH-10.1 | Opens a player in People: no Payments tab or money; Health only where the player shared it | HQ      | H-PEOPLE | Main   |
 
 ## Parent or guardian with a junior (PA)
 

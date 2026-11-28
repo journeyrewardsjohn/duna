@@ -548,7 +548,6 @@ export async function createGuardianInvitation(input: {
   readonly now: Date;
 }) {
   requireDatabase();
-  const database = getDatabase();
   const subject = await assertProfileSubjectAuthority(input);
   if (!subject.isMinor) {
     throw new ProfileOnboardingError(
@@ -556,6 +555,36 @@ export async function createGuardianInvitation(input: {
       "Guardian links are only created for a child or teen account.",
     );
   }
+  return issueGuardianInvitation({
+    minorId: subject.id,
+    createdByPersonId: input.actor.personId,
+    relationship: input.relationship,
+    applicationOrigin: input.applicationOrigin,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+}
+
+/**
+ * Issues a guardian invitation link for a minor (the `/join/guardian/[token]`
+ * flow): cancels any pending link, stores only the token hash, marks the
+ * minor as needing a guardian and audits. Sends nothing. Callers check their
+ * own authority first (the minor or their guardian above; club staff in
+ * services/people).
+ */
+export async function issueGuardianInvitation(input: {
+  readonly minorId: string;
+  readonly createdByPersonId: string;
+  readonly relationship: string;
+  readonly applicationOrigin: string;
+  readonly requestId: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}) {
+  requireDatabase();
+  const database = getDatabase();
+  const subject = { id: input.minorId };
   const token = randomBytes(32).toString("base64url");
   const tokenHash = invitationTokenHash(token);
   const expiresAt = new Date(input.now.getTime() + 14 * 24 * 60 * 60 * 1_000);
@@ -576,7 +605,7 @@ export async function createGuardianInvitation(input: {
     .insert(guardianInvitations)
     .values({
       minorId: subject.id,
-      createdByPersonId: input.actor.personId,
+      createdByPersonId: input.createdByPersonId,
       tokenHash,
       relationship: input.relationship,
       expiresAt,
@@ -594,7 +623,7 @@ export async function createGuardianInvitation(input: {
       })
       .where(eq(people.id, subject.id)),
     database.insert(auditLog).values({
-      actorPersonId: input.actor.personId,
+      actorPersonId: input.createdByPersonId,
       actorType: "person",
       action: "guardianship.invitation.created",
       entityType: "guardian-invitation",
