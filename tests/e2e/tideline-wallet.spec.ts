@@ -174,3 +174,47 @@ test("nothing in the wallet section scrolls sideways at 375 px", async ({
   });
   expect(escapes).toEqual([]);
 });
+
+for (const width of [320, 375]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const text of [100, 200]) {
+      test(`the pass never clips what the desk needs: ${width} px, ${theme}, ${text}% text`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openWallet(page, theme);
+        if (text !== 100)
+          await page.evaluate((size) => {
+            document.documentElement.style.fontSize = `${size}%`;
+          }, text);
+        const passes = page.locator("[data-wallet-passes] .td-mpass");
+        await expect(passes).toHaveCount(6);
+        await passes.last().scrollIntoViewIfNeeded();
+        const clipped = await passes.evaluateAll((nodes) => {
+          const bad: string[] = [];
+          for (const pass of nodes) {
+            const face = pass.closest(".td-mcard")!.getBoundingClientRect();
+            for (const line of pass.querySelectorAll<HTMLElement>(
+              ".td-mpass__club, .td-mpass__member, .td-mpass__status, .td-mpass__meta > span, .td-mpass__note, .td-mpass__title, .td-mpass__text",
+            )) {
+              const box = line.getBoundingClientRect();
+              if (
+                line.scrollWidth > line.clientWidth + 1 ||
+                line.scrollHeight > line.clientHeight + 1 ||
+                box.bottom > face.bottom + 1 ||
+                box.right > face.right + 1
+              )
+                bad.push(line.textContent ?? "");
+            }
+          }
+          return bad;
+        });
+        expect(clipped).toEqual([]);
+        // The full validity date is always there to read.
+        await expect(
+          passes.last().getByText("Valid to Nov 30, 2027"),
+        ).toBeVisible();
+      });
+    }
+  }
+}
