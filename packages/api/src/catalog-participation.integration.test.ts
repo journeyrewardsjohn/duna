@@ -588,6 +588,8 @@ describe("participation read models", () => {
           minimumMet: true,
           playersNeeded: 0,
           decisionAt: "2026-12-10T15:00:00.000Z",
+          lockAt: "2026-12-10T15:00:00.000Z",
+          freeCancelUntil: "2026-12-10T15:00:00.000Z",
           status: "open",
           currentCreditsPerPlayer: 2,
           nextCreditsPerPlayer: 2,
