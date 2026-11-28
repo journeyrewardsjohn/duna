@@ -40,12 +40,15 @@ import { CalendarScreen } from "../features/calendar";
 import { PeopleScreen } from "../features/people";
 import { MoreScreen } from "../features/more";
 import { TabBar } from "./TabBar";
+import { DevicePostureProvider } from "@duna/expo-device-posture";
+import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
 
 export function ProApp() {
   const {
     activeAuthOrganizationId,
     authOrganizations,
     messagingDelivery,
+    mode,
     refresh,
     switchOrganization,
   } = useProRuntime();
@@ -79,6 +82,12 @@ export function ProApp() {
   const surfaceTheme: ThemeName =
     surface === "score" || surface === "scan" ? "dark" : theme;
   const screenTransition = useRef(new Animated.Value(1)).current;
+  // Development-only Layout lab: preview builds only, never production navigation.
+  const [layoutLabOpen, setLayoutLabOpen] = useState(
+    Boolean(layoutLabAutostart),
+  );
+  const previewRef = useRef(mode === "preview");
+  previewRef.current = mode === "preview";
 
   const openCalendar = (entryId?: string) => {
     setCalendarEntryId(entryId);
@@ -120,6 +129,10 @@ export function ProApp() {
 
   useEffect(() => {
     const openActivity = (url: string | null) => {
+      if (url?.startsWith("duna-pro://dev/layout-lab")) {
+        if (previewRef.current) setLayoutLabOpen(true);
+        return;
+      }
       if (url?.startsWith("duna-pro://messages")) {
         const conversationId = url.match(
           /^duna-pro:\/\/messages\/([^/?#]+)/,
@@ -206,7 +219,7 @@ export function ProApp() {
   setActivePalette(surfaceTheme === "dark" ? darkColors : lightColors);
   setActiveStyles(surfaceTheme === "dark" ? darkStyles : lightStyles);
 
-  return (
+  const shell = (
     <OpenDunaAiContext.Provider value={() => setSurface("ai")}>
       <ThemeContext.Provider
         value={{
@@ -283,7 +296,10 @@ export function ProApp() {
             }}
           />
         ) : surface === "messages" ? (
-          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+          <SafeAreaView
+            edges={["top", "left", "right", "bottom"]}
+            style={styles.safe}
+          >
             <StatusBar style={theme === "dark" ? "light" : "dark"} />
             <ProMessagingScreen
               initialAudienceKey={messagesAudienceKey}
@@ -311,7 +327,10 @@ export function ProApp() {
             />
           </SafeAreaView>
         ) : surface === "scan" ? (
-          <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+          <SafeAreaView
+            edges={["top", "left", "right", "bottom"]}
+            style={styles.safe}
+          >
             <StatusBar style="light" />
             <TicketScannerScreen
               onClose={() => setSurface(undefined)}
@@ -332,7 +351,7 @@ export function ProApp() {
             />
           </SafeAreaView>
         ) : surface === "score" ? (
-          <SafeAreaView edges={["top"]} style={styles.safe}>
+          <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
             <StatusBar style="light" />
             <View style={styles.app}>
               <ScorerScreen
@@ -380,10 +399,10 @@ export function ProApp() {
             }}
           />
         ) : (
-          <SafeAreaView edges={["top"]} style={styles.safe}>
+          <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
             <StatusBar style={theme === "dark" ? "light" : "dark"} />
             <View style={styles.app}>
-              <PreviewBanner />
+              <PreviewBanner onOpenLayoutLab={() => setLayoutLabOpen(true)} />
               <Animated.View
                 style={[
                   styles.animatedScreen,
@@ -465,5 +484,14 @@ export function ProApp() {
         )}
       </ThemeContext.Provider>
     </OpenDunaAiContext.Provider>
+  );
+
+  return (
+    <DevicePostureProvider>
+      {shell}
+      {layoutLabOpen && mode === "preview" ? (
+        <ProLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+    </DevicePostureProvider>
   );
 }

@@ -231,6 +231,38 @@ function runCheck(check: ContractCheck) {
         }
       }
       return;
+    case "migratedSourceRules":
+      for (const migratedRoot of check.roots) {
+        const absolute = join(root, migratedRoot);
+        if (!existsSync(absolute)) {
+          violations.push(
+            `${migratedRoot} is listed as migrated but is missing${tag(check)}`,
+          );
+          continue;
+        }
+        const sources = statSync(absolute).isFile()
+          ? [{ label: migratedRoot, source: readFileSync(absolute, "utf8") }]
+          : scriptSources(migratedRoot);
+        for (const { label, source } of sources) {
+          for (const rule of check.forbidden) {
+            const pattern = new RegExp(rule.pattern, rule.flags ?? "");
+            source.split("\n").forEach((line, index) => {
+              if (pattern.test(line)) {
+                violations.push(
+                  `${label}:${index + 1}: ${rule.message}${tag(check)}`,
+                );
+              }
+            });
+          }
+        }
+        const combined = sources.map(({ source }) => source).join("\n");
+        for (const rule of check.required) {
+          if (!combined.includes(rule.value)) {
+            violations.push(`${migratedRoot}: ${rule.message}${tag(check)}`);
+          }
+        }
+      }
+      return;
     case "maxBytes": {
       const absolute = join(root, check.path);
       if (existsSync(absolute) && statSync(absolute).size > check.bytes) {

@@ -1,3 +1,4 @@
+import { adaptiveScreenCheck } from "./adaptive-screens";
 import type { SurfaceContract } from "./types";
 
 /**
@@ -8,12 +9,15 @@ import type { SurfaceContract } from "./types";
 const legacy =
   "legacy: delete when Player native migrates (M-P0/M-P1)" as const;
 const root = "apps/player";
+/** Paths on the Duna Design System; `src/features/**` entries also get the adaptive-layout rule. */
+const migrated: readonly string[] = [];
 
 export const player: SurfaceContract = {
   surface: "player",
   owners: "M-P0 … M-P7, M-N1",
-  migrated: [],
+  migrated,
   checks: [
+    adaptiveScreenCheck("player", migrated),
     { kind: "expoAppConfig", app: "player" },
     {
       kind: "fontLoader",
