@@ -14,6 +14,7 @@ const migrated: readonly string[] = [
   "apps/player/src/features/score",
   "apps/player/src/features/rating",
   "apps/player/src/features/wallet",
+  "apps/player/src/features/booking",
 ];
 
 export const player: SurfaceContract = {
@@ -199,6 +200,47 @@ export const player: SurfaceContract = {
       ],
       message:
         "Booking restates the most you can be charged before payment, joins waitlists and asks for the late-cancel acknowledgement",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/booking/court/CourtBookingFlow.tsx",
+      values: [
+        "<AdaptiveSheet",
+        "startCourtCheckout",
+        "courtCheckoutStatus",
+        "<ReservationCrest",
+        "MONEY_WORDS",
+        "Duna Plus waives the service fee.",
+        "Member rate applied.",
+        "<VenueMap",
+      ],
+      message:
+        "Book a court is one flow: time and court once, who's playing, pay, a Crest confirming step that says what happened to the money, and one confirmed screen (M-P3)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/booking/court/CourtTimePicker.tsx",
+      values: [
+        "<ConditionsLine",
+        "<TimeSlots",
+        "<DayStrip",
+        "createAvailabilityAlert",
+        "createMatchAvailability",
+      ],
+      message:
+        "Court times use the design system's conditions, day and time parts, with open matches, looking to play and a priority alert (M-P3)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/AccountGate.tsx",
+      values: [
+        "<PersonAvatar",
+        'theme="dark"',
+        "haptics.confirmed(1)",
+        "Use a different account",
+      ],
+      message:
+        "The returning-account screen shows one person, centred, on Night Court, with a confirming haptic on Continue (M-P3)",
     },
     {
       kind: "includes",
