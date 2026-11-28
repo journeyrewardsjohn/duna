@@ -2,12 +2,18 @@ import { hqHref } from "@duna/core/hq-routes";
 import { Button, Chip } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PageSection } from "@/components/shell/page-header";
+import {
+  ArchiveControls,
+  VersionHistory,
+} from "@/components/training/history-actions";
 import { PlanBuilder } from "@/components/training/plan-builder";
 import { planStatusCopy, versionLine } from "@/components/training/plan-model";
 import { builderSession } from "@/components/training/plan-page";
 import {
   loadDrill,
   loadPlanLibrary,
+  loadPlanVersions,
   loadPracticePlan,
   trainingContext,
 } from "@/components/training/training-data";
@@ -36,10 +42,11 @@ export default async function PracticePlanPage({
   if (context.session.access !== "operator") return null;
   const plan = context.canWrite ? await loadPracticePlan(planId) : undefined;
   if (plan?.state === "not-found") notFound();
-  const [library, session, pins] = await Promise.all([
+  const [library, session, pins, versions] = await Promise.all([
     context.canWrite ? loadPlanLibrary() : undefined,
     context.canWrite ? builderSession(context, sessionId) : undefined,
     plan?.state === "ok" ? drillPins(plan.data.blocks) : undefined,
+    plan?.state === "ok" ? loadPlanVersions(planId) : undefined,
   ]);
   const state =
     plan?.state === "ok" ? planStatusCopy[plan.data.status] : undefined;
@@ -85,10 +92,6 @@ export default async function PracticePlanPage({
         />
       ) : (
         <>
-          <p className="tr-quiet">
-            Earlier versions stay with the practices that use them. A list of
-            past versions isn&apos;t available on this screen yet.
-          </p>
           <PlanBuilder
             canEdit={context.canWrite}
             key={plan.data.versionId}
@@ -97,6 +100,36 @@ export default async function PracticePlanPage({
             plan={plan.data}
             session={session}
           />
+          <PageSection
+            aside={
+              <ArchiveControls
+                archived={plan.data.status === "archived"}
+                id={plan.data.id}
+                kind="plan"
+                title={plan.data.title}
+              />
+            }
+            id="history"
+            title="History and archive"
+          >
+            {versions?.state === "ok" ? (
+              <VersionHistory
+                canRestore={plan.data.status !== "archived"}
+                id={plan.data.id}
+                kind="plan"
+                versions={versions.data}
+              />
+            ) : versions ? (
+              <TrainingBlockState
+                loaded={versions}
+                organization={context.organization}
+                what="this plan's history"
+              />
+            ) : null}
+            <p className="tr-quiet">
+              Practices keep the version they were given.
+            </p>
+          </PageSection>
         </>
       )}
     </TrainingScreen>

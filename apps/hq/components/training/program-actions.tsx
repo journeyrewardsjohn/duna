@@ -31,12 +31,14 @@ import {
   activateProgramAction,
   addSessionAction,
   cancelProgramAction,
+  importTournamentAction,
   resolveConflictAction,
   updateProgramAction,
 } from "@/app/(next)/(hq)/training/actions";
 import { unwrap } from "../money/money-action-result";
 import { reportFailure } from "../team/team-report";
 import { MessageDraft } from "./message-draft";
+import type { TournamentCandidate } from "./training-data";
 import {
   CoachRows,
   type CoachChoice,
@@ -312,11 +314,14 @@ const addKinds = [
 /** Add a practice, tournament, travel day or other event inside the program. */
 export function AddSession({
   program,
+  candidates = [],
 }: {
   readonly program: Pick<
     TrainingProgramsProgram,
     "id" | "timezone" | "startDate"
   >;
+  /** Tournaments on Duna (club events and the pro tour) to pick from. */
+  readonly candidates?: readonly TournamentCandidate[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -430,6 +435,15 @@ export function AddSession({
           />
         </Field>
       </div>
+      {kind === "tournament" ? (
+        <TournamentSource
+          candidates={candidates}
+          onPick={(pick) => {
+            setTitle(pick.title.slice(0, 160));
+            if (pick.date) setDate(pick.date);
+          }}
+        />
+      ) : null}
       <p className="tr-quiet">
         It is added to this program only; the weekly pattern doesn&apos;t
         change. Athletes are not notified automatically.
@@ -839,5 +853,126 @@ export function CancelProgram({
       </Button>
       {confirm.dialog}
     </form>
+  );
+}
+
+/**
+ * Where a tournament comes from: one already on Duna (club events and the
+ * pro tour), or read from its website by the training service (the same
+ * import the old program page used). Either only fills the form.
+ */
+function TournamentSource({
+  candidates,
+  onPick,
+}: {
+  readonly candidates: readonly TournamentCandidate[];
+  readonly onPick: (pick: { title: string; date?: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const read = useAction(
+    async () =>
+      unwrap(
+        await importTournamentAction({
+          name: name.trim() || "Tournament",
+          websiteUrl: url.trim(),
+        }),
+      ),
+    {
+      report: reportFailure("hq.training.tournament_import_failed"),
+      onSuccess: (result) => {
+        if (result.title || result.startsOn) {
+          onPick({
+            title: result.title ?? (name.trim() || "Tournament"),
+            ...(result.startsOn ? { date: result.startsOn } : {}),
+          });
+        }
+      },
+    },
+  );
+  const result = read.result;
+  return (
+    <div className="tr-stack">
+      {candidates.length > 0 ? (
+        <Field label="A tournament on Duna" optional>
+          <Select
+            onValueChange={(value) => {
+              const pick = candidates.find((row) => row.id === value);
+              if (pick) {
+                onPick({
+                  title: pick.title,
+                  ...(pick.startsAt
+                    ? { date: pick.startsAt.slice(0, 10) }
+                    : {}),
+                });
+              }
+            }}
+            options={candidates.map((row) => ({
+              value: row.id,
+              label: row.subtitle
+                ? `${row.title} · ${row.subtitle}`
+                : row.title,
+            }))}
+            value={null}
+          />
+        </Field>
+      ) : (
+        <p className="tr-quiet">
+          No tournaments on Duna to pick from right now.
+        </p>
+      )}
+      <div className="tr-grid2">
+        <Field label="Tournament name" optional>
+          <Input
+            maxLength={180}
+            onChange={(event) => setName(event.currentTarget.value)}
+            value={name}
+          />
+        </Field>
+        <Field label="Its website" optional>
+          <Input
+            inputMode="url"
+            maxLength={500}
+            onChange={(event) => setUrl(event.currentTarget.value)}
+            placeholder="https://"
+            type="url"
+            value={url}
+          />
+        </Field>
+      </div>
+      <div className="tr-actions">
+        <Button
+          disabled={!/^https?:\/\/\S+\.\S+/.test(url.trim())}
+          loading={read.showPending}
+          onClick={() => void read.run()}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Read the dates from the website
+        </Button>
+      </div>
+      {result && !result.providerAvailable ? (
+        <p className="tr-quiet">
+          Reading tournament websites isn&apos;t set up yet. Fill in the name
+          and dates yourself.
+        </p>
+      ) : result && !result.title && !result.startsOn ? (
+        <p className="tr-quiet">
+          Duna couldn&apos;t find the dates on that page. Fill them in yourself.
+        </p>
+      ) : result ? (
+        <p className="tr-quiet">
+          Filled in from the website. Check it before you add it.
+        </p>
+      ) : null}
+      {read.status === "error" ? (
+        <p className="tr-problem" role="alert">
+          {read.error instanceof Error
+            ? read.error.message
+            : "Couldn't read that page."}
+        </p>
+      ) : null}
+    </div>
   );
 }

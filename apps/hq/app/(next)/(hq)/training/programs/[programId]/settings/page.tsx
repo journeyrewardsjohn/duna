@@ -8,13 +8,21 @@ import {
   CancelProgram,
   PatternSettings,
 } from "@/components/training/program-actions";
+import {
+  ArchiveControls,
+  VersionHistory,
+} from "@/components/training/history-actions";
 import { activationWords } from "@/components/training/program-model";
 import { programPage } from "@/components/training/program-page";
 import {
   loadCoaches,
   loadProgramSessions,
+  loadProgramVersions,
 } from "@/components/training/training-data";
-import { ProgramScreen } from "@/components/training/training-screen";
+import {
+  ProgramScreen,
+  TrainingBlockState,
+} from "@/components/training/training-screen";
 
 export const metadata: Metadata = { title: "Program settings" };
 
@@ -33,9 +41,10 @@ export default async function ProgramSettingsPage({
   if (found.kind === "missing") notFound();
   if (found.kind === "state") return found.node;
   const { program, context } = found.page;
-  const [sessions, coaches] = await Promise.all([
+  const [sessions, coaches, versions] = await Promise.all([
     loadProgramSessions(program.id, program.startDate, program.endDate),
     loadCoaches(),
+    loadProgramVersions(program.id),
   ]);
   const activation = activationWords({ program, now: context.now });
   const live = program.status === "draft" || program.status === "active";
@@ -86,6 +95,35 @@ export default async function ProgramSettingsPage({
               : "Sell as an offering"}
           </Button>
         </div>
+      </PageSection>
+      <PageSection
+        aside={
+          context.canManage && program.status !== "cancelled" ? (
+            <ArchiveControls
+              archived={program.status === "archived"}
+              id={program.id}
+              kind="program"
+              title={program.title}
+            />
+          ) : undefined
+        }
+        id="history"
+        title="History and archive"
+      >
+        {versions.state === "ok" ? (
+          <VersionHistory
+            canRestore={context.canManage && program.status !== "archived"}
+            id={program.id}
+            kind="program"
+            versions={versions.data}
+          />
+        ) : (
+          <TrainingBlockState
+            loaded={versions}
+            organization={context.organization}
+            what="this program's history"
+          />
+        )}
       </PageSection>
       {context.canManage && live ? (
         <PageSection id="cancel" title="Cancel the program">

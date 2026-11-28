@@ -57,6 +57,13 @@ export default async function DrillPage({
             >
               Use in a plan
             </Button>
+            <Button
+              href={hqHref("trainingDrillClassic")}
+              size="sm"
+              variant="ghost"
+            >
+              Open the classic editor
+            </Button>
             {canEdit ? (
               <Button
                 href={hqHref("trainingDrillEdit", { drillId: data.id })}

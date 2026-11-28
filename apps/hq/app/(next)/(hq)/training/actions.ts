@@ -387,3 +387,105 @@ export async function purchaseAction(
     });
   });
 }
+
+/* ------------------------------------------- archive, versions (legacy) */
+
+/**
+ * Archive, restore and earlier versions go through the training service's
+ * existing procedures (the ones the old Training pages used): one record,
+ * one history, whichever screen made it.
+ */
+export async function archiveProgramAction(input: {
+  readonly programId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("archiveProgram", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.archiveTrainingProgram({
+      programId: input.programId,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+export async function restoreProgramArchiveAction(input: {
+  readonly programId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("restoreProgramArchive", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.restoreTrainingProgramArchive({
+      programId: input.programId,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+export async function restoreProgramVersionAction(input: {
+  readonly programId: string;
+  readonly versionId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("restoreProgramVersion", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.restoreTrainingProgramVersion({
+      ...input,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+export async function archivePlanAction(input: {
+  readonly practicePlanId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("archivePlan", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.archiveTrainingPracticePlan({
+      practicePlanId: input.practicePlanId,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+export async function restorePlanArchiveAction(input: {
+  readonly practicePlanId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("restorePlanArchive", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.restoreTrainingPracticePlanArchive({
+      practicePlanId: input.practicePlanId,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+export async function restorePlanVersionAction(input: {
+  readonly practicePlanId: string;
+  readonly versionId: string;
+  readonly idempotencyKey: string;
+}) {
+  return run("restorePlanVersion", async () => {
+    const caller = await getServerCaller();
+    return caller.operator.restoreTrainingPracticePlanVersion({
+      ...input,
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+  });
+}
+
+/** Reads a tournament's name and dates from its website. Saves nothing. */
+export async function importTournamentAction(input: {
+  readonly name: string;
+  readonly websiteUrl: string;
+}) {
+  return run(
+    "importTournament",
+    async () => {
+      const caller = await getServerCaller();
+      return caller.operator.importTrainingTournament(input);
+    },
+    { revalidate: false },
+  );
+}

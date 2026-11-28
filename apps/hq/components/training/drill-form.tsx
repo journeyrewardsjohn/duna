@@ -220,7 +220,12 @@ export function DrillForm({
         <p className="tr-quiet">
           Drawing on the court by hand isn&apos;t here yet. Start from one of
           Duna&apos;s example scenes, or paste a scene document; Duna checks it
-          before it is saved.
+          before it is saved. To describe a drill for Duna to draft, or to draw
+          and animate one by hand, use the{" "}
+          <a className="tr-link" href={hqHref("trainingDrillClassic")}>
+            classic editor
+          </a>
+          .
         </p>
         <Segmented
           aria-label="Where the drawing comes from"

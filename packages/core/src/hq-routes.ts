@@ -67,6 +67,13 @@ export const hqRoutes = {
   trainingDrillCreate: "/training/drills/create",
   /** Old advanced editor address: opens New drill. */
   trainingDrillCreateAdvanced: "/training/drills/create/advanced",
+  /**
+   * The classic Drill Studio (describe a drill, AI draft) and its court
+   * editor (draw, animate, storyboard), kept until the scene AI and editor
+   * package replaces them. Reached from the drill pages, not the navigation.
+   */
+  trainingDrillClassic: "/training/drills/classic",
+  trainingDrillClassicAdvanced: "/training/drills/classic/advanced",
   trainingDrill: "/training/drills/[drillId]",
   trainingDrillEdit: "/training/drills/[drillId]/edit",
   /** Old address: opens Training › Programs. */

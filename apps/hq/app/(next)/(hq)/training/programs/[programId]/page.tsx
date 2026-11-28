@@ -16,11 +16,13 @@ import {
   sessionPlanWords,
   sessionWhen,
 } from "@/components/training/program-model";
+import { InsightsSection } from "@/components/training/insights-section";
 import { programPage } from "@/components/training/program-page";
 import {
   loadCoaches,
   loadConflicts,
   loadProgramSessions,
+  loadTrainingInsights,
 } from "@/components/training/training-data";
 import {
   ProgramScreen,
@@ -45,10 +47,11 @@ export default async function ProgramOverviewPage({
   if (found.kind === "missing") notFound();
   if (found.kind === "state") return found.node;
   const { program, context, canRun } = found.page;
-  const [sessions, conflicts, coaches] = await Promise.all([
+  const [sessions, conflicts, coaches, insights] = await Promise.all([
     loadProgramSessions(program.id, program.startDate, program.endDate),
     loadConflicts(program.id),
     loadCoaches(),
+    loadTrainingInsights(),
   ]);
   const upcoming =
     sessions.state === "ok"
@@ -291,6 +294,21 @@ export default async function ProgramOverviewPage({
               </li>
             ))}
           </ul>
+        )}
+      </PageSection>
+      <PageSection
+        aside={<span className="tr-quiet">Across the club</span>}
+        id="insights"
+        title="Insights"
+      >
+        {insights.state === "ok" ? (
+          <InsightsSection insights={insights.data} />
+        ) : (
+          <TrainingBlockState
+            loaded={insights}
+            organization={context.organization}
+            what="the training insights"
+          />
         )}
       </PageSection>
     </ProgramScreen>

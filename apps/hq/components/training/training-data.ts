@@ -356,3 +356,69 @@ export const loadVenues = cache(async () => {
     ? workspace.data.venues.map((venue) => ({ id: venue.id, name: venue.name }))
     : [];
 });
+
+/** A program's saved versions (the training service's history). */
+export const loadProgramVersions = cache(async (programId: string) => {
+  const caller = await getServerCaller();
+  return settle(
+    () => caller.operator.trainingProgramVersions({ programId }),
+    "programVersions",
+  );
+});
+
+/** A practice plan's saved versions (the training service's history). */
+export const loadPlanVersions = cache(async (practicePlanId: string) => {
+  const caller = await getServerCaller();
+  return settle(
+    () => caller.operator.trainingPracticePlanVersions({ practicePlanId }),
+    "planVersions",
+  );
+});
+
+/** The club's training insights, as the old Insights tab read them. */
+export const loadTrainingInsights = cache(async () => {
+  const caller = await getServerCaller();
+  const workspace = await settle(
+    () => caller.operator.trainingWorkspace(),
+    "trainingInsights",
+  );
+  return workspace.state === "ok"
+    ? ({ state: "ok", data: workspace.data.insights } as const)
+    : workspace;
+});
+
+export interface TournamentCandidate {
+  readonly id: string;
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly href?: string;
+  readonly startsAt?: string;
+  readonly endsAt?: string;
+}
+
+/** Tournaments on Duna (club events and the pro tour) a program can add. */
+export const loadTournamentCandidates = cache(
+  async (): Promise<TournamentCandidate[]> => {
+    const caller = await getServerCaller();
+    const discovery = await settle(
+      () => caller.public.discoveryMap(),
+      "tournamentCandidates",
+    );
+    if (discovery.state !== "ok") return [];
+    return discovery.data.items
+      .filter(
+        (item) =>
+          (item.entityType === "event" && item.kind === "tournament") ||
+          item.entityType === "pro-tour",
+      )
+      .slice(0, 60)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        ...(item.subtitle ? { subtitle: item.subtitle } : {}),
+        ...(item.href ? { href: item.href } : {}),
+        ...(item.startsAt ? { startsAt: item.startsAt } : {}),
+        ...(item.endsAt ? { endsAt: item.endsAt } : {}),
+      }));
+  },
+);

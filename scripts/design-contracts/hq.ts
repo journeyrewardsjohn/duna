@@ -7,6 +7,7 @@ const legacySheets = [
   "globals.css",
   "design-v3.css",
   "work-focus.css",
+  "training.css",
   "ask-duna.css",
   "forms.css",
   "legacy-bridge",

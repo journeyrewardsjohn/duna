@@ -14,7 +14,10 @@ import {
   sessionWhen,
 } from "@/components/training/program-model";
 import { programPage } from "@/components/training/program-page";
-import { loadProgramSessions } from "@/components/training/training-data";
+import {
+  loadProgramSessions,
+  loadTournamentCandidates,
+} from "@/components/training/training-data";
 import {
   ProgramScreen,
   TrainingBlockState,
@@ -38,11 +41,10 @@ export default async function ProgramCalendarPage({
   if (found.kind === "missing") notFound();
   if (found.kind === "state") return found.node;
   const { program, context, canRun } = found.page;
-  const sessions = await loadProgramSessions(
-    program.id,
-    program.startDate,
-    program.endDate,
-  );
+  const [sessions, candidates] = await Promise.all([
+    loadProgramSessions(program.id, program.startDate, program.endDate),
+    loadTournamentCandidates(),
+  ]);
   const weeks =
     sessions.state === "ok" ? sessionsByWeek(sessions.data.items) : [];
   const editable =
@@ -62,7 +64,7 @@ export default async function ProgramCalendarPage({
     >
       {editable ? (
         <div className="tr-toolbar">
-          <AddSession program={program} />
+          <AddSession candidates={candidates} program={program} />
         </div>
       ) : null}
       {sessions.state !== "ok" ? (
