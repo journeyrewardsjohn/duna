@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   kindFromParam,
   mediaInput,
+  missingSentence,
   missingSummary,
   offeringRule,
   priceSummary,
@@ -101,6 +102,9 @@ describe("the publish checklist", () => {
     expect(missingSummary(list)).toEqual([
       "Duna Pay ready to take card payments",
     ]);
+    expect(missingSentence(list)).toBe(
+      "Before it goes live: finish Duna Pay setup to take card payments.",
+    );
   });
 
   it("asks a draft without a price for one, and a group rule for dates", () => {

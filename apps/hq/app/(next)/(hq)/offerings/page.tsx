@@ -8,7 +8,7 @@ import {
 } from "@/components/offerings/offering-list";
 import {
   kindForType,
-  missingSummary,
+  missingSentence,
   offeringRule,
   priceSummary,
   publishChecklist,
@@ -91,7 +91,9 @@ export default async function OfferingsPage() {
         : {}),
       schedule: scheduleSummary(item),
       ...(group ? { group, inherited: rule.source === "club-default" } : {}),
-      missing: context.access.money ? missingSummary(checklist) : [],
+      ...(context.access.money && missingSentence(checklist)
+        ? { missing: missingSentence(checklist) }
+        : {}),
       ...(customers !== undefined ? { customers } : {}),
     };
   });

@@ -168,7 +168,6 @@ export function RuleSentence({
               }
               value={draft.capacity}
             />
-            <span>.</span>
           </>
         ) : null}
       </div>
@@ -195,7 +194,10 @@ export function RuleSentence({
                   : lockValue
               }
             />
-            <span>before it starts. If fewer are booked,</span>
+            <span>before it starts.</span>
+          </div>
+          <div className="pt-sentence__line">
+            <span>If fewer are booked,</span>
             <Select
               aria-label="If fewer are booked"
               className="pt-sentence__select"
@@ -212,7 +214,6 @@ export function RuleSentence({
               ]}
               value={draft.policy}
             />
-            <span>.</span>
           </div>
           <p className="pt-sentence__note">
             That time is also the last moment players can cancel for free.
@@ -232,7 +233,6 @@ export function RuleSentence({
           ]}
           value={draft.waitlist ? "waitlist" : "none"}
         />
-        <span>.</span>
       </div>
     </div>
   );

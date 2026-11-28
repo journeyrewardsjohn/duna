@@ -398,10 +398,6 @@
       .pt-session > .pt-status {
         grid-area: status;
       }
-
-      .pt-sentence__number {
-        width: 8rem;
-      }
     }
   }
 }

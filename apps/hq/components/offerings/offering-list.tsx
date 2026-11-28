@@ -49,8 +49,8 @@ export interface OfferingRow {
   readonly schedule: string;
   readonly group?: string;
   readonly inherited?: boolean;
-  /** Blocking things to do before it can go live. */
-  readonly missing: readonly string[];
+  /** "Before it goes live: set a price." Only for drafts with something to do. */
+  readonly missing?: string;
   readonly customers?: number;
 }
 
@@ -229,10 +229,10 @@ export function OfferingList({
                         : row.group}
                     </span>
                   ) : null}
-                  {row.missing.length > 0 && row.status === "draft" ? (
+                  {row.missing && row.status === "draft" ? (
                     <span className="of-row__missing">
                       <Icon name="alert" size="inline" />
-                      {`Before it goes live: ${row.missing.join("; ")}`}
+                      {row.missing}
                     </span>
                   ) : null}
                 </Link>

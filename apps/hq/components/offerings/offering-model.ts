@@ -667,6 +667,8 @@ export function hasOwnRule(item: OfferingItem): boolean {
 export interface ChecklistItem {
   readonly id: string;
   readonly label: string;
+  /** The same thing as something to do, for a sentence: "set a price". */
+  readonly todo: string;
   readonly done: boolean;
   /** Blocking items stop Publish; the rest are advice. */
   readonly blocking: boolean;
@@ -692,6 +694,7 @@ export function publishChecklist(
   list.push({
     id: "name",
     label: "A name players recognise",
+    todo: "name it",
     done: item.title.trim().length >= 2,
     blocking: true,
     href: hqHref("offering", { itemId: id }),
@@ -702,6 +705,7 @@ export function publishChecklist(
     label: saleOff
       ? "Sales turned on, with a price"
       : "A price players can pay",
+    todo: saleOff ? "turn on sales and set a price" : "set a price",
     done: !saleOff && prices.length > 0,
     blocking: true,
     href: hqHref("offeringPrice", { itemId: id }),
@@ -718,6 +722,7 @@ export function publishChecklist(
     list.push({
       id: "payments",
       label: "Duna Pay ready to take card payments",
+      todo: "finish Duna Pay setup to take card payments",
       done: ready,
       blocking: true,
       href: next?.href ?? hqHref("moneyDunaPay"),
@@ -733,6 +738,7 @@ export function publishChecklist(
     list.push({
       id: "photo",
       label: "A photo of the product",
+      todo: "add a photo",
       done: item.media.some((media) => media.kind === "image"),
       blocking: true,
       href: hqHref("offering", { itemId: id }),
@@ -742,6 +748,7 @@ export function publishChecklist(
     list.push({
       id: "photo",
       label: "A cover photo",
+      todo: "add a cover photo",
       done: item.media.some((media) => media.kind === "image"),
       blocking: false,
       href: hqHref("offering", { itemId: id }),
@@ -758,6 +765,7 @@ export function publishChecklist(
       list.push({
         id: "dates",
         label: "Set session dates (a group rule needs them)",
+        todo: "set session dates for its group rule",
         done: false,
         blocking: true,
         href: hqHref("offeringSchedule", { itemId: id }),
@@ -767,6 +775,7 @@ export function publishChecklist(
     list.push({
       id: "coach",
       label: "A coach who can run it",
+      todo: "invite a coach",
       done: context.coachCount > 0,
       blocking: false,
       href: hqHref("teamInvite"),
@@ -784,6 +793,7 @@ export function publishChecklist(
     list.push({
       id: "membership",
       label: "A live membership for members-only booking",
+      todo: "make a membership live for members-only booking",
       done: context.hasActiveMembership,
       blocking: true,
       href: hqHref("offeringCreate") + "?kind=plans&template=membership",
@@ -791,6 +801,20 @@ export function publishChecklist(
     });
   }
   return list;
+}
+
+/** "Before it goes live: set a price and finish Duna Pay setup to take card payments." */
+export function missingSentence(
+  list: readonly ChecklistItem[],
+): string | undefined {
+  const todos = list
+    .filter((entry) => entry.blocking && !entry.done)
+    .map((entry) => entry.todo);
+  if (todos.length === 0) return undefined;
+  const joined = new Intl.ListFormat("en", { type: "conjunction" }).format(
+    todos,
+  );
+  return `Before it goes live: ${joined}.`;
 }
 
 export function missingSummary(list: readonly ChecklistItem[]): string[] {
