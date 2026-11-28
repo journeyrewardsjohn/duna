@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { createPublicCaller } from "@/lib/public-api";
+import { legalIndexablePaths } from "@/components/legal/legal-library";
 import { staticPublicPages } from "@/lib/public-markdown";
 import { absolutePublicUrl } from "@/lib/pro-seo";
 
@@ -52,6 +53,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.5,
     },
+    // The legal center and the documents in effect; drafts are never listed.
+    ...legalIndexablePaths().map((path) => ({
+      url: absolutePublicUrl(path),
+      changeFrequency: "monthly" as const,
+      priority: 0.3,
+    })),
   ];
   const consumerEventEntries: MetadataRoute.Sitemap = events.map((event) => ({
     url: absolutePublicUrl(`/events/${event.slug}`),

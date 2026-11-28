@@ -933,11 +933,13 @@ test("account controls, profile editing, and legal documents stay reachable", as
 
   await page.goto("/legal");
   await expect(
-    page.getByRole("heading", {
-      name: "Clear rules for every side of Duna.",
-    }),
+    page.getByRole("heading", { level: 1, name: "Duna Legal Center" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /Duna HQ Terms/ })).toBeVisible();
+  await expect(
+    page
+      .getByRole("main")
+      .getByRole("link", { name: "Duna HQ Organization Terms of Service" }),
+  ).toBeVisible();
   await page.goto("/legal/terms");
   await expect(
     page.getByRole("heading", { name: "Duna Consumer Terms of Service" }),

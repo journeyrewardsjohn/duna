@@ -28,3 +28,4 @@ export { default as motion } from "./motion";
 export { default as confirm } from "./confirm";
 export { default as states } from "./states";
 export { default as form } from "./form";
+export { default as document } from "./document";
