@@ -63,7 +63,7 @@ test("the shell frames Home with the four verbs, landmarks and a skip link", asy
     page
       .getByRole("navigation", { name: "Primary actions" })
       .getByRole("link", { name: /Find a game/ }),
-  ).toHaveAttribute("href", "/discover");
+  ).toHaveAttribute("href", "/app/discover");
   await page.keyboard.press("Tab");
   await expect(
     page.getByRole("link", { name: "Skip to content" }),

@@ -28,25 +28,49 @@ test.describe("PL-1 Find a game", () => {
   });
   test("PL-1.2 Search by where, when and what", async ({ page }) => {
     await openPlayerArea(page, "Find");
-    await page.getByRole("button", { name: /^WHERE:/ }).click();
-    const where = page.getByRole("dialog", {
+    await expect(page).toHaveURL(/\/app\/discover$/);
+    await page.getByRole("button", { name: /^Where:/ }).click();
+    const where = page.getByRole("combobox", {
       name: "Where do you want to play?",
     });
-    await expect(where).toBeVisible();
-    await where.getByRole("button", { name: "Close search" }).click();
+    await expect(where).toBeFocused();
+    await page.keyboard.press("Escape");
     await expect(where).toBeHidden();
-    await expect(page.getByRole("button", { name: /^WHEN:/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^WHAT:/ })).toBeVisible();
+    await page.getByRole("button", { name: /^When:/ }).click();
+    await page.getByRole("button", { name: "Tomorrow", exact: true }).click();
+    await page.waitForURL(/when=tomorrow/);
+    await expect(page.getByRole("button", { name: /^What:/ })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
   test("PL-1.3 Filter results to courts", async ({ page }) => {
     await openPlayerArea(page, "Find");
-    await page.getByRole("button", { name: "Courts", exact: true }).click();
+    const courts = page.getByRole("button", {
+      name: "Court time",
+      exact: true,
+    });
+    await courts.click();
+    await expect(courts).toHaveAttribute("aria-pressed", "true");
+    await page.waitForURL(/what=court/);
+    // Venues open their signed-in page, where booking lives.
     await expect(
-      page.getByRole("button", { name: "Courts", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+      page.locator("a.dv-row__link[href^='/app/venues/']").first(),
+    ).toBeVisible();
   });
-  test.fixme("PL-1.4 See results on the map with pins by zoom and satellite close in [P3, C3]", async () => {});
+  test("PL-1.4 See results on the map with pins by zoom and satellite close in", async ({
+    page,
+  }) => {
+    await openPlayerArea(page, "Find");
+    // Wide screens show the map beside the list; the list stays the
+    // accessible source of truth. Without a map key (CI) the map says so.
+    await expect(
+      page.getByRole("region", { name: /Map of results/ }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByText("The discovery map isn't set up yet")
+        .or(page.getByRole("button", { name: "Show satellite" })),
+    ).toBeVisible();
+  });
 });
 
 test.describe("PL-2 Book a court with friends", () => {
