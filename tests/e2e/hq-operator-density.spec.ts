@@ -117,6 +117,11 @@ test("compact Activities keeps every operational destination and accessible tabl
   await expect(
     page.getByRole("button", { name: "Block time", exact: true }),
   ).toBeVisible();
+  // A phone opens Schedule as the agenda; the lanes belong to the day view.
+  if ((page.viewportSize()?.width ?? 1440) < 768) {
+    await page.getByRole("button", { name: "Day", exact: true }).click();
+    await expect(page).toHaveURL(/view=day/);
+  }
   await page.getByRole("button", { name: "Coaches", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Coaches", exact: true }),

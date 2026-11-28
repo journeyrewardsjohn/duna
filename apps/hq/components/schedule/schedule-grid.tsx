@@ -624,7 +624,7 @@ export function ScheduleGrid({
           </div>
           {lanes.map((lane) => (
             <div className="sch-lane-head" key={lane.id}>
-              {lane.label}
+              <span>{lane.label}</span>
               {lane.sublabel ? <small>{lane.sublabel}</small> : null}
             </div>
           ))}

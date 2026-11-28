@@ -168,11 +168,17 @@ export function ScheduleScreen({
 
   const go = useCallback(
     (patch: Partial<ScheduleQuery>, replace = false) => {
-      const href = scheduleHref(query, patch, data.today);
+      // A chosen view stays in the address, so a phone keeps the day grid.
+      const href = scheduleHref(
+        query,
+        patch,
+        data.today,
+        explicitView || patch.view !== undefined,
+      );
       if (replace) router.replace(href, { scroll: false });
       else router.push(href, { scroll: false });
     },
-    [data.today, query, router],
+    [data.today, explicitView, query, router],
   );
 
   const refresh = useCallback(() => router.refresh(), [router]);
@@ -264,7 +270,9 @@ export function ScheduleScreen({
       setClosure({ date: query.date, weather: false });
     if (intent === "weather" && permissions.change)
       setClosure({ date: query.date, weather: true });
-    router.replace(scheduleHref(query, {}, data.today), { scroll: false });
+    router.replace(scheduleHref(query, {}, data.today, explicitView), {
+      scroll: false,
+    });
     // Only when an intent arrives.
   }, [intent]);
 

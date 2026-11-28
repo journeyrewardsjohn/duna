@@ -439,6 +439,9 @@ describe("the address", () => {
     expect(scheduleHref(query, { view: "day" }, "2026-11-28")).toBe(
       "/schedule?date=2026-11-30&by=coach&kind=lesson%2Cblock",
     );
+    expect(scheduleHref(query, { view: "day" }, "2026-11-28", true)).toBe(
+      "/schedule?date=2026-11-30&view=day&by=coach&kind=lesson%2Cblock",
+    );
     expect(
       scheduleHref(parseScheduleQuery({}, "2026-11-28"), {}, "2026-11-28"),
     ).toBe("/schedule");

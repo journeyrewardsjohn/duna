@@ -18,6 +18,10 @@
       min-width: 0;
     }
 
+    .sch > * {
+      min-width: 0;
+    }
+
     .sch > .hqs-page-head {
       margin-block-end: 0;
     }
@@ -747,8 +751,6 @@
 
       .sch-filters {
         flex-wrap: nowrap;
-        margin-inline: calc(-1 * var(--td-space-4));
-        padding-inline: var(--td-space-4);
         overflow-x: auto;
         scrollbar-width: none;
       }

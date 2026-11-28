@@ -206,11 +206,13 @@ export function scheduleHref(
   query: ScheduleQuery,
   patch: Partial<ScheduleQuery> = {},
   today?: string,
+  /** The view was chosen (not the default), so it is written even when "day". */
+  viewChosen = false,
 ): string {
   const next = { ...query, ...patch };
   const params = new URLSearchParams();
   if (next.date !== today) params.set("date", next.date);
-  if (next.view !== "day") params.set("view", next.view);
+  if (next.view !== "day" || viewChosen) params.set("view", next.view);
   if (next.by !== "court") params.set("by", next.by);
   if (next.place) params.set("place", next.place);
   if (next.court) params.set("court", next.court);
