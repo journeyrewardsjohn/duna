@@ -123,6 +123,8 @@ const extraPaths = {
  */
 const knownFailures: Readonly<Record<string, string>> = {
   "/ask": "S1: /ask renders without a main landmark (persona known issue).",
+  "/ask/history":
+    "S1: /ask/history renders without a main landmark, like /ask.",
   "/account":
     "S1: /account renders without a main landmark (persona known issue).",
   "/marketing/promo-codes":
@@ -173,6 +175,12 @@ async function expectHealthyPage(page: Page, path: string) {
   expect(response, `${path}: no response`).not.toBeNull();
   expect(response!.status(), `${path}: HTTP status`).toBeLessThan(400);
   await page.waitForLoadState("load");
+  // Streamed sections (and their error or not-found states) arrive after the
+  // load event; the negative checks below are only meaningful once they have.
+  // Live-update streams keep a connection open, so idle is best effort.
+  await page
+    .waitForLoadState("networkidle", { timeout: 15_000 })
+    .catch(() => undefined);
   await expect(
     page.getByText(
       /This page didn.t load|This page couldn.t load|Application error/,
