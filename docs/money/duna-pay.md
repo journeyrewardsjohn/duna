@@ -104,6 +104,89 @@ club-level holds. Each payout posts one balanced journal (debit
 (processor webhook `payout.failed` / `payout.canceled`) returns its tranches
 to `releasable` and posts the reversal journal once.
 
+## Disputes (§5.1)
+
+The processor sends `charge.dispute.*` events to the **platform** account
+(destination charges are disputed there, never on the club's account; HQ
+lists disputes from Duna's own records, which fixed defect 2).
+`synchronizeMoneyDispute` keeps the legacy `disputes` row and calls
+`synchronizePayDisputeCase` (`services/pay/disputes.ts`):
+
+| Event                           | What happens                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opened (`needs_response`)       | `pay_dispute_cases` row; evidence deadlines (processor's, and the club's: `disputeOrganizationEvidenceDays` after opening, never later than the processor's); a `dispute` hold on the sale for amount + fee; the club's transfer reversed for that amount, capped at the club's proceeds; journal (debit `DUNA_PAY_DISPUTED`, credit `STRIPE_CLEARING`). The sale is never paid out while open. |
+| Evidence (HQ, owner, confirmed) | `operator.pay.submitDisputeEvidence`: text and storage keys stored; the explanation sent to the processor and submitted; idempotent by key. Without processor keys: "not configured yet".                                                                                                                                                                                                       |
+| Won                             | Hold released; the reversed amount re-transferred less the dispute fee unless the processor returned it; journals reverse the hold and book the kept fee (`DUNA_PAY_DISPUTE_FEES`). The sale releases as normal.                                                                                                                                                                                |
+| Lost / accepted                 | Hold applied; loss journal (`DUNA_PAY_DISPUTE_LOSSES`); the lost amount counts against the sale like a refund.                                                                                                                                                                                                                                                                                  |
+| Warning (inquiry) closed        | Case closed, nothing held.                                                                                                                                                                                                                                                                                                                                                                      |
+
+Every processor call carries a deterministic idempotency key
+(`duna-dispute:<id>:reversal|retransfer|evidence:<key>`); replays change
+nothing. If a reversal fails (the club was already paid out), the hold stays
+and reconciliation records the negative balance for recovery.
+
+## Refunds (§5.2, §6)
+
+- **By payment method.** Card refunds move money and are funded below.
+  Credit-paid purchases are refunded in credits by the catalog service (no
+  money moves; there is no obligation). A mixed order has an obligation only
+  for its card part. The operator can refund a credit-paid order with amount
+  0 (the router accepted only positive amounts: defect 5, fixed).
+- **Funding.** Each money refund record is funded against its sale's
+  obligations (`pay_obligation_refunds`), recording where the club's share
+  came from, in order: the sale's **held funds** (not yet released), the
+  club's **available balance** (other releasable, unpaid proceeds), then
+  **future proceeds**. The fourth source, a bank debit, is the processor's
+  negative-balance debit (see recovery). Split refunds across lines use an
+  exact proportional allocation (never a cent created or lost).
+- **Fees.** `refundSplit` (`refund-fees.ts`) implements both rules: `pro-rata`
+  (what the refund executor does today: every component returned in
+  proportion) and `policy` (the drafts' table: club cancels → everything back,
+  Organization Fee returned to the club, club bears processing; player cancels
+  → Service Fee kept by Duna; Duna's error → Duna bears processing). The
+  setting `refundFeeRule` chooses; it is `pro-rata` until the executor is
+  switched (owner decision, below).
+- Before payout a refund reduces what is paid; after payout the club's
+  processor balance pays it (reverse transfer), and a closed sale is reopened
+  and marked refunded.
+
+## Reserves and recovery (§5.4, §5.5)
+
+- **Unredeemed Credit Reserve** (standing): `creditReserveBps` of the cash
+  value of unredeemed paid credits (packs and bundles), recalculated on every
+  reconciliation run, held as one club-level hold. Payouts are reduced by
+  club-level holds.
+- **Rolling reserve** (triggered): when the 90-day refund rate passes
+  `rollingReserveRefundRateBps` or the dispute rate passes
+  `rollingReserveDisputeRateBps`, a reserve is **proposed** with its evidence.
+  Nothing is withheld until a Duna person activates it after sending the
+  written notice (`activateRollingReserve`, explicit confirmation): then it
+  holds `percentBps` of proceeds sold since activation within the rolling
+  window, has a review date, and ends (released) at its end date, never later
+  than 180 days. The club may ask for a review at any time
+  (`operator.pay.requestReserveReview`).
+- **Recovery**: a negative processor balance (refund or loss after payout) is
+  a **set-off** against future proceeds, collected automatically when the
+  balance is positive again; after `recoveryInvoiceDays` an **invoice**
+  recovery is opened for a person to send (Duna never sends it by itself).
+
+## Reconciliation
+
+`/api/cron/money-reconciliation` (every 10 minutes) now also runs
+`reconcileDunaPayBalances`: for each club with obligations it refreshes the
+reserves, compares the processor balance (available + pending) with what
+Duna's records say it holds (every open, held or cancelled-but-unrefunded
+tranche), logs `pay.reconciliation.drift` above
+`reconciliationDriftToleranceMinor`, and tracks recovery. The cron answers
+`attention` when anything drifted or failed.
+
+## What an operator can do (HQ, owner)
+
+Read: obligations, holds, reserves, recoveries, disputes. Write, each with an
+explicit confirmation and owner scope: submit dispute evidence, ask for a
+reserve review, refund an order (existing refund flow), pay out now (existing
+manual payout). Automatic releases follow the policy without a person.
+
 ## How to read a club's balance
 
 - **Releasable now**: tranches with status `releasable` and no payout.
@@ -158,9 +241,8 @@ settings override as `pay.settings.invalid`. Payout creation goes through
 
 ## Status of this work
 
-Pull request 1 of 3 (B2): rules, obligations, delivery facts, the release
-job, payouts from tranches, invariants, and the delivery fix (release at the
-end, not at start minus the refund window). Disputes, refunds by payment
-method, recoveries, reserves and reconciliation drift follow in pull request
-2; fees, account status, the publish gate, the bootstrap script and the
-legal promise table in pull request 3.
+Pull request 1 (B2): rules, obligations, delivery facts, the release job,
+payouts from tranches, invariants, the delivery fix. Pull request 2: disputes,
+refund funding, reserves, recovery, reconciliation drift, defects 2 and 5.
+Pull request 3: fees, account status, the publish gate, the bootstrap script
+and the legal promise table.

@@ -48,6 +48,17 @@ export const payPolicySettingsSchema = z.object({
   recoveryInvoiceDays: z.number().int().min(1).max(90),
   /** §5.6: remainder released this many days after closure notice. */
   closureReleaseDays: z.number().int().min(1).max(540),
+  /**
+   * §6 / terms §9.4: how a refund's cost is split. `pro-rata` is what the
+   * refund executor does today; `policy` is the owner's proposed rule
+   * (Service Fee kept on player cancellations, processing borne by the club).
+   */
+  refundFeeRule: z.enum(["pro-rata", "policy"]),
+  /** Drift between the processor balance and Duna's records worth reporting. */
+  reconciliationDriftToleranceMinor: z.number().int().min(0).max(1_000_000),
+  /** §5.4 triggers for proposing a rolling reserve (90-day rates). */
+  rollingReserveRefundRateBps: z.number().int().min(0).max(10_000),
+  rollingReserveDisputeRateBps: z.number().int().min(0).max(10_000),
   /** §3: schedule written for organisations that have no money settings yet. */
   defaultPayoutInterval: z.enum(["daily", "weekly", "monthly", "manual"]),
 });
@@ -73,6 +84,10 @@ export const DEFAULT_PAY_POLICY_SETTINGS: PayPolicySettings = Object.freeze({
   rollingReserveReviewDays: 30,
   recoveryInvoiceDays: 15,
   closureReleaseDays: 120,
+  refundFeeRule: "pro-rata",
+  reconciliationDriftToleranceMinor: 100,
+  rollingReserveRefundRateBps: 1000,
+  rollingReserveDisputeRateBps: 75,
   defaultPayoutInterval: "daily",
 });
 
