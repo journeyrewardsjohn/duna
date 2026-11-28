@@ -23,6 +23,7 @@ export const MATCH_STATUSES: ReadonlyArray<MatchStatus> = [
   "scheduled",
   "warmup",
   "live",
+  "not-finished",
   "pending-verification",
   "verified",
   "disputed",
@@ -31,11 +32,11 @@ export const MATCH_STATUSES: ReadonlyArray<MatchStatus> = [
   "cancelled",
 ];
 
-/** Every state a score card draws: the enum plus the proposed `not-finished`. */
-export const NET_SCORE_STATUSES: ReadonlyArray<NetScoreStatus> = [
-  ...MATCH_STATUSES,
-  "not-finished",
-];
+/**
+ * Every state a score card draws. Since `not-finished` joined the enum this
+ * is exactly `MATCH_STATUSES`; the name is kept so imports keep working.
+ */
+export const NET_SCORE_STATUSES: ReadonlyArray<NetScoreStatus> = MATCH_STATUSES;
 
 /**
  * Reads a status from data: accepts the enum with hyphens or underscores
