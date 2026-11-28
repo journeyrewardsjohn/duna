@@ -25,6 +25,7 @@ import {
 } from "./workos-environment";
 import { ensurePredictionCreditAccount } from "./prediction-market";
 import { currentAgeBand } from "./age-band";
+import { requestedDemoPersonaRoles } from "./demo-persona";
 
 export type ApiAgeBand = "unknown" | "under-13" | "teen" | "adult";
 
@@ -613,7 +614,16 @@ export async function createApiContextFromRequest(
     now: input?.now,
   };
   const credentials = resolveWorkOSCredentials();
-  if (!credentials) return createApiContext(base);
+  if (!credentials) {
+    // Test-only persona switch (Q0): see ./demo-persona.ts for its gates.
+    const personaRoles = requestedDemoPersonaRoles(
+      request.headers.get("cookie"),
+    );
+    if (personaRoles === undefined) return createApiContext(base);
+    return personaRoles.length === 0
+      ? createApiContext({ ...base, useDemoActor: false })
+      : createApiContext({ ...base, actor: createDemoActor(personaRoles) });
+  }
 
   try {
     const authorization = request.headers.get("authorization");
