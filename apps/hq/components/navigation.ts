@@ -95,7 +95,7 @@ export const operatorModules = [
   {
     slug: "offerings",
     label: "Offerings",
-    href: hqModuleHref("offerings"),
+    href: hqRoutes.offerings,
     icon: "pass",
     group: "People and play",
   },
@@ -191,45 +191,6 @@ export function operatorPanelHref(panel: OperatorPanel): string {
   if (panel === "leagues") return hqLeaguesPath;
   return operatorModuleHref(panel);
 }
-
-/**
- * Offering types, shown as links inside the Offerings list page until H9
- * turns them into in-page filters.
- */
-export const productNavigationItems = [
-  {
-    slug: "all-products",
-    label: "All offerings",
-    href: hqModuleHref("offerings"),
-  },
-  {
-    slug: "services",
-    label: "Services",
-    href: hqHref("offeringType", { productType: "services" }),
-    productType: "service",
-    title: "Services",
-    description: "Lessons, coaching, programs, and bookable services.",
-  },
-  {
-    slug: "plans",
-    label: "Memberships + packs",
-    href: hqHref("offeringType", { productType: "plans" }),
-    productType: "plan",
-    title: "Memberships + packs",
-    description: "Memberships, credit packs, and recurring offers.",
-  },
-  {
-    slug: "goods",
-    label: "Goods + equipment",
-    href: hqHref("offeringType", { productType: "goods" }),
-    productType: "good",
-    title: "Goods + equipment",
-    description: "Inventory-backed goods, rentals, and equipment.",
-  },
-] as const;
-
-export type ProductNavigationItem = (typeof productNavigationItems)[number];
-export type ProductNavigationSlug = ProductNavigationItem["slug"];
 
 /**
  * Event types, shown as links inside the Events list page until H9 turns them
