@@ -324,3 +324,28 @@ them from the next CI run's `first-screen transfer (KiB)` annotations.
 
 Locally: `next build`, `next start --port 3417`, warm the hero images with `curl`, then the §6
 loop against `http://127.0.0.1:3417`. On production, §6 as written.
+
+## 8. First screen visible at first paint (owner decision, 28 November 2026)
+
+Decision: every element in the first viewport on load starts visible; it may keep a transform-only
+Rise. Implemented as one rule in `apps/web/app/(next)/site.css` (`site-first-rise`: the kit's Rise
+travel without the opacity fade or the clip, on the first-screen containers of every site page:
+home, page heroes, Pro team, return page, club and offering pages, venue head, Add a score panel,
+legal documents). `docs/design/website.md` §2.10 records it.
+
+Chrome now reports the LCP at first paint (measured in Chromium: `/pricing` h1 at 68 ms,
+`/run-your-club` lead at 60 ms, was 764–937 ms), so the translate-only Rise does not delay it and
+stays. Lighthouse mobile, same method as §7.1, two runs each (identical within 0.01 s):
+
+| Page             | Score (§7 → now) | LCP (§7 → now) |
+| ---------------- | ---------------- | -------------- |
+| `/`              | 89 → 89          | 3.75 → 3.66 s  |
+| `/discover`      | 90 → 90          | 3.51 → 3.51 s  |
+| `/pricing`       | 92 → 93          | 3.36 → 3.21 s  |
+| `/run-your-club` | 87 → 88          | 3.90 → 3.89 s  |
+
+2.5 s is still not met. With the paint at ~60 ms the remaining LCP is Lighthouse's model, not the
+page: the framework's async scripts (React and the Next router, ~165 KiB) finish and run before
+that first paint on a fast connection, so the simulation counts their download on slow 4G and their
+4x CPU before the paint. Going lower means less framework script before hydration (fewer client
+components in the layout, or a lighter router), not motion or bundling of the site's own code.

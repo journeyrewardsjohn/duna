@@ -314,6 +314,12 @@ Rules: scroll-linked never scroll-jacked (the only pinned element is the story's
 `position: sticky`; the page scrolls normally). Entrances play once. Nothing loops except the two muted
 videos, which pause off-screen and have a Pause control. The first screen animates with CSS alone from
 first paint; nothing on it waits for script or a scroll position. Concepts play when 45% visible.
+The first screen is visible at first paint (owner decision, 28 November 2026): every element in the
+first viewport on load (kicker, headline, lead, search, actions, hero photograph or stage) starts at
+full opacity and unclipped; its Rise keeps only the travel (same duration, easing and Rally stagger).
+One rule in `app/(next)/site.css` ("The first screen is visible at first paint") lists the
+first-screen containers; a new page's hero is added there. Below the first screen, Rise and Rally
+play as designed.
 Reduced motion: end states with a 200 ms fade, no video. First open: the brand sequence
 (`FirstOpen`) runs only in the apps, never on the website. Page changes: View Transitions API cross-fade
 plus 16 px Cross; fallback is a 200 ms fade.
