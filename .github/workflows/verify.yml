@@ -159,6 +159,12 @@ jobs:
       - name: Browser tests (desktop, tablet, phone)
         run: pnpm test:e2e
 
+      # Reporting only: lists persona journeys that still have no passing test.
+      # It cannot fail the job by itself.
+      - name: Persona coverage
+        continue-on-error: true
+        run: pnpm test:personas:coverage --gaps >> "$GITHUB_STEP_SUMMARY"
+
       - name: Save browser QA evidence
         if: always()
         uses: actions/upload-artifact@v4

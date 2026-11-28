@@ -391,7 +391,7 @@ export function ProposalDemo() {
           onClick={() => setStatus("proposed")}
           size="sm"
         >
-          <Icon name="refresh" />
+          <Icon name="undo" />
         </IconButton>
       ) : null}
       {confirm.dialog}

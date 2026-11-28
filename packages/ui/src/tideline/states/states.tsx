@@ -255,7 +255,7 @@ export function NotConfigured({
       actions={canSetUp && setup ? setup : undefined}
       className={className}
       compact={compact}
-      icon="plug"
+      icon="info"
       kind="not-configured"
       role="status"
       title={`${feature} isn't set up yet`}
@@ -292,7 +292,7 @@ export function FeatureOff({
       actions={action}
       className={className}
       compact={compact}
-      icon="power"
+      icon="minus"
       kind="feature-off"
       role="status"
       title={`${feature} is switched off`}
@@ -325,7 +325,7 @@ export function PermissionDenied({
       actions={action}
       className={className}
       compact={compact}
-      icon="lock"
+      icon="key"
       kind="permission-denied"
       role="status"
       title={`You don't have access to ${area}`}
