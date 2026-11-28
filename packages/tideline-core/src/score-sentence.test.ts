@@ -40,7 +40,7 @@ describe("MATCH_STATUSES", () => {
   });
 
   it("every status has chip words and a sentence", () => {
-    expect(NET_SCORE_STATUSES).toHaveLength(MATCH_STATUSES.length + 1);
+    expect(NET_SCORE_STATUSES).toEqual(MATCH_STATUSES);
     for (const status of NET_SCORE_STATUSES) {
       expect(NET_SCORE_STATUS_TEXT[status].length).toBeGreaterThan(0);
       const sentence = netScoreSentence(
