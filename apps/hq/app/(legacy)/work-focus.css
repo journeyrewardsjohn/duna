@@ -1291,12 +1291,7 @@ body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
   .hq-shell--focused .people-command-rail {
     grid-template-columns: minmax(0, 1fr);
   }
+  
+  
 }
 
-input, select, textarea) {
-  min-width: 0;
-}
-select, textarea) {
-  width: 100%;
-  box-sizing: border-box;
-}
