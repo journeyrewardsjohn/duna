@@ -133,7 +133,7 @@ yours: ask the owner listed here.
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `packages/db/src/schema.ts`, `packages/db/drizzle/**` (SQL, `meta/_journal.json`, snapshots)        | Schema steward (R3, then W3-0; one per wave)                                                                                                                              | Write `docs/plan/schema-requests/<WP>.md`; the steward batches one migration per wave          |
 | `packages/api/src/router.ts`, `contracts.ts`, `packages/api/src/index.ts`                           | R3, then frozen                                                                                                                                                           | Code goes in `packages/api/src/routers/<domain>.ts` and `contracts/<domain>.ts`                |
-| `packages/api/src/generated/duna-feature-knowledge.ts`                                              | Whoever merges                                                                                                                                                            | Never hand-merge; run `pnpm knowledge:generate` after a rebase                                 |
+| `packages/api/src/generated/duna-feature-knowledge.ts`                                              | Whoever merges                                                                                                                                                            | Nothing to do: generated on demand, not committed (git-ignored)                                |
 | `pnpm-lock.yaml`, `pnpm-workspace.yaml`                                                             | F1 (UI SDK), B2 (Stripe Connect JS), B6c (three), M-N1 (native)                                                                                                           | Rerun `pnpm install` after a rebase; one dependency change per PR                              |
 | `apps/hq/app/layout.tsx` / `apps/web/app/layout.tsx`                                                | F5a / F6a (F3 supplies the font module)                                                                                                                                   | Request through the owner                                                                      |
 | `apps/hq/components/navigation.ts`, HQ route tree, `packages/core/src/hq-routes.ts`                 | S2                                                                                                                                                                        | Request through S2                                                                             |
@@ -174,7 +174,9 @@ yours: ask the owner listed here.
    messaging channel sends, nothing pays and nothing publishes without a person
    confirming in the UI.
 6. **Generated files and the lockfile are never hand-merged.** Regenerate
-   (`pnpm knowledge:generate`, `pnpm install`, token builds) after a rebase.
+   (`pnpm install`, token builds) after a rebase. The Ask Duna knowledge
+   manifest is not committed: it is generated on install and before every
+   build, typecheck, lint, test and dev run, so there is nothing to do for it.
 7. **Open a PR, never merge** and never enable auto-merge. Title prefixed with
    your package id. The orchestrator merges in a train.
 8. **Screenshots in the PR**: web at 1440, 768 and 390 px in light, dark and
