@@ -109,12 +109,8 @@ test.describe("VI-2 Look around without an account", () => {
     await expect(join.getByText("Your name", { exact: true })).toBeVisible();
     await join.getByRole("link", { name: /^Join for \$/ }).click();
     await expectPageReady(page, "South Bay membership");
-    // Let the page-change Cross (a 16 px slide) finish before measuring.
-    await page.waitForFunction(() =>
-      document
-        .getAnimations()
-        .every((animation) => animation.playState !== "running"),
-    );
+    // Measure the page itself, not the page-change slide that brought it.
+    await page.goto(page.url());
     await expectNoHorizontalOverflow(page);
   });
 });
