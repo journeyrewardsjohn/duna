@@ -91,7 +91,9 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
     title: "Find the people who need a follow-up.",
   });
   await page.goto(`${hqBaseUrl}/people`);
-  const more = page.locator(".hq-work-navigation-more");
+  // The IA has no "More tools": every area is in the sidebar and Settings is
+  // at its foot. The phone keeps a More drawer for the rest.
+  const sidebar = page.locator(".hq-sidebar");
   if ((page.viewportSize()?.width ?? 1440) <= 1100) {
     await page.getByRole("button", { name: "Search HQ", exact: true }).click();
     await expect(
@@ -99,12 +101,11 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
     ).toBeVisible();
     await page.keyboard.press("Escape");
   }
-  const menu = (await more.isVisible())
-    ? more
-    : page.locator(".hq-mobile-navigation-more");
-  await menu.locator("summary").click();
+  const phoneMore = page.locator(".hq-mobile-navigation-more");
+  const menu = (await phoneMore.isVisible()) ? phoneMore : sidebar;
+  if (menu === phoneMore) await menu.locator("summary").click();
   await expect(
-    menu.getByRole("link", { name: "Products", exact: true }),
+    menu.getByRole("link", { name: "Offerings", exact: true }),
   ).toBeVisible();
   await expect(
     menu.getByRole("link", { name: "Settings", exact: true }),

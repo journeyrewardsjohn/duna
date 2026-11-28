@@ -193,7 +193,11 @@ export const visualRoutes: readonly VisualRoute[] = [
     page: "/inbox/create",
     landsOn: "/inbox?compose=new",
   },
-  { name: "audiences", path: "/marketing/audiences", page: "/marketing/audiences" },
+  {
+    name: "audiences",
+    path: "/marketing/audiences",
+    page: "/marketing/audiences",
+  },
   {
     name: "audiences-create",
     path: "/marketing/audiences/create",

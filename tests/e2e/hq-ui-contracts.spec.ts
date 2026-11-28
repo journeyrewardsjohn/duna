@@ -558,7 +558,7 @@ test.describe("HQ setup experience", () => {
     const more = page.locator(".hq-mobile-navigation-more");
     await more.locator("summary").click();
     await expect(more.getByText("All HQ tools")).toBeVisible();
-    for (const tool of ["Get started", "Products", "Money", "Settings"]) {
+    for (const tool of ["Club setup", "Offerings", "Money", "Settings"]) {
       await expect(
         more.getByRole("link", { name: tool, exact: true }),
       ).toBeVisible();
