@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { cx } from "./cx";
 
 /**
- * The small line set Tideline components draw themselves: 24 grid, round caps,
+ * The small line set Tideline components draw themselves: 24 grid, square caps,
  * `currentColor`. Product screens keep using their own icon set for content.
  */
 const paths = {
@@ -35,7 +35,7 @@ export type IconName = keyof typeof paths;
 
 export interface IconProps extends Omit<ComponentProps<"svg">, "children"> {
   name: IconName;
-  /** 18px by default; `sm` is 16px and `lg` is 20px. */
+  /** 20px (control) by default; `sm` is 16px (inline) and `lg` is 24px (navigation). */
   size?: "sm" | "md" | "lg";
 }
 

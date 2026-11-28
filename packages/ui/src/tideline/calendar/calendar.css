@@ -69,10 +69,14 @@
         background-color: var(--td-surface-sunken);
       }
 
-      /* Today carries the energy mark; the selected day keeps the action fill. */
+      /*
+       * Today carries the warm mark (energy-ink, so it reads at 3:1 on light
+       * grounds where Dune itself is 1.7:1); a selected today takes the
+       * label colour on the action fill.
+       */
 
       &[data-today] {
-        background-image: linear-gradient(var(--td-energy) 0 0);
+        background-image: linear-gradient(var(--td-energy-ink) 0 0);
         background-repeat: no-repeat;
         background-position: center calc(100% - 5px);
         background-size: 12px 2px;
@@ -102,9 +106,14 @@
         [data-range-end]
       ) {
         background-color: var(--td-action);
+        background-image: linear-gradient(currentColor 0 0);
         box-shadow: none;
         color: var(--td-on-action);
         font-weight: var(--td-type-label-weight);
+
+        &:not([data-today]) {
+          background-image: none;
+        }
       }
 
       &[data-range-start]:not([data-range-end]) {

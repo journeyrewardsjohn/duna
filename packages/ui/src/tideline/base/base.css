@@ -26,23 +26,27 @@
     -webkit-font-smoothing: antialiased;
     text-size-adjust: 100%;
 
-    /* Compact controls grow to the 48px target on phones and touch screens. */
+    /*
+     * Controls grow to the 48px target on phones and touch screens. The small
+     * control is drawn at 44 in the canvases, but its hit area may not be
+     * below the 48px floor (AGENTS.md, contract R8), so it is 48 here.
+     */
 
     @media (max-width: 599px), (pointer: coarse) {
       --td-control: var(--td-size-target);
       --td-control-lg: var(--td-size-target-primary);
-      --td-control-sm: var(--td-size-phone-control-sm);
+      --td-control-sm: var(--td-size-target);
       --td-row: var(--td-size-target-primary);
       font: var(--td-type-phone-body);
     }
 
+    /*
+     * Under reduced motion nothing travels: --td-motion multiplies every
+     * transform to zero, and the token layer shortens the durations (Rise,
+     * Rally and Cross become a fade of at most 200ms; see tokens.css).
+     */
     @media (prefers-reduced-motion: reduce) {
       --td-motion: 0;
-      --td-duration-instant: 0ms;
-      --td-duration-base: 0ms;
-      --td-duration-settle: 120ms;
-      --td-duration-sheet: 160ms;
-      --td-duration-reveal: 0ms;
     }
 
     &.td--ground {
@@ -68,10 +72,17 @@
       list-style: none;
     }
 
-    /* Closed UI SDK content stays hidden before its own CSS has loaded. */
+    /*
+     * Closed UI SDK content stays hidden before its own CSS has loaded. The
+     * selector's specificity (.td plus three attribute tests: 0-4-0) is above
+     * the family rules that set `display` on a UI SDK part, so it wins inside
+     * the layer with no important declaration; the gallery spec checks every
+     * closed part computes `display: none`. Host CSS does not target
+     * `data-slot` parts.
+     */
 
-    :where([data-slot][hidden]:not([hidden="until-found"])) {
-      display: none !important;
+    [data-slot][hidden]:not([hidden="until-found"]) {
+      display: none;
     }
 
     /* One focus ring everywhere. */
@@ -125,11 +136,18 @@
 
     /* ---------- Type roles ---------- */
 
+    /*
+     * The one title per screen is the brand role: Jost Medium 500 at -0.015em
+     * (falls back to Geist until the Jost files load). Never below 22px and
+     * never on a numeral (contract R2); every other heading is Geist.
+     */
+
     .td-display {
-      font-size: var(--td-type-heading-32-size);
       text-wrap: balance;
       font: var(--td-type-heading-32);
-      letter-spacing: var(--td-type-heading-32-tracking);
+      font-family: var(--td-font-brand);
+      font-weight: var(--td-type-brand-weight);
+      letter-spacing: var(--td-type-brand-tracking);
     }
 
     .td-headline {
@@ -143,7 +161,7 @@
       letter-spacing: var(--td-type-heading-18-tracking);
     }
 
-    /* The phone ramp: Archivo at normal width so names never wrap. */
+    /* The phone ramp. */
 
     @media (max-width: 599px) {
       .td-headline {
@@ -181,27 +199,34 @@
 
     /* ---------- Icon ---------- */
 
+    /*
+     * 24 grid, 1.75 stroke, square ends, mitred joins. Sizes: 14 in chips and
+     * dense rows, 16 inline (sm), 20 in buttons, rows and inputs (default),
+     * 24 in navigation (lg).
+     */
+
     .td-icon {
       flex: none;
-      width: var(--td-size-icon);
-      height: var(--td-size-icon);
+      width: var(--td-size-icon-control);
+      height: var(--td-size-icon-control);
       fill: none;
       stroke: currentColor;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      stroke-width: 1.5;
+      stroke-linecap: var(--td-icon-linecap);
+      stroke-linejoin: var(--td-icon-linejoin);
+      stroke-width: var(--td-icon-stroke);
     }
 
     .td-icon--lg {
-      width: var(--td-size-icon-lg);
-      height: var(--td-size-icon-lg);
-      stroke-width: 1.5;
+      width: var(--td-size-icon-nav);
+      height: var(--td-size-icon-nav);
     }
 
     @media (max-width: 599px) {
       .td-display {
         font: var(--td-type-phone-title);
-        letter-spacing: var(--td-type-phone-title-tracking);
+        font-family: var(--td-font-brand);
+        font-weight: var(--td-type-brand-weight);
+        letter-spacing: var(--td-type-brand-tracking);
       }
 
       .td-headline {
@@ -231,8 +256,8 @@
     }
 
     .td-icon--sm {
-      width: var(--td-size-icon-sm);
-      height: var(--td-size-icon-sm);
+      width: var(--td-size-icon-inline);
+      height: var(--td-size-icon-inline);
     }
 
     /* ---------- Comfortable scale ----------
@@ -261,7 +286,9 @@
     &[data-density="comfortable"] {
       .td-display {
         font: var(--td-type-comfort-display);
-        letter-spacing: var(--td-type-comfort-display-tracking);
+        font-family: var(--td-font-brand);
+        font-weight: var(--td-type-brand-weight);
+        letter-spacing: var(--td-type-brand-tracking);
       }
 
       .td-headline {
@@ -289,8 +316,9 @@
       @media (max-width: 599px) {
         .td-display {
           font: var(--td-type-display-sm);
-          font-weight: var(--td-type-comfort-display-weight);
-          letter-spacing: var(--td-type-display-sm-tracking);
+          font-family: var(--td-font-brand);
+          font-weight: var(--td-type-brand-weight);
+          letter-spacing: var(--td-type-brand-tracking);
         }
 
         .td-headline {

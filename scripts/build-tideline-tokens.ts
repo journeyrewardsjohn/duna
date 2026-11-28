@@ -1,12 +1,17 @@
 /**
- * Regenerates the Tideline token outputs from the design source.
+ * Regenerates the Tideline token outputs from the design contract.
  *
- *   pnpm tideline:tokens           write tokens.css and tokens.ts
- *   pnpm tideline:tokens --check   exit 1 when the generated files are stale
+ *   pnpm tideline:tokens           write tokens.json, tokens.css and tokens.ts
+ *   pnpm tideline:tokens --check   exit 1 when a generated file is stale
  *
- * To take a new design revision, replace
- * `packages/ui/src/tideline/tokens/tokens.json` and run the first command. Names the
- * code needs before design publishes them live in `tokens.additions.json`.
+ * The source of truth is the contract's `docs/design/tideline-4.1.1/tokens.json`.
+ * The build applies the canonical renames and retirements and promotes the
+ * contract's `$duna` zone and icon decisions into tokens
+ * (`canonicalTidelineSource`), writing `packages/ui/src/tideline/tokens/tokens.json`,
+ * the code source that web (`tokens.css`, `tokens.ts`) and native builders read.
+ * Names the code needs before design publishes them live in
+ * `tokens.additions.json`. To take a new design revision, replace the contract
+ * file and run the first command.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -14,7 +19,9 @@ import { format } from "prettier";
 import {
   buildTidelineTokensCss,
   buildTidelineTokensTs,
+  canonicalTidelineSource,
   mergeTidelineAdditions,
+  TIDELINE_CONTRACT_TOKENS,
   type TidelineTokenSource,
 } from "../packages/ui/src/tideline/tokens/token-build";
 
@@ -24,16 +31,19 @@ async function main() {
   const sourcePath = join(directory, "tokens.json");
   const check = process.argv.includes("--check");
 
-  const rawSource = readFileSync(sourcePath, "utf8");
+  const contractPath = join(root, TIDELINE_CONTRACT_TOKENS);
+  const canonical = canonicalTidelineSource(
+    JSON.parse(readFileSync(contractPath, "utf8")) as TidelineTokenSource,
+  );
+  const rawSource = JSON.stringify(canonical);
   const additionsPath = join(directory, "tokens.additions.json");
   const rawAdditions = readFileSync(additionsPath, "utf8");
   const source = mergeTidelineAdditions(
-    JSON.parse(rawSource) as TidelineTokenSource,
+    canonical,
     JSON.parse(rawAdditions) as Partial<TidelineTokenSource>,
   );
 
   const outputs: Array<[path: string, content: string]> = [
-    // The design export is minified differently on each drop; keep it stable.
     [sourcePath, await format(rawSource, { parser: "json" })],
     [additionsPath, await format(rawAdditions, { parser: "json" })],
     [
