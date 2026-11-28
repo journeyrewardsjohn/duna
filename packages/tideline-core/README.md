@@ -59,8 +59,8 @@ state.winner; // null: a winner is known only in verified / complete / forfeit
 scoreAnnouncement(prev, next); // [{ kind: "point", side: "home", setNumber: 2, points: 1 }, { kind: "set-point", side: "home" }]
 ```
 
-Only finished sets count. `not-finished` is a proposed status that is not in
-the `match_status` enum yet.
+Only finished sets count. `not-finished` (a match stopped part-way) is a
+`match_status` value; the set that stood when play stopped never counts.
 
 ### Rating ring
 
