@@ -5,6 +5,10 @@ import {
   type WorkOSMobileUser,
 } from "@duna/mobile-auth";
 import {
+  persistableSnapshot,
+  storedSnapshotHoldsCredential,
+} from "./runtime-persist";
+import {
   mobileUserDisplayName,
   mobileUserInitials,
 } from "@duna/mobile-auth/identity";
@@ -369,7 +373,14 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       .then((stored) => {
         if (!active || !stored) return;
         const parsed = JSON.parse(stored) as unknown;
-        if (isPlayerRuntimeSnapshot(parsed)) applySnapshot(parsed);
+        // One-time cleanup: older snapshots kept the member credential.
+        if (storedSnapshotHoldsCredential(parsed))
+          void AsyncStorage.setItem(
+            runtimeCacheKey,
+            JSON.stringify(persistableSnapshot(parsed as object)),
+          );
+        if (isPlayerRuntimeSnapshot(parsed))
+          applySnapshot(persistableSnapshot(parsed));
       })
       .catch(() => undefined)
       .finally(() => {
@@ -445,7 +456,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       };
       applySnapshot(snapshot);
       setIsOffline(false);
-      void AsyncStorage.setItem(runtimeCacheKey, JSON.stringify(snapshot));
+      void AsyncStorage.setItem(
+        runtimeCacheKey,
+        JSON.stringify(persistableSnapshot(snapshot)),
+      );
     } catch (reason) {
       const state = await Network.getNetworkStateAsync().catch(() => undefined);
       setIsOffline(

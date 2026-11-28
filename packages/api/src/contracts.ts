@@ -5071,7 +5071,20 @@ export const operatorMemberProfileSchema = z.object({
       }),
     )
     .readonly(),
+  /**
+   * PRIV-1, deprecated marker: present only when this viewer may open this
+   * person's Health (same rule as `healthAccess.canView`), and never carries
+   * values (`metrics` is always absent). Values come only from
+   * `operator.memberHealthProfile`, which records the view. Remove once HQ
+   * reads `healthAccess`.
+   */
   health: operatorHealthSnapshotSchema.optional(),
+  /**
+   * PRIV-1: whether THIS viewer may open THIS person's Health, from the
+   * Health service's own non-recording check. Reading it writes no access
+   * record.
+   */
+  healthAccess: z.object({ canView: z.boolean() }),
   timeline: z
     .array(
       z.object({

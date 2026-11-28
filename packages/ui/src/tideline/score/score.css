@@ -20,8 +20,12 @@
       --td-ns-big: 30px;
     }
 
+    /* "SET 1" stays on one line: the column fits the mono label (it wrapped at 44px). */
     .td-ns--sm .td-ns__lab {
-      width: 44px;
+      width: 56px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .td-ns--lg {

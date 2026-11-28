@@ -106,6 +106,28 @@ export const ROUTES = {
     "Tournaments, brackets and court assignments",
     { presentation: "window" },
   ),
+  // My working life (M-R5): when I can work, time away and cover.
+  availability: route(
+    "schedule",
+    "Availability",
+    "clock-window",
+    "When you can coach, week by week",
+    { legacy: false },
+  ),
+  timeAway: route(
+    "schedule",
+    "Time away",
+    "block",
+    "Days you can't work and time off you ask for",
+    { legacy: false },
+  ),
+  cover: route(
+    "schedule",
+    "Cover",
+    "users",
+    "Sessions that need a coach, and asking for cover",
+    { legacy: false },
+  ),
   // People (Students for coaches).
   people: route(
     "people",
@@ -135,10 +157,10 @@ export const ROUTES = {
     "Ask about your day, your players and your club",
     { presentation: "window" },
   ),
-  // Money (Earnings for coaches).
+  // Money (Earnings for coaches): the tab's root is Earnings (M-R5).
   money: route(
     "money",
-    "Money",
+    "Club money",
     "wallet",
     "Sales, payouts, refunds and what is owed",
   ),
@@ -247,7 +269,7 @@ export const TABS: readonly TabDefinition[] = [
     titles: { coach: "Earnings", owner: "Money" },
     systemImage: "dollarsign.circle",
     icon: "wallet",
-    defaultRoute: "money",
+    defaultRoute: null,
     summary: "What you have earned, collected and are owed",
   },
 ];
