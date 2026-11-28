@@ -1,0 +1,403 @@
+/*
+ * Group sessions (PART-6, PART-7) on the Duna Design System: the rule
+ * sentence, the price ladder, session rows, the session panel and the
+ * attendance checklist. Shared by Offerings and, later, Events. Tokens only,
+ * in the `hq` layer; nothing here wears the live colour except a session
+ * actually running (the chip's own `live` tone). No legacy sheet.
+ */
+@layer hq {
+  .td {
+    .pt-quiet {
+      margin: 0;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .pt-label {
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-label);
+    }
+
+    .pt-num {
+      font-family: var(--td-font-mono);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .pt-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+    }
+
+    .pt-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+    }
+
+    /* ---------- Status ---------- */
+
+    .pt-status {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+      min-width: 0;
+    }
+
+    .pt-status__line {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    /* ---------- The rule sentence ---------- */
+
+    .pt-sentence {
+      display: grid;
+      gap: var(--td-space-3);
+      max-width: 72ch;
+    }
+
+    .pt-sentence__line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-body);
+    }
+
+    .pt-sentence__number {
+      width: 9rem;
+    }
+
+    .pt-sentence__select {
+      flex: 0 1 auto;
+      inline-size: auto;
+      min-inline-size: 10rem;
+      max-inline-size: 100%;
+    }
+
+    .pt-sentence__note {
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .pt-presets {
+      display: grid;
+      gap: var(--td-space-2);
+    }
+
+    .pt-presets__group {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+      gap: var(--td-space-2);
+    }
+
+    /* ---------- Price ladder ---------- */
+
+    .pt-ladder {
+      display: grid;
+      gap: var(--td-space-3);
+      justify-items: start;
+    }
+
+    .pt-ladder > .td-notice {
+      justify-self: stretch;
+    }
+
+    .pt-ladder__rows {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pt-ladder__row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+      font: var(--td-type-body);
+    }
+
+    .pt-ladder__worked {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, max-content));
+      gap: var(--td-space-1) var(--td-space-4);
+      margin: 0 0 var(--td-space-2);
+
+      & > div {
+        display: contents;
+      }
+
+      & dt {
+        color: var(--td-text-2);
+      }
+
+      & dd {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+      }
+    }
+
+    /* ---------- Session rows ---------- */
+
+    .pt-sessions {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .hqs-section[data-flush] .pt-sessions > .pt-filters {
+      padding-inline: var(--td-space-4);
+    }
+
+    .pt-session-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pt-session {
+      display: grid;
+      grid-template-columns: 8rem minmax(0, 1fr) auto auto auto;
+      gap: var(--td-space-3);
+      align-items: center;
+      width: 100%;
+      min-height: 3.5rem;
+      padding: var(--td-space-3) var(--td-space-4);
+      border: 0;
+      border-block-start: 1px solid var(--td-line);
+      background: none;
+      color: var(--td-text);
+      font: var(--td-type-body);
+      text-align: start;
+      cursor: pointer;
+
+      &:hover {
+        background: var(--td-surface-subtle);
+      }
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: inset var(--td-focus-ring);
+      }
+    }
+
+    .pt-session-list > li:first-child .pt-session {
+      border-block-start: 0;
+    }
+
+    .pt-session__when {
+      font: var(--td-type-label);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .pt-session__what {
+      display: grid;
+      gap: var(--td-space-1);
+      min-width: 0;
+    }
+
+    .pt-session__title {
+      font: var(--td-type-label);
+    }
+
+    .pt-session__staff {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .pt-session__count,
+    .pt-session__stake {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    /* ---------- The session panel ---------- */
+
+    .pt-sheet {
+      width: min(30rem, 100vw);
+    }
+
+    .pt-sheet__body {
+      display: grid;
+      gap: var(--td-space-5);
+      padding-block-end: var(--td-space-5);
+    }
+
+    .pt-sheet__state,
+    .pt-sheet__section {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .pt-sheet__staff {
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .pt-sheet__heading {
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .pt-sheet__actions {
+      display: grid;
+      gap: var(--td-space-2);
+
+      & > .td-btn {
+        justify-content: flex-start;
+      }
+    }
+
+    .pt-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+      gap: var(--td-space-3);
+      margin: 0;
+
+      & dt {
+        color: var(--td-text-3);
+        font: var(--td-type-meta);
+      }
+
+      & dd {
+        margin: 0;
+        color: var(--td-text);
+        font: var(--td-type-body);
+      }
+    }
+
+    .pt-roster {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & > li {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--td-space-1) var(--td-space-3);
+        align-items: center;
+        justify-content: space-between;
+        min-height: 3rem;
+        padding-block: var(--td-space-2);
+        border-block-start: 1px solid var(--td-line);
+        font: var(--td-type-body);
+      }
+
+      & > li:first-child {
+        border-block-start: 0;
+      }
+    }
+
+    /* ---------- Attendance: big rows for the court ---------- */
+
+    .pt-attendance {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .pt-attendance__list {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pt-attendance__row {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr) auto;
+      gap: var(--td-space-3);
+      align-items: center;
+      width: 100%;
+      min-height: 3.5rem;
+      padding: var(--td-space-2) var(--td-space-3);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      color: var(--td-text);
+      font: var(--td-type-body);
+      text-align: start;
+      cursor: pointer;
+      transition: background-color var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-mark="attended"] {
+        border-color: var(--td-line-strong);
+        background: var(--td-surface-subtle);
+      }
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: var(--td-focus-ring);
+      }
+    }
+
+    .pt-attendance__box {
+      display: inline-grid;
+      place-items: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border: 1px solid var(--td-line-strong);
+      border-radius: var(--td-radius-sm);
+      color: var(--td-positive);
+    }
+
+    .pt-attendance__name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .pt-attendance__state {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    @container hqs-main (max-width: 640px) {
+      .pt-session {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          "when count"
+          "status status"
+          "what what"
+          "stake stake";
+        gap: var(--td-space-2);
+      }
+
+      .pt-session__when {
+        grid-area: when;
+      }
+
+      .pt-session__what {
+        grid-area: what;
+      }
+
+      .pt-session__count {
+        grid-area: count;
+      }
+
+      .pt-session__count {
+        justify-self: end;
+      }
+
+      .pt-session__stake {
+        grid-area: stake;
+      }
+
+      .pt-session > .pt-status {
+        grid-area: status;
+      }
+    }
+  }
+}

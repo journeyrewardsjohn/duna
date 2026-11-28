@@ -82,7 +82,6 @@ test("creation examples wait for explicit AI submission and preserve review", as
 
 for (const [path, heading, builder] of [
   ["/events/create", "Create event", ".event-builder"],
-  ["/offerings/create", "Create offer", ".guided-product-builder"],
   ["/setup/places/create", "Add venue", ".venue-create-studio"],
 ] as const) {
   test(`manual ${path} remains available with keyboard focus and dark containment`, async ({
@@ -123,19 +122,6 @@ for (const [path, heading, builder] of [
           .map((node) => node.getAttribute("name") ?? node.tagName),
       );
     expect(outside).toEqual([]);
-    if (path === "/offerings/create" && info.project.name === "mobile") {
-      const clearance = await page.evaluate(() => {
-        const footer = document.querySelector(".guided-product-footer")!;
-        const navigation = document.querySelector(".hq-sidebar")!;
-        return {
-          footerBottom: footer.getBoundingClientRect().bottom,
-          navigationTop: navigation.getBoundingClientRect().top,
-        };
-      });
-      expect(clearance.footerBottom).toBeLessThanOrEqual(
-        clearance.navigationTop,
-      );
-    }
     await page.evaluate(async () => {
       await document.fonts.ready;
       window.scrollTo(0, 0);

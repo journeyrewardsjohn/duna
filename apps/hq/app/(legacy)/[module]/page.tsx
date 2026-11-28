@@ -72,13 +72,11 @@ export default async function OperatorModulePage({
       : Promise.resolve([]),
   ]);
   const activeType =
-    panel === "offerings"
-      ? "all-products"
-      : panel === "events"
-        ? "all-events"
-        : panel === "leagues"
-          ? "leagues"
-          : undefined;
+    panel === "events"
+      ? "all-events"
+      : panel === "leagues"
+        ? "leagues"
+        : undefined;
   return (
     <OperatorShell
       active={operatorPanelArea(panel)}

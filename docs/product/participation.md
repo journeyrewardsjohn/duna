@@ -12,8 +12,11 @@ group is decided (the **decision time**), and what happens if it is too small.
 Everything a player, coach or owner sees is written from those four facts by one
 function, so the words never disagree between the website, HQ and the apps.
 
-Example club sentence: "Runs with at least 3 players, up to 8. We decide 24 hours
-before it starts. If fewer are booked, cancel and return credits."
+Example club sentence: "Runs with at least 3 players, up to 6. If fewer are booked
+24 hours before, cancel and return credits. Keeps a waitlist." Its short form, on
+preset chips: "3 to 6 players · cancel if fewer · waitlist". Both come from
+`participationRuleSentence` and `participationRulePhrase` in
+`@duna/core`; no screen writes its own.
 
 ## The decisions behind it (build defaults)
 
@@ -68,6 +71,19 @@ Rules that always hold:
   price on the ladder. At the decision each booking settles to the price for
   the final group and the difference goes back to the wallet it came from,
   once. Nobody ever pays more than they reserved.
+- **What the price line says** (before the decision, credit payers):
+  - no cheaper price reached yet: "3 credits now. If more join by Thu 6:00 PM,
+    the difference comes back."
+  - the group already reached a cheaper price than the one reserved: "3 credits
+    now; 1 comes back when the group is confirmed Thu 6:00 PM." (", more if
+    more join." when an even cheaper price is still possible). The amount is
+    what comes back if the group holds at today's size.
+  - every price on the ladder is the same: "3 credits now."
+  - card payers see no "difference" line until card ladders are charged
+    (`PARTICIPATION_POLICY.cardLadderCharged`); the words for them exist
+    ("$30.00 now; $10.00 goes back to your card when …").
+- **The cliff warning** uses the right article: "An 8th player lowers your
+  total from 21 to 16 credits.", "A 7th player …".
 - **Booking after the decision** pays the final price straight away.
 - **Cancelled under the minimum or by the club.** Everything comes back:
   credits to the wallet, card payments refunded with the Service Fee,
@@ -92,6 +108,25 @@ Rules that always hold:
 | Owner (`payments:write`)    | Cancel a session with refunds after a strong confirmation that restates people and refunds.                                                |
 
 Attendance never changes a price, and recording it needs no money permission.
+
+**Before cancelling, see exactly what happens.** HQ and Pro ask
+`operator.participation.cancelPreview` first: each booking (a junior by first
+name), how they paid, what comes back (credits to the wallet, a refund to the
+card or the cash paid at the desk, a released reservation, or "needs
+attention"), and who Duna's own notice goes to (the guardian for a junior). It
+is worked out by the same code that cancels, so the preview and the result
+cannot differ. Amounts are shown only to people who can see payments; a coach
+sees names and payment methods.
+
+**A coach's request to cancel** is approved or declined by a director
+(`resolveCancelRequest`). Approving is exactly a director's cancel (it needs the
+refund permission and the same strong confirmation). Declining records the
+decision; Duna has no staff inbox yet, so the coach is not told automatically
+and the director tells them.
+
+**Share links for staff.** "Message the group" and the session sheet ask for a
+share link (`shareLink`): the same `/i/…` link a player gets, for that session
+only, ending when it starts.
 
 ## Settings
 

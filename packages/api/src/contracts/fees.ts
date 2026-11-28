@@ -150,6 +150,84 @@ export const feesPlatformSummarySchema = z.object({
   }),
 });
 
+/**
+ * PART-B (additive): `operator.fees.quote`, the operator-side all-in
+ * preview for a price screen: what a player pays and what the club
+ * receives, from the same composition checkout charges
+ * (`quoteCheckoutFees`) and the club's plan. Nothing is recorded.
+ */
+export const feesOperatorQuoteInputSchema = z
+  .object({
+    offeringId: w3IdSchema.optional(),
+    /** A price being edited that is not saved yet (card or cash). */
+    priceMinor: z.number().int().min(0).max(100_000_000).optional(),
+    /** With `priceMinor`: what is being priced (fees differ for goods). */
+    offeringType: z
+      .enum(["event", "service", "good", "plan"])
+      .default("service"),
+    offeringSubtype: z.string().max(48).optional(),
+    currency: z.string().length(3),
+    method: z.enum(["card", "cash", "credits"]),
+    quantity: z.number().int().min(1).max(50).default(1),
+  })
+  .refine(
+    (input) =>
+      (input.offeringId === undefined) !== (input.priceMinor === undefined),
+    { message: "Give an offering or a price, not both." },
+  );
+
+export const feesOperatorQuoteLineSchema = z.object({
+  kind: z.enum(["item", "service-fee", "processing", "organization-fee"]),
+  label: z.string().min(1),
+  amount: w3AmountSchema,
+  /** Who pays it: the player on top of the price, or the club out of it. */
+  payer: z.enum(["player", "club"]),
+});
+
+export const feesOperatorQuoteSchema = z.union([
+  z.object({
+    status: z.literal("ok"),
+    unit: z.literal("money"),
+    method: z.enum(["card", "cash"]),
+    quantity: z.number().int().positive(),
+    price: w3AmountSchema,
+    playerPays: w3AmountSchema,
+    clubReceives: w3AmountSchema,
+    /** Everything Duna keeps: service fee, processing, Organization Fee. */
+    dunaFees: w3AmountSchema,
+    lines: z.array(feesOperatorQuoteLineSchema),
+    planKey: z.string().min(1),
+    organizationFeeBps: w3BasisPointsSchema,
+    /** A player with Duna Premium pays no Service Fee on this purchase. */
+    premiumWaivesServiceFee: z.boolean(),
+    feeRuleVersion: z.string().min(1).max(32),
+  }),
+  z.object({
+    status: z.literal("ok"),
+    unit: z.literal("credits"),
+    method: z.literal("credits"),
+    quantity: z.number().int().positive(),
+    /** Credits a player spends; no money moves, so no fees. */
+    playerPaysCredits: z.number().int().nonnegative(),
+    clubReceivesCredits: z.number().int().nonnegative(),
+    lines: z.array(feesOperatorQuoteLineSchema).length(0),
+  }),
+  z.object({
+    status: z.literal("unavailable"),
+    reason: z.enum([
+      "no-card-price",
+      "no-credit-price",
+      "card-not-accepted",
+      "credits-not-accepted",
+      "currency-not-supported",
+      "currency-mismatch",
+      "price-needed",
+    ]),
+    message: z.string().min(1),
+  }),
+]);
+
+export type FeesOperatorQuote = z.infer<typeof feesOperatorQuoteSchema>;
 export type FeesQuote = z.infer<typeof feesQuoteSchema>;
 export type FeesPremiumState = z.infer<typeof feesPremiumStateSchema>;
 export type FeesPremiumSubscription = z.infer<
