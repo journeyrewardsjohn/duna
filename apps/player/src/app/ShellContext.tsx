@@ -5,6 +5,7 @@ import type { CourtBookingRequest } from "../features/courts/court-types";
 import type { VideoTransferStatus } from "../../video-studio";
 import type { WatchScoreDraft } from "../../watch-scoring";
 import type { ScoreDraft } from "../features/score/score-draft";
+import type { IntroRequest } from "../features/intro/IntroSheet";
 import type { RouteKey, TabKey } from "./router";
 import type { RouteEntry, ShellAction } from "./shell-state";
 
@@ -51,6 +52,8 @@ export interface ShellNavigation {
   readonly addResult: (draft?: ScoreDraft) => void;
   /** The film studio reports upload progress for the shell banner. */
   readonly onVideoTransfer: (status: VideoTransferStatus | undefined) => void;
+  /** A section's intro, or "What's in Duna" (every intro). */
+  readonly showIntro: (request: IntroRequest) => void;
   /** Long press on the preview chip (preview builds): the Layout lab. */
   readonly openLayoutLab: () => void;
 }

@@ -535,8 +535,10 @@ export function PlayerDunaAiScreen({
 
   if (!active) return null;
 
+  // The top edge too: the close and the Messages switch sit below the status
+  // bar and the Dynamic Island, never under them.
   return (
-    <SafeAreaView edges={["bottom"]} style={styles.safe}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.safe}

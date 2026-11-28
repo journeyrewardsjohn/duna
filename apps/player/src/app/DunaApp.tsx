@@ -69,6 +69,9 @@ import { rememberSummary } from "../features/score/match-cache";
 import { draftFromWatch, type ScoreDraft } from "../features/score/score-draft";
 import { WatchDraftSheet } from "../features/score/WatchDraftSheet";
 import { PickupModal } from "../features/pickup/PickupModal";
+import { IntroSheet, type IntroRequest } from "../features/intro/IntroSheet";
+import { isIntroKey } from "../features/intro/intro-content";
+import { useIntros } from "../features/intro/use-intros";
 import { colors } from "../shared/palette";
 import {
   deepLinkNavigation,
@@ -171,6 +174,7 @@ export function DunaApp() {
     foundationsAutostart,
   );
   const mountedAt = useRef(Date.now());
+  const showIntroRef = useRef<(request: IntroRequest) => void>(() => undefined);
   const previewRef = useRef(runtime.mode === "preview");
   previewRef.current = runtime.mode === "preview";
 
@@ -249,6 +253,14 @@ export function DunaApp() {
       if (url?.startsWith("duna://dev/gate")) {
         // Preview builds: the returning-account screen, for screenshots.
         if (previewRef.current) setGatePreview(true);
+        return;
+      }
+      if (url?.startsWith("duna://intro")) {
+        // "What's in Duna" (duna://intro) or one section (duna://intro/wallet).
+        const key = url.match(/^duna:\/\/intro\/([a-z]+)/)?.[1];
+        showIntroRef.current(
+          isIntroKey(key) ? { kind: "section", key } : { kind: "tour" },
+        );
         return;
       }
       if (url?.startsWith("duna://dev/layout-lab")) {
@@ -493,6 +505,26 @@ export function DunaApp() {
     [events, matches, openCourt, openEventAtIndex, openMatch],
   );
 
+  // Section intros (owner feedback 28 Nov): once per section, and on request.
+  const intros = useIntros({
+    tab: state.tab,
+    route: state.stacks[state.tab]?.key ?? null,
+    blocked:
+      Boolean(state.window) ||
+      newSheetOpen ||
+      Boolean(bookingId) ||
+      eventIndex !== null ||
+      eventDetailIndex !== null ||
+      Boolean(selectedMatch) ||
+      Boolean(organizationSlug) ||
+      createMatchOpen ||
+      courtFinderOpen ||
+      profileEditorOpen ||
+      artworkStudioOpen,
+  });
+  const showIntro = intros.show;
+  showIntroRef.current = showIntro;
+
   const shell = useMemo<ShellNavigation>(
     () => ({
       dispatch,
@@ -531,8 +563,10 @@ export function DunaApp() {
       openLayoutLab: () => {
         if (previewRef.current) setLayoutLabOpen(true);
       },
+      showIntro,
     }),
     [
+      showIntro,
       openCourt,
       openEvent,
       openEventAtIndex,
@@ -628,6 +662,8 @@ export function DunaApp() {
               )}
               {windowRoute?.key === "messages" ? (
                 <View style={[StyleSheet.absoluteFill, styles.window]}>
+                  {/* Messages is drawn light: dark status bar text on it. */}
+                  <StatusBar style="dark" />
                   <ThemeOverride theme="light">
                     <SafeAreaProvider style={styles.fill}>
                       {SCREENS.messages(windowRoute, shell)}
@@ -643,6 +679,7 @@ export function DunaApp() {
                   windowRoute?.key === "ai" ? styles.window : styles.hidden,
                 ]}
               >
+                {windowRoute?.key === "ai" ? <StatusBar style="dark" /> : null}
                 <PlayerDunaAiScreen
                   active={windowRoute?.key === "ai"}
                   initialPrompt={aiInitialPrompt}
@@ -828,6 +865,19 @@ export function DunaApp() {
                 }}
               />
               <WatchDraftSheet onReview={shell.reviewWatchScore} />
+              <IntroSheet
+                onClose={intros.close}
+                onGo={(intro) => {
+                  if ("route" in intro.destination)
+                    dispatch({ type: "open", route: intro.destination.route });
+                  else
+                    dispatch({
+                      type: "select-tab",
+                      tab: intro.destination.tab,
+                    });
+                }}
+                request={intros.request}
+              />
             </View>
           </PlayerProfileProvider>
         </LiveMatchProvider>

@@ -103,14 +103,12 @@ const demoPerformanceHistory = demoMatches.map((match, index) => {
 
 export function PerformanceScreen({
   onArtwork,
-  onBack,
   onEditProfile,
   onHealth,
   onPredictions,
   onWallet,
 }: {
   readonly onArtwork: () => void;
-  readonly onBack: () => void;
   readonly onEditProfile: () => void;
   readonly onHealth: () => void;
   readonly onPredictions: () => void;
@@ -403,9 +401,6 @@ export function PerformanceScreen({
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
     >
-      <Pressable onPress={onBack} style={styles.profileBack}>
-        <Text style={styles.profileBackText}>‹ You</Text>
-      </Pressable>
       <AppHeader eyebrow="YOUR PLAYER STORY" />
       <ImageBackground
         imageStyle={styles.athleteHeroImage}
