@@ -6,19 +6,11 @@ const venueCreateSource = readFileSync(
   new URL("./venue-create-workspace.tsx", import.meta.url),
   "utf8",
 );
-const themeKitSource = readFileSync(
-  new URL("./commerce-controls.tsx", import.meta.url),
-  "utf8",
-);
 
-describe("venue and brand uploads", () => {
-  it("offers uploads beside venue and brand URLs without a media-type dropdown", () => {
+// Brand uploads moved to Club setup › Identity (components/setup/brand-editor.tsx).
+describe("venue uploads", () => {
+  it("offers an upload beside the venue's image address", () => {
     expect(venueCreateSource).toContain('purpose: "venue"');
     expect(venueCreateSource).toContain('type="file"');
-    expect(themeKitSource).toContain('uploadBrandMedia(file, "heroPosterUrl")');
-    expect(themeKitSource).toContain('name="heroMediaType"');
-    expect(themeKitSource).not.toMatch(
-      /<select[\s\S]{0,160}name="heroMediaType"/,
-    );
   });
 });
