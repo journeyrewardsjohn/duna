@@ -25,7 +25,16 @@ const hqServerCommand = process.env.CI
 // through a test-only cookie. The servers honour it only with this variable,
 // only in demo mode and never on a production deployment
 // (packages/api/src/demo-persona.ts).
-const personaSwitch = { DUNA_DEMO_PERSONAS: "enabled" };
+// Every browser test signs in as the same demo actor, from several workers
+// and viewports at once, which exhausts the real per-actor tRPC budget. The
+// servers multiply those budgets for the run; the API ignores this on a
+// production deployment (packages/api/src/rate-limit.ts
+// e2eRateLimitMultiplier). Places, Add a score and Ask Duna keep their own
+// real limiters.
+const serverEnv = {
+  DUNA_DEMO_PERSONAS: "enabled",
+  DUNA_E2E_RATE_LIMIT_MULTIPLIER: "20",
+};
 const personaSuite = "**/personas/**";
 
 // Gallery run (docs/OPERATIONS.md "Component gallery end-to-end"): with
@@ -58,7 +67,7 @@ export default defineConfig({
           {
             command: webServerCommand,
             port: webPort,
-            env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl, ...personaSwitch },
+            env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl, ...serverEnv },
             reuseExistingServer: !process.env.CI,
             timeout: 120_000,
           },
@@ -66,9 +75,7 @@ export default defineConfig({
     {
       command: hqServerCommand,
       port: hqPort,
-      env: galleryRun
-        ? { ...personaSwitch, TIDELINE_GALLERY: "1" }
-        : personaSwitch,
+      env: galleryRun ? { ...serverEnv, TIDELINE_GALLERY: "1" } : serverEnv,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
