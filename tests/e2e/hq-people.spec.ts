@@ -336,7 +336,7 @@ test("a junior's household: the guardian, and an invitation that sends nothing",
   await signIn(page);
   await page.goto(hq(`/people/${ava}/family`));
   await title(page, "Ava Patel");
-  const guardians = page.locator("#guardians");
+  const guardians = page.getByRole("region", { name: "Guardians" });
   await expect(guardians).toContainText("Sam Rivera");
   await expect(guardians).toContainText("Verified");
   const invite = page.getByRole("form", { name: "Invite a guardian" });
@@ -368,7 +368,7 @@ test("documents show the version signed against the current one, and a request i
 }) => {
   await signIn(page);
   await page.goto(hq(`/people/${maya}/documents`));
-  const waivers = page.locator("#waivers");
+  const waivers = page.getByRole("region", { name: "Waivers" });
   await expect(waivers).toContainText("Club participation waiver");
   await expect(waivers).toContainText("Version 2 signed");
   await expect(waivers).toContainText("current is version 3");

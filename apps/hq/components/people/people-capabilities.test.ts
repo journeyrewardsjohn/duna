@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The guard against shipping a dead end: a People capability switch turns
@@ -147,6 +147,16 @@ const actionsFor: Record<
 };
 
 describe("People capability switches never lead to a dead end", () => {
+  // The whole API router loads once (slow on a cold CI runner).
+  let paths: string[] = [];
+  beforeAll(async () => {
+    const { appRouter } = await import("@duna/api");
+    paths = Object.keys(
+      (appRouter as unknown as { _def: { procedures: object } })._def
+        .procedures,
+    );
+  }, 120_000);
+
   beforeEach(() => {
     logged.length = 0;
     called.length = 0;
@@ -161,12 +171,7 @@ describe("People capability switches never lead to a dead end", () => {
   });
 
   it("every switch that is on reaches its procedures, never 'needs API'", async () => {
-    const { appRouter } = await import("@duna/api");
     const { capabilitiesFrom } = await import("./people-capabilities");
-    const paths = Object.keys(
-      (appRouter as unknown as { _def: { procedures: object } })._def
-        .procedures,
-    );
     const capabilities = capabilitiesFrom(paths);
     const loaded = await actions();
     for (const [capability, on] of Object.entries(capabilities)) {
@@ -182,17 +187,11 @@ describe("People capability switches never lead to a dead end", () => {
       ).toBe(true);
       expect(called.length, capability).toBe(results.length);
     }
-  });
+  }, 60_000);
 
   it("matches what the API serves today", async () => {
-    const { appRouter } = await import("@duna/api");
     const { capabilitiesFrom } = await import("./people-capabilities");
-    const capabilities = capabilitiesFrom(
-      Object.keys(
-        (appRouter as unknown as { _def: { procedures: object } })._def
-          .procedures,
-      ),
-    );
+    const capabilities = capabilitiesFrom(paths);
     expect(capabilities).toEqual({
       import: true,
       merge: true,
