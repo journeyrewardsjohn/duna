@@ -49,10 +49,12 @@ back, the card designer in HQ and the moment a purchase lands. Status:
 5. **Three art sources, so no card is ever plain:** the club uploads a still or
    a 3–6 s loop; the club picks from the Duna art set; or Duna derives art from
    the club colour. Default for a new club: derived.
-6. **The Duna art set is a family of seven light-on-sand-and-water pieces**
-   (Sand Ripple, Shore Water, Net Shadow, Under Lights, Golden Hour, First
-   Light, Tideline) plus Club Colour. Abstract and textural; no people, no
-   balls, no logos.
+6. **The Duna art set is ten lush, luminous pieces spread across the colour
+   wheel** (Golden Dune, Coral Dusk, Under Lights, Ocean Teal, Sea Glass, Noon
+   Net, Storm Swell, Ember Net, First Light, Marram Gold) plus Club Colour, so
+   a wallet of five reads as five different clubs. Our subjects (sand, water,
+   light, net, sky, night under lights) rendered with depth and light; no
+   people, no balls, no logos, no text.
 7. **Two presentations of the same wallet.** Carousel (neighbours peeking,
    snap, dots) up to six cards; vertical stack (strips you draw a card out of)
    at seven or more. The person can switch either way; the choice is remembered
@@ -72,23 +74,25 @@ back, the card designer in HQ and the moment a purchase lands. Status:
 
 ### Proportions and geometry
 
-| Property  | Value                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Ratio     | 1.586 (ISO/IEC 7810 ID-1), height = width ÷ 1.586                                                                        |
-| Width     | Phone 316–340 pt (pane width − 76, so neighbours peek about 26 pt); Duo half-open top pane 400 pt; checkout up to 400 pt |
-| Radius    | 5.2 % of width (about 17.5 pt at 340)                                                                                    |
-| Keyline   | 1 px, inset 7 pt, colour = text colour at 30 %                                                                           |
-| Safe area | 5 % of width left/right, 8.5 % of height top/bottom                                                                      |
-| Shadow    | Two layers (`0 16 34 / 42 %`, `0 2 6 / 30 %` of a Night Court near-black); none in the stack strips                      |
+| Property   | Value                                                                                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ratio      | 1.586 (ISO/IEC 7810 ID-1), height = width ÷ 1.586                                                                                                                                                         |
+| Width      | Phone up to 372 pt (pane width − 52: the card nearly fills the width, neighbours peek about 14 pt); regular panes 396 pt; Duo half-open top pane and checkout 420 pt                                      |
+| Radius     | 5.2 % of width (about 19 pt at 372)                                                                                                                                                                       |
+| Keyline    | 1 px, inset 7 pt, white at 30 % in screen blend (a translucent light tone on any art)                                                                                                                     |
+| Glass edge | Inner top highlight (white 42 %), 1 px inner rim (white 12 %), inner bottom shade (black 22 %)                                                                                                            |
+| Safe area  | 5 % of width left/right, 8.5 % of height top/bottom                                                                                                                                                       |
+| Shadow     | Three layers: contact `0 1 2 / 35 %`, lift `0 10 22 −6 / 50 %` (Night Court near-black), and a coloured glow `0 30 60 −20` in the art's own average tone at 85 %, so each card lights the ground under it |
+| Sheen      | Soft-light radial highlight plus a faint diagonal band that follow the pointer (iPad, web) or device tilt (iOS, opt-in). It moves only when the person moves; it never loops                              |
 
 ### What is on the face
 
-| Slot         | Content                                                                                           | Type                                    |
-| ------------ | ------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Top left     | `ClubMark` 30 pt (logo on its colour, uploaded tile, or Jost monogram) + club display name        | Geist 600 13                            |
-| Top right    | Plan chip (outlined, e.g. "Annual", "Junior", "Family", "Staff", "Day", "Pack") **or** state chip | Geist 500 10.5; state chip Geist 600 11 |
-| Bottom left  | Member name; for a junior "Held by {guardian}, guardian"; then `No. 0412 · Since Mar 2024`        | Geist 600 16.5; Geist Mono 10.5         |
-| Bottom right | One live fact: credits left, valid-through, next booking, "Today", "Staff", or nothing            | Geist Mono 11, tabular, glass chip      |
+| Slot         | Content                                                                                        | Type                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Top left     | `ClubMark` 30 pt (logo on its colour, uploaded tile, or Jost monogram) + club display name     | Geist 600 13.5                                               |
+| Top right    | Plan chip (glass, e.g. "Annual", "Junior", "Family", "Staff", "Day", "Pack") **or** state chip | Geist 500 10.5; state chip Geist 600 11                      |
+| Bottom left  | Member name; for a junior "Held by {guardian}, guardian"; then `No. 0412 · Since Mar 2024`     | Geist 600 20 (confident); Geist Mono 10.5                    |
+| Bottom right | One live fact: credits left, valid-through, next booking, "Today", "Staff", or nothing         | Geist Mono 11, tabular, glass chip on the scrim tone at 50 % |
 
 **Deliberately not on the face:** price, the code (it is on the back), the
 Duna logo (the club owns the face; Duna signs the back), more than one number,
@@ -100,15 +104,26 @@ live).
 Measured once per art and colour (on the poster frame), stored with the card
 design, recomputed in HQ when the club changes anything:
 
-1. Average the top 32 % and the bottom 38 % of the poster.
-2. Pick the text colour (Salt or Night Court) with the better contrast against
-   the worse region.
-3. If the ratio is under 5:1, add a scrim gradient in that region only: colour
-   = the art's own average mixed 72 % toward Night Court (or 70 % toward Salt for
-   dark text), alpha = the smallest value that reaches 5:1, capped at 75 %.
-4. Minimum scrim 8 % top, 12 % bottom, so loops that brighten later still read.
-5. HQ shows the result ("Salt on the art · 6.8:1 · scrim 22 %"). If the cap
-   cannot reach 4.5:1, HQ blocks the design and says why.
+1. Sample the two text footprints only: top left (0–68 % wide, 4–24 % high:
+   mark and club name) and bottom left (0–64 % wide, 66–95 % high: member and
+   number). The chips carry their own glass backgrounds.
+2. Take the 90th percentile luminance (for Salt text) and the 10th percentile
+   (for Night Court text) of each footprint, not the average, so a bright
+   streak under a letter counts.
+3. Text is **Salt by default**. Night Court is chosen only on genuinely light
+   art (average luminance above 0.38 and Night Court needs at least 20 points
+   less scrim).
+4. The scrim is local: a radial field anchored at the top-left and bottom-left
+   corners, coloured from the art's own average mixed 80 % toward Night Court
+   (or toward Salt for dark text), alpha = the smallest value that brings the
+   90th-percentile pixel to 5:1, capped at 93 % at the corner and falling to
+   zero by 62–66 % of the card. The rest of the art keeps full colour.
+5. Minimum scrim 12 % top, 18 % bottom, so loops that brighten later still read.
+6. HQ shows the result ("Salt on the art · 5.0:1 · scrim top 76 %"). If the cap
+   cannot reach 5:1, HQ blocks the design and says why.
+
+Every piece of the art set and the derived art passes 5:1 in the prototype
+(checked on all twelve demo cards).
 
 Text also carries a soft text-shadow in the scrim colour (25–30 %), never a
 hard outline.
@@ -142,36 +157,78 @@ hard outline.
 1. **Club upload**: a still (JPEG/PNG, at least 1012 × 638, any larger ratio is
    cropped to 1.586 with a focal point) or a loop (3–6 s, seamless, no sound,
    ≤ 2.5 MB source). Duna transcodes and makes the poster.
-2. **Duna art set**: the club picks one of seven pieces and optionally tints
+2. **Duna art set**: the club picks one of ten pieces and optionally tints
    it toward its colour (hue shift only, never desaturation).
-3. **Derived from club colour**: three soft fields of the club colour, a
-   lighter tone and a Dune-warmed tone drifting slowly, with faint court-line
-   contours so it is never flat. Used automatically until the club chooses.
+3. **Derived from club colour** (the default until the club chooses): a
+   domain-warped light field in the club's hue family, four tones from the
+   club colour (deep shadow at 10 % lightness, body at 30 %, a lit tone shifted
+   5° warmer at 42 %, a highlight shifted 8° at 70 %), with an inner glow,
+   a light source upper right and film grain. It reads as a painted field in
+   that colour, never a flat tint.
 
 ### The Duna art set
 
-Each piece is light on a beach court, abstracted. Palettes stay inside the brand
-(Night Court, Salt, Dune, Hardwood) plus sea greens for water.
+Our world (sand, water, light, net, sky, night under lights) rendered lush:
+macro and aerial abstractions with depth, volumetric light, saturated natural
+colour and painterly softness. The set spans the colour wheel so neighbouring
+cards never look alike. Each piece is composed with calmer tone at top left and
+along the bottom (where type sits) and its light upper right.
 
-| Piece        | What moves (one seamless loop)                    | Period | Palette                        |
-| ------------ | ------------------------------------------------- | ------ | ------------------------------ |
-| Sand Ripple  | Ripples drift one wavelength; light from top left | 6 s    | Dune, Salt, Hardwood shadow    |
-| Shore Water  | Caustic net shimmers over shallow water           | 5 s    | Night Court to sea green       |
-| Net Shadow   | The shadow of the net mesh sways on sand          | 6 s    | Sand, warm umber shadow        |
-| Under Lights | Two floodlight cones breathe; haze drifts         | 6 s    | Night Court, Salt, Dune line   |
-| Golden Hour  | Low shafts of light sway; dust motes              | 5 s    | Hardwood to Dune               |
-| First Light  | Sun low over a haze line; reflection shimmers     | 6 s    | Salt, peach, Dune              |
-| Tideline     | Foam edge washes in and out over wet sand         | 6 s    | Wet sand, sea glass, Salt foam |
-| Club Colour  | Derived (above)                                   | 6 s    | The club colour                |
+| Piece        | Subject and light                                                        | What moves (one seamless loop)       | Period | Palette (shadow → highlight)      |
+| ------------ | ------------------------------------------------------------------------ | ------------------------------------ | ------ | --------------------------------- |
+| Golden Dune  | A dune ridge at golden hour, lit face and slip-face shadow, wind ripples | The light crosses the ridge and back | 6 s    | `#2A1006 #7E3A10 #E0892E #FFD98C` |
+| Coral Dusk   | Dusk sky reflected in wet sand, clouds lit from within                   | Cloud drifts and folds               | 6 s    | `#2B0F2E #9C2F5E #F2735A #FFD6B8` |
+| Under Lights | Night court: floodlight bloom through sea haze, bokeh                    | Haze breathes, bokeh drifts          | 6 s    | `#050A22 #1B2470 #5565E0 #FFE9C2` |
+| Ocean Teal   | Deep teal shallows from above, sunlit caustic net                        | Caustics drift                       | 5 s    | `#03222B #0B5563 #1FA3A6 #C8FFF2` |
+| Sea Glass    | Pale sea-glass shallows over white sand                                  | Caustics drift                       | 5 s    | `#14544F #3E9C8A #9FDCC8 #EFFFF8` |
+| Noon Net     | White-hot noon sand with the long shadow of the net mesh                 | The net shadow sways                 | 6 s    | `#8C6A3C #CFAF78 #F0DDB6 #FFFBF0` |
+| Storm Swell  | Storm-blue swell, silver light on the faces                              | The swell rolls                      | 5 s    | `#040B14 #132C46 #365E82 #A9C2D6` |
+| Ember Net    | Ember sunset glowing through an out-of-focus net                         | Bokeh drifts behind the mesh         | 6 s    | `#180403 #7A1408 #EA5A1C #FFC86E` |
+| First Light  | A cloudscape at first light, lit from within                             | Cloud drifts                         | 6 s    | `#2E2C5C #8C5C94 #E98F79 #FFDCC0` |
+| Marram Gold  | Dune grass backlit by low sun, gold haze, deep green                     | Grass sways, light motes drift       | 6 s    | `#0B1A0B #2E4A1C #C9992F #FFF1BA` |
+| Club Colour  | Derived (above)                                                          | The light field folds                | 6 s    | From the club colour              |
 
-The prototype draws all eight procedurally (canvas) so the loops are real.
-Production ships them as rendered files (below), generated from the same
-recipes, so the set looks identical on every platform.
+**How the prototype renders them.** Every piece is a GPU-painted field (one
+WebGL fragment shader with five recipes: warped light field, caustics, lit dune
+ridges, night bokeh, backlit grass), seamless because time enters only as a
+point moving round a circle. One shared renderer draws the selected card at
+30 fps and paints a still poster for every other card. All motion in the
+prototype is this real-time procedural motion; there is no video file in it.
+
+**Generated art (Higgsfield).** The owner authorised generation. The prompts
+below were prepared and priced (GPT Image 2.6, 3:2, high quality, 1k: 1.25
+credits each; Seedance 2.5, 5 s, 480p, no audio, start frame = end frame for a
+seamless loop: 15 credits each; balance 2,323 credits). The generation call was
+**refused by this environment's permission check**, so nothing was generated and
+**0 credits were spent**. When a person allows it, run these, pick by eye, and
+replace the shader posters with the stills (keeping the shader for derived
+art):
+
+| #   | Piece        | Prompt (all end with: "painterly softness, real depth, volumetric light, saturated natural colour; calm tone top left and along the bottom; no people, no text, no letters, no logos") |
+| --- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Ocean Teal   | Aerial macro looking straight down into deep ocean-teal shallow water, sunlit caustic light nets over rippled sand, turquoise highlights to deep teal shadow                           |
+| 2   | Golden Dune  | Molten golden-hour dune ridges, low raking sun, glowing amber and honey crests, long umber shadows, fine wind ripples                                                                  |
+| 3   | Coral Dusk   | Coral, magenta and violet dusk sky reflected on glassy wet sand at low tide, clouds lit from within                                                                                    |
+| 4   | Under Lights | Deep indigo night, floodlight bloom through sea haze over a beach court, volumetric cones, heavy bokeh                                                                                 |
+| 5   | Sea Glass    | Aerial pale sea-glass green shallows, translucent mint water over white sand, soft haze                                                                                                |
+| 6   | Noon Net     | White-hot noon sand with the long crisp diagonal shadow of a volleyball net mesh, bleached warm light                                                                                  |
+| 7   | Storm Swell  | Aerial storm-blue ocean swell, slate and steel blue, silver light on wave faces, white foam lace                                                                                       |
+| 8   | Ember Net    | Out-of-focus ember-orange and deep red sunset glowing through the dark mesh of a beach volleyball net, molten bokeh                                                                    |
+| 9   | First Light  | First light over a calm sea, cloudscape lit from within in peach, apricot, lilac and salt-white                                                                                        |
+| 10  | Marram Gold  | Dune grass backlit by low sun, blades blurred into gold haze with deep green shadows, sparkling bokeh                                                                                  |
+| L1  | Ocean Teal   | Loop from still 1: "caustic light drifts slowly over the sand, almost breathing, locked-off camera" (start and end frame = still)                                                      |
+| L2  | Golden Dune  | Loop from still 2: "the low sun moves slowly across the ridges, shadows shift, locked-off camera"                                                                                      |
+| L3  | Coral Dusk   | Loop from still 3: "clouds pass slowly, reflections shimmer, locked-off camera"                                                                                                        |
+
+Estimated total: 10 × 1.25 + 3 × 15 = **57.5 credits**. Each generated asset
+is logged in `apps/web/public/media/brand/imagery-log.json` (model, prompt,
+provenance) per `AGENTS.md`.
 
 ### Motion rules for art
 
 - Loops are 3–6 s, seamless (every moving term is periodic in the loop), slow
-  (nothing crosses more than 4 % of the card per second), and never cut.
+  and almost breathing (nothing crosses more than 4 % of the card per second),
+  and never cut.
 - Only the **selected** card moves. Neighbours, strips and lists show the
   poster. A card that leaves the screen pauses and returns to its poster.
 - A still poster is always shown first; the loop fades in over 200 ms once
@@ -181,19 +238,36 @@ recipes, so the set looks identical on every platform.
 - On cellular, loops download only when the person has opened the wallet before
   on Wi-Fi (cached) or allows "Play card motion on cellular" (default off).
 - The card back never moves.
-- **Lighter alternative (default on web, opt-in on iOS)**: a pointer or tilt
-  sheen, a soft-light radial highlight that follows the pointer. No tilt of
-  the card itself (the card stays flat; motion is in the light).
+- The sheen follows the pointer or tilt and never animates on its own. The
+  card itself never tilts.
+
+### Asset pipeline
+
+1. **Source.** Art set: rendered from the shader recipes (or the generated
+   stills and loops above) at 2024 × 1276. Club upload: still or loop, cropped
+   to 1.586 with a focal point. Derived: rendered server-side from the club
+   colour whenever it changes.
+2. **Encode.** Poster, strip and Wallet strip images; loops in HEVC, AV1 and
+   H.264 (table below). Loops are checked for a seamless seam (first and last
+   frame difference below a threshold) and rejected otherwise.
+3. **Measure.** The contrast pass above runs on the poster and on frames at
+   25 %, 50 % and 75 % of the loop; the strongest scrim wins and is stored with
+   the design.
+4. **Deliver.** Duna Hosting, cached on device; posters ship with the wallet
+   response, loops load only for the selected card.
+5. **Web fallback.** Where a loop cannot load (data saver, slow link), the web
+   component can run the same shader recipe live for art-set and derived cards
+   (about 6 KB of shader, no file).
 
 ### Formats and sizes
 
 | Asset                 | Native (iOS)                                                             | Web                                                   | Budget            |
 | --------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- | ----------------- |
-| Poster                | HEIC 1012 × 638 (@3x for 340 pt) + JPEG fallback                         | AVIF + JPEG, 1012 and 680 widths, `srcset`            | ≤ 120 KB each     |
-| Loop                  | HEVC (H.265) 1012 × 638, 30 fps, no audio, `.mp4`                        | AV1 `.mp4` and H.264 `.mp4`, 680 × 428 and 1012 × 638 | ≤ 900 KB per file |
-| Stack strip / list    | Poster only, 340 × 214                                                   | Poster only                                           | ≤ 30 KB           |
+| Poster                | HEIC 1116 × 704 (@3x for 372 pt) + JPEG fallback                         | AVIF + JPEG, 1116 and 744 widths, `srcset`            | ≤ 140 KB each     |
+| Loop                  | HEVC (H.265) 1116 × 704, 30 fps, no audio, `.mp4`                        | AV1 `.mp4` and H.264 `.mp4`, 744 × 470 and 1116 × 704 | ≤ 900 KB per file |
+| Stack strip / list    | Poster only, 372 × 234                                                   | Poster only                                           | ≤ 35 KB           |
 | Apple / Google Wallet | `strip.png` 1125 × 432 (cropped from the poster), `logo.png`, `icon.png` | —                                                     | PassKit limits    |
-| Art set masters       | Rendered from the recipes at 2024 × 1276, 6 s, then encoded as above     | same                                                  | —                 |
+| Art set masters       | 2024 × 1276 still, 6 s loop at 30 fps                                    | same                                                  | —                 |
 
 Video is stored and delivered by Duna Hosting (the video provider already used
 for recordings); the poster comes from the same pipeline.
@@ -202,7 +276,7 @@ for recordings); the poster comes from the same pipeline.
 
 ### Carousel (1–6 cards, and always on the Duo half-open top pane)
 
-- Horizontal, one card centred, neighbours peek about 26 pt each side and are
+- Horizontal, one card centred, neighbours peek about 14 pt each side and are
   scaled to 94 % from their inner edge (they do not dim).
 - Snaps per card; a selection haptic on each snap; page dots under it (the
   current dot is an 18 pt Dune pill).
@@ -213,7 +287,7 @@ for recordings); the poster comes from the same pipeline.
 
 ### Stack (7 or more, or by choice)
 
-- Each card shows a strip 27 % of its height (mark, name, plan or state chip).
+- Each card shows a strip 36 % of its height, tall enough that each card's art reads as its own colour (mark, name, plan or state chip).
   The last card shows in full.
 - Tap a strip or drag it up 30 pt to **draw it out**: it Rises to the top
   (480 ms), the others collapse into a pile beneath it with their top edges
