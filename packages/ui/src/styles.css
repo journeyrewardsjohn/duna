@@ -42,9 +42,9 @@
   z-index: 1;
 }
 
-.duna-loader__mark .duna-mark__icon {
-  height: 4.5rem;
-  width: 4.5rem;
+.duna-loader__mark {
+  color: var(--text-1, currentColor);
+  line-height: 0;
 }
 
 .duna-loader__label {
@@ -230,12 +230,19 @@
 }
 
 :root {
-  --font-display: "Satoshi", "Helvetica Neue", Arial, sans-serif;
+  /* Duna type (F3): each app loads Jost, Geist and Geist Mono through
+     next/font (its app/fonts.ts) and sets --td-font-brand, --td-font-ui and
+     --td-font-mono on the html element. The legacy --font-* names below point
+     at them until each surface migrates to the Tideline roles. The Tideline
+     display and numeric roles are Geist too. */
+  --td-font-display: var(--td-font-ui);
+  --td-font-numeric: var(--td-font-ui);
+  --font-display: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif);
   --font-heading: var(--font-display);
-  --font-body: "Satoshi", "Helvetica Neue", Arial, sans-serif;
+  --font-body: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif);
   --font-ui: var(--font-body);
   --font-sans: var(--font-body);
-  --font-data: "Satoshi", "Helvetica Neue", Arial, sans-serif;
+  --font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif);
   --font-monument: var(--font-data);
   --font-mono: var(--font-data);
   --sand-100: #efe6d3;
@@ -346,41 +353,6 @@
   --image-veil: var(--ground);
   background-image: none !important;
   font-size: max(17px, 1rem);
-}
-
-.duna-mark {
-  align-items: center;
-  display: inline-flex;
-  line-height: 0;
-}
-
-.duna-mark__icon {
-  display: block;
-  height: 2rem;
-  object-fit: contain;
-  width: 2rem;
-}
-.duna-mark__icon--compact {
-  display: none;
-}
-.duna-mark__logo {
-  display: block;
-  height: 2rem;
-  object-fit: contain;
-  width: auto;
-}
-.duna-mark__logo--white {
-  display: none;
-}
-
-:root[data-theme="dark"] .duna-mark__logo--blue,
-[data-zone="live"] .duna-mark__logo--blue {
-  display: none;
-}
-
-:root[data-theme="dark"] .duna-mark__logo--white,
-[data-zone="live"] .duna-mark__logo--white {
-  display: block;
 }
 
 .duna-button {
@@ -1883,7 +1855,7 @@
   --dac-sand: var(--color-sand, var(--surface-2, #f2e2d1));
   --dac-surface: var(--color-surface, var(--surface-1, #fff));
   color: var(--dac-ink);
-  font-family: var(--font-body, "Satoshi", system-ui, sans-serif);
+  font-family: var(--font-body, system-ui, sans-serif);
   position: relative;
   z-index: 140;
 }
@@ -1995,10 +1967,8 @@
   transform: translateY(-2px);
 }
 
-.duna-action-center__duna-button img {
-  height: 43px;
-  object-fit: contain;
-  width: 40px;
+.duna-action-center__duna-button svg {
+  display: block;
 }
 
 .duna-action-center__chat,
@@ -2067,10 +2037,8 @@
   width: 42px;
 }
 
-.duna-action-center__avatar img {
-  height: 34px;
-  object-fit: contain;
-  width: 31px;
+.duna-action-center__avatar {
+  color: white;
 }
 
 .duna-action-center__chat-header > span:nth-child(2) {

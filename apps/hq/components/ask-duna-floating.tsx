@@ -193,7 +193,7 @@ export function AskDunaFloating({
           focusComposer();
         }}
       >
-        <DunaMark compact />
+        <DunaMark decorative size={20} />
         <span>Ask Duna</span>
         {busy && <small>Working…</small>}
       </button>

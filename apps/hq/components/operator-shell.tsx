@@ -1,7 +1,7 @@
 import type { OrganizationSummary } from "@duna/core";
 import { HqPagePrompt } from "./hq-work-prompt";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
-import { DunaActionTrigger, DunaMark } from "@duna/ui";
+import { DunaActionTrigger, DunaLogo } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   Bell,
@@ -90,7 +90,7 @@ export async function OperatorShell({
     >
       <aside className="hq-sidebar">
         <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
-          <DunaMark />
+          <DunaLogo decorative size={24} />
           <small>HQ</small>
         </Link>
         <nav aria-label="Operator modules">

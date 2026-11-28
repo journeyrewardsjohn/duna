@@ -2,7 +2,13 @@
 
 import type { PlayerOrganizationAccess } from "@duna/api";
 import type { PersonSummary } from "@duna/core";
-import { DunaActionTrigger, DunaMark, DunaTaskPrompt, Numeric } from "@duna/ui";
+import {
+  DunaActionTrigger,
+  DunaLogo,
+  DunaMark,
+  DunaTaskPrompt,
+  Numeric,
+} from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   CalendarDays,
@@ -73,7 +79,7 @@ export function PlayerShell({
             className="player-sidebar__brand"
             href="/"
           >
-            <DunaMark />
+            <DunaLogo decorative size={24} />
           </Link>
           <nav aria-label="Duna player navigation">
             {navigation.map(({ label, href, icon: Icon }) => {
@@ -142,7 +148,7 @@ export function PlayerShell({
               className="player-topbar__brand"
               href="/app"
             >
-              <DunaMark compact />
+              <DunaMark decorative size={24} />
             </Link>
             <PlayerOrganizationSwitcher
               access={organizationAccess}
@@ -162,7 +168,7 @@ export function PlayerShell({
                 label="Open Duna AI"
                 panel="chat"
               >
-                <DunaMark compact />
+                <DunaMark decorative size={20} />
                 <span>Ask Duna</span>
               </DunaActionTrigger>
               <ThemeToggle />
@@ -259,7 +265,7 @@ export function PlayerShell({
               label="Open Duna AI"
               panel="chat"
             >
-              <DunaMark compact />
+              <DunaMark decorative size={20} />
               <span>Ask Duna</span>
             </DunaActionTrigger>
             {mobileNavigation.slice(2).map(({ label, href, icon: Icon }) => (

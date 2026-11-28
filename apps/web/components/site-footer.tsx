@@ -1,4 +1,4 @@
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import Link from "next/link";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 
@@ -7,7 +7,7 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer__top">
         <div>
-          <DunaMark />
+          <DunaLogo size={28} />
           <p>The operating system for sand.</p>
         </div>
         <div className="site-footer__links">

@@ -2,7 +2,7 @@
  * Duna Web Design System v4
  *
  * Marketing and public-web language derived from Duna Homepage v2:
- * Satoshi verdict headlines, DM Mono data, snow/sky/blush washes,
+ * verdict headlines, Geist Mono data, snow/sky/blush washes,
  * passport-navy brand surfaces, pill controls, and full-bleed section bands.
  * Product/app surfaces keep the mobile Duna design system.
  */
@@ -42,7 +42,13 @@
   --duna-web-gold-ink: #96792b;
   --duna-web-live: #c94443;
   --duna-web-positive: #1e7a46;
-  --duna-web-font-mono: "DM Mono", "SFMono-Regular", Consolas, monospace;
+  --duna-web-font-mono: var(
+    --td-font-mono,
+    ui-monospace,
+    "SFMono-Regular",
+    Consolas,
+    monospace
+  );
   --duna-web-content-max: 1216px;
   --duna-web-nav-height: 78px;
   --duna-web-radius-band: 48px;

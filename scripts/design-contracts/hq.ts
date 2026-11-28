@@ -13,10 +13,29 @@ export const hq: SurfaceContract = {
     {
       kind: "includes",
       file: "apps/hq/app/layout.tsx",
-      values: ["api.fontshare.com/v2/css?f[]=satoshi@"],
-      message: "apps/hq/app/layout.tsx must load Satoshi from Fontshare",
-      legacy:
-        "legacy: delete when HQ loads Jost/Geist through the F3 font module (F5a)",
+      values: [
+        'import { dunaFontClassName } from "./fonts"',
+        "dunaFontClassName",
+      ],
+      message:
+        "apps/hq/app/layout.tsx must load Jost, Geist and Geist Mono through the brand font module (app/fonts.ts)",
+    },
+    {
+      kind: "includes",
+      file: "apps/hq/app/fonts.ts",
+      values: [
+        "next/font/google",
+        "Jost({",
+        "Geist({",
+        "Geist_Mono({",
+        '"--td-font-brand"',
+        '"--td-font-ui"',
+        '"--td-font-mono"',
+        'weight: "500"',
+        'display: "swap"',
+      ],
+      message:
+        "apps/hq/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the Tideline font variables",
     },
     {
       kind: "includes",
