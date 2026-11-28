@@ -1,5 +1,5 @@
 import { CrestMark, Wordmark } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 
 /** The Crest and the drawn wordmark, as the link home. */
 export function SiteBrand({ className }: { readonly className?: string }) {

@@ -14,7 +14,7 @@ import {
   OfflineBanner,
   Rally,
 } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import type { CSSProperties } from "react";
 import { ArrowLink, LinkButton } from "@/components/site/link-button";
 import { siteLinks } from "@/components/site/links";

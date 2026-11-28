@@ -5,12 +5,14 @@
 import "@duna/ui/tideline/styles.css";
 
 import { useErrorReference } from "@duna/observability/react";
-import { Button, ErrorState } from "@duna/ui/tideline";
+import { buttonClassName } from "@duna/ui/tideline";
+import { SiteErrorState } from "@/components/site/site-error-state";
 
 /**
- * Replaces a root layout when it fails, so it renders its own document. The
- * kit's ErrorState, reported once through @duna/observability with the
- * reference a person can send to support.
+ * Replaces a root layout when it fails, so it renders its own document: the
+ * kit's error state, reported once through @duna/observability with the
+ * reference a person can send to support. `SiteErrorState`, not
+ * `ErrorState`: this file's script ships with every page (see there).
  */
 export default function GlobalError({
   error,
@@ -33,11 +35,11 @@ export default function GlobalError({
             padding: "var(--td-space-6)",
           }}
         >
-          <ErrorState
+          <SiteErrorState
             action={
-              <Button href="/" variant="ghost">
-                Duna home
-              </Button>
+              <a className={buttonClassName({ variant: "ghost" })} href="/">
+                <span className="td-btn__label">Duna home</span>
+              </a>
             }
             message="Something went wrong on our side, not yours. Try again. If it keeps happening, send Duna support the reference below."
             onRetry={unstable_retry ?? reset}

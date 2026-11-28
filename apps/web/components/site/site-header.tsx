@@ -1,31 +1,78 @@
 "use client";
 
-import {
-  Icon,
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetTrigger,
-} from "@duna/ui/tideline";
-import Link from "next/link";
+import { buttonClassName, Icon } from "@duna/ui/tideline";
+import Link from "@/components/site/site-link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type ComponentType, useEffect, useState } from "react";
 import { AccountLink } from "./account-link";
 import { type SiteAudience, useSiteAudience } from "./audience";
 import { SiteBrand } from "./brand";
+import { firstViewSettled } from "./first-view";
 import { LinkButton } from "./link-button";
 import { siteLinks, siteNavigation } from "./links";
+import type { SiteMenuProps } from "./site-menu";
 
 interface SiteHeaderProps {
   /** Whether sign-in is configured on this deployment. */
   readonly authConfigured: boolean;
 }
 
-function isCurrent(pathname: string, href: string) {
+export function isCurrent(pathname: string, href: string) {
   const path = href.split("#")[0] ?? "";
   if (!path.startsWith("/") || path === "/") return false;
   // A section's pages count as it (the Pro Tour's team pages are the tour).
   return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+/**
+ * The menu button as the server renders it and until the sheet's script is
+ * here: the same element `SheetTrigger` draws, closed. Pressing it opens the
+ * sheet as soon as that script arrives.
+ */
+function MenuButton({ onPress }: { readonly onPress: () => void }) {
+  return (
+    <button
+      aria-expanded={false}
+      aria-haspopup="dialog"
+      aria-label="Open menu"
+      className={buttonClassName({ variant: "secondary" }, "site-header__menu")}
+      data-closed=""
+      data-slot="drawer-trigger"
+      onClick={onPress}
+      type="button"
+    >
+      <Icon name="more" size="control" />
+    </button>
+  );
+}
+
+type SiteMenuComponent = ComponentType<SiteMenuProps>;
+const loadSiteMenu = () =>
+  import("./site-menu").then((module) => module.SiteMenu as SiteMenuComponent);
+
+/**
+ * The menu sheet's component once its script has loaded: after the first
+ * screen settles, or on the first press of the button. The button is swapped
+ * for the sheet's own trigger only when the script is here, never in the
+ * middle of a press.
+ */
+function useSiteMenu(): readonly [SiteMenuComponent | null, () => void] {
+  const [menu, setMenu] = useState<SiteMenuComponent | null>(null);
+  const load = () => {
+    void loadSiteMenu().then((component) => setMenu(() => component));
+  };
+  useEffect(() => {
+    let live = true;
+    void firstViewSettled()
+      .then(loadSiteMenu)
+      .then((component) => {
+        if (live) setMenu(() => component);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return [menu, load] as const;
 }
 
 /** The scroll position past which the header draws its hairline. */
@@ -128,12 +175,17 @@ export function AudienceCta({
 /**
  * The public header: the mark, the page links, the audience switch, sign in
  * (or the way into the app) and the primary call to action. Under 1080 px the
- * links move into a sheet.
+ * links move into a sheet (`SiteMenu`, loaded after the first screen).
  */
 export function SiteHeader({ authConfigured }: SiteHeaderProps) {
   const pathname = usePathname();
   const scrolled = useScrolledPast(HAIRLINE_AT);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [SiteMenu, loadMenu] = useSiteMenu();
+  const openMenu = () => {
+    setMenuOpen(true);
+    loadMenu();
+  };
 
   return (
     <header className="site-header" data-scrolled={scrolled || undefined}>
@@ -158,43 +210,15 @@ export function SiteHeader({ authConfigured }: SiteHeaderProps) {
           <span className="site-header__cta">
             <AudienceCta />
           </span>
-          <Sheet onOpenChange={setMenuOpen} open={menuOpen} side="right">
-            <SheetTrigger
-              aria-label="Open menu"
-              className="site-header__menu"
-              variant="secondary"
-            >
-              <Icon name="more" size="control" />
-            </SheetTrigger>
-            <SheetContent
-              className="site-menu"
-              closeLabel="Close menu"
-              title="Menu"
-            >
-              <nav aria-label="Main" className="site-menu__nav">
-                {siteNavigation.map((item) => (
-                  <Link
-                    aria-current={
-                      isCurrent(pathname, item.href) ? "page" : undefined
-                    }
-                    href={item.href}
-                    key={item.label}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-              <AudienceSwitch className="site-menu__audience" />
-              <div className="site-menu__actions">
-                <AccountLink block configured={authConfigured} />
-                <AudienceCta block />
-              </div>
-              <SheetClose block variant="ghost">
-                Close
-              </SheetClose>
-            </SheetContent>
-          </Sheet>
+          {SiteMenu ? (
+            <SiteMenu
+              authConfigured={authConfigured}
+              onOpenChange={setMenuOpen}
+              open={menuOpen}
+            />
+          ) : (
+            <MenuButton onPress={openMenu} />
+          )}
         </div>
       </div>
     </header>

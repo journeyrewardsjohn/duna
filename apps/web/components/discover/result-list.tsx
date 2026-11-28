@@ -1,7 +1,7 @@
 "use client";
 
 import { Chip, ClubMark, rallyStyle, riseClassName } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import type { ResultRow } from "./results";
 
 const TONES = {

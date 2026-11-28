@@ -9,13 +9,12 @@ import {
 import { WEBSITE_MONTHLY_PRICE_MINOR } from "@duna/api/website-billing";
 import { Icon } from "@duna/ui/tideline";
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { legalIndex } from "@/components/legal/legal-library";
 import { LinkButton } from "@/components/site/link-button";
 import { clubSignupHref, siteLinks } from "@/components/site/links";
 import { siteOgImage } from "@/components/site/og";
 import { PageHero, SectionHead } from "@/components/site/page-parts";
-import { FeeCalculator } from "@/components/site/pricing/fee-calculator";
 import { PlanCards } from "@/components/site/pricing/plan-cards";
 import {
   dollars,
@@ -23,6 +22,7 @@ import {
   processingTerms,
 } from "@/components/site/pricing/pricing-data";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+import { LaterFeeCalculator } from "@/components/site/deferred";
 
 const title = "Pricing · Duna";
 const description =
@@ -261,7 +261,7 @@ export default function PricingPage() {
             </dd>
           </div>
         </dl>
-        <FeeCalculator />
+        <LaterFeeCalculator />
       </section>
 
       <section

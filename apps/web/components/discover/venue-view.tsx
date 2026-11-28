@@ -7,7 +7,7 @@ import {
   Icon,
 } from "@duna/ui/tideline";
 import { localDateOf, parseIsoDate, sunTimes } from "@duna/tideline-core";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { CourtBooking } from "./court-booking";
 import { ResultItem } from "./result-list";
 import { discoverHref, DEFAULT_DISCOVER_STATE } from "./search-state";

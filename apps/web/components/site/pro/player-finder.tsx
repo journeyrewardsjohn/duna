@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar, Icon, Input, Segmented } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { useDeferredValue, useMemo, useState } from "react";
 
 export interface ProFinderPlayer {

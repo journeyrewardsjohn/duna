@@ -1,22 +1,16 @@
 "use client";
 
+import { Icon, type IconName } from "@duna/ui/tideline";
 import {
-  Button,
-  Icon,
-  type IconName,
-  Sheet,
-  SheetContent,
-} from "@duna/ui/tideline";
-import {
-  type ReactNode,
+  lazy,
+  Suspense,
   useEffect,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { firstViewSettled } from "../site/first-view";
 import type { WhereChoice } from "../site/search/search-query";
-import { WherePicker } from "../site/search/where-picker";
-import { DiscoverWhatPicker, DiscoverWhenPicker } from "./pickers";
 import {
   type DiscoverState,
   type DiscoverWhere,
@@ -25,7 +19,12 @@ import {
   whereLabel,
 } from "./search-state";
 
-type Field = "where" | "when" | "what";
+export type Field = "where" | "when" | "what";
+
+const loadPickers = () => import("./search-bar-pickers");
+const DiscoverBarPickers = lazy(() =>
+  loadPickers().then((module) => ({ default: module.DiscoverBarPickers })),
+);
 
 const PHONE = "(max-width: 760px)";
 
@@ -66,60 +65,13 @@ const FIELDS: ReadonlyArray<{ id: Field; label: string; icon: IconName }> = [
   { id: "what", label: "What", icon: "ball" },
 ];
 
-function Panel({
-  field,
-  children,
-  onClose,
-}: {
-  readonly field: Field;
-  readonly children: ReactNode;
-  readonly onClose: () => void;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const element = panel.current;
-    if (field !== "where") {
-      element?.querySelector<HTMLElement>("button, input")?.focus();
-    }
-    const outside = (event: PointerEvent) => {
-      const bar = element?.closest(".dv-bar");
-      if (bar && !bar.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [field, onClose]);
-  return (
-    <div
-      aria-label={FIELDS.find((item) => item.id === field)!.label}
-      className="dv-bar__panel td-rise td-rise--short"
-      data-field={field}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-      ref={panel}
-      role="dialog"
-    >
-      {children}
-      {field === "where" ? null : (
-        <div className="dv-bar__panel-foot">
-          <Button onClick={onClose} size="sm" variant="secondary">
-            Done
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * Where · When · What, carried from the home page. On wide screens three
  * fields side by side, each opening its picker under the bar; on phones one
  * summary that opens a full-height sheet with the three stacked and a
  * sticky "Show results". The page owns the state (it is the address): this
- * bar proposes changes through `onChange`.
+ * bar proposes changes through `onChange`. The pickers live in
+ * `DiscoverBarPickers`, loaded after the first screen.
  */
 export function DiscoverSearchBar({
   state,
@@ -138,6 +90,20 @@ export function DiscoverSearchBar({
   const [sheet, setSheet] = useState(false);
   const [draft, setDraft] = useState(state);
   const fields = useRef<HTMLDivElement>(null);
+  // The pickers' script (place search, calendar, sheet) is fetched after the
+  // first screen settles; the press that opens one also starts the fetch.
+  const [pickersWanted, setPickersWanted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void firstViewSettled()
+      .then(loadPickers)
+      .then(() => {
+        if (live) setPickersWanted(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => setDraft(state), [state]);
 
@@ -157,16 +123,6 @@ export function DiscoverSearchBar({
     what: whatLabel(state),
   };
 
-  const where = (apply: (where: DiscoverWhere) => void, autoFocus: boolean) => (
-    <WherePicker
-      autoFocus={autoFocus}
-      initialText={state.where.kind === "text" ? state.where.text : ""}
-      label="Where do you want to play?"
-      onChoose={(choice) => apply(whereFromChoice(choice))}
-      onDismiss={close}
-    />
-  );
-
   return (
     <div className="dv-bar" data-pending={pending || undefined}>
       <div
@@ -180,7 +136,10 @@ export function DiscoverSearchBar({
             aria-expanded={sheet}
             aria-haspopup="dialog"
             className="dv-bar__summary"
-            onClick={() => setSheet(true)}
+            onClick={() => {
+              setPickersWanted(true);
+              setSheet(true);
+            }}
             type="button"
           >
             <Icon name="search" size="control" />
@@ -201,9 +160,10 @@ export function DiscoverSearchBar({
               className="dv-bar__field"
               data-field={field.id}
               key={field.id}
-              onClick={() =>
-                setOpen((current) => (current === field.id ? null : field.id))
-              }
+              onClick={() => {
+                setPickersWanted(true);
+                setOpen((current) => (current === field.id ? null : field.id));
+              }}
               type="button"
             >
               <Icon name={field.icon} size="control" />
@@ -214,89 +174,22 @@ export function DiscoverSearchBar({
         )}
       </div>
       <span aria-hidden="true" className="dv-bar__progress" />
-      {open && !phone ? (
-        <Panel field={open} onClose={close}>
-          {open === "where"
-            ? where((next) => {
-                onChange({ ...state, where: next, radius: null });
-                setOpen("when");
-              }, true)
-            : null}
-          {open === "when" ? (
-            <DiscoverWhenPicker
-              onTime={(time) => onChange({ ...state, time })}
-              onWhen={(when) => onChange({ ...state, when })}
-              time={state.time}
-              when={state.when}
-            />
-          ) : null}
-          {open === "what" ? (
-            <DiscoverWhatPicker
-              onSurface={(surface) => onChange({ ...state, surface })}
-              onWhat={(what) => onChange({ ...state, what })}
-              surface={state.surface}
-              what={state.what}
-            />
-          ) : null}
-        </Panel>
+      {pickersWanted ? (
+        <Suspense fallback={null}>
+          <DiscoverBarPickers
+            close={close}
+            draft={draft}
+            onChange={onChange}
+            open={open}
+            phone={phone}
+            setDraft={setDraft}
+            setOpen={setOpen}
+            setSheet={setSheet}
+            sheet={sheet}
+            state={state}
+          />
+        </Suspense>
       ) : null}
-      <Sheet onOpenChange={setSheet} open={sheet}>
-        <SheetContent
-          className="dv-sheet-search"
-          closeLabel="Close search"
-          title="Find a game"
-        >
-          <section aria-label="Where" className="dv-sheet-search__section">
-            <p className="site-label">Where</p>
-            <p className="dv-sheet-search__current">
-              {draft.where.kind === "text"
-                ? draft.where.text
-                : whereLabel(draft.where)}
-            </p>
-            {sheet
-              ? where(
-                  (next) =>
-                    setDraft((current) => ({
-                      ...current,
-                      where: next,
-                      radius: null,
-                    })),
-                  false,
-                )
-              : null}
-          </section>
-          <section aria-label="When" className="dv-sheet-search__section">
-            <DiscoverWhenPicker
-              onTime={(time) => setDraft((current) => ({ ...current, time }))}
-              onWhen={(when) => setDraft((current) => ({ ...current, when }))}
-              time={draft.time}
-              when={draft.when}
-            />
-          </section>
-          <section aria-label="What" className="dv-sheet-search__section">
-            <DiscoverWhatPicker
-              onSurface={(surface) =>
-                setDraft((current) => ({ ...current, surface }))
-              }
-              onWhat={(what) => setDraft((current) => ({ ...current, what }))}
-              surface={draft.surface}
-              what={draft.what}
-            />
-          </section>
-          <div className="dv-sheet-search__foot">
-            <Button
-              block
-              onClick={() => {
-                setSheet(false);
-                onChange(draft);
-              }}
-              variant="primary"
-            >
-              Show results
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
