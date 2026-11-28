@@ -37,6 +37,7 @@
     "verify:mobile-runtime": "tsx scripts/verify-mobile-runtime.ts",
     "verify:design-system": "tsx scripts/verify-design-system.ts",
     "verify:readable-type": "tsx scripts/verify-readable-type.ts",
+    "verify:single-react-types": "tsx scripts/verify-single-react-types.ts",
     "verify:hq-css-ratchet": "tsx scripts/verify-hq-css-ratchet.ts",
     "test:visual:hq": "playwright test --config playwright.hq-visual.config.ts --project=desktop --project=tablet --project=mobile",
     "css:usage:hq": "tsx scripts/css-usage.ts",
@@ -44,7 +45,7 @@
     "knowledge:generate": "tsx scripts/generate-duna-feature-knowledge.ts",
     "knowledge:check": "tsx scripts/generate-duna-feature-knowledge.ts --check",
     "tideline:tokens": "tsx scripts/build-tideline-tokens.ts",
-    "verify": "pnpm format:check && pnpm knowledge:check && pnpm verify:design-system && pnpm verify:readable-type && pnpm verify:hq-css-ratchet && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:mobile-runtime && pnpm build && pnpm test:e2e"
+    "verify": "pnpm format:check && pnpm knowledge:check && pnpm verify:design-system && pnpm verify:readable-type && pnpm verify:single-react-types && pnpm verify:hq-css-ratchet && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:mobile-runtime && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
