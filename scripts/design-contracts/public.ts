@@ -124,6 +124,78 @@ export const publicWeb: SurfaceContract = {
       message:
         "The home page keeps its canonical address and site search action",
     },
+    // SITE-2: the marketing pages moved out of (legacy), at the same
+    // addresses, each with its canonical URL and its Markdown companion.
+    ...(
+      [
+        ["run-your-club", "/run-your-club"],
+        ["coaches", "/coaches"],
+        ["pricing", "/pricing"],
+        ["apps", "/apps"],
+        ["sand-rating", "/sand-rating"],
+        ["pro", "/pro"],
+      ] as const
+    ).map(([folder, path]) => ({
+      kind: "includes" as const,
+      file: `apps/web/app/(next)/(site)/${folder}/page.tsx`,
+      values: [`canonical: "${path}"`, `"${path}.md"`, 'import "../pages.css"'],
+      message: `${path} lives in the new shell with its canonical address and Markdown companion`,
+    })),
+    ...[
+      "apps/web/app/(legacy)/run-your-club/page.tsx",
+      "apps/web/app/(legacy)/run-your-club/training/page.tsx",
+      "apps/web/app/(legacy)/run-your-club/training-os/page.tsx",
+      "apps/web/app/(legacy)/run-your-club/features/page.tsx",
+      "apps/web/app/(legacy)/pro/page.tsx",
+      "apps/web/app/(legacy)/pro/teams/[teamNo]/page.tsx",
+      "apps/web/app/(legacy)/pro/onboarding-complete/page.tsx",
+      "apps/web/app/(legacy)/methodology/page.tsx",
+      "apps/web/app/(legacy)/apps/apple-watch/page.tsx",
+      "apps/web/components/run-your-business-page.tsx",
+      "apps/web/components/training-os-page.tsx",
+      "apps/web/components/watch-marketing-page.tsx",
+      "apps/web/components/pro-tour-browser.tsx",
+      "apps/web/components/pro-player-discovery.tsx",
+      "apps/web/components/rating-backtest-chart.tsx",
+    ].map((path) => ({ kind: "absent" as const, path })),
+    {
+      kind: "includes",
+      file: "apps/web/app/(next)/(site)/pro/teams/[teamNo]/page.tsx",
+      values: ["professionalTeamJsonLd", "`/pro/teams/${team.teamNo}`"],
+      message:
+        "Pro Tour team pages keep their address, JSON-LD and Markdown companion",
+    },
+    {
+      // Prices on the site come from the plan tables, never typed in.
+      kind: "includes",
+      file: "apps/web/components/site/pricing/pricing-data.ts",
+      values: [
+        "ORGANIZATION_PLANS",
+        "MEMBERSHIP_PLANS",
+        "DUNA_SERVICE_FEE_BPS",
+        "quoteCheckoutFees",
+      ],
+      message:
+        "Pricing figures derive from @duna/core and @duna/pricing (docs/design/website.md §2.8)",
+    },
+    {
+      kind: "excludes",
+      file: "apps/web/app/(next)/(site)/pages.css",
+      values: ["@import", "!important"],
+      message:
+        "apps/web/app/(next)/(site)/pages.css is token-based: no imports, no !important",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/proxy.ts",
+      values: [
+        '"/methodology": "/sand-rating#method"',
+        '"/run-your-club/training": "/coaches#plan"',
+        '"/apps/apple-watch": "/apps#watch"',
+      ],
+      message:
+        "Moved public pages answer with a 301 to their new home (docs/design/website.md §2.2)",
+    },
     {
       kind: "includes",
       file: "apps/web/components/legal/legal-document-view.tsx",
@@ -149,6 +221,13 @@ export const publicWeb: SurfaceContract = {
         "A placeholder in a legal draft must render as “To be confirmed”",
     },
     { kind: "noFontPackages", app: "web" },
+    {
+      kind: "maxBytes",
+      path: "apps/web/public/site/coach-portrait.webp",
+      bytes: 250 * 1024,
+      message:
+        "apps/web/public/site/coach-portrait.webp is a single WebP source under 250 KB (next/image serves the widths)",
+    },
     ...[
       "apps/web/public/site/hero-loop.mp4",
       "apps/web/public/site/attack-loop.mp4",

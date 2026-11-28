@@ -38,7 +38,7 @@ const mainNavigation = [
     detail: "Find games, improve, and follow the sport",
   },
   {
-    href: "/run-your-club#plans",
+    href: "/pricing",
     label: "Club pricing",
     detail: "Plans, transaction fees, and video usage",
   },
@@ -444,7 +444,7 @@ function SiteMobileMenuView({
                     >
                       <div className="site-mobile-sheet__section-heading">
                         <span>Run your club</span>
-                        <Link href="/run-your-club/features" onClick={close}>
+                        <Link href="/run-your-club#features" onClick={close}>
                           All features
                         </Link>
                       </div>

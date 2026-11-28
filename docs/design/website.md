@@ -147,21 +147,27 @@ the tour moves to `/tour` with 301s.
 
 ### 2.2 Redirect map (301 unless noted)
 
-| From                                      | To                                                                                       |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `/players`                                | `/` (player content is the homepage)                                                     |
-| `/run-your-club/features`                 | `/run-your-club#features`                                                                |
-| `/run-your-club/features/[...slug]`       | `/run-your-club#[slug]` (keep pages that have unique content; decide per slug in SITE-5) |
-| `/run-your-club/training`, `/training-os` | `/coaches#plan`                                                                          |
-| `/methodology`                            | `/sand-rating#method`                                                                    |
-| `/discover/results`                       | `/discover` (same query string)                                                          |
-| `/discover/map`                           | `/discover?view=map`                                                                     |
-| `/apps/apple-watch`                       | `/apps#watch`                                                                            |
-| `/run-your-club#plans`                    | links updated to `/pricing` (fragment cannot redirect)                                   |
-| `/players/[handle]`                       | unchanged (profiles)                                                                     |
-| `/app/discover*`                          | `/discover*` (existing)                                                                  |
+| From                                      | To                                                                                                                    |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/players`                                | `/` (player content is the homepage)                                                                                  |
+| `/run-your-club/features`                 | `/run-your-club#features`                                                                                             |
+| `/run-your-club/features/[...slug]`       | unchanged for now: the per-feature pages stay in `(legacy)` (SITE-2 kept them; decide per slug when they are rebuilt) |
+| `/run-your-club/training`, `/training-os` | `/coaches#plan`                                                                                                       |
+| `/methodology`                            | `/sand-rating#method`                                                                                                 |
+| `/discover/results`                       | `/discover` (same query string)                                                                                       |
+| `/discover/map`                           | `/discover?view=map`                                                                                                  |
+| `/apps/apple-watch`                       | `/apps#watch`                                                                                                         |
+| `/run-your-club#plans`                    | links updated to `/pricing` (fragment cannot redirect)                                                                |
+| `/players/[handle]`                       | unchanged (profiles)                                                                                                  |
+| `/app/discover*`                          | `/discover*` (existing)                                                                                               |
 
 Everything else keeps its URL. Each redirect gets a Markdown companion redirect too.
+
+As built (SITE-2, 28 November 2026): `apps/web/proxy.ts` answers `/methodology`, `/run-your-club/features`,
+`/run-your-club/training`, `/run-your-club/training-os` and `/apps/apple-watch` (and each `.md`) with a 301,
+the fragment included. The Pro Tour keeps `/pro`, `/pro?tour=…&date=…`, `/pro/teams/[teamNo]` and
+`/pro/onboarding-complete` at the same addresses in the new shell. `/run-your-club#plans` links now point
+at `/pricing`.
 
 ### 2.3 The first screen
 

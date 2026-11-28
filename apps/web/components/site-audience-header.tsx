@@ -57,13 +57,13 @@ export function SiteAudienceHeader({
             <>
               <ClubFeaturesMenu label="Features" />
               <Link href="/#built-for">Who it’s for</Link>
-              <Link href="/run-your-club#plans">Pricing</Link>
+              <Link href="/pricing">Pricing</Link>
             </>
           ) : (
             <>
               <SiteExperienceMenu navigation={playNavigation} />
               <SiteExperienceMenu navigation={watchNavigation} />
-              <Link href="/methodology">Sand Rating</Link>
+              <Link href="/sand-rating">Sand Rating</Link>
             </>
           )}
         </nav>

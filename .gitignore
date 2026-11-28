@@ -16,6 +16,10 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 
+# generated on demand by `pnpm knowledge:generate` (also runs on install and as
+# a turbo dependency of build, typecheck, lint, test and dev)
+packages/api/src/generated/
+
 # credentials and local state
 .env
 .env.local

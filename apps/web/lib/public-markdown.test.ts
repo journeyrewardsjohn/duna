@@ -1,5 +1,7 @@
 import type { EventSummary } from "@duna/api";
+import { DUNA_SERVICE_FEE_BPS, ORGANIZATION_PLANS } from "@duna/core";
 import { describe, expect, it } from "vitest";
+import { dollars } from "../components/site/pricing/pricing-data";
 import {
   canonicalPathFromMarkdownRequest,
   markdownPathForCanonical,
@@ -137,19 +139,29 @@ describe("public Markdown representations", () => {
     expect(markdown).toContain("Do not claim a court is available");
   });
 
-  it("documents the distinct club-owner and solo-coach operating paths", () => {
+  it("describes what Duna runs for a club, live today versus in build", () => {
     const markdown = renderStaticPageMarkdown("/run-your-club");
-    expect(markdown).toContain("Solo coaches can manage a mobile calendar");
-    expect(markdown).toContain("Club owners can coordinate venues");
-    expect(markdown).toContain("Players control health-data sharing");
-    expect(markdown).toContain("Duna AI suggestions remain reviewable");
+    expect(markdown).toContain("Bookings and programs (live today)");
+    expect(markdown).toContain("Concierge (in build)");
+    expect(markdown).toContain("paid out within 3 business days");
+    expect(markdown).toContain("nothing moves until a person approves it");
   });
 
-  it("publishes the Training OS feature story for coaches and AI agents", () => {
-    const markdown = renderStaticPageMarkdown("/run-your-club/training-os");
-    expect(markdown).toContain("Program Designer turns dates");
-    expect(markdown).toContain("Advanced Drill Studio models player movement");
-    expect(markdown).toContain("fixed installment schedule");
-    expect(markdown).toContain("latest five non-financial versions");
+  it("prices every plan from the plan tables", () => {
+    const markdown = renderStaticPageMarkdown("/pricing");
+    for (const plan of Object.values(ORGANIZATION_PLANS)) {
+      expect(markdown).toContain(
+        `${plan.name} (clubs and coaches): ${dollars(plan.monthlyPriceMinor)} a month`,
+      );
+    }
+    expect(markdown).toContain(
+      `${DUNA_SERVICE_FEE_BPS / 100}% on card payments for bookings`,
+    );
+  });
+
+  it("explains the Sand Rating and its method at its new address", () => {
+    const markdown = renderStaticPageMarkdown("/sand-rating");
+    expect(markdown).toContain("confirms it and nobody disputes it");
+    expect(markdown).toContain("Provisional, Developing, Reliable, Locked");
   });
 });
