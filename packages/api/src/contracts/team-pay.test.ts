@@ -147,12 +147,12 @@ describe("operator.teamPay in demo and connected mode (W3-0 stubs)", () => {
     expect(approved.status).toBe("approved");
   });
 
-  it("says 'not implemented yet' outside demo mode", async () => {
+  it("calls the B3b service outside demo mode (no longer 'not implemented')", async () => {
     dataSource.demo = false;
     const error = await as(["owner"])
       .payPeriods()
       .catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(isNotImplementedYet(error)).toBe(true);
+    // No database in this test: the service is reached and fails on it.
+    expect(isNotImplementedYet(error)).toBe(false);
   });
 });

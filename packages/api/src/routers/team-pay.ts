@@ -8,8 +8,9 @@
  * write need "payments:write" (owners; managers read only).
  *
  * Every procedure returns its fixture from @duna/core/demo/team-pay in demo
- * mode and throws `notImplementedYet` otherwise until B3b lands the service
- * in ../services/team-pay/. Read ./README.md first.
+ * mode and calls the B3b service in ../services/team-pay/ otherwise. The
+ * service narrows reads further: one member's pay is visible to that member,
+ * managers and payments readers; pay runs to managers and payments readers.
  */
 import {
   teamPayDemo,
@@ -40,13 +41,29 @@ import {
   teamPayStaffCompensationSchema,
 } from "../contracts/team-pay";
 import { usesDemoData } from "../services/data-source";
-import { notImplementedYet } from "./not-implemented";
+import * as service from "../services/team-pay";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
 const DOMAIN = "team-pay";
 const read = organizationProcedure("members:read");
 const money = organizationProcedure("payments:write");
 const DEMO_NOW = "2026-11-30T18:00:00.000Z";
+
+function payContext(ctx: {
+  readonly actor: service.PayContext["actor"];
+  readonly organizationId: string;
+  readonly requestId: string;
+  readonly now: Date;
+  readonly ipAddress?: string;
+}): service.PayContext {
+  return {
+    actor: ctx.actor,
+    organizationId: ctx.organizationId,
+    requestId: ctx.requestId,
+    now: ctx.now,
+    ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+  };
+}
 
 function demoRun(payRunId: string) {
   const row = teamPayDemoRuns.find((candidate) => candidate.id === payRunId);
@@ -63,7 +80,7 @@ export const teamPayOperatorRouter = router({
   staffCompensation: read
     .input(teamPayStaffCompensationInputSchema)
     .output(teamPayStaffCompensationSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const page = teamPayDemo.staffCompensation;
         return {
@@ -71,24 +88,27 @@ export const teamPayOperatorRouter = router({
           staff: { ...page.staff, staffProfileId: input.staffProfileId },
         };
       }
-      return notImplementedYet(DOMAIN, "staffCompensation");
+      return service.staffCompensationPage(
+        payContext(ctx),
+        input.staffProfileId,
+      );
     }),
 
   /** Start a new effective-dated model (closes the current one). */
   setCompensation: money
     .input(teamPaySetCompensationInputSchema)
     .output(teamPayCompensationSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { id: teamPayDemo.compensation[0]!.id, ...input };
       }
-      return notImplementedYet(DOMAIN, "setCompensation");
+      return service.setCompensation(payContext(ctx), input);
     }),
 
   setIncomeGoal: money
     .input(teamPaySetIncomeGoalInputSchema)
     .output(teamPayStaffCompensationSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const page = teamPayDemo.staffCompensation;
         return {
@@ -96,28 +116,28 @@ export const teamPayOperatorRouter = router({
           goal: { ...page.goal, target: input.target, period: input.period },
         };
       }
-      return notImplementedYet(DOMAIN, "setIncomeGoal");
+      return service.setIncomeGoal(payContext(ctx), input);
     }),
 
-  payPeriods: read.output(teamPayPeriodsSchema).query(() => {
+  payPeriods: read.output(teamPayPeriodsSchema).query(async ({ ctx }) => {
     if (usesDemoData()) return { periods: teamPayDemoPeriods };
-    return notImplementedYet(DOMAIN, "payPeriods");
+    return service.payPeriods(payContext(ctx));
   }),
 
   createPayPeriod: money
     .input(teamPayCreatePeriodInputSchema)
     .output(teamPayPeriodSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...teamPayDemoPeriods[0]!, ...input, status: "open" as const };
       }
-      return notImplementedYet(DOMAIN, "createPayPeriod");
+      return service.createPayPeriod(payContext(ctx), input);
     }),
 
   payRuns: read
     .input(teamPayRunsInputSchema)
     .output(teamPayRunsSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           runs: teamPayDemoRuns.filter(
@@ -127,32 +147,32 @@ export const teamPayOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "payRuns");
+      return service.payRuns(payContext(ctx), input);
     }),
 
   /** One run with its lines and exports (TM-PayRun). */
   payRun: read
     .input(teamPayRunInputSchema)
     .output(teamPayRunSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) return demoRun(input.payRunId);
-      return notImplementedYet(DOMAIN, "payRun");
+      return service.payRun(payContext(ctx), input.payRunId);
     }),
 
   /** Compute a new revision for the period (idempotent by key). */
   computePayRun: money
     .input(teamPayComputeRunInputSchema)
     .output(teamPayRunSchema)
-    .mutation(() => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) return teamPayDemoRuns[0]!;
-      return notImplementedYet(DOMAIN, "computePayRun");
+      return service.computeTeamPayRun(payContext(ctx), input);
     }),
 
   /** Replace a line's labelled adjustments (and its method for a contractor). */
   adjustLine: money
     .input(teamPayAdjustLineInputSchema)
     .output(teamPayLineSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const row = teamPayDemoRuns
           .flatMap((candidate) => candidate.lines)
@@ -176,14 +196,14 @@ export const teamPayOperatorRouter = router({
           ...(input.method ? { method: input.method } : {}),
         };
       }
-      return notImplementedYet(DOMAIN, "adjustLine");
+      return service.adjustLine(payContext(ctx), input);
     }),
 
   /** ready-for-approval → approved, by a person with payments:write. */
   approvePayRun: money
     .input(teamPayApproveRunInputSchema)
     .output(teamPayRunSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const row = demoRun(input.payRunId);
         return {
@@ -192,14 +212,14 @@ export const teamPayOperatorRouter = router({
           approvedAt: DEMO_NOW,
         };
       }
-      return notImplementedYet(DOMAIN, "approvePayRun");
+      return service.approvePayRun(payContext(ctx), input);
     }),
 
   /** Write an export file (W-2 lines and contractor lines paid outside Duna). */
   exportPayRun: money
     .input(teamPayExportRunInputSchema)
     .output(teamPayExportSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const row = demoRun(input.payRunId);
         return {
@@ -212,17 +232,17 @@ export const teamPayOperatorRouter = router({
           createdAt: DEMO_NOW,
         };
       }
-      return notImplementedYet(DOMAIN, "exportPayRun");
+      return service.exportPayRun(payContext(ctx), input);
     }),
 
   /** draft | ready-for-approval → cancelled. */
   cancelPayRun: money
     .input(teamPayCancelRunInputSchema)
     .output(teamPayRunSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...demoRun(input.payRunId), status: "cancelled" as const };
       }
-      return notImplementedYet(DOMAIN, "cancelPayRun");
+      return service.cancelPayRun(payContext(ctx), input.payRunId);
     }),
 });
