@@ -390,19 +390,17 @@ export function ScheduleScreen({
     const where = override.courtName ? ` on ${override.courtName}` : "";
     const people = item.people.filter((person) => !person.noShow);
     if (people.length === 0) {
-      const outcome = await confirm.run({
+      await confirm.run({
         tier: "undo",
         title: `${item.title} moved to ${when}${where}`,
         undoneMessage: `${item.title} is back at ${clock(item.startsAt, zone)}`,
         optimistic: apply,
         perform,
-        reverse: async () => {
-          await reverse();
-          refresh();
-        },
+        // The actions revalidate the schedule themselves; a refresh here
+        // could land after Undo and show the old answer.
+        reverse: () => reverse(),
         report: reportError,
       });
-      if (outcome.status === "done") refresh();
       return;
     }
     const names = people.map((person) => person.name);
@@ -419,60 +417,55 @@ export function ScheduleScreen({
     });
     if (outcome.status !== "done") return;
     const rollback = apply();
-    refresh();
     undoToast(`${item.title} moved to ${when}`, {
       description: `${plural(people.length, "person", "people")} ${people.length === 1 ? "was" : "were"} sent the new time.`,
       onUndo: async () => {
         rollback();
         await reverse();
-        refresh();
       },
     });
   };
 
   const checkIn = (item: ScheduleItem, person: ItemPerson) => {
     const key = `${item.id}:${person.id}`;
-    void confirm
-      .run({
-        tier: "undo",
-        title: `${person.name} checked in`,
-        undoneMessage: `${person.name} is no longer checked in`,
-        optimistic: () => {
-          setChecks((current) => new Map(current).set(key, true));
-          return () =>
-            setChecks((current) => {
-              const copy = new Map(current);
-              copy.delete(key);
-              return copy;
-            });
-        },
-        perform: ({ idempotencyKey }) =>
-          act(
-            checkInAction({
-              itemId: item.id,
-              source: item.source,
-              rowId: person.id,
-              checkedIn: true,
-              idempotencyKey,
-            }),
-          ),
-        reverse: async () => {
-          await act(
-            checkInAction({
-              itemId: item.id,
-              source: item.source,
-              rowId: person.id,
-              checkedIn: false,
-              idempotencyKey: crypto.randomUUID(),
-            }),
-          );
-          refresh();
-        },
-        report: reportError,
-      })
-      .then((outcome) => {
-        if (outcome.status === "done") refresh();
-      });
+    void confirm.run({
+      tier: "undo",
+      title: `${person.name} checked in`,
+      undoneMessage: `${person.name} is no longer checked in`,
+      optimistic: () => {
+        setChecks((current) => new Map(current).set(key, true));
+        return () =>
+          setChecks((current) => {
+            const copy = new Map(current);
+            copy.delete(key);
+            return copy;
+          });
+      },
+      perform: ({ idempotencyKey }) =>
+        act(
+          checkInAction({
+            itemId: item.id,
+            source: item.source,
+            rowId: person.id,
+            checkedIn: true,
+            idempotencyKey,
+          }),
+        ),
+      reverse: async () => {
+        await act(
+          checkInAction({
+            itemId: item.id,
+            source: item.source,
+            rowId: person.id,
+            checkedIn: false,
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        );
+        // Shown as not checked in until the revalidated schedule arrives.
+        setChecks((current) => new Map(current).set(key, false));
+      },
+      report: reportError,
+    });
   };
 
   /* ------------------------------ lanes ------------------------------ */
