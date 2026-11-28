@@ -57,6 +57,15 @@ export const hq: SurfaceContract = {
       message:
         "app/(next) imports only the design system (docs/plan/legacy-styles.md)",
     },
+    // The shell and rebuilt screens' components render only inside
+    // app/(next), so they may not reach a legacy sheet either (the legacy
+    // pages' AccessDenied wrapper and ThemedTideline load the bridge).
+    ...["apps/hq/components/shell", "apps/hq/components/today"].map((root) => ({
+      kind: "treeExcludes" as const,
+      root,
+      values: [...legacySheets, '"@/lib/access"', "themed-tideline"],
+      message: `${root} renders inside app/(next): design system only`,
+    })),
     ...["apps/hq/app/global-error.tsx", "apps/hq/app/global-not-found.tsx"].map(
       (file) => ({
         kind: "excludes" as const,

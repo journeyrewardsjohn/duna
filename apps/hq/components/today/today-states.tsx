@@ -1,10 +1,10 @@
 import {
   Button,
   ErrorState,
-  PermissionDenied,
   Skeleton,
   SkeletonListRow,
 } from "@duna/ui/tideline";
+import { AccessDeniedState } from "@/lib/access-state";
 
 /**
  * Loading and failure states for Today's blocks, shaped like what they
@@ -112,7 +112,7 @@ export function BlockDenied({
   readonly organization: string;
 }) {
   return (
-    <PermissionDenied
+    <AccessDeniedState
       area={area}
       compact
       grantedBy={`an owner of ${organization}`}

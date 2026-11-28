@@ -1,4 +1,5 @@
-import { Button, PermissionDenied } from "@duna/ui/tideline";
+import { Button } from "@duna/ui/tideline";
+import { AccessDeniedState } from "@/lib/access-state";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { getHqSession, hasScope } from "./hq-session";
@@ -17,7 +18,8 @@ export function NoHqAccess({ session }: { readonly session: ShellSession }) {
     return (
       <div className="hqs-state">
         <PageHeader title="Duna HQ" />
-        <PermissionDenied
+        <AccessDeniedState
+          reason="signed-out"
           action={
             <Button href="/sign-in" variant="primary">
               Sign in
@@ -32,7 +34,8 @@ export function NoHqAccess({ session }: { readonly session: ShellSession }) {
   return (
     <div className="hqs-state">
       <PageHeader title="Duna HQ" />
-      <PermissionDenied
+      <AccessDeniedState
+        reason="not-staff"
         action={
           <Button href={`${playerAppUrl}/app`} variant="secondary">
             Open Duna
@@ -65,7 +68,7 @@ export async function RequireScope({
   if (hasScope(session, scope)) return children;
   return (
     <div className="hqs-state">
-      <PermissionDenied
+      <AccessDeniedState
         area={area}
         grantedBy={`an owner of ${session.organization?.name ?? "your club"}`}
       />

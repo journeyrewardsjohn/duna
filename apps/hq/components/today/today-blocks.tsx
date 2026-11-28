@@ -196,7 +196,14 @@ export async function ScheduleBlock({
               </span>
             </div>
             <div className="today-row__status">
-              {status ? <Chip tone={status.tone}>{status.label}</Chip> : null}
+              {status?.tone === "note" ? (
+                <Chip className="today-row__note" kind="taxonomy">
+                  <Icon name="users" size="chip" />
+                  {status.label}
+                </Chip>
+              ) : status ? (
+                <Chip tone={status.tone}>{status.label}</Chip>
+              ) : null}
             </div>
           </li>
         );

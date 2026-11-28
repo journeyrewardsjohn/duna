@@ -8,10 +8,10 @@ import {
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import type { PersonSummary } from "@duna/core";
 import { report } from "@duna/observability";
-import { TRPCError } from "@trpc/server";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { getServerCaller } from "@/lib/api";
+import { isPermissionDenied } from "@/lib/permission-denied";
 
 /**
  * Today's data: the same four reads the old home page made (dashboard,
@@ -31,12 +31,7 @@ async function settle<T>(
   try {
     return { state: "ok", data: await read() };
   } catch (error) {
-    if (
-      error instanceof TRPCError &&
-      (error.code === "FORBIDDEN" || error.code === "UNAUTHORIZED")
-    ) {
-      return { state: "denied" };
-    }
+    if (isPermissionDenied(error)) return { state: "denied" };
     const reference = report(error, {
       event: "hq.today.block_failed",
       tags: { block },

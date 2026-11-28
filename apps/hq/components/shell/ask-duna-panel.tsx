@@ -9,11 +9,11 @@ import {
   Chip,
   IconButton,
   NotConfigured,
-  PermissionDenied,
   riseClassName,
   useConfirm,
 } from "@duna/ui/tideline";
 import type { UserContent } from "ai";
+import { AccessDeniedState } from "@/lib/access-state";
 import {
   useCallback,
   useEffect,
@@ -70,7 +70,7 @@ function AskUnavailable({ session }: { readonly session: ShellSession }) {
       );
     case "no-access":
       return (
-        <PermissionDenied
+        <AccessDeniedState
           area="Ask Duna"
           compact
           grantedBy="an owner of this club"

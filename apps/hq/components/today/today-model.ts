@@ -16,7 +16,11 @@ export type ScheduleItem = OperatorDashboard["schedule"][number];
 
 export interface ScheduleStatus {
   readonly label: string;
-  readonly tone: "live" | "positive" | "attention" | "neutral";
+  /**
+   * `live` (Solar, pulsing) is only for play in progress. "Almost full" is a
+   * quiet note with an icon, never a coloured status that reads as live.
+   */
+  readonly tone: "live" | "positive" | "note" | "neutral";
 }
 
 /** The status chip of a schedule row; `undefined` for an ordinary open session. */
@@ -29,7 +33,7 @@ export function scheduleStatus(item: ScheduleItem): ScheduleStatus | undefined {
     case "almost-full":
       return {
         label: `${item.spotsRemaining} ${item.spotsRemaining === 1 ? "spot" : "spots"} left`,
-        tone: "attention",
+        tone: "note",
       };
     case "cancelled":
       return { label: "Cancelled", tone: "neutral" };
