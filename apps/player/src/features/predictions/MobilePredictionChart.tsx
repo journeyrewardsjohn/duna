@@ -1,3 +1,4 @@
+import { runWithWatchdog, settleValues } from "@duna/ui/native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, useWindowDimensions, View } from "react-native";
 import Svg, { Circle, Line, Path } from "react-native-svg";
@@ -51,12 +52,15 @@ export function MobilePredictionChart({
 
   useEffect(() => {
     reveal.setValue(0);
-    Animated.timing(reveal, {
-      duration: 460,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    return runWithWatchdog(
+      Animated.timing(reveal, {
+        duration: 460,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      { timeline: 460, settle: settleValues([[reveal, 1]]) },
+    );
   }, [market.id, reveal]);
 
   const selectFromTouch = (locationX: number) => {

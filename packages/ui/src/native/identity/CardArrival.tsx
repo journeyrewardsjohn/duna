@@ -8,6 +8,7 @@
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useHaptics, useReducedMotion } from "../motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 import { ThemeOverride } from "../theme/ThemeProvider";
 import { nativeTokens } from "../tokens";
 import { Text, Title } from "../type";
@@ -71,8 +72,15 @@ export function CardArrival({
             words.map((value) => timing(value, 600)),
           ),
         ]);
-    animation.start();
-    return () => animation.stop();
+    return runWithWatchdog(animation, {
+      timeline: reduced ? 200 : 450 + 700 + 2 * 120 + 600,
+      settle: settleValues([
+        [line, 1],
+        [rise, 1],
+        [fade, 1],
+        ...words.map((value) => [value, 1] as const),
+      ]),
+    });
     // The moment plays once per arrival.
   }, []);
 

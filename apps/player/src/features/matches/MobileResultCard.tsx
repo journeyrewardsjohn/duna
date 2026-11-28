@@ -1,3 +1,4 @@
+import { runWithWatchdog, settleValues } from "@duna/ui/native";
 import { demoPeople } from "@duna/core/demo";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Pressable, View } from "react-native";
@@ -51,12 +52,15 @@ export function MobileResultCard({
       reveal.setValue(1);
       return;
     }
-    Animated.timing(reveal, {
-      toValue: 1,
-      duration: 620,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    return runWithWatchdog(
+      Animated.timing(reveal, {
+        toValue: 1,
+        duration: 620,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      { timeline: 620, settle: settleValues([[reveal, 1]]) },
+    );
   }, [reducedMotion, reveal]);
   const result = match.actualResult >= 0.5 ? "W" : "L";
   const sides = matchSides(match, personId);

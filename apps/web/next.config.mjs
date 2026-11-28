@@ -26,6 +26,23 @@ const nextConfig = {
     // AVIF first, WebP for browsers without it (docs/design/website.md §6).
     formats: ["image/avif", "image/webp"],
   },
+  async headers() {
+    return [
+      {
+        // The public site's loops and photographs are served by name, not by
+        // content hash, so they cannot be immutable. A day in the browser and
+        // a week of stale-while-revalidate instead of `max-age=0`, which made
+        // every visit re-check every loop (docs/design/website-performance.md).
+        source: "/site/:file*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 /**

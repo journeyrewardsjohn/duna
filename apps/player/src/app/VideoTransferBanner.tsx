@@ -8,6 +8,8 @@ import {
 import {
   Icon,
   Spinner,
+  runWithWatchdog,
+  settleValues,
   Text,
   useReducedMotion,
   useTheme,
@@ -43,14 +45,21 @@ export function VideoTransferBanner({
     status.stage === "uploading" ||
     status.stage === "processing";
   const responder = useMemo(() => {
+    // The swipe-away dismisses in `done`; the watchdog makes sure it runs
+    // even if the native driver never reports back.
     const settle = (toValue: number, done?: () => void) =>
-      Animated.timing(slideX, {
-        duration: reduceMotion ? 0 : 160,
-        toValue,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) done?.();
-      });
+      runWithWatchdog(
+        Animated.timing(slideX, {
+          duration: reduceMotion ? 0 : 160,
+          toValue,
+          useNativeDriver: true,
+        }),
+        {
+          timeline: reduceMotion ? 0 : 160,
+          settle: settleValues([[slideX, toValue]]),
+          onFinish: done,
+        },
+      );
     return PanResponder.create({
       onMoveShouldSetPanResponder: (_event, gesture) =>
         Math.abs(gesture.dx) > 10 &&
