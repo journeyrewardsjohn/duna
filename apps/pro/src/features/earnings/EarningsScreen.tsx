@@ -245,8 +245,8 @@ function MyPay({
         )}
         <Text tone="text-2" variant="phone-meta">
           {goal
-            ? "From the sessions you've delivered, worked out by Duna. Your pay run is final."
-            : "The phone doesn't estimate pay of its own."}
+            ? "Worked out by Duna from the sessions you've delivered so far. Your club's approved pay run is the final figure."
+            : "Duna doesn't estimate pay on the phone. Your club's approved pay run is the final figure."}
         </Text>
       </Card>
       <Card testID="earnings-goal">
