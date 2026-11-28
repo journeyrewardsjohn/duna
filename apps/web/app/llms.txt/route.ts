@@ -26,7 +26,8 @@ Markdown pages include canonical Duna URLs. Return people to the canonical HTML 
 - [Professional tour hub](${absolutePublicUrl("/pro")}): live, current-week, and upcoming professional events plus recent match updates.
 - [World and Duna rankings](${absolutePublicUrl("/rankings")}): top 200 men's and women's official rankings and match-based Sand Rating tables.
 - Public player profiles expose a reviewed biography, nationality, college, career record, Sand Rating history, world ranking, verified match record, model-defined upsets, partnerships, upcoming registered events, broadcast options, videos, and current reporting when those facts have been verified.
-- [Sand Rating methodology](${absolutePublicUrl("/methodology")}): audited walk-forward results, model comparisons, calibration, learning curves, and rating design.
+- [Sand Rating](${absolutePublicUrl("/sand-rating")}): how the rating moves, confirmation by both sides, provisional and established ratings, and the audited walk-forward method.
+- [For clubs](${absolutePublicUrl("/run-your-club")}), [Duna Pro for coaches](${absolutePublicUrl("/coaches")}), [Pricing](${absolutePublicUrl("/pricing")}) and [the apps](${absolutePublicUrl("/apps")}): what Duna runs, plans and fees from the plan tables, and Duna and Duna Pro.
 - [Duna MCP server](${absolutePublicUrl("/api/mcp")}): discovery, events, matches, teams, players, rankings, watch destinations, coaches, clinics, booking entry points, and role-gated authenticated repair.
 - [About Duna](${absolutePublicUrl("/about")}): product and company context.
 

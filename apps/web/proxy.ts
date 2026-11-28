@@ -15,13 +15,29 @@ const movedPublicPages: Readonly<Record<string, string>> = {
   // The player landing page is the home page now.
   "/players": "/",
   "/players.md": "/index.md",
+  // The method is a section of the Sand Rating page.
+  "/methodology": "/sand-rating#method",
+  "/methodology.md": "/sand-rating.md",
+  // The features hub is the clubs page's "What Duna runs".
+  "/run-your-club/features": "/run-your-club#features",
+  "/run-your-club/features.md": "/run-your-club.md",
+  // Training and the practice plan live on the coaches page.
+  "/run-your-club/training": "/coaches#plan",
+  "/run-your-club/training.md": "/coaches.md",
+  "/run-your-club/training-os": "/coaches#plan",
+  "/run-your-club/training-os.md": "/coaches.md",
+  // Apple Watch is a section of the apps page.
+  "/apps/apple-watch": "/apps#watch",
+  "/apps/apple-watch.md": "/apps.md",
 };
 
 async function routeProxy(request: NextRequest): Promise<NextResponse> {
   const moved = movedPublicPages[request.nextUrl.pathname];
   if (moved) {
     const destination = request.nextUrl.clone();
-    destination.pathname = moved;
+    const [pathname, fragment] = moved.split("#");
+    destination.pathname = pathname ?? moved;
+    destination.hash = fragment ? `#${fragment}` : "";
     return NextResponse.redirect(destination, 301);
   }
 
