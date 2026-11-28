@@ -153,7 +153,7 @@ export const participationDecisions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id")
-      .notNull()
+      
       .references(() => organizations.id, { onDelete: "cascade" }),
     subjectType: varchar("subject_type", { length: 32 }).notNull(),
     /** Polymorphic: the service validates it. */
@@ -189,6 +189,9 @@ export const participationDecisions = pgTable(
     ),
     index("participation_decisions_open_lock_idx")
       .on(table.organizationId, table.lockAt)
+      .where(sql`${table.outcome} IS NULL`),
+    index("participation_decisions_due_idx")
+      .on(table.subjectType, table.lockAt)
       .where(sql`${table.outcome} IS NULL`),
     index("participation_decisions_outcome_idx").on(
       table.organizationId,
@@ -456,7 +459,7 @@ export const participationNotices = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id")
-      .notNull()
+      
       .references(() => organizations.id, { onDelete: "cascade" }),
     subjectType: varchar("subject_type", { length: 32 }).notNull(),
     subjectId: uuid("subject_id").notNull(),
