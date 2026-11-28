@@ -43,7 +43,7 @@ const BANNER_TONE: Record<
  * WALLET-4). No endpoint exists for a club card yet, so this renders
  * nothing; it is the one place the buttons go when it does.
  */
-function AddToPhoneWallet(_: { readonly cardId: string }) {
+function AddToPhoneWallet(): null {
   return null;
 }
 
@@ -167,12 +167,10 @@ function ManageMembership({
 
 function Sheet({
   sheet,
-  cardId,
   flipped,
   status,
 }: {
   readonly sheet: ClubSheet;
-  readonly cardId: string;
   readonly flipped: boolean;
   readonly status: string;
 }) {
@@ -190,7 +188,7 @@ function Sheet({
           The desk scans the code on the back of your card. It is your Duna
           member credential today; a code that changes every 30 seconds comes
           with club passes.
-          <AddToPhoneWallet cardId={cardId} />
+          <AddToPhoneWallet />
         </Notice>
       ) : null}
       {sheet.banner ? (
@@ -477,12 +475,7 @@ export function WalletView({
         value={selected?.id}
       >
         {selected && sheet ? (
-          <Sheet
-            cardId={selected.id}
-            flipped={flipped}
-            sheet={sheet}
-            status={selected.status}
-          />
+          <Sheet flipped={flipped} sheet={sheet} status={selected.status} />
         ) : null}
       </Wallet>
       <Balance model={model} />

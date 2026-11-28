@@ -297,20 +297,35 @@ let frame = 0;
 let last = 0;
 
 /** One loop for the page, 30 fps, and only the most visible card moves. */
+/**
+ * A device that cannot paint a frame in about 28 ms (software rendering, an
+ * old GPU) gets stills: three slow frames in a row stop the loops for the
+ * page, so the art never takes the main thread from the person.
+ */
+let slowFrames = 0;
+let tooSlow = false;
+
 function tick(now: number) {
-  frame = animators.size > 0 ? requestAnimationFrame(tick) : 0;
-  if (document.hidden || now - last < 33) return;
+  frame = animators.size > 0 && !tooSlow ? requestAnimationFrame(tick) : 0;
+  if (tooSlow || document.hidden || now - last < 33) return;
   last = now;
   let best: Animator | null = null;
   for (const animator of animators)
     if (animator.visible > 0 && (!best || animator.visible > best.visible))
       best = animator;
-  if (best) paint(best.canvas, best.art, (now / 1000 / best.art.period) % 1);
+  if (!best) return;
+  const started = performance.now();
+  paint(best.canvas, best.art, (now / 1000 / best.art.period) % 1);
+  slowFrames = performance.now() - started > 28 ? slowFrames + 1 : 0;
+  if (slowFrames >= 3) {
+    tooSlow = true;
+    for (const animator of animators) paint(animator.canvas, animator.art, 0);
+  }
 }
 
 function startLoop(animator: Animator): () => void {
   animators.add(animator);
-  if (!frame) frame = requestAnimationFrame(tick);
+  if (!frame && !tooSlow) frame = requestAnimationFrame(tick);
   return () => {
     animators.delete(animator);
     if (animators.size === 0 && frame) {
@@ -399,34 +414,47 @@ export function CardArt({
     : "";
   const play = animate && motion;
 
-  // Paint the poster (t = 0) and report it; then loop while selected and seen.
+  // Paint the poster (t = 0) when the card comes near the screen and report
+  // it for the contrast measurement; then loop while selected and seen.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !shader) return;
-    paint(canvas, shader, 0);
-    const pixels = sample(canvas);
-    if (pixels) reported.current?.(pixels);
-    if (!play) return;
-    const animator: Animator = { canvas, art: shader, visible: 0 };
-    const observer =
-      typeof IntersectionObserver === "undefined"
-        ? null
-        : new IntersectionObserver(
-            ([entry]) => {
-              animator.visible = entry?.isIntersecting
-                ? entry.intersectionRatio || 0.01
-                : 0;
-              if (!animator.visible) paint(canvas, shader, 0);
-            },
-            { threshold: [0, 0.25, 0.5, 0.75, 1] },
-          );
-    if (observer) observer.observe(canvas);
-    else animator.visible = 1;
-    const stop = startLoop(animator);
-    return () => {
-      stop();
-      observer?.disconnect();
+    let shown = false;
+    const poster = () => {
+      if (shown) return;
+      shown = true;
       paint(canvas, shader, 0);
+      const pixels = sample(canvas);
+      if (pixels) reported.current?.(pixels);
+    };
+    const animator: Animator | null = play
+      ? { canvas, art: shader, visible: 0 }
+      : null;
+    let stop: (() => void) | null = null;
+    if (typeof IntersectionObserver === "undefined") {
+      poster();
+      if (animator) {
+        animator.visible = 1;
+        stop = startLoop(animator);
+      }
+      return () => stop?.();
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const seen = entry?.isIntersecting ?? false;
+        if (seen) poster();
+        if (!animator) return;
+        animator.visible = seen ? entry!.intersectionRatio || 0.01 : 0;
+        if (!seen && shown) paint(canvas, shader, 0);
+      },
+      { rootMargin: "200px", threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    observer.observe(canvas);
+    if (animator) stop = startLoop(animator);
+    return () => {
+      stop?.();
+      observer.disconnect();
+      if (animator && shown) paint(canvas, shader, 0);
     };
     // The shader key stands in for the piece and its palette.
   }, [shaderKey, play]);

@@ -122,6 +122,8 @@ test("type on every registered art piece reaches 5:1, measured on its poster", a
   await openWallet(page);
   const cards = page.locator("[data-wallet-artset] .td-mcard");
   await expect(cards).toHaveCount(10);
+  // Posters paint as cards come near the screen.
+  for (let i = 0; i < 10; i += 1) await cards.nth(i).scrollIntoViewIfNeeded();
   await expect(
     page.locator("[data-wallet-artset] .td-mcard[data-measured]"),
   ).toHaveCount(10, { timeout: 15_000 });
