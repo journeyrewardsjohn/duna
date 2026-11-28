@@ -1,6 +1,14 @@
 packages:
   - "apps/*"
   - "packages/*"
+# One copy of the React types for the whole workspace. Next's own type
+# declarations import "react" without depending on @types/react, so with two
+# versions installed they bind to whichever one pnpm happens to hoist, and the
+# HQ production build on Vercel failed on that. 19.3 matches the React that
+# Next 16.2 runs for the app router (its vendored 19.3 canary) and the React
+# 19.3 runtime of the iOS apps. Checked by scripts/verify-single-react-types.ts.
+overrides:
+  "@types/react": 19.3.3
 ignoredOptionalDependencies:
   - "@mongodb-js/zstd"
   - node-liblzma
