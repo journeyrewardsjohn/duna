@@ -12,11 +12,17 @@ import {
 } from "@duna/db/schema";
 import { z } from "zod";
 import {
+  participationCopySchema,
+  participationDisplaySchema,
+  participationDisplayStateSchema,
+} from "./participation";
+import {
   w3AmountSchema,
   w3DateSchema,
   w3DateTimeSchema,
   w3IdSchema,
   w3PageInputSchema,
+  w3TimeOfDaySchema,
 } from "./w3-common";
 
 export const searchKindSchema = z.enum(searchDocumentKinds);
@@ -160,7 +166,78 @@ export const searchDocumentSchema = z.object({
   refreshedAt: w3DateTimeSchema,
 });
 
+/**
+ * B10 (additive): one bookable session occurrence, for the session detail
+ * screen and the `duna://sessions/:id` link (`public.search.session`).
+ * A session the caller may not see is "not found", never "forbidden".
+ */
+export const searchSessionInputSchema = z.object({
+  id: w3IdSchema,
+  /** The viewer's device zone, to add "(9:00 PM your time)". */
+  viewerTimeZone: z.string().max(64).optional(),
+});
+
+export const searchSessionSchema = z.object({
+  id: w3IdSchema,
+  catalogItemId: w3IdSchema,
+  catalogVariantId: w3IdSchema.optional(),
+  title: z.string().min(1),
+  /** lesson | clinic | group | open-play (from the offering). */
+  sessionKind: z.enum(["lesson", "clinic", "group", "open-play"]),
+  summary: z.string().optional(),
+  level: z.string().optional(),
+  path: z.string().startsWith("/"),
+  status: z.enum(["scheduled", "cancelled"]),
+  club: z.object({
+    id: w3IdSchema,
+    slug: z.string().min(1),
+    name: z.string().min(1),
+  }),
+  venue: z
+    .object({
+      id: w3IdSchema.optional(),
+      name: z.string().min(1),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+      locality: z.string().optional(),
+    })
+    .optional(),
+  startsAt: w3DateTimeSchema,
+  endsAt: w3DateTimeSchema,
+  /** The venue's zone; `local` is the wall clock there. */
+  timezone: z.string().min(1),
+  local: z.object({
+    date: w3DateSchema,
+    startTime: w3TimeOfDaySchema,
+    endTime: w3TimeOfDaySchema,
+  }),
+  capacity: z.number().int().positive(),
+  spotsLeft: z.number().int().nonnegative(),
+  membershipRequired: z.boolean(),
+  prices: z.array(
+    z.object({
+      priceId: w3IdSchema,
+      kind: z.enum(["card", "credit", "cash"]),
+      audience: z.enum(["everyone", "member", "non-member"]),
+      amount: w3AmountSchema.optional(),
+      credits: z.number().int().nonnegative().optional(),
+    }),
+  ),
+  /** The core display model (the price ladder is `display.price.ladder`). */
+  participation: z.object({
+    displayState: participationDisplayStateSchema,
+    display: participationDisplaySchema,
+    copy: participationCopySchema,
+  }),
+  waitlist: z.object({
+    /** The session's rule keeps a waitlist once it is full. */
+    available: z.boolean(),
+    waiting: z.number().int().nonnegative(),
+  }),
+});
+
 export type SearchQueryInput = z.infer<typeof searchQueryInputSchema>;
+export type SearchSession = z.infer<typeof searchSessionSchema>;
 export type SearchResult = z.infer<typeof searchResultSchema>;
 export type SearchResults = z.infer<typeof searchResultsSchema>;
 export type SearchDocument = z.infer<typeof searchDocumentSchema>;

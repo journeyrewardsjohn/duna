@@ -1,44 +1,75 @@
 /**
- * Router seam: search (owner: B10). Where / when / what search over
- * `search_documents`. Shapes are frozen in ../contracts/search.ts (W3-0).
- * Reads go to the replica through `getReadOnlyDatabase()`.
+ * Router: search (owner: B10). Where / when / what search, typeahead and one
+ * session by id. Shapes are in ../contracts/search.ts; the service is
+ * ../services/search/. Reads go to the replica (`getReadOnlyDatabase()`).
  *
  * Mounted once in ../router.ts:
- *   public.search  publicProcedure (anonymous, IP rate limited): public rows only
- *   player.search  protectedProcedure: also "members" rows of the player's clubs
+ *   public.search  publicProcedure: public rows only; per-address budgets
+ *   player.search  protectedProcedure: also members-only sessions of the
+ *                  player's clubs
  *
- * Every procedure returns its fixture from @duna/core/demo/search in demo
- * mode and throws `notImplementedYet` otherwise until B10 lands the service
- * in ../services/search/. Read ./README.md first.
+ * Demo mode runs the same engine over @duna/core/demo/search.
  */
-import { searchDemo } from "@duna/core/demo/search";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, publicProcedure, router } from "../auth";
+import type { ApiContext } from "../context";
 import {
   searchQueryInputSchema,
   searchResultsSchema,
+  searchSessionInputSchema,
+  searchSessionSchema,
   searchSuggestInputSchema,
   searchSuggestionsSchema,
 } from "../contracts/search";
-import { usesDemoData } from "../services/data-source";
-import { notImplementedYet } from "./not-implemented";
+import {
+  SearchCursorError,
+  SearchInputError,
+  SearchNotFoundError,
+  SearchRateLimitError,
+  searchQuery,
+  searchSession,
+  searchSuggest,
+} from "../services/search";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
 const DOMAIN = "search";
 
-/** Demo filter: kinds and text only; an unmatched query shows the empty state. */
-function demoResults(input: {
-  readonly what?: { readonly kinds?: readonly string[] };
-  readonly text?: string;
-}) {
-  const kinds = input.what?.kinds;
-  const text = input.text?.trim().toLowerCase();
-  const items = searchDemo.results.items.filter(
-    (item) =>
-      (!kinds?.length || kinds.includes(item.kind)) &&
-      (!text || item.title.toLowerCase().includes(text)),
-  );
-  if (items.length === 0) return searchDemo.emptyResults;
-  return { ...searchDemo.results, items, totalEstimate: items.length };
+function caller(ctx: ApiContext) {
+  return {
+    personId: ctx.actor?.personId,
+    ipAddress: ctx.ipAddress,
+    now: ctx.now,
+  };
+}
+
+/** Domain errors as tRPC codes; anything else is unexpected and reported. */
+async function guarded<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof SearchRateLimitError) {
+      // `cause.retryAfterSeconds` is what a route sends as Retry-After.
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: error.message,
+        cause: error,
+      });
+    }
+    if (
+      error instanceof SearchInputError ||
+      error instanceof SearchCursorError
+    ) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: error.message,
+        cause: error,
+      });
+    }
+    if (error instanceof SearchNotFoundError) {
+      throw new TRPCError({ code: "NOT_FOUND", message: error.message });
+    }
+    throw error;
+  }
 }
 
 export const searchPublicRouter = router({
@@ -46,23 +77,39 @@ export const searchPublicRouter = router({
     .output(domainSeamStatusSchema)
     .query(() => domainSeamStatus(DOMAIN)),
 
-  /** Results for the map and list (F-Web-Search). */
+  /** Results for the map and list (Player Find, the site's search). */
   query: publicProcedure
     .input(searchQueryInputSchema)
     .output(searchResultsSchema)
-    .query(({ input }) => {
-      if (usesDemoData()) return demoResults(input);
-      return notImplementedYet(DOMAIN, "query");
-    }),
+    .query(({ ctx, input }) =>
+      guarded(() =>
+        searchQuery(input, {
+          ...caller(ctx),
+          personId: undefined,
+          includeMembers: false,
+        }),
+      ),
+    ),
 
   /** Typeahead for the Where and What pickers. */
   suggest: publicProcedure
     .input(searchSuggestInputSchema)
     .output(searchSuggestionsSchema)
-    .query(() => {
-      if (usesDemoData()) return searchDemo.suggestions;
-      return notImplementedYet(DOMAIN, "suggest");
-    }),
+    .query(({ ctx, input }) =>
+      guarded(() => searchSuggest(input, caller(ctx))),
+    ),
+
+  /**
+   * One bookable session (the detail screen, `duna://sessions/:id`). A
+   * signed-in caller may also see members-only and private sessions they
+   * belong to; anyone else gets NOT_FOUND, never FORBIDDEN.
+   */
+  session: publicProcedure
+    .input(searchSessionInputSchema)
+    .output(searchSessionSchema)
+    .query(({ ctx, input }) =>
+      guarded(() => searchSession(input, caller(ctx))),
+    ),
 });
 
 export const searchPlayerRouter = router({
@@ -70,12 +117,13 @@ export const searchPlayerRouter = router({
     .output(domainSeamStatusSchema)
     .query(() => domainSeamStatus(DOMAIN)),
 
-  /** Same shape as public.search.query, plus members-only rows of the player's clubs. */
+  /** Same shape as public.search.query, plus members-only sessions of the player's clubs. */
   query: protectedProcedure
     .input(searchQueryInputSchema)
     .output(searchResultsSchema)
-    .query(({ input }) => {
-      if (usesDemoData()) return demoResults(input);
-      return notImplementedYet(DOMAIN, "query");
-    }),
+    .query(({ ctx, input }) =>
+      guarded(() =>
+        searchQuery(input, { ...caller(ctx), includeMembers: true }),
+      ),
+    ),
 });

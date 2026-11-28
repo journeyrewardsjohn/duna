@@ -62,6 +62,7 @@ import {
 import {
   assertBalancedJournal,
   membershipSubscriptionPolicy,
+  readParticipationRuleV2,
   reverseLedgerPostings,
   validateMembershipSubscriptionPolicy,
   type LedgerPosting,
@@ -2320,7 +2321,13 @@ export async function loadPublicOrganizationStorefront(
         configuration: item.configuration,
         ...(itemParticipationRules
           ? {
-              participation: publicParticipationSummary(itemParticipationRules),
+              participation: {
+                ...publicParticipationSummary(itemParticipationRules),
+                // B10: whether the rule keeps a waitlist once full.
+                waitlist:
+                  readParticipationRuleV2(item.configuration.participation)
+                    ?.waitlist ?? false,
+              },
             }
           : {}),
         upcomingOccurrences,
