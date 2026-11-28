@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import {
   ScheduleDenied,
   ScheduleFailed,
@@ -16,8 +15,6 @@ import {
 } from "@/components/schedule/schedule-screen";
 import { getHqSession, hasScope } from "@/components/shell/hq-session";
 import { ShellPage } from "@/components/shell/shell-context";
-
-export const metadata: Metadata = { title: "Schedule" };
 
 const intents = new Set<ScheduleIntent>([
   "book",

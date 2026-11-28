@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import "@/components/participation/participation.css";
 import "@/components/schedule/schedule.css";
 
-/** Also set here so the title holds while a filter change re-renders the page. */
+/**
+ * The title lives on the layout only: a filter change re-renders the page,
+ * and a page title would be re-resolved (and briefly absent) on each one.
+ */
 export const metadata: Metadata = { title: "Schedule" };
 
 /** Schedule's screens share one token-based sheet (design system only). */

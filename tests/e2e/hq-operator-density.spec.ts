@@ -111,28 +111,19 @@ test("compact Activities keeps every operational destination and accessible tabl
     .getByRole("link", { name: "Courts & rentals", exact: true })
     .click();
   await expect(page).toHaveURL(`${base}/schedule`);
-  if ((page.viewportSize()?.width ?? 1440) < 768) {
-    // A phone folds the schedule's actions into one menu.
-    await expect(
-      page.getByRole("button", { name: "Add or change", exact: true }),
-    ).toBeVisible();
-  } else {
-    await expect(
-      page.getByRole("button", { name: "New booking", exact: true }),
-    ).toHaveCount(1);
-    await expect(
-      page.getByRole("button", { name: "Block time", exact: true }),
-    ).toBeVisible();
-  }
-  // A phone opens Schedule as the agenda; the lanes belong to the day view.
-  if ((page.viewportSize()?.width ?? 1440) < 768) {
-    // Once hydrated, a phone shows the agenda and says so.
-    await expect(
-      page.getByRole("button", { name: "List", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+  // A narrow main column (a phone, a tablet beside the sidebar) folds the
+  // schedule's actions into one menu; wider screens show them as buttons.
+  await expect(
+    page
+      .getByRole("button", { name: "New booking", exact: true })
+      .or(page.getByRole("button", { name: "Add or change", exact: true })),
+  ).toBeVisible();
+  // A narrow column opens Schedule as the agenda; the lanes belong to the
+  // day view, so choose it (retrying until the page has hydrated).
+  await expect(async () => {
     await page.getByRole("button", { name: "Day", exact: true }).click();
-    await expect(page).toHaveURL(/view=day/);
-  }
+    await expect(page).toHaveURL(/view=day/, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   await page.getByRole("button", { name: "Coaches", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Coaches", exact: true }),

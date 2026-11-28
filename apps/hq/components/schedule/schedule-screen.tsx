@@ -155,14 +155,24 @@ export function ScheduleScreen({
 
   useEffect(() => {
     setViewerZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    const media = window.matchMedia("(max-width: 767px)");
-    const sync = () => setPhone(media.matches);
+    // "Phone" follows the same rule as the stylesheet: the main column (not
+    // the window) is under 768 px, as on a tablet beside the sidebar.
+    const main = document.querySelector(".hqs-main") ?? document.body;
+    const sync = () => {
+      const style = getComputedStyle(main);
+      const inline =
+        main.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+      setPhone(inline < 768);
+    };
     sync();
-    media.addEventListener("change", sync);
+    const observer = new ResizeObserver(sync);
+    observer.observe(main);
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
     return () => {
       window.clearInterval(timer);
-      media.removeEventListener("change", sync);
+      observer.disconnect();
     };
   }, []);
 
