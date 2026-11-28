@@ -29,6 +29,7 @@ import {
   payObligations,
   paymentFundSchedules,
   payments,
+  participationDecisions,
   payouts,
   refundRecords,
   registrations,
@@ -237,6 +238,23 @@ async function catalogLineFacts(input: {
       )
       .limit(1);
     if (occurrence) {
+      // PART: the session's own rule snapshot (participation_decisions)
+      // covers sessions that inherit the club default, which the
+      // offering's configuration does not show.
+      const [decision] = await database
+        .select({ ruleSnapshot: participationDecisions.ruleSnapshot })
+        .from(participationDecisions)
+        .where(
+          and(
+            eq(participationDecisions.subjectType, "catalog-session-occurrence"),
+            eq(participationDecisions.subjectId, occurrence.id),
+          ),
+        )
+        .limit(1);
+      const snapshotMinimum = decision
+        ? (readParticipationRules(decision.ruleSnapshot, occurrence.capacity)
+            ?.minParticipants ?? 1)
+        : 1;
       return {
         ...base,
         sessionCount: 1,
@@ -244,7 +262,8 @@ async function catalogLineFacts(input: {
         deliveryEndsAt: occurrence.endsAt,
         delivery: {
           source: { type: "catalog_occurrence", id: occurrence.id },
-          awaitsParticipationDecision,
+          awaitsParticipationDecision:
+            awaitsParticipationDecision || snapshotMinimum > 1,
         },
       };
     }
