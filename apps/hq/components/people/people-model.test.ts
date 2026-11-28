@@ -2,10 +2,8 @@ import type { OperatorMemberProfile } from "@duna/api";
 import { describe, expect, it } from "vitest";
 import {
   attentionFor,
-  canSeeHealth,
-  HEALTH_ADULT_VIEWER_ROLES,
-  HEALTH_JUNIOR_VIEWER_ROLES,
-  checkImport,
+  BULK_TAG_MAX,
+  NOTE_MAX_LENGTH,
   exportColumns,
   exportRow,
   filterRows,
@@ -14,9 +12,13 @@ import {
   guessMapping,
   listHref,
   listStateFromParams,
+  importFieldLabels,
+  importRequest,
+  IMPORT_MAX_ROWS,
   mappingProblems,
   matchesPersonQuery,
-  mergePlan,
+  mergeBlock,
+  mergeMoves,
   nextBestAction,
   type NextActionInput,
   normalisePhone,
@@ -31,11 +33,13 @@ import {
   visibleRange,
   type WorkspacePerson,
 } from "./people-model";
-import { capabilitiesFrom } from "./people-capabilities";
 import {
-  HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES,
-  HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES,
-} from "../../../../packages/api/src/services/health/policy";
+  PEOPLE_BULK_TAG_MAX_PEOPLE,
+  PEOPLE_IMPORT_MAX_ROWS,
+  PEOPLE_NOTE_MAX_LENGTH,
+  peopleImportFieldSchema,
+} from "../../../../packages/api/src/contracts/people";
+import { capabilitiesFrom } from "./people-capabilities";
 
 const now = new Date("2026-11-28T15:00:00.000Z");
 const timeZone = "America/Los_Angeles";
@@ -477,11 +481,7 @@ describe("export columns", () => {
   });
 });
 
-describe("import dry run", () => {
-  const existing = [
-    { id: "a", name: "Maya Chen", email: "maya@example.com", isJunior: false },
-  ];
-
+describe("import file", () => {
   it("parses quoted CSV and guesses the columns", () => {
     const table = parseCsv(
       '\uFEFFFull name,E-mail,Mobile,Date of birth,Parent name,Parent email\r\n"Lee, Sam",sam@example.com,,,,\n',
@@ -500,59 +500,57 @@ describe("import dry run", () => {
     expect(guessMapping(table[0]!)).toEqual([
       "name",
       "email",
-      "phone",
+      "phoneE164",
       "birthDate",
       "guardianName",
       "guardianEmail",
     ]);
   });
 
-  it("explains every problem per row and writes nothing", () => {
-    const table = [
-      ["Name", "Email", "Mobile", "DOB", "Guardian", "Guardian email"],
-      ["Sam Lee", "sam@example.com", "", "", "", ""],
-      ["", "x@example.com", "", "", "", ""],
-      ["Kid One", "", "", "2015-04-02", "", ""],
-      ["Kid Two", "", "", "2014-01-01", "Pat Two", "pat@example.com"],
-      ["Maya Chen", "maya@example.com", "", "", "", ""],
-      ["Sam Lee", "SAM@example.com", "", "", "", ""],
-      ["Bad Mail", "nope", "12", "", "", ""],
-    ];
-    const mapping = guessMapping(table[0]!);
-    const result = checkImport(table, mapping, existing, now);
-    expect(result.summary).toEqual({
-      total: 7,
-      ready: 2,
-      duplicates: 2,
-      problems: 3,
-      juniors: 1,
+  it("uses exactly the import procedure's fields and row limit", () => {
+    expect(
+      Object.keys(importFieldLabels)
+        .filter((field) => field !== "ignore")
+        .sort(),
+    ).toEqual([...peopleImportFieldSchema.options].sort());
+    expect(IMPORT_MAX_ROWS).toBe(PEOPLE_IMPORT_MAX_ROWS);
+    expect(BULK_TAG_MAX).toBe(PEOPLE_BULK_TAG_MAX_PEOPLE);
+    expect(NOTE_MAX_LENGTH).toBe(PEOPLE_NOTE_MAX_LENGTH);
+  });
+
+  it("sends rows by column name, only mapped columns, with unique names", () => {
+    const request = importRequest(
+      [
+        ["Name", "Email", "Notes", "Email"],
+        ["Sam Lee", " sam@example.com ", "private", "other@example.com"],
+      ],
+      ["name", "email", "ignore", "guardianEmail"],
+    );
+    expect(request).toEqual({
+      ok: true,
+      rows: [
+        {
+          Name: "Sam Lee",
+          Email: "sam@example.com",
+          "Column 4": "other@example.com",
+        },
+      ],
+      mapping: { name: "Name", email: "Email", guardianEmail: "Column 4" },
     });
-    expect(result.rows[1]).toMatchObject({ line: 3, problems: ["No name"] });
-    expect(result.rows[2]!.problems).toEqual([
-      "Junior without a guardian name",
-      "Junior without a guardian email or mobile",
-    ]);
-    expect(result.rows[3]).toMatchObject({ kind: "junior", status: "ready" });
-    expect(result.rows[3]!.email).toBeUndefined();
-    expect(result.rows[4]).toMatchObject({
-      status: "duplicate",
-      duplicateOf: "Maya Chen",
-    });
-    expect(result.rows[5]).toMatchObject({
-      status: "duplicate",
-      duplicateOf: "Sam Lee, earlier in this file",
-    });
-    expect(result.rows[6]!.problems).toEqual([
-      "Email isn't an email address",
-      "Mobile isn't a full number",
-    ]);
+  });
+
+  it("refuses a cell over the procedure's limit, in words", () => {
+    const request = importRequest([["Name"], ["x".repeat(401)]], ["name"]);
+    expect(request.ok).toBe(false);
+    if (!request.ok) expect(request.problem).toMatch(/^Row 1, Name/);
   });
 
   it("says what a column mapping is missing", () => {
     expect(mappingProblems(["ignore", "email"])).toEqual([
       "Choose the column with each person's name.",
     ]);
-    expect(mappingProblems(["name", "name", "phone"])).toEqual([
+    expect(mappingProblems(["name", "guardianPhoneE164"])).toEqual([]);
+    expect(mappingProblems(["name", "name", "phoneE164"])).toEqual([
       "Full name is chosen for 2 columns.",
     ]);
   });
@@ -564,91 +562,28 @@ describe("import dry run", () => {
   });
 });
 
-describe("merge plan", () => {
-  const side = (overrides: Partial<Parameters<typeof mergePlan>[0]> = {}) => ({
-    id: "a",
-    name: "Maya Chen",
-    email: "maya@example.com",
-    isJunior: false,
-    credits: 3,
-    memberSince: "2026-01-01T00:00:00.000Z",
-    upcoming: 1,
-    ...overrides,
-  });
-
-  it("keeps the kept record's details, fills gaps, adds credits", () => {
-    const plan = mergePlan(
-      side(),
-      side({
-        id: "b",
-        name: "Maya C",
-        email: "other@example.com",
-        phone: "+13105550121",
-        plan: "Club unlimited",
-        credits: 5,
-        memberSince: "2025-06-01T00:00:00.000Z",
-      }),
-    );
-    expect(plan.blocked).toBeUndefined();
-    expect(plan.kept).toEqual([
-      { label: "Name", value: "Maya Chen", from: "kept" },
-      { label: "Email", value: "maya@example.com", from: "kept" },
-      { label: "Mobile", value: "+13105550121", from: "merged" },
-      { label: "Plan", value: "Club unlimited", from: "merged" },
-      { label: "Credits", value: "8", from: "both" },
-      { label: "Joined", value: "2025-06-01", from: "merged" },
-    ]);
-    expect(plan.moved[0]).toBe("Maya C's bookings and attendance history");
-  });
-
-  it("never merges a junior with an adult, or a record with itself", () => {
+describe("merge checks", () => {
+  it("never asks to merge a junior with an adult, or a record with itself", () => {
     expect(
-      mergePlan(side(), side({ id: "b", isJunior: true })).blocked,
+      mergeBlock({ id: "a", isJunior: false }, { id: "b", isJunior: true }),
     ).toMatch(/junior and an adult/);
-    expect(mergePlan(side(), side()).blocked).toBe(
-      "Choose two different people.",
-    );
-  });
-});
-
-describe("health permission follows the Health service's rule", () => {
-  it("uses exactly the service's viewer roles", () => {
-    expect([...HEALTH_ADULT_VIEWER_ROLES]).toEqual([
-      ...HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES,
-    ]);
-    expect([...HEALTH_JUNIOR_VIEWER_ROLES]).toEqual([
-      ...HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES,
-    ]);
+    expect(
+      mergeBlock({ id: "a", isJunior: false }, { id: "a", isJunior: false }),
+    ).toBe("Choose two different people.");
+    expect(
+      mergeBlock({ id: "a", isJunior: false }, { id: "b", isJunior: false }),
+    ).toBeUndefined();
   });
 
-  it("reaches owners, managers and coaches for an adult", () => {
-    for (const role of ["owner", "manager", "coach"]) {
-      expect(canSeeHealth([role], false), role).toBe(true);
-    }
-  });
-
-  it("reaches only coaches for a junior", () => {
-    expect(canSeeHealth(["coach"], true)).toBe(true);
-    expect(canSeeHealth(["owner"], true)).toBe(false);
-    expect(canSeeHealth(["manager"], true)).toBe(false);
-  });
-
-  it("never reaches the front desk, scorekeepers, accountants or members", () => {
-    for (const role of [
-      "front-desk",
-      "scorekeeper",
-      "accountant",
-      "player",
-      "guardian",
-    ]) {
-      expect(canSeeHealth([role], false), role).toBe(false);
-      expect(canSeeHealth([role], true), role).toBe(false);
-    }
+  it("says what moves, only the kinds that move", () => {
+    expect(
+      mergeMoves({ bookings: 2, attendance: 1, notes: 0, payments: 1 }),
+    ).toEqual(["2 bookings", "1 attendance record", "1 payment"]);
   });
 });
 
 describe("capability switches", () => {
-  it("turns a feature on only when its procedure exists", () => {
+  it("turns a feature on only when every procedure it needs exists", () => {
     expect(capabilitiesFrom(["operator.memberProfile"])).toEqual({
       import: false,
       merge: false,
@@ -656,16 +591,20 @@ describe("capability switches", () => {
       tags: false,
       household: false,
       documents: false,
+      planChange: false,
       membershipChange: false,
     });
     const on = capabilitiesFrom([
+      "operator.people.importPreview",
       "operator.people.import",
-      "operator.people.merge.preview",
+      "operator.people.mergePreview",
+      "operator.people.notes.list",
       "operator.people.importer",
     ]);
     expect(on.import).toBe(true);
-    expect(on.merge).toBe(true);
-    expect(on.notes).toBe(false);
+    // The merge itself is missing: no half a feature.
+    expect(on.merge).toBe(false);
+    expect(on.notes).toBe(true);
   });
 });
 
@@ -738,10 +677,7 @@ describe("redaction before anything reaches a browser", () => {
   } as unknown as OperatorMemberProfile;
 
   it("drops health, money and a junior's contact for a coach", () => {
-    const cut = redactProfile(profile, {
-      canSeePayments: false,
-      canSeeHealth: false,
-    });
+    const cut = redactProfile(profile, { canSeePayments: false });
     expect(cut.health).toBeUndefined();
     expect(cut.purchases).toEqual([]);
     expect(cut.plans[0]!.priceMinor).toBe(0);
@@ -754,10 +690,9 @@ describe("redaction before anything reaches a browser", () => {
     expect(JSON.stringify(cut)).not.toContain("58");
   });
 
-  it("never passes a junior's health on, even to an owner", () => {
+  it("never passes the health marker on, to anyone", () => {
     expect(
-      redactProfile(profile, { canSeePayments: true, canSeeHealth: true })
-        .health,
+      redactProfile(profile, { canSeePayments: true }).health,
     ).toBeUndefined();
   });
 });

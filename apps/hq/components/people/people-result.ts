@@ -5,7 +5,15 @@ export type PeopleActionResult<T> =
   | { readonly ok: true; readonly data: T }
   | {
       readonly ok: false;
-      readonly code: "denied" | "not-configured" | "invalid" | "failed";
+      readonly code:
+        | "denied"
+        | "not-configured"
+        | "invalid"
+        | "failed"
+        /** A preview expired or the records changed: preview again. */
+        | "stale"
+        /** The recipient can't get a draft (see the action's message). */
+        | "not-eligible";
       readonly message: string;
       /** The request id the API logged the failure under. */
       readonly reference?: string;

@@ -3,12 +3,14 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * People on the new shell (H-PEOPLE), in demo mode: search and segments as
  * addresses, an open person, a junior added with a guardian, giving
- * credits and refunds through their strong confirmations, features without a
- * backend not offered, a coach's view (no payments; health only because the
- * person shared it), the Health service's rule by tab and by address with no
- * leak, and every People page at 375 px with no horizontal scroll and no
- * legacy stylesheet. Import, merge and plan changes wait behind their
- * capability switches (fixme until their procedures exist).
+ * credits and refunds through their strong confirmations, import and merge
+ * through Duna's own preview and a strong confirmation, team notes, tags,
+ * the household with a guardian invitation that sends nothing, signature
+ * requests as Inbox drafts, a coach's view (no payments; the Health tab
+ * because the Health service says so), the Health service's rule by tab and
+ * by address with no leak, and every People page at 375 px with no
+ * horizontal scroll and no legacy stylesheet. Pause, resume and cancel of a
+ * plan stay behind their capability switch (fixme: not built).
  *
  * Ported access checks from the legacy People pages: "health appears only
  * after a player grants access" (now by the Health service's own rule),
@@ -68,7 +70,9 @@ test("search and segments are shareable addresses, and a junior shows no contact
   await expect(page).toHaveURL(/\/people\?q=noah$/);
   await page.getByRole("searchbox", { name: "Search people" }).fill("");
   await page.getByRole("button", { name: /^Juniors, \d+$/ }).click();
-  await expect(page).toHaveURL(/segment=juniors/);
+  // Clearing the search applies at once, so the address never carries the
+  // old words (this was the flake: a reload with "?q=noah" still in it).
+  await expect(page).toHaveURL(/\/people\?segment=juniors$/);
   await expect(list.getByRole("link", { name: "Ava Patel" })).toBeVisible();
   await expect(list.getByRole("link", { name: "Maya Chen" })).toHaveCount(0);
   // The junior's row never carries a contact (the guardian is the contact).
@@ -173,8 +177,7 @@ test("adding a junior asks for the guardian, explains duplicates, and sends once
   expect(actions).toHaveLength(1);
 });
 
-// Capability "import": offered only when `operator.people.import` exists.
-test.fixme("an import dry run shows each problem, writes nothing, then confirms with counts [capability: import]", async ({
+test("an import's dry run is Duna's own, writes nothing, then confirms with counts and messages no one", async ({
   page,
 }) => {
   await signIn(page);
@@ -191,37 +194,34 @@ test.fixme("an import dry run shows each problem, writes nothing, then confirms 
         "Rae Kim,,+13105550190,,,",
         ",nobody@example.com,,,,",
         "Kid One,,,2016-03-02,,",
-        "Maya Chen,maya@example.com,,,,",
       ].join("\n"),
     ),
   });
-  await expect(page.getByText("members.csv: 5 rows")).toBeVisible();
-  await page.getByRole("button", { name: "Check the rows" }).click();
-  await expect(
-    page.getByText(
-      "Nothing is saved yet. 2 ready, 1 duplicate, 2 with problems.",
-    ),
-  ).toBeVisible();
-  const rows = page.getByRole("list", { name: "Rows in the file" });
-  await expect(rows).toContainText("No name");
-  await expect(rows).toContainText("Junior without a guardian email or mobile");
-  await expect(rows).toContainText("Already at the club: Maya Chen");
-  // The dry run itself sent nothing to the server.
+  await expect(page.getByText("members.csv: 4 rows")).toBeVisible();
+  // Choosing and matching the file asks the server nothing.
   expect(actions).toHaveLength(0);
+  await page.getByRole("button", { name: "Check the rows" }).dblclick();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Nothing is saved yet." }),
+  ).toContainText("2 new");
+  // One dry run, even for a double click.
+  expect(actions).toHaveLength(1);
+  const rows = page.getByRole("list", { name: "Rows in the file" });
+  // Rows that need a look come first, each problem in words.
+  await expect(rows).toContainText("Add the person's name.");
+  await expect(rows).toContainText("A junior needs a parent or guardian.");
   await page.getByRole("button", { name: "Import 2 people" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("Add 2 people to the club?");
-  await expect(dialog).toContainText(
-    "1 duplicate and 2 rows with problems are left out",
-  );
+  await expect(dialog).toContainText("2 rows with problems are left out");
   await expect(dialog).toContainText("No one is messaged.");
-  await dialog.getByRole("button", { name: "Add 2 people" }).click();
-  await expect(dialog).toContainText("Nothing was changed.");
-  expect(actions).toHaveLength(1);
+  await dialog.getByRole("button", { name: "Add 2 people" }).dblclick();
+  await expect(page.getByRole("heading", { name: "Imported" })).toBeVisible();
+  await expect(page.getByText("No one was messaged.").first()).toBeVisible();
+  expect(actions).toHaveLength(2);
 });
 
-// Capability "merge": offered only when `operator.people.merge` exists.
-test.fixme("merging shows both records side by side and says what is kept [capability: merge]", async ({
+test("merging asks Duna what moves, then confirms strongly; a junior and an adult are never merged", async ({
   page,
 }) => {
   await signIn(page);
@@ -230,14 +230,21 @@ test.fixme("merging shows both records side by side and says what is kept [capab
   await expect(
     page.getByRole("region", { name: "Side by side" }),
   ).toContainText("Jordan Smith");
-  const kept = page.getByRole("region", { name: "What is kept" });
-  await expect(kept).toContainText("Credits");
+  const actions = countActions(page);
   await page.getByRole("button", { name: "Review the merge" }).click();
+  const plan = page.getByRole("region", { name: "What is kept" });
+  await expect(plan).toContainText("What Maya Chen keeps");
+  await expect(plan).toContainText("2 bookings");
+  await page.getByRole("button", { name: "Merge into Maya Chen" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("Merge Jordan Smith into Maya Chen?");
   await expect(dialog).toContainText("A merge can't be undone.");
-  await dialog.getByRole("button", { name: "Merge into Maya Chen" }).click();
-  await expect(dialog).toContainText("Nothing was changed.");
+  await expect(dialog).toContainText("no one is messaged");
+  await dialog.getByRole("button", { name: "Merge into Maya Chen" }).dblclick();
+  await expect(
+    page.getByRole("status").filter({ hasText: "is now part of Maya Chen" }),
+  ).toBeVisible();
+  expect(actions).toHaveLength(2);
   // A junior and an adult are never merged.
   await page.goto(hq(`/people/merge?a=${maya}&b=${ava}`));
   await expect(page.getByText("These can't be merged")).toBeVisible();
@@ -278,29 +285,103 @@ test("an owner refunds from Payments through the same strong refund Money uses",
   ).toBeVisible();
 });
 
-test("features without a backend are not offered anywhere", async ({
+test("features whose backend exists are offered: import and tags", async ({
   page,
 }) => {
   await signIn(page);
   await page.goto(hq("/people"));
-  await expect(page.getByRole("link", { name: "Import" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Import" })).toBeVisible();
   await page.getByRole("checkbox", { name: "Select Maya Chen" }).check();
   const bulk = page.getByRole("region", { name: "Selected people" });
-  await expect(bulk.getByRole("button", { name: "Tag" })).toHaveCount(0);
+  await bulk.getByRole("button", { name: "Tag" }).click();
+  const tagDialog = page.getByRole("dialog", { name: "Tag people" });
+  await tagDialog.getByRole("textbox", { name: "Tag" }).fill("Spring league");
+  const actions = countActions(page);
+  await tagDialog.getByRole("button", { name: "Tag 1 person" }).dblclick();
+  await expect(page.getByText("Tagged 1 person “Spring league”")).toBeVisible();
+  expect(actions).toHaveLength(1);
+  // A person's own tags on Overview.
+  await page.goto(hq(`/people/${maya}`));
   await expect(
-    bulk.getByRole("button", { name: "Start a message draft" }),
+    page.getByRole("list", { name: "Tags" }).getByText("League"),
   ).toBeVisible();
-  await page.goto(hq(`/people/${maya}/notes`));
-  await expect(page.getByRole("form", { name: "Add a note" })).toHaveCount(0);
-  // An old or typed address says so plainly, with no form that can't work.
-  await page.goto(hq("/people/import"));
-  await expect(
-    page.getByText("Importing people from a file isn't available yet"),
-  ).toBeVisible();
-  await expect(page.getByLabel("Spreadsheet file")).toHaveCount(0);
 });
 
-test("a coach sees no payments, and health only because the person shared it with the club", async ({
+test("team notes: added with author and time, never shown to the person, removed with a confirmation", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq(`/people/${maya}/notes`));
+  const notes = page.getByRole("list", { name: "Team notes" });
+  await expect(notes).toContainText("Prefers evening sessions.");
+  const form = page.getByRole("form", { name: "Add a note" });
+  await expect(form).toContainText("never by the person");
+  await form
+    .getByRole("textbox", { name: "Note" })
+    .fill("Asked about the spring league.");
+  const actions = countActions(page);
+  await form.getByRole("button", { name: "Save note" }).dblclick();
+  await expect(notes).toContainText("Asked about the spring league.");
+  expect(actions).toHaveLength(1);
+  await notes.getByRole("button", { name: "Remove" }).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Remove this note?");
+  await dialog.getByRole("button", { name: "Remove note" }).click();
+  await expect(page.getByText("Note removed")).toBeVisible();
+});
+
+test("a junior's household: the guardian, and an invitation that sends nothing", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq(`/people/${ava}/family`));
+  await title(page, "Ava Patel");
+  const guardians = page.locator("#guardians");
+  await expect(guardians).toContainText("Sam Rivera");
+  await expect(guardians).toContainText("Verified");
+  const invite = page.getByRole("form", { name: "Invite a guardian" });
+  await invite
+    .getByRole("textbox", { name: "Guardian name" })
+    .fill("Lee Patel");
+  await invite
+    .getByRole("textbox", { name: /Guardian email/ })
+    .fill("lee.patel@example.com");
+  await invite.getByRole("button", { name: "Review the invitation" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("No one is messaged");
+  const actions = countActions(page);
+  await dialog
+    .getByRole("button", { name: "Create the invitation" })
+    .dblclick();
+  await expect(page.getByText("Invitation ready, not sent")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Invitation link" }),
+  ).toHaveValue(/\/join\/guardian\//);
+  expect(actions).toHaveLength(1);
+  await expect(
+    page.getByRole("form", { name: "Link a guardian the club knows" }),
+  ).toBeVisible();
+});
+
+test("documents show the version signed against the current one, and a request is an Inbox draft", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq(`/people/${maya}/documents`));
+  const waivers = page.locator("#waivers");
+  await expect(waivers).toContainText("Club participation waiver");
+  await expect(waivers).toContainText("Version 2 signed");
+  await expect(waivers).toContainText("current is version 3");
+  await expect(waivers).toContainText("New version to sign");
+  const actions = countActions(page);
+  await waivers.getByRole("button", { name: "Ask for a signature" }).dblclick();
+  await expect(
+    page.getByRole("link", { name: "Review and send in Inbox" }),
+  ).toBeVisible();
+  expect(actions).toHaveLength(1);
+});
+
+test("a coach sees no payments, and the Health tab because the Health service allows it", async ({
   page,
 }) => {
   await signIn(page, "coach");
@@ -309,13 +390,18 @@ test("a coach sees no payments, and health only because the person shared it wit
   const tabs = page.getByRole("navigation", { name: "Maya Chen" });
   await expect(tabs.getByRole("link", { name: "Overview" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Payments" })).toHaveCount(0);
-  // Maya shared a summary with the club; the service's rule reaches coaches.
+  // The Health service's own check (`healthAccess.canView`) allows this
+  // coach; the person's page itself carries no health value.
   await expect(tabs.getByRole("link", { name: "Health" })).toBeVisible();
   // Money is neither rendered nor serialised into the page for the browser.
-  expect(await page.content()).not.toContain("1,485");
+  const overview = await page.content();
+  expect(overview).not.toContain("1,485");
+  expect(overview).not.toContain("bpm");
+  // Values come only from the Health service's own read, which needs Duna
+  // Database: demo says so honestly instead of inventing figures.
   await page.goto(hq(`/people/${maya}/health`));
-  await expect(page.getByText("58 bpm")).toBeVisible();
   await expect(page.getByText(/not medical advice/).first()).toBeVisible();
+  await expect(page.locator("main")).not.toContainText("bpm");
   await page.goto(hq("/people"));
   await expect(page.getByRole("button", { name: "Export" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Add a person" })).toHaveCount(0);
@@ -364,9 +450,14 @@ test("health exists only for viewers the service allows: no tab, and the address
   ]) {
     expect(html, leak).not.toContain(leak);
   }
-  // The owner sees an adult's shared summary, with the standing wording.
+  // The owner may open an adult's shared summary, with the standing wording.
+  await page.goto(hq(`/people/${maya}`));
+  await expect(
+    page
+      .getByRole("navigation", { name: "Maya Chen" })
+      .getByRole("link", { name: "Health" }),
+  ).toBeVisible();
   await page.goto(hq(`/people/${maya}/health`));
-  await expect(page.getByText("58 bpm")).toBeVisible();
   await expect(page.getByText(/not medical advice/).first()).toBeVisible();
 });
 

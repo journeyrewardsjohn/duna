@@ -32,9 +32,10 @@ import {
 import {
   bulkDraftAction,
   exportPeopleAction,
-  tagPeopleAction,
+  setTagsAction,
 } from "@/app/(next)/(hq)/people/actions";
 import {
+  BULK_TAG_MAX,
   filterRows,
   type ListState,
   listHref,
@@ -92,6 +93,7 @@ export function PeopleList({
   duplicates,
   focusSearch = false,
   capabilities,
+  clubTags = [],
 }: {
   readonly rows: readonly PersonRow[];
   readonly initial: ListState;
@@ -104,13 +106,21 @@ export function PeopleList({
   readonly focusSearch?: boolean;
   /** Features whose backend has landed (people-capabilities.ts). */
   readonly capabilities: Pick<PeopleCapabilities, "import" | "merge" | "tags">;
+  /** The club's tags with their counts (when tags are on). */
+  readonly clubTags?: readonly {
+    readonly tag: string;
+    readonly count: number;
+  }[];
 }) {
   const router = useRouter();
   const confirm = useConfirm();
   const today = useMemo(() => new Date(now), [now]);
   const [query, setQuery] = useState(initial.query);
   const [segment, setSegment] = useState<PeopleSegment>(initial.segment);
-  const debounced = useDebouncedValue(query);
+  const settled = useDebouncedValue(query);
+  // Typing waits for the pause; clearing the search applies at once, so a
+  // segment chosen right after clearing never carries the old words.
+  const debounced = query.trim() === "" ? "" : settled;
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dialog, setDialog] = useState<"draft" | "tag" | undefined>();
   const searchRef = useRef<HTMLDivElement>(null);
@@ -128,15 +138,18 @@ export function PeopleList({
     [rows, state, today, timeZone],
   );
 
-  // The view is an address: segment and search land in the URL.
+  // The view is an address: segment and search land in the URL. The
+  // browser's own history (which the router follows) changes it at once,
+  // with no server round trip per keystroke, so the address always matches
+  // what is on screen (a reload or a shared link opens the same view).
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
-    router.replace(listHref(state), { scroll: false });
-  }, [router, state]);
+    window.history.replaceState(window.history.state, "", listHref(state));
+  }, [state]);
 
   useEffect(() => {
     if (!focusSearch) return;
@@ -377,6 +390,12 @@ export function PeopleList({
         people={selectedRows}
       />
       <TagDialog
+        clubTags={clubTags}
+        onDone={() => {
+          setDialog(undefined);
+          setSelected(new Set());
+          router.refresh();
+        }}
         onOpenChange={(open) => setDialog(open ? "tag" : undefined)}
         open={dialog === "tag"}
         people={selectedRows}
@@ -635,44 +654,71 @@ function BulkDraftDialog({
   );
 }
 
-/** Tags selected people (the tag store is "Needs API": it says so honestly). */
+/**
+ * Tags the selected people with one of the club's tags (or a new one):
+ * reversible and low stakes, so it happens on the press, with its result
+ * said in a toast. At most 200 people at once, as the API bounds it.
+ */
 function TagDialog({
   open,
   onOpenChange,
+  onDone,
   people,
+  clubTags,
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
+  readonly onDone: () => void;
   readonly people: readonly PersonRow[];
+  readonly clubTags: readonly {
+    readonly tag: string;
+    readonly count: number;
+  }[];
 }) {
   const [tag, setTag] = useState("");
+  const tooMany = people.length > BULK_TAG_MAX;
   const save = useAction(
-    async () =>
+    async ({ idempotencyKey }) =>
       unwrap(
-        await tagPeopleAction({
+        await setTagsAction({
           personIds: people.map((row) => row.id),
-          tag: tag.trim(),
+          add: [tag.trim()],
+          idempotencyKey,
         }),
       ),
     {
-      messages: { success: "Tagged" },
+      messages: {
+        success: (result) =>
+          `Tagged ${result.people} ${result.people === 1 ? "person" : "people"} “${tag.trim()}”`,
+      },
       report: reportFailure("hq.people.tag_failed"),
+      onSuccess: () => {
+        setTag("");
+        onDone();
+      },
     },
   );
+  const suggestions = clubTags
+    .filter(
+      (entry) =>
+        !tag.trim() ||
+        entry.tag.toLocaleLowerCase().includes(tag.trim().toLocaleLowerCase()),
+    )
+    .slice(0, 8);
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
-        description={`A tag groups people for a segment or an audience. ${people.length} selected.`}
+        description={`A tag groups people for a segment or an audience. ${people.length} selected. Tags are the club's own: people never see them.`}
         title="Tag people"
       >
         <form
           className="people-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (tag.trim()) void save.run();
+            if (tag.trim() && !tooMany) void save.run();
           }}
         >
-          <Field label="Tag">
+          <Field hint="Letters and numbers, up to 40 characters." label="Tag">
             <Input
               maxLength={40}
               onChange={(event) => setTag(event.currentTarget.value)}
@@ -680,15 +726,37 @@ function TagDialog({
               value={tag}
             />
           </Field>
+          {suggestions.length > 0 ? (
+            <div
+              aria-label="The club's tags"
+              className="people-tag-suggestions"
+              role="group"
+            >
+              {suggestions.map((entry) => (
+                <FilterChip
+                  key={entry.tag}
+                  onPressedChange={() => setTag(entry.tag)}
+                  pressed={tag.trim() === entry.tag}
+                >
+                  {entry.tag}
+                </FilterChip>
+              ))}
+            </div>
+          ) : null}
+          {tooMany ? (
+            <Notice role="status" title="Too many at once" tone="warning">
+              {`Tag ${BULK_TAG_MAX} people or fewer at a time. ${people.length} are selected; narrow the list with a segment or search.`}
+            </Notice>
+          ) : null}
           {save.error ? (
-            <Notice role="status" tone="info" title="Not available yet">
+            <Notice role="alert" title="Not tagged" tone="danger">
               {(save.error as { userMessage?: string }).userMessage ??
-                "Tagging isn't available yet. Nothing was changed."}
+                "The tag wasn't saved. Nothing was changed."}
             </Notice>
           ) : null}
           <div className="people-actions">
             <Button
-              disabled={!tag.trim()}
+              disabled={!tag.trim() || tooMany}
               loading={save.showPending}
               type="submit"
               variant="primary"

@@ -5,14 +5,12 @@ import {
   Field,
   Input,
   Notice,
-  Textarea,
   useAction,
   useConfirm,
 } from "@duna/ui/tideline";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  addNoteAction,
   changeMembershipAction,
   grantCreditsAction,
   saveDraftAction,
@@ -299,134 +297,6 @@ export function GrantCredits({
         </Button>
       </div>
       {confirm.dialog}
-    </form>
-  );
-}
-
-/**
- * "Send for signature" as a reviewed draft: an adult's request waits in
- * Inbox; a junior's goes through Inbox to the guardian. Nothing is sent here.
- */
-export function SignatureRequest({
-  personId,
-  firstName,
-  documentTitle,
-  isJunior,
-  channel,
-  clubName,
-}: {
-  readonly personId: string;
-  readonly firstName: string;
-  readonly documentTitle: string;
-  readonly isJunior: boolean;
-  readonly channel?: "email" | "sms";
-  readonly clubName: string;
-}) {
-  const [saved, setSaved] = useState(false);
-  const draft = useAction(
-    async ({ idempotencyKey }) =>
-      unwrap(
-        await saveDraftAction({
-          personId,
-          subject: `Please sign: ${documentTitle}`,
-          body: `Hi ${firstName}, before your next session at ${clubName}, please read and sign the ${documentTitle} in the Duna app. Reply here with any questions.`,
-          channel: channel ?? "email",
-          idempotencyKey,
-        }),
-      ),
-    {
-      messages: {
-        success: "The request is a draft in Inbox",
-        error: "The draft wasn't saved. Nothing was sent.",
-      },
-      report: reportFailure("hq.people.signature_draft_failed"),
-      onSuccess: () => setSaved(true),
-    },
-  );
-  if (isJunior) {
-    return (
-      <Button
-        href={`/inbox?compose=new&recipient=${encodeURIComponent(personId)}`}
-        size="sm"
-        variant="secondary"
-      >
-        Ask the guardian in Inbox
-      </Button>
-    );
-  }
-  if (!channel) {
-    return (
-      <span className="people-quiet">Add an email or mobile number first.</span>
-    );
-  }
-  return saved ? (
-    <Button href="/inbox" size="sm" variant="secondary">
-      Review in Inbox
-    </Button>
-  ) : (
-    <span className="people-inline">
-      <Button {...draft.buttonProps} size="sm" variant="secondary">
-        Send for signature
-      </Button>
-      {draft.error ? (
-        <span className="people-quiet" role="alert">
-          {messageOf(draft.error, "Not saved. Nothing was sent.")}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-/** A note about the person, kept with their record (author and time added). */
-export function AddNote({ personId }: { readonly personId: string }) {
-  const [body, setBody] = useState("");
-  const save = useAction(
-    async ({ idempotencyKey }) =>
-      unwrap(await addNoteAction({ personId, body, idempotencyKey })),
-    {
-      messages: { success: "Note saved" },
-      report: reportFailure("hq.people.note_failed"),
-      onSuccess: () => setBody(""),
-    },
-  );
-  return (
-    <form
-      aria-label="Add a note"
-      className="people-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (body.trim()) void save.run();
-      }}
-    >
-      <Field
-        hint="Seen by the club's team only, never by the person."
-        label="Note"
-      >
-        <Textarea
-          maxLength={4000}
-          onChange={(event) => setBody(event.currentTarget.value)}
-          rows={3}
-          value={body}
-        />
-      </Field>
-      {save.error ? (
-        <Notice role="status" title="Not saved" tone="info">
-          {messageOf(
-            save.error,
-            "Notes aren't available yet. Nothing was saved.",
-          )}
-        </Notice>
-      ) : null}
-      <div className="people-actions">
-        <Button
-          disabled={!body.trim()}
-          loading={save.showPending}
-          type="submit"
-          variant="secondary"
-        >
-          Save note
-        </Button>
-      </div>
     </form>
   );
 }

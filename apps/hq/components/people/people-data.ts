@@ -17,7 +17,6 @@ import {
   type PeopleCapabilities,
 } from "./people-capabilities";
 import {
-  canSeeHealth,
   type DuplicateCandidate,
   type PersonRow,
   redactProfile,
@@ -111,13 +110,18 @@ export interface PeopleContext {
 }
 
 /** Every procedure path the API router serves (read once per process). */
-function procedurePaths(): string[] {
+export function procedurePaths(): string[] {
   const definition = (
     appRouter as unknown as {
       _def?: { procedures?: Record<string, unknown> };
     }
   )._def;
   return Object.keys(definition?.procedures ?? {});
+}
+
+/** The People capability switches right now (from the router's procedures). */
+export function peopleCapabilitiesNow(): PeopleCapabilities {
+  return capabilitiesFrom(procedurePaths());
 }
 
 export const peopleContext = cache(async (): Promise<PeopleContext> => {
@@ -136,31 +140,10 @@ export const peopleContext = cache(async (): Promise<PeopleContext> => {
     canExport: canWrite,
     canRefund: hasScope(session, "payments:write"),
     canBook: hasScope(session, "sessions:write"),
-    capabilities: capabilitiesFrom(procedurePaths()),
+    capabilities: peopleCapabilitiesNow(),
     now: new Date().toISOString(),
   };
 });
-
-/**
- * Whether this person's Health tab exists for this viewer, decided WITHOUT
- * an access record. The Health service's only read (`memberHealthProfile`)
- * records "health.profile_viewed" for every non-owner call, and its
- * non-recording check (`resolveHealthAccess`) is not exported, so the page
- * never calls the service on load. It decides from the two non-recording
- * parts it can read: the service's viewer roles (owners, managers and coaches
- * for an adult; only coaches for a junior), and the person's active share
- * with the club as the member profile's own grant lookup returns it (the
- * `health` snapshot `operator.memberProfile` builds from health sharing
- * grants). The recording read happens once, when the Health tab is opened,
- * and the service then checks age, guardian approval and the grant again.
- */
-function healthTabExists(
-  subjectIsJunior: boolean,
-  sharedWithClub: boolean,
-  context: PeopleContext,
-): boolean {
-  return sharedWithClub && canSeeHealth(context.roles, subjectIsJunior);
-}
 
 export interface PeopleWorkspace {
   readonly rows: readonly PersonRow[];
@@ -299,18 +282,17 @@ export const loadPerson = cache(
       "memberProfile",
     );
     if (profile.state !== "ok") return profile;
-    const health = healthTabExists(
-      row.isJunior,
-      profile.data.health !== undefined,
-      context,
-    );
+    // The Health service's own non-recording check (PRIV-1): it covers the
+    // person's share with the club and a share with one named coach. No
+    // health read happens on this page; the Health tab makes the one
+    // recording read when it is opened.
+    const health = profile.data.healthAccess?.canView === true;
     return {
       state: "ok",
       data: {
         row,
         profile: redactProfile(profile.data, {
           canSeePayments: context.canSeePayments,
-          canSeeHealth: health,
         }),
         canSeeHealth: health,
         people: people.data,
@@ -343,8 +325,38 @@ export const loadHealthHistory = cache(
   },
 );
 
-/** The club's waivers and consent documents (versions and requirements). */
-export const loadWaivers = cache(async () => {
+/** The staff notes on a person (`operator.people.notes.list`). */
+export const loadStaffNotes = cache(async (personId: string) => {
   const caller = await getServerCaller();
-  return settle(() => caller.operator.waiverWorkspace(), "waiverWorkspace");
+  return settle(
+    () => caller.operator.people.notes.list({ personId }),
+    "peopleNotes",
+  );
+});
+
+/** The club's tags, with this person's own (`operator.people.tags.list`). */
+export const loadTags = cache(async (personId?: string) => {
+  const caller = await getServerCaller();
+  return settle(
+    () => caller.operator.people.tags.list(personId ? { personId } : {}),
+    "peopleTags",
+  );
+});
+
+/** Guardians, juniors, who pays and who is contacted (`household`). */
+export const loadHousehold = cache(async (personId: string) => {
+  const caller = await getServerCaller();
+  return settle(
+    () => caller.operator.people.household({ personId }),
+    "peopleHousehold",
+  );
+});
+
+/** Each waiver and consent with the version signed, by whom and when. */
+export const loadDocuments = cache(async (personId: string) => {
+  const caller = await getServerCaller();
+  return settle(
+    () => caller.operator.people.documents({ personId }),
+    "peopleDocuments",
+  );
 });

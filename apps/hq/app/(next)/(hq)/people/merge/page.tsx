@@ -11,7 +11,11 @@ import { PageSection } from "@/components/shell/page-header";
 
 export const metadata: Metadata = { title: "Merge duplicates" };
 
-/** Merge two records of one person, side by side (`?a=<id>&b=<id>`). */
+/**
+ * Merge two records of one person, side by side (`?a=<id>&b=<id>`): Duna
+ * checks the merge first (what stays, what moves, what blocks it), then one
+ * strong confirmation merges exactly that.
+ */
 export default async function MergePeoplePage({
   searchParams,
 }: {

@@ -24,7 +24,8 @@ function timeOf(iso: string, timeZone: string): string {
 /**
  * A person › Bookings: what's coming up and what happened, in the words the
  * rest of HQ uses (Booked, Attended, No-show, Cancelled, Refunded), each
- * linking to its session, and adding them to a session.
+ * linking to its session with the session's own group state (the shared
+ * participation words, `groupState`), and adding them to a session.
  */
 export default async function PersonBookingsPage({
   params,
@@ -85,7 +86,13 @@ export default async function PersonBookingsPage({
                   {session.title}
                 </Link>
                 <span className="people-quiet">
-                  {[session.kind.replaceAll("-", " "), session.venueName]
+                  {[
+                    // The session's state in the shared participation words
+                    // every Duna surface uses ("3 places left", "Full").
+                    session.groupState?.staffWords ??
+                      session.kind.replaceAll("-", " "),
+                    session.venueName,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>

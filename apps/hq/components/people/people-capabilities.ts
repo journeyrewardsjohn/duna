@@ -1,27 +1,45 @@
 /**
- * People's capability switches: one per feature whose backend procedure has
- * not landed yet. A feature is offered (its button, tab section, palette
- * entry and empty-state link) only when its procedure exists in the API
+ * People's capability switches: one per feature that needs a backend
+ * procedure. A feature is offered (its button, tab section, palette entry
+ * and empty-state link) only when EVERY procedure it needs exists in the API
  * router, so nothing in production leads to a dead end, and each turns on by
- * itself when the backend package adds the procedure. Pure: the server reads
- * the router's procedure paths and passes them in (`people-data.ts`).
+ * itself when the backend adds what is missing. Pure: the server reads the
+ * router's procedure paths and passes them in (`people-data.ts`).
+ *
+ * The guard test (`people-capabilities.test.ts`) fails if a switch is on
+ * while its server action still answers "isn't switched on yet".
  */
 export const PEOPLE_CAPABILITY_PROCEDURES = {
-  /** Import people from a file (dry run, then write). */
-  import: "operator.people.import",
-  /** Merge two records of one person. */
-  merge: "operator.people.merge",
-  /** Notes about a person, not tied to a session. */
-  notes: "operator.people.notes",
-  /** Tags on people. */
-  tags: "operator.people.tags",
-  /** Household links and linking a guardian from HQ. */
-  household: "operator.people.household",
-  /** Who signed which waiver version, and when. */
-  documents: "operator.people.documents",
-  /** Pause, resume and cancel a member's plan (with its preview). */
-  membershipChange: "operator.people.changeMembership",
-} as const;
+  /** Import people from a file: dry run, then write. */
+  import: ["operator.people.importPreview", "operator.people.import"],
+  /** Merge two records of one person: preview, then merge. */
+  merge: ["operator.people.mergePreview", "operator.people.merge"],
+  /** Staff notes about a person, not tied to a session. */
+  notes: ["operator.people.notes"],
+  /** The club's tags on people. */
+  tags: ["operator.people.tags"],
+  /** The household, inviting and linking a guardian. */
+  household: [
+    "operator.people.household",
+    "operator.people.inviteGuardian",
+    "operator.people.linkGuardian",
+  ],
+  /** Who signed which waiver version, and asking for a signature. */
+  documents: ["operator.people.documents", "operator.people.requestSignature"],
+  /**
+   * Changing a member to another plan, with its preview. It also needs a
+   * read of the club's plans with their ids, and the plan id on each of the
+   * person's memberships, so HQ can offer a target: neither exists yet
+   * ("Needs API" in docs/product/people.md), so this stays off.
+   */
+  planChange: [
+    "operator.people.planChangePreview",
+    "operator.people.changePlan",
+    "operator.people.planOptions",
+  ],
+  /** Pause, resume and cancel a member's plan for them: not built. */
+  membershipChange: ["operator.people.changeMembership"],
+} as const satisfies Record<string, readonly string[]>;
 
 export type PeopleCapability = keyof typeof PEOPLE_CAPABILITY_PROCEDURES;
 export type PeopleCapabilities = Readonly<Record<PeopleCapability, boolean>>;
@@ -34,9 +52,9 @@ export function capabilitiesFrom(
   const has = (path: string) =>
     paths.some((entry) => entry === path || entry.startsWith(`${path}.`));
   return Object.fromEntries(
-    Object.entries(PEOPLE_CAPABILITY_PROCEDURES).map(([key, path]) => [
+    Object.entries(PEOPLE_CAPABILITY_PROCEDURES).map(([key, needed]) => [
       key,
-      has(path),
+      needed.every(has),
     ]),
   ) as unknown as PeopleCapabilities;
 }

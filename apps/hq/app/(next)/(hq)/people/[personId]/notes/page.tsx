@@ -3,16 +3,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageSection } from "@/components/shell/page-header";
-import { AddNote } from "@/components/people/person-actions";
+import { loadStaffNotes } from "@/components/people/people-data";
 import { firstName, shortDate } from "@/components/people/people-model";
-import { PersonScreen, personPage } from "@/components/people/people-screen";
+import {
+  PeopleBlockState,
+  PersonScreen,
+  personPage,
+} from "@/components/people/people-screen";
+import { StaffNotes } from "@/components/people/person-records";
 
 export const metadata: Metadata = { title: "Notes" };
 
 /**
- * A person › Notes: the team's notes with their author and time, whether
- * each is private to the team or shared with the person, adding one (when
- * its capability is on), and the club's videos of them.
+ * A person › Notes: the team's own notes about the person (author and time;
+ * never shown to the person, never exported), the coaches' session notes
+ * with whether each is shared, and the club's videos of them.
  */
 export default async function PersonNotesPage({
   params,
@@ -31,18 +36,37 @@ export default async function PersonNotesPage({
   const notes = [...profile.notes].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
+  const staffNotes = context.capabilities.notes
+    ? await loadStaffNotes(row.id)
+    : undefined;
   return (
     <PersonScreen
       askStarters={[`Summarise the coaches' notes about ${first}`]}
       page={page}
       tab="notes"
     >
-      {context.canWrite && context.capabilities.notes ? (
-        <PageSection id="add-note" title="Add a note">
-          <AddNote personId={row.id} />
+      {staffNotes ? (
+        <PageSection id="team-notes" title="Team notes">
+          {staffNotes.state === "ok" ? (
+            <StaffNotes
+              canWrite={context.canWrite}
+              firstName={first}
+              isOwner={context.roles.includes("owner")}
+              notes={staffNotes.data.notes}
+              personId={row.id}
+              timeZone={context.timeZone}
+              viewerId={context.session.person?.id}
+            />
+          ) : (
+            <PeopleBlockState
+              loaded={staffNotes}
+              organization={context.organization}
+              what={`the team's notes about ${first}`}
+            />
+          )}
         </PageSection>
       ) : null}
-      <PageSection flush id="notes" title="Notes">
+      <PageSection flush id="notes" title="Session notes">
         {notes.length === 0 ? (
           <p className="people-quiet people-pad">
             No notes yet. Coaches&apos; session notes about {first} collect

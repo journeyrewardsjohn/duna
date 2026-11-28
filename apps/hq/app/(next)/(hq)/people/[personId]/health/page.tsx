@@ -70,8 +70,8 @@ function Trend({
 
 /**
  * A person › Health: the read-only summary the person chose to share, for
- * exactly the viewers the Health service allows for this person (see
- * `healthTabExists` in people-data.ts); never in a list or an export, under the
+ * exactly the viewers the Health service allows for this person (its own
+ * `healthAccess.canView` on the member profile); never in a list or an export, under the
  * product's standing "not medical advice" wording. For anyone else this tab
  * does not exist; reaching the address says "You need access" and nothing
  * about the person's health.
@@ -87,7 +87,7 @@ export default async function PersonHealthPage({
   if (found.kind === "state") return found.node;
   const { page } = found;
   const { record, context } = page;
-  const { row, profile } = record;
+  const { row } = record;
   // The one recording read (an access record), made only here where values
   // are shown; the service re-checks grant, age and guardian approval.
   const history = record.canSeeHealth
@@ -107,22 +107,30 @@ export default async function PersonHealthPage({
   }
   const first = firstName(row.name);
   const now = new Date(context.now);
-  const snapshot = profile.health;
-  const detail = history.state === "ok" ? history.data : undefined;
+  // Values come only from this read; the member profile carries none.
+  if (history.state !== "ok") {
+    return (
+      <PersonScreen askStarters={[]} page={page} tab="health">
+        <PageSection id="summary" title="Shared health summary">
+          <PeopleBlockState
+            loaded={history}
+            organization={context.organization}
+            what={`${first}'s shared health summary`}
+          />
+          <p className="people-disclaimer">{HEALTH_DISCLAIMER}</p>
+        </PageSection>
+      </PersonScreen>
+    );
+  }
+  const detail = history.data;
   const metrics = {
-    readinessScore:
-      snapshot?.metrics?.readinessScore ?? detail?.intelligence.readiness.score,
-    strainScore:
-      snapshot?.metrics?.strainScore ?? detail?.intelligence.strain.score,
-    restingHeartRate:
-      snapshot?.metrics?.restingHeartRate ?? detail?.summary.restingHeartRate,
-    heartRateVariabilityMs:
-      snapshot?.metrics?.heartRateVariabilityMs ??
-      detail?.summary.heartRateVariabilityMs,
-    sleepHours: snapshot?.metrics?.sleepHours ?? detail?.summary.lastSleepHours,
-    exerciseMinutes: snapshot?.metrics?.exerciseMinutes,
+    readinessScore: detail.intelligence.readiness.score,
+    strainScore: detail.intelligence.strain.score,
+    restingHeartRate: detail.summary.restingHeartRate,
+    heartRateVariabilityMs: detail.summary.heartRateVariabilityMs,
+    sleepHours: detail.summary.lastSleepHours,
   };
-  const daily = detail ? detail.daily.slice(0, 14).toReversed() : [];
+  const daily = detail.daily.slice(0, 14).toReversed();
   const pick = (key: "steps" | "activeEnergyKcal" | "sleepHours") =>
     daily.flatMap((day) => (day[key] === undefined ? [] : [day[key]!]));
   const figures: readonly [string, number | undefined, string, number][] = [
@@ -131,13 +139,11 @@ export default async function PersonHealthPage({
     ["Resting heart rate", metrics.restingHeartRate, " bpm", 0],
     ["Heart rate variability", metrics.heartRateVariabilityMs, " ms", 0],
     ["Sleep", metrics.sleepHours, " h", 1],
-    ["Exercise", metrics.exerciseMinutes, " min", 0],
   ];
-  const factors =
-    detail?.intelligence.readiness.factors.filter(
-      (factor) => factor.score !== undefined,
-    ) ?? [];
-  const scopes = snapshot?.scopes ?? detail?.access.scopes ?? [];
+  const factors = detail.intelligence.readiness.factors.filter(
+    (factor) => factor.score !== undefined,
+  );
+  const scopes = detail.access.scopes;
   return (
     <PersonScreen
       askStarters={[`How has ${first}'s training load changed this month?`]}
@@ -164,18 +170,10 @@ export default async function PersonHealthPage({
       <p className="people-disclaimer">{HEALTH_DISCLAIMER}</p>
       <PageSection id="sharing" title="What is shared">
         <p className="people-body">
-          {`${first} chose to share ${scopes.join(", ").replaceAll("-", " ")}${
-            snapshot?.observedAt
-              ? `. Last updated ${shortDate(snapshot.observedAt, context.timeZone, now)}`
-              : ""
-          }. ${first} can stop sharing at any time.`}
+          {`${first} chose to share ${scopes.join(", ").replaceAll("-", " ")}. ${first} can stop sharing at any time.`}
         </p>
-        {(snapshot?.metrics?.readinessSummary ??
-        detail?.intelligence.readiness.summary) ? (
-          <p className="people-body">
-            {snapshot?.metrics?.readinessSummary ??
-              detail?.intelligence.readiness.summary}
-          </p>
+        {detail.intelligence.readiness.summary ? (
+          <p className="people-body">{detail.intelligence.readiness.summary}</p>
         ) : null}
         {factors.length > 0 ? (
           <ul className="people-facts-list">
@@ -189,45 +187,37 @@ export default async function PersonHealthPage({
         ) : null}
       </PageSection>
       <PageSection id="trends" title="Recent days">
-        {history.state !== "ok" ? (
-          <PeopleBlockState
-            loaded={history}
-            organization={context.organization}
-            what="the day-by-day history"
-          />
-        ) : (
-          <>
-            <div className="people-trends">
-              <Trend label="Steps" values={pick("steps")} />
-              <Trend
-                label="Active energy"
-                suffix=" kcal"
-                values={pick("activeEnergyKcal")}
-              />
-              <Trend label="Sleep" suffix=" h" values={pick("sleepHours")} />
-            </div>
-            {history.data.timeline.length > 0 ? (
-              <ul className="people-timeline" aria-label="Shared timeline">
-                {history.data.timeline.slice(0, 24).map((entry) => (
-                  <li key={entry.id}>
-                    <span className="people-timeline__what">
-                      <strong>{entry.metric.replaceAll("-", " ")}</strong>
-                      <span>
-                        {entry.value === undefined
-                          ? (entry.categoryValue ?? "Recorded")
-                          : `${Math.round(entry.value * 10) / 10}${entry.unit ? ` ${entry.unit}` : ""}`}
-                      </span>
+        <>
+          <div className="people-trends">
+            <Trend label="Steps" values={pick("steps")} />
+            <Trend
+              label="Active energy"
+              suffix=" kcal"
+              values={pick("activeEnergyKcal")}
+            />
+            <Trend label="Sleep" suffix=" h" values={pick("sleepHours")} />
+          </div>
+          {history.data.timeline.length > 0 ? (
+            <ul className="people-timeline" aria-label="Shared timeline">
+              {history.data.timeline.slice(0, 24).map((entry) => (
+                <li key={entry.id}>
+                  <span className="people-timeline__what">
+                    <strong>{entry.metric.replaceAll("-", " ")}</strong>
+                    <span>
+                      {entry.value === undefined
+                        ? (entry.categoryValue ?? "Recorded")
+                        : `${Math.round(entry.value * 10) / 10}${entry.unit ? ` ${entry.unit}` : ""}`}
                     </span>
-                    <time dateTime={entry.startedAt}>
-                      {shortDate(entry.startedAt, context.timeZone, now)}
-                    </time>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <p className="people-disclaimer">{history.data.disclaimer}</p>
-          </>
-        )}
+                  </span>
+                  <time dateTime={entry.startedAt}>
+                    {shortDate(entry.startedAt, context.timeZone, now)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="people-disclaimer">{history.data.disclaimer}</p>
+        </>
       </PageSection>
     </PersonScreen>
   );

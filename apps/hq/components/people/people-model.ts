@@ -3,7 +3,7 @@
  * React, no I/O, so every rule here is unit-tested: what a person is to the
  * club in plain words, what needs attention, segments as shareable URL
  * states, search, the next best action, duplicates, export columns, import
- * checks, merge plans, who may see health, and what a role may receive at
+ * checks, merge checks, and what a role may receive at
  * all (redaction happens on the server, before anything reaches a browser).
  */
 
@@ -11,28 +11,12 @@ import type { OperatorMemberProfile } from "@duna/api";
 
 // ---------------------------------------------------------------- privacy
 
-/**
- * The roles a person's health grant to the club reaches, exactly as the
- * Health service decides (`HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES` and
- * `HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES` in the service's policy; a unit
- * test keeps these equal): owners, managers and coaches for an adult, only
- * coaches for a junior. The front desk, scorekeepers and accountants are
- * never reached. A role in the list sees health only when the person has
- * shared it (the service checks the grant itself with Duna Database).
+/*
+ * Who may open a person's Health is decided by the Health service itself and
+ * arrives with the member profile as `healthAccess.canView` (computed by the
+ * service's non-recording check, so reading it writes no access record). HQ
+ * keeps no copy of that rule.
  */
-export const HEALTH_ADULT_VIEWER_ROLES = ["owner", "manager", "coach"] as const;
-export const HEALTH_JUNIOR_VIEWER_ROLES = ["coach"] as const;
-
-/** Whether the viewer's role is one a health grant can reach for this person. */
-export function canSeeHealth(
-  roles: readonly string[],
-  subjectIsJunior: boolean,
-): boolean {
-  const reached: readonly string[] = subjectIsJunior
-    ? HEALTH_JUNIOR_VIEWER_ROLES
-    : HEALTH_ADULT_VIEWER_ROLES;
-  return roles.some((role) => reached.includes(role));
-}
 
 /** The product's standing wording under any health figure. */
 export const HEALTH_DISCLAIMER =
@@ -1046,36 +1030,47 @@ export function toCsv(rows: readonly (readonly string[])[]): string {
 
 // ---------------------------------------------------------------- import
 
+/**
+ * What a column can hold: the import procedure's own field names
+ * (`peopleImportFieldSchema`; a unit test keeps them equal), plus "ignore".
+ */
 export type ImportField =
   | "name"
-  | "firstName"
-  | "lastName"
+  | "givenName"
+  | "familyName"
   | "email"
-  | "phone"
+  | "phoneE164"
   | "birthDate"
-  | "junior"
+  | "isMinor"
+  | "relationship"
   | "guardianName"
   | "guardianEmail"
-  | "guardianPhone"
+  | "guardianPhoneE164"
+  | "tags"
   | "ignore";
 
 export const importFieldLabels: Readonly<Record<ImportField, string>> = {
   name: "Full name",
-  firstName: "First name",
-  lastName: "Last name",
+  givenName: "First name",
+  familyName: "Last name",
   email: "Email",
-  phone: "Mobile",
+  phoneE164: "Mobile",
   birthDate: "Date of birth",
-  junior: "Junior (yes or no)",
+  isMinor: "Junior (yes or no)",
+  relationship: "Guardian's relationship",
   guardianName: "Guardian name",
   guardianEmail: "Guardian email",
-  guardianPhone: "Guardian mobile",
+  guardianPhoneE164: "Guardian mobile",
+  tags: "Tags",
   ignore: "Don't import",
 };
 
-/** At most this many rows in one file (a club's whole list fits). */
-export const IMPORT_MAX_ROWS = 5000;
+/** The import procedure's bounds (`PEOPLE_IMPORT_MAX_ROWS`; tested equal). */
+export const IMPORT_MAX_ROWS = 1000;
 export const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+/** The procedure's limits on one column name and one cell. */
+export const IMPORT_MAX_HEADER = 80;
+export const IMPORT_MAX_CELL = 400;
 
 /** RFC 4180 CSV: quoted cells, escaped quotes, commas and line breaks inside quotes. */
 export function parseCsv(text: string): string[][] {
@@ -1116,15 +1111,17 @@ export function parseCsv(text: string): string[][] {
 
 const headerWords: readonly [ImportField, RegExp][] = [
   ["guardianEmail", /^(guardian|parent).*(e\s?mail)/],
-  ["guardianPhone", /^(guardian|parent).*(phone|mobile|cell)/],
+  ["guardianPhoneE164", /^(guardian|parent).*(phone|mobile|cell)/],
+  ["relationship", /relationship|relation/],
   ["guardianName", /^(guardian|parent)/],
-  ["firstName", /^(first|given)\s*name$|^first$/],
-  ["lastName", /^(last|family|sur)\s*name$|^surname$|^last$/],
+  ["givenName", /^(first|given)\s*name$|^first$/],
+  ["familyName", /^(last|family|sur)\s*name$|^surname$|^last$/],
   ["name", /^(full\s*)?name$|^member$|^player$|^person$/],
   ["email", /e\s?mail/],
-  ["phone", /phone|mobile|cell/],
+  ["phoneE164", /phone|mobile|cell/],
   ["birthDate", /birth|dob/],
-  ["junior", /junior|minor|under\s*18|child/],
+  ["isMinor", /junior|minor|under\s*18|child/],
+  ["tags", /^tags?$|^labels?$|^groups?$/],
 ];
 
 /** A first guess at what each column holds, from its header. */
@@ -1142,159 +1139,18 @@ export function guessMapping(headers: readonly string[]): ImportField[] {
   });
 }
 
-export interface ImportRow {
-  /** The line in the file (the header is line 1). */
-  readonly line: number;
-  readonly name: string;
-  readonly kind: "adult" | "junior";
-  readonly email?: string;
-  readonly phone?: string;
-  readonly guardianName?: string;
-  readonly guardianEmail?: string;
-  readonly guardianPhone?: string;
-  readonly status: "ready" | "duplicate" | "problem";
-  readonly problems: readonly string[];
-  readonly duplicateOf?: string;
-}
-
-export interface ImportCheck {
-  readonly rows: readonly ImportRow[];
-  readonly summary: {
-    readonly total: number;
-    readonly ready: number;
-    readonly duplicates: number;
-    readonly problems: number;
-    readonly juniors: number;
-  };
-}
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function ageOn(birth: string, now: Date): number | undefined {
-  const date = new Date(birth);
-  if (Number.isNaN(date.getTime())) return undefined;
-  let age = now.getUTCFullYear() - date.getUTCFullYear();
-  const beforeBirthday =
-    now.getUTCMonth() < date.getUTCMonth() ||
-    (now.getUTCMonth() === date.getUTCMonth() &&
-      now.getUTCDate() < date.getUTCDate());
-  if (beforeBirthday) age -= 1;
-  return age;
-}
-
-const truthy = /^(y|yes|true|1|junior|minor|x)$/i;
-
-/**
- * The dry run: what each row would become, with every problem in words.
- * Writes nothing. Duplicates are checked against the club's people and
- * against earlier rows in the same file.
- */
-export function checkImport(
-  table: readonly (readonly string[])[],
-  mapping: readonly ImportField[],
-  existing: readonly DuplicateCandidate[],
-  now: Date,
-): ImportCheck {
-  const [, ...body] = table;
-  const seen: DuplicateCandidate[] = [];
-  const rows: ImportRow[] = body
-    .slice(0, IMPORT_MAX_ROWS)
-    .map((cells, index) => {
-      const value = (field: ImportField) => {
-        const column = mapping.indexOf(field);
-        return column >= 0 ? (cells[column] ?? "").trim() : "";
-      };
-      const name =
-        value("name") ||
-        [value("firstName"), value("lastName")].filter(Boolean).join(" ");
-      const birth = value("birthDate");
-      const age = birth ? ageOn(birth, now) : undefined;
-      const isJunior =
-        truthy.test(value("junior")) || (age !== undefined && age < 18);
-      const problems: string[] = [];
-      if (!name) problems.push("No name");
-      if (birth && age === undefined)
-        problems.push("Date of birth isn't a date");
-      const rawEmail = value("email");
-      const rawPhone = value("phone");
-      const email = normaliseEmail(rawEmail);
-      const phone = normalisePhone(rawPhone);
-      const guardianEmail = normaliseEmail(value("guardianEmail"));
-      const guardianPhone = normalisePhone(value("guardianPhone"));
-      if (isJunior) {
-        if (!value("guardianName"))
-          problems.push("Junior without a guardian name");
-        if (!guardianEmail && !guardianPhone)
-          problems.push("Junior without a guardian email or mobile");
-        if (guardianEmail && !emailPattern.test(guardianEmail))
-          problems.push("Guardian email isn't an email address");
-        if (value("guardianPhone") && !guardianPhone)
-          problems.push("Guardian mobile isn't a full number");
-      } else {
-        if (!email && !phone) problems.push("No email or mobile");
-        if (email && !emailPattern.test(email))
-          problems.push("Email isn't an email address");
-        if (rawPhone && !phone) problems.push("Mobile isn't a full number");
-      }
-      const candidate: DuplicateCandidate = {
-        id: `row-${index}`,
-        name,
-        email: isJunior ? undefined : email,
-        phone: isJunior ? undefined : phone,
-        isJunior,
-      };
-      const strong = (match: DuplicateMatch) =>
-        match.strength === "same-contact" ||
-        (match.strength === "same-name" && isJunior);
-      const existingMatch = name
-        ? findDuplicates(candidate, existing).find(strong)
-        : undefined;
-      const fileMatch =
-        !existingMatch && name
-          ? findDuplicates(candidate, seen).find(strong)
-          : undefined;
-      seen.push(candidate);
-      const duplicateOf = existingMatch
-        ? existingMatch.name
-        : fileMatch
-          ? `${fileMatch.name}, earlier in this file`
-          : undefined;
-      return {
-        line: index + 2,
-        name: name || "(no name)",
-        kind: isJunior ? "junior" : "adult",
-        email: isJunior ? undefined : email,
-        phone: isJunior ? undefined : phone,
-        guardianName: isJunior ? value("guardianName") || undefined : undefined,
-        guardianEmail: isJunior ? guardianEmail : undefined,
-        guardianPhone: isJunior ? guardianPhone : undefined,
-        status:
-          problems.length > 0 ? "problem" : duplicateOf ? "duplicate" : "ready",
-        problems,
-        duplicateOf,
-      };
-    });
-  return {
-    rows,
-    summary: {
-      total: rows.length,
-      ready: rows.filter((row) => row.status === "ready").length,
-      duplicates: rows.filter((row) => row.status === "duplicate").length,
-      problems: rows.filter((row) => row.status === "problem").length,
-      juniors: rows.filter(
-        (row) => row.status === "ready" && row.kind === "junior",
-      ).length,
-    },
-  };
-}
-
-/** Whether the mapping can import anything: a name, and contact for adults. */
+/** Whether the mapping can import anything: a name, and some contact. */
 export function mappingProblems(mapping: readonly ImportField[]): string[] {
   const has = (field: ImportField) => mapping.includes(field);
   const problems: string[] = [];
-  if (!has("name") && !has("firstName"))
+  if (!has("name") && !has("givenName"))
     problems.push("Choose the column with each person's name.");
-  if (!has("email") && !has("phone"))
+  if (
+    !has("email") &&
+    !has("phoneE164") &&
+    !has("guardianEmail") &&
+    !has("guardianPhoneE164")
+  )
     problems.push("Choose the column with an email or a mobile number.");
   const counts = new Map<ImportField, number>();
   for (const field of mapping) {
@@ -1310,6 +1166,59 @@ export function mappingProblems(mapping: readonly ImportField[]): string[] {
   return problems;
 }
 
+/**
+ * The file as the import procedure takes it: each row as column → cell,
+ * and each Duna field → its column. Column names are made unique (an empty
+ * or repeated header becomes "Column 3"). Answers a problem in words when
+ * the file can't be sent as it is (a cell or header over the limits).
+ */
+export function importRequest(
+  table: readonly (readonly string[])[],
+  mapping: readonly ImportField[],
+):
+  | {
+      readonly ok: true;
+      readonly rows: Record<string, string>[];
+      readonly mapping: Partial<Record<Exclude<ImportField, "ignore">, string>>;
+    }
+  | { readonly ok: false; readonly problem: string } {
+  const [header = [], ...body] = table;
+  const seen = new Set<string>();
+  const names = header.map((raw, index) => {
+    let name = raw.trim().slice(0, IMPORT_MAX_HEADER) || `Column ${index + 1}`;
+    if (seen.has(name)) name = `Column ${index + 1}`;
+    seen.add(name);
+    return name;
+  });
+  const fields: Partial<Record<Exclude<ImportField, "ignore">, string>> = {};
+  mapping.forEach((field, index) => {
+    if (field !== "ignore" && names[index]) fields[field] = names[index];
+  });
+  const rows: Record<string, string>[] = [];
+  for (const [line, cells] of body.entries()) {
+    const row: Record<string, string> = {};
+    for (const [index, name] of names.entries()) {
+      if (mapping[index] === "ignore" || mapping[index] === undefined) continue;
+      const value = (cells[index] ?? "").trim();
+      if (value.length > IMPORT_MAX_CELL) {
+        return {
+          ok: false,
+          problem: `Row ${line + 1}, ${name}: a cell is longer than ${IMPORT_MAX_CELL} characters. Shorten it and choose the file again.`,
+        };
+      }
+      row[name] = value;
+    }
+    rows.push(row);
+  }
+  return { ok: true, rows, mapping: fields };
+}
+
+// ---------------------------------------------------------------- tags
+
+/** The tag procedure's bounds (`PEOPLE_BULK_TAG_MAX_PEOPLE`; tested equal). */
+export const BULK_TAG_MAX = 200;
+export const NOTE_MAX_LENGTH = 4000;
+
 // ---------------------------------------------------------------- merge
 
 export interface MergeSide {
@@ -1324,81 +1233,57 @@ export interface MergeSide {
   readonly upcoming: number;
 }
 
-export interface MergePlan {
-  /** Why it can't be merged, when it can't. */
-  readonly blocked?: string;
-  /** Each detail the merged person keeps, and whose it was. */
-  readonly kept: readonly {
-    readonly label: string;
-    readonly value: string;
-    readonly from: "kept" | "merged" | "both";
-  }[];
-  /** What moves across from the merged record. */
-  readonly moved: readonly string[];
+/**
+ * Why two records obviously can't be merged, before asking Duna (which
+ * checks every rule itself in `mergePreview`): the same record twice, or a
+ * junior and an adult.
+ */
+export function mergeBlock(
+  keep: Pick<MergeSide, "id" | "isJunior">,
+  merge: Pick<MergeSide, "id" | "isJunior">,
+): string | undefined {
+  if (keep.id === merge.id) return "Choose two different people.";
+  if (keep.isJunior !== merge.isJunior)
+    return "A junior and an adult can't be merged: they are different people, and the adult may be the junior's guardian.";
+  return undefined;
 }
 
-/**
- * What a merge keeps: the kept record's details first, the other's where
- * the kept one has none; credits add up; history, bookings, payments and
- * notes move across. A junior and an adult are never merged.
- */
-export function mergePlan(keep: MergeSide, merge: MergeSide): MergePlan {
-  if (keep.id === merge.id) {
-    return { blocked: "Choose two different people.", kept: [], moved: [] };
-  }
-  if (keep.isJunior !== merge.isJunior) {
-    return {
-      blocked:
-        "A junior and an adult can't be merged: they are different people, and the adult may be the junior's guardian.",
-      kept: [],
-      moved: [],
-    };
-  }
-  const pick = (a: string | undefined, b: string | undefined) =>
-    a
-      ? { value: a, from: "kept" as const }
-      : b
-        ? { value: b, from: "merged" as const }
-        : undefined;
-  const kept: {
-    label: string;
-    value: string;
-    from: "kept" | "merged" | "both";
-  }[] = [{ label: "Name", value: keep.name, from: "kept" }];
-  if (!keep.isJunior) {
-    const email = pick(keep.email, merge.email);
-    if (email) kept.push({ label: "Email", ...email });
-    const phone = pick(keep.phone, merge.phone);
-    if (phone) kept.push({ label: "Mobile", ...phone });
-  }
-  const plan = pick(keep.plan, merge.plan);
-  if (plan) kept.push({ label: "Plan", ...plan });
-  kept.push({
-    label: "Credits",
-    value: String(keep.credits + merge.credits),
-    from:
-      merge.credits > 0 && keep.credits > 0
-        ? "both"
-        : merge.credits > 0
-          ? "merged"
-          : "kept",
-  });
-  kept.push({
-    label: "Joined",
-    value: (keep.memberSince < merge.memberSince
-      ? keep.memberSince
-      : merge.memberSince
-    ).slice(0, 10),
-    from: keep.memberSince <= merge.memberSince ? "kept" : "merged",
-  });
-  return {
-    kept,
-    moved: [
-      `${merge.name}'s bookings and attendance history`,
-      `${merge.name}'s payments, refunds and credits`,
-      `${merge.name}'s notes, documents and family links`,
-    ],
-  };
+/** How many rows of each kind a merge moves, in words (only non-zero kinds). */
+export const mergeMoveWords: Readonly<
+  Record<
+    | "bookings"
+    | "attendance"
+    | "memberships"
+    | "credits"
+    | "payments"
+    | "waivers"
+    | "familyLinks"
+    | "notes"
+    | "tags",
+    readonly [string, string]
+  >
+> = {
+  bookings: ["booking", "bookings"],
+  attendance: ["attendance record", "attendance records"],
+  memberships: ["membership", "memberships"],
+  credits: ["credit wallet", "credit wallets"],
+  payments: ["payment", "payments"],
+  waivers: ["waiver signature", "waiver signatures"],
+  familyLinks: ["family link", "family links"],
+  notes: ["note", "notes"],
+  tags: ["tag", "tags"],
+};
+
+export function mergeMoves(
+  moves: Partial<Record<keyof typeof mergeMoveWords, number>>,
+): string[] {
+  return (Object.keys(mergeMoveWords) as (keyof typeof mergeMoveWords)[])
+    .filter((kind) => (moves[kind] ?? 0) > 0)
+    .map((kind) => {
+      const count = moves[kind]!;
+      const [one, many] = mergeMoveWords[kind];
+      return `${count} ${count === 1 ? one : many}`;
+    });
 }
 
 // ---------------------------------------------------------------- bookings
@@ -1451,17 +1336,14 @@ export function cardStatusOf(
 /**
  * A member profile cut to what the viewer may receive, on the server,
  * before any part of it is rendered or handed to a client component: no
- * health unless the viewer may see this person's health; no money (orders,
+ * health marker (values come only from the Health tab's read); no money (orders,
  * refunds, prices, spend, purchase lines in the timeline) unless the viewer
  * reads payments; never a junior's own contact. Zeroed money is never shown:
  * the screens only render money for roles that read payments.
  */
 export function redactProfile(
   profile: OperatorMemberProfile,
-  permissions: {
-    readonly canSeePayments: boolean;
-    readonly canSeeHealth: boolean;
-  },
+  permissions: { readonly canSeePayments: boolean },
 ): OperatorMemberProfile {
   const isJunior = profile.relationship.isMinor;
   const relationship = {
@@ -1475,7 +1357,10 @@ export function redactProfile(
   return {
     ...profile,
     relationship,
-    health: permissions.canSeeHealth && !isJunior ? profile.health : undefined,
+    // Health values never arrive here (they come only from the Health
+    // service's recording read on the Health tab); the deprecated marker is
+    // dropped so nothing about health reaches a page that doesn't need it.
+    health: undefined,
     purchases: permissions.canSeePayments ? profile.purchases : [],
     plans: permissions.canSeePayments
       ? profile.plans

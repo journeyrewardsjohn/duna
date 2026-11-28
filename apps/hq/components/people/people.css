@@ -696,6 +696,47 @@
       font: var(--td-type-label);
     }
 
+    /* ---------- Team notes, tags, household invitations ---------- */
+
+    .people-staff-notes,
+    .people-tags,
+    .people-invite-result {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+    }
+
+    .people-tag-list,
+    .people-tag-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .people-tag-list > li {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--td-space-1);
+      max-width: 100%;
+      padding-inline: var(--td-space-3) var(--td-space-1);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-pill);
+      background: var(--td-surface-subtle);
+    }
+
+    .people-tag {
+      overflow: hidden;
+      min-width: 0;
+      padding-block: var(--td-space-1);
+      color: var(--td-text);
+      font: var(--td-type-label);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ---------- Health ---------- */
 
     .people-trends {

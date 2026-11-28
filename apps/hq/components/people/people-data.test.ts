@@ -4,11 +4,16 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
  * The Health service records an access record ("health.profile_viewed")
  * for every non-owner call of `operator.memberHealthProfile`, its only read.
  * Opening a person's page must make none; opening the Health tab exactly
- * one. The caller is a stand-in that counts those calls.
+ * one. Whether the tab exists is the service's own answer on the member
+ * profile (`healthAccess.canView`, its non-recording check): HQ keeps no
+ * copy of the rule. The caller is a stand-in that counts those calls and
+ * answers `canView` as the service would for the viewer.
  */
 const maya = "10000000-0000-4000-8000-000000000201";
 const calls = { memberHealthProfile: 0 };
 const roles = { current: ["coach"] as string[] };
+/** What the Health service's check answers for this viewer. */
+const access = { canView: true };
 
 const person = {
   personId: maya,
@@ -53,12 +58,15 @@ const caller = {
       notes: [],
       videos: [],
       timeline: [],
-      health: {
-        source: "apple-healthkit",
-        scopes: ["heart"],
-        grantedAt: "2026-11-01T00:00:00.000Z",
-        metrics: { restingHeartRate: 58 },
-      },
+      // The deprecated marker (never values since PRIV-1): HQ ignores it.
+      health: access.canView
+        ? {
+            source: "apple-healthkit",
+            scopes: ["heart"],
+            grantedAt: "2026-11-01T00:00:00.000Z",
+          }
+        : undefined,
+      healthAccess: { canView: access.canView },
     }),
     memberHealthProfile: async () => {
       calls.memberHealthProfile += 1;
@@ -99,10 +107,26 @@ describe("health access records", () => {
     const { loadPerson } = await import("./people-data");
     const loaded = await loadPerson(maya);
     expect(loaded.state).toBe("ok");
-    // The tab exists (a coach, and Maya shares with the club)…
+    // The tab exists (the service says this coach may view Maya's health)…
     if (loaded.state === "ok") expect(loaded.data.canSeeHealth).toBe(true);
     // …decided without the service's recording read.
     expect(calls.memberHealthProfile).toBe(0);
+  });
+
+  it("a coach Maya shared with by name sees the tab (the service's answer, not a role list)", async () => {
+    // Front desk is never in a role list; a by-name share still reaches the
+    // person it names, and HQ follows the service rather than a role copy.
+    roles.current = ["front-desk"];
+    access.canView = true;
+    const { loadPerson } = await import("./people-data");
+    const loaded = await loadPerson(maya);
+    if (loaded.state === "ok") {
+      expect(loaded.data.canSeeHealth).toBe(true);
+      // No value or marker reaches the page.
+      expect(loaded.data.profile.health).toBeUndefined();
+    }
+    expect(calls.memberHealthProfile).toBe(0);
+    roles.current = ["coach"];
   });
 
   it("opening the Health tab creates exactly one", async () => {
@@ -112,8 +136,8 @@ describe("health access records", () => {
     expect(calls.memberHealthProfile).toBe(1);
   });
 
-  it("a role the share does not reach gets no tab and no record", async () => {
-    roles.current = ["front-desk"];
+  it("a viewer the service refuses gets no tab and no record", async () => {
+    access.canView = false;
     const { loadPerson } = await import("./people-data");
     const loaded = await loadPerson(maya);
     if (loaded.state === "ok") {
@@ -121,6 +145,6 @@ describe("health access records", () => {
       expect(loaded.data.profile.health).toBeUndefined();
     }
     expect(calls.memberHealthProfile).toBe(0);
-    roles.current = ["coach"];
+    access.canView = true;
   });
 });

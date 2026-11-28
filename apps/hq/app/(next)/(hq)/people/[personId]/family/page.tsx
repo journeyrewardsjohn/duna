@@ -1,15 +1,25 @@
+import type { PeopleHousehold } from "@duna/api";
 import { hqHref } from "@duna/core/hq-routes";
 import { Avatar, Button, Chip, Notice } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageSection } from "@/components/shell/page-header";
+import { loadHousehold } from "@/components/people/people-data";
 import {
   firstName,
   type GuardianState,
-  normaliseName,
 } from "@/components/people/people-model";
-import { PersonScreen, personPage } from "@/components/people/people-screen";
+import {
+  PeopleBlockState,
+  PeopleUnavailable,
+  PersonScreen,
+  personPage,
+} from "@/components/people/people-screen";
+import {
+  InviteGuardian,
+  LinkGuardian,
+} from "@/components/people/person-records";
 
 export const metadata: Metadata = { title: "Family" };
 
@@ -22,11 +32,30 @@ const consentWords: Record<
   none: { label: "No guardian consent", tone: "warning" },
 };
 
+const reviewWords: Record<
+  PeopleHousehold["guardians"][number]["reviewStatus"],
+  { readonly label: string; readonly tone?: "positive" | "warning" | "info" }
+> = {
+  verified: { label: "Verified", tone: "positive" },
+  pending: { label: "In review", tone: "info" },
+  rejected: { label: "Not accepted", tone: "warning" },
+};
+
+const juniorConsentWords: Record<
+  PeopleHousehold["juniors"][number]["consent"]["state"],
+  { readonly label: string; readonly tone?: "positive" | "warning" }
+> = {
+  recorded: { label: "Consent recorded", tone: "positive" },
+  withdrawn: { label: "Consent withdrawn", tone: "warning" },
+  "not-recorded": { label: "Consent not recorded", tone: "warning" },
+};
+
 /**
- * A person › Family, as a household: guardians and juniors linked both ways,
- * who pays and who is contacted (the guardian, never the junior), consent
- * per junior, and adding a junior through the club's invitation (the
- * guardian accepts before the junior joins).
+ * A person › Family, as Duna's household record (`household`): guardians
+ * with their review state, who is contacted and who pays; juniors with their
+ * consent state; and, for a junior, inviting a guardian (a link and a draft
+ * to send from Inbox: nothing is sent here) or linking an adult the club
+ * knows (in review, consent not recorded).
  */
 export default async function PersonFamilyPage({
   params,
@@ -41,23 +70,25 @@ export default async function PersonFamilyPage({
   const { record, context } = page;
   const { row } = record;
   const first = firstName(row.name);
-  const juniors = row.isJunior
-    ? []
-    : record.people.rows.filter(
-        (other) =>
-          other.isJunior &&
-          other.guardianName &&
-          normaliseName(other.guardianName) === normaliseName(row.name),
-      );
-  const guardian =
-    row.isJunior && row.guardianName
-      ? record.people.rows.find(
-          (other) =>
-            !other.isJunior &&
-            normaliseName(other.name) === normaliseName(row.guardianName!),
-        )
-      : undefined;
+  const household = context.capabilities.household
+    ? await loadHousehold(row.id)
+    : undefined;
   const addJunior = `${hqHref("memberInvite")}?kind=junior&guardian=${encodeURIComponent(row.id)}`;
+  const canChange = context.canWrite && context.capabilities.household;
+  const adults = record.people.rows
+    .filter((other) => !other.isJunior && other.id !== row.id)
+    .map((other) => ({ id: other.id, name: other.name }));
+  const personLink = (ref: { personId: string; displayName: string }) =>
+    record.people.rows.some((other) => other.id === ref.personId) ? (
+      <Link
+        className="people-link"
+        href={hqHref("member", { personId: ref.personId })}
+      >
+        {ref.displayName}
+      </Link>
+    ) : (
+      ref.displayName
+    );
   return (
     <PersonScreen
       actions={
@@ -78,117 +109,167 @@ export default async function PersonFamilyPage({
       page={page}
       tab="family"
     >
-      {row.isJunior ? (
-        <>
-          <PageSection id="guardian" title="Guardian">
-            <div className="people-household">
-              <div className="people-household__person">
-                <Avatar name={row.guardianName ?? "Guardian"} size="md" />
-                <span className="people-household__text">
-                  <strong>
-                    {guardian ? (
-                      <Link
-                        className="people-link"
-                        href={hqHref("member", { personId: guardian.id })}
-                      >
-                        {guardian.name}
-                      </Link>
-                    ) : (
-                      (row.guardianName ??
-                      (row.guardianState === "verified"
-                        ? "A confirmed guardian"
-                        : "No guardian yet"))
-                    )}
-                  </strong>
-                  <span className="people-quiet">
-                    Contacted for {first}, books and pays for them
-                  </span>
-                </span>
-                <Chip tone={consentWords[row.guardianState ?? "none"].tone}>
-                  {consentWords[row.guardianState ?? "none"].label}
-                </Chip>
-              </div>
-            </div>
-            <ul className="people-facts-list">
-              <li>
-                <strong>Who is contacted</strong>
-                <span>
-                  {row.guardianName ?? "The guardian"}. The club never contacts{" "}
-                  {first} directly, and {first}&apos;s page has no contact of
-                  their own.
-                </span>
-              </li>
-              <li>
-                <strong>Who pays</strong>
-                <span>The guardian, from their own Duna account.</span>
-              </li>
-              <li>
-                <strong>Consent</strong>
-                <span>
-                  {row.guardianState === "verified"
-                    ? "A guardian accepted and the relationship is confirmed."
-                    : row.guardianState === "pending"
-                      ? "The guardian has been asked and hasn't accepted yet. Until then the club can't book, message or charge for this junior."
-                      : "No guardian has accepted yet. Until one does, the club can't book, message or charge for this junior."}
-                </span>
-              </li>
-            </ul>
-          </PageSection>
-          <Notice title="A second guardian" tone="info">
-            A guardian adds another guardian from their own Duna app, where each
-            one accepts by link.
-          </Notice>
-        </>
+      {!household ? (
+        <PeopleUnavailable what="The household record" />
+      ) : household.state !== "ok" ? (
+        <PeopleBlockState
+          loaded={household}
+          organization={context.organization}
+          what={`${first}'s household`}
+        />
       ) : (
-        <PageSection
-          aside={
-            context.canWrite ? (
-              <Link className="people-link" href={addJunior}>
-                Add a junior
-              </Link>
-            ) : undefined
-          }
-          flush
-          id="juniors"
-          title="Juniors"
-        >
-          {juniors.length === 0 ? (
-            <p className="people-quiet people-pad">
-              {row.isGuardian
-                ? `No junior invited by the club names ${first} as guardian. Juniors ${first} added in their own Duna app aren't listed in HQ.`
-                : `${first} isn't a guardian of any junior at the club.`}
-            </p>
-          ) : (
-            <ul className="people-household-list">
-              {juniors.map((junior) => (
-                <li key={junior.id}>
-                  <Avatar name={junior.name} size="md" />
-                  <Link
-                    className="people-link"
-                    href={hqHref("member", { personId: junior.id })}
-                  >
-                    {junior.name}
-                  </Link>
-                  <Chip
-                    tone={consentWords[junior.guardianState ?? "none"].tone}
-                  >
-                    {consentWords[junior.guardianState ?? "none"].label}
-                  </Chip>
+        <>
+          {row.isJunior || household.data.guardians.length > 0 ? (
+            <PageSection flush id="guardians" title="Guardians">
+              {household.data.guardians.length === 0 ? (
+                <p className="people-quiet people-pad">
+                  {`No guardian is linked to ${first} yet. Until one accepts, the club can't book, message or charge for ${first}.`}
+                </p>
+              ) : (
+                <ul className="people-household-list">
+                  {household.data.guardians.map((guardian) => (
+                    <li key={guardian.personId}>
+                      <Avatar name={guardian.displayName} size="md" />
+                      <span className="people-household__text">
+                        <strong>{personLink(guardian)}</strong>
+                        <span className="people-quiet">
+                          {[
+                            guardian.relationship,
+                            guardian.contacted
+                              ? `contacted for ${first}`
+                              : undefined,
+                            guardian.pays === true ? "pays" : undefined,
+                            guardian.canApproveSpending
+                              ? "approves spending"
+                              : undefined,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </span>
+                      <Chip tone={reviewWords[guardian.reviewStatus].tone}>
+                        {reviewWords[guardian.reviewStatus].label}
+                      </Chip>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PageSection>
+          ) : null}
+
+          {row.isJunior ? (
+            <PageSection id="consent" title="Consent and contact">
+              <ul className="people-facts-list">
+                <li>
+                  <strong>Consent</strong>
+                  <span>
+                    <Chip tone={consentWords[row.guardianState ?? "none"].tone}>
+                      {consentWords[row.guardianState ?? "none"].label}
+                    </Chip>
+                  </span>
                 </li>
-              ))}
-            </ul>
+                <li>
+                  <strong>Who is contacted</strong>
+                  <span>
+                    {household.data.contact
+                      ? `${household.data.contact.displayName}. `
+                      : "A verified guardian, once one accepts. "}
+                    {`The club never contacts ${first} directly, and ${first}'s page has no contact of their own.`}
+                  </span>
+                </li>
+                {household.data.payer ? (
+                  <li>
+                    <strong>Who pays</strong>
+                    <span>{household.data.payer.displayName}</span>
+                  </li>
+                ) : null}
+              </ul>
+            </PageSection>
+          ) : (
+            <>
+              <PageSection
+                aside={
+                  context.canWrite ? (
+                    <Link className="people-link" href={addJunior}>
+                      Add a junior
+                    </Link>
+                  ) : undefined
+                }
+                flush
+                id="juniors"
+                title="Juniors"
+              >
+                {household.data.juniors.length === 0 ? (
+                  <p className="people-quiet people-pad">
+                    {`${first} isn't a guardian of any junior at the club.`}
+                  </p>
+                ) : (
+                  <ul className="people-household-list">
+                    {household.data.juniors.map((junior) => (
+                      <li key={junior.personId}>
+                        <Avatar name={junior.displayName} size="md" />
+                        <span className="people-household__text">
+                          <strong>{personLink(junior)}</strong>
+                          {junior.consent.at ? (
+                            <span className="people-quiet">
+                              {`Since ${junior.consent.at.slice(0, 10)}`}
+                            </span>
+                          ) : null}
+                        </span>
+                        <Chip
+                          tone={juniorConsentWords[junior.consent.state].tone}
+                        >
+                          {juniorConsentWords[junior.consent.state].label}
+                        </Chip>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </PageSection>
+              <PageSection id="contact" title="Contact">
+                <p className="people-body">
+                  {household.data.juniors.length > 0
+                    ? `${first} is contacted for themselves and for their juniors.`
+                    : `${first} is contacted directly.`}
+                  {household.data.payer
+                    ? ` ${household.data.payer.displayName} pays for ${first}'s bookings.`
+                    : ""}
+                </p>
+              </PageSection>
+            </>
           )}
-        </PageSection>
+
+          {row.isJunior && canChange ? (
+            <>
+              <PageSection id="invite-guardian" title="Invite a guardian">
+                <p className="people-body">
+                  {`Makes ${first}'s guardian invitation link and a draft message for you to send from Inbox. Nothing is sent from here.`}
+                </p>
+                <InviteGuardian
+                  juniorFirstName={first}
+                  juniorPersonId={row.id}
+                />
+              </PageSection>
+              <PageSection
+                id="link-guardian"
+                title="Link a guardian the club knows"
+              >
+                <LinkGuardian
+                  adults={adults}
+                  juniorFirstName={first}
+                  juniorPersonId={row.id}
+                />
+              </PageSection>
+            </>
+          ) : null}
+          {row.isJunior ? (
+            <Notice title="A second guardian" tone="info">
+              A guardian can also add another guardian from their own Duna app,
+              where each one accepts by link.
+            </Notice>
+          ) : null}
+        </>
       )}
-      {!row.isJunior ? (
-        <PageSection id="contact" title="Contact">
-          <p className="people-body">
-            {row.isGuardian || juniors.length > 0
-              ? `${first} is contacted for themselves and for their juniors, and pays for their juniors' bookings.`
-              : `${first} is contacted directly and pays for their own bookings.`}
-          </p>
-        </PageSection>
-      ) : null}
     </PersonScreen>
   );
 }

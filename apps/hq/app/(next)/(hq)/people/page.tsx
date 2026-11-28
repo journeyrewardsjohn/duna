@@ -5,7 +5,11 @@ import {
   type DuplicatePair,
   PeopleList,
 } from "@/components/people/people-list";
-import { loadPeople, peopleContext } from "@/components/people/people-data";
+import {
+  loadPeople,
+  loadTags,
+  peopleContext,
+} from "@/components/people/people-data";
 import {
   findDuplicatePairs,
   listStateFromParams,
@@ -47,6 +51,12 @@ export default async function PeoplePage({
           }))
       : [];
   const count = people.state === "ok" ? people.data.rows.length : undefined;
+  // The club's tags for the bulk Tag action (a read failure only loses the
+  // suggestions; tagging still works).
+  const tags =
+    people.state === "ok" && context.canWrite && context.capabilities.tags
+      ? await loadTags()
+      : undefined;
   return (
     <PeopleScreen
       actions={
@@ -82,6 +92,7 @@ export default async function PeoplePage({
           canExport={context.canExport}
           capabilities={context.capabilities}
           canWrite={context.canWrite}
+          clubTags={tags?.state === "ok" ? tags.data.tags : []}
           duplicates={duplicates}
           focusSearch={params.focus === "search"}
           initial={initial}

@@ -14,7 +14,13 @@ import {
   nextBestAction,
   shortDate,
 } from "@/components/people/people-model";
-import { PersonScreen, personPage } from "@/components/people/people-screen";
+import { loadTags } from "@/components/people/people-data";
+import {
+  PeopleBlockState,
+  PersonScreen,
+  personPage,
+} from "@/components/people/people-screen";
+import { PersonTags } from "@/components/people/person-records";
 
 export const metadata: Metadata = { title: "Person" };
 
@@ -68,6 +74,7 @@ export default async function PersonOverviewPage({
     (plan) => cardStatusOf(plan.status) !== "expired",
   );
   const club = record.people.club;
+  const tags = context.capabilities.tags ? await loadTags(row.id) : undefined;
   const messageHref = `/inbox?compose=new&recipient=${encodeURIComponent(row.id)}`;
   return (
     <PersonScreen
@@ -186,6 +193,25 @@ export default async function PersonOverviewPage({
           </div>
         </dl>
       </PageSection>
+
+      {tags ? (
+        <PageSection id="tags" title="Tags">
+          {tags.state === "ok" ? (
+            <PersonTags
+              canWrite={context.canWrite}
+              clubTags={tags.data.tags.map((entry) => entry.tag)}
+              personId={row.id}
+              tags={tags.data.personTags ?? []}
+            />
+          ) : (
+            <PeopleBlockState
+              loaded={tags}
+              organization={context.organization}
+              what={`${first}'s tags`}
+            />
+          )}
+        </PageSection>
+      ) : null}
 
       <PageSection
         aside={

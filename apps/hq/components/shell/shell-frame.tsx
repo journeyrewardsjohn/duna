@@ -40,7 +40,7 @@ import {
   type ShellApi,
   type ShellPageInfo,
 } from "./shell-context";
-import { parseShellCommand, shellCommands } from "./shell-commands";
+import { parseShellCommand, shellCommandsFor } from "./shell-commands";
 import { Sidebar, type NavCounts } from "./sidebar";
 import { applyThemePreference } from "./theme";
 
@@ -61,9 +61,15 @@ export function ShellFrame({
   session,
   sidebar: initialSidebar,
   counts,
+  peopleCommands,
   children,
 }: {
   readonly session: ShellSession;
+  /** People's switched palette commands that are on for this person. */
+  readonly peopleCommands?: {
+    readonly import: boolean;
+    readonly merge: boolean;
+  };
   /** The remembered choice, or undefined for the width's default. */
   readonly sidebar?: SidebarMode;
   readonly counts?: NavCounts;
@@ -220,7 +226,7 @@ export function ShellFrame({
             <div className="hqs-top__actions">
               <CommandPalette
                 className="hqs-search"
-                commands={shellCommands}
+                commands={shellCommandsFor(peopleCommands)}
                 emptyText="Nothing matches. Try a page name, like Money."
                 onAction={(value) => {
                   const command = parseShellCommand(value);

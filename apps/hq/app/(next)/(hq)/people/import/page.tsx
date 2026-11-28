@@ -11,8 +11,10 @@ import {
 export const metadata: Metadata = { title: "Import people" };
 
 /**
- * Import people from a spreadsheet: choose, match columns, a dry run that
- * writes nothing, then one strong confirmation with the counts.
+ * Import people from a spreadsheet: choose, match columns, Duna's dry run
+ * (it writes nothing), then one strong confirmation with the counts. The
+ * people list is read first so a role or environment that can't see it gets
+ * its honest state before choosing a file.
  */
 export default async function ImportPeoplePage() {
   const context = await peopleContext();
@@ -32,7 +34,7 @@ export default async function ImportPeoplePage() {
       {!context.capabilities.import ? (
         <PeopleUnavailable what="Importing people from a file" />
       ) : people.state === "ok" ? (
-        <ImportFlow now={context.now} people={people.data.candidates} />
+        <ImportFlow />
       ) : (
         <PeopleBlockState
           loaded={people}
