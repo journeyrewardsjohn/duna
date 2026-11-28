@@ -119,6 +119,10 @@ test("compact Activities keeps every operational destination and accessible tabl
   ).toBeVisible();
   // A phone opens Schedule as the agenda; the lanes belong to the day view.
   if ((page.viewportSize()?.width ?? 1440) < 768) {
+    // Once hydrated, a phone shows the agenda and says so.
+    await expect(
+      page.getByRole("button", { name: "List", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Day", exact: true }).click();
     await expect(page).toHaveURL(/view=day/);
   }
