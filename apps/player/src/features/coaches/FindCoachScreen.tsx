@@ -23,10 +23,8 @@ import { CoachProfileModal } from "./CoachProfileModal";
 import { styles } from "../../legacy/styles";
 
 export function FindCoachScreen({
-  onBack,
   onOpenEvent,
 }: {
-  readonly onBack: () => void;
   readonly onOpenEvent: (eventIndex: number) => void;
 }) {
   const { coaches = [], dashboard, venues = [] } = usePlayerRuntime();
@@ -151,14 +149,6 @@ export function FindCoachScreen({
         contentContainerStyle={styles.screenContent}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          accessibilityLabel="Back to Play"
-          accessibilityRole="button"
-          onPress={onBack}
-          style={styles.coachFinderBack}
-        >
-          <Text style={styles.coachFinderBackText}>‹ Play</Text>
-        </Pressable>
         <Text style={[styles.eyebrow, styles.coachFinderEyebrow]}>
           COACHES ON DUNA
         </Text>

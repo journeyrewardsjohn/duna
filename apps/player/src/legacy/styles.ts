@@ -776,18 +776,6 @@ function createStyles() {
       paddingHorizontal: mobileControl.pageInset,
     },
     homeQuickActionPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
-    coachFinderBack: {
-      alignSelf: "flex-start",
-      marginBottom: 18,
-      minHeight: 40,
-      paddingRight: 16,
-      paddingTop: 8,
-    },
-    coachFinderBackText: {
-      color: colors.aqua,
-      fontSize: 14,
-      fontWeight: "900",
-    },
     coachFinderEyebrow: {
       lineHeight: 17,
       marginBottom: mobileGrid[1],
@@ -3326,18 +3314,6 @@ function createStyles() {
       fontSize: 12,
       fontWeight: "900",
     },
-    predictionPortfolioBack: {
-      alignItems: "center",
-      alignSelf: "flex-start",
-      minHeight: 48,
-      justifyContent: "center",
-      marginBottom: 2,
-    },
-    predictionPortfolioBackText: {
-      color: colors.aqua,
-      fontSize: 14,
-      fontWeight: "800",
-    },
     predictionPortfolioIntro: {
       color: colors.muted,
       fontSize: 15,
@@ -4499,18 +4475,6 @@ function createStyles() {
     athleteStudioSecondaryText: {
       color: colors.bone,
       fontSize: 12,
-      fontWeight: "800",
-    },
-    profileBack: {
-      alignItems: "center",
-      alignSelf: "flex-start",
-      justifyContent: "center",
-      minHeight: 48,
-      paddingRight: 16,
-    },
-    profileBackText: {
-      color: colors.aqua,
-      fontSize: 13,
       fontWeight: "800",
     },
     profileSetupCard: {

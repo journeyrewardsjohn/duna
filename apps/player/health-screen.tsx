@@ -542,13 +542,7 @@ function formatDate(value: string): string {
   });
 }
 
-export function HealthScreen({
-  onBack,
-  theme,
-}: {
-  readonly onBack: () => void;
-  readonly theme: HealthTheme;
-}) {
+export function HealthScreen({ theme }: { readonly theme: HealthTheme }) {
   const runtime = usePlayerRuntime();
   const { client, mode } = runtime;
   const palette = theme === "dark" ? darkPalette : lightPalette;
@@ -1140,13 +1134,6 @@ export function HealthScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.navRow}>
-          <Pressable
-            accessibilityLabel="Back to profile"
-            onPress={onBack}
-            style={styles.backButton}
-          >
-            <Text style={styles.backText}>‹</Text>
-          </Pressable>
           <View style={styles.navCopy}>
             <Text style={styles.eyebrow}>HEALTH · PRIVATE BY DEFAULT</Text>
             <Text style={styles.navTitle}>Your body, in context.</Text>
@@ -2310,7 +2297,13 @@ function CheckInModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["bottom"]} style={styles.checkInSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+              hitSlop={12}
+              onPress={onClose}
+              style={styles.modalCloseButton}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>PRIVATE CHECK-IN</Text>
@@ -2565,7 +2558,13 @@ function HealthImportOverlay({
           : "Secure connection confirmed";
 
   return (
-    <Modal animationType="fade" statusBarTranslucent transparent visible>
+    <Modal
+      animationType="fade"
+      onRequestClose={onMinimize}
+      statusBarTranslucent
+      transparent
+      visible
+    >
       <View accessibilityViewIsModal style={styles.importBackdrop}>
         <View style={styles.importCard}>
           <View style={styles.importMark}>
@@ -2594,8 +2593,14 @@ function HealthImportOverlay({
           <Text style={styles.importTitle}>{copy.title}</Text>
           <Text style={styles.importBody}>{copy.body}</Text>
           <Text style={styles.importCount}>{recordLabel}</Text>
-          {status.phase !== "permission" && status.phase !== "complete" && (
-            <Pressable onPress={onMinimize} style={styles.importMinimizeButton}>
+          {/* Every phase but the finished one keeps a way out, including
+              the wait for the system permission sheet. */}
+          {status.phase !== "complete" && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onMinimize}
+              style={styles.importMinimizeButton}
+            >
               <Text style={styles.importMinimizeButtonText}>
                 Keep using Duna
               </Text>
@@ -2706,7 +2711,13 @@ function ConnectModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+              hitSlop={12}
+              onPress={onClose}
+              style={styles.modalCloseButton}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>APPLE HEALTH</Text>
@@ -2845,7 +2856,13 @@ function ShareModal({
       <View style={styles.modalBackdrop}>
         <SafeAreaView edges={["top", "bottom"]} style={styles.modalSheet}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={onClose}>
+            <Pressable
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+              hitSlop={12}
+              onPress={onClose}
+              style={styles.modalCloseButton}
+            >
               <Text style={styles.modalClose}>Close</Text>
             </Pressable>
             <Text style={styles.modalEyebrow}>DUNA SHARING</Text>
@@ -3035,20 +3052,6 @@ function createHealthStyles(colors: HealthPalette) {
       gap: 12,
       paddingTop: 10,
       paddingBottom: 4,
-    },
-    backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surface,
-    },
-    backText: {
-      color: colors.ink,
-      fontSize: 34,
-      lineHeight: 36,
-      marginTop: -3,
     },
     navCopy: { flex: 1 },
     navTitle: {
@@ -4201,7 +4204,8 @@ function createHealthStyles(colors: HealthPalette) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.line,
     },
-    modalClose: { color: colors.aqua, fontSize: 12, fontWeight: "800" },
+    modalClose: { color: colors.aqua, fontSize: 16, fontWeight: "800" },
+    modalCloseButton: { minHeight: 44, minWidth: 44, justifyContent: "center" },
     modalEyebrow: {
       color: colors.muted,
       fontSize: 12,
