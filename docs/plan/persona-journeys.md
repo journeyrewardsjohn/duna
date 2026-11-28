@@ -341,8 +341,12 @@ Mono loads) failing to load in a sandboxed browser; F3 removes those loads.
   (production servers, as CI runs it). Locally without `CI` it starts dev
   servers. It runs in the same `pnpm test:e2e` as the viewport suites, as its
   own Playwright project (`personas`, desktop 1440 × 900); the viewport
-  projects ignore it. At Q0 it takes about 20 seconds with 4 workers once the
-  servers are up (50 passing tests, 72 fixme).
+  projects ignore it. At Q0 the project runs in about 20 seconds with CI's 2 workers
+  (54 tests pass: 46 journey steps, 4 owner checks, 4 harness self-tests; 73
+  are `fixme`); the whole `pnpm test:e2e` took 2.3 minutes locally. With several
+  worktrees on one machine, give each its own ports
+  (`PLAYWRIGHT_WEB_PORT`, `PLAYWRIGHT_HQ_PORT`) and its own Ask Duna agent
+  port (`EVE_NEXT_PRODUCTION_PORT`, default 4274), or HQ fails to start.
 - **Personas in demo mode.** Demo mode signs every request in as one actor
   (Mara Lewis, player + manager). The servers Playwright starts set
   `DUNA_DEMO_PERSONAS=enabled`; a test's `persona` option sets the
