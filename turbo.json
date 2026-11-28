@@ -91,22 +91,33 @@
     "WORKOS_COOKIE_PASSWORD"
   ],
   "tasks": {
+    "knowledge:generate": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/generate-duna-feature-knowledge.ts",
+        "$TURBO_ROOT$/docs/BUILD_MATRIX.md",
+        "$TURBO_ROOT$/docs/surfaces/**",
+        "src/router.ts",
+        "src/routers/**"
+      ],
+      "outputs": ["src/generated/**"]
+    },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^knowledge:generate", "knowledge:generate"],
       "outputs": [".next/**", "dist/**"]
     },
     "dev": {
+      "dependsOn": ["^knowledge:generate", "knowledge:generate"],
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint", "^knowledge:generate", "knowledge:generate"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck", "^knowledge:generate", "knowledge:generate"]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^knowledge:generate", "knowledge:generate"],
       "outputs": ["coverage/**"]
     },
     "test:watch": {
