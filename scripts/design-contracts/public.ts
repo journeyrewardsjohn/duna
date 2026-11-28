@@ -102,11 +102,12 @@ export const publicWeb: SurfaceContract = {
       kind: "includes",
       file: "apps/web/app/design-v4.css",
       values: [
-        "--duna-web-snow: #fcfcff",
-        "--duna-web-charcoal: #18181b",
-        "--duna-web-navy: #142335",
-        "--duna-web-sky: #d3e3f0",
-        "--duna-web-blush: #fecfc0",
+        // F2b points the public palette at Duna Design System roles.
+        "--duna-web-snow: var(--td-ground)",
+        "--duna-web-charcoal: var(--td-text)",
+        "--duna-web-navy: var(--td-action)",
+        "--duna-web-sky: var(--td-info-wash)",
+        "--duna-web-blush: var(--td-energy)",
         "--duna-web-radius-band: 48px",
         "--duna-web-font-mono: var(",
       ],

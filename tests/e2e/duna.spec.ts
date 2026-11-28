@@ -236,7 +236,7 @@ test("public club pages keep the hero readable and the section rail useful", asy
 
     await expect(hero).toHaveAttribute("data-hero-kind", "gradient");
     await expect(heading).toBeVisible();
-    await expect(heading).toHaveCSS("color", "rgb(32, 32, 32)");
+    await expect(heading).toHaveCSS("color", "rgb(14, 26, 34)");
     await expect(sectionNav).toBeVisible();
     await expect(
       sectionNav.getByRole("link", { name: "Events" }),
@@ -284,14 +284,14 @@ test("public club pages keep the hero readable and the section rail useful", asy
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(".club-profile")).toHaveCSS(
     "background-color",
-    "rgb(25, 25, 25)",
+    "rgb(14, 26, 34)",
   );
   await expect(
     page.getByRole("heading", {
       level: 1,
       name: "South Bay Volleyball Club",
     }),
-  ).toHaveCSS("color", "rgb(245, 245, 243)");
+  ).toHaveCSS("color", "rgb(244, 242, 236)");
   await expectNoHorizontalOverflow(page);
 });
 
@@ -1026,9 +1026,9 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     };
   });
   expect(aiAnalystColors).toEqual({
-    action: "rgb(25, 25, 25)",
-    heading: "rgb(25, 25, 25)",
-    signalHeading: "rgb(25, 25, 25)",
+    action: "rgb(14, 26, 34)",
+    heading: "rgb(14, 26, 34)",
+    signalHeading: "rgb(14, 26, 34)",
   });
   await expect(page.getByText("Payments are connected.")).toHaveCount(0);
   await expect(

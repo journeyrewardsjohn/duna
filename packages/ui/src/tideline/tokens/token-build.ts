@@ -388,17 +388,6 @@ function knownNames(source: TidelineTokenSource): Set<string> {
   );
 }
 
-function themeSelector(theme: string): string {
-  const selectors =
-    theme === DEFAULT_THEME
-      ? [TIDELINE_ROOT, `${TIDELINE_ROOT}[data-theme="${theme}"]`]
-      : [`${TIDELINE_ROOT}[data-theme="${theme}"]`];
-  if (ZONE_THEMES.has(theme)) {
-    selectors.push(`${TIDELINE_ROOT}[data-zone="${theme}"]`);
-  }
-  return selectors.join(",\n");
-}
-
 function hexChannels(hex: string): [number, number, number] | null {
   const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(hex.trim());
   if (!match?.[1]) return null;
@@ -531,16 +520,108 @@ function typeStyles(source: TidelineTokenSource) {
   );
 }
 
-function declarations(lines: Array<[string, string]>): string {
-  return lines.map(([name, value]) => `    ${name}: ${value};`).join("\n");
+function declarations(lines: Array<[string, string]>, indent = "  "): string {
+  return lines
+    .map(([name, value]) => `${indent}  ${name}: ${value};`)
+    .join("\n");
+}
+
+/**
+ * The selectors and wrapping of a generated token stylesheet. The library's
+ * `tokens.css` scopes everything to a `.td` wrapper inside `@layer tideline`;
+ * the legacy root variant (`tokens.root.css`) puts the same custom properties
+ * on `:root`, unlayered, so pre-Tideline stylesheets can alias them without
+ * taking any Tideline component style or reset.
+ */
+interface TokenCssScope {
+  /** The plain (light, default) selector, e.g. `.td` or `:root`. */
+  readonly root: string;
+  /** The selector a zone or theme attribute is appended to. */
+  readonly attributeHost: string;
+  /** Extra selectors for a zone that may also be set on a descendant. */
+  readonly descendantZones: ReadonlySet<string>;
+  /** Emit `color-scheme` lines (only the library owns the element's scheme). */
+  readonly colorScheme: boolean;
+  /**
+   * Emit the font-family stacks. The apps define `--td-font-*` on `<html>`
+   * through `next/font`, so the root scope must not redeclare them.
+   */
+  readonly fontFamilies: boolean;
+  /** Wrap in this cascade layer, or emit unlayered. */
+  readonly layer: string | null;
+  readonly title: string;
+}
+
+const LIBRARY_SCOPE: TokenCssScope = {
+  root: TIDELINE_ROOT,
+  attributeHost: TIDELINE_ROOT,
+  descendantZones: new Set(),
+  colorScheme: true,
+  fontFamilies: true,
+  layer: "tideline",
+  title: "tokens",
+};
+
+/**
+ * Legacy root scope. Both web apps resolve the theme onto `<html data-theme>`
+ * before paint (`themeBootScript`, which also follows the system preference),
+ * HQ sets `<html data-zone="hq">`, and a live section may set
+ * `data-zone="live"` on any element: the live values are therefore also
+ * declared on a descendant zone, so aliases redeclared there resolve live.
+ */
+const LEGACY_ROOT_SCOPE: TokenCssScope = {
+  root: ":root",
+  attributeHost: ":root",
+  descendantZones: new Set(["live"]),
+  colorScheme: false,
+  fontFamilies: false,
+  layer: null,
+  title: "legacy root tokens (custom properties only)",
+};
+
+function scopedThemeSelector(theme: string, scope: TokenCssScope): string {
+  const host = scope.attributeHost;
+  const selectors =
+    theme === DEFAULT_THEME
+      ? [scope.root, `${host}[data-theme="${theme}"]`]
+      : [`${host}[data-theme="${theme}"]`];
+  if (ZONE_THEMES.has(theme)) {
+    selectors.push(`${host}[data-zone="${theme}"]`);
+    if (scope.descendantZones.has(theme)) {
+      selectors.push(`${host} [data-zone="${theme}"]`);
+    }
+  }
+  return selectors.join(",\n");
 }
 
 /** The generated stylesheet: every token as a `--td-*` custom property. */
 export function buildTidelineTokensCss(source: TidelineTokenSource): string {
+  return buildScopedTokensCss(source, LIBRARY_SCOPE);
+}
+
+/**
+ * The same `--td-*` custom properties on `:root` (light),
+ * `:root[data-theme="dark"]`, the live zone (on the root or any descendant)
+ * and `:root[data-zone="hq"]`, unlayered and with nothing else: no
+ * `color-scheme`, no font-family stack (next/font owns those on `<html>`),
+ * no component style, no reset. Legacy stylesheets import it
+ * and point their own variables at these roles (F2b).
+ */
+export function buildTidelineRootTokensCss(
+  source: TidelineTokenSource,
+): string {
+  return buildScopedTokensCss(source, LEGACY_ROOT_SCOPE);
+}
+
+function buildScopedTokensCss(
+  source: TidelineTokenSource,
+  scope: TokenCssScope,
+): string {
   const known = knownNames(source);
   const groups = tokenGroups(source);
   const themes = themeIds(source);
   const colors = resolveTidelineColors(source);
+  const indent = scope.layer ? "  " : "";
 
   const base: Array<[string, string]> = [];
   const themed = new Map<string, Array<[string, string]>>(
@@ -564,8 +645,10 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
     }
   }
 
-  for (const [family, stack] of Object.entries(source.type.families)) {
-    base.push([cssVar(`font-${family}`), stack]);
+  if (scope.fontFamilies) {
+    for (const [family, stack] of Object.entries(source.type.families)) {
+      base.push([cssVar(`font-${family}`), stack]);
+    }
   }
   for (const style of typeStyles(source)) {
     const name = `type-${style.name}`;
@@ -580,18 +663,27 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
     ]);
   }
 
-  const blocks = themes.map((theme) => {
-    const ground = colors[theme]?.ground;
-    const scheme =
-      ground && hexChannels(ground) && relativeLuminance(ground) < 0.2
-        ? "dark"
-        : "light";
-    const lines: Array<[string, string]> = [
-      ["color-scheme", scheme],
+  const schemeLine = (ground: string | undefined): Array<[string, string]> =>
+    scope.colorScheme
+      ? [
+          [
+            "color-scheme",
+            ground && hexChannels(ground) && relativeLuminance(ground) < 0.2
+              ? "dark"
+              : "light",
+          ],
+        ]
+      : [];
+
+  const block = (selector: string, lines: Array<[string, string]>) =>
+    `${indent}${selector.replaceAll("\n", `\n${indent}`)} {\n${declarations(lines, indent)}\n${indent}}`;
+
+  const blocks = themes.map((theme) =>
+    block(scopedThemeSelector(theme, scope), [
+      ...schemeLine(colors[theme]?.ground),
       ...(themed.get(theme) ?? []),
-    ];
-    return `  ${themeSelector(theme).replaceAll("\n", "\n  ")} {\n${declarations(lines)}\n  }`;
-  });
+    ]),
+  );
 
   // A zone repaints a few roles. Its plain selector serves the default
   // theme; each other theme gets a more specific block that restores (or
@@ -599,22 +691,18 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
   for (const [zone, byTheme] of Object.entries(zoneOverrides(source))) {
     for (const theme of themes) {
       const values = byTheme[theme] ?? {};
-      const ground = values.ground ?? colors[theme]?.ground;
-      const scheme =
-        ground && hexChannels(ground) && relativeLuminance(ground) < 0.2
-          ? "dark"
-          : "light";
       const selector =
         theme === DEFAULT_THEME
-          ? `${TIDELINE_ROOT}[data-zone="${zone}"]`
-          : `${TIDELINE_ROOT}[data-zone="${zone}"][data-theme="${theme}"]`;
-      const lines: Array<[string, string]> = [
-        ["color-scheme", scheme],
-        ...Object.entries(values).map(
-          ([role, value]) => [cssVar(role), value] as [string, string],
-        ),
-      ];
-      blocks.push(`  ${selector} {\n${declarations(lines)}\n  }`);
+          ? `${scope.attributeHost}[data-zone="${zone}"]`
+          : `${scope.attributeHost}[data-zone="${zone}"][data-theme="${theme}"]`;
+      blocks.push(
+        block(selector, [
+          ...schemeLine(values.ground ?? colors[theme]?.ground),
+          ...Object.entries(values).map(
+            ([role, value]) => [cssVar(role), value] as [string, string],
+          ),
+        ]),
+      );
     }
   }
 
@@ -634,21 +722,20 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
   const reducedBlock =
     reduced.length > 0
       ? [
-          `  @media (prefers-reduced-motion: reduce) {`,
-          `    ${TIDELINE_ROOT} {`,
-          ...reduced.map(([name, value]) => `      ${cssVar(name)}: ${value};`),
-          `    }`,
-          `  }`,
+          `${indent}@media (prefers-reduced-motion: reduce) {`,
+          `${indent}  ${scope.root} {`,
+          ...reduced.map(
+            ([name, value]) => `${indent}    ${cssVar(name)}: ${value};`,
+          ),
+          `${indent}  }`,
+          `${indent}}`,
         ]
       : [];
 
+  const body = [block(scope.root, base), ...blocks, ...reducedBlock];
   return [
-    `/* Tideline ${source.version} tokens. ${GENERATED_NOTE} */`,
-    `@layer tideline {`,
-    `  ${TIDELINE_ROOT} {\n${declarations(base)}\n  }`,
-    ...blocks,
-    ...reducedBlock,
-    `}`,
+    `/* Tideline ${source.version} ${scope.title}. ${GENERATED_NOTE} */`,
+    ...(scope.layer ? [`@layer ${scope.layer} {`, ...body, `}`] : body),
     ``,
   ].join("\n");
 }
