@@ -3400,7 +3400,7 @@ body[data-zone="operator"] .hq-setup-progress__score {
   aspect-ratio: 1;
   background: var(--hq-deep);
   border-radius: 22px;
-  color: #fff;
+  color: var(--td-on-action);
   display: grid;
   justify-items: center;
   max-width: 230px;
@@ -3580,7 +3580,7 @@ body[data-zone="operator"] .hq-setup-strip__icon {
   align-items: center;
   background: var(--hq-deep);
   border-radius: 13px;
-  color: #fff;
+  color: var(--td-on-action);
   display: flex;
   height: 44px;
   justify-content: center;
@@ -6581,7 +6581,7 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 
 .hq-button--primary,
 .primary-action {
-  color: #f2f0ea;
+  color: var(--td-on-action);
   border-color: var(--hq-deep);
   background: var(--hq-deep);
 }
