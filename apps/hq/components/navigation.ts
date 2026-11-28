@@ -74,7 +74,7 @@ export const operatorModules = [
   {
     slug: "team",
     label: "Team",
-    href: hqModuleHref("team"),
+    href: hqRoutes.team,
     icon: "partner",
     group: "People and play",
   },

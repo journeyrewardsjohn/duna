@@ -167,6 +167,20 @@ export async function readAskDunaOperation(
     validateInput(procedure, input),
     crypto.randomUUID(),
   );
+  if (
+    name === "operator.memberProfile" &&
+    result &&
+    typeof result === "object"
+  ) {
+    // Health stays in its dedicated product UI (see ask-duna-capabilities):
+    // the model never receives a member's health block, even when the viewer
+    // may see it in HQ (PRIV-1).
+    return boundedResult(
+      Object.fromEntries(
+        Object.entries(result).filter(([key]) => key !== "health"),
+      ),
+    );
+  }
   if (name === "operator.workspace") {
     // Keep HQ's small, authoritative checklist intact even when the underlying
     // workspace is too large to send to the model in full.

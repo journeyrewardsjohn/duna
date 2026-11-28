@@ -1,4 +1,5 @@
 import { trainingDrillsDemo } from "@duna/core/demo/training-drills";
+import { validateTrainingScene } from "@duna/core/training-scene";
 import {
   trainingContentStatusEnum,
   trainingDrillListingPricings,
@@ -47,6 +48,21 @@ describe("training-drills contract and demo fixtures (W3-0)", () => {
       trainingDrillsPurchaseSchema.parse(purchase);
   });
 
+  it("is rich enough for the screens: thirty drills, real v2 scenes whose status matches the validator", () => {
+    expect(demo.summaries.length).toBeGreaterThanOrEqual(30);
+    expect(demo.scenes.length).toBeGreaterThanOrEqual(5);
+    for (const scene of demo.scenes) {
+      const result = validateTrainingScene(scene.document);
+      if (scene.validationStatus === "valid") expect(result.ok).toBe(true);
+      if (scene.validationStatus === "invalid") {
+        expect(result.ok).toBe(false);
+        expect(result.issues.map((issue) => issue.rule)).toContain(
+          scene.validationIssues[0]!.rule,
+        );
+      }
+    }
+  });
+
   it("covers every state of every state machine", () => {
     expectCoverage(
       trainingDrillScopes,
@@ -92,7 +108,7 @@ describe("training-drills contract and demo fixtures (W3-0)", () => {
   });
 });
 
-describe("training-drills routers in demo and connected mode (W3-0 stubs)", () => {
+describe("training-drills routers in demo and connected mode", () => {
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "true");
@@ -127,12 +143,12 @@ describe("training-drills routers in demo and connected mode (W3-0 stubs)", () =
     });
   });
 
-  it("says 'not implemented yet' outside demo mode", async () => {
+  it("calls the B5 service outside demo mode (no longer 'not implemented')", async () => {
     dataSource.demo = false;
     const error = await caller()
       .operator.trainingDrills.library({ scope: "club" })
       .catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(isNotImplementedYet(error)).toBe(true);
+    // No database in this test: the service is reached and fails on it.
+    expect(isNotImplementedYet(error)).toBe(false);
   });
 });

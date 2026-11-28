@@ -556,6 +556,9 @@ importers:
       '@duna/pricing':
         specifier: workspace:*
         version: link:../../packages/pricing
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../../packages/tideline-core
       '@duna/ui':
         specifier: workspace:*
         version: link:../../packages/ui

@@ -27,8 +27,43 @@ export const web: SurfaceContract = {
     "apps/web/app/(next)/(app)/",
     "apps/web/components/app-shell/",
     "apps/web/lib/app-routes.ts",
+    // Find a game (SITE-4): /discover, /venues/[id] and the /app twins.
+    "apps/web/components/discover/",
   ],
   checks: [
+    // Find a game (SITE-4): the search, results, map and venue pages moved to
+    // app/(next) and share components/discover; the old pages are deleted.
+    ...[
+      "apps/web/app/(legacy)/discover/page.tsx",
+      "apps/web/app/(legacy)/venues/[venueId]/page.tsx",
+      "apps/web/app/(legacy)/app/discover/page.tsx",
+      "apps/web/app/(legacy)/app/venues/[venueId]/page.tsx",
+      "apps/web/components/discovery-experience.tsx",
+      "apps/web/components/court-booking-panel.tsx",
+      "apps/web/components/venue-layout-viewer.tsx",
+    ].map(
+      (path) =>
+        ({
+          kind: "absent",
+          path,
+          message:
+            "Find a game lives in app/(next) on components/discover (SITE-4); the old page is deleted",
+        }) as const,
+    ),
+    {
+      kind: "treeExcludes",
+      root: "apps/web/components/discover",
+      values: [...legacySheets, "lucide-react"],
+      message:
+        "Find a game renders in app/(next): design-system parts only (the map provider's own sheet loads with the map in map-vendor.ts)",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/discover/results.ts",
+      values: ["participationDisplay", "renderParticipationCopy"],
+      message:
+        "Find a game shows the group state in the shared participation words",
+    },
     // The rebuilt Player web app (P1): the shell, Home and the route table.
     {
       kind: "absent",

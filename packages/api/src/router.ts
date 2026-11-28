@@ -10014,6 +10014,7 @@ const operatorRouter = router({
         ? loadDemoOperatorMemberProfile(
             ctx.actor!.organizationId!,
             input.personId,
+            ctx.actor!,
           )
         : loadOperatorMemberProfile({
             actor: ctx.actor!,
