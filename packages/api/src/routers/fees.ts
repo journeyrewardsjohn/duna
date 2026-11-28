@@ -13,9 +13,17 @@
  */
 import { feesDemo } from "@duna/core/demo/fees";
 import { TRPCError } from "@trpc/server";
-import { organizationProcedure, protectedProcedure, router } from "../auth";
+import type { CurrencyCode } from "@duna/pricing";
+import {
+  organizationProcedure,
+  protectedProcedure,
+  rateLimitMiddleware,
+  router,
+} from "../auth";
 import {
   feesCancelPremiumInputSchema,
+  feesOperatorQuoteInputSchema,
+  feesOperatorQuoteSchema,
   feesPlatformSummarySchema,
   feesPremiumStateSchema,
   feesQuoteInputSchema,
@@ -24,6 +32,10 @@ import {
   feesStartPremiumResultSchema,
 } from "../contracts/fees";
 import { usesDemoData } from "../services/data-source";
+import {
+  composeOperatorQuote,
+  quoteOperatorPrice,
+} from "../services/fees/operator-quote";
 import { quoteCatalogPurchase } from "../services/fees/quote";
 import { notImplementedYet } from "./not-implemented";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
@@ -49,6 +61,58 @@ export const feesOperatorRouter = router({
     .query(() => {
       if (usesDemoData()) return feesDemo.platformSummary;
       return notImplementedYet(DOMAIN, "platformSummary");
+    }),
+
+  /**
+   * PART-B: the all-in preview on HQ price screens: what a player pays and
+   * what the club receives, from checkout's own fee composition and the
+   * club's plan. Records nothing; an unknown rate answers "unavailable".
+   */
+  quote: organizationProcedure("payments:read")
+    .use(
+      rateLimitMiddleware({
+        id: "fees-operator-quote",
+        capacity: 60,
+        refillPerMinute: 60,
+      }),
+    )
+    .input(feesOperatorQuoteInputSchema)
+    .output(feesOperatorQuoteSchema)
+    .query(({ ctx, input }) => {
+      if (usesDemoData()) {
+        if (input.method === "credits") {
+          return {
+            status: "ok" as const,
+            unit: "credits" as const,
+            method: "credits" as const,
+            quantity: input.quantity,
+            playerPaysCredits: 2 * input.quantity,
+            clubReceivesCredits: 2 * input.quantity,
+            lines: [],
+          };
+        }
+        const summary = feesDemo.platformSummary;
+        return composeOperatorQuote({
+          currency: summary.monthlyPlanPrice.currency as CurrencyCode,
+          method: input.method,
+          title: input.offeringId ? "Thursday clinic" : "Price",
+          kind: input.offeringType === "good" ? "merchandise" : "booking",
+          offeringId: input.offeringId,
+          // The demo clinic's card price when no draft price is given.
+          unitPriceMinor: input.priceMinor ?? 3_000,
+          quantity: input.quantity,
+          commission: {
+            rateBps: summary.organizationFeeBps,
+            organizationId: summary.organizationId,
+            plan: summary.planKey,
+            source: "plan-default",
+          },
+        });
+      }
+      return quoteOperatorPrice({
+        organizationId: ctx.organizationId,
+        request: input,
+      });
     }),
 });
 

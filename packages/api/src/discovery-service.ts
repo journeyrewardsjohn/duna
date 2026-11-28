@@ -6,6 +6,12 @@ import {
 import type { DiscoveryMap, DiscoveryMapItem, PublicCoach } from "./contracts";
 import { loadPublicCoaches } from "./catalog-service";
 import { getRepository } from "./repository";
+import { usesDemoData } from "./services/data-source";
+import {
+  loadEventParticipation,
+  type DiscoveryParticipation,
+} from "./services/search/event-participation";
+import { log } from "@duna/observability";
 import {
   loadPublicProCoverage,
   type PublicProCoverage,
@@ -60,6 +66,7 @@ function eventEditorialImage(event: EventSummary): string | undefined {
 function eventPoint(
   event: EventSummary,
   venues: readonly VenueSummary[],
+  participation?: DiscoveryParticipation,
 ): DiscoveryMapItem {
   const directCoordinates =
     finiteCoordinate(event.location?.latitude) &&
@@ -88,6 +95,7 @@ function eventPoint(
       : {}),
     price: event.price,
     tags: [event.kind, event.organizationName, event.venueName, ...event.tags],
+    ...(participation ? { participation } : {}),
   };
 }
 
@@ -323,6 +331,8 @@ export function buildDiscoveryMap(input: {
   readonly coaches: readonly PublicCoach[];
   readonly proEvents?: readonly PublicProEvent[];
   readonly proMatches?: readonly PublicProMatch[];
+  /** B10: group state for events with a group rule, by event id. */
+  readonly participation?: ReadonlyMap<string, DiscoveryParticipation>;
   readonly now?: Date;
 }): DiscoveryMap {
   const now = input.now ?? new Date();
@@ -336,7 +346,9 @@ export function buildDiscoveryMap(input: {
     ...input.venues.map(venuePoint),
     ...input.events
       .filter((event) => isCurrent(event.endsAt))
-      .map((event) => eventPoint(event, input.venues)),
+      .map((event) =>
+        eventPoint(event, input.venues, input.participation?.get(event.id)),
+      ),
     ...input.coaches.map((coach) => coachPoint(coach, input.venues)),
     ...(input.proEvents ?? [])
       .map(proEventPoint)
@@ -359,9 +371,12 @@ export function buildDiscoveryMap(input: {
   };
 }
 
-export async function loadDiscoveryMap(
-  now = new Date(),
-): Promise<DiscoveryMap> {
+/** The discovery map and the rows it was built from (the server search reads both). */
+export async function loadDiscoverySources(now = new Date()): Promise<{
+  readonly map: DiscoveryMap;
+  readonly events: readonly EventSummary[];
+  readonly venues: readonly VenueSummary[];
+}> {
   const repository = getRepository();
   const [events, venues, coaches, proCoverage] = await Promise.all([
     repository.public.events(),
@@ -369,12 +384,34 @@ export async function loadDiscoveryMap(
     loadPublicCoaches().catch(() => []),
     loadPublicProCoverage().catch(() => undefined),
   ]);
-  return buildDiscoveryMap({
+  const participation = usesDemoData()
+    ? undefined
+    : await loadEventParticipation({
+        events: events.filter(
+          (event) => Date.parse(event.endsAt) >= now.getTime(),
+        ),
+        now,
+      }).catch((error: unknown) => {
+        // Group state is extra: the map still loads without it.
+        log.warn("discovery.participation.unavailable", {
+          errorName: error instanceof Error ? error.name : "unknown",
+        });
+        return undefined;
+      });
+  const map = buildDiscoveryMap({
     events,
     venues,
     coaches,
     proEvents: proCoverage?.events,
     proMatches: proCoverage?.matches,
+    ...(participation ? { participation } : {}),
     now,
   });
+  return { map, events, venues };
+}
+
+export async function loadDiscoveryMap(
+  now = new Date(),
+): Promise<DiscoveryMap> {
+  return (await loadDiscoverySources(now)).map;
 }

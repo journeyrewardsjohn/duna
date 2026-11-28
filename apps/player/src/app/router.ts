@@ -103,13 +103,37 @@ export const ROUTES = {
     "schedule",
     "Your bookings, matches and calendar",
   ),
-  score: route("play", "Add a result", "trophy", "Your opponents confirm it"),
+  // Scoring and results (M-P4a): add a result, a result and its states,
+  // and the scorekeeper (whole window, the live zone).
+  score: route("play", "Add a result", "trophy", "Your opponents confirm it", {
+    legacy: false,
+  }),
+  result: route("play", "Result", "score", "A match, its state and rating", {
+    legacy: false,
+    listed: false,
+    ownTitle: true,
+  }),
+  live: route("play", "Score a match", "score", "Keep score point by point", {
+    presentation: "window",
+    legacy: false,
+    listed: false,
+  }),
   // Improve: rating, film, health, training and the player profile.
   performance: route(
     "improve",
-    "Sand Rating and results",
+    "Sand Rating",
     "rating",
-    "Your rating, form and recent matches",
+    "Your rating, recent matches and what counts",
+    { legacy: false },
+  ),
+  // The earlier performance analysis (form, partners, upsets), reached from
+  // the Sand Rating home until Improve rebuilds it.
+  insights: route(
+    "improve",
+    "Performance in depth",
+    "rating",
+    "Form, partners, upsets and every rated match",
+    { listed: false },
   ),
   video: route(
     "improve",

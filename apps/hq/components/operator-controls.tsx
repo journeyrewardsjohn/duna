@@ -82,7 +82,6 @@ import {
   CommerceSettingsControls,
   PeopleRefundControls,
   PeopleWalletControls,
-  ProductCatalogControls,
 } from "./commerce-controls";
 import { SessionDraftManager } from "./session-draft-manager";
 
@@ -3397,9 +3396,7 @@ function FacilitiesControls({
 }
 
 export function OperatorControls({
-  focusedCreate = false,
   module,
-  waivers,
   workspace,
 }: {
   readonly focusedCreate?: boolean;
@@ -3428,15 +3425,6 @@ export function OperatorControls({
         </div>
         <PlayerInvitationComposer workspace={workspace} />
       </div>
-    );
-  }
-  if (module === "offerings") {
-    return (
-      <ProductCatalogControls
-        focused={focusedCreate}
-        waivers={waivers}
-        workspace={workspace}
-      />
     );
   }
   if (module === "money") {
