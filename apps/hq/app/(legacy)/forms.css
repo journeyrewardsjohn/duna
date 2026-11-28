@@ -277,75 +277,10 @@ body[data-zone="operator"] .hq-shell--focused:not(.admin-shell) .hq-sidebar {
   box-shadow: var(--hq-shadow-control);
 }
 
-.hq-shell--focused .team-workspace {
-  min-width: 0;
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr);
-}
-.hq-shell--focused .team-directory {
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-  overflow: hidden;
-}
-.hq-shell--focused .team-directory__header {
-  padding: 16px;
-  border-bottom: 1px solid var(--hq-line);
-}
-.hq-shell--focused .team-directory__header h2 {
-  margin: 0;
-}
-.hq-shell--focused .team-directory__tools {
-  padding: 16px 16px 8px;
-}
-.hq-shell--focused .team-filter-row {
-  padding: 0 16px 12px;
-  flex-wrap: wrap;
-}
-.hq-shell--focused .team-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  border-radius: 6px;
-}
-.hq-shell--focused .team-search input {
-  min-width: 0;
-  width: 100%;
-  font-size: 16px;
-}
-.hq-shell--focused .team-directory > .hq-data-scroll {
-  min-width: 0;
-  width: 100%;
-  border-radius: 0;
-  border-left: 0;
-  border-right: 0;
-}
-.hq-shell--focused .team-data-table {
-  min-width: 850px;
-}
-.hq-shell--focused .team-data-table td {
-  font-size: 14px;
-}
-.hq-shell--focused .team-data-table small {
-  display: block;
-  font-size: 12px;
-  color: var(--hq-muted);
-  font-weight: 400;
-}
-.hq-shell--focused .team-data-table .team-table__identity {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.hq-shell--focused .team-data-table .team-avatar {
-  flex-shrink: 0;
-}
 .hq-shell--focused .people-directory__header {
   max-width: 480px;
 }
-.hq-shell--focused :is(.people-filter-row, .team-filter-row) button {
+.hq-shell--focused :is(.people-filter-row) button {
   border-radius: 6px;
 }
 
@@ -455,44 +390,21 @@ body[data-zone="operator"]
 .hq-shell--focused .hq-button:not(.hq-button--danger):not(:disabled):hover {
   border-color: var(--hq-muted);
 }
-.hq-shell--focused :is(.team-sort, .team-search, .people-search) {
+.hq-shell--focused :is(.people-search) {
   border: 1px solid var(--hq-edge);
   border-radius: 8px;
   background: var(--hq-ground);
   box-shadow: var(--hq-shadow-inset);
 }
-.hq-shell--focused .team-directory__tools {
-  border-top: 0;
-  margin-top: 0;
-}
-.hq-shell--focused .team-view-toggle {
-  padding: 3px;
-  gap: 2px;
-  border-radius: 8px;
-  border-color: var(--hq-line);
-  background: var(--hq-soft);
-  box-shadow: var(--hq-shadow-inset);
-}
-.hq-shell--focused .team-view-toggle button {
-  min-height: 48px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--hq-muted);
-}
-.hq-shell--focused .team-view-toggle button[aria-pressed="true"],
-.hq-shell--focused :is(.team-filter-row, .people-filter-row) button.active {
+
+.hq-shell--focused :is(.people-filter-row) button.active {
   border-color: var(--hq-line);
   background: var(--hq-ground);
   color: var(--hq-text);
   box-shadow: var(--hq-shadow-control);
 }
-.hq-shell--focused .team-filter-row {
-  padding-top: 8px;
-  border-top: 1px solid var(--hq-line);
-  background: var(--hq-soft);
-}
-.hq-shell--focused :is(.team-filter-row, .people-filter-row) button {
+
+.hq-shell--focused :is(.people-filter-row) button {
   min-height: 48px;
   border: 1px solid transparent;
 }
