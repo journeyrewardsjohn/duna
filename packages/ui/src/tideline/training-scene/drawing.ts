@@ -27,6 +27,7 @@ import { shortRole } from "./sentences";
 import {
   type Frame,
   sampleTimeline,
+  stillTime,
   type Timeline,
   type TimelineItem,
 } from "./timeline";
@@ -255,6 +256,28 @@ export function buildDrawing(
         posts: [at({ x: -netHalf, y: 0 }), at({ x: netHalf, y: 0 })],
       };
 
+  // Where people stand in this view: an arrow that ends at a person stops
+  // short of their mark, so its head stays visible.
+  const frameAt =
+    options.frame ??
+    (item
+      ? sampleTimeline(timeline, item.t + 1e-3)
+      : sampleTimeline(timeline, 0));
+  const after =
+    options.item === undefined
+      ? undefined
+      : sampleTimeline(timeline, stillTime(timeline, options.item));
+  const standing = [...frameAt.people, ...(after?.people ?? [])].map((person) =>
+    at(person),
+  );
+  const endGap = (point: Vec, plain: number) =>
+    standing.some(
+      (spot) =>
+        Math.hypot(spot.x - point.x, spot.y - point.y) < sizes.dot * 1.2,
+    )
+      ? sizes.dot + 4
+      : plain;
+
   // ---- ball paths ----
   const paths: DrawnPath[] = [];
   const obstaclePoints: Vec[] = [];
@@ -296,7 +319,7 @@ export function buildDrawing(
   for (const contact of contacts) {
     const a = at(contact.from);
     const c = at(contact.to);
-    const trimmed = trim(a, c, 4, sizes.ball + 3) ?? { a, c };
+    const trimmed = trim(a, c, 4, endGap(c, sizes.ball + 3)) ?? { a, c };
     const control = bowControl(
       trimmed.a,
       trimmed.c,
@@ -368,7 +391,7 @@ export function buildDrawing(
       const a = at(move.from);
       const c = at(move.to);
       if (Math.hypot(c.x - a.x, c.y - a.y) < 0.9 * projection.scale) continue;
-      const trimmed = trim(a, c, sizes.dot + 3, 5);
+      const trimmed = trim(a, c, sizes.dot + 3, endGap(c, 5));
       if (!trimmed) continue;
       for (let k = 0; k <= 8; k++) {
         obstaclePoints.push({
@@ -407,11 +430,6 @@ export function buildDrawing(
   }
 
   // ---- people and balls, where they are at the item's start ----
-  const frameAt =
-    options.frame ??
-    (item
-      ? sampleTimeline(timeline, item.t + 1e-3)
-      : sampleTimeline(timeline, 0));
   const slots = new Map(resolved.slots.map((slot) => [slot.id, slot]));
   const people = frameAt.people.map((person) => {
     const slot = slots.get(person.slot);
