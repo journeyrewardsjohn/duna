@@ -47,10 +47,14 @@ function countActions(page: Page) {
 }
 
 async function noSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(1);
+  // Pages Cross in sideways on navigation: measure once the motion settles.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
 }
 
 test.beforeEach(async ({}, testInfo) => {
@@ -137,7 +141,7 @@ test("the group rule saves after showing what happens to booked sessions", async
   await page.goto(hq(`/offerings/${clinic}/group-size`));
   await expect(page.getByText("What players see")).toBeVisible();
   const fewest = page.getByLabel("Fewest players it runs with");
-  await fewest.fill("3");
+  await fewest.fill("5");
   await fewest.press("Tab");
   await page.getByRole("button", { name: "Save group size" }).click();
   // The kit's confirmation is an alert dialog.
@@ -145,8 +149,9 @@ test("the group rule saves after showing what happens to booked sessions", async
   await expect(question).toContainText(
     "Change the group rule for Weekly clinic?",
   );
-  await expect(question).toContainText("Runs with at least 3 players.");
+  await expect(question).toContainText("Runs with at least 5 players.");
   await expect(question).toContainText("keeps the rule people booked under");
+  // The demo preview answers "loosens", so the choice to apply it is offered.
   await expect(
     question.getByRole("checkbox", {
       name: "Also apply it to the booked sessions",
