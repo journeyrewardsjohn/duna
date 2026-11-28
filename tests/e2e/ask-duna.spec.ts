@@ -45,26 +45,23 @@ test("Ask Duna opens product links within HQ and still reviews external links", 
   expect(context.pages()).toHaveLength(initialTabs);
 });
 
-test("HQ assistant deep links and launchers open the floating Ask Duna surface", async ({
+test("HQ assistant deep links open Ask Duna in the new shell and the floating surface on older pages", async ({
   page,
 }) => {
   await installAskDunaFixture(page);
+  // Today is on the new shell: ?duna=ask opens the docked panel.
   await page.goto(`${hqBaseUrl}/?duna=ask`);
   await expect(page).toHaveURL(`${hqBaseUrl}/?duna=ask`);
+  const docked = page.getByRole("complementary", { name: "Ask Duna" });
+  await expect(docked).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Floating Ask Duna" }),
+    docked.getByRole("textbox", { name: "Ask Duna anything" }),
   ).toBeVisible();
+  // People is not rebuilt yet: the legacy floating surface still opens there.
   await page.goto(`${hqBaseUrl}/people`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
-  const launcher = page.getByRole("button", {
-    name: "Open Ask Duna",
-    exact: true,
-  });
-  if ((page.viewportSize()?.width ?? 1440) > 1100)
-    await expect(launcher).toBeHidden();
-  else await expect(launcher).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page.getByRole("button", { name: "Duna AI", exact: true }).click();
   } else {
@@ -77,9 +74,6 @@ test("HQ assistant deep links and launchers open the floating Ask Duna surface",
   await expect(
     page.getByRole("textbox", { name: "Ask Duna anything" }),
   ).toBeFocused();
-  await expect(
-    page.getByRole("region", { name: "Duna AI assistant" }),
-  ).toHaveCount(0);
 });
 
 test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ pages", async ({

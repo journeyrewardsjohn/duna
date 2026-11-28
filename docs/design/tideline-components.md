@@ -35,19 +35,20 @@ import { Button, Tideline, TidelineFonts } from "@duna/ui/tideline";
   A nested scope states its own theme and zone; it never inherits them.
 - Popups (dialogs, menus, selects, toasts) render in place in the browser's
   top layer, so they stay inside the scope. Render `Toaster` once per scope.
-- In HQ and Web, also import `@duna/ui/tideline/legacy-bridge.css` (see
-  "Layers and the legacy bridge").
+- A screen on the design system lives in its app's `(next)` route group,
+  whose root layout imports only `@duna/ui/tideline/styles.css` (see
+  "Layers" and [`hq-shell.md`](hq-shell.md)); it never shares a document
+  with a legacy sheet.
 
 Public import paths (`packages/ui/package.json` exports). HQ and Web both
 list `@duna/ui` in `transpilePackages`, so either app can use them:
 
-| Path                                  | What it is                                                     |
-| ------------------------------------- | -------------------------------------------------------------- |
-| `@duna/ui/tideline`                   | Every component, hook and helper (`tideline/index.ts`)         |
-| `@duna/ui/tideline/styles.css`        | The one stylesheet: tokens plus every family, in cascade order |
-| `@duna/ui/tideline/legacy-bridge.css` | The unlayered bridge for apps with unlayered global CSS        |
-| `@duna/ui/tideline/tokens`            | Resolved token values (TypeScript, no DOM; for React Native)   |
-| `@duna/ui/tideline/tokens.css`        | The `--td-*` custom properties alone                           |
+| Path                           | What it is                                                     |
+| ------------------------------ | -------------------------------------------------------------- |
+| `@duna/ui/tideline`            | Every component, hook and helper (`tideline/index.ts`)         |
+| `@duna/ui/tideline/styles.css` | The one stylesheet: tokens plus every family, in cascade order |
+| `@duna/ui/tideline/tokens`     | Resolved token values (TypeScript, no DOM; for React Native)   |
+| `@duna/ui/tideline/tokens.css` | The `--td-*` custom properties alone                           |
 
 The React Native entry (`@duna/ui/mobile`) and the package root (`@duna/ui`)
 never import Tideline; `styles.test.ts` fails if they do.
@@ -61,7 +62,6 @@ tideline/
   index.ts           one `export * from "./<family>";` line per family (merge=union)
   styles.css         layer order, tokens, one `@import` per family (merge=union)
   styles.test.ts     guards this convention and the stylesheet rules
-  legacy-bridge.css  unlayered bridge (not a family)
   tokens/            tokens.json source, generated tokens.css / tokens.ts, build and tests
   <family>/
     index.ts         the family's public exports
@@ -96,8 +96,8 @@ never through the package barrel.
    block at the end of the same file.
 2. Append `export * from "./<family>";` to `tideline/index.ts`.
 3. Append `@import "./<family>/<family>.css";` to `tideline/styles.css`.
-4. Add `apps/hq/app/tideline/sections/<family>.tsx` that default exports its
-   gallery examples (`GalleryExample[]`, see `apps/hq/app/tideline/gallery.ts`),
+4. Add `apps/hq/app/(next)/tideline/sections/<family>.tsx` that default exports its
+   gallery examples (`GalleryExample[]`, see `apps/hq/app/(next)/tideline/gallery.ts`),
    and append `export { default as <name> } from "./<family>";` to
    `sections/index.ts`. Reuse a group from `galleryGroups` or declare your
    own group object with an unused `order`; the page sorts groups and examples
@@ -116,9 +116,8 @@ missing from a list or listed twice.
 - **Only `packages/ui/src/tideline/**` imports `@ui-sdk/*`.** Apps and other
   packages use the Tideline wrappers. `styles.test.ts` scans `apps/` and
   `packages/` and fails on any other import.
-- **No `!important`.** Win with the layer and specificity instead; against
-  unlayered host CSS, `legacy-bridge.css` hands properties back with
-  `revert-layer`. `styles.test.ts` fails on any important declaration. The
+- **No `!important`.** Win with the layer and specificity instead.
+  `styles.test.ts` fails on any important declaration. The
   Tideline guard in `pnpm verify:design-system` enforces the same rule (plus
   no retired orange, Solar only on live states, no vendor names in copy)
   with no exemptions for the library.
@@ -357,38 +356,36 @@ are dense. Both scales read tokens; `dense` shrinks the booking components.
 the interaction layer: slots load through `useDelayedLoading`, choosing a slot
 is a `useOptimisticAction` that rolls back with a toast if the hold fails.
 
-## Layers and the legacy bridge
+## Layers
 
 Every family stylesheet lives in `@layer tideline`, and every rule is nested
 under `.td`. `styles.css` declares the order `@layer ui-sdk, tideline;` before
-anything else. Any unlayered rule beats any layered one, and HQ and Web have unlayered
-global CSS that matches Tideline's elements (`button { font: inherit }`,
-`a { color: inherit }`, heading sizes, input fills, a
-`[class*="__label"]` eyebrow rule, `[data-zone="live"]`).
+anything else. An app's own sheet for design-system screens (HQ:
+`apps/hq/app/(next)/hq.css`) adds its layer after these
+(`@layer ui-sdk, tideline, hq;`), so it can lay out a library part without
+`!important`.
 
-`legacy-bridge.css` is a small unlayered file that uses `revert-layer` to hand
-those properties back to Tideline, only on elements Tideline owns (a `td-*`
-class or a UI SDK `data-slot`) inside a `.td` scope. Import it in an app that
-still has unlayered global CSS, and delete it when that CSS is gone or
-layered. Inside a scope with the bridge, restyle a Tideline element through a
-layer or with specificity above `.td.td`, not with a single class.
+The unlayered legacy bridge is gone (S1, 28 November 2026): design-system
+screens live in a separate root layout (`app/(next)`) whose document carries
+no legacy CSS, so nothing needs handing back. See
+[`hq-shell.md`](hq-shell.md) and `docs/plan/legacy-styles.md`.
 
 ## Gallery
 
-`apps/hq/app/tideline/page.tsx` opens with **Foundations**: the brand
+`apps/hq/app/(next)/tideline/page.tsx` opens with **Foundations**: the brand
 colours, the palette by role in light, HQ, dark and live, the type roles
 (Jost falls back to Geist until F3), the icon scale and the motion verbs.
 Then it shows every component and state, with an
 Interactions lab (simulated latency of 0 / 150 / 600 / 2000ms and a "fail next
 request" switch). It builds its sections from
-`apps/hq/app/tideline/sections/<family>.tsx`: each file default exports its
+`apps/hq/app/(next)/tideline/sections/<family>.tsx`: each file default exports its
 examples with a group and an order, and the page groups and sorts them.
 
 Unless HQ runs with `TIDELINE_GALLERY=1`, `apps/hq/proxy.ts` answers
 `/tideline` and everything under it with a plain 404 (`x-robots-tag:
 noindex`) before any page, layout or loading UI runs; the pages also call
 `notFound()` and set `robots: noindex`. The flag is read per request
-(`apps/hq/app/tideline/gallery-guard.ts`). The gallery is in no navigation,
+(`apps/hq/app/(next)/tideline/gallery-guard.ts`). The gallery is in no navigation,
 sitemap or route list. With the flag, it follows the normal HQ sign-in rules
 (open in demo mode).
 
@@ -413,8 +410,8 @@ TIDELINE_GALLERY=1 pnpm dev:hq
   the hook tests run on a small stand-in for React's hook runtime; the real
   thing is covered in the browser.
 - `pnpm --filter @duna/hq test` covers the gallery guard
-  (`app/tideline/gallery-guard.test.ts`) and the sections list
-  (`app/tideline/sections/sections.test.ts`).
+  (`app/(next)/tideline/gallery-guard.test.ts`) and the sections list
+  (`app/(next)/tideline/sections/sections.test.ts`).
 - The Playwright spec `tests/e2e/tideline-gallery.spec.ts` checks keyboard
   operation of Dialog, Select, Combobox, DatePicker, Switch and Tabs, plus
   search cancellation, loader thresholds, button loading, optimistic undo and

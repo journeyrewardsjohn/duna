@@ -39,7 +39,7 @@ import {
   generateTrainingDrillAction,
   saveTrainingDrillAction,
   trainingDrillStoryboardStatusAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 
 type EditorTab = "draw" | "animate" | "notes" | "output";

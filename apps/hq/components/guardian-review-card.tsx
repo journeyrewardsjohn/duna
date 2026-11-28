@@ -7,7 +7,7 @@ import { useActionState } from "react";
 import {
   reviewGuardianshipAction,
   type GuardianReviewActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: GuardianReviewActionState = {
   status: "idle",

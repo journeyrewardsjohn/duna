@@ -231,7 +231,20 @@ test.describe("CO-11 Ask Duna to do it", () => {
       page.getByRole("textbox", { name: "What would you like Duna to do?" }),
     ).toBeVisible();
   });
-  test.fixme("CO-11.2 Ask Duna opens as a docked panel from the top bar or Cmd+J [S1]", async () => {});
+  test("CO-11.2 Ask Duna opens as a docked panel from the top bar or Cmd+J", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Today");
+    const panel = page.getByRole("complementary", { name: "Ask Duna" });
+    await page.getByRole("button", { name: "Ask Duna" }).first().click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(panel).toBeVisible();
+    // Demo mode: the honest state instead of a request that would fail.
+    await expect(panel.getByText("Ask Duna isn't set up yet")).toBeVisible();
+  });
   test.fixme("CO-11.3 Ask Duna fills the same form a person uses and applies only after a confirm [S4]", async () => {});
 });
 
@@ -244,8 +257,39 @@ test.describe("CO-12 Grow: reports, marketing and the website", () => {
 });
 
 test.describe("CO-13 Identity chrome", () => {
-  test.fixme("CO-13.1 Switch organisation and create a new one from the switcher [S1]", async () => {});
-  test.fixme("CO-13.2 A coach or player who opens an owner page sees 'You need access', not an error page [S1]", async () => {});
+  test("CO-13.1 Switch organisation and create a new one from the switcher", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Today");
+    await page.getByRole("button", { name: /Switch club\. Current:/ }).click();
+    const menu = page.getByRole("menu");
+    await expect(
+      menu.getByRole("menuitem", { name: /Current organisation/ }),
+    ).toBeVisible();
+    await menu
+      .getByRole("menuitem", { name: "Create new organisation" })
+      .click();
+    await expect(page).toHaveURL(/\/setup\/start\?mode=create$/);
+    await expectPageReady(page);
+  });
+
+  test.describe("as a player", () => {
+    test.use({ persona: "player" });
+    test("CO-13.2 A coach or player who opens an owner page sees 'You need access', not an error page", async ({
+      page,
+    }) => {
+      await page.goto(hq("/"));
+      await expect(
+        page.getByText("You don't have access to Duna HQ"),
+      ).toBeVisible();
+      await expect(
+        page.getByText(/This page didn.t load|couldn.t load/),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("link", { name: "Open the Duna app" }),
+      ).toBeVisible();
+    });
+  });
 });
 
 test.describe("CO-14 Pay the team", () => {

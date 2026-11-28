@@ -145,7 +145,7 @@ test.describe("HQ route walk (demo mode)", () => {
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "desktop",
-      "Route health does not depend on the viewport; the sidebar is checked at every width by hq-ui-contracts.",
+      "Route health does not depend on the viewport; the sidebar is checked at every width by hq-shell.spec.ts.",
     );
   });
 
@@ -154,8 +154,8 @@ test.describe("HQ route walk (demo mode)", () => {
   }) => {
     await page.goto(hqBaseUrl);
     const links = page
-      .getByRole("navigation", { name: "Operator modules" })
-      .locator("[data-nav-id] > a");
+      .getByRole("navigation", { name: "Duna HQ" })
+      .locator("a[data-nav-id]");
     await expect(links).toHaveCount(sidebar.length);
     for (const [index, [label, path]] of sidebar.entries()) {
       // A count badge (unread threads, drafts) may follow the label.
@@ -171,8 +171,8 @@ test.describe("HQ route walk (demo mode)", () => {
     test(`sidebar: ${label} opens ${path}`, async ({ page }) => {
       await page.goto(hqBaseUrl);
       await page
-        .getByRole("navigation", { name: "Operator modules" })
-        .locator("[data-nav-id] > a")
+        .getByRole("navigation", { name: "Duna HQ" })
+        .locator("a[data-nav-id]")
         .nth(index)
         .click();
       await expect(page).toHaveURL(new URL(path, hqBaseUrl).toString());

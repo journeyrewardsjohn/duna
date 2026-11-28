@@ -1,5 +1,5 @@
 {
-  "app/inbox/actions.ts": {
+  "app/(legacy)/inbox/actions.ts": {
     "no-console": {
       "count": 1
     }

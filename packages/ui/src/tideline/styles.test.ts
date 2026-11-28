@@ -133,14 +133,10 @@ describe("Tideline stylesheet rules", () => {
   });
 
   it("uses no important declarations", () => {
-    // The cascade layer and specificity win instead; legacy-bridge.css hands
-    // properties back from unlayered host CSS.
+    // The cascade layer and specificity win instead.
     for (const { name, css } of stylesheets) {
       expect(css, `${name}.css`).not.toMatch(/!\s*important/i);
     }
-    expect(stripComments(read("legacy-bridge.css"))).not.toMatch(
-      /!\s*important/i,
-    );
   });
 
   it("sets the primary label colour for links and children", () => {
@@ -149,10 +145,6 @@ describe("Tideline stylesheet rules", () => {
       /a\.td-btn--primary:is\(:link, :visited, :hover, :active, :focus\)/,
     );
     expect(button).toContain("-webkit-text-fill-color: var(--td-on-action);");
-    // Against unlayered host CSS the bridge hands both properties back.
-    const bridge = stripComments(read("legacy-bridge.css"));
-    expect(bridge).toContain("color: revert-layer;");
-    expect(bridge).toContain("-webkit-text-fill-color: revert-layer;");
   });
 
   it("gives every loop a reduced-motion resting state in its own family", () => {

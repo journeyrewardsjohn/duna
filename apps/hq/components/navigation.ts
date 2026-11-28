@@ -4,17 +4,12 @@ import {
   Bot,
   BrainCircuit,
   Building2,
-  CalendarDays,
-  ClipboardCheck,
   Coins,
   DatabaseZap,
   Flag,
   FlaskConical,
   HeartHandshake,
   Headphones,
-  ListChecks,
-  Mail,
-  PackageOpen,
   Radio,
   ScrollText,
   ShieldCheck,
@@ -386,12 +381,3 @@ export const adminModules = [
 }[];
 
 export type AdminModule = (typeof adminModules)[number]["slug"];
-
-export const quickActions = [
-  { label: "New session", icon: CalendarDays },
-  { label: "Add person", icon: UsersRound },
-  { label: "Create product", icon: PackageOpen },
-  { label: "Send update", icon: Mail },
-  { label: "Run check-in", icon: ClipboardCheck },
-  { label: "Reconcile", icon: ListChecks },
-] as const;

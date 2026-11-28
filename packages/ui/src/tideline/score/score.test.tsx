@@ -273,7 +273,7 @@ describe("gallery", () => {
   it("shows every NetScore status", () => {
     const gallery = readFileSync(
       new URL(
-        "../../../../../apps/hq/app/tideline/sections/score.tsx",
+        "../../../../../apps/hq/app/(next)/tideline/sections/score.tsx",
         import.meta.url,
       ),
       "utf8",

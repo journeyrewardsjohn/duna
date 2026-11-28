@@ -13,7 +13,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaAuthProvider } from "@/components/auth-provider";
 import { AskDunaFloatingProvider } from "@/components/ask-duna-floating-provider";
-import { dunaFontClassName } from "./fonts";
+import { dunaFontClassName } from "../fonts";
 
 export const metadata: Metadata = {
   title: {

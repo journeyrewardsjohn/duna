@@ -40,7 +40,7 @@ import {
 import {
   generateTrainingProgramAction,
   saveTrainingProgramAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 
 type ProgramMilestone = {
   readonly id: string;

@@ -45,7 +45,7 @@ import {
   smokeTestScraperAction,
   updateScraperControlAction,
   type SandActionState,
-} from "@/app/admin/sand-actions";
+} from "@/app/(legacy)/admin/sand-actions";
 import { PlayerCombobox, type PlayerComboboxOption } from "./player-combobox";
 
 const initialState: SandActionState = { status: "idle", message: "" };

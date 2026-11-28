@@ -25,7 +25,7 @@ import { useRouter } from "next/navigation";
 import {
   generateTrainingDrillAction,
   saveTrainingDrillAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 
 const examples = [

@@ -14,7 +14,7 @@ import {
   createFeatureFlagAction,
   updateFeatureFlagAction,
   type FeatureFlagActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 import { DemoDataControls } from "./demo-data-controls";
 
 const initialState: FeatureFlagActionState = {

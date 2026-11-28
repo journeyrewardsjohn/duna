@@ -12,6 +12,11 @@ import {
 } from "./hq-routes";
 
 const hqApp = resolve(import.meta.dirname, "../../../apps/hq/app");
+// HQ has two root layouts (docs/design/hq-shell.md): rebuilt pages live in
+// (next), pages not yet rebuilt in (legacy). Neither group is in the URL.
+const hqRootGroups = ["(legacy)", "(next)"] as const;
+const servedBy = (...path: string[]) =>
+  hqRootGroups.some((group) => existsSync(join(hqApp, group, ...path)));
 
 function pageTemplates(directory: string): string[] {
   return readdirSync(directory).flatMap((name) => {
@@ -48,19 +53,17 @@ describe("HQ route map", () => {
   it("only lists module slugs that HQ still serves and that have no page of their own", () => {
     const sources = [
       readFileSync(join(hqApp, "../components/navigation.ts"), "utf8"),
-      readFileSync(join(hqApp, "[module]/page.tsx"), "utf8"),
-      readFileSync(join(hqApp, "admin/[module]/page.tsx"), "utf8"),
+      readFileSync(join(hqApp, "(legacy)/[module]/page.tsx"), "utf8"),
+      readFileSync(join(hqApp, "(legacy)/admin/[module]/page.tsx"), "utf8"),
     ].join("\n");
     for (const slug of [...hqOperatorModuleSlugs, ...hqAdminModuleSlugs]) {
       expect(sources, slug).toContain(`"${slug}"`);
     }
     for (const slug of hqOperatorModuleSlugs) {
-      expect(existsSync(join(hqApp, slug, "page.tsx")), slug).toBe(false);
+      expect(servedBy(slug, "page.tsx"), slug).toBe(false);
     }
     for (const slug of hqAdminModuleSlugs) {
-      expect(existsSync(join(hqApp, "admin", slug, "page.tsx")), slug).toBe(
-        false,
-      );
+      expect(servedBy("admin", slug, "page.tsx"), slug).toBe(false);
     }
   });
 
