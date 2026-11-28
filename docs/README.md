@@ -34,7 +34,7 @@ provider operations, and time-sensitive release evidence.
   delivery, moderation, attachments, and Upstash wakeups.
 - [`adr/ADR-003-owned-messaging-delivery.md`](adr/ADR-003-owned-messaging-delivery.md)
   — owned cursor-sync decision.
-- [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md) — Mux, R2, upload, playback, Vision,
+- [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md) — Cloudflare Stream, R2, upload, playback, Vision,
   privacy, and release gates.
 - [`DUNA_VISION_ANALYSIS.md`](DUNA_VISION_ANALYSIS.md) — analysis event model,
   human review, GPU-worker contract, and release gates.

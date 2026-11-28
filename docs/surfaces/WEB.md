@@ -20,8 +20,8 @@ Duna Web owns:
 - mobile WorkOS authorization-code exchange and refresh endpoints;
 - public MCP, deterministic Markdown representations, sitemap, structured data,
   and agent navigation;
-- provider ingress for Stripe, Mux, Inngest, messaging, media, and scheduled
-  player-source refreshes.
+- provider ingress for Stripe, Cloudflare Stream, Inngest, messaging, media,
+  and scheduled player-source refreshes.
 
 It does not own dense operator administration (HQ), global platform control
 (Admin), or native device behavior (Player/Pro).
@@ -38,7 +38,7 @@ It does not own dense operator administration (HQ), global platform control
 | Invitations         | `/join/guardian/*`, `/join/organization/*`, `/join/team/*`, `/join/match/*`, `/app/booking-invite/*`         | Server actions and typed mutations           |
 | Machine-readable    | `/agents`, `/llms.txt`, `/api/public-markdown`, `/api/mcp`, sitemap/robots                                   | Route handlers and `docs/MCP.md`             |
 | Network API         | `/api/trpc`, `/api/auth/mobile/*`, `/api/messaging/*`, `/api/health`                                         | Route handlers backed by `packages/api`      |
-| Provider ingress    | `/api/stripe/webhook`, `/api/mux/webhook`, `/api/inngest`                                                    | Signed handlers and durable workflow records |
+| Provider ingress    | `/api/stripe/webhook`, `/api/cloudflare/stream/webhook`, `/api/inngest`                                      | Signed handlers and durable workflow records |
 | Media and live      | `/api/player-media/*`, `/api/video/*`, `/api/livekit/token`, `/api/pro-matches/*/live`                       | API/media/LiveKit adapters                   |
 
 The file tree is the route source of truth. Search it before adding a new route:
@@ -68,7 +68,7 @@ flowchart LR
   TRPC --> Router["packages/api AppRouter"]
   Caller --> Router
   Router --> DB["packages/db -> Neon"]
-  Router --> Providers["Stripe, Mux, R2, LiveKit, WorkOS, Inngest"]
+  Router --> Providers["Stripe, Cloudflare Stream, R2, LiveKit, WorkOS, Inngest"]
 ```
 
 ## Identity and authorization

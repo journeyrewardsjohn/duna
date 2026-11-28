@@ -34,7 +34,7 @@ flowchart TB
 
   Router --> Domain["Core + pure rating / league / scheduling / pricing"]
   Router --> DB["Drizzle -> Neon Postgres"]
-  Router --> Providers["WorkOS, Stripe, Mux, R2, Upstash, Inngest, AI, maps, delivery"]
+  Router --> Providers["WorkOS, Stripe, Cloudflare Stream, R2, Upstash, Inngest, AI, maps, delivery"]
 ```
 
 ## Runtime topology
@@ -148,7 +148,7 @@ mutations add idempotency, audit, confirmation, and rate limits as required.
 Use tRPC for product queries/mutations. Add a route handler only when the
 protocol requires one, for example:
 
-- signed Stripe/Mux webhooks;
+- signed Stripe and authenticated Cloudflare Stream webhooks;
 - OAuth code exchange/refresh;
 - MCP Streamable HTTP;
 - SSE messaging wakeups;
@@ -176,7 +176,7 @@ forward-only SQL migrations live in `packages/db`.
 | Wallet/credits       | Immutable journals and entries; custody rules remain server/provider controlled             |
 | Booking/ticketing    | Holds, bookings, policy acceptances, registrations, scan ledger                             |
 | Messaging            | Conversation-local sequence, stable client UUID, participant state, moderation, attachments |
-| Video/Vision         | Duna metadata/authorization; Mux/R2 own media transport objects                             |
+| Video/Vision         | Duna metadata/authorization; Cloudflare Stream/R2 own media transport objects               |
 | Health               | Minimized metadata plus encrypted AES-GCM payload; owner grants revalidated on read         |
 | Workflows            | Deduplicated webhook events and durable job state                                           |
 | Administration       | Immutable audit records and scoped feature flags                                            |
@@ -263,7 +263,7 @@ Provider adapters are optional by environment and should degrade explicitly:
 - Neon: application data and shared rate/idempotency state;
 - Upstash: messaging wake hints only;
 - Inngest: durable workflow dispatch/recovery;
-- Mux and Cloudflare R2: live/video and private originals/attachments;
+- Cloudflare Stream and R2: live/video and private originals/attachments;
 - LiveKit: short-lived voice rooms and workers;
 - Vercel AI Gateway/OpenAI Agents: bounded model work;
 - Mapbox, Google Places/Routes, Tomorrow.io: planning and location context;

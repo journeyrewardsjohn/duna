@@ -144,7 +144,7 @@ audit entries contain no Health values and are kept as the compliance record.
 - Values, units, sleep states, workout details and check-in answers are stored
   inside AES-256-GCM ciphertext. Only person, metric, sample kind, time range,
   key version and the keyed external-ID hash remain queryable.
-- TLS protects transit. Database columns, logs, analytics, crash reports, Mux
+- TLS protects transit. Database columns, logs, analytics, crash reports, video
   metadata, notifications and audit entries never receive clear Health values.
 - Health data is not placed in iCloud. Local anchors live in the iOS Keychain
   through SecureStore and contain no Health values.
