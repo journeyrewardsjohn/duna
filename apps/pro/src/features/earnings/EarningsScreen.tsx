@@ -121,7 +121,7 @@ function EarningsPrimary({ withPast }: { readonly withPast: boolean }) {
   const [toast, setToast] = useState<string | null>(null);
   return (
     <View style={styles.fill}>
-      <PaneScroll gap={20} testID="earnings-primary">
+      <PaneScroll gap={20} root testID="earnings-primary">
         <TopBar />
         <View style={styles.head}>
           <Title>{tabTitle("money", shell.audience)}</Title>
@@ -147,7 +147,7 @@ function EarningsPrimary({ withPast }: { readonly withPast: boolean }) {
 function EarningsSecondary() {
   const { team, data } = useEarningsContext();
   return (
-    <PaneScroll gap={16} testID="earnings-secondary">
+    <PaneScroll gap={16} root testID="earnings-secondary">
       {team ? <PastPay data={data} team={team} /> : <NotOnTeam />}
     </PaneScroll>
   );
@@ -384,7 +384,9 @@ function PastPay({
         >
           <View style={styles.flex}>
             <Text variant="phone-body" weight={600}>
-              {line.period}
+              {line.revision > 1
+                ? `${line.period} · correction ${line.revision - 1}`
+                : line.period}
             </Text>
             <Text tone="text-2" variant="phone-meta">
               {`${line.sessions} · ${line.hours} · ${line.method}`}

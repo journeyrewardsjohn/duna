@@ -64,19 +64,23 @@ export function PaneScroll({
   children,
   testID,
   gap = 16,
+  root = false,
 }: {
   readonly children: ReactNode;
   readonly testID?: string;
   readonly gap?: number;
+  /** A tab root: clear the status bar (a route sits under its header). */
+  readonly root?: boolean;
 }) {
   const edges = usePaneEdges();
   const { colors, tokens } = useTheme();
   return (
     <ScrollView
       contentContainerStyle={{
-        paddingTop: tokens.space["4"],
+        paddingTop: (root ? edges.top : 0) + tokens.space[root ? "2" : "4"],
         paddingBottom: edges.bottom + tokens.space["8"],
-        paddingHorizontal: tokens.space["4"],
+        paddingLeft: (root ? edges.left : 0) + tokens.space["4"],
+        paddingRight: (root ? edges.right : 0) + tokens.space["4"],
         gap,
       }}
       keyboardShouldPersistTaps="handled"
@@ -312,11 +316,11 @@ export function Stepper({
       >
         {label}
       </Text>
+      <Text style={styles.stepValue} tabular variant="phone-heading">
+        {value}
+      </Text>
       <View style={styles.stepRow}>
         {button("minus", `${label} earlier`, -1, canDecrease)}
-        <Text style={styles.stepValue} tabular variant="phone-heading">
-          {value}
-        </Text>
         {button("plus", `${label} later`, 1, canIncrease)}
       </View>
     </View>
@@ -422,7 +426,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  stepValue: { flexShrink: 1, textAlign: "center" },
+  stepValue: { textAlign: "center" },
   stepButton: {
     width: 44,
     height: 44,

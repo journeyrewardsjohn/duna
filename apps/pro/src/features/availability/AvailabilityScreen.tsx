@@ -58,6 +58,7 @@ import {
   weekdayLong,
   weekdayShort,
   weekOrder,
+  windowKindLabels,
   type ScheduleRow,
 } from "./team-words";
 import {
@@ -184,6 +185,16 @@ function AvailabilityReady({
   const haptics = useHaptics();
   const region = useRegionLayout();
   const edges = usePaneEdges();
+  // In a split window the day sheet covers this pane: keep it clear of the
+  // status bar and the Duo's trailing tab bar (the window's safe area, since
+  // the route's own safe area is measured below its header).
+  const windowSafe = region.windowLayout.safeArea;
+  const inPane = region.windowLayout.paneCount >= 2;
+  const sheetInsets = {
+    top: inPane ? windowSafe.top : 0,
+    right: inPane ? windowSafe.right : 0,
+    bottom: windowSafe.bottom,
+  };
   const now = new Date().toISOString();
   const today = localDateOf(Date.now(), team.timeZone);
   const [target, setTarget] = useState<Target | null>(() =>
@@ -335,7 +346,14 @@ function AvailabilityReady({
     </View>
   );
 
-  const schedules = page.schedules.filter((row) => row.status !== "archived");
+  const statusOrder = { active: 0, fallback: 1, draft: 2, archived: 3 };
+  const schedules = page.schedules
+    .filter((row) => row.status !== "archived")
+    .sort(
+      (left, right) =>
+        statusOrder[left.status] - statusOrder[right.status] ||
+        right.effectiveFrom.localeCompare(left.effectiveFrom),
+    );
   const scheduleChooser = (
     <View style={styles.block}>
       <SectionHead
@@ -639,7 +657,14 @@ function AvailabilityReady({
         visible={dayOpen && region.layout.paneCount < 2}
       >
         <View
-          style={[styles.sheetHead, { paddingHorizontal: tokens.space["4"] }]}
+          style={[
+            styles.sheetHead,
+            {
+              paddingLeft: tokens.space["4"],
+              paddingRight: sheetInsets.right + tokens.space["4"],
+              paddingTop: sheetInsets.top,
+            },
+          ]}
         >
           <Text style={styles.flex} tone="text-2" variant="phone-meta">
             Changes are saved when you review and save the week.
@@ -652,8 +677,9 @@ function AvailabilityReady({
         </View>
         <ScrollView
           contentContainerStyle={{
-            paddingHorizontal: tokens.space["4"],
-            paddingBottom: tokens.space["8"],
+            paddingLeft: tokens.space["4"],
+            paddingRight: sheetInsets.right + tokens.space["4"],
+            paddingBottom: sheetInsets.bottom + tokens.space["8"],
             gap: tokens.space["4"],
           }}
         >
@@ -798,7 +824,7 @@ function WeekDayRow({
               </Text>
               {block.kind !== "coaching" ? (
                 <Text tone="text-2" variant="phone-meta">
-                  {block.label ?? block.kind}
+                  {block.label ?? windowKindLabels[block.kind]}
                 </Text>
               ) : null}
             </View>
@@ -820,6 +846,8 @@ function ConflictList({
   readonly timeZone: string;
   readonly idle?: boolean;
 }) {
+  const newly = conflicts.filter((session) => session.newlyOutside);
+  const already = conflicts.filter((session) => !session.newlyOutside);
   if (idle) {
     return (
       <View style={styles.block}>
@@ -842,26 +870,43 @@ function ConflictList({
         />
       ) : (
         <>
-          <Notice
-            text="They stay booked with you. Duna lists each one for your club's managers as needing cover; nobody is moved until a manager assigns someone."
-            title={`${conflicts.length} booked ${conflicts.length === 1 ? "session is" : "sessions are"} outside your new hours`}
-            tone="warning"
-          />
-          {conflicts.map((session) => (
+          {newly.length > 0 ? (
+            <Notice
+              text="They stay booked with you. Duna lists each one for your club's managers as needing cover; nobody is moved until a manager assigns someone."
+              title={`${newly.length} booked ${newly.length === 1 ? "session moves" : "sessions move"} outside your hours`}
+              tone="warning"
+            />
+          ) : null}
+          {already.length > 0 ? (
+            <Notice
+              text="These were outside your hours before this change. When you save, Duna lists them for your club's managers as needing cover too; they stay booked with you."
+              title={`${already.length} booked ${already.length === 1 ? "session is" : "sessions are"} already outside your hours`}
+              tone="info"
+            />
+          ) : null}
+          {[...newly, ...already].map((session) => (
             <View
-              accessibilityLabel={`${session.title}, ${sessionWhenWords(session, timeZone)}${session.venueName ? `, ${session.venueName}` : ""}`}
+              accessibilityLabel={`${session.title}, ${sessionWhenWords(session, timeZone)}${session.venueName ? `, ${session.venueName}` : ""}${session.newlyOutside ? ", moved outside your hours by this change" : ", already outside your hours"}`}
               accessible
               key={session.id}
               style={styles.conflict}
               testID={`conflict-${session.id}`}
             >
-              <Icon name="schedule" size="inline" tone="warning" />
+              <Icon
+                name="schedule"
+                size="inline"
+                tone={session.newlyOutside ? "warning" : "text-2"}
+              />
               <View style={styles.flex}>
                 <Text variant="phone-body" weight={600}>
                   {session.title}
                 </Text>
                 <Text tone="text-2" variant="phone-meta">
-                  {[sessionWhenWords(session, timeZone), session.venueName]
+                  {[
+                    sessionWhenWords(session, timeZone),
+                    session.venueName,
+                    session.newlyOutside ? undefined : "already outside",
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </Text>
@@ -1004,7 +1049,7 @@ function SaveSheet({
           value:
             conflicts.length === 0
               ? "None affected"
-              : `${conflicts.length} outside your new hours: they stay booked with you and are listed for your managers as needing cover`,
+              : `${conflicts.length} outside your hours after this: they stay booked with you and are listed for your managers as needing cover`,
         },
       ]}
       testID="availability-save-sheet"
