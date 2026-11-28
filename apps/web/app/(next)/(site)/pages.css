@@ -509,24 +509,28 @@
       }
     }
 
-    .site-concept-site:is([data-phase="play"], [data-phase="paint"]) {
-      .site-concept-site__typed {
-        animation: site-pages-type calc(var(--site-typing-steps, 46) * 38ms)
-          steps(var(--site-typing-steps, 46)) 400ms backwards;
-      }
+    /* Only when motion is welcome: the first-paint concept (`paint`) is in
+       the server HTML, so it must never animate under reduced motion. */
+    @media (prefers-reduced-motion: no-preference) {
+      .site-concept-site:is([data-phase="play"], [data-phase="paint"]) {
+        .site-concept-site__typed {
+          animation: site-pages-type calc(var(--site-typing-steps, 46) * 38ms)
+            steps(var(--site-typing-steps, 46)) 400ms backwards;
+        }
 
-      .site-concept-site__before {
-        animation: site-pages-swap-out 2600ms var(--td-ease-rise) backwards;
-      }
+        .site-concept-site__before {
+          animation: site-pages-swap-out 2600ms var(--td-ease-rise) backwards;
+        }
 
-      .site-concept-site__after {
-        animation: site-pages-rise var(--td-duration-rise) var(--td-ease-rise)
-          2500ms backwards;
-      }
+        .site-concept-site__after {
+          animation: site-pages-rise var(--td-duration-rise) var(--td-ease-rise)
+            2500ms backwards;
+        }
 
-      .site-concept-site__reply {
-        animation: site-pages-rise var(--td-duration-rise) var(--td-ease-rise)
-          3000ms backwards;
+        .site-concept-site__reply {
+          animation: site-pages-rise var(--td-duration-rise) var(--td-ease-rise)
+            3000ms backwards;
+        }
       }
     }
 
@@ -1366,15 +1370,6 @@
       align-items: center;
       justify-content: space-between;
       gap: var(--td-space-2);
-    }
-
-    .site-price-card__tag {
-      padding: 2px var(--td-space-3);
-      border: 1px solid var(--td-line-strong);
-      border-radius: var(--td-radius-pill);
-      color: var(--td-text-2);
-      font-size: 13px;
-      font-weight: 600;
     }
 
     .site-price-card__price {
