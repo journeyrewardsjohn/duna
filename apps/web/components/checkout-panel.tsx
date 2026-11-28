@@ -32,7 +32,7 @@ import {
   checkoutStatusAction,
   searchTeammatesAction,
   startEventCheckoutAction,
-} from "@/app/app/checkout/[slug]/actions";
+} from "@/app/(legacy)/app/checkout/[slug]/actions";
 import { WaiverSignaturePanel } from "./waiver-signature-panel";
 
 type PurchaseKind = "entry" | "ticket";

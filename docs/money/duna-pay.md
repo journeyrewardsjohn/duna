@@ -104,6 +104,151 @@ club-level holds. Each payout posts one balanced journal (debit
 (processor webhook `payout.failed` / `payout.canceled`) returns its tranches
 to `releasable` and posts the reversal journal once.
 
+## Disputes (§5.1)
+
+The processor sends `charge.dispute.*` events to the **platform** account
+(destination charges are disputed there, never on the club's account; HQ
+lists disputes from Duna's own records, which fixed defect 2).
+`synchronizeMoneyDispute` keeps the legacy `disputes` row and calls
+`synchronizePayDisputeCase` (`services/pay/disputes.ts`):
+
+| Event                           | What happens                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opened (`needs_response`)       | `pay_dispute_cases` row; evidence deadlines (processor's, and the club's: `disputeOrganizationEvidenceDays` after opening, never later than the processor's); a `dispute` hold on the sale for amount + fee; the club's transfer reversed for that amount, capped at the club's proceeds; journal (debit `DUNA_PAY_DISPUTED`, credit `STRIPE_CLEARING`). The sale is never paid out while open. |
+| Evidence (HQ, owner, confirmed) | `operator.pay.submitDisputeEvidence`: text and storage keys stored; the explanation sent to the processor and submitted; idempotent by key. Without processor keys: "not configured yet".                                                                                                                                                                                                       |
+| Won                             | Hold released; the reversed amount re-transferred less the dispute fee unless the processor returned it; journals reverse the hold and book the kept fee (`DUNA_PAY_DISPUTE_FEES`). The sale releases as normal.                                                                                                                                                                                |
+| Lost / accepted                 | Hold applied; loss journal (`DUNA_PAY_DISPUTE_LOSSES`); the lost amount counts against the sale like a refund.                                                                                                                                                                                                                                                                                  |
+| Warning (inquiry) closed        | Case closed, nothing held.                                                                                                                                                                                                                                                                                                                                                                      |
+
+Every processor call carries a deterministic idempotency key
+(`duna-dispute:<id>:reversal|retransfer|evidence:<key>`); replays change
+nothing. If a reversal fails (the club was already paid out), the hold stays
+and reconciliation records the negative balance for recovery.
+
+## Refunds (§5.2, §6)
+
+- **By payment method.** Card refunds move money and are funded below.
+  Credit-paid purchases are refunded in credits by the catalog service (no
+  money moves; there is no obligation). A mixed order has an obligation only
+  for its card part. The operator can refund a credit-paid order with amount
+  0 (the router accepted only positive amounts: defect 5, fixed).
+- **Funding.** Each money refund record is funded against its sale's
+  obligations (`pay_obligation_refunds`), recording where the club's share
+  came from, in order: the sale's **held funds** (not yet released), the
+  club's **available balance** (other releasable, unpaid proceeds), then
+  **future proceeds**. The fourth source, a bank debit, is the processor's
+  negative-balance debit (see recovery). Split refunds across lines use an
+  exact proportional allocation (never a cent created or lost).
+- **Fees.** `refundSplit` (`refund-fees.ts`) implements both rules: `pro-rata`
+  (what the refund executor does today: every component returned in
+  proportion) and `policy` (the drafts' table: club cancels → everything back,
+  Organization Fee returned to the club, club bears processing; player cancels
+  → Service Fee kept by Duna; Duna's error → Duna bears processing). The
+  setting `refundFeeRule` chooses; it is `pro-rata` until the executor is
+  switched (owner decision, below).
+- Before payout a refund reduces what is paid; after payout the club's
+  processor balance pays it (reverse transfer), and a closed sale is reopened
+  and marked refunded.
+
+## Reserves and recovery (§5.4, §5.5)
+
+- **Unredeemed Credit Reserve** (standing): `creditReserveBps` of the cash
+  value of unredeemed paid credits (packs and bundles), recalculated on every
+  reconciliation run, held as one club-level hold. Payouts are reduced by
+  club-level holds.
+- **Rolling reserve** (triggered): when the 90-day refund rate passes
+  `rollingReserveRefundRateBps` or the dispute rate passes
+  `rollingReserveDisputeRateBps`, a reserve is **proposed** with its evidence.
+  Nothing is withheld until a Duna person activates it after sending the
+  written notice (`activateRollingReserve`, explicit confirmation): then it
+  holds `percentBps` of proceeds sold since activation within the rolling
+  window, has a review date, and ends (released) at its end date, never later
+  than 180 days. The club may ask for a review at any time
+  (`operator.pay.requestReserveReview`).
+- **Recovery**: a negative processor balance (refund or loss after payout) is
+  a **set-off** against future proceeds, collected automatically when the
+  balance is positive again; after `recoveryInvoiceDays` an **invoice**
+  recovery is opened for a person to send (Duna never sends it by itself).
+
+## Reconciliation
+
+`/api/cron/money-reconciliation` (every 10 minutes) now also runs
+`reconcileDunaPayBalances`: for each club with obligations it refreshes the
+reserves, compares the processor balance (available + pending) with what
+Duna's records say it holds (every open, held or cancelled-but-unrefunded
+tranche), logs `pay.reconciliation.drift` above
+`reconciliationDriftToleranceMinor`, and tracks recovery. The cron answers
+`attention` when anything drifted or failed.
+
+## What an operator can do (HQ, owner)
+
+Read: obligations, holds, reserves, recoveries, disputes. Write, each with an
+explicit confirmation and owner scope: submit dispute evidence, ask for a
+reserve review, refund an order (existing refund flow), pay out now (existing
+manual payout). Automatic releases follow the policy without a person.
+
+## Account status and onboarding
+
+`organization_pay_accounts.status` is derived from the processor's account
+facts on every `account.updated` webhook (`syncPayAccount`), never set by
+hand (`derivePayAccountStatus`, pure, tested):
+
+| Status          | When                                              |
+| --------------- | ------------------------------------------------- |
+| `not-started`   | No connected account                              |
+| `in-progress`   | Account exists, details not submitted             |
+| `verifying`     | Submitted; the processor is checking              |
+| `action-needed` | Requirements due now (labels in plain words)      |
+| `restricted`    | Requirements past due, or the account is disabled |
+| `ready`         | Charges and payouts enabled, nothing due          |
+
+`operator.pay.startOnboarding` returns a hosted link (creating the connected
+account on first use) or, for `embedded`, an account session's client
+secret created server side. Without processor keys or `NEXT_PUBLIC_HQ_URL`
+it answers `not-configured` and calls nothing. `publishGate` /
+`assertPaymentsReady` require business facts, a verified account and a
+verified payout bank.
+
+## Fees and the up-front quote
+
+Every amount comes from `@duna/pricing`. `quoteCheckoutFees` is the one
+composition of the player Service Fee, the processing estimate and the
+Organization Fee (version `checkout-fees-v1`). `player.fees.quote` prices a
+catalog purchase with it before commitment and records `pay_fee_quotes`;
+catalog checkout charges with the same function and records the quote it
+charged, linked to the order, so a receipt can be reproduced. Sales tax is
+calculated by the processor at checkout; the quote's tax line is 0. Event,
+court and in-person checkouts still compose the same pricing functions
+inline (same rules, same amounts); moving them onto `quoteCheckoutFees` is
+listed below.
+
+Recurring charges: a subscription created with an application-fee
+percentage already pays Duna's fee on each invoice; the renewal webhook now
+withholds only what the charge did not already collect (defect 3).
+
+## Promise in the legal drafts → where the code keeps it
+
+| Promise (draft, section)                                                                                       | Where the code keeps it                                                                     | Status                                                                                         |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Paid within 3 business days once settled and delivered (duna-pay §6, §8)                                       | `release-rules.ts` (releasable), daily schedule default, `pay.release.overdue` monitor      | Kept (daily); weekly/monthly slower by the club's choice                                       |
+| One-time bookings released after the event (duna-pay §6.1)                                                     | `scheduled-end` rule; delivery sweep checks the booking/session was not cancelled           | Kept                                                                                           |
+| Programs pro rata per session; weekly without a schedule; 25% start tranche (§6.2–6.3)                         | `pro-rata-sessions`, `pro-rata-weekly`, start tranche with good-standing check              | Kept                                                                                           |
+| Events ≤ 7 days at the end of the last day (§6.2)                                                              | `event-last-day`                                                                            | Kept (end of the last session, not midnight local time)                                        |
+| Memberships after settlement + 3 business days and the full-refund window (§6.4)                               | `membership-period`                                                                         | Kept                                                                                           |
+| Credit packs on settlement with a 20% Unredeemed Credit Reserve; redemption-based for the first 90 days (§7.4) | `credit-pack-reserve`, `refreshCreditReserve`                                               | Kept                                                                                           |
+| Goods on fulfilment; buyer may cancel after the ship-by date (booking §2.5)                                    | `goods-fulfilment`, `goods-cancel-offered` fact                                             | Partly: the buyer's cancel action and tracking-number capture are not built                    |
+| First payout 7 days after the first payment (§7.1)                                                             | `organization_pay_accounts.first_payout_not_before`                                         | Kept                                                                                           |
+| Rolling reserve 10% / 90 days, max 180, reviewed every 30, with notice (§7.3)                                  | `refreshRollingReserve`, `activateRollingReserve` (person confirms notice), review requests | Kept; Duna staff screen to activate is not built (service function only)                       |
+| Disputes: hold, evidence within 7 days, re-transfer on win (§10)                                               | `disputes.ts`                                                                               | Kept; evidence files are sent as labels in the explanation, not uploaded as processor files    |
+| Refunds from held funds, then balance, then future proceeds, then bank (§9.3)                                  | `refunds.ts`, `balances.ts` recovery                                                        | Kept; bank debit is the processor's `debit_negative_balances` (owner setting)                  |
+| Fees on refunds by cause (§9.4; fees-and-premium §2.6)                                                         | `refund-fees.ts` (`policy` rule)                                                            | **Not yet**: the refund executor returns every fee share pro rata (`refundFeeRule = pro-rata`) |
+| Purchases paid with credits refunded in credits (§9.5)                                                         | catalog refund restores credits; operator refund of a credit order (defect 5 fixed)         | Kept; operator "refund as credits" without the player's choice is still possible (P14)         |
+| Service Fee and total shown before paying (fees-and-premium §2.4)                                              | `player.fees.quote` → `pay_fee_quotes`                                                      | Kept for catalog items; all-in display on every surface is the UI's job                        |
+| Negative balance recovered by set-off, bank debit, then invoice in 15 days (§11)                               | `reconcileRecovery`                                                                         | Kept; the invoice is opened for a person to send                                               |
+| Closure: 60 days for credit refunds, remainder after 120 days (§17)                                            | settings only                                                                               | **Not yet** (suspension/closure workflow, P11)                                                 |
+| Court bookings refunded per policy on player cancellation (booking §2)                                         | player-bookings (not B2)                                                                    | **Not yet** (P6)                                                                               |
+| Refunds started within 5 business days (§9.6)                                                                  | none                                                                                        | **Not yet** (no SLA monitor on refund requests)                                                |
+
 ## How to read a club's balance
 
 - **Releasable now**: tranches with status `releasable` and no payout.
@@ -158,9 +303,10 @@ settings override as `pay.settings.invalid`. Payout creation goes through
 
 ## Status of this work
 
-Pull request 1 of 3 (B2): rules, obligations, delivery facts, the release
-job, payouts from tranches, invariants, and the delivery fix (release at the
-end, not at start minus the refund window). Disputes, refunds by payment
-method, recoveries, reserves and reconciliation drift follow in pull request
-2; fees, account status, the publish gate, the bootstrap script and the
-legal promise table in pull request 3.
+B2 pull requests: (1) rules, obligations, delivery facts, release job,
+payouts from tranches, defect 1; (2) disputes, refund funding, reserves,
+recovery, reconciliation drift, defects 2 and 5; (3) account status,
+onboarding, publish gate, payout settings, the fee quote, defects 3, 4 and 6.
+Still stubs: `refundPolicies`, `upsertRefundPolicy`, `taxSettings`,
+`updateTaxSettings`, `balance`, `moneyHome` (they answer "not configured
+yet"); `operator.fees.platformSummary` and the Premium procedures.

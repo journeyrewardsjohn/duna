@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState, useTransition } from "react";
-import { updatePickupAction } from "@/app/events/[slug]/actions";
+import { updatePickupAction } from "@/app/(legacy)/events/[slug]/actions";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 import styles from "./pickup-edit-form.module.css";
 

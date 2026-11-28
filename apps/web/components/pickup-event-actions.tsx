@@ -32,12 +32,12 @@ import {
   reportPickupAttendanceAction,
   requestPickupJoinAction,
   reviewPickupJoinRequestAction,
-} from "@/app/events/[slug]/actions";
+} from "@/app/(legacy)/events/[slug]/actions";
 import { PlayerEventNotes } from "@/components/player-event-notes";
 import {
   searchTeammatesAction,
   startEventCheckoutAction,
-} from "@/app/app/checkout/[slug]/actions";
+} from "@/app/(legacy)/app/checkout/[slug]/actions";
 
 type PickupPlayerResult = {
   readonly person: PersonSummary;

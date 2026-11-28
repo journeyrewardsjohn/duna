@@ -3,7 +3,7 @@
 import type { WaiverRequirement } from "@duna/api";
 import { Check, Copy, Send, ShieldCheck } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
-import { executeWaiverAction } from "@/app/clubs/[slug]/products/[productSlug]/actions";
+import { executeWaiverAction } from "@/app/(legacy)/clubs/[slug]/products/[productSlug]/actions";
 import { MarkdownContent } from "./markdown-content";
 
 type SignerRole =

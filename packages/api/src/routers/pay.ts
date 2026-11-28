@@ -49,6 +49,24 @@ import {
 } from "../contracts/pay";
 import { usesDemoData } from "../services/data-source";
 import {
+  loadPayAccount,
+  loadPayPayoutSettings,
+  payPublishGate,
+  startPayOnboarding,
+  updatePayBusiness,
+  updatePayPayoutSettings,
+} from "../services/pay/account";
+import {
+  listPayRecoveries,
+  listPayReserves,
+  requestPayReserveReview,
+} from "../services/pay/balances";
+import {
+  listPayDisputes,
+  loadPayDispute,
+  submitPayDisputeEvidence,
+} from "../services/pay/disputes";
+import {
   listPayHolds,
   listPayObligations,
   loadPayObligationDetail,
@@ -66,45 +84,61 @@ export const payOperatorRouter = router({
     .query(() => domainSeamStatus(DOMAIN)),
 
   /** The derived Duna Pay status, requirements and bank (DP-Status). */
-  account: read.output(payAccountSchema).query(() => {
+  account: read.output(payAccountSchema).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.account;
-    return notImplementedYet(DOMAIN, "account");
+    return loadPayAccount(ctx.organizationId);
   }),
 
   /** Business facts confirmed on DP-Business. */
   updateBusiness: write
     .input(payUpdateBusinessInputSchema)
     .output(payAccountSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) {
         return {
           ...payDemo.account,
           business: { ...payDemo.account.business, ...input },
         };
       }
-      return notImplementedYet(DOMAIN, "updateBusiness");
+      return updatePayBusiness({
+        organizationId: ctx.organizationId,
+        ...input,
+        now: ctx.now,
+      });
     }),
 
   /** Open verification (hosted link or embedded session), DP-Verify. */
   startOnboarding: write
     .input(payStartOnboardingInputSchema)
     .output(payOnboardingSessionSchema)
-    .mutation(() => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) return payDemo.onboardingSession;
-      return notImplementedYet(DOMAIN, "startOnboarding");
+      return startPayOnboarding({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        method: input.method,
+        returnPath: input.returnPath,
+        requestId: ctx.requestId,
+        now: ctx.now,
+      });
     }),
 
-  payoutSettings: read.output(payPayoutSettingsSchema).query(() => {
+  payoutSettings: read.output(payPayoutSettingsSchema).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.payoutSettings;
-    return notImplementedYet(DOMAIN, "payoutSettings");
+    return loadPayPayoutSettings(ctx.organizationId);
   }),
 
   updatePayoutSettings: write
     .input(payUpdatePayoutSettingsInputSchema)
     .output(payPayoutSettingsSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) return { ...payDemo.payoutSettings, ...input };
-      return notImplementedYet(DOMAIN, "updatePayoutSettings");
+      return updatePayPayoutSettings({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        changes: input,
+        now: ctx.now,
+      });
     }),
 
   refundPolicies: read.output(z.array(payRefundPolicySchema)).query(() => {
@@ -184,28 +218,34 @@ export const payOperatorRouter = router({
     return listPayHolds(ctx.organizationId);
   }),
 
-  reserves: read.output(z.array(payReserveSchema)).query(() => {
+  reserves: read.output(z.array(payReserveSchema)).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.reserves;
-    return notImplementedYet(DOMAIN, "reserves");
+    return listPayReserves(ctx.organizationId);
   }),
 
   /** The club may ask for a review of a reserve at any time (§5.4). */
   requestReserveReview: write
     .input(payRequestReserveReviewInputSchema)
     .output(payReserveSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) {
         const reserve = payDemo.reserves.find((r) => r.id === input.reserveId);
         if (!reserve) throw new TRPCError({ code: "NOT_FOUND" });
         return { ...reserve, status: "under-review" as const };
       }
-      return notImplementedYet(DOMAIN, "requestReserveReview");
+      return requestPayReserveReview({
+        organizationId: ctx.organizationId,
+        reserveId: input.reserveId,
+        actorPersonId: ctx.actor.personId,
+        note: input.note,
+        now: ctx.now,
+      });
     }),
 
   disputes: read
     .input(payDisputesInputSchema)
     .output(payDisputesPageSchema)
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) {
         return {
           items: payDemo.disputes.filter(
@@ -213,13 +253,13 @@ export const payOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "disputes");
+      return listPayDisputes(ctx.organizationId, input);
     }),
 
   dispute: read
     .input(payDisputeInputSchema)
     .output(payDisputeDetailSchema)
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) {
         const item = payDemo.disputes.find(
           (candidate) => candidate.id === input.disputeCaseId,
@@ -227,14 +267,14 @@ export const payOperatorRouter = router({
         if (!item) throw new TRPCError({ code: "NOT_FOUND" });
         return item;
       }
-      return notImplementedYet(DOMAIN, "dispute");
+      return loadPayDispute(ctx.organizationId, input.disputeCaseId);
     }),
 
   /** A person submits evidence; Duna forwards it to the processor. */
   submitDisputeEvidence: write
     .input(paySubmitDisputeEvidenceInputSchema)
     .output(payDisputeDetailSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) {
         const item = payDemo.disputes.find(
           (candidate) => candidate.id === input.disputeCaseId,
@@ -253,21 +293,29 @@ export const payOperatorRouter = router({
           },
         };
       }
-      return notImplementedYet(DOMAIN, "submitDisputeEvidence");
+      return submitPayDisputeEvidence({
+        organizationId: ctx.organizationId,
+        actorPersonId: ctx.actor.personId,
+        disputeCaseId: input.disputeCaseId,
+        explanation: input.explanation,
+        fileStorageKeys: input.fileStorageKeys,
+        idempotencyKey: input.idempotencyKey,
+        now: ctx.now,
+      });
     }),
 
-  recoveries: read.output(z.array(payRecoverySchema)).query(() => {
+  recoveries: read.output(z.array(payRecoverySchema)).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.recoveries;
-    return notImplementedYet(DOMAIN, "recoveries");
+    return listPayRecoveries(ctx.organizationId);
   }),
 
   /** `assertPaymentsReady` for the publish gate (DP-Gate). */
   publishGate: read
     .input(payPublishGateInputSchema)
     .output(payPublishGateSchema)
-    .query(() => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) return payDemo.publishGate;
-      return notImplementedYet(DOMAIN, "publishGate");
+      return payPublishGate(ctx.organizationId, input);
     }),
 
   /** The Money home (MN-Home). */

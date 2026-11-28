@@ -4,7 +4,9 @@ import {
   calculateConsumerPlatformFee,
   calculateOrganizationCommissionFee,
   calculateOperatorProcessingFee,
+  CHECKOUT_FEE_RULE_VERSION,
   priceConsumerOrder,
+  quoteCheckoutFees,
   selectLowestQualifiedCourtRate,
 } from "./index";
 
@@ -232,5 +234,66 @@ describe("Duna pricing", () => {
     expect(result.fees).toHaveLength(1);
     expect(result.fees[0]?.amountMinor).toBe(750);
     expect(result.totalMinor).toBe(19_750);
+  });
+});
+
+describe("quoteCheckoutFees (B2: one composition for every quote and checkout)", () => {
+  const commission = {
+    rateBps: 250,
+    organizationId: "org",
+    plan: "club",
+    source: "plan-default" as const,
+  };
+  const items = [
+    {
+      id: "v",
+      kind: "booking" as const,
+      description: "Lesson",
+      quantity: 1,
+      unitAmountMinor: 5_000,
+    },
+  ];
+  it("matches the separate rules exactly", () => {
+    const quote = quoteCheckoutFees({
+      items,
+      currency: "USD",
+      isDunaPlus: false,
+      tender: "online-card",
+      commission,
+    });
+    const priced = priceConsumerOrder({
+      items,
+      currency: "USD",
+      isDunaPlus: false,
+    });
+    expect(quote.priced).toEqual(priced);
+    const processing = calculateOperatorProcessingFee({
+      amountMinor: 5_000,
+      currency: "USD",
+      method: "online-card",
+    });
+    const organization = calculateOrganizationCommissionFee({
+      amountMinor: 5_000,
+      currency: "USD",
+      ...commission,
+    });
+    expect(quote.processingFee).toEqual(processing);
+    expect(quote.organizationFee).toEqual(organization);
+    expect(quote.applicationFeeMinor).toBe(
+      quote.serviceFeeMinor + processing.amountMinor + organization.amountMinor,
+    );
+    expect(quote.feeRuleVersion).toBe(CHECKOUT_FEE_RULE_VERSION);
+  });
+  it("credit purchases carry no fees", () => {
+    const quote = quoteCheckoutFees({
+      items,
+      currency: "USD",
+      isDunaPlus: false,
+      tender: "credits",
+      commission,
+    });
+    expect(quote.serviceFeeMinor).toBe(0);
+    expect(quote.applicationFeeMinor).toBe(0);
+    expect(quote.processingFee).toBeUndefined();
   });
 });

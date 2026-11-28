@@ -5,7 +5,7 @@ import { Badge } from "@duna/ui";
 import { Bell, Mail, MessageSquareText, Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { recordMarketingConsentAction } from "@/app/app/settings/actions";
+import { recordMarketingConsentAction } from "@/app/(legacy)/app/settings/actions";
 
 type Consent = PlayerSettings["consents"][number];
 type MarketingScope = Exclude<Consent["scope"], "transactional">;

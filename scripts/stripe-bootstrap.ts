@@ -6,6 +6,7 @@ import {
   ORGANIZATION_PLANS,
   ORGANIZATION_VIDEO_ADD_ONS,
   ORGANIZATION_VIDEO_RATES,
+  assertStripeBootstrapAllowed,
   membershipTierCode,
   type MembershipBillingInterval,
   type PaidMembershipPlanId,
@@ -20,14 +21,11 @@ try {
 }
 
 const key = process.env.STRIPE_SECRET_KEY;
-if (!key) {
-  throw new Error("Set STRIPE_SECRET_KEY in .env.local before bootstrapping.");
-}
-if (!key.startsWith("sk_test_")) {
-  throw new Error("Duna bootstrap only accepts Stripe sandbox secret keys.");
-}
+// The environment's key decides the mode (defect 6: live keys were refused).
+// Live runs need --confirm-live; the key is never printed.
+const mode = assertStripeBootstrapAllowed({ key, argv: process.argv });
 
-const stripe = new Stripe(key, {
+const stripe = new Stripe(key!, {
   appInfo: { name: "Duna bootstrap", version: "0.1.0" },
   apiVersion: "2026-07-29.dahlia",
   maxNetworkRetries: 3,
@@ -306,7 +304,7 @@ async function archiveRetiredNetworkPlan() {
 async function main() {
   const account = await stripe.accounts.retrieve(null);
   if (!account.id) {
-    throw new Error("Stripe sandbox account could not be resolved.");
+    throw new Error("Stripe account could not be resolved.");
   }
 
   const resources: Record<string, string> = {};
@@ -359,24 +357,24 @@ async function main() {
     }
   }
 
-  const existingClocks = await stripe.testHelpers.testClocks.list({
-    limit: 100,
-  });
+  // Test clocks exist only in sandbox mode.
   const testClock =
-    existingClocks.data.find(
-      (clock) =>
-        clock.name === "Duna subscription lifecycle" &&
-        clock.status !== "internal_failure",
-    ) ??
-    (await stripe.testHelpers.testClocks.create({
-      frozen_time: Math.floor(Date.now() / 1000),
-      name: "Duna subscription lifecycle",
-    }));
+    mode === "sandbox"
+      ? ((await stripe.testHelpers.testClocks.list({ limit: 100 })).data.find(
+          (clock) =>
+            clock.name === "Duna subscription lifecycle" &&
+            clock.status !== "internal_failure",
+        ) ??
+        (await stripe.testHelpers.testClocks.create({
+          frozen_time: Math.floor(Date.now() / 1000),
+          name: "Duna subscription lifecycle",
+        })))
+      : undefined;
 
   process.stdout.write(
     JSON.stringify(
       {
-        mode: "sandbox",
+        mode,
         account: account.id,
         resources,
         environment: {
@@ -402,7 +400,7 @@ async function main() {
           STRIPE_HQ_UPLOAD_PAYG_PRICE_ID: resources.duna_hq_upload_payg,
           STRIPE_HQ_LIVE_PAYG_PRICE_ID: resources.duna_hq_live_payg,
         },
-        testClock: testClock.id,
+        testClock: testClock?.id,
       },
       null,
       2,

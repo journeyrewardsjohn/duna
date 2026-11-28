@@ -41,7 +41,7 @@ import {
   loadCourtAvailabilityAction,
   quoteCourtCheckoutAction,
   startCourtCheckoutAction,
-} from "@/app/app/venues/[venueId]/actions";
+} from "@/app/(legacy)/app/venues/[venueId]/actions";
 import { CalendarDatePicker } from "./calendar-date-picker";
 
 type InvitedPlayer = {

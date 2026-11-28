@@ -24,7 +24,6 @@ import {
   organizationPayAccounts,
   payDeliveryEvents,
   payHolds,
-  payObligationRefunds,
   payObligations,
   payReleaseTranches,
   paymentFundSchedules,
@@ -39,10 +38,12 @@ import {
   inArray,
   isNull,
   notInArray,
+  or,
   sql,
-  sum,
 } from "drizzle-orm";
 import { addBusinessDays } from "./business-days";
+import { obligationDisputeTotals } from "./disputes";
+import { fundPendingRefunds, refundedProceedsForPlan } from "./refunds";
 import type { DeliverySnapshot, DeliverySource } from "./obligations";
 import {
   ensurePayObligationsForFund,
@@ -437,62 +438,53 @@ export async function loadObligationPlan(
   readonly disputedMinor: number;
 }> {
   const database = getDatabase();
-  const [
-    events,
-    released,
-    holds,
-    accountRows,
-    fundRows,
-    fundedRefunds,
-    grantRows,
-  ] = await Promise.all([
-    loadReleaseEvents(obligation.id),
-    database
-      .select()
-      .from(payReleaseTranches)
-      .where(
-        and(
-          eq(payReleaseTranches.obligationId, obligation.id),
-          eq(payReleaseTranches.status, "released"),
+  const [events, released, holds, accountRows, fundRows, grantRows] =
+    await Promise.all([
+      loadReleaseEvents(obligation.id),
+      database
+        .select()
+        .from(payReleaseTranches)
+        .where(
+          and(
+            eq(payReleaseTranches.obligationId, obligation.id),
+            eq(payReleaseTranches.status, "released"),
+          ),
         ),
-      ),
-    database
-      .select({ id: payHolds.id })
-      .from(payHolds)
-      .where(
-        and(
-          eq(payHolds.obligationId, obligation.id),
-          eq(payHolds.status, "active"),
-        ),
-      )
-      .limit(1),
-    database
-      .select()
-      .from(organizationPayAccounts)
-      .where(
-        eq(organizationPayAccounts.organizationId, obligation.organizationId),
-      )
-      .limit(1),
-    obligation.fundScheduleId
-      ? database
-          .select()
-          .from(paymentFundSchedules)
-          .where(eq(paymentFundSchedules.id, obligation.fundScheduleId))
-          .limit(1)
-      : Promise.resolve([]),
-    database
-      .select({ total: sum(payObligationRefunds.amountMinor) })
-      .from(payObligationRefunds)
-      .where(eq(payObligationRefunds.obligationId, obligation.id)),
-    obligation.deliveryRule === "credit-pack-reserve"
-      ? database
-          .select({ initialCredits: organizationCreditGrants.initialCredits })
-          .from(organizationCreditGrants)
-          .where(eq(organizationCreditGrants.sourceOrderId, obligation.orderId))
-          .orderBy(asc(organizationCreditGrants.createdAt))
-          .limit(1)
-      : Promise.resolve([]),
-  ]);
+      database
+        .select({ id: payHolds.id })
+        .from(payHolds)
+        .where(
+          and(
+            eq(payHolds.obligationId, obligation.id),
+            eq(payHolds.status, "active"),
+          ),
+        )
+        .limit(1),
+      database
+        .select()
+        .from(organizationPayAccounts)
+        .where(
+          eq(organizationPayAccounts.organizationId, obligation.organizationId),
+        )
+        .limit(1),
+      obligation.fundScheduleId
+        ? database
+            .select()
+            .from(paymentFundSchedules)
+            .where(eq(paymentFundSchedules.id, obligation.fundScheduleId))
+            .limit(1)
+        : Promise.resolve([]),
+      obligation.deliveryRule === "credit-pack-reserve"
+        ? database
+            .select({ initialCredits: organizationCreditGrants.initialCredits })
+            .from(organizationCreditGrants)
+            .where(
+              eq(organizationCreditGrants.sourceOrderId, obligation.orderId),
+            )
+            .orderBy(asc(organizationCreditGrants.createdAt))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
   const snapshot = snapshotOf(obligation);
   const account = accountRows[0];
   const fund = fundRows[0];
@@ -504,17 +496,28 @@ export async function loadObligationPlan(
         )
       : 0;
   const refundedGrossMinor = fund ? share(fund.refundedMinor) : 0;
-  // A processor refund before funding records exist (pull request 2 adds
-  // them): the whole refunded amount comes off the club's proceeds, as the
-  // pre-obligation rail did (net − refunded). Conservative: the club is
-  // never paid a refunded cent, and never more than the old rail paid.
-  const refundedFromFund = refundedGrossMinor;
+  // Refunds: what funding records say, plus any processor refund not funded
+  // yet taken in full from the proceeds (the club is never paid a refunded
+  // cent). A lost or accepted dispute costs the club like a refund.
+  const disputes = await obligationDisputeTotals(obligation.id);
   const refundedProceedsMinor = Math.min(
     obligation.proceedsMinor,
-    Math.max(refundedFromFund, Number(fundedRefunds[0]?.total ?? 0)),
+    (await refundedProceedsForPlan({
+      obligation,
+      refundedGrossShareMinor: refundedGrossMinor,
+    })) + Math.min(obligation.proceedsMinor, disputes.lostMinor),
   );
-  const disputedMinor =
-    fund && fund.status === "disputed" ? share(fund.disputedMinor) : 0;
+  // Open disputes: the processor cases, or the legacy fund marker before a
+  // case exists.
+  const disputedMinor = Math.max(
+    disputes.openMinor,
+    fund &&
+      fund.status === "disputed" &&
+      disputes.lostMinor === 0 &&
+      disputes.openMinor === 0
+      ? share(fund.disputedMinor)
+      : 0,
+  );
   const firstPayoutNotBefore =
     account && !account.firstPayoutDelayWaivedAt
       ? (account.firstPayoutNotBefore ?? undefined)
@@ -671,7 +674,14 @@ export async function openObligations(input: {
     .from(payObligations)
     .where(
       and(
-        notInArray(payObligations.status, [...CLOSED_OBLIGATION_STATUSES]),
+        or(
+          notInArray(payObligations.status, [...CLOSED_OBLIGATION_STATUSES]),
+          // A closed sale is reopened when money moves after it closed: a
+          // refund, a dispute or a processor refund (over-release, §5.5).
+          sql`EXISTS (SELECT 1 FROM pay_obligation_refunds r WHERE r.obligation_id = ${payObligations.id} AND r.created_at > ${payObligations.updatedAt})`,
+          sql`EXISTS (SELECT 1 FROM pay_dispute_cases d WHERE d.obligation_id = ${payObligations.id} AND d.updated_at > ${payObligations.updatedAt})`,
+          sql`EXISTS (SELECT 1 FROM payment_fund_schedules f WHERE f.id = ${payObligations.fundScheduleId} AND f.updated_at > ${payObligations.updatedAt} AND (f.refunded_minor > 0 OR f.disputed_minor > 0))`,
+        ),
         input.organizationId
           ? eq(payObligations.organizationId, input.organizationId)
           : undefined,
@@ -723,6 +733,14 @@ export async function runPayReleaseJob(input: {
           : undefined,
       ),
     );
+
+  const refunds = await fundPendingRefunds({
+    policy,
+    now: input.now,
+    organizationId: input.organizationId,
+    limit,
+  });
+  failures += refunds.failures;
 
   let refreshed = 0;
   let deliveryEvents = 0;

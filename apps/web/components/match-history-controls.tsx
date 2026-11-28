@@ -7,7 +7,7 @@ import { useState, useTransition } from "react";
 import {
   flagMatchHistoryAction,
   removeSelfReportedMatchAction,
-} from "@/app/app/score/actions";
+} from "@/app/(legacy)/app/score/actions";
 
 export function MatchHistoryControls({
   match,

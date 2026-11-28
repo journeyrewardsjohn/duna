@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   recordCompletedMatchAction,
   startMatchAction,
-} from "@/app/app/score/actions";
+} from "@/app/(legacy)/app/score/actions";
 import { PlaceSearch, type PlaceDetails } from "@/components/place-search";
 
 type TeamSide = "A" | "B";

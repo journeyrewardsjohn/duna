@@ -40,18 +40,12 @@ test("marketing and player discovery stay usable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Your club.All together.",
+    "Meet you at the net.",
   );
-  await page
-    .getByRole("navigation", { name: "Choose your Duna experience" })
-    .getByRole("link", { name: "For Players" })
-    .click();
-  await expect(
-    page.getByRole("link", { name: "Find a game", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("search", { name: "Find a game" })).toBeVisible();
   await expect(
     page.getByRole("img", {
-      name: "Beach volleyball on a tournament center court",
+      name: /beach volleyball player rests between rallies/,
     }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -137,37 +131,23 @@ test("wide, short homepages keep the hero clear of fixed navigation", async ({
 
     const header = page.locator(".site-header");
     const heading = page.getByRole("heading", {
-      name: "Your club. All together.",
+      level: 1,
+      name: "Meet you at the net.",
     });
-    const primaryAction = page
-      .getByRole("link", { name: "Get started", exact: true })
-      .last();
-    const secondaryAction = page.getByRole("link", {
-      name: "Explore the features",
-    });
-
+    const where = page.getByRole("button", { name: /^Where/ });
     await expect(heading).toBeVisible();
-    await expect(primaryAction).toBeVisible();
-    await expect(secondaryAction).toBeVisible();
+    await expect(where).toBeVisible();
 
-    const [headerBox, headingBox, primaryBox, secondaryBox] = await Promise.all(
-      [
-        getBox(header),
-        getBox(heading),
-        getBox(primaryAction),
-        getBox(secondaryAction),
-      ],
-    );
-
+    const [headerBox, headingBox, whereBox] = await Promise.all([
+      getBox(header),
+      getBox(heading),
+      getBox(where),
+    ]);
     expect(headingBox.y).toBeGreaterThanOrEqual(
       headerBox.y + headerBox.height + 8,
     );
-    expect(primaryBox.y).toBeGreaterThanOrEqual(
-      headingBox.y + headingBox.height + 24,
-    );
-    expect(secondaryBox.y + secondaryBox.height).toBeLessThanOrEqual(
-      viewport.height,
-    );
+    // The search's first row is on the first screen.
+    expect(whereBox.y + whereBox.height).toBeLessThanOrEqual(viewport.height);
     await expectNoHorizontalOverflow(page);
   }
 });
@@ -180,7 +160,8 @@ test("mobile public navigation opens as a full-screen product sheet", async ({
     { width: 1024, height: 768 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
+    // A page still on the legacy header (the home page moved to app/(next)).
+    await page.goto("/discover");
     await page.getByRole("button", { name: "Open navigation menu" }).click();
 
     const sheet = page.getByRole("dialog", {
@@ -406,10 +387,12 @@ test("public pickup pages keep their story and booking rail contained", async ({
 
 test("landing pages remain usable with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  // `/players` now redirects home (proxy.ts); the clubs chapter is on it.
   for (const path of ["/", "/players"]) {
     await page.goto(path);
+    await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.locator("#features")).toBeVisible();
+    await expect(page.locator("#clubs")).toBeAttached();
     await expectNoHorizontalOverflow(page);
   }
 });
@@ -536,7 +519,8 @@ test("branded identity entry preserves the secure auth handoff", async ({
 test("light mode starts cleanly and the dark choice persists", async ({
   page,
 }) => {
-  await page.goto("/");
+  // The legacy header carries the theme control (home is in app/(next)).
+  await page.goto("/discover");
   const mobileMenu = page.getByRole("button", {
     name: "Open navigation menu",
   });

@@ -12,27 +12,43 @@ import {
 test.use({ persona: "visitor" });
 
 test.describe("VI-1 Arrive and choose an audience", () => {
-  test("VI-1.1 The home page leads with clubs and offers the audience choice", async ({
+  test("VI-1.1 The home page leads with the search and offers the audience choice", async ({
     page,
   }) => {
     await page.goto("/");
-    await expectPageReady(page, /Your club\.\s*All together\./);
+    await expectPageReady(page, "Meet you at the net.");
     await expect(
-      page.getByRole("navigation", { name: "Choose your Duna experience" }),
+      page.getByRole("search", { name: "Find a game" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "I am here to" }).first(),
     ).toBeVisible();
     await expectNoLayoutShift(page);
     await expectNoHorizontalOverflow(page);
   });
-  test("VI-1.2 For Players opens the player landing page", async ({ page }) => {
+  test("VI-1.2 'I run a club' changes the call to action and is remembered", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await page
-      .getByRole("navigation", { name: "Choose your Duna experience" })
-      .getByRole("link", { name: "For Players" })
+    const header = page.getByRole("banner");
+    await header
+      .getByRole("group", { name: "I am here to" })
+      .getByRole("button", { name: "I run a club" })
       .click();
-    await expect(page).toHaveURL(/\/players$/);
     await expect(
-      page.getByRole("link", { name: "Find a game", exact: true }),
+      header
+        .locator(".site-header__cta")
+        .getByRole("link", { name: "Start your club", exact: true }),
     ).toBeVisible();
+    await page.reload();
+    await expect(
+      header
+        .locator(".site-header__cta")
+        .getByRole("link", { name: "Start your club", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Meet you at the net.",
+    );
   });
 });
 
