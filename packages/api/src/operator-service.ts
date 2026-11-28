@@ -58,6 +58,13 @@ import {
 } from "./services/team-availability";
 import { stableHash } from "./canonical";
 import {
+  canWriteMoney,
+  copyLegacyCompensation,
+  legacyCompensationView,
+  legacyEditorChanges,
+} from "./services/team-pay/legacy";
+import { setCompensation, setIncomeGoal } from "./services/team-pay";
+import {
   applyCourtScheduleChanges,
   courtScheduleVersion,
   type CourtScheduleWindow,
@@ -1654,6 +1661,12 @@ export async function loadOperatorWorkspace(
     })),
     organization.timezone,
   );
+  // B3b: compensation and goals come from staff_compensation and
+  // operator_earnings_goals, shown in the legacy shape.
+  const staffPayView = await legacyCompensationView(
+    organizationId,
+    staffProfileRows.map((row) => row.profile),
+  );
 
   const activeOwnerPersonIds = new Set(
     (
@@ -2303,19 +2316,11 @@ export async function loadOperatorWorkspace(
             : "private",
         role: role as OperatorWorkspace["staff"][number]["role"],
         isOwner: activeOwnerPersonIds.has(row.profile.personId),
-        workerClassification:
-          row.profile.workerClassification === "w2-employee" ||
-          row.profile.workerClassification === "1099-contractor"
-            ? row.profile.workerClassification
-            : "not-set",
-        compensationModel:
-          row.profile.compensationModel === "hourly" ||
-          row.profile.compensationModel === "profit-share" ||
-          row.profile.compensationModel === "hourly-plus-profit-share"
-            ? row.profile.compensationModel
-            : "not-set",
-        hourlyRateMinor: row.profile.hourlyRateMinor ?? undefined,
-        profitShareBps: row.profile.profitShareBps ?? undefined,
+        workerClassification: staffPayView.get(row.profile.id)!
+          .workerClassification,
+        compensationModel: staffPayView.get(row.profile.id)!.compensationModel,
+        hourlyRateMinor: staffPayView.get(row.profile.id)!.hourlyRateMinor,
+        profitShareBps: staffPayView.get(row.profile.id)!.profitShareBps,
         currency: currency(row.profile.currency),
         addressComplete: Boolean(
           row.profile.addressLine1 &&
@@ -2335,14 +2340,8 @@ export async function loadOperatorWorkspace(
         longitude: row.profile.longitude ?? undefined,
         availability:
           staffAvailabilityView.get(row.profile.id) ?? row.profile.availability,
-        incomeGoalMinor: row.profile.incomeGoalMinor ?? undefined,
-        incomeGoalPeriod:
-          row.profile.incomeGoalPeriod === "week" ||
-          row.profile.incomeGoalPeriod === "month" ||
-          row.profile.incomeGoalPeriod === "quarter" ||
-          row.profile.incomeGoalPeriod === "year"
-            ? row.profile.incomeGoalPeriod
-            : undefined,
+        incomeGoalMinor: staffPayView.get(row.profile.id)!.incomeGoalMinor,
+        incomeGoalPeriod: staffPayView.get(row.profile.id)!.incomeGoalPeriod,
         sessionsRun30d: sessionRows.filter(
           (session) =>
             session.coachPersonId === row.profile.personId &&
@@ -3555,6 +3554,18 @@ export async function claimStaffInvitation(input: {
   };
 }
 
+function localDateIn(instant: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 export async function updateStaffProfile(input: {
   readonly actor: ApiActor;
   readonly personId: string;
@@ -3768,17 +3779,6 @@ export async function updateStaffProfile(input: {
   const values = {
     staffRole: input.role,
     workerClassification: input.workerClassification,
-    compensationModel: input.compensationModel,
-    hourlyRateMinor:
-      input.compensationModel === "hourly" ||
-      input.compensationModel === "hourly-plus-profit-share"
-        ? input.hourlyRateMinor
-        : null,
-    profitShareBps:
-      input.compensationModel === "profit-share" ||
-      input.compensationModel === "hourly-plus-profit-share"
-        ? input.profitShareBps
-        : null,
     addressLine1: input.addressLine1?.trim() || null,
     addressLine2: input.addressLine2?.trim() || null,
     locality: input.locality?.trim() || null,
@@ -3788,11 +3788,46 @@ export async function updateStaffProfile(input: {
     googlePlaceId: input.googlePlaceId?.trim() || null,
     latitude: input.latitude,
     longitude: input.longitude,
-    incomeGoalMinor: input.incomeGoalMinor,
-    incomeGoalPeriod: input.incomeGoalPeriod,
     active: input.active,
     updatedAt: input.now,
   };
+  // B3b: compensation and the income goal live in staff_compensation and
+  // operator_earnings_goals; the legacy columns are no longer written. A
+  // change made here is a money write and needs payments:write.
+  const organizationForPay = await organizationRow(organizationId);
+  await getTransactionalDatabase().transaction((transaction) =>
+    copyLegacyCompensation(transaction, {
+      profile: current,
+      currency: organizationForPay.currency,
+      now: input.now,
+      actorPersonId: input.actor.personId,
+    }),
+  );
+  const currentPay = (
+    await legacyCompensationView(organizationId, [current])
+  ).get(current.id)!;
+  const payChanges = legacyEditorChanges(currentPay, {
+    workerClassification: input.workerClassification,
+    compensationModel: input.compensationModel,
+    ...(input.hourlyRateMinor !== undefined
+      ? { hourlyRateMinor: input.hourlyRateMinor }
+      : {}),
+    ...(input.profitShareBps !== undefined
+      ? { profitShareBps: input.profitShareBps }
+      : {}),
+    ...(input.incomeGoalMinor !== undefined
+      ? { incomeGoalMinor: input.incomeGoalMinor }
+      : {}),
+    ...(input.incomeGoalPeriod
+      ? { incomeGoalPeriod: input.incomeGoalPeriod }
+      : {}),
+  });
+  if ((payChanges.model || payChanges.goal) && !canWriteMoney(input.actor)) {
+    throw new OperatorServiceError(
+      "FORBIDDEN",
+      "Only the organization Owner can change compensation or income goals.",
+    );
+  }
   const tx = getTransactionalDatabase();
   // B3a: availability and blackouts go to the named-schedule tables; the
   // legacy `availability` column is no longer written.
@@ -3914,6 +3949,43 @@ export async function updateStaffProfile(input: {
         tags: { operation: "legacy-editor-blackout" },
       });
     }
+  }
+  const payContext = {
+    actor: input.actor,
+    organizationId,
+    requestId: input.requestId,
+    now: input.now,
+  };
+  if (payChanges.model) {
+    const currency = organizationForPay.currency.toUpperCase() as "USD";
+    await setCompensation(payContext, {
+      staffProfileId: current.id,
+      model: payChanges.model.model,
+      classification: payChanges.model.classification,
+      effectiveFrom: localDateIn(input.now, organizationForPay.timezone),
+      ...(payChanges.model.hourlyRateMinor !== undefined
+        ? {
+            hourlyRate: {
+              amountMinor: payChanges.model.hourlyRateMinor,
+              currency,
+            },
+          }
+        : {}),
+      ...(payChanges.model.revenueShareBps !== undefined
+        ? { revenueShareBps: payChanges.model.revenueShareBps }
+        : {}),
+      revenueShareScope: [],
+    });
+  }
+  if (payChanges.goal) {
+    await setIncomeGoal(payContext, {
+      staffProfileId: current.id,
+      target: {
+        amountMinor: payChanges.goal.targetMinor,
+        currency: organizationForPay.currency.toUpperCase() as "USD",
+      },
+      period: payChanges.goal.period,
+    });
   }
   return {
     id: current.id,

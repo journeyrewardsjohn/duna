@@ -260,6 +260,29 @@ Service functions with no procedure yet: `processPendingSetupRuns` (advance
 waiting or stalled reads, for a cron) and `purgeExpiredSetupRunData` (the
 proposed 180-day retention), both in `packages/api/src/services/setup`.
 
+## Team pay (`operator.teamPay`, owner B3b)
+
+Shapes are frozen in `packages/api/src/contracts/team-pay.ts`; the product
+rules are in [`docs/product/team.md`](product/team.md). Every procedure is
+live and returns its fixture from `@duna/core/demo/team-pay` in demo mode.
+The computation is the pure `computePayRun` in
+`packages/api/src/services/team-pay/compute.ts`; Duna computes and exports
+and pays nobody here.
+
+| Procedure                          | Scope                                                                      | Notes                                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `staffCompensation`                | `members:read` + the member themselves, `members:write` or `payments:read` | Current model, history, goal with `earned` from delivered sessions in the goal window                                                            |
+| `setCompensation`, `setIncomeGoal` | `payments:write`                                                           | A new model closes the current one the day before; same-day replacement only if no run used it; rates in the club currency                       |
+| `payPeriods`, `createPayPeriod`    | read `members:read`; create `payments:write`                               | End date from frequency; twice-monthly starts on the 1st or 16th; no overlaps (`CONFLICT`)                                                       |
+| `payRuns`, `payRun`                | `members:read` + `members:write` or `payments:read`                        | Lines with sessions count, minutes, earnings, labelled adjustments, total; exports with who and when                                             |
+| `computePayRun`                    | `payments:write`                                                           | Idempotent by key; new revision; cancels unapproved revisions; after an approved run it pays only sessions (and salary) not yet paid             |
+| `adjustLine`, `cancelPayRun`       | `payments:write`                                                           | Only while `ready-for-approval`; `duna-pay` refused (W-2 never; contractors until B3c)                                                           |
+| `approvePayRun`                    | `payments:write`                                                           | Idempotent; an approved run is immutable                                                                                                         |
+| `exportPayRun`                     | `payments:write`                                                           | Generic CSV (columns in `export-file.ts`), private storage, 15-minute signed link; other layouts and missing storage answer "not configured yet" |
+
+`operator.teamPayouts.*` (B3c) stays "not implemented yet" by design; see
+[`docs/money/contractor-payouts.md`](money/contractor-payouts.md).
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.
