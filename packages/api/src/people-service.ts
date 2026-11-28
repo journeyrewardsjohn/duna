@@ -4,8 +4,6 @@ import {
   eventTypes,
   getDatabase,
   guardianships,
-  healthConnections,
-  healthSharingGrants,
   membershipTiers,
   memberships,
   messages,
@@ -29,7 +27,7 @@ import {
   videos,
 } from "@duna/db";
 import { arrivalSharingWindow } from "@duna/scheduling";
-import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   eventCaptainPaymentComplete,
@@ -46,7 +44,11 @@ import type {
 import type { ApiActor } from "./context";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { loadSessionArrivalBoard } from "./arrival-service";
-import { loadHealthProfile } from "./health-service";
+import {
+  organizationViewerRolesFor,
+  type HealthAgeBand,
+} from "./services/health/policy";
+import { healthSummaryVisibleTo, loadHealthProfile } from "./health-service";
 import {
   loadEventCancellationPreview,
   loadOperatorDivisionDetail,
@@ -464,7 +466,7 @@ export async function loadOperatorMemberProfile(input: {
     orderRows,
     attendanceRows,
     videoRows,
-    healthGrant,
+    healthAccess,
   ] = await Promise.all([
     database
       .select({ membership: memberships, tier: membershipTiers })
@@ -533,56 +535,38 @@ export async function loadOperatorMemberProfile(input: {
       )
       .orderBy(desc(videos.createdAt))
       .limit(24),
-    database.query.healthSharingGrants.findFirst({
-      where: and(
-        eq(healthSharingGrants.ownerPersonId, personId),
-        eq(healthSharingGrants.audienceKind, "organization"),
-        eq(healthSharingGrants.organizationId, organizationId),
-        isNull(healthSharingGrants.revokedAt),
-        gte(healthSharingGrants.expiresAt, input.now),
-        sql`${healthSharingGrants.scopes} @> ARRAY['summary']::text[]`,
-      ),
-      orderBy: [desc(healthSharingGrants.createdAt)],
+    // PRIV-1: the Health service's own viewer rule, narrowed to this club.
+    // Anyone it does not name gets no health block at all.
+    healthSummaryVisibleTo({
+      subjectPersonId: personId,
+      viewer: input.actor,
+      organizationId,
+      now: input.now,
     }),
   ]);
 
   const orderIds = orderRows.map((order) => order.id);
-  const [itemRows, refundRows, notes, healthProfile, healthConnection] =
-    await Promise.all([
-      orderIds.length
-        ? database
-            .select()
-            .from(orderItems)
-            .where(inArray(orderItems.orderId, orderIds))
-        : Promise.resolve([]),
-      orderIds.length
-        ? database
-            .select()
-            .from(refundRecords)
-            .where(
-              and(
-                eq(refundRecords.organizationId, organizationId),
-                inArray(refundRecords.orderId, orderIds),
-              ),
-            )
-            .orderBy(desc(refundRecords.createdAt))
-        : Promise.resolve([]),
-      loadSessionNotes({ organizationId, personId }),
-      healthGrant
-        ? loadHealthProfile({
-            actor: input.actor,
-            subjectPersonId: personId,
-            now: input.now,
-            requestId: input.requestId,
-            ipAddress: input.ipAddress,
-          })
-        : Promise.resolve(undefined),
-      healthGrant
-        ? database.query.healthConnections.findFirst({
-            where: eq(healthConnections.personId, personId),
-          })
-        : Promise.resolve(undefined),
-    ]);
+  const [itemRows, refundRows, notes] = await Promise.all([
+    orderIds.length
+      ? database
+          .select()
+          .from(orderItems)
+          .where(inArray(orderItems.orderId, orderIds))
+      : Promise.resolve([]),
+    orderIds.length
+      ? database
+          .select()
+          .from(refundRecords)
+          .where(
+            and(
+              eq(refundRecords.organizationId, organizationId),
+              inArray(refundRecords.orderId, orderIds),
+            ),
+          )
+          .orderBy(desc(refundRecords.createdAt))
+      : Promise.resolve([]),
+    loadSessionNotes({ organizationId, personId }),
+  ]);
   const noteCountBySession = new Map<string, number>();
   for (const note of notes) {
     noteCountBySession.set(
@@ -754,39 +738,19 @@ export async function loadOperatorMemberProfile(input: {
     purchases,
     notes,
     videos: mappedVideos,
-    health:
-      healthGrant && healthProfile
-        ? {
-            source: "apple-healthkit",
-            scopes: healthGrant.categories,
-            grantedAt: healthGrant.createdAt.toISOString(),
-            observedAt: healthConnection?.lastSyncedAt?.toISOString(),
-            metrics: {
-              readinessScore: healthProfile.intelligence.readiness.score,
-              readinessLabel: healthProfile.intelligence.readiness.label,
-              readinessConfidence:
-                healthProfile.intelligence.readiness.confidence,
-              readinessSummary: healthProfile.intelligence.readiness.summary,
-              strainScore: healthProfile.intelligence.strain.score,
-              sleepContinuityPercent:
-                healthProfile.intelligence.sleep?.efficiencyPercent,
-              restingHeartRate: healthProfile.summary.restingHeartRate,
-              heartRateVariabilityMs:
-                healthProfile.summary.heartRateVariabilityMs,
-              sleepHours: healthProfile.summary.lastSleepHours,
-              steps:
-                healthProfile.daily[0]?.steps === undefined
-                  ? undefined
-                  : Math.round(healthProfile.daily[0].steps),
-              activeEnergyKcal:
-                healthProfile.daily[0]?.activeEnergyKcal ??
-                healthProfile.summary.sevenDayActiveEnergyKcal,
-              latestWorkoutAt: healthProfile.timeline.find(
-                (entry) => entry.metric === "workout",
-              )?.startedAt,
-            },
-          }
-        : undefined,
+    // PRIV-1: no health value ever leaves this read; values come only from
+    // memberHealthProfile, which records the view. `health` is the
+    // deprecated marker (absent for a non-viewer, never with metrics).
+    ...(healthAccess
+      ? {
+          health: {
+            source: "apple-healthkit" as const,
+            scopes: [...healthAccess.categories],
+            grantedAt: healthAccess.grantedAt,
+          },
+        }
+      : {}),
+    healthAccess: { canView: Boolean(healthAccess) },
     timeline,
   };
 }
@@ -810,15 +774,32 @@ export async function loadOperatorMemberHealthProfile(input: {
   });
 }
 
+/**
+ * Demo stand-in for the Health viewer rule: the demo player shared a summary
+ * with the club, so it reaches exactly the roles the Health policy names for
+ * an organization grant (`organizationViewerRolesFor`), adult viewers only.
+ */
+export function demoHealthVisibleTo(
+  viewer: Pick<ApiActor, "roles" | "ageBand">,
+  ownerBand: HealthAgeBand = "adult",
+): boolean {
+  if (viewer.ageBand !== "adult") return false;
+  const roles = organizationViewerRolesFor(ownerBand);
+  return viewer.roles.some((role) => roles.includes(role));
+}
+
 export async function loadDemoOperatorMemberProfile(
   organizationId: string,
   personId: string,
+  viewer: Pick<ApiActor, "roles" | "ageBand">,
 ): Promise<OperatorMemberProfile> {
   const { relationship, workspace } = await assertRelationship(
     organizationId,
     personId,
     true,
   );
+  const demoHealthShared =
+    relationship.displayName === "Maya Chen" && demoHealthVisibleTo(viewer);
   const sessionsForPerson = workspace.eventRegistrations
     .filter((registration) => registration.personId === personId)
     .flatMap((registration) => {
@@ -1039,26 +1020,18 @@ export async function loadDemoOperatorMemberProfile(
     purchases,
     notes,
     videos,
-    health:
-      relationship.displayName === "Maya Chen"
-        ? {
-            source: "apple-healthkit",
-            scopes: ["activity", "heart-rate", "sleep", "workouts"],
+    ...(demoHealthShared
+      ? {
+          health: {
+            source: "apple-healthkit" as const,
+            scopes: ["activity", "heart"],
             grantedAt: new Date(
               Date.now() - 30 * 24 * 60 * 60_000,
             ).toISOString(),
-            observedAt: new Date(Date.now() - 4 * 60 * 60_000).toISOString(),
-            metrics: {
-              restingHeartRate: 58,
-              heartRateVariabilityMs: 67,
-              sleepHours: 7.7,
-              steps: 8_942,
-              activeEnergyKcal: 614,
-              exerciseMinutes: 71,
-              latestWorkoutAt: completedSession?.endsAt,
-            },
-          }
-        : undefined,
+          },
+        }
+      : {}),
+    healthAccess: { canView: demoHealthShared },
     timeline,
   };
 }

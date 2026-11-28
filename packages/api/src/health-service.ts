@@ -163,6 +163,8 @@ type HealthAccess = {
   readonly metrics?: readonly HealthMetric[];
   /** The owner's age band today (from their birth date). */
   readonly ownerBand?: HealthAgeBand;
+  /** Newest grant that gives this viewer access (non-owners only). */
+  readonly grantedAt?: Date;
 };
 
 export function healthGrantAllows(input: {
@@ -602,6 +604,12 @@ async function resolveHealthAccess(input: {
   readonly viewerPersonId: string;
   readonly now: Date;
   readonly ownerState?: HealthSubjectState;
+  /**
+   * Read inside one club's workspace: an organization grant counts only when
+   * it names this club, and a coach grant only when the viewer coaches the
+   * owner at this club. Omitted for the person-to-person reads.
+   */
+  readonly organizationId?: string;
 }): Promise<HealthAccess | undefined> {
   const ownerState =
     input.ownerState ??
@@ -664,6 +672,7 @@ async function resolveHealthAccess(input: {
     };
     if (
       grant.audienceKind === "player" &&
+      !input.organizationId &&
       healthGrantAllows({
         ...baseGrant,
         relationshipActive: await playerRelationshipExists(
@@ -678,10 +687,17 @@ async function resolveHealthAccess(input: {
       grant.audienceKind === "coach" &&
       healthGrantAllows({
         ...baseGrant,
-        relationshipActive: await activeCoachRelationshipExists(
-          input.ownerPersonId,
-          input.viewerPersonId,
-        ),
+        relationshipActive: input.organizationId
+          ? await activeOrganizationViewer(
+              input.ownerPersonId,
+              input.viewerPersonId,
+              input.organizationId,
+              ["coach"],
+            )
+          : await activeCoachRelationshipExists(
+              input.ownerPersonId,
+              input.viewerPersonId,
+            ),
       })
     ) {
       valid.push(grant);
@@ -689,6 +705,8 @@ async function resolveHealthAccess(input: {
     if (
       grant.audienceKind === "organization" &&
       grant.organizationId &&
+      (!input.organizationId ||
+        grant.organizationId === input.organizationId) &&
       healthGrantAllows({
         ...baseGrant,
         relationshipActive: await activeOrganizationViewer(
@@ -713,6 +731,9 @@ async function resolveHealthAccess(input: {
     ),
     metrics: ownerPermit.allowedMetrics,
     ownerBand: ownerState.band,
+    grantedAt: new Date(
+      Math.max(...valid.map((grant) => grant.createdAt.getTime())),
+    ),
   };
 }
 
@@ -1796,6 +1817,52 @@ async function buildMatchContexts(
   });
 }
 
+/** A summary read needs access and, for anyone but the owner, the summary scope. */
+function healthSummaryAccessible(
+  access: HealthAccess | undefined,
+): access is HealthAccess {
+  return Boolean(access && (access.owner || access.scopes.includes("summary")));
+}
+
+/**
+ * The Health service's own viewer rule, for reads that sit inside a club
+ * workspace (operator.memberProfile `healthAccess.canView`, PRIV-1).
+ * Returns the categories the viewer may see in a summary, or undefined:
+ * never throws, never reads a value, writes no access record. Same rule as `loadHealthProfile` (adult viewer; an effective grant
+ * to this viewer, to them as the person's coach, or to the club for the roles
+ * `organizationViewerRolesFor` names), narrowed to one club: a grant to
+ * another club, a peer-player grant and a coach relationship at another club
+ * do not count here.
+ */
+export async function healthSummaryVisibleTo(input: {
+  readonly subjectPersonId: string;
+  readonly viewer: ApiActor;
+  readonly organizationId: string;
+  readonly now: Date;
+}): Promise<
+  | {
+      readonly categories: readonly HealthCategory[];
+      readonly grantedAt: string;
+    }
+  | undefined
+> {
+  if (input.viewer.ageBand !== "adult") return undefined;
+  if (usesDemoData()) return undefined;
+  const access = await resolveHealthAccess({
+    ownerPersonId: input.subjectPersonId,
+    viewerPersonId: input.viewer.personId,
+    now: input.now,
+    organizationId: input.organizationId,
+  });
+  if (!healthSummaryAccessible(access) || access.categories.length === 0) {
+    return undefined;
+  }
+  return {
+    categories: access.categories,
+    grantedAt: (access.grantedAt ?? input.now).toISOString(),
+  };
+}
+
 async function buildProfile(input: {
   readonly subjectPersonId: string;
   readonly viewer: ApiActor;
@@ -1841,7 +1908,7 @@ async function buildProfile(input: {
     now: input.now,
     ownerState,
   });
-  if (!access || (!access.owner && !access.scopes.includes("summary"))) {
+  if (!healthSummaryAccessible(access)) {
     throw new HealthServiceError(
       "ACCESS_DENIED",
       "This player has not shared Duna Health with you.",
