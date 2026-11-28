@@ -1,6 +1,6 @@
 "use client";
 
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import {
   ArrowRight,
   BellRing,
@@ -1090,7 +1090,7 @@ function ProductSurfaceHeader({ label }: { readonly label: string }) {
   return (
     <header className={styles.productSurfaceHeader}>
       <span className={styles.productSurfaceBrand}>
-        <DunaMark />
+        <DunaLogo decorative size={20} />
         <b>Duna HQ</b>
       </span>
       <span className={styles.productSurfaceOrg}>South Bay Volleyball</span>

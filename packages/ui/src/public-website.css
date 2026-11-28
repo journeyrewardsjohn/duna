@@ -9,7 +9,7 @@
   --public-content-width: 1216px;
   --public-nav-height: 76px;
   /* Acid Grotesk delivery is pending the owner's licensed webfont files. */
-  --public-font: "Satoshi", "Helvetica Neue", Arial, sans-serif;
+  --public-font: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif);
   --duna-web-snow: var(--public-ground);
   --duna-web-white: var(--public-ground);
   --duna-web-charcoal: var(--public-ink);

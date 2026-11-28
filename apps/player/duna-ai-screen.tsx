@@ -134,7 +134,7 @@ export function PlayerDunaAiScreen({
   readonly pathname: string;
 }) {
   const runtime = usePlayerRuntime();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<import("react-native").ScrollViewInstance>(null);
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);

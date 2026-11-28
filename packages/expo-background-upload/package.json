@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "expo": "~57.0.10",
-    "expo-modules-core": "~57.0.8",
-    "react-native": "0.86.2"
+    "expo": "~58.1.0",
+    "expo-modules-core": "~58.2.0",
+    "react-native": "0.88.1"
   }
 }

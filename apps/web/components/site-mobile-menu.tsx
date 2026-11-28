@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import {
   ArrowRight,
@@ -238,7 +238,7 @@ function SiteMobileMenuView({
                   href="/"
                   onClick={close}
                 >
-                  <DunaMark />
+                  <DunaLogo decorative size={24} />
                 </Link>
                 <div>
                   <ThemeToggle label="Color theme" />

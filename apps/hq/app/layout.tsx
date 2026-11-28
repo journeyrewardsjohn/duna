@@ -13,6 +13,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaAuthProvider } from "@/components/auth-provider";
 import { AskDunaFloatingProvider } from "@/components/ask-duna-floating-provider";
+import { dunaFontClassName } from "./fonts";
 
 export const metadata: Metadata = {
   title: {
@@ -37,17 +38,13 @@ export default function RootLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <html
+      className={dunaFontClassName}
       data-theme="light"
       data-theme-preference="system"
       lang="en"
       suppressHydrationWarning
     >
       <head>
-        <link href="https://api.fontshare.com" rel="preconnect" />
-        <link
-          href="https://api.fontshare.com/v2/css?f[]=satoshi@1,2&display=swap"
-          rel="stylesheet"
-        />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body data-zone="operator">

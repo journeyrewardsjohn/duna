@@ -31880,11 +31880,9 @@ a {
   z-index: 100;
 }
 
-.site-loading img {
+.site-loading svg {
   animation: site-loading-breathe 900ms ease-in-out infinite alternate;
-  height: 2rem;
-  object-fit: contain;
-  width: 2rem;
+  color: var(--text-1);
 }
 
 .site-loading__label {

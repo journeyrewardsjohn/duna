@@ -153,7 +153,8 @@ export function VenueBookingModal({
       readonly title: string;
     };
   }>();
-  const bookingDateScrollRef = useRef<ScrollView>(null);
+  const bookingDateScrollRef =
+    useRef<import("react-native").ScrollViewInstance>(null);
   const bookingDateScrollX = useRef(0);
   const dateRailPositioned = useRef(false);
 

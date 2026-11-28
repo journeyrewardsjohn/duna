@@ -1,4 +1,4 @@
-import { Badge, DunaMark } from "@duna/ui";
+import { Badge, DunaLogo } from "@duna/ui";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { Bell, Search, ShieldCheck } from "lucide-react";
@@ -24,7 +24,7 @@ export async function AdminShell({
     <div className="hq-shell hq-shell--focused admin-shell">
       <aside className="hq-sidebar">
         <Link className="hq-sidebar__brand" href="/admin">
-          <DunaMark />
+          <DunaLogo size={24} />
           <Badge tone="warning">Admin</Badge>
         </Link>
         <div className="admin-identity">

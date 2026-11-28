@@ -1,4 +1,4 @@
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import { ArrowRight, Check, Smartphone } from "lucide-react";
 import type { Metadata } from "next";
 import styles from "./page.module.css";
@@ -19,7 +19,7 @@ export default async function ProOnboardingCompletePage({
     <main className={styles.page}>
       <section className={styles.card}>
         <header>
-          <DunaMark />
+          <DunaLogo size={28} />
           <span>Duna Pro</span>
         </header>
         <span className={styles.icon}>

@@ -1,4 +1,4 @@
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
@@ -6,7 +6,7 @@ export function AdminAccessDenied() {
   return (
     <main className="admin-access-denied">
       <div>
-        <DunaMark />
+        <DunaLogo size={28} />
         <span className="admin-access-denied__icon">
           <ShieldAlert aria-hidden size={24} />
         </span>

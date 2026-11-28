@@ -60,7 +60,7 @@ export function HqWorkPrompt({ date }: { readonly date: string }) {
         />
         <div className="hq-work-prompt__tools">
           <span>
-            <DunaMark compact /> Duna AI
+            <DunaMark decorative size={16} /> Duna AI
           </span>
           <button aria-label="Ask Duna" disabled={!value.trim()} type="submit">
             <ArrowUp size={18} aria-hidden />
@@ -98,7 +98,7 @@ export function HqPagePrompt({ label }: { readonly label: string }) {
         setValue("");
       }}
     >
-      <DunaMark compact />
+      <DunaMark decorative size={20} />
       <input
         aria-label={`Ask Duna about ${label.toLowerCase()}`}
         placeholder={`Ask Duna about ${label.toLowerCase()}, or describe a task…`}
