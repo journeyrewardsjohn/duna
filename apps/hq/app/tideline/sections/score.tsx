@@ -191,7 +191,10 @@ const examples: GalleryExample[] = [
         {(["sm", "md", "lg"] as const).map((size) => (
           <div
             key={size}
-            style={{ flex: "1 1 240px", maxWidth: size === "lg" ? 460 : size === "md" ? 340 : 260 }}
+            style={{
+              flex: "1 1 240px",
+              maxWidth: size === "lg" ? 460 : size === "md" ? 340 : 260,
+            }}
           >
             <NetScore
               layout="net"
