@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { EventBrackets } from "@/components/events/event-brackets";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Brackets and results" };
 
 /** An event › Brackets and results: pools, standings and the bracket. */
 export default async function EventBracketsPage({

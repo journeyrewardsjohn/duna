@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
 import { AccessDeniedState } from "@/lib/access-state";
 import { EventMoney } from "@/components/events/event-money";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Event money" };
 
 /**
  * An event › Money: collected, refunded and kept, each order and its

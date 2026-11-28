@@ -1,8 +1,5 @@
-import type { Metadata } from "next";
 import { EventEntries } from "@/components/events/event-entries";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Entries" };
 
 /** An event › Divisions and entries: the field, the waitlist and check-in. */
 export default async function EventEntriesPage({

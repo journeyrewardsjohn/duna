@@ -1,8 +1,5 @@
-import type { Metadata } from "next";
 import { EventNotes } from "@/components/events/event-notes";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Event notes" };
 
 /** An event › Notes: what coaches and staff wrote or said, and its video. */
 export default async function EventNotesPage({

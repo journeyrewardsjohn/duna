@@ -1,8 +1,5 @@
-import type { Metadata } from "next";
 import { EventSettings } from "@/components/events/event-settings";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Event settings" };
 
 /** An event › Settings: details, registration, and cancelling with refunds. */
 export default async function EventSettingsPage({

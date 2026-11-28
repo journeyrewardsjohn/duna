@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { EventSchedule } from "@/components/events/event-schedule";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Schedule and courts" };
 
 /** An event › Schedule and courts: every match by court and time. */
 export default async function EventSchedulePage({

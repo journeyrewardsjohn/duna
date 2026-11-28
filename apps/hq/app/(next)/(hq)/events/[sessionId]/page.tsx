@@ -1,8 +1,5 @@
-import type { Metadata } from "next";
 import { EventOverview } from "@/components/events/event-overview";
 import { EventScreen, eventPage } from "@/components/events/event-screen";
-
-export const metadata: Metadata = { title: "Event" };
 
 /** An event › Overview: the launch steps, the numbers, and on the day what is happening now. */
 export default async function EventOverviewPage({
