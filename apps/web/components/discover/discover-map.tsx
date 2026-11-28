@@ -52,6 +52,12 @@ export interface DiscoverMapProps {
   readonly feature?: string;
   /** Opening zoom when there is one point and no area. */
   readonly zoom?: number;
+  /**
+   * Show why a map is missing (demo and development). For the public the
+   * map instead calls `onUnavailable` and draws nothing.
+   */
+  readonly explainMissing?: boolean;
+  readonly onUnavailable?: () => void;
 }
 
 const SOURCE = "duna-results";
@@ -150,11 +156,15 @@ export default function DiscoverMap({
   label,
   feature = "The map",
   zoom,
+  explainMissing = true,
+  onUnavailable,
 }: DiscoverMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapboxMap | null>(null);
   const latest = useRef({ points, onSelect, onHover });
   latest.current = { points, onSelect, onHover };
+  const gone = useRef(onUnavailable);
+  gone.current = onUnavailable;
   const [state, setState] = useState<
     "loading" | "ready" | "not-configured" | "error"
   >("loading");
@@ -174,6 +184,7 @@ export default function DiscoverMap({
       if (cancelled || !container.current) return;
       if (engine.state === "not-configured") {
         setState("not-configured");
+        gone.current?.();
         return;
       }
       if (engine.state === "error") {
@@ -184,6 +195,7 @@ export default function DiscoverMap({
           }),
         );
         setState("error");
+        gone.current?.();
         return;
       }
       const { mapboxgl } = engine;
@@ -465,6 +477,10 @@ export default function DiscoverMap({
     setLook(next);
     current.setStyle(MAP_STYLES[next]);
   };
+
+  if (!explainMissing && (state === "not-configured" || state === "error")) {
+    return null;
+  }
 
   return (
     <div className="dv-map" data-state={state}>

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import type { MapPresence } from "./map-presence";
 
 const DiscoverMap = dynamic(() => import("./discover-map"), {
   ssr: false,
@@ -18,7 +19,10 @@ export function VenueMap({
   name,
   latitude,
   longitude,
+  presence = "on",
 }: {
+  /** Decided on the server: `off` draws nothing (the address stays). */
+  readonly presence?: MapPresence;
   readonly id: string;
   readonly name: string;
   readonly latitude: number;
@@ -26,6 +30,7 @@ export function VenueMap({
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
+  const [gone, setGone] = useState(presence === "off");
   useEffect(() => {
     const element = frame.current;
     if (!element) return;
@@ -41,11 +46,16 @@ export function VenueMap({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  if (gone) return null;
   return (
     <div className="vn-map" ref={frame}>
       {near ? (
         <DiscoverMap
+          explainMissing={presence === "explain"}
           feature="The venue map"
+          onUnavailable={
+            presence === "explain" ? undefined : () => setGone(true)
+          }
           label={`${name} on a map`}
           points={[{ id, latitude, longitude, title: name }]}
           selectedId={id}

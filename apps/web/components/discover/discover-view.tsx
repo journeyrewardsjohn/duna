@@ -21,6 +21,7 @@ import {
   useTransition,
 } from "react";
 import type { MapArea, MapPoint } from "./discover-map";
+import type { MapPresence } from "./map-presence";
 import type { DiscoverResults, ResultRow } from "./results";
 import { ResultItem, type RowHandlers } from "./result-list";
 import { DiscoverSearchBar } from "./search-bar";
@@ -69,6 +70,8 @@ export interface DiscoverViewProps {
   readonly basePath: string;
   /** Set when the feed failed: the error with its reference. */
   readonly failure?: { readonly reference: string };
+  /** Decided on the server (map-presence.ts): `off` draws no map at all. */
+  readonly map?: MapPresence;
 }
 
 function summaryLine(state: DiscoverState, results: DiscoverResults) {
@@ -91,6 +94,7 @@ export function DiscoverView({
   results,
   basePath,
   failure,
+  map = "on",
 }: DiscoverViewProps) {
   const router = useRouter();
   const wide = useWide();
@@ -166,8 +170,11 @@ export function DiscoverView({
     [rows],
   );
 
-  const mapView = shown.view === "map";
-  const mapWanted = wide || mapView;
+  // The public never sees a broken or unexplained map: if it can't load, the
+  // list takes the whole width and the switch goes away.
+  const [mapGone, setMapGone] = useState(map === "off");
+  const mapView = shown.view === "map" && !mapGone;
+  const mapWanted = !mapGone && (wide || mapView);
 
   const select = (id: string | null) => {
     setSelectedId(id);
@@ -427,6 +434,7 @@ export function DiscoverView({
   return (
     <div
       className="dv"
+      data-map={mapGone ? "off" : undefined}
       data-view={mapView ? "map" : "list"}
       data-wide={wide || undefined}
       ref={root}
@@ -476,18 +484,23 @@ export function DiscoverView({
               </button>
             ) : null}
           </div>
-          <Segmented
-            aria-label="Show results as"
-            className="dv-switch"
-            onValueChange={(value) =>
-              change({ ...shown, view: value === "map" ? "map" : "list" }, true)
-            }
-            options={[
-              { value: "list", label: "List" },
-              { value: "map", label: "Map" },
-            ]}
-            value={shown.view}
-          />
+          {mapGone ? null : (
+            <Segmented
+              aria-label="Show results as"
+              className="dv-switch"
+              onValueChange={(value) =>
+                change(
+                  { ...shown, view: value === "map" ? "map" : "list" },
+                  true,
+                )
+              }
+              options={[
+                { value: "list", label: "List" },
+                { value: "map", label: "Map" },
+              ]}
+              value={shown.view}
+            />
+          )}
         </div>
       </div>
       <div className="dv-body">
@@ -525,22 +538,28 @@ export function DiscoverView({
             <div className="dv-sheet__body">{body}</div>
           </div>
         )}
-        <div className="dv-mapcol" data-shown={mapWanted || undefined}>
-          {mapWanted ? (
-            <DiscoverMap
-              feature="The discovery map"
-              hoveredId={hoveredId}
-              label="Map of results. The list has the same results."
-              onHover={setHoveredId}
-              onSearchArea={searchArea}
-              onSelect={select}
-              origin={results.origin}
-              points={points}
-              radiusMiles={results.radiusMiles}
-              selectedId={selectedId}
-            />
-          ) : null}
-        </div>
+        {mapGone ? null : (
+          <div className="dv-mapcol" data-shown={mapWanted || undefined}>
+            {mapWanted ? (
+              <DiscoverMap
+                explainMissing={map === "explain"}
+                feature="The discovery map"
+                hoveredId={hoveredId}
+                label="Map of results. The list has the same results."
+                onHover={setHoveredId}
+                onSearchArea={searchArea}
+                onSelect={select}
+                onUnavailable={
+                  map === "explain" ? undefined : () => setMapGone(true)
+                }
+                origin={results.origin}
+                points={points}
+                radiusMiles={results.radiusMiles}
+                selectedId={selectedId}
+              />
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

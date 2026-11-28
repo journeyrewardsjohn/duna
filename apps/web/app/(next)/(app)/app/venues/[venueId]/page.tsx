@@ -9,6 +9,7 @@ import {
   requestedVenueStart,
 } from "@/components/discover/venue-time";
 import { VenueView } from "@/components/discover/venue-view";
+import { mapPresence } from "@/components/discover/map-presence.server";
 import { getServerCaller } from "@/lib/api";
 
 type Props = {
@@ -40,6 +41,7 @@ export default async function AppVenuePage({ params, searchParams }: Props) {
   const query = await searchParams;
   const venue = await loadVenuePage(venueId, "/app/venues");
   if (!venue) notFound();
+  const map = await mapPresence();
   const caller = await getServerCaller();
   const [settings, suggestedPlayers] = await Promise.all([
     // Signed out, the shell sends the person to sign in (and back here);
@@ -56,6 +58,7 @@ export default async function AppVenuePage({ params, searchParams }: Props) {
             requestedVenueStart(query) ?? localVenueStart(venue.timezone),
         }}
         discoverPath="/app/discover"
+        map={map}
         venue={venue}
       />
     );
@@ -97,6 +100,7 @@ export default async function AppVenuePage({ params, searchParams }: Props) {
           : {}),
       }}
       discoverPath="/app/discover"
+      map={map}
       venue={venue}
     />
   );

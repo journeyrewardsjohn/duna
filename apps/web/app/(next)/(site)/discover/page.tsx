@@ -6,6 +6,7 @@ import {
   loadDiscoverPage,
 } from "@/components/discover/discover-data";
 import { DiscoverView } from "@/components/discover/discover-view";
+import { mapPresence } from "@/components/discover/map-presence.server";
 import type { DiscoverQuery } from "@/components/discover/search-state";
 import { discoveryCollectionJsonLd } from "@/lib/discovery-seo";
 import { serializeJsonLd } from "@/lib/pro-seo";
@@ -25,6 +26,7 @@ export async function generateMetadata({
  * `/discover/map` addresses land here with their query strings.
  */
 export default async function DiscoverPage({ searchParams }: Props) {
+  const map = await mapPresence();
   const data = await loadDiscoverPage(await searchParams, {
     venueHref: (venueId) => `/venues/${venueId}`,
   });
@@ -39,6 +41,7 @@ export default async function DiscoverPage({ searchParams }: Props) {
       <DiscoverView
         basePath="/discover"
         failure={data.failure}
+        map={map}
         results={data.results}
         state={data.state}
       />

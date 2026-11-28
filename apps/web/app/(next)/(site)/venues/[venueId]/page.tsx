@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { localVenueStart } from "@/components/discover/venue-time";
 import { loadVenuePage } from "@/components/discover/venue-data";
 import { VenueView } from "@/components/discover/venue-view";
+import { mapPresence } from "@/components/discover/map-presence.server";
 import { siteOgImage } from "@/components/site/og";
 import {
   discoveryItemJsonLd,
@@ -74,6 +75,7 @@ export default async function PublicVenuePage({ params }: Props) {
   const { venueId } = await params;
   const venue = await loadVenuePage(venueId, "/venues");
   if (!venue) notFound();
+  const map = await mapPresence();
   const graph = venue.inventory
     ? venueJsonLd(venue.inventory)
     : venueSummaryJsonLd(venue.summary!);
@@ -100,6 +102,7 @@ export default async function PublicVenuePage({ params }: Props) {
             defaultLocalStartsAt: localVenueStart(venue.timezone),
           }}
           discoverPath="/discover"
+          map={map}
           venue={venue}
         />
       </div>

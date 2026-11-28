@@ -272,4 +272,36 @@ test.describe("find a game", () => {
     expect(sheets.join(" ")).not.toMatch(LEGACY_SHEETS);
     await expectNoHorizontalOverflow(page);
   });
+
+  test("without a map key the public sees no map panel and no setup message", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    // Demo-only switch: view as a member of the public (no map key in CI).
+    await context.addCookies([
+      { name: "duna-demo-visitor", value: "public", url: baseURL! },
+    ]);
+    await wide(page);
+    await page.goto("/discover");
+    await expect(page.locator(".dv-row").first()).toBeVisible();
+    await expect(page.getByText(/map key|isn't set up yet/)).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: /Map of results/ }),
+    ).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect(page.getByRole("radio", { name: "Map" })).toHaveCount(0);
+    await page.goto("/venues/10000000-0000-4000-8000-000000000002");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Manhattan Beach Pier",
+    );
+    await page.mouse.wheel(0, 2000);
+    await expect(page.getByText(/map key|isn't set up yet/)).toHaveCount(0);
+    await expect(
+      page
+        .getByRole("complementary", { name: "Getting there" })
+        .getByRole("link", { name: "Get directions" }),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
 });

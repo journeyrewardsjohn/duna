@@ -11,6 +11,7 @@ import Link from "next/link";
 import { CourtBooking } from "./court-booking";
 import { ResultItem } from "./result-list";
 import { discoverHref, DEFAULT_DISCOVER_STATE } from "./search-state";
+import type { MapPresence } from "./map-presence";
 import type { VenuePageData } from "./venue-data";
 import { VenueMap } from "./venue-map";
 
@@ -40,6 +41,8 @@ function rate(
 
 export interface VenueViewProps {
   readonly venue: VenuePageData;
+  /** Decided on the server (map-presence.ts). */
+  readonly map?: MapPresence;
   /** `/discover` or `/app/discover`: where "Find a game" goes. */
   readonly discoverPath: string;
   /** Signed in (the booking twin) or a visitor (browse, then sign in). */
@@ -64,7 +67,12 @@ export interface VenueViewProps {
  * club that runs it. Photos only when the club uploaded one; otherwise the
  * brand's placeholder, never a stand-in picture.
  */
-export function VenueView({ venue, discoverPath, booking }: VenueViewProps) {
+export function VenueView({
+  venue,
+  discoverPath,
+  booking,
+  map = "on",
+}: VenueViewProps) {
   const now = Date.now();
   const localDate = parseIsoDate(localDateOf(now, venue.timezone));
   const sun =
@@ -241,24 +249,25 @@ export function VenueView({ venue, discoverPath, booking }: VenueViewProps) {
                 </section>
               ))
             )}
-            {venue.coaches.length > 0 ? (
-              <section aria-labelledby="vn-coaches" className="dv-day">
-                <h3 className="dv-day__title" id="vn-coaches">
-                  Coaches here
-                </h3>
-                <ul className="dv-rows">
-                  {venue.coaches.map((row) => (
-                    <ResultItem
-                      index={index++}
-                      key={row.id}
-                      row={row}
-                      session={false}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
           </section>
+
+          {venue.coaches.length > 0 ? (
+            <section aria-labelledby="vn-coaches" className="vn-section">
+              <h2 className="vn-section__title" id="vn-coaches">
+                Coaches here
+              </h2>
+              <ul className="dv-rows">
+                {venue.coaches.map((row) => (
+                  <ResultItem
+                    index={index++}
+                    key={row.id}
+                    row={row}
+                    session={false}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section aria-labelledby="vn-courts" className="vn-section">
             <h2 className="vn-section__title" id="vn-courts">
@@ -331,6 +340,7 @@ export function VenueView({ venue, discoverPath, booking }: VenueViewProps) {
           {venue.latitude !== undefined && venue.longitude !== undefined ? (
             <VenueMap
               id={venue.id}
+              presence={map}
               latitude={venue.latitude}
               longitude={venue.longitude}
               name={venue.name}

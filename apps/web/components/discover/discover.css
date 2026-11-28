@@ -320,6 +320,10 @@
         grid-template-columns: minmax(0, var(--dv-list)) minmax(0, 1fr);
       }
 
+      .dv[data-map="off"] .dv-body {
+        grid-template-columns: minmax(0, 880px);
+      }
+
       .dv-mapcol {
         position: sticky;
         inset-block-start: calc(var(--dv-stick-top) + var(--dv-stick-h, 136px));
