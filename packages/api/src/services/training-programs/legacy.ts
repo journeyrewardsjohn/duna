@@ -103,7 +103,9 @@ export function legacySlots(program: Pick<ProgramRow, "id" | "recurrence">) {
       : 1;
   return recurrence.days.flatMap((day, index): SlotView[] => {
     if (!isRecord(day)) return [];
-    const weekday = WEEKDAYS.indexOf(String(day.day) as (typeof WEEKDAYS)[number]);
+    const weekday = WEEKDAYS.indexOf(
+      String(day.day) as (typeof WEEKDAYS)[number],
+    );
     const startsAt = String(day.startsAt ?? "");
     const duration = Number(day.durationMinutes);
     if (weekday < 0 || !TIME.test(startsAt) || !(duration > 0)) return [];
@@ -146,13 +148,21 @@ export function legacyExceptions(
     const id = String(milestone.id ?? "");
     return [
       {
-        id: UUID.test(id) ? id : stableUuid(program.id, "legacy-milestone", String(index)),
+        id: UUID.test(id)
+          ? id
+          : stableUuid(program.id, "legacy-milestone", String(index)),
         kind: mapped,
         startsOn,
         endsOn,
         label:
-          String(milestone.title ?? "").trim().slice(0, 160) ||
-          (mapped === "break" ? "Break" : mapped === "travel" ? "Travel" : "Tournament"),
+          String(milestone.title ?? "")
+            .trim()
+            .slice(0, 160) ||
+          (mapped === "break"
+            ? "Break"
+            : mapped === "travel"
+              ? "Travel"
+              : "Tournament"),
       },
     ];
   });
@@ -240,7 +250,12 @@ export function effectiveStructure(
 
 /** The legacy `recurrence` mirror written with every new structure. */
 export function legacyRecurrence(
-  slots: readonly { weekday: number; startsAt: string; endsAt: string; intervalWeeks: number }[],
+  slots: readonly {
+    weekday: number;
+    startsAt: string;
+    endsAt: string;
+    intervalWeeks: number;
+  }[],
   exceptions: readonly { kind: string; startsOn: string; endsOn: string }[],
 ) {
   const days = slots

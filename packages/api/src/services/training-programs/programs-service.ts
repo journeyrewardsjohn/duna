@@ -35,7 +35,17 @@ import {
   timeFromMinuteOfDay,
   weekdayOfDate,
 } from "@duna/scheduling";
-import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  ne,
+  sql,
+} from "drizzle-orm";
 import type { z } from "zod";
 import type {
   trainingProgramsCancelInputSchema,
@@ -241,7 +251,11 @@ function summaryOf(
   const leadRef = lead ? peopleById.get(lead.personId) : undefined;
   const week =
     status === "active"
-      ? currentWeekNumber(isoDate(now, row.timezone), row.startDate, row.endDate)
+      ? currentWeekNumber(
+          isoDate(now, row.timezone),
+          row.startDate,
+          row.endDate,
+        )
       : undefined;
   return {
     id: row.id,
@@ -274,11 +288,18 @@ export async function programSummaries(
   now: Date,
 ): Promise<Summary[]> {
   const ids = rows.map((row) => row.id);
-  const [stored, counts] = await Promise.all([loadStored(ids), loadCounts(ids)]);
+  const [stored, counts] = await Promise.all([
+    loadStored(ids),
+    loadCounts(ids),
+  ]);
   const structures = new Map(
     rows.map((row) => [
       row.id,
-      effectiveStructure(row, stored.get(row.id)!, counts.legacyLead.get(row.id)),
+      effectiveStructure(
+        row,
+        stored.get(row.id)!,
+        counts.legacyLead.get(row.id),
+      ),
     ]),
   );
   const leadIds = [...structures.values()].flatMap((structure) =>
@@ -348,7 +369,10 @@ async function weeksOf(
   for (const event of loads) {
     const date = isoDate(event.startsAt, row.timezone);
     const weekNumber = Math.floor(daysBetween(row.startDate, date) / 7) + 1;
-    byWeek.set(weekNumber, [...(byWeek.get(weekNumber) ?? []), event.plannedLoad]);
+    byWeek.set(weekNumber, [
+      ...(byWeek.get(weekNumber) ?? []),
+      event.plannedLoad,
+    ]);
   }
   const off = structure.exceptions.filter(
     (exception) => exception.kind === "break" || exception.kind === "blackout",
@@ -357,7 +381,9 @@ async function weeksOf(
     const isOff = weeksOff([week], row.endDate, off) === 1;
     const values = byWeek.get(week.weekNumber) ?? [];
     const load = values.length
-      ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+      ? Math.round(
+          values.reduce((sum, value) => sum + value, 0) / values.length,
+        )
       : 0;
     return {
       weekNumber: week.weekNumber,
@@ -474,7 +500,9 @@ async function validateDraft(
     }
     const venueIds = [
       ...new Set(
-        draft.weeklySlots.flatMap((slot) => (slot.venueId ? [slot.venueId] : [])),
+        draft.weeklySlots.flatMap((slot) =>
+          slot.venueId ? [slot.venueId] : [],
+        ),
       ),
     ];
     const courtIds = [
@@ -490,7 +518,8 @@ async function validateDraft(
             eq(venues.organizationId, context.organizationId),
           ),
         );
-      if (rows.length !== venueIds.length) notFound("This venue was not found.");
+      if (rows.length !== venueIds.length)
+        notFound("This venue was not found.");
     }
     if (courtIds.length > 0) {
       const rows = await getDatabase()
@@ -503,7 +532,8 @@ async function validateDraft(
             eq(venues.organizationId, context.organizationId),
           ),
         );
-      if (rows.length !== courtIds.length) notFound("This court was not found.");
+      if (rows.length !== courtIds.length)
+        notFound("This court was not found.");
     }
   }
   if (draft.athletePersonIds) await assertPeopleExist(draft.athletePersonIds);
@@ -563,11 +593,15 @@ async function regenerateSessions(
           transaction
             .selectDistinct({ id: trainingAthleteResponses.trainingEventId })
             .from(trainingAthleteResponses)
-            .where(inArray(trainingAthleteResponses.trainingEventId, existingIds)),
+            .where(
+              inArray(trainingAthleteResponses.trainingEventId, existingIds),
+            ),
           transaction
             .select({ id: trainingPracticeOutcomes.trainingEventId })
             .from(trainingPracticeOutcomes)
-            .where(inArray(trainingPracticeOutcomes.trainingEventId, existingIds)),
+            .where(
+              inArray(trainingPracticeOutcomes.trainingEventId, existingIds),
+            ),
           transaction
             .select({ id: staffCoverageRequests.trainingEventId })
             .from(staffCoverageRequests)
@@ -622,7 +656,9 @@ async function regenerateSessions(
       .delete(trainingEvents)
       .where(inArray(trainingEvents.id, [...plan.remove]));
   }
-  const loadByWeek = new Map(weeks.map((week) => [week.startsOn, week.plannedLoad]));
+  const loadByWeek = new Map(
+    weeks.map((week) => [week.startsOn, week.plannedLoad]),
+  );
   const sortedCoaches = [...coaches].sort((left, right) =>
     left.role === right.role ? 0 : left.role === "lead" ? -1 : 1,
   );
@@ -632,10 +668,12 @@ async function regenerateSessions(
       const weekday = weekdayOfDate(occurrence.localDate);
       const weekStart = addCalendarDays(
         program.startDate,
-        Math.floor(daysBetween(program.startDate, occurrence.localDate) / 7) * 7,
+        Math.floor(daysBetween(program.startDate, occurrence.localDate) / 7) *
+          7,
       );
       const covering = sortedCoaches.filter(
-        (coach) => coach.weekdays.length === 0 || coach.weekdays.includes(weekday),
+        (coach) =>
+          coach.weekdays.length === 0 || coach.weekdays.includes(weekday),
       );
       return {
         occurrence,
@@ -820,7 +858,9 @@ async function writeStructure(
 
 async function nextVersion(transaction: Transaction, programId: string) {
   const [row] = await transaction
-    .select({ max: sql<number>`coalesce(max(${trainingProgramVersions.version}), 0)::int` })
+    .select({
+      max: sql<number>`coalesce(max(${trainingProgramVersions.version}), 0)::int`,
+    })
     .from(trainingProgramVersions)
     .where(eq(trainingProgramVersions.programId, programId));
   return (row?.max ?? 0) + 1;
@@ -949,7 +989,8 @@ export async function createProgram(
           entityType: "training-program",
           entityId: id,
           after: request,
-          reason: "Created a draft program; no sessions exist until it is activated.",
+          reason:
+            "Created a draft program; no sessions exist until it is activated.",
         });
       });
       log.info("training-programs.program.created", {
@@ -970,7 +1011,11 @@ export async function createProgram(
 
 function assertEditable(row: ProgramRow, now: Date) {
   const status = programStatus(row, now);
-  if (status === "cancelled" || status === "archived" || status === "completed") {
+  if (
+    status === "cancelled" ||
+    status === "archived" ||
+    status === "completed"
+  ) {
     conflict(`A ${status} program cannot be changed.`);
   }
 }
@@ -1051,7 +1096,13 @@ export async function updateProgram(
       const updated = await syncLegacyColumns(transaction, programId, {
         updatedAt: context.now,
       });
-      await snapshotVersion(transaction, context, programId, { update: input }, "Updated.");
+      await snapshotVersion(
+        transaction,
+        context,
+        programId,
+        { update: input },
+        "Updated.",
+      );
       const counts =
         updated.status === "active"
           ? await regenerateSessions(transaction, context, updated)
@@ -1060,7 +1111,11 @@ export async function updateProgram(
         action: "training-program.updated",
         entityType: "training-program",
         entityId: programId,
-        before: { title: row.title, startDate: row.startDate, endDate: row.endDate },
+        before: {
+          title: row.title,
+          startDate: row.startDate,
+          endDate: row.endDate,
+        },
         after: input,
         reason:
           counts.needsReview > 0
@@ -1100,7 +1155,11 @@ export async function activateProgram(
       await copyLegacyProgramStructure(transaction, context, row, legacyLead);
       const [updated] = await transaction
         .update(trainingPrograms)
-        .set({ status: "active", activatedAt: context.now, updatedAt: context.now })
+        .set({
+          status: "active",
+          activatedAt: context.now,
+          updatedAt: context.now,
+        })
         .where(eq(trainingPrograms.id, programId))
         .returning();
       const result = await regenerateSessions(transaction, context, updated!);
@@ -1161,7 +1220,7 @@ export async function cancelProgram(
           and(
             eq(trainingEvents.programId, input.programId),
             inArray(trainingEvents.status, ["planned", "ready"]),
-            sql`${trainingEvents.startsAt} > ${context.now}`,
+            gt(trainingEvents.startsAt, context.now),
           ),
         )
         .returning({ id: trainingEvents.id });
@@ -1223,16 +1282,24 @@ export function datesInSentence(sentence: string, today: string): string[] {
   for (const match of sentence.matchAll(
     /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/gi,
   )) {
-    const date = resolve(MONTHS.indexOf(match[1]!.slice(0, 3).toLowerCase()), Number(match[2]));
+    const date = resolve(
+      MONTHS.indexOf(match[1]!.slice(0, 3).toLowerCase()),
+      Number(match[2]),
+    );
     if (date) found.push({ index: match.index, date });
   }
   for (const match of sentence.matchAll(
     /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi,
   )) {
-    const date = resolve(MONTHS.indexOf(match[2]!.slice(0, 3).toLowerCase()), Number(match[1]));
+    const date = resolve(
+      MONTHS.indexOf(match[2]!.slice(0, 3).toLowerCase()),
+      Number(match[1]),
+    );
     if (date) found.push({ index: match.index, date });
   }
-  return found.sort((left, right) => left.index - right.index).map((item) => item.date);
+  return found
+    .sort((left, right) => left.index - right.index)
+    .map((item) => item.date);
 }
 
 /**
@@ -1263,7 +1330,8 @@ export async function proposeFromSentence(
   const uniqueSlots = slots.filter(
     (slot, index) =>
       slots.findIndex(
-        (other) => other.weekday === slot.weekday && other.startsAt === slot.startsAt,
+        (other) =>
+          other.weekday === slot.weekday && other.startsAt === slot.startsAt,
       ) === index,
   );
   if (uniqueSlots.length === 0) {
@@ -1277,16 +1345,24 @@ export async function proposeFromSentence(
   let endDate = dates[1];
   if (!startDate) {
     startDate = addCalendarDays(today, (8 - weekdayOfDate(today)) % 7 || 7);
-    needsCheck.push({ field: "startDate", note: "When does the program start?" });
+    needsCheck.push({
+      field: "startDate",
+      note: "When does the program start?",
+    });
   }
   if (!endDate || endDate < startDate) {
     endDate = addCalendarDays(startDate, 12 * 7 - 1);
     assumptions.push("Twelve weeks long");
     needsCheck.push({ field: "endDate", note: "When does the program end?" });
   }
-  const athletes = /\b(\d{1,3})\s+(juniors|players|athletes|kids|girls|boys|adults)\b/i.exec(text);
+  const athletes =
+    /\b(\d{1,3})\s+(juniors|players|athletes|kids|girls|boys|adults)\b/i.exec(
+      text,
+    );
   if (athletes) {
-    assumptions.push(`${athletes[1]} ${athletes[2]!.toLowerCase()}; add them on the roster`);
+    assumptions.push(
+      `${athletes[1]} ${athletes[2]!.toLowerCase()}; add them on the roster`,
+    );
   }
   if (/holiday|christmas|winter break/i.test(text)) {
     needsCheck.push({
@@ -1294,7 +1370,8 @@ export async function proposeFromSentence(
       note: "Which dates are the holidays? Add them as a break.",
     });
   }
-  const audience = /\bfor\s+(?:\d+\s+)?([a-z][a-z\s-]{2,40}?)(?:,|$| on | from )/i.exec(text);
+  const audience =
+    /\bfor\s+(?:\d+\s+)?([a-z][a-z\s-]{2,40}?)(?:,|$| on | from )/i.exec(text);
   const title =
     text
       .split(/\bfor\b|,/i)[0]!
@@ -1304,10 +1381,9 @@ export async function proposeFromSentence(
     (slot) =>
       minuteOfDayFromTime(slot.endsAt) - minuteOfDayFromTime(slot.startsAt),
   );
-  const defaultPracticeMinutes = minutes.length
-    ? Math.max(...minutes)
-    : 90;
-  if (uniqueSlots.length > 0) assumptions.push(`Practice times are in ${timezone}`);
+  const defaultPracticeMinutes = minutes.length ? Math.max(...minutes) : 90;
+  if (uniqueSlots.length > 0)
+    assumptions.push(`Practice times are in ${timezone}`);
   needsCheck.push({ field: "coaches", note: "Who leads the program?" });
   log.info("training-programs.program.proposed", {
     organizationId: context.organizationId,
@@ -1325,7 +1401,10 @@ export async function proposeFromSentence(
       startDate,
       endDate,
       timezone,
-      defaultPracticeMinutes: Math.min(720, Math.max(15, defaultPracticeMinutes)),
+      defaultPracticeMinutes: Math.min(
+        720,
+        Math.max(15, defaultPracticeMinutes),
+      ),
       coaches: [],
       weeklySlots: uniqueSlots,
       exceptions: [],

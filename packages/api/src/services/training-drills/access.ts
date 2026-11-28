@@ -16,7 +16,16 @@ import {
   trainingDrillVersions,
   trainingDrills,
 } from "@duna/db";
-import { and, eq, exists, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { ApiActor } from "../../context";
 
 export interface DrillViewer {
@@ -40,7 +49,10 @@ export function purchasedCondition(viewer: DrillViewer): SQL {
             eq(trainingDrillListings.drillId, trainingDrills.id),
             eq(trainingDrillPurchases.status, "complete"),
             or(
-              eq(trainingDrillPurchases.buyerOrganizationId, viewer.organizationId),
+              eq(
+                trainingDrillPurchases.buyerOrganizationId,
+                viewer.organizationId,
+              ),
               eq(trainingDrillPurchases.buyerPersonId, viewer.actor.personId),
             ),
           ),
@@ -53,7 +65,10 @@ export function purchasedCondition(viewer: DrillViewer): SQL {
         .where(
           and(
             eq(trainingDrillLicenses.drillId, trainingDrills.id),
-            eq(trainingDrillLicenses.buyerOrganizationId, viewer.organizationId),
+            eq(
+              trainingDrillLicenses.buyerOrganizationId,
+              viewer.organizationId,
+            ),
             eq(trainingDrillLicenses.status, "active"),
           ),
         ),
@@ -98,7 +113,10 @@ export interface PinnedDrillVersion {
  */
 export async function pinDrillVersions(
   viewer: DrillViewer,
-  refs: readonly { readonly drillId?: string; readonly drillVersionId?: string }[],
+  refs: readonly {
+    readonly drillId?: string;
+    readonly drillVersionId?: string;
+  }[],
 ): Promise<(PinnedDrillVersion | undefined)[]> {
   const drillIds = [
     ...new Set(refs.flatMap((ref) => (ref.drillId ? [ref.drillId] : []))),
@@ -113,7 +131,10 @@ export async function pinDrillVersions(
   }
   const versions = versionIds.length
     ? await getDatabase()
-        .select({ id: trainingDrillVersions.id, drillId: trainingDrillVersions.drillId })
+        .select({
+          id: trainingDrillVersions.id,
+          drillId: trainingDrillVersions.drillId,
+        })
         .from(trainingDrillVersions)
         .where(inArray(trainingDrillVersions.id, versionIds))
     : [];
@@ -127,12 +148,19 @@ export async function pinDrillVersions(
       currentVersionId: trainingDrills.currentVersionId,
     })
     .from(trainingDrills)
-    .where(and(inArray(trainingDrills.id, allDrillIds), visibleDrillCondition(viewer)));
+    .where(
+      and(
+        inArray(trainingDrills.id, allDrillIds),
+        visibleDrillCondition(viewer),
+      ),
+    );
   const drillById = new Map(drills.map((drill) => [drill.id, drill]));
   const versionById = new Map(versions.map((version) => [version.id, version]));
   return refs.map((ref) => {
     if (!ref.drillId && !ref.drillVersionId) return undefined;
-    const version = ref.drillVersionId ? versionById.get(ref.drillVersionId) : undefined;
+    const version = ref.drillVersionId
+      ? versionById.get(ref.drillVersionId)
+      : undefined;
     if (ref.drillVersionId && !version) return undefined;
     const drillId = version?.drillId ?? ref.drillId!;
     if (ref.drillId && ref.drillId !== drillId) return undefined;

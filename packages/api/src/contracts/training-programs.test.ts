@@ -55,6 +55,11 @@ describe("training-programs contract and demo fixtures (W3-0)", () => {
     trainingProgramsPracticePlanSchema.parse(demo.practicePlan);
   });
 
+  it("is rich enough for the screens: programs and six practice plans", () => {
+    expect(demo.summaries.length).toBeGreaterThanOrEqual(2);
+    expect(demo.practicePlanSummaries.length).toBeGreaterThanOrEqual(6);
+  });
+
   it("covers every state of every state machine", () => {
     expectCoverage(
       trainingProgramsProgramStatuses,

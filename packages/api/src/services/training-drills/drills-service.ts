@@ -113,7 +113,9 @@ export function marketplaceFeeBps(): number | undefined {
   const raw = process.env.TRAINING_MARKETPLACE_FEE_BPS?.trim();
   if (!raw) return undefined;
   const value = Number(raw);
-  return Number.isInteger(value) && value >= 0 && value <= 10_000 ? value : undefined;
+  return Number.isInteger(value) && value >= 0 && value <= 10_000
+    ? value
+    : undefined;
 }
 
 function titleCase(value: string): string {
@@ -137,7 +139,10 @@ function record(value: unknown): Record<string, unknown> {
 function strings(value: unknown, max = 20): string[] {
   return Array.isArray(value)
     ? value
-        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .filter(
+          (item): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        )
         .map((item) => item.slice(0, 300))
         .slice(0, max)
     : [];
@@ -165,14 +170,19 @@ function filterConditions(filters: Filters): (SQL | undefined)[] {
       : undefined,
     filters.level?.trim()
       ? or(
-          ilike(trainingDrills.skillLevel, `%${escapeLike(filters.level.trim())}%`),
+          ilike(
+            trainingDrills.skillLevel,
+            `%${escapeLike(filters.level.trim())}%`,
+          ),
           eq(trainingDrills.skillLevel, "all-levels"),
         )
       : undefined,
     filters.equipment?.length
       ? arrayContains(trainingDrills.equipment, filters.equipment)
       : undefined,
-    filters.maxMinutes ? lte(trainingDrills.durationMinutes, filters.maxMinutes) : undefined,
+    filters.maxMinutes
+      ? lte(trainingDrills.durationMinutes, filters.maxMinutes)
+      : undefined,
   ];
 }
 
@@ -188,12 +198,17 @@ async function summaries(
 ): Promise<Summary[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
-  const versionIds = rows.flatMap((row) => (row.currentVersionId ? [row.currentVersionId] : []));
+  const versionIds = rows.flatMap((row) =>
+    row.currentVersionId ? [row.currentVersionId] : [],
+  );
   const database = getDatabase();
   const [versions, focusRows, usage, purchased, listings] = await Promise.all([
     versionIds.length
       ? database
-          .select({ id: trainingDrillVersions.id, version: trainingDrillVersions.version })
+          .select({
+            id: trainingDrillVersions.id,
+            version: trainingDrillVersions.version,
+          })
           .from(trainingDrillVersions)
           .where(inArray(trainingDrillVersions.id, versionIds))
       : Promise.resolve([]),
@@ -201,7 +216,12 @@ async function summaries(
       .select({ drillId: trainingDrillTags.drillId, label: trainingTags.label })
       .from(trainingDrillTags)
       .innerJoin(trainingTags, eq(trainingTags.id, trainingDrillTags.tagId))
-      .where(and(inArray(trainingDrillTags.drillId, ids), eq(trainingDrillTags.isFocusArea, true))),
+      .where(
+        and(
+          inArray(trainingDrillTags.drillId, ids),
+          eq(trainingDrillTags.isFocusArea, true),
+        ),
+      ),
     viewer.organizationId
       ? database
           .select({
@@ -211,15 +231,24 @@ async function summaries(
           .from(trainingPracticePlanBlocks)
           .innerJoin(
             trainingDrillVersions,
-            eq(trainingDrillVersions.id, trainingPracticePlanBlocks.drillVersionId),
+            eq(
+              trainingDrillVersions.id,
+              trainingPracticePlanBlocks.drillVersionId,
+            ),
           )
           .innerJoin(
             trainingPracticePlanVersions,
-            eq(trainingPracticePlanVersions.id, trainingPracticePlanBlocks.practicePlanVersionId),
+            eq(
+              trainingPracticePlanVersions.id,
+              trainingPracticePlanBlocks.practicePlanVersionId,
+            ),
           )
           .innerJoin(
             trainingPracticePlans,
-            eq(trainingPracticePlans.id, trainingPracticePlanVersions.practicePlanId),
+            eq(
+              trainingPracticePlans.id,
+              trainingPracticePlanVersions.practicePlanId,
+            ),
           )
           .where(
             and(
@@ -237,35 +266,52 @@ async function summaries(
           .where(
             and(
               inArray(trainingDrills.id, ids),
-              purchasedCondition({ actor: viewer.actor, organizationId: viewer.organizationId }),
+              purchasedCondition({
+                actor: viewer.actor,
+                organizationId: viewer.organizationId,
+              }),
             ),
           )
       : Promise.resolve([]),
     database
-      .select({ drillId: trainingDrillListings.drillId, listedAs: trainingDrillListings.listedAs })
+      .select({
+        drillId: trainingDrillListings.drillId,
+        listedAs: trainingDrillListings.listedAs,
+      })
       .from(trainingDrillListings)
       .where(
-        and(inArray(trainingDrillListings.drillId, ids), eq(trainingDrillListings.status, "listed")),
+        and(
+          inArray(trainingDrillListings.drillId, ids),
+          eq(trainingDrillListings.status, "listed"),
+        ),
       ),
   ]);
   const peopleById = await loadPeople(
     rows.map((row) => row.ownerPersonId ?? row.createdByPersonId),
   );
   const versionNumber = new Map(versions.map((row) => [row.id, row.version]));
-  const focusByDrill = new Map(focusRows.map((row) => [row.drillId, row.label]));
+  const focusByDrill = new Map(
+    focusRows.map((row) => [row.drillId, row.label]),
+  );
   const usageByDrill = new Map(usage.map((row) => [row.drillId, row.plans]));
   const purchasedIds = new Set(purchased.map((row) => row.id));
-  const sellerByDrill = new Map(listings.map((row) => [row.drillId, row.listedAs]));
+  const sellerByDrill = new Map(
+    listings.map((row) => [row.drillId, row.listedAs]),
+  );
   return rows.map((row) => {
-    const own = row.organizationId === viewer.organizationId && viewer.organizationId !== undefined;
+    const own =
+      row.organizationId === viewer.organizationId &&
+      viewer.organizationId !== undefined;
     const isPurchased = !own && purchasedIds.has(row.id);
-    const author = peopleById.get(row.ownerPersonId ?? row.createdByPersonId ?? "");
+    const author = peopleById.get(
+      row.ownerPersonId ?? row.createdByPersonId ?? "",
+    );
     const sourceLabel =
       row.scope === "duna"
         ? "Duna library"
         : !own
-          ? sellerByDrill.get(row.id) ?? row.sourceAttribution ?? undefined
-          : row.sourceAttribution ?? undefined;
+          ? (sellerByDrill.get(row.id) ?? row.sourceAttribution ?? undefined)
+          : (row.sourceAttribution ?? undefined);
     return {
       id: row.id,
       slug: row.slug,
@@ -286,9 +332,13 @@ async function summaries(
       load: blockLoad(row.intensity),
       touches: row.touchEstimateTypical,
       jumps: row.jumpEstimateTypical,
-      ...(author && (own || row.scope !== "duna") ? { author: author as PersonRef } : {}),
+      ...(author && (own || row.scope !== "duna")
+        ? { author: author as PersonRef }
+        : {}),
       ...(sourceLabel ? { sourceLabel: sourceLabel.slice(0, 160) } : {}),
-      version: row.currentVersionId ? (versionNumber.get(row.currentVersionId) ?? 1) : 1,
+      version: row.currentVersionId
+        ? (versionNumber.get(row.currentVersionId) ?? 1)
+        : 1,
       usedInPlans: usageByDrill.get(row.id) ?? 0,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -299,7 +349,9 @@ async function summaries(
 
 export async function library(
   context: TrainingContext,
-  input: Filters & { readonly scope: z.infer<typeof trainingDrillsLibraryScopeSchema> },
+  input: Filters & {
+    readonly scope: z.infer<typeof trainingDrillsLibraryScopeSchema>;
+  },
 ): Promise<{ scope: typeof input.scope; items: Summary[] }> {
   if (!hasScope(context.actor, "training:write")) {
     forbidden("The drill library is for coaches.");
@@ -338,7 +390,10 @@ export async function library(
   return { scope: input.scope, items: await summaries(context, rows) };
 }
 
-async function loadVisibleDrill(context: TrainingContext, drillId: string): Promise<DrillRow> {
+async function loadVisibleDrill(
+  context: TrainingContext,
+  drillId: string,
+): Promise<DrillRow> {
   const [row] = await getDatabase()
     .select()
     .from(trainingDrills)
@@ -367,7 +422,11 @@ function sceneOut(row: typeof trainingDrillScenes.$inferSelect): Scene {
 }
 
 /** A legacy v1 scene, converted for reading only (nothing is written). */
-function convertedScene(row: DrillRow, versionId: string, now: Date): Scene | undefined {
+function convertedScene(
+  row: DrillRow,
+  versionId: string,
+  now: Date,
+): Scene | undefined {
   const document = convertLegacyTrainingScene(row.choreography, {
     title: row.title,
     objective: row.purpose || row.summary,
@@ -409,7 +468,11 @@ function listingOut(
     licenseTerms: row.licenseTerms,
     listedAs: row.listedAs,
     seller: row.sellerOrganizationId
-      ? { kind: "organization", id: row.sellerOrganizationId, displayName: sellerName }
+      ? {
+          kind: "organization",
+          id: row.sellerOrganizationId,
+          displayName: sellerName,
+        }
       : { kind: "person", id: row.sellerPersonId!, displayName: sellerName },
     marketplaceFeeBps: row.pricing === "paid" ? (marketplaceFeeBps() ?? 0) : 0,
     ...(row.listedAt ? { listedAt: row.listedAt.toISOString() } : {}),
@@ -417,8 +480,16 @@ function listingOut(
   };
 }
 
-async function sellerNames(rows: readonly (typeof trainingDrillListings.$inferSelect)[]) {
-  const orgIds = [...new Set(rows.flatMap((row) => (row.sellerOrganizationId ? [row.sellerOrganizationId] : [])))];
+async function sellerNames(
+  rows: readonly (typeof trainingDrillListings.$inferSelect)[],
+) {
+  const orgIds = [
+    ...new Set(
+      rows.flatMap((row) =>
+        row.sellerOrganizationId ? [row.sellerOrganizationId] : [],
+      ),
+    ),
+  ];
   const [orgs, peopleById] = await Promise.all([
     orgIds.length
       ? getDatabase()
@@ -460,7 +531,9 @@ async function detailOf(
       ? database
           .select()
           .from(trainingDrillReviewChecks)
-          .where(eq(trainingDrillReviewChecks.drillVersionId, row.currentVersionId))
+          .where(
+            eq(trainingDrillReviewChecks.drillVersionId, row.currentVersionId),
+          )
       : Promise.resolve([]),
     own && !options.forPlayer
       ? database
@@ -475,7 +548,9 @@ async function detailOf(
           .limit(1)
       : Promise.resolve([]),
   ]);
-  const peopleById = await loadPeople(versions.map((version) => version.createdByPersonId));
+  const peopleById = await loadPeople(
+    versions.map((version) => version.createdByPersonId),
+  );
   const coaching = record(row.coaching);
   const scoring = record(row.scoring);
   const currentVersionId = row.currentVersionId ?? versions.at(-1)?.id;
@@ -524,7 +599,10 @@ async function detailOf(
   };
 }
 
-export async function drillDetail(context: TrainingContext, drillId: string): Promise<Detail> {
+export async function drillDetail(
+  context: TrainingContext,
+  drillId: string,
+): Promise<Detail> {
   if (!hasScope(context.actor, "training:write")) {
     forbidden("The drill library is for coaches.");
   }
@@ -540,7 +618,8 @@ function assertCanEdit(context: TrainingContext, row: DrillRow) {
     forbidden("Duna and purchased drills are read-only. Copy it to change it.");
   }
   if (row.scope === "personal") {
-    if (row.ownerPersonId !== context.actor.personId) notFound("This drill was not found.");
+    if (row.ownerPersonId !== context.actor.personId)
+      notFound("This drill was not found.");
     return;
   }
   if (isTrainingManager(context.actor)) return;
@@ -554,10 +633,16 @@ interface SceneWrite {
   readonly source: "coach" | "converted";
 }
 
-function sceneValues(scene: SceneWrite, versionId: string, context: TrainingContext) {
+function sceneValues(
+  scene: SceneWrite,
+  versionId: string,
+  context: TrainingContext,
+) {
   const size = JSON.stringify(scene.document).length;
   if (size > TRAINING_SCENE_MAX_BYTES) {
-    badRequest(`A scene can be at most ${Math.floor(TRAINING_SCENE_MAX_BYTES / 1024)} KB.`);
+    badRequest(
+      `A scene can be at most ${Math.floor(TRAINING_SCENE_MAX_BYTES / 1024)} KB.`,
+    );
   }
   const validation = validateTrainingScene(scene.document);
   return {
@@ -618,7 +703,13 @@ export async function copyLegacyScene(
   if (document) {
     await transaction
       .insert(trainingDrillScenes)
-      .values(sceneValues({ document, source: "converted" }, row.currentVersionId, context));
+      .values(
+        sceneValues(
+          { document, source: "converted" },
+          row.currentVersionId,
+          context,
+        ),
+      );
   }
   await transaction.insert(auditLog).values({
     organizationId: row.organizationId,
@@ -648,18 +739,22 @@ async function upsertFocusTag(
   focus: string,
 ) {
   const label = focus.trim().slice(0, 120);
-  const slug = label
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 80) || "focus";
+  const slug =
+    label
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, 80) || "focus";
   const [found] = await transaction
     .select({ id: trainingTags.id })
     .from(trainingTags)
     .where(
       and(
         eq(trainingTags.slug, slug),
-        or(isNull(trainingTags.organizationId), eq(trainingTags.organizationId, context.organizationId)),
+        or(
+          isNull(trainingTags.organizationId),
+          eq(trainingTags.organizationId, context.organizationId),
+        ),
       ),
     )
     .orderBy(sql`${trainingTags.organizationId} nulls first`)
@@ -683,7 +778,12 @@ async function upsertFocusTag(
   }
   await transaction
     .delete(trainingDrillTags)
-    .where(and(eq(trainingDrillTags.drillId, drillId), eq(trainingDrillTags.isFocusArea, true)));
+    .where(
+      and(
+        eq(trainingDrillTags.drillId, drillId),
+        eq(trainingDrillTags.isFocusArea, true),
+      ),
+    );
   await transaction
     .insert(trainingDrillTags)
     .values({ drillId, tagId, isFocusArea: true, createdAt: context.now })
@@ -697,18 +797,28 @@ export async function saveVersion(
   context: TrainingContext,
   input: z.infer<typeof trainingDrillsSaveVersionInputSchema>,
 ): Promise<Detail> {
-  if (input.players.min > input.players.max ||
-      input.players.recommended < input.players.min ||
-      input.players.recommended > input.players.max) {
+  if (
+    input.players.min > input.players.max ||
+    input.players.recommended < input.players.min ||
+    input.players.recommended > input.players.max
+  ) {
     badRequest("Players: minimum ≤ recommended ≤ maximum.");
   }
-  if (input.scene && JSON.stringify(input.scene).length > TRAINING_SCENE_MAX_BYTES) {
-    badRequest(`A scene can be at most ${Math.floor(TRAINING_SCENE_MAX_BYTES / 1024)} KB.`);
+  if (
+    input.scene &&
+    JSON.stringify(input.scene).length > TRAINING_SCENE_MAX_BYTES
+  ) {
+    badRequest(
+      `A scene can be at most ${Math.floor(TRAINING_SCENE_MAX_BYTES / 1024)} KB.`,
+    );
   }
-  const existing = input.drillId ? await loadVisibleDrill(context, input.drillId) : undefined;
+  const existing = input.drillId
+    ? await loadVisibleDrill(context, input.drillId)
+    : undefined;
   if (existing) {
     assertCanEdit(context, existing);
-    if (existing.status === "archived") conflict("An archived drill cannot be changed.");
+    if (existing.status === "archived")
+      conflict("An archived drill cannot be changed.");
     if (input.scope !== existing.scope) {
       badRequest("Change who can see a drill with setScope.");
     }
@@ -724,115 +834,156 @@ export async function saveVersion(
     execute: async () => {
       const drillId = existing?.id ?? crypto.randomUUID();
       const versionId = crypto.randomUUID();
-      const validity = await getTransactionalDatabase().transaction(async (transaction) => {
-        let previousScene: Record<string, unknown> | undefined;
-        if (existing) {
-          const [locked] = await transaction
-            .select()
-            .from(trainingDrills)
-            .where(eq(trainingDrills.id, existing.id))
-            .for("update");
-          await copyLegacyScene(transaction, context, locked!);
-          if (!input.scene && locked!.currentVersionId) {
-            const [scene] = await transaction
-              .select({ document: trainingDrillScenes.document })
-              .from(trainingDrillScenes)
-              .where(eq(trainingDrillScenes.drillVersionId, locked!.currentVersionId));
-            previousScene = scene?.document;
+      const validity = await getTransactionalDatabase().transaction(
+        async (transaction) => {
+          let previousScene: Record<string, unknown> | undefined;
+          if (existing) {
+            const [locked] = await transaction
+              .select()
+              .from(trainingDrills)
+              .where(eq(trainingDrills.id, existing.id))
+              .for("update");
+            await copyLegacyScene(transaction, context, locked!);
+            if (!input.scene && locked!.currentVersionId) {
+              const [scene] = await transaction
+                .select({ document: trainingDrillScenes.document })
+                .from(trainingDrillScenes)
+                .where(
+                  eq(
+                    trainingDrillScenes.drillVersionId,
+                    locked!.currentVersionId,
+                  ),
+                );
+              previousScene = scene?.document;
+            }
           }
-        }
-        const values = {
-          title: input.title.trim(),
-          purpose: input.purpose,
-          targetAudience: input.targetAudience,
-          summary: input.summary,
-          descriptionMarkdown: input.descriptionMarkdown,
-          minPlayers: input.players.min,
-          maxPlayers: input.players.max,
-          recommendedPlayers: input.players.recommended,
-          durationMinutes: input.durationMinutes,
-          skillLevel: input.level.trim().toLowerCase().replaceAll(/\s+/g, "-").slice(0, 32),
-          equipment: input.equipment.map((item) => item.trim()).filter(Boolean),
-          coaching: {
-            ...record(existing?.coaching),
-            cues: input.coachingCues,
-            ...(input.rotationRule ? { rotationRule: input.rotationRule } : {}),
-          },
-          scoring: {
-            ...record(existing?.scoring),
-            ...(input.successCriteria ? { successCriteria: input.successCriteria } : {}),
-          },
-          currentVersionId: versionId,
-          updatedAt: context.now,
-        };
-        if (existing) {
-          await transaction.update(trainingDrills).set(values).where(eq(trainingDrills.id, drillId));
-        } else {
-          await transaction.insert(trainingDrills).values({
-            ...values,
-            id: drillId,
-            organizationId: context.organizationId,
-            slug: slugify(input.title, drillId),
-            status: input.scope === "club" ? "published" : "draft",
-            scope: input.scope,
-            ownerPersonId: input.scope === "personal" ? context.actor.personId : null,
+          const values = {
+            title: input.title.trim(),
+            purpose: input.purpose,
+            targetAudience: input.targetAudience,
+            summary: input.summary,
+            descriptionMarkdown: input.descriptionMarkdown,
+            minPlayers: input.players.min,
+            maxPlayers: input.players.max,
+            recommendedPlayers: input.players.recommended,
+            durationMinutes: input.durationMinutes,
+            skillLevel: input.level
+              .trim()
+              .toLowerCase()
+              .replaceAll(/\s+/g, "-")
+              .slice(0, 32),
+            equipment: input.equipment
+              .map((item) => item.trim())
+              .filter(Boolean),
+            coaching: {
+              ...record(existing?.coaching),
+              cues: input.coachingCues,
+              ...(input.rotationRule
+                ? { rotationRule: input.rotationRule }
+                : {}),
+            },
+            scoring: {
+              ...record(existing?.scoring),
+              ...(input.successCriteria
+                ? { successCriteria: input.successCriteria }
+                : {}),
+            },
+            currentVersionId: versionId,
+            updatedAt: context.now,
+          };
+          if (existing) {
+            await transaction
+              .update(trainingDrills)
+              .set(values)
+              .where(eq(trainingDrills.id, drillId));
+          } else {
+            await transaction.insert(trainingDrills).values({
+              ...values,
+              id: drillId,
+              organizationId: context.organizationId,
+              slug: slugify(input.title, drillId),
+              status: input.scope === "club" ? "published" : "draft",
+              scope: input.scope,
+              ownerPersonId:
+                input.scope === "personal" ? context.actor.personId : null,
+              createdByPersonId: context.actor.personId,
+              createdAt: context.now,
+            });
+          }
+          const [max] = await transaction
+            .select({
+              max: sql<number>`coalesce(max(${trainingDrillVersions.version}), 0)::int`,
+            })
+            .from(trainingDrillVersions)
+            .where(eq(trainingDrillVersions.drillId, drillId));
+          const number = (max?.max ?? 0) + 1;
+          await transaction.insert(trainingDrillVersions).values({
+            id: versionId,
+            drillId,
+            version: number,
+            snapshot: { kind: "training-drill/w3", ...request },
+            changeNote: input.changeNote?.trim() || null,
             createdByPersonId: context.actor.personId,
             createdAt: context.now,
           });
-        }
-        const [max] = await transaction
-          .select({ max: sql<number>`coalesce(max(${trainingDrillVersions.version}), 0)::int` })
-          .from(trainingDrillVersions)
-          .where(eq(trainingDrillVersions.drillId, drillId));
-        const number = (max?.max ?? 0) + 1;
-        await transaction.insert(trainingDrillVersions).values({
-          id: versionId,
-          drillId,
-          version: number,
-          snapshot: { kind: "training-drill/w3", ...request },
-          changeNote: input.changeNote?.trim() || null,
-          createdByPersonId: context.actor.personId,
-          createdAt: context.now,
-        });
-        const document = input.scene ?? previousScene;
-        let sceneStatus: string | undefined;
-        if (document) {
-          const scene = sceneValues({ document, source: "coach" }, versionId, context);
-          sceneStatus = scene.validationStatus;
-          await transaction.insert(trainingDrillScenes).values(scene);
-          const derived = scene.derived;
-          if (derived.touchesPerRep !== undefined || derived.jumpsPerRep !== undefined) {
-            // Estimates from the scene: reps per drill ≈ one every 20 seconds of work.
-            const reps = Math.max(1, Math.round((input.durationMinutes * 60) / 20));
-            const touches = Math.round((derived.touchesPerRep ?? 0) * reps);
+          const document = input.scene ?? previousScene;
+          let sceneStatus: string | undefined;
+          if (document) {
+            const scene = sceneValues(
+              { document, source: "coach" },
+              versionId,
+              context,
+            );
+            sceneStatus = scene.validationStatus;
+            await transaction.insert(trainingDrillScenes).values(scene);
+            const derived = scene.derived;
+            if (
+              derived.touchesPerRep !== undefined ||
+              derived.jumpsPerRep !== undefined
+            ) {
+              // Estimates from the scene: reps per drill ≈ one every 20 seconds of work.
+              const reps = Math.max(
+                1,
+                Math.round((input.durationMinutes * 60) / 20),
+              );
+              const touches = Math.round((derived.touchesPerRep ?? 0) * reps);
+              await transaction
+                .update(trainingDrills)
+                .set({
+                  touchEstimateLow: Math.round(touches * 0.8),
+                  touchEstimateTypical: touches,
+                  touchEstimateHigh: Math.round(touches * 1.2),
+                  jumpEstimateTypical: Math.round(
+                    (derived.jumpsPerRep ?? 0) * reps,
+                  ),
+                })
+                .where(eq(trainingDrills.id, drillId));
+            }
+          }
+          await upsertFocusTag(transaction, context, drillId, input.focus);
+          if (
+            existing &&
+            existing.reviewState !== "not-submitted" &&
+            existing.reviewState !== "rejected"
+          ) {
+            // A new version needs its own review before it can be listed.
             await transaction
               .update(trainingDrills)
-              .set({
-                touchEstimateLow: Math.round(touches * 0.8),
-                touchEstimateTypical: touches,
-                touchEstimateHigh: Math.round(touches * 1.2),
-                jumpEstimateTypical: Math.round((derived.jumpsPerRep ?? 0) * reps),
-              })
+              .set({ reviewState: "not-submitted" })
               .where(eq(trainingDrills.id, drillId));
           }
-        }
-        await upsertFocusTag(transaction, context, drillId, input.focus);
-        if (existing && existing.reviewState !== "not-submitted" && existing.reviewState !== "rejected") {
-          // A new version needs its own review before it can be listed.
-          await transaction
-            .update(trainingDrills)
-            .set({ reviewState: "not-submitted" })
-            .where(eq(trainingDrills.id, drillId));
-        }
-        await audit(transaction, context, {
-          action: existing ? "training-drill.versioned" : "training-drill.created",
-          entityType: "training-drill",
-          entityId: drillId,
-          after: { version: number, scope: input.scope },
-          reason: `Saved drill version ${number}${document ? ` with a ${sceneStatus} scene` : ""}.`,
-        });
-        return { number, sceneStatus };
-      });
+          await audit(transaction, context, {
+            action: existing
+              ? "training-drill.versioned"
+              : "training-drill.created",
+            entityType: "training-drill",
+            entityId: drillId,
+            after: { version: number, scope: input.scope },
+            reason: `Saved drill version ${number}${document ? ` with a ${sceneStatus} scene` : ""}.`,
+          });
+          return { number, sceneStatus };
+        },
+      );
       log.info("training-drills.drill.saved", {
         organizationId: context.organizationId,
         drillId,
@@ -853,7 +1004,10 @@ export async function setScope(
   const row = await loadVisibleDrill(context, input.drillId);
   assertCanEdit(context, row);
   if (row.scope === input.scope) return detailOf(context, row);
-  if (input.scope === "personal" && row.createdByPersonId !== context.actor.personId) {
+  if (
+    input.scope === "personal" &&
+    row.createdByPersonId !== context.actor.personId
+  ) {
     forbidden("Only the author can make a club drill theirs again.");
   }
   await getTransactionalDatabase().transaction(async (transaction) => {
@@ -861,8 +1015,11 @@ export async function setScope(
       .update(trainingDrills)
       .set({
         scope: input.scope,
-        ownerPersonId: input.scope === "personal" ? context.actor.personId : null,
-        ...(input.scope === "club" && row.status === "draft" ? { status: "published" } : {}),
+        ownerPersonId:
+          input.scope === "personal" ? context.actor.personId : null,
+        ...(input.scope === "club" && row.status === "draft"
+          ? { status: "published" }
+          : {}),
         updatedAt: context.now,
       })
       .where(eq(trainingDrills.id, row.id));
@@ -872,7 +1029,8 @@ export async function setScope(
       entityId: row.id,
       before: { scope: row.scope },
       after: { scope: input.scope },
-      reason: input.scope === "club" ? "Shared with the club." : "Made private.",
+      reason:
+        input.scope === "club" ? "Shared with the club." : "Made private.",
     });
   });
   log.info("training-drills.drill.scope-changed", {
@@ -887,13 +1045,18 @@ const PERSONAL_DATA = [
   { pattern: /[\w.+-]+@[\w-]+\.[\w.]+/, note: "an email address" },
   { pattern: /(?:\+?\d[\s().-]?){9,}/, note: "a phone number" },
   { pattern: /(^|\s)@[a-z0-9_.]{3,}/i, note: "a social handle" },
-  { pattern: /https?:\/\/\S+\.(?:jpe?g|png|heic|webp|gif|mp4|mov)\b/i, note: "a link to a photo or video" },
+  {
+    pattern: /https?:\/\/\S+\.(?:jpe?g|png|heic|webp|gif|mp4|mov)\b/i,
+    note: "a link to a photo or video",
+  },
 ];
 
 /** Text a public listing would show, scanned for personal data. */
 export function personalDataFindings(texts: readonly string[]): string[] {
   const joined = texts.join("\n");
-  return PERSONAL_DATA.filter((rule) => rule.pattern.test(joined)).map((rule) => rule.note);
+  return PERSONAL_DATA.filter((rule) => rule.pattern.test(joined)).map(
+    (rule) => rule.note,
+  );
 }
 
 export async function submitForReview(
@@ -905,83 +1068,99 @@ export async function submitForReview(
   if (row.currentVersionId !== input.drillVersionId) {
     conflict("Submit the drill's latest version.");
   }
-  if (row.reviewState === "checks-running" || row.reviewState === "in-review" || row.reviewState === "approved") {
+  if (
+    row.reviewState === "checks-running" ||
+    row.reviewState === "in-review" ||
+    row.reviewState === "approved"
+  ) {
     return detailOf(context, row);
   }
-  const outcome = await getTransactionalDatabase().transaction(async (transaction) => {
-    await copyLegacyScene(transaction, context, row);
-    const [scene] = await transaction
-      .select()
-      .from(trainingDrillScenes)
-      .where(eq(trainingDrillScenes.drillVersionId, input.drillVersionId));
-    const sceneOk = scene?.validationStatus === "valid";
-    const people = Array.isArray(scene?.document?.people) ? scene!.document.people : [];
-    const findings = personalDataFindings([
-      row.title,
-      row.summary,
-      row.purpose,
-      row.targetAudience,
-      row.descriptionMarkdown,
-      ...strings(record(row.coaching).cues),
-      JSON.stringify(record(scene?.document).teaching ?? {}),
-      ...people.map((person) => JSON.stringify(person)),
-    ]);
-    const checks = [
-      {
-        kind: "scene-valid",
-        status: sceneOk ? "ok" : "failed",
-        note: sceneOk
-          ? null
-          : scene
-            ? (scene.validationIssues[0]?.message ?? "The scene has problems.")
-            : "Add a scene that passes the checks.",
-      },
-      {
-        kind: "no-personal-data",
-        status: findings.length === 0 ? "ok" : "failed",
-        note: findings.length === 0 ? null : `Remove ${findings.join(", ")}.`,
-      },
-      { kind: "duna-review", status: "waiting", note: null },
-    ];
-    for (const check of checks) {
-      await transaction
-        .insert(trainingDrillReviewChecks)
-        .values({
-          drillVersionId: input.drillVersionId,
-          kind: check.kind,
-          status: check.status,
-          note: check.note,
-          decidedAt: check.status === "waiting" ? null : context.now,
-          createdAt: context.now,
-          updatedAt: context.now,
-        })
-        .onConflictDoUpdate({
-          target: [trainingDrillReviewChecks.drillVersionId, trainingDrillReviewChecks.kind],
-          set: {
+  const outcome = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      await copyLegacyScene(transaction, context, row);
+      const [scene] = await transaction
+        .select()
+        .from(trainingDrillScenes)
+        .where(eq(trainingDrillScenes.drillVersionId, input.drillVersionId));
+      const sceneOk = scene?.validationStatus === "valid";
+      const people = Array.isArray(scene?.document?.people)
+        ? scene!.document.people
+        : [];
+      const findings = personalDataFindings([
+        row.title,
+        row.summary,
+        row.purpose,
+        row.targetAudience,
+        row.descriptionMarkdown,
+        ...strings(record(row.coaching).cues),
+        JSON.stringify(record(scene?.document).teaching ?? {}),
+        ...people.map((person) => JSON.stringify(person)),
+      ]);
+      const checks = [
+        {
+          kind: "scene-valid",
+          status: sceneOk ? "ok" : "failed",
+          note: sceneOk
+            ? null
+            : scene
+              ? (scene.validationIssues[0]?.message ??
+                "The scene has problems.")
+              : "Add a scene that passes the checks.",
+        },
+        {
+          kind: "no-personal-data",
+          status: findings.length === 0 ? "ok" : "failed",
+          note: findings.length === 0 ? null : `Remove ${findings.join(", ")}.`,
+        },
+        { kind: "duna-review", status: "waiting", note: null },
+      ];
+      for (const check of checks) {
+        await transaction
+          .insert(trainingDrillReviewChecks)
+          .values({
+            drillVersionId: input.drillVersionId,
+            kind: check.kind,
             status: check.status,
             note: check.note,
             decidedAt: check.status === "waiting" ? null : context.now,
+            createdAt: context.now,
             updatedAt: context.now,
-          },
-        });
-    }
-    const passed = sceneOk && findings.length === 0;
-    const reviewState = passed ? "in-review" : "changes-requested";
-    await transaction
-      .update(trainingDrills)
-      .set({ reviewState, status: passed ? "review" : row.status, updatedAt: context.now })
-      .where(eq(trainingDrills.id, row.id));
-    await audit(transaction, context, {
-      action: "training-drill.review-submitted",
-      entityType: "training-drill",
-      entityId: row.id,
-      after: { reviewState, versionId: input.drillVersionId },
-      reason: passed
-        ? "Automatic checks passed; waiting for Duna review."
-        : "Automatic checks found problems; changes requested.",
-    });
-    return { reviewState, sceneOk, findings: findings.length };
-  });
+          })
+          .onConflictDoUpdate({
+            target: [
+              trainingDrillReviewChecks.drillVersionId,
+              trainingDrillReviewChecks.kind,
+            ],
+            set: {
+              status: check.status,
+              note: check.note,
+              decidedAt: check.status === "waiting" ? null : context.now,
+              updatedAt: context.now,
+            },
+          });
+      }
+      const passed = sceneOk && findings.length === 0;
+      const reviewState = passed ? "in-review" : "changes-requested";
+      await transaction
+        .update(trainingDrills)
+        .set({
+          reviewState,
+          status: passed ? "review" : row.status,
+          updatedAt: context.now,
+        })
+        .where(eq(trainingDrills.id, row.id));
+      await audit(transaction, context, {
+        action: "training-drill.review-submitted",
+        entityType: "training-drill",
+        entityId: row.id,
+        after: { reviewState, versionId: input.drillVersionId },
+        reason: passed
+          ? "Automatic checks passed; waiting for Duna review."
+          : "Automatic checks found problems; changes requested.",
+      });
+      return { reviewState, sceneOk, findings: findings.length };
+    },
+  );
   log.info("training-drills.drill.review-submitted", {
     organizationId: context.organizationId,
     drillId: row.id,
@@ -1009,16 +1188,27 @@ export async function saveListing(
   if (!storefrontEnabled) storefrontOff();
   const row = await loadVisibleDrill(context, input.drillId);
   assertCanEdit(context, row);
-  if (input.sellAs === "organization" && (row.scope !== "club" || !isTrainingManager(context.actor))) {
+  if (
+    input.sellAs === "organization" &&
+    (row.scope !== "club" || !isTrainingManager(context.actor))
+  ) {
     forbidden("A manager lists the club's drills for the club.");
   }
-  if (input.sellAs === "person" && row.createdByPersonId !== context.actor.personId) {
+  if (
+    input.sellAs === "person" &&
+    row.createdByPersonId !== context.actor.personId
+  ) {
     forbidden("Only the author can list a drill in their own name.");
   }
   const [version] = await getDatabase()
     .select({ id: trainingDrillVersions.id })
     .from(trainingDrillVersions)
-    .where(and(eq(trainingDrillVersions.id, input.drillVersionId), eq(trainingDrillVersions.drillId, row.id)));
+    .where(
+      and(
+        eq(trainingDrillVersions.id, input.drillVersionId),
+        eq(trainingDrillVersions.drillId, row.id),
+      ),
+    );
   if (!version) notFound("This drill version was not found.");
   if (input.pricing === "paid" && marketplaceFeeBps() === undefined) {
     throw new TRPCError({
@@ -1026,11 +1216,14 @@ export async function saveListing(
       message: "Paid listings are not configured yet.",
     });
   }
-  const approved = row.reviewState === "approved" && row.currentVersionId === input.drillVersionId;
+  const approved =
+    row.reviewState === "approved" &&
+    row.currentVersionId === input.drillVersionId;
   const status = approved ? "listed" : "pending-review";
   const values = {
     drillVersionId: input.drillVersionId,
-    sellerOrganizationId: input.sellAs === "organization" ? context.organizationId : null,
+    sellerOrganizationId:
+      input.sellAs === "organization" ? context.organizationId : null,
     sellerPersonId: input.sellAs === "person" ? context.actor.personId : null,
     status,
     pricing: input.pricing,
@@ -1042,39 +1235,47 @@ export async function saveListing(
     delistedAt: null,
     updatedAt: context.now,
   };
-  const saved = await getTransactionalDatabase().transaction(async (transaction) => {
-    const [current] = await transaction
-      .select()
-      .from(trainingDrillListings)
-      .where(
-        and(
-          eq(trainingDrillListings.drillId, row.id),
-          inArray(trainingDrillListings.status, [...ACTIVE_LISTING]),
-        ),
-      )
-      .for("update");
-    const [listing] = current
-      ? await transaction
-          .update(trainingDrillListings)
-          .set(values)
-          .where(eq(trainingDrillListings.id, current.id))
-          .returning()
-      : await transaction
-          .insert(trainingDrillListings)
-          .values({ ...values, drillId: row.id, createdAt: context.now })
-          .returning();
-    await audit(transaction, context, {
-      action: approved ? "training-drill.listed" : "training-drill.listing-saved",
-      entityType: "training-drill-listing",
-      entityId: listing!.id,
-      ...(current ? { before: { status: current.status } } : {}),
-      after: { status, pricing: input.pricing, priceMinor: input.price.amountMinor },
-      reason: approved
-        ? "Listed in the drill store (review approved)."
-        : "Listing saved; it goes live once Duna review approves the drill.",
-    });
-    return listing!;
-  });
+  const saved = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(trainingDrillListings)
+        .where(
+          and(
+            eq(trainingDrillListings.drillId, row.id),
+            inArray(trainingDrillListings.status, [...ACTIVE_LISTING]),
+          ),
+        )
+        .for("update");
+      const [listing] = current
+        ? await transaction
+            .update(trainingDrillListings)
+            .set(values)
+            .where(eq(trainingDrillListings.id, current.id))
+            .returning()
+        : await transaction
+            .insert(trainingDrillListings)
+            .values({ ...values, drillId: row.id, createdAt: context.now })
+            .returning();
+      await audit(transaction, context, {
+        action: approved
+          ? "training-drill.listed"
+          : "training-drill.listing-saved",
+        entityType: "training-drill-listing",
+        entityId: listing!.id,
+        ...(current ? { before: { status: current.status } } : {}),
+        after: {
+          status,
+          pricing: input.pricing,
+          priceMinor: input.price.amountMinor,
+        },
+        reason: approved
+          ? "Listed in the drill store (review approved)."
+          : "Listing saved; it goes live once Duna review approves the drill.",
+      });
+      return listing!;
+    },
+  );
   log.info("training-drills.listing.saved", {
     organizationId: context.organizationId,
     drillId: row.id,
@@ -1093,7 +1294,10 @@ async function loadOwnListing(context: TrainingContext, listingId: string) {
       and(
         eq(trainingDrillListings.id, listingId),
         or(
-          eq(trainingDrillListings.sellerOrganizationId, context.organizationId),
+          eq(
+            trainingDrillListings.sellerOrganizationId,
+            context.organizationId,
+          ),
           eq(trainingDrillListings.sellerPersonId, context.actor.personId),
         ),
       ),
@@ -1102,7 +1306,10 @@ async function loadOwnListing(context: TrainingContext, listingId: string) {
   return row;
 }
 
-export async function delist(context: TrainingContext, listingId: string): Promise<Listing> {
+export async function delist(
+  context: TrainingContext,
+  listingId: string,
+): Promise<Listing> {
   const listing = await loadOwnListing(context, listingId);
   if (listing.sellerOrganizationId && !isTrainingManager(context.actor)) {
     forbidden("A manager takes the club's listings down.");
@@ -1110,22 +1317,28 @@ export async function delist(context: TrainingContext, listingId: string): Promi
   if (listing.status === "delisted" || listing.status === "rejected") {
     return listingOut(listing, (await sellerNames([listing]))(listing));
   }
-  const [saved] = await getTransactionalDatabase().transaction(async (transaction) => {
-    const rows = await transaction
-      .update(trainingDrillListings)
-      .set({ status: "delisted", delistedAt: context.now, updatedAt: context.now })
-      .where(eq(trainingDrillListings.id, listing.id))
-      .returning();
-    await audit(transaction, context, {
-      action: "training-drill.delisted",
-      entityType: "training-drill-listing",
-      entityId: listing.id,
-      before: { status: listing.status },
-      after: { status: "delisted" },
-      reason: "Taken out of the drill store; existing purchases keep access.",
-    });
-    return rows;
-  });
+  const [saved] = await getTransactionalDatabase().transaction(
+    async (transaction) => {
+      const rows = await transaction
+        .update(trainingDrillListings)
+        .set({
+          status: "delisted",
+          delistedAt: context.now,
+          updatedAt: context.now,
+        })
+        .where(eq(trainingDrillListings.id, listing.id))
+        .returning();
+      await audit(transaction, context, {
+        action: "training-drill.delisted",
+        entityType: "training-drill-listing",
+        entityId: listing.id,
+        before: { status: listing.status },
+        after: { status: "delisted" },
+        reason: "Taken out of the drill store; existing purchases keep access.",
+      });
+      return rows;
+    },
+  );
   log.info("training-drills.listing.delisted", {
     organizationId: context.organizationId,
     listingId: listing.id,
@@ -1138,12 +1351,18 @@ export async function store(
   viewer: { readonly actor?: ApiActor; readonly organizationId?: string },
   filters: Filters,
   enabled: boolean,
-): Promise<{ enabled: boolean; items: { listing: Listing; drill: Summary }[] }> {
+): Promise<{
+  enabled: boolean;
+  items: { listing: Listing; drill: Summary }[];
+}> {
   if (!enabled) return { enabled: false, items: [] };
   const rows = await getDatabase()
     .select({ listing: trainingDrillListings, drill: trainingDrills })
     .from(trainingDrillListings)
-    .innerJoin(trainingDrills, eq(trainingDrills.id, trainingDrillListings.drillId))
+    .innerJoin(
+      trainingDrills,
+      eq(trainingDrills.id, trainingDrillListings.drillId),
+    )
     .where(
       and(
         eq(trainingDrillListings.status, "listed"),
@@ -1151,7 +1370,10 @@ export async function store(
         viewer.organizationId
           ? or(
               isNull(trainingDrillListings.sellerOrganizationId),
-              ne(trainingDrillListings.sellerOrganizationId, viewer.organizationId),
+              ne(
+                trainingDrillListings.sellerOrganizationId,
+                viewer.organizationId,
+              ),
             )
           : undefined,
         ...filterConditions(filters),
@@ -1178,19 +1400,33 @@ export async function publicListing(listingId: string, enabled: boolean) {
   const [row] = await getDatabase()
     .select({ listing: trainingDrillListings, drill: trainingDrills })
     .from(trainingDrillListings)
-    .innerJoin(trainingDrills, eq(trainingDrills.id, trainingDrillListings.drillId))
-    .where(and(eq(trainingDrillListings.id, listingId), eq(trainingDrillListings.status, "listed")));
+    .innerJoin(
+      trainingDrills,
+      eq(trainingDrills.id, trainingDrillListings.drillId),
+    )
+    .where(
+      and(
+        eq(trainingDrillListings.id, listingId),
+        eq(trainingDrillListings.status, "listed"),
+      ),
+    );
   if (!row) notFound("This listing was not found.");
   const [summary] = await summaries({}, [row.drill]);
   return {
-    listing: listingOut(row.listing, (await sellerNames([row.listing]))(row.listing)),
+    listing: listingOut(
+      row.listing,
+      (await sellerNames([row.listing]))(row.listing),
+    ),
     drill: summary!,
   };
 }
 
 // ----------------------------------------------------------------- purchases
 
-function purchaseOut(row: typeof trainingDrillPurchases.$inferSelect, drillId: string): Purchase {
+function purchaseOut(
+  row: typeof trainingDrillPurchases.$inferSelect,
+  drillId: string,
+): Purchase {
   return {
     id: row.id,
     listingId: row.listingId,
@@ -1212,7 +1448,11 @@ function purchaseOut(row: typeof trainingDrillPurchases.$inferSelect, drillId: s
 
 export async function purchase(
   context: TrainingContext,
-  input: { readonly listingId: string; readonly buyAs: "organization" | "person"; readonly idempotencyKey: string },
+  input: {
+    readonly listingId: string;
+    readonly buyAs: "organization" | "person";
+    readonly idempotencyKey: string;
+  },
   enabled: boolean,
 ): Promise<Purchase> {
   if (!enabled) storefrontOff();
@@ -1222,7 +1462,12 @@ export async function purchase(
   const [listing] = await getDatabase()
     .select()
     .from(trainingDrillListings)
-    .where(and(eq(trainingDrillListings.id, input.listingId), eq(trainingDrillListings.status, "listed")));
+    .where(
+      and(
+        eq(trainingDrillListings.id, input.listingId),
+        eq(trainingDrillListings.status, "listed"),
+      ),
+    );
   if (!listing) notFound("This listing was not found.");
   if (
     listing.sellerOrganizationId === context.organizationId ||
@@ -1243,46 +1488,60 @@ export async function purchase(
     now: context.now,
     execute: async () => {
       const free = listing.priceMinor === 0;
-      const id = await getTransactionalDatabase().transaction(async (transaction) => {
-        const [held] = await transaction
-          .select({ id: trainingDrillPurchases.id })
-          .from(trainingDrillPurchases)
-          .where(
-            and(
-              eq(trainingDrillPurchases.listingId, listing.id),
-              inArray(trainingDrillPurchases.status, ["pending", "complete"]),
-              buyer.buyerOrganizationId
-                ? eq(trainingDrillPurchases.buyerOrganizationId, buyer.buyerOrganizationId)
-                : eq(trainingDrillPurchases.buyerPersonId, buyer.buyerPersonId!),
-            ),
-          )
-          .limit(1);
-        if (held) return held.id;
-        const [created] = await transaction
-          .insert(trainingDrillPurchases)
-          .values({
-            listingId: listing.id,
-            ...buyer,
-            status: free ? "complete" : "pending",
-            priceMinor: listing.priceMinor,
-            currency: listing.currency,
-            purchasedByPersonId: context.actor.personId,
-            completedAt: free ? context.now : null,
-            createdAt: context.now,
-            updatedAt: context.now,
-          })
-          .returning({ id: trainingDrillPurchases.id });
-        await audit(transaction, context, {
-          action: free ? "training-drill.purchase-completed" : "training-drill.purchase-started",
-          entityType: "training-drill-purchase",
-          entityId: created!.id,
-          after: { listingId: listing.id, buyAs: input.buyAs, priceMinor: listing.priceMinor },
-          reason: free
-            ? "Took a free drill from the store."
-            : "Started a paid drill purchase; it completes when the person finishes checkout.",
-        });
-        return created!.id;
-      });
+      const id = await getTransactionalDatabase().transaction(
+        async (transaction) => {
+          const [held] = await transaction
+            .select({ id: trainingDrillPurchases.id })
+            .from(trainingDrillPurchases)
+            .where(
+              and(
+                eq(trainingDrillPurchases.listingId, listing.id),
+                inArray(trainingDrillPurchases.status, ["pending", "complete"]),
+                buyer.buyerOrganizationId
+                  ? eq(
+                      trainingDrillPurchases.buyerOrganizationId,
+                      buyer.buyerOrganizationId,
+                    )
+                  : eq(
+                      trainingDrillPurchases.buyerPersonId,
+                      buyer.buyerPersonId!,
+                    ),
+              ),
+            )
+            .limit(1);
+          if (held) return held.id;
+          const [created] = await transaction
+            .insert(trainingDrillPurchases)
+            .values({
+              listingId: listing.id,
+              ...buyer,
+              status: free ? "complete" : "pending",
+              priceMinor: listing.priceMinor,
+              currency: listing.currency,
+              purchasedByPersonId: context.actor.personId,
+              completedAt: free ? context.now : null,
+              createdAt: context.now,
+              updatedAt: context.now,
+            })
+            .returning({ id: trainingDrillPurchases.id });
+          await audit(transaction, context, {
+            action: free
+              ? "training-drill.purchase-completed"
+              : "training-drill.purchase-started",
+            entityType: "training-drill-purchase",
+            entityId: created!.id,
+            after: {
+              listingId: listing.id,
+              buyAs: input.buyAs,
+              priceMinor: listing.priceMinor,
+            },
+            reason: free
+              ? "Took a free drill from the store."
+              : "Started a paid drill purchase; it completes when the person finishes checkout.",
+          });
+          return created!.id;
+        },
+      );
       log.info("training-drills.purchase.recorded", {
         organizationId: context.organizationId,
         purchaseId: id,
@@ -1300,11 +1559,19 @@ export async function purchase(
   return purchaseOut(row!, listing.drillId);
 }
 
-export async function purchases(context: TrainingContext): Promise<{ items: Purchase[] }> {
+export async function purchases(
+  context: TrainingContext,
+): Promise<{ items: Purchase[] }> {
   const rows = await getDatabase()
-    .select({ purchase: trainingDrillPurchases, drillId: trainingDrillListings.drillId })
+    .select({
+      purchase: trainingDrillPurchases,
+      drillId: trainingDrillListings.drillId,
+    })
     .from(trainingDrillPurchases)
-    .innerJoin(trainingDrillListings, eq(trainingDrillListings.id, trainingDrillPurchases.listingId))
+    .innerJoin(
+      trainingDrillListings,
+      eq(trainingDrillListings.id, trainingDrillPurchases.listingId),
+    )
     .where(
       or(
         eq(trainingDrillPurchases.buyerOrganizationId, context.organizationId),
@@ -1333,14 +1600,24 @@ export async function playerDrill(
   const [row] = await getDatabase()
     .select()
     .from(trainingDrills)
-    .where(and(eq(trainingDrills.id, drillId), eq(trainingDrills.status, "published")));
+    .where(
+      and(
+        eq(trainingDrills.id, drillId),
+        eq(trainingDrills.status, "published"),
+      ),
+    );
   if (!row) notFound("This drill was not found.");
   let allowed = row.scope === "duna" && row.organizationId === null;
   if (!allowed) {
     const [listed] = await getDatabase()
       .select({ id: trainingDrillListings.id })
       .from(trainingDrillListings)
-      .where(and(eq(trainingDrillListings.drillId, row.id), eq(trainingDrillListings.status, "listed")))
+      .where(
+        and(
+          eq(trainingDrillListings.drillId, row.id),
+          eq(trainingDrillListings.status, "listed"),
+        ),
+      )
       .limit(1);
     allowed = Boolean(listed);
   }
@@ -1354,14 +1631,24 @@ export async function playerDrill(
       )
       .innerJoin(
         trainingPracticePlanBlocks,
-        eq(trainingPracticePlanBlocks.practicePlanVersionId, trainingEvents.practicePlanVersionId),
+        eq(
+          trainingPracticePlanBlocks.practicePlanVersionId,
+          trainingEvents.practicePlanVersionId,
+        ),
       )
-      .innerJoin(trainingDrillVersions, eq(trainingDrillVersions.id, trainingPracticePlanBlocks.drillVersionId))
+      .innerJoin(
+        trainingDrillVersions,
+        eq(trainingDrillVersions.id, trainingPracticePlanBlocks.drillVersionId),
+      )
       .where(
         and(
           eq(trainingDrillVersions.drillId, row.id),
           inArray(trainingProgramParticipants.personId, [...followedPersonIds]),
-          inArray(trainingProgramParticipants.status, ["active", "invited", "completed"]),
+          inArray(trainingProgramParticipants.status, [
+            "active",
+            "invited",
+            "completed",
+          ]),
           ne(trainingEvents.status, "cancelled"),
         ),
       )
@@ -1372,7 +1659,8 @@ export async function playerDrill(
   return detailOf(
     {
       actor,
-      organizationId: row.organizationId ?? "00000000-0000-4000-8000-000000000000",
+      organizationId:
+        row.organizationId ?? "00000000-0000-4000-8000-000000000000",
       requestId: "player",
       now,
     },

@@ -131,9 +131,15 @@ export function planTotals(input: {
     plannedMinutes: Math.max(1, input.plannedMinutes),
     load: Math.min(100, load),
     ...(input.targetLoad === undefined ? {} : { targetLoad: input.targetLoad }),
-    touches: blocks.reduce((sum, block) => sum + (block.estimatedTouches ?? 0), 0),
+    touches: blocks.reduce(
+      (sum, block) => sum + (block.estimatedTouches ?? 0),
+      0,
+    ),
     jumps: blocks.reduce((sum, block) => sum + (block.estimatedJumps ?? 0), 0),
-    metres: blocks.reduce((sum, block) => sum + (block.estimatedMetres ?? 0), 0),
+    metres: blocks.reduce(
+      (sum, block) => sum + (block.estimatedMetres ?? 0),
+      0,
+    ),
     workRestRatio: ratio(work, Math.max(0, minutes - work)),
     focusMix,
   };
@@ -243,14 +249,25 @@ export function proposeBlocks(input: {
   const candidates = input.drills
     .filter((drill) => drill.minPlayers <= Math.max(1, input.athletes))
     .sort((left, right) => {
-      const leftMatch = focus && left.focus.toLowerCase().includes(focus) ? 0 : 1;
+      const leftMatch =
+        focus && left.focus.toLowerCase().includes(focus) ? 0 : 1;
       const rightMatch =
         focus && right.focus.toLowerCase().includes(focus) ? 0 : 1;
       return leftMatch - rightMatch || left.title.localeCompare(right.title);
     });
   const blocks: ProposedBlock[] = [];
   let minute = 0;
-  const push = (block: Omit<ProposedBlock, "sequence" | "startsAtMinute" | "lane" | "transitionMinutes" | "plannedLoad" | "locked">) => {
+  const push = (
+    block: Omit<
+      ProposedBlock,
+      | "sequence"
+      | "startsAtMinute"
+      | "lane"
+      | "transitionMinutes"
+      | "plannedLoad"
+      | "locked"
+    >,
+  ) => {
     blocks.push({
       ...block,
       sequence: blocks.length,

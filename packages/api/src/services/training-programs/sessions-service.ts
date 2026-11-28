@@ -178,7 +178,9 @@ function resolutionsOf(row: Pick<EventRow, "externalLoad">) {
 }
 
 /** Sessions with coaches, plan, cover and athlete counts: six queries in all. */
-export async function buildSessions(rows: readonly EventRow[]): Promise<Session[]> {
+export async function buildSessions(
+  rows: readonly EventRow[],
+): Promise<Session[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
   const programIds = [
@@ -207,7 +209,10 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
           .from(trainingPracticePlanVersions)
           .innerJoin(
             trainingPracticePlans,
-            eq(trainingPracticePlans.id, trainingPracticePlanVersions.practicePlanId),
+            eq(
+              trainingPracticePlans.id,
+              trainingPracticePlanVersions.practicePlanId,
+            ),
           )
           .where(inArray(trainingPracticePlanVersions.id, versionIds))
       : Promise.resolve([]),
@@ -217,7 +222,11 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
       .where(
         and(
           inArray(staffCoverageRequests.trainingEventId, ids),
-          inArray(staffCoverageRequests.status, ["open", "asking", "nobody-free"]),
+          inArray(staffCoverageRequests.status, [
+            "open",
+            "asking",
+            "nobody-free",
+          ]),
         ),
       ),
     programIds.length
@@ -231,7 +240,10 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
             and(
               inArray(trainingProgramParticipants.programId, programIds),
               eq(trainingProgramParticipants.role, "athlete"),
-              inArray(trainingProgramParticipants.status, ["active", "invited"]),
+              inArray(trainingProgramParticipants.status, [
+                "active",
+                "invited",
+              ]),
             ),
           )
           .groupBy(trainingProgramParticipants.programId)
@@ -244,7 +256,9 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
   ]);
   const versions = new Map(versionRows.map((row) => [row.versionId, row]));
   const covered = new Set(coverRows.map((row) => row.eventId));
-  const athletes = new Map(athleteRows.map((row) => [row.programId, row.count]));
+  const athletes = new Map(
+    athleteRows.map((row) => [row.programId, row.count]),
+  );
   return rows.map((row) => {
     const own = coachRows.filter((coach) => coach.trainingEventId === row.id);
     const coaches = (
@@ -259,12 +273,24 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
               courtId: coach.courtId,
             }))
         : row.coachPersonId
-          ? [{ personId: row.coachPersonId, role: "lead" as const, courtId: null }]
+          ? [
+              {
+                personId: row.coachPersonId,
+                role: "lead" as const,
+                courtId: null,
+              },
+            ]
           : []
     ).flatMap((coach) => {
       const person = peopleById.get(coach.personId);
       return person
-        ? [{ ...person, role: coach.role, ...(coach.courtId ? { courtId: coach.courtId } : {}) }]
+        ? [
+            {
+              ...person,
+              role: coach.role,
+              ...(coach.courtId ? { courtId: coach.courtId } : {}),
+            },
+          ]
         : [];
     });
     const version = row.practicePlanVersionId
@@ -289,8 +315,8 @@ export async function buildSessions(rows: readonly EventRow[]): Promise<Session[
             ...(row.estimatedJumps !== null
               ? { estimatedJumps: row.estimatedJumps }
               : {}),
-            loadEstimateSource:
-              row.loadEstimateSource as "assumed" | "coach-edited" | "derived-from-scene",
+            loadEstimateSource: row.loadEstimateSource as
+              "assumed" | "coach-edited" | "derived-from-scene",
           }
         : { mode: "none" };
     const cancelledBy = row.cancelledByPersonId
@@ -335,7 +361,11 @@ async function sessionOut(organizationId: string, sessionId: string) {
 
 export async function listSessions(
   context: TrainingContext,
-  input: { readonly programId?: string; readonly from: string; readonly to: string },
+  input: {
+    readonly programId?: string;
+    readonly from: string;
+    readonly to: string;
+  },
 ): Promise<{ items: Session[] }> {
   const from = new Date(input.from);
   const to = new Date(input.to);
@@ -343,14 +373,17 @@ export async function listSessions(
   if (to.getTime() - from.getTime() > SESSION_WINDOW_DAYS * DAY_MS) {
     badRequest(`Ask for at most ${SESSION_WINDOW_DAYS} days at a time.`);
   }
-  if (input.programId) await loadProgramRow(context.organizationId, input.programId);
+  if (input.programId)
+    await loadProgramRow(context.organizationId, input.programId);
   const rows = await getDatabase()
     .select()
     .from(trainingEvents)
     .where(
       and(
         eq(trainingEvents.organizationId, context.organizationId),
-        input.programId ? eq(trainingEvents.programId, input.programId) : undefined,
+        input.programId
+          ? eq(trainingEvents.programId, input.programId)
+          : undefined,
         lt(trainingEvents.startsAt, to),
         gt(trainingEvents.endsAt, from),
       ),
@@ -391,7 +424,12 @@ async function validatePlace(
     const [venue] = await getDatabase()
       .select({ id: venues.id })
       .from(venues)
-      .where(and(eq(venues.id, venueId), eq(venues.organizationId, context.organizationId)));
+      .where(
+        and(
+          eq(venues.id, venueId),
+          eq(venues.organizationId, context.organizationId),
+        ),
+      );
     if (!venue) notFound("This venue was not found.");
   }
   if (courtId) {
@@ -399,7 +437,12 @@ async function validatePlace(
       .select({ id: courts.id, venueId: courts.venueId })
       .from(courts)
       .innerJoin(venues, eq(venues.id, courts.venueId))
-      .where(and(eq(courts.id, courtId), eq(venues.organizationId, context.organizationId)));
+      .where(
+        and(
+          eq(courts.id, courtId),
+          eq(venues.organizationId, context.organizationId),
+        ),
+      );
     if (!court) notFound("This court was not found.");
     if (venueId && court.venueId !== venueId) {
       badRequest("The court is not at this venue.");
@@ -419,7 +462,10 @@ export async function addSession(
   }
   if (!isValidTimeZone(input.timezone)) badRequest("Unknown time zone.");
   if (input.programId) {
-    const program = await loadProgramRow(context.organizationId, input.programId);
+    const program = await loadProgramRow(
+      context.organizationId,
+      input.programId,
+    );
     const status = programStatus(program, context.now);
     if (status === "cancelled" || status === "archived") {
       conflict(`A ${status} program cannot get new sessions.`);
@@ -496,8 +542,10 @@ export async function cancelSession(
 ): Promise<Session> {
   const row = await loadEvent(context.organizationId, input.sessionId);
   await assertCanRun(context, { programId: row.programId, eventId: row.id });
-  if (row.status === "cancelled") return sessionOut(context.organizationId, row.id);
-  if (row.status === "completed") conflict("A completed session cannot be cancelled.");
+  if (row.status === "cancelled")
+    return sessionOut(context.organizationId, row.id);
+  if (row.status === "completed")
+    conflict("A completed session cannot be cancelled.");
   await getTransactionalDatabase().transaction(async (transaction) => {
     await cancelEvent(transaction, context, row, input.reason.trim());
     await audit(transaction, context, {
@@ -619,7 +667,8 @@ async function loadClubPlanVersion(organizationId: string, versionId: string) {
       ),
     );
   if (!version) notFound("This practice plan was not found.");
-  if (version.status === "archived") conflict("An archived plan cannot be attached.");
+  if (version.status === "archived")
+    conflict("An archived plan cannot be attached.");
   const blocks = await getDatabase()
     .select()
     .from(trainingPracticePlanBlocks)
@@ -637,7 +686,12 @@ async function loadClubPlanVersion(organizationId: string, versionId: string) {
     estimatedJumps: block.estimatedJumps ?? undefined,
   }));
   const totals = planTotals({ blocks: timeline, plannedMinutes: 1 });
-  return { ...version, load: totals.load, touches: totals.touches, jumps: totals.jumps };
+  return {
+    ...version,
+    load: totals.load,
+    touches: totals.touches,
+    jumps: totals.jumps,
+  };
 }
 
 export async function setSessionPlan(
@@ -652,7 +706,10 @@ export async function setSessionPlan(
   const plan = input.plan;
   const version =
     plan.mode === "plan"
-      ? await loadClubPlanVersion(context.organizationId, plan.practicePlanVersionId)
+      ? await loadClubPlanVersion(
+          context.organizationId,
+          plan.practicePlanVersionId,
+        )
       : undefined;
   await getTransactionalDatabase().transaction(async (transaction) => {
     const values =
@@ -768,7 +825,9 @@ async function computeConflicts(
   if (events.length === 0) return { conflicts: [], events: byId };
   const eventIds = events.map((event) => event.id);
   const from = events[0]!.startsAt;
-  const to = new Date(Math.max(...events.map((event) => event.endsAt.getTime())));
+  const to = new Date(
+    Math.max(...events.map((event) => event.endsAt.getTime())),
+  );
   const eventCoaches = await database
     .select()
     .from(trainingEventCoaches)
@@ -785,7 +844,9 @@ async function computeConflicts(
   }
   const coachIds = [...new Set([...coachIdsByEvent.values()].flat())];
   const venueIds = [
-    ...new Set(events.flatMap((event) => (event.venueId ? [event.venueId] : []))),
+    ...new Set(
+      events.flatMap((event) => (event.venueId ? [event.venueId] : [])),
+    ),
   ];
   const [profiles, stops, cover] = await Promise.all([
     coachIds.length
@@ -797,7 +858,10 @@ async function computeConflicts(
           .from(organizationStaffProfiles)
           .where(
             and(
-              eq(organizationStaffProfiles.organizationId, context.organizationId),
+              eq(
+                organizationStaffProfiles.organizationId,
+                context.organizationId,
+              ),
               inArray(organizationStaffProfiles.personId, coachIds),
             ),
           )
@@ -812,7 +876,10 @@ async function computeConflicts(
               inArray(courtPlayStops.venueId, venueIds),
               eq(courtPlayStops.status, "active"),
               lt(courtPlayStops.startsAt, to),
-              or(isNull(courtPlayStops.endsAt), gt(courtPlayStops.endsAt, from)),
+              or(
+                isNull(courtPlayStops.endsAt),
+                gt(courtPlayStops.endsAt, from),
+              ),
             ),
           )
       : Promise.resolve([]),
@@ -848,14 +915,21 @@ async function computeConflicts(
       ])
     : [[], []];
   const peopleById = await loadPeople(coachIds);
-  const profileByPerson = new Map(profiles.map((row) => [row.personId, row.id]));
+  const profileByPerson = new Map(
+    profiles.map((row) => [row.personId, row.id]),
+  );
   const covered = new Set(cover.map((row) => row.eventId));
   const conflicts: ComputedConflict[] = [];
   const overlaps = (event: EventRow, startsAt: Date, endsAt: Date | null) =>
     event.startsAt < (endsAt ?? new Date(8.64e15)) && event.endsAt > startsAt;
   for (const event of events) {
     const resolutions = resolutionsOf(event);
-    const add = (entry: Omit<ComputedConflict, "id" | "programId" | "sessionId" | "status">) => {
+    const add = (
+      entry: Omit<
+        ComputedConflict,
+        "id" | "programId" | "sessionId" | "status"
+      >,
+    ) => {
       const id = conflictId(entry.kind, event.id);
       const resolution =
         (resolutions[id] as Conflict["resolution"] | undefined) ??
@@ -890,9 +964,16 @@ async function computeConflicts(
       if (!profileId) continue;
       const name = peopleById.get(personId)?.displayName ?? "A coach";
       const blackout = blackouts.find(
-        (row) => row.staffProfileId === profileId && overlaps(event, row.startsAt, row.endsAt),
+        (row) =>
+          row.staffProfileId === profileId &&
+          overlaps(event, row.startsAt, row.endsAt),
       );
-      if (blackout && !conflicts.some((item) => item.id === conflictId("coach-blackout", event.id))) {
+      if (
+        blackout &&
+        !conflicts.some(
+          (item) => item.id === conflictId("coach-blackout", event.id),
+        )
+      ) {
         add({
           kind: "coach-blackout",
           description: `${name} is unavailable`,
@@ -904,9 +985,16 @@ async function computeConflicts(
         });
       }
       const away = timeOff.find(
-        (row) => row.staffProfileId === profileId && overlaps(event, row.startsAt, row.endsAt),
+        (row) =>
+          row.staffProfileId === profileId &&
+          overlaps(event, row.startsAt, row.endsAt),
       );
-      if (away && !conflicts.some((item) => item.id === conflictId("coach-time-off", event.id))) {
+      if (
+        away &&
+        !conflicts.some(
+          (item) => item.id === conflictId("coach-time-off", event.id),
+        )
+      ) {
         add({
           kind: "coach-time-off",
           description: `${name} has approved time off`,
@@ -971,7 +1059,10 @@ export async function resolveConflict(
 ): Promise<Conflict> {
   const program = await loadProgramRow(context.organizationId, input.programId);
   await assertCanRun(context, { programId: program.id });
-  const { conflicts, events } = await computeConflicts(context, input.programId);
+  const { conflicts, events } = await computeConflicts(
+    context,
+    input.programId,
+  );
   const found = conflicts.find((item) => item.id === input.conflictId);
   if (!found) notFound("This conflict was not found or no longer applies.");
   if (found.status === "resolved" && found.resolution === input.resolution) {
@@ -1010,11 +1101,17 @@ export async function resolveConflict(
     const startsAt = new Date(wallTimeToInstant(newDate, minute, tz));
     moved = {
       startsAt,
-      endsAt: new Date(startsAt.getTime() + (event.endsAt.getTime() - event.startsAt.getTime())),
+      endsAt: new Date(
+        startsAt.getTime() +
+          (event.endsAt.getTime() - event.startsAt.getTime()),
+      ),
     };
   }
   await getTransactionalDatabase().transaction(async (transaction) => {
-    const resolutions = { ...resolutionsOf(event), [found.id]: input.resolution };
+    const resolutions = {
+      ...resolutionsOf(event),
+      [found.id]: input.resolution,
+    };
     if (input.resolution === "drop-practice") {
       await cancelEvent(transaction, context, event, found.description);
     }
@@ -1052,7 +1149,10 @@ export async function resolveConflict(
     await transaction
       .update(trainingEvents)
       .set({
-        externalLoad: { ...event.externalLoad, conflictResolutions: resolutions },
+        externalLoad: {
+          ...event.externalLoad,
+          conflictResolutions: resolutions,
+        },
         ...(moved ?? {}),
         updatedAt: context.now,
       })
@@ -1091,7 +1191,11 @@ async function athletesOf(programId: string | null) {
       and(
         eq(trainingProgramParticipants.programId, programId),
         eq(trainingProgramParticipants.role, "athlete"),
-        inArray(trainingProgramParticipants.status, ["active", "invited", "completed"]),
+        inArray(trainingProgramParticipants.status, [
+          "active",
+          "invited",
+          "completed",
+        ]),
       ),
     )
     .limit(200);
@@ -1123,7 +1227,10 @@ export async function sessionOutcome(
           .select()
           .from(trainingPracticePlanBlocks)
           .where(
-            eq(trainingPracticePlanBlocks.practicePlanVersionId, row.practicePlanVersionId),
+            eq(
+              trainingPracticePlanBlocks.practicePlanVersionId,
+              row.practicePlanVersionId,
+            ),
           )
           .orderBy(asc(trainingPracticePlanBlocks.startsAtMinute))
       : Promise.resolve([]),
@@ -1138,7 +1245,10 @@ export async function sessionOutcome(
   const statusByPerson = new Map(
     responses.map((response) => [response.personId, response.attendanceStatus]),
   );
-  const recorded = (outcome?.blockOutcomes ?? []) as readonly Record<string, unknown>[];
+  const recorded = (outcome?.blockOutcomes ?? []) as readonly Record<
+    string,
+    unknown
+  >[];
   return {
     sessionId: row.id,
     plannedLoad: row.plannedLoad,
@@ -1172,7 +1282,9 @@ export async function sessionOutcome(
           : {}),
       };
     }),
-    ...(outcome?.notesMarkdown ? { notes: outcome.notesMarkdown.slice(0, 4_000) } : {}),
+    ...(outcome?.notesMarkdown
+      ? { notes: outcome.notesMarkdown.slice(0, 4_000) }
+      : {}),
     ...(outcome ? { recordedAt: outcome.updatedAt.toISOString() } : {}),
   };
 }
@@ -1183,11 +1295,14 @@ export async function recordSessionOutcome(
 ): Promise<Outcome> {
   const row = await loadEvent(context.organizationId, input.sessionId);
   await assertCanRun(context, { programId: row.programId, eventId: row.id });
-  if (row.status === "cancelled") conflict("A cancelled session has no outcome.");
+  if (row.status === "cancelled")
+    conflict("A cancelled session has no outcome.");
   if (row.startsAt > context.now) {
     conflict("Record what happened once the session has started.");
   }
-  const athletes = new Set((await athletesOf(row.programId)).map((a) => a.personId));
+  const athletes = new Set(
+    (await athletesOf(row.programId)).map((a) => a.personId),
+  );
   const existingResponses = await getDatabase()
     .select({ personId: trainingAthleteResponses.personId })
     .from(trainingAthleteResponses)
@@ -1203,7 +1318,10 @@ export async function recordSessionOutcome(
             .select({ id: trainingPracticePlanBlocks.id })
             .from(trainingPracticePlanBlocks)
             .where(
-              eq(trainingPracticePlanBlocks.practicePlanVersionId, row.practicePlanVersionId),
+              eq(
+                trainingPracticePlanBlocks.practicePlanVersionId,
+                row.practicePlanVersionId,
+              ),
             )
         ).map((block) => block.id)
       : [],
@@ -1249,7 +1367,9 @@ export async function recordSessionOutcome(
       ),
       blockOutcomes: input.blocks.map((block) => ({
         blockId: block.blockId,
-        ...(block.actualMinutes !== undefined ? { actualMinutes: block.actualMinutes } : {}),
+        ...(block.actualMinutes !== undefined
+          ? { actualMinutes: block.actualMinutes }
+          : {}),
         ...(block.outcome ? { outcome: block.outcome } : {}),
       })),
       notesMarkdown: input.notes?.trim() || null,
@@ -1298,7 +1418,11 @@ export async function athleteProgramIds(personIds: readonly string[]) {
     .where(
       and(
         inArray(trainingProgramParticipants.personId, [...personIds]),
-        inArray(trainingProgramParticipants.status, ["active", "invited", "completed"]),
+        inArray(trainingProgramParticipants.status, [
+          "active",
+          "invited",
+          "completed",
+        ]),
         ne(trainingPrograms.status, "draft"),
       ),
     )

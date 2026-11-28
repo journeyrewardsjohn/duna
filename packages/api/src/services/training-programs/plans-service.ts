@@ -31,7 +31,10 @@ import type {
   trainingProgramsSavePracticePlanInputSchema,
 } from "../../contracts/training-programs";
 import { executeIdempotent } from "../../idempotency";
-import { pinDrillVersions, visibleDrillCondition } from "../training-drills/access";
+import {
+  pinDrillVersions,
+  visibleDrillCondition,
+} from "../training-drills/access";
 import {
   BLOCK_KINDS,
   type BlockKind,
@@ -74,17 +77,23 @@ function kindOf(value: string): BlockKind {
 }
 
 /** Legacy plans stored `{}`: fall back to what the plan itself says. */
-export function assumptionsOf(row: Pick<PlanRow, "assumptions" | "targetLoad">): Assumptions {
+export function assumptionsOf(
+  row: Pick<PlanRow, "assumptions" | "targetLoad">,
+): Assumptions {
   const raw = row.assumptions ?? {};
   const number = (value: unknown, fallback: number, minimum: number) =>
     typeof value === "number" && Number.isInteger(value) && value >= minimum
       ? value
       : fallback;
   const level =
-    typeof raw.level === "string" && raw.level.trim() ? raw.level.trim().slice(0, 80) : "All levels";
+    typeof raw.level === "string" && raw.level.trim()
+      ? raw.level.trim().slice(0, 80)
+      : "All levels";
   const seasonWeek = number(raw.seasonWeek, 0, 1);
   const targetLoad =
-    typeof raw.targetLoad === "number" ? raw.targetLoad : (row.targetLoad ?? undefined);
+    typeof raw.targetLoad === "number"
+      ? raw.targetLoad
+      : (row.targetLoad ?? undefined);
   return {
     athletes: number(raw.athletes, 8, 1),
     courts: number(raw.courts, 1, 1),
@@ -107,7 +116,10 @@ async function canEdit(context: TrainingContext, plan: PlanRow) {
   }
 }
 
-async function loadPlan(organizationId: string, planId: string): Promise<PlanRow> {
+async function loadPlan(
+  organizationId: string,
+  planId: string,
+): Promise<PlanRow> {
   const [row] = await getDatabase()
     .select()
     .from(trainingPracticePlans)
@@ -134,12 +146,17 @@ export async function listPracticePlans(
     .from(trainingPracticePlans)
     .leftJoin(
       trainingPracticePlanVersions,
-      eq(trainingPracticePlanVersions.id, trainingPracticePlans.currentVersionId),
+      eq(
+        trainingPracticePlanVersions.id,
+        trainingPracticePlans.currentVersionId,
+      ),
     )
     .where(
       and(
         eq(trainingPracticePlans.organizationId, context.organizationId),
-        input.status ? eq(trainingPracticePlans.status, input.status) : undefined,
+        input.status
+          ? eq(trainingPracticePlans.status, input.status)
+          : undefined,
       ),
     )
     .orderBy(desc(trainingPracticePlans.updatedAt))
@@ -158,7 +175,10 @@ export async function listPracticePlans(
   };
 }
 
-function blockOut(block: BlockRow, drillIdByVersion: ReadonlyMap<string, string>) {
+function blockOut(
+  block: BlockRow,
+  drillIdByVersion: ReadonlyMap<string, string>,
+) {
   const drillId = block.drillVersionId
     ? drillIdByVersion.get(block.drillVersionId)
     : undefined;
@@ -175,12 +195,21 @@ function blockOut(block: BlockRow, drillIdByVersion: ReadonlyMap<string, string>
     plannedLoad: block.plannedLoad,
     ...(block.focus ? { focus: block.focus } : {}),
     ...(drillId ? { drillId, drillVersionId: block.drillVersionId! } : {}),
-    ...(block.estimatedTouches !== null ? { estimatedTouches: block.estimatedTouches } : {}),
-    ...(block.estimatedJumps !== null ? { estimatedJumps: block.estimatedJumps } : {}),
-    ...(block.estimatedMetres !== null ? { estimatedMetres: block.estimatedMetres } : {}),
-    estimateSource: block.estimateSource as Plan["blocks"][number]["estimateSource"],
+    ...(block.estimatedTouches !== null
+      ? { estimatedTouches: block.estimatedTouches }
+      : {}),
+    ...(block.estimatedJumps !== null
+      ? { estimatedJumps: block.estimatedJumps }
+      : {}),
+    ...(block.estimatedMetres !== null
+      ? { estimatedMetres: block.estimatedMetres }
+      : {}),
+    estimateSource:
+      block.estimateSource as Plan["blocks"][number]["estimateSource"],
     locked: block.locked,
-    ...(block.instructionsMarkdown ? { instructionsMarkdown: block.instructionsMarkdown } : {}),
+    ...(block.instructionsMarkdown
+      ? { instructionsMarkdown: block.instructionsMarkdown }
+      : {}),
   };
 }
 
@@ -193,7 +222,10 @@ export async function practicePlanDetail(
   return planFromRow(context, plan);
 }
 
-async function planFromRow(context: TrainingContext, plan: PlanRow): Promise<Plan> {
+async function planFromRow(
+  context: TrainingContext,
+  plan: PlanRow,
+): Promise<Plan> {
   const database = getDatabase();
   const [version] = plan.currentVersionId
     ? await database
@@ -207,7 +239,10 @@ async function planFromRow(context: TrainingContext, plan: PlanRow): Promise<Pla
       .select()
       .from(trainingPracticePlanBlocks)
       .where(eq(trainingPracticePlanBlocks.practicePlanVersionId, version.id))
-      .orderBy(trainingPracticePlanBlocks.startsAtMinute, trainingPracticePlanBlocks.sequence)
+      .orderBy(
+        trainingPracticePlanBlocks.startsAtMinute,
+        trainingPracticePlanBlocks.sequence,
+      )
       .limit(200),
     database
       .select({
@@ -219,7 +254,10 @@ async function planFromRow(context: TrainingContext, plan: PlanRow): Promise<Pla
       .from(trainingEvents)
       .innerJoin(
         trainingPracticePlanVersions,
-        eq(trainingPracticePlanVersions.id, trainingEvents.practicePlanVersionId),
+        eq(
+          trainingPracticePlanVersions.id,
+          trainingEvents.practicePlanVersionId,
+        ),
       )
       .where(
         and(
@@ -232,15 +270,24 @@ async function planFromRow(context: TrainingContext, plan: PlanRow): Promise<Pla
       .limit(1),
   ]);
   const versionIds = [
-    ...new Set(blocks.flatMap((block) => (block.drillVersionId ? [block.drillVersionId] : []))),
+    ...new Set(
+      blocks.flatMap((block) =>
+        block.drillVersionId ? [block.drillVersionId] : [],
+      ),
+    ),
   ];
   const drillVersions = versionIds.length
     ? await database
-        .select({ id: trainingDrillVersions.id, drillId: trainingDrillVersions.drillId })
+        .select({
+          id: trainingDrillVersions.id,
+          drillId: trainingDrillVersions.drillId,
+        })
         .from(trainingDrillVersions)
         .where(inArray(trainingDrillVersions.id, versionIds))
     : [];
-  const drillIdByVersion = new Map(drillVersions.map((row) => [row.id, row.drillId]));
+  const drillIdByVersion = new Map(
+    drillVersions.map((row) => [row.id, row.drillId]),
+  );
   const used = usage[0];
   let phase: Plan["phase"];
   if (used?.programId) {
@@ -324,116 +371,125 @@ export async function savePracticePlan(
     execute: async () => {
       const planId = existing?.id ?? crypto.randomUUID();
       const versionId = crypto.randomUUID();
-      const durationMinutes = Math.min(720, Math.max(1, timelineMinutes(input.blocks)));
+      const durationMinutes = Math.min(
+        720,
+        Math.max(1, timelineMinutes(input.blocks)),
+      );
       const totals = planTotals({
         blocks: input.blocks,
         plannedMinutes: durationMinutes,
         targetLoad: input.targetLoad,
       });
-      const version = await getTransactionalDatabase().transaction(async (transaction) => {
-        if (existing) {
-          const [locked] = await transaction
-            .select()
-            .from(trainingPracticePlans)
-            .where(eq(trainingPracticePlans.id, existing.id))
-            .for("update");
-          assertTransition(locked!.status, input.status);
-        } else {
-          await transaction.insert(trainingPracticePlans).values({
-            id: planId,
-            organizationId: context.organizationId,
-            slug: slugify(input.title, planId),
-            title: input.title.trim(),
-            purpose: input.purpose,
-            targetAudience: input.targetAudience,
-            status: "draft",
-            durationMinutes,
-            plannedLoad: totals.load,
+      const version = await getTransactionalDatabase().transaction(
+        async (transaction) => {
+          if (existing) {
+            const [locked] = await transaction
+              .select()
+              .from(trainingPracticePlans)
+              .where(eq(trainingPracticePlans.id, existing.id))
+              .for("update");
+            assertTransition(locked!.status, input.status);
+          } else {
+            await transaction.insert(trainingPracticePlans).values({
+              id: planId,
+              organizationId: context.organizationId,
+              slug: slugify(input.title, planId),
+              title: input.title.trim(),
+              purpose: input.purpose,
+              targetAudience: input.targetAudience,
+              status: "draft",
+              durationMinutes,
+              plannedLoad: totals.load,
+              createdByPersonId: context.actor.personId,
+              createdAt: context.now,
+              updatedAt: context.now,
+            });
+          }
+          const [max] = await transaction
+            .select({
+              max: sql<number>`coalesce(max(${trainingPracticePlanVersions.version}), 0)::int`,
+            })
+            .from(trainingPracticePlanVersions)
+            .where(eq(trainingPracticePlanVersions.practicePlanId, planId));
+          const number = (max?.max ?? 0) + 1;
+          await transaction.insert(trainingPracticePlanVersions).values({
+            id: versionId,
+            practicePlanId: planId,
+            version: number,
+            snapshot: { ...request, totals },
+            changeNote: input.changeNote?.trim() || null,
             createdByPersonId: context.actor.personId,
             createdAt: context.now,
-            updatedAt: context.now,
           });
-        }
-        const [max] = await transaction
-          .select({
-            max: sql<number>`coalesce(max(${trainingPracticePlanVersions.version}), 0)::int`,
-          })
-          .from(trainingPracticePlanVersions)
-          .where(eq(trainingPracticePlanVersions.practicePlanId, planId));
-        const number = (max?.max ?? 0) + 1;
-        await transaction.insert(trainingPracticePlanVersions).values({
-          id: versionId,
-          practicePlanId: planId,
-          version: number,
-          snapshot: { ...request, totals },
-          changeNote: input.changeNote?.trim() || null,
-          createdByPersonId: context.actor.personId,
-          createdAt: context.now,
-        });
-        if (input.blocks.length > 0) {
-          await transaction.insert(trainingPracticePlanBlocks).values(
-            input.blocks.map((block, index) => ({
-              practicePlanVersionId: versionId,
-              drillVersionId: pins[index]?.drillVersionId ?? null,
-              sequence: block.sequence,
-              lane: block.lane,
-              title: block.title.trim(),
-              kind: block.kind,
-              startsAtMinute: block.startsAtMinute,
-              durationMinutes: block.durationMinutes,
-              transitionMinutes: block.transitionMinutes,
-              intensity: block.intensity,
-              plannedLoad: blockLoad(block.intensity),
-              instructionsMarkdown: block.instructionsMarkdown?.trim() || null,
-              focus: block.focus?.trim() || null,
-              estimatedTouches: block.estimatedTouches ?? null,
-              estimatedJumps: block.estimatedJumps ?? null,
-              estimatedMetres: block.estimatedMetres ?? null,
-              estimateSource: block.estimateSource,
-              locked: block.locked,
-              createdAt: context.now,
-            })),
-          );
-        }
-        await transaction
-          .update(trainingPracticePlans)
-          .set({
-            title: input.title.trim(),
-            purpose: input.purpose,
-            targetAudience: input.targetAudience,
-            status: input.status,
-            durationMinutes,
-            plannedLoad: totals.load,
-            assumptions: input.assumptions,
-            targetLoad: input.targetLoad ?? null,
-            currentVersionId: versionId,
-            ...(input.status === "published" && existing?.status !== "published"
-              ? { publishedAt: context.now }
-              : {}),
-            ...(input.status === "archived" ? { archivedAt: context.now } : {}),
-            updatedAt: context.now,
-          })
-          .where(eq(trainingPracticePlans.id, planId));
-        const transition =
-          existing && existing.status !== input.status
-            ? input.status === "published"
-              ? "training-plan.published"
-              : input.status === "archived"
-                ? "training-plan.archived"
-                : "training-plan.status-changed"
-            : existing
-              ? "training-plan.versioned"
-              : "training-plan.created";
-        await audit(transaction, context, {
-          action: transition,
-          entityType: "training-practice-plan",
-          entityId: planId,
-          ...(existing ? { before: { status: existing.status } } : {}),
-          after: { status: input.status, version: number },
-          reason: `Saved version ${number} (${input.blocks.length} blocks, ${durationMinutes} minutes).`,
-        });
-        return number;
-      });
+          if (input.blocks.length > 0) {
+            await transaction.insert(trainingPracticePlanBlocks).values(
+              input.blocks.map((block, index) => ({
+                practicePlanVersionId: versionId,
+                drillVersionId: pins[index]?.drillVersionId ?? null,
+                sequence: block.sequence,
+                lane: block.lane,
+                title: block.title.trim(),
+                kind: block.kind,
+                startsAtMinute: block.startsAtMinute,
+                durationMinutes: block.durationMinutes,
+                transitionMinutes: block.transitionMinutes,
+                intensity: block.intensity,
+                plannedLoad: blockLoad(block.intensity),
+                instructionsMarkdown:
+                  block.instructionsMarkdown?.trim() || null,
+                focus: block.focus?.trim() || null,
+                estimatedTouches: block.estimatedTouches ?? null,
+                estimatedJumps: block.estimatedJumps ?? null,
+                estimatedMetres: block.estimatedMetres ?? null,
+                estimateSource: block.estimateSource,
+                locked: block.locked,
+                createdAt: context.now,
+              })),
+            );
+          }
+          await transaction
+            .update(trainingPracticePlans)
+            .set({
+              title: input.title.trim(),
+              purpose: input.purpose,
+              targetAudience: input.targetAudience,
+              status: input.status,
+              durationMinutes,
+              plannedLoad: totals.load,
+              assumptions: input.assumptions,
+              targetLoad: input.targetLoad ?? null,
+              currentVersionId: versionId,
+              ...(input.status === "published" &&
+              existing?.status !== "published"
+                ? { publishedAt: context.now }
+                : {}),
+              ...(input.status === "archived"
+                ? { archivedAt: context.now }
+                : {}),
+              updatedAt: context.now,
+            })
+            .where(eq(trainingPracticePlans.id, planId));
+          const transition =
+            existing && existing.status !== input.status
+              ? input.status === "published"
+                ? "training-plan.published"
+                : input.status === "archived"
+                  ? "training-plan.archived"
+                  : "training-plan.status-changed"
+              : existing
+                ? "training-plan.versioned"
+                : "training-plan.created";
+          await audit(transaction, context, {
+            action: transition,
+            entityType: "training-practice-plan",
+            entityId: planId,
+            ...(existing ? { before: { status: existing.status } } : {}),
+            after: { status: input.status, version: number },
+            reason: `Saved version ${number} (${input.blocks.length} blocks, ${durationMinutes} minutes).`,
+          });
+          return number;
+        },
+      );
       log.info("training-programs.plan.saved", {
         organizationId: context.organizationId,
         practicePlanId: planId,
@@ -529,7 +585,9 @@ export async function proposePracticePlan(
   return {
     id,
     slug: "proposal",
-    title: input.focus?.trim() ? `${input.focus.trim()} practice` : "New practice",
+    title: input.focus?.trim()
+      ? `${input.focus.trim()} practice`
+      : "New practice",
     status: "draft",
     durationMinutes: input.durationMinutes,
     plannedLoad: totals.load,
@@ -552,9 +610,15 @@ export async function proposePracticePlan(
       intensity: block.intensity,
       plannedLoad: block.plannedLoad,
       ...(block.focus ? { focus: block.focus } : {}),
-      ...(block.drillId ? { drillId: block.drillId, drillVersionId: block.drillVersionId! } : {}),
-      ...(block.estimatedTouches !== undefined ? { estimatedTouches: block.estimatedTouches } : {}),
-      ...(block.estimatedJumps !== undefined ? { estimatedJumps: block.estimatedJumps } : {}),
+      ...(block.drillId
+        ? { drillId: block.drillId, drillVersionId: block.drillVersionId! }
+        : {}),
+      ...(block.estimatedTouches !== undefined
+        ? { estimatedTouches: block.estimatedTouches }
+        : {}),
+      ...(block.estimatedJumps !== undefined
+        ? { estimatedJumps: block.estimatedJumps }
+        : {}),
       estimateSource: block.estimateSource,
       locked: false,
     })),

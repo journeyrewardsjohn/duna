@@ -4,7 +4,12 @@
  * guardian of (`guardianships`), across clubs. Draft programs are never
  * shown. Nothing here is organisation-scoped: the person is the scope.
  */
-import { getDatabase, guardianships, trainingEvents, trainingPrograms } from "@duna/db";
+import {
+  getDatabase,
+  guardianships,
+  trainingEvents,
+  trainingPrograms,
+} from "@duna/db";
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import type { z } from "zod";
 import type {
@@ -13,14 +18,24 @@ import type {
 } from "../../contracts/training-programs";
 import type { ApiActor } from "../../context";
 import { programSummaries } from "./programs-service";
-import { athleteProgramIds, buildSessions, SESSION_LIST_LIMIT, SESSION_WINDOW_DAYS } from "./sessions-service";
+import {
+  athleteProgramIds,
+  buildSessions,
+  SESSION_LIST_LIMIT,
+  SESSION_WINDOW_DAYS,
+} from "./sessions-service";
 import { badRequest } from "./shared";
 
 export async function followedPeople(actor: ApiActor): Promise<string[]> {
   const minors = await getDatabase()
     .select({ minorId: guardianships.minorId })
     .from(guardianships)
-    .where(and(eq(guardianships.guardianId, actor.personId), eq(guardianships.verified, true)))
+    .where(
+      and(
+        eq(guardianships.guardianId, actor.personId),
+        eq(guardianships.verified, true),
+      ),
+    )
     .limit(20);
   return [actor.personId, ...minors.map((row) => row.minorId)];
 }

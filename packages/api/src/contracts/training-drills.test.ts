@@ -1,4 +1,5 @@
 import { trainingDrillsDemo } from "@duna/core/demo/training-drills";
+import { validateTrainingScene } from "@duna/core/training-scene";
 import {
   trainingContentStatusEnum,
   trainingDrillListingPricings,
@@ -45,6 +46,21 @@ describe("training-drills contract and demo fixtures (W3-0)", () => {
     for (const item of demo.store) trainingDrillsStoreItemSchema.parse(item);
     for (const purchase of demo.purchases)
       trainingDrillsPurchaseSchema.parse(purchase);
+  });
+
+  it("is rich enough for the screens: thirty drills, real v2 scenes whose status matches the validator", () => {
+    expect(demo.summaries.length).toBeGreaterThanOrEqual(30);
+    expect(demo.scenes.length).toBeGreaterThanOrEqual(5);
+    for (const scene of demo.scenes) {
+      const result = validateTrainingScene(scene.document);
+      if (scene.validationStatus === "valid") expect(result.ok).toBe(true);
+      if (scene.validationStatus === "invalid") {
+        expect(result.ok).toBe(false);
+        expect(result.issues.map((issue) => issue.rule)).toContain(
+          scene.validationIssues[0]!.rule,
+        );
+      }
+    }
   });
 
   it("covers every state of every state machine", () => {

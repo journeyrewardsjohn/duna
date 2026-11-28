@@ -82,9 +82,7 @@ export function dateInRanges(
   date: string,
   ranges: readonly DateRange[],
 ): boolean {
-  return ranges.some(
-    (range) => date >= range.startsOn && date <= range.endsOn,
-  );
+  return ranges.some((range) => date >= range.startsOn && date <= range.endsOn);
 }
 
 /**
@@ -124,7 +122,9 @@ export function generateOccurrences(input: {
         localDate: date,
         startMinute,
         endMinute,
-        startsAt: new Date(wallTimeToInstant(date, startMinute, input.timezone)),
+        startsAt: new Date(
+          wallTimeToInstant(date, startMinute, input.timezone),
+        ),
         endsAt: new Date(wallTimeToInstant(date, endMinute, input.timezone)),
         ...(slot.venueId ? { venueId: slot.venueId } : {}),
         ...(slot.courtIds?.[0] ? { courtId: slot.courtIds[0] } : {}),
@@ -210,7 +210,10 @@ export interface ProgramWeek {
 }
 
 /** Weeks numbered from the start date, the last one partial if needed. */
-export function programWeeks(startDate: string, endDate: string): ProgramWeek[] {
+export function programWeeks(
+  startDate: string,
+  endDate: string,
+): ProgramWeek[] {
   const span = daysBetween(startDate, endDate);
   if (span < 0) return [];
   const count = Math.min(105, Math.floor(span / 7) + 1);

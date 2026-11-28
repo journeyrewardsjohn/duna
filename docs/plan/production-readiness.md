@@ -294,6 +294,16 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 - Owner decisions: an invisible bot challenge on claim (none exists in the repo); the promotion rule
   from candidate to public listing (spec: three confirmed matches or one staff approval) waits for B9.
 
+### Training programs, practice plans and the drill library (B4/B5, 28 November 2026)
+
+- Migration `0121_training_library_indexes` (additive: six indexes, two of them trigram) must run
+  before the deploy; it was not rehearsed on a Neon branch by B4/B5 (left to the orchestrator).
+- `TRAINING_MARKETPLACE_FEE_BPS` (basis points, e.g. `1500`): the owner's marketplace fee on paid
+  drill listings. Unset, paid listings answer "not configured"; free listings work.
+- Owner decisions: who records the "Duna review" decision on a drill (no admin procedure yet); how
+  a paid drill purchase reaches catalog checkout (listings carry no catalog item); scheduling a job
+  that marks ended programs `completed` (reads already report them as completed).
+
 ### WorkOS
 
 1. [RBL] Create/promote the WorkOS Production environment; set `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_COOKIE_PASSWORD` (new random, >= 32 chars) in Vercel `duna-web` AND `duna-hq` Production, then redeploy both.
