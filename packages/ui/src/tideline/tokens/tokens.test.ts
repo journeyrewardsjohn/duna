@@ -74,12 +74,29 @@ describe("Tideline token pipeline", () => {
     );
   });
 
+  it("every scope's font tokens keep the faces the app loaded", () => {
+    // A nested .td (dark, live, hq zone) must not swap a next/font face for
+    // a literal family name that next/font does not serve.
+    for (const family of ["ui", "display", "numeric", "brand", "mono"]) {
+      const loaded = family === "brand" || family === "mono" ? family : "ui";
+      expect(css).toMatch(
+        new RegExp(`--td-font-${family}:\\s*var\\(\\s*--duna-font-${loaded},`),
+      );
+    }
+  });
+
   it("tokens.root.css carries the same --td-* values on :root, and nothing else", () => {
     const root = read("tokens.root.css");
     expect(root).not.toContain("@layer");
     expect(root).not.toMatch(/color-scheme/);
-    // next/font defines the families on <html>; the root sheet must not.
-    expect(root).not.toMatch(/--td-font-(?:ui|brand|mono|display|numeric):/);
+    // The family tokens read the faces next/font loads on <html>.
+    expect(root).toMatch(/--td-font-ui:\s*var\(\s*--duna-font-ui,\s*"Geist"/);
+    expect(root).toMatch(
+      /--td-font-brand:\s*var\(\s*--duna-font-brand,\s*"Jost"/,
+    );
+    expect(root).toMatch(
+      /--td-font-mono:\s*var\(\s*--duna-font-mono,\s*"Geist Mono"/,
+    );
     const declarations = root.match(/^\s+[a-z-]+(?=:)/gm) ?? [];
     expect(declarations.length).toBeGreaterThan(200);
     expect(declarations.every((name) => name.trim().startsWith("--td-"))).toBe(
@@ -98,8 +115,14 @@ describe("Tideline token pipeline", () => {
     // Every colour role the library declares has the same value at the root.
     const roleLines = (sheet: string) =>
       new Set(
-        (sheet.match(/^\s+--td-[a-z0-9-]+: [^;]+;/gm) ?? []).map((line) =>
-          line.trim(),
+        // A declaration may wrap over several lines; compare it as one.
+        (sheet.match(/^\s+--td-[a-z0-9-]+:[^;]+;/gm) ?? []).map((line) =>
+          line
+            .trim()
+            .replaceAll(/\s+/g, " ")
+            .replaceAll(/\(\s/g, "(")
+            .replaceAll(/,\s\)/g, ")")
+            .replace(/:\s*/, ": "),
         ),
       );
     const library = roleLines(css);
