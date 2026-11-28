@@ -66,6 +66,31 @@ separate release gates.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 
+## Component gallery end-to-end
+
+The `gallery-e2e` job in `.github/workflows/verify.yml` builds HQ once and runs
+only the specs that exercise the Tideline component library on the
+development-only gallery at `/tideline`: `tests/e2e/tideline-gallery.spec.ts`,
+`tideline-score-identity.spec.ts` and `tideline-time-conditions.spec.ts` (the
+interaction-kit cases are in the first), on the desktop, tablet and phone
+projects. HQ runs in demo mode with `TIDELINE_GALLERY=1`; the public web server
+is not started. The gallery is read per request (`apps/hq/app/tideline/gallery-guard.ts`),
+so the build is the ordinary production build. Without the flag those specs skip
+themselves, which is why `build-and-e2e` does not run them, and the ungated
+`tests/e2e/tideline-gallery-hidden.spec.ts` proves in that job that `/tideline`
+is a 404 with `noindex` on the production server.
+
+Run the same thing locally (after `pnpm --filter @duna/hq build`, or let it use
+the dev server by leaving `CI` unset):
+
+```bash
+pnpm test:e2e:gallery
+```
+
+Packages that change `packages/ui/src/tideline/**` or the gallery pages must keep
+this job green. Whether it is part of `release-gate` is stated in the job list in
+the workflow.
+
 ## Production deploys
 
 Vercel deploys `main` to production for `duna-hq` (root `apps/hq`) and
