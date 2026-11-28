@@ -18,10 +18,11 @@ import {
   type MapStyle,
 } from "@duna/ui/native/map";
 import Mapbox, { type MapState } from "@rnmapbox/maps";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePaneEdges } from "../../app/ui";
 import { useFind } from "./FindContext";
 import type { FindResult } from "./find-search";
+import { initialCamera } from "./map-region";
 import { useMapboxTokenState } from "./mapbox-token";
 
 const LOOK_KEY = "duna.find.map-look";
@@ -53,19 +54,6 @@ export function pinsToDraw(
     .slice(0, cap);
 }
 
-function bounds(results: readonly FindResult[]) {
-  const points = results.filter(
-    (result) => result.latitude !== undefined && result.longitude !== undefined,
-  );
-  if (points.length === 0) return null;
-  const lats = points.map((point) => point.latitude!);
-  const lngs = points.map((point) => point.longitude!);
-  return {
-    ne: [Math.max(...lngs), Math.max(...lats)] as [number, number],
-    sw: [Math.min(...lngs), Math.min(...lats)] as [number, number],
-  };
-}
-
 export function FindMap({
   compact = false,
 }: {
@@ -90,8 +78,61 @@ export function FindMap({
     () => pinsToDraw(find.results, find.selectedId),
     [find.results, find.selectedId],
   );
-  const frame = useMemo(() => bounds(pins), [pins]);
   const where = find.criteria.where;
+  const pinPoints = useMemo(
+    () =>
+      pins.map((pin) => ({
+        latitude: pin.latitude!,
+        longitude: pin.longitude!,
+      })),
+    [pins],
+  );
+  const camera = initialCamera({
+    pins: pinPoints,
+    where: where
+      ? { latitude: where.latitude, longitude: where.longitude }
+      : null,
+    compact,
+    edges,
+  });
+  const cameraRef = useRef<Mapbox.Camera>(null);
+  const fitted = useRef(false);
+  // A wide pane can mount the map before it has its size, and a camera
+  // set then opens at world zoom: fit again once the map has loaded.
+  const refit = () => {
+    if (compact) return;
+    if (camera.kind === "center") {
+      cameraRef.current?.setCamera({
+        centerCoordinate: camera.centerCoordinate,
+        zoomLevel: camera.zoomLevel,
+        animationDuration: 0,
+      });
+      return;
+    }
+    const { padding } = camera;
+    cameraRef.current?.fitBounds(
+      camera.ne,
+      camera.sw,
+      [padding.top, padding.right, padding.bottom, padding.left],
+      0,
+    );
+  };
+  const cameraProps =
+    camera.kind === "center"
+      ? {
+          centerCoordinate: camera.centerCoordinate,
+          zoomLevel: camera.zoomLevel,
+        }
+      : {
+          bounds: {
+            ne: camera.ne,
+            sw: camera.sw,
+            paddingTop: camera.padding.top,
+            paddingBottom: camera.padding.bottom,
+            paddingLeft: camera.padding.left,
+            paddingRight: camera.padding.right,
+          },
+        };
 
   if (map.state === "not-configured") {
     return (
@@ -139,6 +180,14 @@ export function FindMap({
       <Mapbox.MapView
         attributionPosition={{ bottom: 8, left: 8 }}
         logoPosition={{ bottom: 8, left: 92 }}
+        onDidFinishLoadingMap={refit}
+        onDidFinishLoadingStyle={refit}
+        onMapIdle={() => {
+          // The style can set its own camera as it loads; fit once after.
+          if (fitted.current) return;
+          fitted.current = true;
+          refit();
+        }}
         onCameraChanged={(state: MapState) => {
           const next = state.properties.zoom;
           if (Math.abs(next - zoom) >= 0.25) setZoom(next);
@@ -149,22 +198,11 @@ export function FindMap({
       >
         <Mapbox.Camera
           animationDuration={320}
-          {...(where
-            ? {
-                centerCoordinate: [where.longitude, where.latitude],
-                zoomLevel: 11,
-              }
-            : frame
-              ? {
-                  bounds: {
-                    ...frame,
-                    paddingTop: 64,
-                    paddingBottom: 64,
-                    paddingLeft: 48,
-                    paddingRight: 48,
-                  },
-                }
-              : { centerCoordinate: [-118.4, 33.86], zoomLevel: 9 })}
+          // A wide pane may create the map before it has its size: the
+          // first frame starts from the fitted region too.
+          {...(compact ? {} : { defaultSettings: cameraProps })}
+          ref={cameraRef}
+          {...cameraProps}
         />
         {find.location === "granted" ? <Mapbox.UserLocation visible /> : null}
         {pins.map((result) => {

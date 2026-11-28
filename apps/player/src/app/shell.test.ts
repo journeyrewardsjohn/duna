@@ -45,13 +45,15 @@ describe("route table", () => {
   });
 
   it("keeps every pre-shell screen reachable (no function dropped)", () => {
-    // Find (discover) was rebuilt by M-P1 and is no longer legacy.
+    // Find (discover) was rebuilt by M-P1 and is no longer legacy; scoring,
+    // results and the Sand Rating home by M-P4a.
     expect(ROUTES.discover.legacy).toBe(false);
+    for (const key of ["score", "result", "live", "performance"] as const)
+      expect(ROUTES[key].legacy).toBe(false);
     const legacy: RouteKey[] = [
       "coaches",
       "plans",
-      "score",
-      "performance",
+      "insights",
       "video",
       "health",
       "training",
@@ -62,6 +64,11 @@ describe("route table", () => {
       "predictions",
     ];
     for (const key of legacy) expect(ROUTES[key].legacy).toBe(true);
+    // The scorekeeper covers the window; a result opens from a list.
+    expect(ROUTES.live.presentation).toBe("window");
+    expect(routesForTab("play")).not.toContain("result");
+    expect(routesForTab("improve")).toContain("performance");
+    expect(routesForTab("improve")).not.toContain("insights");
     // Predictions is reached from Wallet and Performance, not a hub row.
     expect(routesForTab("connect")).not.toContain("predictions");
     expect(routesForTab("connect")).toContain("account");
@@ -209,5 +216,32 @@ describe("layout plan per size class and posture", () => {
     expect(
       homeArrangement(resolveLayout({ ...windows.iPadLarge, fontScale: 1.2 })),
     ).toBe("split");
+  });
+});
+
+describe("scoring routes (M-P4a)", () => {
+  it("opens the scorekeeper over the window and returns to the tab", () => {
+    const opened = run(
+      { type: "select-tab", tab: "improve" },
+      { type: "open", route: "live", nonce: 3 },
+    );
+    expect(opened.window?.entry.key).toBe("live");
+    expect(isRouteActive(opened, "live")).toBe(true);
+    expect(shellReducer(opened, { type: "close-window" }).tab).toBe("improve");
+  });
+
+  it("opens a result in Play with its match", () => {
+    const state = run({
+      type: "open",
+      route: "result",
+      targetId: "m1",
+      nonce: 4,
+    });
+    expect(state.tab).toBe("play");
+    expect(state.stacks.play).toEqual({
+      key: "result",
+      targetId: "m1",
+      nonce: 4,
+    });
   });
 });
