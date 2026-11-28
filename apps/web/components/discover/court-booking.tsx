@@ -38,6 +38,10 @@ import {
   startCourtCheckoutAction,
 } from "./court-actions";
 import { groupWords } from "./results";
+import {
+  BookingInvites,
+  type BookingInviteSeat,
+} from "../player/invite/booking-invites";
 
 type InvitedPlayer = {
   readonly key: string;
@@ -164,6 +168,10 @@ export function CourtBooking({
   const [policyScrolled, setPolicyScrolled] = useState(false);
   const [notice, setNotice] = useState(initialNotice ?? "");
   const [checkoutSessionId] = useState(initialCheckoutSessionId);
+  const [inviteSeats, setInviteSeats] = useState<readonly BookingInviteSeat[]>(
+    [],
+  );
+  const [inviteWhen, setInviteWhen] = useState<string>();
   const [quote, setQuote] = useState<CourtCheckoutQuote>();
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(true);
@@ -278,9 +286,7 @@ export function CourtBooking({
       if (response.status.complete) {
         if (initialCheckoutIntent === "host") {
           if (!response.status.match) {
-            setNotice(
-              "Payment received. Creating your match and sending invitations…",
-            );
+            setNotice("Payment received. Creating your match…");
             timer = setTimeout(check, 1_500);
             return;
           }
@@ -289,10 +295,12 @@ export function CourtBooking({
           );
           return;
         }
+        setInviteSeats(response.status.participants ?? []);
         setNotice("Payment received. Your court is confirmed.");
         return;
       }
       if (response.status.awaitingParticipants) {
+        setInviteSeats(response.status.participants ?? []);
         setNotice(
           "Your share is paid. The court stays reserved while the invited players finish their shares.",
         );
@@ -553,6 +561,10 @@ export function CourtBooking({
         );
         return;
       }
+      setInviteSeats(response.result.participants ?? []);
+      setInviteWhen(
+        `${new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: venue.timezone }).format(new Date(response.result.startsAt))} ${instantTime(response.result.startsAt, venue.timezone)}`,
+      );
       setNotice("Your court is confirmed.");
       setReviewOpen(false);
     });
@@ -805,6 +817,17 @@ export function CourtBooking({
         </p>
       ) : null}
 
+      {inviteSeats.length > 0 ? (
+        <BookingInvites
+          organizerName={subject?.displayName ?? ""}
+          origin={typeof window === "undefined" ? "" : window.location.origin}
+          place={venue.name}
+          seats={inviteSeats}
+          what="a court"
+          {...(inviteWhen ? { when: inviteWhen } : {})}
+        />
+      ) : null}
+
       {selectedSlots.length > 0 ? (
         <div className="vn-book__actions">
           {guest ? (
@@ -948,7 +971,8 @@ export function CourtBooking({
                     <span className="vn-court__text">
                       <span className="vn-court__name">Split it</span>
                       <span className="site-meta">
-                        You pay your share; everyone else gets a secure link.
+                        You pay your share, then send everyone else their link
+                        from your own phone.
                       </span>
                     </span>
                     <span className="vn-price">
