@@ -28,7 +28,10 @@ import { allocateProportionally, refundSplit } from "./refund-fees";
 type Obligation = typeof payObligations.$inferSelect;
 
 /** Refund records with money that have not been funded yet. */
-async function unfundedRefunds(organizationId: string | undefined, limit: number) {
+async function unfundedRefunds(
+  organizationId: string | undefined,
+  limit: number,
+) {
   return getDatabase()
     .select()
     .from(refundRecords)
@@ -37,7 +40,9 @@ async function unfundedRefunds(organizationId: string | undefined, limit: number
         eq(refundRecords.disposition, "original-payment"),
         inArray(refundRecords.status, ["pending", "succeeded"]),
         sql`${refundRecords.amountMinor} > 0`,
-        organizationId ? eq(refundRecords.organizationId, organizationId) : undefined,
+        organizationId
+          ? eq(refundRecords.organizationId, organizationId)
+          : undefined,
         sql`EXISTS (SELECT 1 FROM pay_obligations o WHERE o.order_id = ${refundRecords.orderId})`,
         sql`NOT EXISTS (SELECT 1 FROM pay_obligation_refunds r WHERE r.refund_record_id = ${refundRecords.id})`,
       ),
@@ -46,7 +51,10 @@ async function unfundedRefunds(organizationId: string | undefined, limit: number
     .limit(limit);
 }
 
-async function availableBalanceMinor(organizationId: string, excludeObligationId: string) {
+async function availableBalanceMinor(
+  organizationId: string,
+  excludeObligationId: string,
+) {
   const [row] = await getDatabase()
     .select({ total: sum(payReleaseTranches.amountMinor) })
     .from(payReleaseTranches)
@@ -85,7 +93,10 @@ export async function fundRefundRecord(input: {
   const shares = allocateProportionally(
     Math.min(
       input.refund.amountMinor,
-      obligations.reduce((total, obligation) => total + obligation.grossMinor, 0),
+      obligations.reduce(
+        (total, obligation) => total + obligation.grossMinor,
+        0,
+      ),
     ),
     obligations.map((obligation) => obligation.grossMinor),
   );
@@ -123,17 +134,27 @@ async function fundObligationRefund(input: {
         .limit(1)
     : [];
   const fundGross = Math.max(1, fund?.grossMinor ?? obligation.grossMinor);
-  const part = (value: number) => Math.round((value * obligation.grossMinor) / fundGross);
-  const serviceFee = Math.min(part(fund?.consumerFeeMinor ?? 0), obligation.grossMinor - obligation.taxMinor);
+  const part = (value: number) =>
+    Math.round((value * obligation.grossMinor) / fundGross);
+  const serviceFee = Math.min(
+    part(fund?.consumerFeeMinor ?? 0),
+    obligation.grossMinor - obligation.taxMinor,
+  );
   const itemsMinor = obligation.grossMinor - serviceFee - obligation.taxMinor;
-  const organizationFee = Math.min(part(fund?.organizationFeeMinor ?? 0), itemsMinor);
+  const organizationFee = Math.min(
+    part(fund?.organizationFeeMinor ?? 0),
+    itemsMinor,
+  );
   const processingFee = Math.min(
     Math.max(0, obligation.applicationFeeMinor - serviceFee - organizationFee),
     itemsMinor - organizationFee,
   );
   const itemsRefunded = Math.min(
     itemsMinor,
-    Math.round((input.refundGrossMinor * itemsMinor) / Math.max(1, obligation.grossMinor)),
+    Math.round(
+      (input.refundGrossMinor * itemsMinor) /
+        Math.max(1, obligation.grossMinor),
+    ),
   );
   // The refund executor today returns every component pro rata (see
   // refund-fees.ts); the club's share follows what actually happened.
@@ -158,9 +179,15 @@ async function fundObligationRefund(input: {
   if (clubBears <= 0) return 0;
   const held = Math.min(
     clubBears,
-    Math.max(0, obligation.proceedsMinor - obligation.releasedMinor - alreadyFunded),
+    Math.max(
+      0,
+      obligation.proceedsMinor - obligation.releasedMinor - alreadyFunded,
+    ),
   );
-  const sources: { source: "held-funds" | "available-balance" | "future-proceeds"; amount: number }[] = [];
+  const sources: {
+    source: "held-funds" | "available-balance" | "future-proceeds";
+    amount: number;
+  }[] = [];
   if (held > 0) sources.push({ source: "held-funds", amount: held });
   clubBears -= held;
   if (clubBears > 0) {
@@ -168,10 +195,12 @@ async function fundObligationRefund(input: {
       clubBears,
       await availableBalanceMinor(obligation.organizationId, obligation.id),
     );
-    if (available > 0) sources.push({ source: "available-balance", amount: available });
+    if (available > 0)
+      sources.push({ source: "available-balance", amount: available });
     clubBears -= available;
   }
-  if (clubBears > 0) sources.push({ source: "future-proceeds", amount: clubBears });
+  if (clubBears > 0)
+    sources.push({ source: "future-proceeds", amount: clubBears });
 
   return getTransactionalDatabase().transaction(async (transaction) => {
     await transaction.execute(
@@ -217,12 +246,22 @@ export async function fundPendingRefunds(input: {
 }): Promise<{ readonly funded: number; readonly failures: number }> {
   let funded = 0;
   let failures = 0;
-  for (const refund of await unfundedRefunds(input.organizationId, input.limit ?? 500)) {
+  for (const refund of await unfundedRefunds(
+    input.organizationId,
+    input.limit ?? 500,
+  )) {
     try {
-      funded += await fundRefundRecord({ refund, policy: input.policy, now: input.now });
+      funded += await fundRefundRecord({
+        refund,
+        policy: input.policy,
+        now: input.now,
+      });
     } catch (error) {
       failures += 1;
-      report(error, { event: "pay.refund.fundingFailed", fields: { refundRecordId: refund.id } });
+      report(error, {
+        event: "pay.refund.fundingFailed",
+        fields: { refundRecordId: refund.id },
+      });
     }
   }
   return { funded, failures };
@@ -259,11 +298,17 @@ export async function refundedProceedsForPlan(input: {
         .from(payObligations)
         .where(eq(payObligations.orderId, obligation.orderId)),
     ]);
-    const orderGross = Math.max(1, Number(siblings[0]?.total ?? obligation.grossMinor));
+    const orderGross = Math.max(
+      1,
+      Number(siblings[0]?.total ?? obligation.grossMinor),
+    );
     fundedGross = Math.round(
       (Number(records[0]?.total ?? 0) * obligation.grossMinor) / orderGross,
     );
   }
-  const unfundedGross = Math.max(0, input.refundedGrossShareMinor - fundedGross);
+  const unfundedGross = Math.max(
+    0,
+    input.refundedGrossShareMinor - fundedGross,
+  );
   return Math.min(obligation.proceedsMinor, funded + unfundedGross);
 }

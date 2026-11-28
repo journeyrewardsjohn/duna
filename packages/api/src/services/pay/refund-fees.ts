@@ -58,7 +58,10 @@ function assertSale(sale: RefundableSale): void {
   if (parts.some((value) => !Number.isSafeInteger(value) || value < 0)) {
     throw new Error("Refund amounts must be non-negative minor units.");
   }
-  if (sale.itemsMinor + sale.serviceFeeMinor + sale.taxMinor !== sale.grossMinor) {
+  if (
+    sale.itemsMinor + sale.serviceFeeMinor + sale.taxMinor !==
+    sale.grossMinor
+  ) {
     throw new Error("Gross must equal items + Service Fee + tax.");
   }
   if (sale.organizationFeeMinor + sale.processingFeeMinor > sale.itemsMinor) {
@@ -84,8 +87,16 @@ export function refundSplit(input: {
   }
   const taxRefundedMinor = share(sale.taxMinor, items, sale.itemsMinor);
   const serviceShare = share(sale.serviceFeeMinor, items, sale.itemsMinor);
-  const organizationFeeShare = share(sale.organizationFeeMinor, items, sale.itemsMinor);
-  const processingShare = share(sale.processingFeeMinor, items, sale.itemsMinor);
+  const organizationFeeShare = share(
+    sale.organizationFeeMinor,
+    items,
+    sale.itemsMinor,
+  );
+  const processingShare = share(
+    sale.processingFeeMinor,
+    items,
+    sale.itemsMinor,
+  );
 
   if (input.rule === "pro-rata") {
     const applicationFeeRefundedMinor =
@@ -102,12 +113,14 @@ export function refundSplit(input: {
   const serviceRefunded = input.cause === "player" ? 0 : serviceShare;
   // The club's proceeds fall by the items refunded less the Organization Fee
   // returned to it; it bears the processing cost unless Duna erred.
-  const processingBorneByDuna = input.cause === "duna-error" ? processingShare : 0;
+  const processingBorneByDuna =
+    input.cause === "duna-error" ? processingShare : 0;
   const clubBearsMinor = items - organizationFeeShare - processingBorneByDuna;
   return {
     playerRefundMinor: items + serviceRefunded + taxRefundedMinor,
     clubBearsMinor,
-    applicationFeeRefundedMinor: serviceRefunded + organizationFeeShare + processingBorneByDuna,
+    applicationFeeRefundedMinor:
+      serviceRefunded + organizationFeeShare + processingBorneByDuna,
     serviceFeeKeptMinor: serviceShare - serviceRefunded,
     taxRefundedMinor,
   };
@@ -117,7 +130,10 @@ export function refundSplit(input: {
  * Split an amount across parts in proportion to weights (largest remainder;
  * the parts always sum to the amount). Used for split refunds across lines.
  */
-export function allocateProportionally(amount: number, weights: readonly number[]): number[] {
+export function allocateProportionally(
+  amount: number,
+  weights: readonly number[],
+): number[] {
   if (!Number.isSafeInteger(amount) || amount < 0) {
     throw new Error("Amounts must be non-negative minor units.");
   }
@@ -125,14 +141,19 @@ export function allocateProportionally(amount: number, weights: readonly number[
   const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
   if (total <= 0) {
     const base = Math.floor(amount / weights.length);
-    return weights.map((_, index) => base + (index < amount - base * weights.length ? 1 : 0));
+    return weights.map(
+      (_, index) => base + (index < amount - base * weights.length ? 1 : 0),
+    );
   }
   const exact = weights.map((weight) => (amount * Math.max(0, weight)) / total);
   const floors = exact.map(Math.floor);
   let remainder = amount - floors.reduce((sum, value) => sum + value, 0);
   const order = exact
     .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
-    .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+    .sort(
+      (left, right) =>
+        right.fraction - left.fraction || left.index - right.index,
+    );
   for (const { index } of order) {
     if (remainder <= 0) break;
     floors[index]! += 1;

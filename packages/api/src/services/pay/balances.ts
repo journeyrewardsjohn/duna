@@ -35,7 +35,17 @@ import {
 } from "@duna/db";
 import { log, report } from "@duna/observability";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, gte, inArray, isNotNull, sql, sum } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  sql,
+  sum,
+} from "drizzle-orm";
 import type { z } from "zod";
 import { currencySchema } from "../../contracts";
 import type { payRecoverySchema, payReserveSchema } from "../../contracts/pay";
@@ -59,7 +69,12 @@ async function upsertReserveHold(input: {
   const [hold] = await database
     .select()
     .from(payHolds)
-    .where(and(eq(payHolds.reserveId, input.reserveId), eq(payHolds.status, "active")))
+    .where(
+      and(
+        eq(payHolds.reserveId, input.reserveId),
+        eq(payHolds.status, "active"),
+      ),
+    )
     .limit(1);
   if (hold) {
     if (hold.amountMinor !== input.amountMinor) {
@@ -67,7 +82,10 @@ async function upsertReserveHold(input: {
         .update(payHolds)
         .set({ amountMinor: input.amountMinor, updatedAt: input.now })
         .where(eq(payHolds.id, hold.id));
-      log.info("pay.hold.updated", { holdId: hold.id, organizationId: input.organizationId });
+      log.info("pay.hold.updated", {
+        holdId: hold.id,
+        organizationId: input.organizationId,
+      });
     }
     return;
   }
@@ -85,15 +103,24 @@ async function upsertReserveHold(input: {
       releaseAfter: input.releaseAfter,
     })
     .returning({ id: payHolds.id });
-  log.info("pay.hold.placed", { holdId: created?.id, organizationId: input.organizationId, kind: input.kind });
+  log.info("pay.hold.placed", {
+    holdId: created?.id,
+    organizationId: input.organizationId,
+    kind: input.kind,
+  });
 }
 
 /** Cash value of a club's unredeemed paid credits (packs and bundles). */
-export async function unredeemedPaidCreditValueMinor(organizationId: string): Promise<number> {
+export async function unredeemedPaidCreditValueMinor(
+  organizationId: string,
+): Promise<number> {
   const [row] = await getDatabase()
     .select({ total: sum(organizationCreditGrants.remainingValueMinor) })
     .from(organizationCreditGrants)
-    .innerJoin(catalogItems, eq(organizationCreditGrants.catalogItemId, catalogItems.id))
+    .innerJoin(
+      catalogItems,
+      eq(organizationCreditGrants.catalogItemId, catalogItems.id),
+    )
     .where(
       and(
         eq(organizationCreditGrants.organizationId, organizationId),
@@ -138,7 +165,9 @@ export async function refreshCreditReserve(input: {
         status: "active",
         percentBps: Math.max(1, input.policy.creditReserveBps),
         startsAt: input.now,
-        reviewAt: new Date(input.now.getTime() + input.policy.rollingReserveReviewDays * DAY_MS),
+        reviewAt: new Date(
+          input.now.getTime() + input.policy.rollingReserveReviewDays * DAY_MS,
+        ),
         // The standing reserve is stated in the Duna Pay terms (§7); the
         // terms accepted at onboarding are the notice.
         noticeReason:
@@ -155,7 +184,8 @@ export async function refreshCreditReserve(input: {
     kind: "unredeemed-credit-reserve",
     amountMinor: amount,
     currency: input.currency,
-    reason: "Unredeemed Credit Reserve: a share of unused paid credits is held for player refunds.",
+    reason:
+      "Unredeemed Credit Reserve: a share of unused paid credits is held for player refunds.",
     now: input.now,
   });
   return amount;
@@ -192,10 +222,19 @@ export async function organizationRiskRates(organizationId: string, now: Date) {
   const [disputed] = await database
     .select({ cases: count() })
     .from(payDisputeCases)
-    .where(and(eq(payDisputeCases.organizationId, organizationId), gte(payDisputeCases.openedAt, since)));
+    .where(
+      and(
+        eq(payDisputeCases.organizationId, organizationId),
+        gte(payDisputeCases.openedAt, since),
+      ),
+    );
   return {
-    refundRateBps: Math.round((Number(refunded?.total ?? 0) * 10_000) / chargedMinor),
-    disputeRateBps: Math.round((Number(disputed?.cases ?? 0) * 10_000) / charges),
+    refundRateBps: Math.round(
+      (Number(refunded?.total ?? 0) * 10_000) / chargedMinor,
+    ),
+    disputeRateBps: Math.round(
+      (Number(disputed?.cases ?? 0) * 10_000) / charges,
+    ),
   };
 }
 
@@ -225,13 +264,29 @@ export async function refreshRollingReserve(input: {
     if (reserve.endsAt && reserve.endsAt <= input.now) {
       await database
         .update(payReserves)
-        .set({ status: "released", releasedAt: input.now, updatedAt: input.now })
+        .set({
+          status: "released",
+          releasedAt: input.now,
+          updatedAt: input.now,
+        })
         .where(eq(payReserves.id, reserve.id));
       await database
         .update(payHolds)
-        .set({ status: "released", releasedAt: input.now, updatedAt: input.now })
-        .where(and(eq(payHolds.reserveId, reserve.id), eq(payHolds.status, "active")));
-      log.info("pay.reserve.released", { reserveId: reserve.id, organizationId: input.organizationId });
+        .set({
+          status: "released",
+          releasedAt: input.now,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(payHolds.reserveId, reserve.id),
+            eq(payHolds.status, "active"),
+          ),
+        );
+      log.info("pay.reserve.released", {
+        reserveId: reserve.id,
+        organizationId: input.organizationId,
+      });
       continue;
     }
     const windowStart = new Date(
@@ -253,7 +308,10 @@ export async function refreshRollingReserve(input: {
       organizationId: input.organizationId,
       reserveId: reserve.id,
       kind: "rolling-reserve",
-      amountMinor: basisPointShare(Number(sold?.total ?? 0), reserve.percentBps),
+      amountMinor: basisPointShare(
+        Number(sold?.total ?? 0),
+        reserve.percentBps,
+      ),
       currency: input.currency,
       reason: reserve.noticeReason,
       releaseAfter: reserve.endsAt ?? undefined,
@@ -285,7 +343,11 @@ export async function refreshRollingReserve(input: {
       evidence: { ...rates, measuredAt: input.now.toISOString() },
     })
     .returning({ id: payReserves.id });
-  log.warn("pay.reserve.proposed", { reserveId: proposed?.id, organizationId: input.organizationId, trigger });
+  log.warn("pay.reserve.proposed", {
+    reserveId: proposed?.id,
+    organizationId: input.organizationId,
+    trigger,
+  });
 }
 
 /**
@@ -311,15 +373,29 @@ export async function activateRollingReserve(input: {
       status: "active",
       startsAt: input.now,
       endsAt: new Date(input.now.getTime() + days * DAY_MS),
-      reviewAt: new Date(input.now.getTime() + input.policy.rollingReserveReviewDays * DAY_MS),
+      reviewAt: new Date(
+        input.now.getTime() + input.policy.rollingReserveReviewDays * DAY_MS,
+      ),
       noticeSentAt: input.noticeSentAt,
       decidedByPersonId: input.actorPersonId,
       updatedAt: input.now,
     })
-    .where(and(eq(payReserves.id, input.reserveId), eq(payReserves.status, "proposed")))
-    .returning({ id: payReserves.id, organizationId: payReserves.organizationId });
-  if (!updated.length) throw new Error("Only a proposed reserve can be activated.");
-  log.info("pay.reserve.activated", { reserveId: input.reserveId, organizationId: updated[0]!.organizationId });
+    .where(
+      and(
+        eq(payReserves.id, input.reserveId),
+        eq(payReserves.status, "proposed"),
+      ),
+    )
+    .returning({
+      id: payReserves.id,
+      organizationId: payReserves.organizationId,
+    });
+  if (!updated.length)
+    throw new Error("Only a proposed reserve can be activated.");
+  log.info("pay.reserve.activated", {
+    reserveId: input.reserveId,
+    organizationId: updated[0]!.organizationId,
+  });
 }
 
 /** The club asks for a review at any time (§5.4). */
@@ -334,14 +410,24 @@ export async function requestPayReserveReview(input: {
   const [reserve] = await database
     .select()
     .from(payReserves)
-    .where(and(eq(payReserves.id, input.reserveId), eq(payReserves.organizationId, input.organizationId)))
+    .where(
+      and(
+        eq(payReserves.id, input.reserveId),
+        eq(payReserves.organizationId, input.organizationId),
+      ),
+    )
     .limit(1);
   if (!reserve) throw new TRPCError({ code: "NOT_FOUND" });
   if (reserve.status !== "active" && reserve.status !== "under-review") {
-    throw new TRPCError({ code: "CONFLICT", message: "Only an active reserve can be reviewed." });
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Only an active reserve can be reviewed.",
+    });
   }
   const evidence = reserve.evidence as { reviewRequests?: unknown };
-  const requests = Array.isArray(evidence.reviewRequests) ? evidence.reviewRequests : [];
+  const requests = Array.isArray(evidence.reviewRequests)
+    ? evidence.reviewRequests
+    : [];
   await database
     .update(payReserves)
     .set({
@@ -350,13 +436,20 @@ export async function requestPayReserveReview(input: {
         ...evidence,
         reviewRequests: [
           ...requests,
-          { at: input.now.toISOString(), personId: input.actorPersonId, note: input.note },
+          {
+            at: input.now.toISOString(),
+            personId: input.actorPersonId,
+            note: input.note,
+          },
         ],
       },
       updatedAt: input.now,
     })
     .where(eq(payReserves.id, reserve.id));
-  log.info("pay.reserve.reviewRequested", { reserveId: reserve.id, organizationId: input.organizationId });
+  log.info("pay.reserve.reviewRequested", {
+    reserveId: reserve.id,
+    organizationId: input.organizationId,
+  });
   const list = await listPayReserves(input.organizationId);
   return list.find((entry) => entry.id === reserve.id)!;
 }
@@ -372,7 +465,10 @@ export interface ReconciliationLine {
 }
 
 /** What Duna's records say is still in the club's processor balance. */
-export async function expectedProcessorBalanceMinor(organizationId: string, currency: string) {
+export async function expectedProcessorBalanceMinor(
+  organizationId: string,
+  currency: string,
+) {
   const [open] = await getDatabase()
     .select({ total: sum(payReleaseTranches.amountMinor) })
     .from(payReleaseTranches)
@@ -380,7 +476,13 @@ export async function expectedProcessorBalanceMinor(organizationId: string, curr
       and(
         eq(payReleaseTranches.organizationId, organizationId),
         eq(payReleaseTranches.currency, currency),
-        inArray(payReleaseTranches.status, ["scheduled", "delivered", "releasable", "held", "cancelled"]),
+        inArray(payReleaseTranches.status, [
+          "scheduled",
+          "delivered",
+          "releasable",
+          "held",
+          "cancelled",
+        ]),
       ),
     );
   return Number(open?.total ?? 0);
@@ -413,9 +515,17 @@ export async function reconcileRecovery(input: {
     for (const row of pending.filter((entry) => entry.kind === "set-off")) {
       await database
         .update(payRecoveries)
-        .set({ status: "collected", collectedAt: input.now, updatedAt: input.now })
+        .set({
+          status: "collected",
+          collectedAt: input.now,
+          updatedAt: input.now,
+        })
         .where(eq(payRecoveries.id, row.id));
-      log.info("pay.recovery.collected", { recoveryId: row.id, organizationId: input.organizationId, source: "future-proceeds" });
+      log.info("pay.recovery.collected", {
+        recoveryId: row.id,
+        organizationId: input.organizationId,
+        source: "future-proceeds",
+      });
     }
     return;
   }
@@ -430,10 +540,15 @@ export async function reconcileRecovery(input: {
         amountMinor: owed,
         currency: input.currency,
         owedFor: "negative-balance",
-        dueAt: new Date(input.now.getTime() + input.policy.recoveryInvoiceDays * DAY_MS),
+        dueAt: new Date(
+          input.now.getTime() + input.policy.recoveryInvoiceDays * DAY_MS,
+        ),
       })
       .returning({ id: payRecoveries.id });
-    log.warn("pay.recovery.opened", { recoveryId: created?.id, organizationId: input.organizationId });
+    log.warn("pay.recovery.opened", {
+      recoveryId: created?.id,
+      organizationId: input.organizationId,
+    });
     return;
   }
   if (setOff.amountMinor !== owed) {
@@ -454,10 +569,15 @@ export async function reconcileRecovery(input: {
         amountMinor: owed,
         currency: input.currency,
         owedFor: "negative-balance",
-        dueAt: new Date(input.now.getTime() + input.policy.recoveryInvoiceDays * DAY_MS),
+        dueAt: new Date(
+          input.now.getTime() + input.policy.recoveryInvoiceDays * DAY_MS,
+        ),
       })
       .returning({ id: payRecoveries.id });
-    log.warn("pay.recovery.invoiceOpened", { recoveryId: invoice?.id, organizationId: input.organizationId });
+    log.warn("pay.recovery.invoiceOpened", {
+      recoveryId: invoice?.id,
+      organizationId: input.organizationId,
+    });
   }
 }
 
@@ -466,14 +586,24 @@ export async function reconcilePayBalances(input: {
   readonly policy: PayPolicySettings;
   readonly now: Date;
   readonly organizationId?: string;
-}): Promise<{ readonly lines: readonly ReconciliationLine[]; readonly drifted: number; readonly failures: number }> {
+}): Promise<{
+  readonly lines: readonly ReconciliationLine[];
+  readonly drifted: number;
+  readonly failures: number;
+}> {
   const clubs = await getDatabase()
-    .select({ id: organizations.id, currency: organizations.currency, stripeAccountId: organizations.stripeAccountId })
+    .select({
+      id: organizations.id,
+      currency: organizations.currency,
+      stripeAccountId: organizations.stripeAccountId,
+    })
     .from(organizations)
     .where(
       and(
         isNotNull(organizations.stripeAccountId),
-        input.organizationId ? eq(organizations.id, input.organizationId) : undefined,
+        input.organizationId
+          ? eq(organizations.id, input.organizationId)
+          : undefined,
         sql`EXISTS (SELECT 1 FROM pay_obligations o WHERE o.organization_id = ${organizations.id})`,
       ),
     );
@@ -482,26 +612,68 @@ export async function reconcilePayBalances(input: {
   for (const club of clubs) {
     const currency = club.currency.toUpperCase();
     try {
-      await refreshCreditReserve({ organizationId: club.id, currency, policy: input.policy, now: input.now });
-      await refreshRollingReserve({ organizationId: club.id, currency, policy: input.policy, now: input.now });
+      await refreshCreditReserve({
+        organizationId: club.id,
+        currency,
+        policy: input.policy,
+        now: input.now,
+      });
+      await refreshRollingReserve({
+        organizationId: club.id,
+        currency,
+        policy: input.policy,
+        now: input.now,
+      });
       if (!isStripeConfigured() || !club.stripeAccountId) continue;
-      const money = await loadConnectedAccountMoney({ accountId: club.stripeAccountId, currency });
+      const money = await loadConnectedAccountMoney({
+        accountId: club.stripeAccountId,
+        currency,
+      });
       const available = money.stripeAvailableMinor ?? 0;
       const processorMinor = available + (money.stripePendingMinor ?? 0);
-      const expectedMinor = await expectedProcessorBalanceMinor(club.id, currency);
-      const line = { organizationId: club.id, currency, processorMinor, expectedMinor, driftMinor: processorMinor - expectedMinor };
+      const expectedMinor = await expectedProcessorBalanceMinor(
+        club.id,
+        currency,
+      );
+      const line = {
+        organizationId: club.id,
+        currency,
+        processorMinor,
+        expectedMinor,
+        driftMinor: processorMinor - expectedMinor,
+      };
       lines.push(line);
-      if (Math.abs(line.driftMinor) > input.policy.reconciliationDriftToleranceMinor) {
+      if (
+        Math.abs(line.driftMinor) >
+        input.policy.reconciliationDriftToleranceMinor
+      ) {
         log.warn("pay.reconciliation.drift", line);
       }
-      await reconcileRecovery({ organizationId: club.id, currency, availableMinor: available, policy: input.policy, now: input.now });
+      await reconcileRecovery({
+        organizationId: club.id,
+        currency,
+        availableMinor: available,
+        policy: input.policy,
+        now: input.now,
+      });
     } catch (error) {
       failures += 1;
-      report(error, { event: "pay.reconciliation.failed", fields: { organizationId: club.id } });
+      report(error, {
+        event: "pay.reconciliation.failed",
+        fields: { organizationId: club.id },
+      });
     }
   }
-  const drifted = lines.filter((line) => Math.abs(line.driftMinor) > input.policy.reconciliationDriftToleranceMinor).length;
-  log.info("pay.reconciliation.completed", { clubs: clubs.length, drifted, failures });
+  const drifted = lines.filter(
+    (line) =>
+      Math.abs(line.driftMinor) >
+      input.policy.reconciliationDriftToleranceMinor,
+  ).length;
+  log.info("pay.reconciliation.completed", {
+    clubs: clubs.length,
+    drifted,
+    failures,
+  });
   return { lines, drifted, failures };
 }
 
@@ -514,18 +686,41 @@ function money(amountMinor: number, currency: string) {
   };
 }
 
-export async function listPayReserves(organizationId: string): Promise<z.infer<typeof payReserveSchema>[]> {
+export async function listPayReserves(
+  organizationId: string,
+): Promise<z.infer<typeof payReserveSchema>[]> {
   const database = getDatabase();
   const [reserves, holds, [club]] = await Promise.all([
-    database.select().from(payReserves).where(eq(payReserves.organizationId, organizationId)).orderBy(desc(payReserves.createdAt)),
     database
-      .select({ reserveId: payHolds.reserveId, amountMinor: payHolds.amountMinor })
+      .select()
+      .from(payReserves)
+      .where(eq(payReserves.organizationId, organizationId))
+      .orderBy(desc(payReserves.createdAt)),
+    database
+      .select({
+        reserveId: payHolds.reserveId,
+        amountMinor: payHolds.amountMinor,
+      })
       .from(payHolds)
-      .where(and(eq(payHolds.organizationId, organizationId), eq(payHolds.status, "active"), isNotNull(payHolds.reserveId))),
-    database.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, organizationId)).limit(1),
+      .where(
+        and(
+          eq(payHolds.organizationId, organizationId),
+          eq(payHolds.status, "active"),
+          isNotNull(payHolds.reserveId),
+        ),
+      ),
+    database
+      .select({ currency: organizations.currency })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1),
   ]);
   const held = new Map<string, number>();
-  for (const hold of holds) held.set(hold.reserveId!, (held.get(hold.reserveId!) ?? 0) + hold.amountMinor);
+  for (const hold of holds)
+    held.set(
+      hold.reserveId!,
+      (held.get(hold.reserveId!) ?? 0) + hold.amountMinor,
+    );
   return reserves.map((reserve) => ({
     id: reserve.id,
     kind: reserve.kind as z.infer<typeof payReserveSchema>["kind"],
@@ -541,7 +736,9 @@ export async function listPayReserves(organizationId: string): Promise<z.infer<t
   }));
 }
 
-export async function listPayRecoveries(organizationId: string): Promise<z.infer<typeof payRecoverySchema>[]> {
+export async function listPayRecoveries(
+  organizationId: string,
+): Promise<z.infer<typeof payRecoverySchema>[]> {
   const rows = await getDatabase()
     .select()
     .from(payRecoveries)

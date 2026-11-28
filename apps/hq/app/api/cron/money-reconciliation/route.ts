@@ -30,6 +30,10 @@ export async function GET(request: Request) {
   return NextResponse.json({
     status: result.failed || pay.failures || pay.drifted ? "attention" : "ok",
     ...result,
-    pay: { drifted: pay.drifted, failures: pay.failures, clubs: pay.lines.length },
+    pay: {
+      drifted: pay.drifted,
+      failures: pay.failures,
+      clubs: pay.lines.length,
+    },
   });
 }

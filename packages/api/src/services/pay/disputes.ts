@@ -30,7 +30,17 @@ import {
 import { assertBalancedJournal, type LedgerPosting } from "@duna/core";
 import { log, report } from "@duna/observability";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, isNull, lt, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import type { z } from "zod";
 import { ensureLedgerAccount } from "../../catalog-service";
 import { currencySchema } from "../../contracts";
@@ -45,7 +55,10 @@ import {
   reverseConnectedTransfer,
   submitProcessorDisputeEvidence,
 } from "../../payments";
-import { loadPayPolicySettings, type PayPolicySettings } from "./policy-settings";
+import {
+  loadPayPolicySettings,
+  type PayPolicySettings,
+} from "./policy-settings";
 
 type DisputeCase = typeof payDisputeCases.$inferSelect;
 type CaseStatus = DisputeCase["status"];
@@ -56,7 +69,9 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
 function num(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /** Processor status → case status (pure). */
@@ -74,9 +89,13 @@ export function disputeCaseStatus(
       return "warning-closed";
     case "under_review":
     case "warning_under_review":
-      return current === "evidence-submitted" ? "evidence-submitted" : "under-review";
+      return current === "evidence-submitted"
+        ? "evidence-submitted"
+        : "under-review";
     default:
-      return current === "evidence-submitted" ? "evidence-submitted" : "needs-response";
+      return current === "evidence-submitted"
+        ? "evidence-submitted"
+        : "needs-response";
   }
 }
 
@@ -91,7 +110,10 @@ export function disputeFee(balanceTransactions: unknown): {
   const fees = rows.map((row) => num(row.fee) ?? 0);
   const feeMinor = Math.max(0, fees[0] ?? 0);
   const total = fees.reduce((sum, fee) => sum + fee, 0);
-  return { feeMinor, feeReturned: rows.length > 1 && feeMinor > 0 && total <= 0 };
+  return {
+    feeMinor,
+    feeReturned: rows.length > 1 && feeMinor > 0 && total <= 0,
+  };
 }
 
 async function accounts(organizationId: string, currency: string) {
@@ -247,12 +269,19 @@ export async function synchronizePayDisputeCase(input: {
     .limit(1);
   const amountMinor = Math.max(0, num(input.object.amount) ?? 0);
   const currency = (str(input.object.currency) ?? order.currency).toUpperCase();
-  const { feeMinor, feeReturned } = disputeFee(input.object.balance_transactions);
-  const evidenceDetails = input.object.evidence_details as Record<string, unknown> | undefined;
+  const { feeMinor, feeReturned } = disputeFee(
+    input.object.balance_transactions,
+  );
+  const evidenceDetails = input.object.evidence_details as
+    Record<string, unknown> | undefined;
   const dueBySeconds = num(evidenceDetails?.due_by);
-  const evidenceDueBy = dueBySeconds ? new Date(dueBySeconds * 1_000) : undefined;
+  const evidenceDueBy = dueBySeconds
+    ? new Date(dueBySeconds * 1_000)
+    : undefined;
   const createdSeconds = num(input.object.created);
-  const openedAt = createdSeconds ? new Date(createdSeconds * 1_000) : input.now;
+  const openedAt = createdSeconds
+    ? new Date(createdSeconds * 1_000)
+    : input.now;
   const organizationDue = new Date(
     openedAt.getTime() + policy.disputeOrganizationEvidenceDays * DAY_MS,
   );
@@ -274,9 +303,13 @@ export async function synchronizePayDisputeCase(input: {
       currency,
       evidenceDueBy,
       organizationEvidenceDueBy:
-        evidenceDueBy && evidenceDueBy < organizationDue ? evidenceDueBy : organizationDue,
+        evidenceDueBy && evidenceDueBy < organizationDue
+          ? evidenceDueBy
+          : organizationDue,
       openedAt,
-      closedAt: CLOSED.has(disputeCaseStatus(processorStatus)) ? input.now : null,
+      closedAt: CLOSED.has(disputeCaseStatus(processorStatus))
+        ? input.now
+        : null,
       createdAt: input.now,
       updatedAt: input.now,
     })
@@ -308,8 +341,17 @@ export async function synchronizePayDisputeCase(input: {
     .where(eq(payDisputeCases.id, dispute.id))
     .limit(1);
   if (!dispute) return undefined;
-  if (nextStatus !== "warning-closed" && !processorStatus.startsWith("warning")) {
-    await openDisputeMoney({ dispute, organizationId, obligation, payment, now: input.now });
+  if (
+    nextStatus !== "warning-closed" &&
+    !processorStatus.startsWith("warning")
+  ) {
+    await openDisputeMoney({
+      dispute,
+      organizationId,
+      obligation,
+      payment,
+      now: input.now,
+    });
   }
   if (closing) {
     await closeDisputeMoney({ dispute, organizationId, now: input.now });
@@ -349,24 +391,34 @@ async function openDisputeMoney(input: {
       status: "active",
       amountMinor: owedMinor,
       currency: dispute.currency,
-      reason: "Card dispute opened: the amount and fee are held until it closes.",
+      reason:
+        "Card dispute opened: the amount and fee are held until it closes.",
       startsAt: input.now,
     });
     const claimed = await database
       .update(payDisputeCases)
       .set({ holdId, updatedAt: input.now })
-      .where(and(eq(payDisputeCases.id, dispute.id), isNull(payDisputeCases.holdId)))
+      .where(
+        and(eq(payDisputeCases.id, dispute.id), isNull(payDisputeCases.holdId)),
+      )
       .returning({ id: payDisputeCases.id });
     if (!claimed.length) {
       // Another delivery of the same webhook won: drop this duplicate hold.
       await database
         .update(payHolds)
-        .set({ status: "released", releasedAt: input.now, updatedAt: input.now })
+        .set({
+          status: "released",
+          releasedAt: input.now,
+          updatedAt: input.now,
+        })
         .where(eq(payHolds.id, holdId));
     }
   }
   if (dispute.transferReversalId || !input.payment.stripeTransferId) return;
-  const reversalMinor = Math.min(owedMinor, input.obligation?.proceedsMinor ?? owedMinor);
+  const reversalMinor = Math.min(
+    owedMinor,
+    input.obligation?.proceedsMinor ?? owedMinor,
+  );
   if (reversalMinor <= 0) return;
   try {
     const reversal = isStripeConfigured()
@@ -404,7 +456,10 @@ async function openDisputeMoney(input: {
     // stays, and reconciliation records the negative balance for recovery.
     report(error, {
       event: "pay.dispute.reversalFailed",
-      fields: { disputeCaseId: dispute.id, organizationId: input.organizationId },
+      fields: {
+        disputeCaseId: dispute.id,
+        organizationId: input.organizationId,
+      },
     });
   }
 }
@@ -422,7 +477,8 @@ async function closeDisputeMoney(input: {
   }
   const database = getDatabase();
   const won = dispute.status === "won";
-  if (dispute.holdId) await settleHold(dispute.holdId, won ? "released" : "applied", input.now);
+  if (dispute.holdId)
+    await settleHold(dispute.holdId, won ? "released" : "applied", input.now);
   const [reversalJournal] = dispute.reversalLedgerJournalId
     ? await database
         .select()
@@ -441,14 +497,20 @@ async function closeDisputeMoney(input: {
   const ledger = await accounts(input.organizationId, dispute.currency);
   let journalId: string | undefined;
   if (won && reversedMinor > 0) {
-    const keptFeeMinor = dispute.feeReturned ? 0 : Math.min(dispute.feeMinor, reversedMinor);
+    const keptFeeMinor = dispute.feeReturned
+      ? 0
+      : Math.min(dispute.feeMinor, reversedMinor);
     const backMinor = reversedMinor - keptFeeMinor;
     const [organization] = await database
       .select()
       .from(organizations)
       .where(eq(organizations.id, input.organizationId))
       .limit(1);
-    if (backMinor > 0 && organization?.stripeAccountId && isStripeConfigured()) {
+    if (
+      backMinor > 0 &&
+      organization?.stripeAccountId &&
+      isStripeConfigured()
+    ) {
       try {
         const transfer = await createConnectedTransfer({
           connectedAccountId: organization.stripeAccountId,
@@ -524,7 +586,11 @@ async function closeDisputeMoney(input: {
   });
 }
 
-async function settleHold(holdId: string, status: "released" | "applied", now: Date) {
+async function settleHold(
+  holdId: string,
+  status: "released" | "applied",
+  now: Date,
+) {
   await getDatabase()
     .update(payHolds)
     .set({ status, releasedAt: now, updatedAt: now })
@@ -537,13 +603,17 @@ export async function obligationDisputeTotals(obligationId: string): Promise<{
   readonly lostMinor: number;
 }> {
   const rows = await getDatabase()
-    .select({ status: payDisputeCases.status, amountMinor: payDisputeCases.amountMinor })
+    .select({
+      status: payDisputeCases.status,
+      amountMinor: payDisputeCases.amountMinor,
+    })
     .from(payDisputeCases)
     .where(eq(payDisputeCases.obligationId, obligationId));
   let openMinor = 0;
   let lostMinor = 0;
   for (const row of rows) {
-    if (row.status === "lost" || row.status === "accepted") lostMinor += row.amountMinor;
+    if (row.status === "lost" || row.status === "accepted")
+      lostMinor += row.amountMinor;
     else if (!CLOSED.has(row.status)) openMinor += row.amountMinor;
   }
   return { openMinor, lostMinor };
@@ -562,16 +632,24 @@ function money(amountMinor: number, currency: string) {
 }
 
 async function buyerFor(orderIds: readonly string[]) {
-  if (!orderIds.length) return new Map<string, { personId: string; displayName: string }>();
+  if (!orderIds.length)
+    return new Map<string, { personId: string; displayName: string }>();
   const rows = await getDatabase()
-    .select({ orderId: orders.id, personId: people.id, displayName: people.displayName })
+    .select({
+      orderId: orders.id,
+      personId: people.id,
+      displayName: people.displayName,
+    })
     .from(orders)
     .innerJoin(people, eq(orders.buyerPersonId, people.id))
     .where(inArray(orders.id, [...orderIds]));
   return new Map(
     rows
       .filter((row) => row.displayName)
-      .map((row) => [row.orderId, { personId: row.personId, displayName: row.displayName! }]),
+      .map((row) => [
+        row.orderId,
+        { personId: row.personId, displayName: row.displayName! },
+      ]),
   );
 }
 
@@ -604,7 +682,9 @@ function caseDetail(
   const evidence = row.evidence as { explanation?: unknown; files?: unknown };
   const files = Array.isArray(evidence.files)
     ? (evidence.files as { storageKey?: unknown; label?: unknown }[])
-        .filter((file) => typeof file.storageKey === "string" && file.storageKey)
+        .filter(
+          (file) => typeof file.storageKey === "string" && file.storageKey,
+        )
         .map((file) => ({
           storageKey: file.storageKey as string,
           label:
@@ -617,7 +697,9 @@ function caseDetail(
     ...caseSummary(row, buyer),
     evidence: {
       explanation:
-        typeof evidence.explanation === "string" ? evidence.explanation : undefined,
+        typeof evidence.explanation === "string"
+          ? evidence.explanation
+          : undefined,
       files,
     },
     holdId: row.holdId ?? undefined,
@@ -654,12 +736,18 @@ export async function listPayDisputes(
     .orderBy(desc(payDisputeCases.openedAt), desc(payDisputeCases.id))
     .limit(limit + 1);
   const page = rows.slice(0, limit);
-  const buyers = await buyerFor(page.flatMap((row) => (row.orderId ? [row.orderId] : [])));
+  const buyers = await buyerFor(
+    page.flatMap((row) => (row.orderId ? [row.orderId] : [])),
+  );
   const last = page.at(-1);
   return {
-    items: page.map((row) => caseSummary(row, row.orderId ? buyers.get(row.orderId) : undefined)),
+    items: page.map((row) =>
+      caseSummary(row, row.orderId ? buyers.get(row.orderId) : undefined),
+    ),
     nextCursor:
-      rows.length > limit && last ? `${last.openedAt.toISOString()}|${last.id}` : undefined,
+      rows.length > limit && last
+        ? `${last.openedAt.toISOString()}|${last.id}`
+        : undefined,
   };
 }
 
@@ -725,7 +813,9 @@ export async function submitPayDisputeEvidence(input: {
     disputeId: row.processorDisputeId,
     explanation: [
       input.explanation,
-      files.length ? `Supporting files held by the club: ${files.map((f) => f.label).join(", ")}` : "",
+      files.length
+        ? `Supporting files held by the club: ${files.map((f) => f.label).join(", ")}`
+        : "",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -735,7 +825,11 @@ export async function submitPayDisputeEvidence(input: {
     .update(payDisputeCases)
     .set({
       status: "evidence-submitted",
-      evidence: { explanation: input.explanation, files, idempotencyKey: input.idempotencyKey },
+      evidence: {
+        explanation: input.explanation,
+        files,
+        idempotencyKey: input.idempotencyKey,
+      },
       evidenceSubmittedAt: input.now,
       evidenceSubmittedByPersonId: input.actorPersonId,
       updatedAt: input.now,
