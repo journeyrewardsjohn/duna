@@ -34,8 +34,7 @@ address.
 `scripts/design-contracts/hq.ts` pins this: both layouts load the font module;
 `(next)`'s layout is a design-system document; nothing under `app/(next)`,
 nor `global-error` / `global-not-found`, imports a legacy sheet; `hq.css` has
-no `@import` and no important flag; `app/layout.tsx` and the old
-`legacy-bridge.css` do not exist.
+no `@import` and no important flag; `app/layout.tsx` does not exist.
 
 ## The document
 

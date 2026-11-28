@@ -92,7 +92,9 @@
     /*
      * Each filled variant sets its label colour on the button itself, for
      * links in every state and for every child, so a page's own `a` or text
-     * rules inside the layers cannot put the wrong label on the fill.
+     * rules inside the layers cannot put the wrong label on the fill. Against
+     * unlayered host CSS, legacy-bridge.css hands `color` and
+     * `-webkit-text-fill-color` back to these rules.
      */
 
     .td-btn--primary,

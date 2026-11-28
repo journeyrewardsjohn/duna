@@ -43,12 +43,13 @@ import { Button, Tideline, TidelineFonts } from "@duna/ui/tideline";
 Public import paths (`packages/ui/package.json` exports). HQ and Web both
 list `@duna/ui` in `transpilePackages`, so either app can use them:
 
-| Path                           | What it is                                                     |
-| ------------------------------ | -------------------------------------------------------------- |
-| `@duna/ui/tideline`            | Every component, hook and helper (`tideline/index.ts`)         |
-| `@duna/ui/tideline/styles.css` | The one stylesheet: tokens plus every family, in cascade order |
-| `@duna/ui/tideline/tokens`     | Resolved token values (TypeScript, no DOM; for React Native)   |
-| `@duna/ui/tideline/tokens.css` | The `--td-*` custom properties alone                           |
+| Path                                  | What it is                                                     |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `@duna/ui/tideline`                   | Every component, hook and helper (`tideline/index.ts`)         |
+| `@duna/ui/tideline/styles.css`        | The one stylesheet: tokens plus every family, in cascade order |
+| `@duna/ui/tideline/legacy-bridge.css` | The unlayered bridge for Web pages that still share legacy CSS |
+| `@duna/ui/tideline/tokens`            | Resolved token values (TypeScript, no DOM; for React Native)   |
+| `@duna/ui/tideline/tokens.css`        | The `--td-*` custom properties alone                           |
 
 The React Native entry (`@duna/ui/mobile`) and the package root (`@duna/ui`)
 never import Tideline; `styles.test.ts` fails if they do.
@@ -365,10 +366,12 @@ anything else. An app's own sheet for design-system screens (HQ:
 (`@layer ui-sdk, tideline, hq;`), so it can lay out a library part without
 `!important`.
 
-The unlayered legacy bridge is gone (S1, 28 November 2026): design-system
-screens live in a separate root layout (`app/(next)`) whose document carries
-no legacy CSS, so nothing needs handing back. See
-[`hq-shell.md`](hq-shell.md) and `docs/plan/legacy-styles.md`.
+HQ's design-system screens live in a separate root layout (`app/(next)`)
+whose document carries no legacy CSS, so they need no bridge
+([`hq-shell.md`](hq-shell.md)). `legacy-bridge.css`, a small unlayered file
+that uses `revert-layer` to hand properties back from unlayered global CSS,
+remains only for Web pages that still share a document with legacy sheets
+(today `apps/web/app/legal`); delete it when Web has its own `(next)` group.
 
 ## Gallery
 

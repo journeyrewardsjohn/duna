@@ -73,7 +73,6 @@ export const hq: SurfaceContract = {
         "apps/hq/app/(next)/hq.css is HQ's own token-based sheet: no imports, no !important",
     },
     { kind: "absent", path: "apps/hq/app/layout.tsx" },
-    { kind: "absent", path: "packages/ui/src/tideline/legacy-bridge.css" },
     {
       kind: "includes",
       file: "apps/hq/app/fonts.ts",
