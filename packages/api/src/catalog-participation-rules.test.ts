@@ -51,10 +51,20 @@ describe("participation configuration on catalog items", () => {
       allowCredits: true,
       creditCost: 3,
     });
+    const ladder = [
+      { minParticipants: 1, maxParticipants: 1, creditsPerPlayer: 3 },
+      { minParticipants: 2, maxParticipants: 6, creditsPerPlayer: 2 },
+      { minParticipants: 7, maxParticipants: 12, creditsPerPlayer: 1 },
+    ];
+    // Version 2, plus the 289 keys the HQ form still reads. No lock is
+    // stored: the session inherits the club default, then the refund window.
     expect(normalized.participation).toEqual({
+      version: 2,
+      unit: "player",
       minParticipants: 1,
       minimumPolicy: "run",
-      cutoffMinutesBeforeStart: 1_440,
+      waitlist: false,
+      tiers: ladder,
       settlementBasis: "cutoff",
       creditTiers: [
         { minParticipants: 1, maxParticipants: 1, creditsPerPlayer: 3 },
@@ -136,7 +146,7 @@ describe("participation configuration on catalog items", () => {
         allowCredits: true,
         creditCost: 3,
       }),
-    ).toThrow("leaves a gap");
+    ).toThrow("Prices must cover every group size from 1 to 12. 5 is missing.");
   });
 
   it("requires the credit price to be the highest tier", () => {
@@ -216,6 +226,8 @@ describe("occurrence participation state", () => {
       minimumMet: false,
       playersNeeded: 1,
       decisionAt: "2026-12-10T15:00:00.000Z",
+      lockAt: "2026-12-10T15:00:00.000Z",
+      freeCancelUntil: "2026-12-10T15:00:00.000Z",
       status: "open",
       currentCreditsPerPlayer: 2,
       nextCreditsPerPlayer: 2,

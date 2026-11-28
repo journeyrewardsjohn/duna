@@ -2385,6 +2385,12 @@ export const sessions = pgTable(
     status: sessionStatusEnum("status").notNull().default("draft"),
     capacity: integer("capacity").notNull(),
     minimumCapacity: integer("minimum_capacity").notNull().default(1),
+    /** PART: group rule (JSON v2, read with readParticipationRuleV2). */
+    participation: jsonb("participation").$type<Record<string, unknown>>(),
+    /** PART: "Rules to review" for backfilled legacy minimums. */
+    participationReviewState: varchar("participation_review_state", {
+      length: 16,
+    }),
     publishedAt: timestamp("published_at", {
       withTimezone: true,
       mode: "date",
@@ -2395,6 +2401,10 @@ export const sessions = pgTable(
   (table) => [
     index("session_start_idx").on(table.startsAt),
     check("session_time_valid", sql`${table.endsAt} > ${table.startsAt}`),
+    check(
+      "session_participation_review_state_valid",
+      sql`${table.participationReviewState} IS NULL OR ${table.participationReviewState} IN ('pending', 'kept', 'changed')`,
+    ),
     check(
       "session_capacity_valid",
       sql`${table.capacity} >= ${table.minimumCapacity} AND ${table.minimumCapacity} > 0`,
@@ -2800,6 +2810,8 @@ export const divisions = pgTable("divisions", {
   capacity: integer("capacity").notNull(),
   minimumTeams: integer("minimum_teams").notNull().default(2),
   maximumTeams: integer("maximum_teams"),
+  /** PART: group rule (JSON v2, unit "team"). */
+  participation: jsonb("participation").$type<Record<string, unknown>>(),
   teamSize: integer("team_size").notNull().default(2),
   priceBasis: varchar("price_basis", { length: 24 })
     .notNull()
@@ -8847,6 +8859,13 @@ export const catalogFulfillments = pgTable(
       table.status,
     ),
     index("catalog_fulfillment_version_idx").on(table.catalogItemVersionId),
+    // PART decision 5: one active booking per participant per session.
+    // "Add a player" (one booking, a larger quantity) brings guests.
+    uniqueIndex("catalog_fulfillment_occurrence_person_active_unique")
+      .on(table.catalogSessionOccurrenceId, table.personId)
+      .where(
+        sql`${table.status} IN ('held', 'pending', 'ready', 'fulfilled') AND ${table.catalogSessionOccurrenceId} IS NOT NULL`,
+      ),
     check(
       "catalog_fulfillment_kind_valid",
       sql`${table.kind} IN ('registration', 'appointment', 'pickup', 'shipment', 'rental', 'digital-content', 'membership', 'credit-grant', 'package')`,
@@ -10827,6 +10846,12 @@ export const pickupSessions = pgTable(
         autoCancelLowAttendance: false,
         minimumAttendance: 2,
       }),
+    /** PART: group rule (JSON v2). */
+    participation: jsonb("participation").$type<Record<string, unknown>>(),
+    /** PART: "Rules to review" for backfilled auto-cancel settings. */
+    participationReviewState: varchar("participation_review_state", {
+      length: 16,
+    }),
     costMinor: integer("cost_minor").notNull().default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("USD"),
     createdAt,
@@ -10841,6 +10866,10 @@ export const pickupSessions = pgTable(
     ),
     check("pickup_session_capacity_valid", sql`${table.capacity} > 1`),
     check("pickup_session_cost_valid", sql`${table.costMinor} >= 0`),
+    check(
+      "pickup_session_participation_review_state_valid",
+      sql`${table.participationReviewState} IS NULL OR ${table.participationReviewState} IN ('pending', 'kept', 'changed')`,
+    ),
     check(
       "pickup_session_rating_range_valid",
       sql`(${table.ratingMinimum} IS NULL AND ${table.ratingMaximum} IS NULL) OR (${table.ratingMinimum} IS NOT NULL AND ${table.ratingMaximum} IS NOT NULL AND ${table.ratingMaximum} >= ${table.ratingMinimum})`,
@@ -13256,3 +13285,4 @@ export * from "./schema/health";
 export * from "./schema/premium";
 export * from "./schema/households";
 export * from "./schema/legal";
+export * from "./schema/participation";

@@ -32,6 +32,8 @@
     "./native/loaders": "./src/native/loaders/index.ts",
     "./native/states": "./src/native/states/index.ts",
     "./native/brand": "./src/native/brand/index.ts",
+    "./native/score": "./src/native/score/index.ts",
+    "./native/conditions": "./src/native/conditions/index.ts",
     "./native/foundations": "./src/native/foundations/FoundationsScreen.tsx",
     "./assets/fonts/*": "./assets/fonts/*"
   },

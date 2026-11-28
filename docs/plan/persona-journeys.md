@@ -158,102 +158,121 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 | ------- | --------------------------------------------------------- | ------- | -------- | ------- |
 | CO-14.1 | Runs a pay period for coaches and exports it (idempotent) | HQ      | B3b, H5  | Planned |
 
+### CO-15 Group sessions that fill up (PART)
+
+Added by PART-3 (28 November 2026) from [`participation.md`](participation.md) §13. The backend is on `main`; each step is a `fixme` owned by the UI package that makes it pass.
+
+| Step    | The person does → expected result                                                                                                     | Surface | Packages | Status  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | ------- |
+| CO-15.1 | Sets the club's booking rule as a sentence → offerings without their own rule show "Club default"                                     | HQ      | PART-6   | Planned |
+| CO-15.2 | Picks "Clinic" on an offering and enters a price ladder → sees the cliff warning and the live preview                                 | HQ      | PART-6   | Planned |
+| CO-15.3 | Opens Today → "At risk this week" lists a session with "Needs 2 by Thu 6:00 PM"                                                       | HQ      | PART-7   | Planned |
+| CO-15.4 | Cancels a thin session → strong confirmation restates people and refunds; the session shows "Cancelled"                               | HQ      | PART-7   | Planned |
+| CO-15.5 | Asks Duna "make every clinic need 4 players" → a proposal card with before / after and affected sessions; nothing changes until saved | HQ      | PART-6   | Planned |
+
 ## Coach (CH)
 
 Teaches sessions, runs practices, scores matches, writes to players and
 parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 
-| Step   | The person does → expected result                                                          | Surface    | Packages   | Status  |
-| ------ | ------------------------------------------------------------------------------------------ | ---------- | ---------- | ------- |
-| CH-1.1 | Sets weekly availability with effective dates → autosaved draft; conflicts named           | HQ         | B3a, H5    | Planned |
-| CH-1.2 | Adds time off and a blackout → sees what it uncovers and suggested substitutes             | HQ         | B3a, H5    | Planned |
-| CH-1.n | Sets availability and blackouts on the phone                                               | Pro        | M-R5       | Native  |
-| CH-2.1 | Opens Today → the day's sessions                                                           | HQ         | H1         | Main    |
-| CH-2.2 | Opens Schedule by coach                                                                    | HQ         | H2         | Main    |
-| CH-2.n | Opens Pro Today: agenda by court and by coach, one-line conditions, light icon by the time | Pro        | M-R1       | Native  |
-| CH-3.1 | Opens the session from Today → its operations page                                         | HQ         | H2         | Main    |
-| CH-3.2 | Checks players in → tier 0 with Undo; the roster count Rallies                             | HQ         | H2         | Planned |
-| CH-3.n | Checks in courtside on the phone, offline-tolerant                                         | Pro        | M-R2       | Native  |
-| CH-4.1 | Scores a match point by point from the session → NetScore, one state per match status      | HQ         | H2, C1     | Planned |
-| CH-4.2 | Finishes the match and publishes the result after a confirm                                | HQ         | H9         | Planned |
-| CH-4.n | Scores on the phone (live zone) or on the Watch (swipe up / down, left to undo; unchanged) | Pro, Watch | M-R2, M-P7 | Native  |
-| CH-5.1 | Writes an after-practice note for the program                                              | HQ         | H6         | Planned |
-| CH-5.2 | Messages a player or a parent about a session                                              | HQ         | H3         | Planned |
-| CH-5.n | Writes notes and messages from the phone (voice notes kept)                                | Pro        | M-R3       | Native  |
-| CH-6.1 | Sees sessions, pay period and expected pay                                                 | HQ         | H5, B3b    | Planned |
-| CH-6.2 | Receives contractor payouts to their own connected account                                 | HQ         | B3c        | Planned |
-| CH-6.3 | Opens Money without permission → "You need access", not an error page                      | HQ         | H10        | Main    |
-| CH-6.n | Gets paid on the phone: Tap to Pay for a lesson (hidden where unsupported), see pay        | Pro        | M-R4       | Native  |
-| CH-7.1 | Opens the practice plan builder                                                            | HQ         | H7         | Main    |
-| CH-7.2 | Starts a drill from a description                                                          | HQ         | H8         | Main    |
-| CH-7.3 | Builds a plan with totals, diagrams, coach mode; prints it with diagrams                   | HQ         | H7, B6b    | Planned |
-| CH-7.4 | Creates a drill with AI placing the players; edits and versions it                         | HQ         | B6d, H8    | Planned |
-| CH-7.n | Runs coach mode and the 2D drill player on the phone or iPad                               | Pro        | M-R6       | Native  |
-| CH-8.1 | Opens Training on their programs                                                           | HQ         | H6         | Main    |
-| CH-8.2 | Opens a program's Roster and Schedule tabs (deep-linkable)                                 | HQ         | H6, S3     | Planned |
+| Step   | The person does → expected result                                                                                  | Surface    | Packages        | Status  |
+| ------ | ------------------------------------------------------------------------------------------------------------------ | ---------- | --------------- | ------- |
+| CH-1.1 | Sets weekly availability with effective dates → autosaved draft; conflicts named                                   | HQ         | B3a, H5         | Planned |
+| CH-1.2 | Adds time off and a blackout → sees what it uncovers and suggested substitutes                                     | HQ         | B3a, H5         | Planned |
+| CH-1.n | Sets availability and blackouts on the phone                                                                       | Pro        | M-R5            | Native  |
+| CH-2.1 | Opens Today → the day's sessions                                                                                   | HQ         | H1              | Main    |
+| CH-2.2 | Opens Schedule by coach                                                                                            | HQ         | H2              | Main    |
+| CH-2.n | Opens Pro Today: agenda by court and by coach, one-line conditions, light icon by the time                         | Pro        | M-R1            | Native  |
+| CH-3.1 | Opens the session from Today → its operations page                                                                 | HQ         | H2              | Main    |
+| CH-3.2 | Checks players in → tier 0 with Undo; the roster count Rallies                                                     | HQ         | H2              | Planned |
+| CH-3.n | Checks in courtside on the phone, offline-tolerant                                                                 | Pro        | M-R2            | Native  |
+| CH-4.1 | Scores a match point by point from the session → NetScore, one state per match status                              | HQ         | H2, C1          | Planned |
+| CH-4.2 | Finishes the match and publishes the result after a confirm                                                        | HQ         | H9              | Planned |
+| CH-4.n | Scores on the phone (live zone) or on the Watch (swipe up / down, left to undo; unchanged)                         | Pro, Watch | M-R2, M-P7      | Native  |
+| CH-5.1 | Writes an after-practice note for the program                                                                      | HQ         | H6              | Planned |
+| CH-5.2 | Messages a player or a parent about a session                                                                      | HQ         | H3              | Planned |
+| CH-5.n | Writes notes and messages from the phone (voice notes kept)                                                        | Pro        | M-R3            | Native  |
+| CH-6.1 | Sees sessions, pay period and expected pay                                                                         | HQ         | H5, B3b         | Planned |
+| CH-6.2 | Receives contractor payouts to their own connected account                                                         | HQ         | B3c             | Planned |
+| CH-6.3 | Opens Money without permission → "You need access", not an error page                                              | HQ         | H10             | Main    |
+| CH-6.n | Gets paid on the phone: Tap to Pay for a lesson (hidden where unsupported), see pay                                | Pro        | M-R4            | Native  |
+| CH-7.1 | Opens the practice plan builder                                                                                    | HQ         | H7              | Main    |
+| CH-7.2 | Starts a drill from a description                                                                                  | HQ         | H8              | Main    |
+| CH-7.3 | Builds a plan with totals, diagrams, coach mode; prints it with diagrams                                           | HQ         | H7, B6b         | Planned |
+| CH-7.4 | Creates a drill with AI placing the players; edits and versions it                                                 | HQ         | B6d, H8         | Planned |
+| CH-7.n | Runs coach mode and the 2D drill player on the phone or iPad                                                       | Pro        | M-R6            | Native  |
+| CH-8.1 | Opens Training on their programs                                                                                   | HQ         | H6              | Main    |
+| CH-8.2 | Opens a program's Roster and Schedule tabs (deep-linkable)                                                         | HQ         | H6, S3          | Planned |
+| CH-9.1 | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Planned |
+| CH-9.2 | Marks attendance with "Everyone's here" and one exception, offline → it sends when back online (spec id CH-7.2)    | Pro        | PART-12         | Native  |
 
 ## Parent or guardian with a junior (PA)
 
 Books and pays for a junior, hears from the coach, decides what is shared, and
 cancels when plans change. Mostly in the Player app, sometimes on the web.
 
-| Step   | The person does → expected result                                                                                  | Surface     | Packages | Status  |
-| ------ | ------------------------------------------------------------------------------------------------------------------ | ----------- | -------- | ------- |
-| PA-1.1 | Opens Settings › Household → "Add dependent" offered                                                               | Web         | none     | Main    |
-| PA-1.2 | Adds a junior's private profile with consent recorded → "Pending review", toast                                    | Web         | none     | **Gap** |
-| PA-1.3 | Invites a second guardian who accepts by link (`/join/guardian/[token]` exists)                                    | Web         | none     | **Gap** |
-| PA-1.n | Manages the family in the app (profile and organisation screens)                                                   | Player      | M-P6     | Native  |
-| PA-2.1 | Opens a session's checkout                                                                                         | Web         | P5       | Main    |
-| PA-2.2 | Chooses the junior as the participant                                                                              | Web         | none     | **Gap** |
-| PA-2.3 | Pays once (single-flight, idempotency key) → the junior's session appears in Next up                               | Web         | P5, B2   | Planned |
-| PA-2.n | Books lessons and events for the junior in the app                                                                 | Player      | M-P3b    | Native  |
-| PA-3.1 | Opens messages                                                                                                     | Web         | P7       | Main    |
-| PA-3.2 | Receives a coach's message tied to the junior's session; replies                                                   | Web         | P7, B7   | Planned |
-| PA-3.3 | Chooses how to be reached per club (app, email, text)                                                              | Web         | P7       | Planned |
-| PA-3.n | The same in the app's Concierge                                                                                    | Player      | M-P5a    | Native  |
-| PA-4.1 | Approves or declines sharing the junior's health data with the coach (owner decision pending, `HEALTH_PRIVACY.md`) | Web, Player | none     | **Gap** |
-| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                    | Web         | none     | **Gap** |
-| PA-5.2 | Sees the refund with its amount and where it went                                                                  | Web         | P6       | Planned |
-| PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                       | Web         | none     | **Gap** |
-| PA-7.1 | Opens Home → Next up first                                                                                         | Web         | P1       | Main    |
-| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                            | Web         | P1       | Planned |
-| PA-7.n | The family's next session as a widget and Live Activity                                                            | Player      | M-K2     | Native  |
+| Step   | The person does → expected result                                                                                  | Surface     | Packages       | Status  |
+| ------ | ------------------------------------------------------------------------------------------------------------------ | ----------- | -------------- | ------- |
+| PA-1.1 | Opens Settings › Household → "Add dependent" offered                                                               | Web         | none           | Main    |
+| PA-1.2 | Adds a junior's private profile with consent recorded → "Pending review", toast                                    | Web         | none           | **Gap** |
+| PA-1.3 | Invites a second guardian who accepts by link (`/join/guardian/[token]` exists)                                    | Web         | none           | **Gap** |
+| PA-1.n | Manages the family in the app (profile and organisation screens)                                                   | Player      | M-P6           | Native  |
+| PA-2.1 | Opens a session's checkout                                                                                         | Web         | P5             | Main    |
+| PA-2.2 | Chooses the junior as the participant                                                                              | Web         | none           | **Gap** |
+| PA-2.3 | Pays once (single-flight, idempotency key) → the junior's session appears in Next up                               | Web         | P5, B2         | Planned |
+| PA-2.n | Books lessons and events for the junior in the app                                                                 | Player      | M-P3b          | Native  |
+| PA-3.1 | Opens messages                                                                                                     | Web         | P7             | Main    |
+| PA-3.2 | Receives a coach's message tied to the junior's session; replies                                                   | Web         | P7, B7         | Planned |
+| PA-3.3 | Chooses how to be reached per club (app, email, text)                                                              | Web         | P7             | Planned |
+| PA-3.n | The same in the app's Concierge                                                                                    | Player      | M-P5a          | Native  |
+| PA-4.1 | Approves or declines sharing the junior's health data with the coach (owner decision pending, `HEALTH_PRIVACY.md`) | Web, Player | none           | **Gap** |
+| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                    | Web         | none           | **Gap** |
+| PA-5.2 | Sees the refund with its amount and where it went                                                                  | Web         | P6             | Planned |
+| PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                       | Web         | none           | **Gap** |
+| PA-7.1 | Opens Home → Next up first                                                                                         | Web         | P1             | Main    |
+| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                            | Web         | P1             | Planned |
+| PA-7.n | The family's next session as a widget and Live Activity                                                            | Player      | M-K2           | Native  |
+| PA-8.1 | Books a clinic for a child → checkout shows "3 credits now" and the ladder; the guardian receives the confirmation | Web         | PART-8         | Planned |
+| PA-8.2 | The clinic is cancelled under its minimum → the guardian is told and the credits are back in the wallet            | Web         | PART-5, PART-8 | Planned |
 
 ## Adult player (PL)
 
 Finds a game, books a court with friends, plays and records the result,
 watches the rating move, watches film, manages membership and wallet.
 
-| Step   | The person does → expected result                                                                | Surface       | Packages    | Status  |
-| ------ | ------------------------------------------------------------------------------------------------ | ------------- | ----------- | ------- |
-| PL-1.1 | Opens Home → direct actions and Next up first, no layout jump                                    | Web           | P1          | Main    |
-| PL-1.2 | Searches by where, when and what (sheets open and close)                                         | Web           | P3, C6      | Main    |
-| PL-1.3 | Filters results to courts                                                                        | Web           | P3          | Main    |
-| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                         | Web           | P3, C3      | Planned |
-| PL-1.n | Finds play in the app: search sheet, list and map                                                | Player        | M-P2        | Native  |
-| PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.") | Web           | P5          | Planned |
-| PL-2.2 | Adds friends to the booking                                                                      | Web           | P5          | Planned |
-| PL-2.3 | Splits the payment → tier 2 confirm restating each share; idempotency key per intent             | Web           | P5, B2      | Planned |
-| PL-2.4 | The confirmed booking Rises in and appears in Next up                                            | Web           | P5          | Planned |
-| PL-2.n | Books a court in the app (day strip, slots, durations, light, weather), Apple Pay                | Player        | M-P3a       | Native  |
-| PL-3.1 | Hosts a pickup and publishes it → "… is live."                                                   | Web           | P5          | Main    |
-| PL-3.2 | Joins an event through checkout → secure payment hand-off explained                              | Web           | P5          | Main    |
-| PL-4.1 | Starts recording a finished result (scores per set)                                              | Web           | P8          | Main    |
-| PL-4.2 | Records the match once everyone agreed → single-flight; per-set scores; green "Won" check        | Web           | P8          | Planned |
-| PL-4.3 | Sees the rating change per match in history                                                      | Web           | P8          | Main    |
-| PL-4.4 | Sees the rating ring with the new rating and progress to the next half point                     | Web           | P8, C1      | Planned |
-| PL-4.n | Scores live on the phone or the Watch; rating and results in the app                             | Player, Watch | M-P4a, M-P7 | Native  |
-| PL-5.1 | Opens the film library (today: "This page couldn't load")                                        | Web           | P9          | Planned |
-| PL-5.2 | Shares a clip with a coach after a confirm                                                       | Web           | P9          | Planned |
-| PL-5.n | Films, reviews with heart-rate overlay where data exists, shares; on-device clip titles          | Player        | M-P4b       | Native  |
-| PL-6.1 | Opens the wallet → money, club credits, activity                                                 | Web           | P6          | Main    |
-| PL-6.2 | Sees Premium with an honest checkout state                                                       | Web           | P6          | Main    |
-| PL-6.3 | Keeps club membership cards in the wallet; renews or cancels (tier 1, states when access ends)   | Web           | P6          | Planned |
-| PL-6.n | Membership cards and Apple Wallet in the app                                                     | Player        | M-P5b       | Native  |
-| PL-7.1 | Opens messages                                                                                   | Web           | P7          | Main    |
-| PL-7.2 | Uses Concierge threads tied to a booking, match or club                                          | Web           | P7, B7      | Planned |
-| PL-8.1 | Sees health context around their game, only where data exists                                    | Web           | P9          | Planned |
-| PL-8.n | Health in the app, read-only, hidden where HealthKit is unavailable                              | Player        | M-P4c       | Native  |
+| Step   | The person does → expected result                                                                  | Surface       | Packages        | Status  |
+| ------ | -------------------------------------------------------------------------------------------------- | ------------- | --------------- | ------- |
+| PL-1.1 | Opens Home → direct actions and Next up first, no layout jump                                      | Web           | P1              | Main    |
+| PL-1.2 | Searches by where, when and what (sheets open and close)                                           | Web           | P3, C6          | Main    |
+| PL-1.3 | Filters results to courts                                                                          | Web           | P3              | Main    |
+| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | P3, C3          | Planned |
+| PL-1.n | Finds play in the app: search sheet, list and map                                                  | Player        | M-P2            | Native  |
+| PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.")   | Web           | P5              | Planned |
+| PL-2.2 | Adds friends to the booking                                                                        | Web           | P5              | Planned |
+| PL-2.3 | Splits the payment → tier 2 confirm restating each share; idempotency key per intent               | Web           | P5, B2          | Planned |
+| PL-2.4 | The confirmed booking Rises in and appears in Next up                                              | Web           | P5              | Planned |
+| PL-2.n | Books a court in the app (day strip, slots, durations, light, weather), Apple Pay                  | Player        | M-P3a           | Native  |
+| PL-3.1 | Hosts a pickup and publishes it → "… is live."                                                     | Web           | P5              | Main    |
+| PL-3.2 | Joins an event through checkout → secure payment hand-off explained                                | Web           | P5              | Main    |
+| PL-4.1 | Starts recording a finished result (scores per set)                                                | Web           | P8              | Main    |
+| PL-4.2 | Records the match once everyone agreed → single-flight; per-set scores; green "Won" check          | Web           | P8              | Planned |
+| PL-4.3 | Sees the rating change per match in history                                                        | Web           | P8              | Main    |
+| PL-4.4 | Sees the rating ring with the new rating and progress to the next half point                       | Web           | P8, C1          | Planned |
+| PL-4.n | Scores live on the phone or the Watch; rating and results in the app                               | Player, Watch | M-P4a, M-P7     | Native  |
+| PL-5.1 | Opens the film library (today: "This page couldn't load")                                          | Web           | P9              | Planned |
+| PL-5.2 | Shares a clip with a coach after a confirm                                                         | Web           | P9              | Planned |
+| PL-5.n | Films, reviews with heart-rate overlay where data exists, shares; on-device clip titles            | Player        | M-P4b           | Native  |
+| PL-6.1 | Opens the wallet → money, club credits, activity                                                   | Web           | P6              | Main    |
+| PL-6.2 | Sees Premium with an honest checkout state                                                         | Web           | P6              | Main    |
+| PL-6.3 | Keeps club membership cards in the wallet; renews or cancels (tier 1, states when access ends)     | Web           | P6              | Planned |
+| PL-6.n | Membership cards and Apple Wallet in the app                                                       | Player        | M-P5b           | Native  |
+| PL-7.1 | Opens messages                                                                                     | Web           | P7              | Main    |
+| PL-7.2 | Uses Concierge threads tied to a booking, match or club                                            | Web           | P7, B7          | Planned |
+| PL-8.1 | Sees health context around their game, only where data exists                                      | Web           | P9              | Planned |
+| PL-8.n | Health in the app, read-only, hidden where HealthKit is unavailable                                | Player        | M-P4c           | Native  |
+| PL-9.1 | Sees "Needs 2 more · confirms Thu 6:00 PM" on a session and shares the invite link                 | Web, Player   | PART-8, PART-11 | Planned |
+| PL-9.2 | Tries to book the same session twice → "You're already booked" with "Add a player"                 | Web           | PART-8          | Planned |
+| PL-9.3 | Cancels after the lock → acknowledges paying the final price; gets it back when the place is taken | Web           | PART-4, PART-8  | Planned |
 
 ## Facility owner (FO)
 

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "./gallery-hydration";
 
 /**
  * Time and conditions components (C4, C5) on the gallery page
@@ -22,7 +23,7 @@ async function open(page: Page, width = 1280, query = "") {
   await expect(
     page.getByRole("heading", { level: 1, name: "Time and light" }),
   ).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  await waitForHydration(page);
 }
 
 const example = (page: Page, id: string): Locator =>

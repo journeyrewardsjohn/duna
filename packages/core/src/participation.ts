@@ -3,7 +3,33 @@
  * bookable activity with a headcount. This module is deliberately pure: the
  * API layer supplies the stored configuration, the capacity, the clock, and the
  * ledger. Nothing here reads a database or decides who is allowed to act.
+ *
+ * PART-1 (28 November 2026): this file is the version 1 (pull request 289)
+ * API, kept working as an ADAPTER onto version 2 in ./participation/. New
+ * code uses the v2 exports (`readParticipationRuleV2`,
+ * `validateParticipationRuleV2`, `participationDisplay`, ...).
+ *
+ * Deprecated, still exported for existing callers:
+ * - `ParticipationRules` / `ParticipationCreditTier` (use `ParticipationRuleV2`,
+ *   `ParticipationPriceTier`);
+ * - `validateParticipationRules` (use `validateParticipationRuleV2`: it adds
+ *   the plain-language messages, non-increasing prices and cliff warnings,
+ *   and refuses the attendance basis on new saves);
+ * - `participationCutoffAt` (use `participationLockAt`);
+ * - `settlementBasis` / `ParticipationSettlementBasis`: read only, for 289
+ *   bookings that agreed to attendance pricing (decision 2);
+ * - `DEFAULT_PARTICIPATION_CUTOFF_MINUTES` (use
+ *   `PARTICIPATION_POLICY.defaultLockMinutesBeforeStart`).
+ * `readParticipationRules` now reads both the v1 and the v2 stored shapes.
  */
+import {
+  MAX_PARTICIPATION_CREDITS_PER_PLAYER,
+  PARTICIPATION_POLICY,
+  readParticipationRuleV2,
+  type ParticipationPriceTier,
+} from "./participation/index";
+
+export * from "./participation/index";
 
 export type ParticipationMinimumPolicy = "cancel" | "run";
 export type ParticipationSettlementBasis = "cutoff" | "attendance";
@@ -33,11 +59,11 @@ export interface ParticipationRules {
   readonly creditTiers: readonly ParticipationCreditTier[];
 }
 
-/** 24 hours matches Duna's default cancellation window. */
-export const DEFAULT_PARTICIPATION_CUTOFF_MINUTES = 1_440;
+/** 24 hours matches Duna's default cancellation window. @deprecated */
+export const DEFAULT_PARTICIPATION_CUTOFF_MINUTES =
+  PARTICIPATION_POLICY.defaultLockMinutesBeforeStart;
 export const MAX_PARTICIPATION_CUTOFF_MINUTES = 10_080;
 export const MAX_PARTICIPATION_CREDIT_TIERS = 12;
-export const MAX_PARTICIPATION_CREDITS_PER_PLAYER = 10_000;
 
 export interface ParticipationValidationContext {
   /** The activity's capacity (maximum participants). */
@@ -71,6 +97,8 @@ function plural(count: number, noun: string): string {
 }
 
 /**
+ * @deprecated Use `validateParticipationRuleV2`.
+ *
  * Strictly validates operator-supplied participation rules against the real
  * capacity. Tiers must start at the minimum, be contiguous and non-overlapping,
  * and end at the capacity. The final tier may omit `maxParticipants`, which
@@ -260,48 +288,30 @@ export function readParticipationRules(
   value: unknown,
   capacity: number,
 ): ParticipationRules | undefined {
-  const input = record(value);
-  if (!input || !Number.isSafeInteger(capacity) || capacity < 1) {
-    return undefined;
-  }
-  const storedMinimum = wholeNumber(input.minParticipants) ?? 1;
-  const cutoff = wholeNumber(input.cutoffMinutesBeforeStart);
-  const creditTiers: ParticipationCreditTier[] = [];
-  if (Array.isArray(input.creditTiers)) {
-    for (const rawTier of input.creditTiers) {
-      const tier = record(rawTier);
-      const tierMin = wholeNumber(tier?.minParticipants);
-      const credits = wholeNumber(tier?.creditsPerPlayer);
-      if (tierMin === undefined || tierMin < 1 || !credits || credits < 1) {
-        // A malformed stored tier table is never partially applied.
-        creditTiers.length = 0;
-        break;
-      }
-      creditTiers.push({
-        minParticipants: tierMin,
-        maxParticipants: Math.max(
-          tierMin,
-          wholeNumber(tier?.maxParticipants) ?? Number.MAX_SAFE_INTEGER,
-        ),
-        creditsPerPlayer: credits,
-      });
-    }
-    creditTiers.sort(
-      (left, right) => left.minParticipants - right.minParticipants,
-    );
-  }
+  if (!Number.isSafeInteger(capacity) || capacity < 1) return undefined;
+  const rule = readParticipationRuleV2(value);
+  if (!rule) return undefined;
   return {
-    minParticipants: Math.min(capacity, Math.max(1, storedMinimum)),
+    minParticipants: Math.min(capacity, Math.max(1, rule.minParticipants)),
     maxParticipants: capacity,
-    minimumPolicy: input.minimumPolicy === "cancel" ? "cancel" : "run",
+    minimumPolicy: rule.minimumPolicy,
     cutoffMinutesBeforeStart:
-      cutoff === undefined
-        ? DEFAULT_PARTICIPATION_CUTOFF_MINUTES
-        : Math.min(MAX_PARTICIPATION_CUTOFF_MINUTES, Math.max(0, cutoff)),
-    settlementBasis:
-      input.settlementBasis === "attendance" ? "attendance" : "cutoff",
-    creditTiers,
+      rule.lockMinutesBeforeStart ?? DEFAULT_PARTICIPATION_CUTOFF_MINUTES,
+    settlementBasis: rule.legacySettlementBasis ?? "cutoff",
+    creditTiers: creditTiersFromPriceTiers(rule.tiers),
   };
+}
+
+/** The credit rungs of a v2 ladder, or none when any rung has no credit price. */
+export function creditTiersFromPriceTiers(
+  tiers: readonly ParticipationPriceTier[],
+): ParticipationCreditTier[] {
+  if (tiers.some((tier) => tier.creditsPerPlayer === undefined)) return [];
+  return tiers.map((tier) => ({
+    minParticipants: tier.minParticipants,
+    maxParticipants: tier.maxParticipants,
+    creditsPerPlayer: tier.creditsPerPlayer!,
+  }));
 }
 
 /** True when the rules change nothing compared with a capacity-only offer. */
@@ -356,6 +366,7 @@ export function reservedCreditsPerPlayer(
  * it appears, before anyone can book. Its decision moves to halfway between
  * opening and the start instead.
  */
+/** @deprecated Use `participationLockAt`. */
 export function participationCutoffAt(
   startsAt: Date,
   rules: Pick<ParticipationRules, "cutoffMinutesBeforeStart">,

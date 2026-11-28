@@ -1,18 +1,27 @@
-import { useMemo, useRef } from "react";
 import {
-  ActivityIndicator,
   Animated,
-  Easing,
   PanResponder,
   Pressable,
+  StyleSheet,
   View,
 } from "react-native";
+import {
+  Icon,
+  Spinner,
+  Text,
+  useReducedMotion,
+  useTheme,
+} from "@duna/ui/native";
+import { useMemo, useRef } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { VideoTransferStatus } from "../../video-studio";
-import { DunaIcon } from "../../duna-icon";
-import { SatoshiText as Text } from "../../satoshi-text";
-import { colors } from "../shared/palette";
-import { styles } from "../legacy/styles";
 
+/**
+ * Upload and import progress for a recording, shown by the shell over every
+ * tab (top edge, below the status bar or the Duo's camera column) so it
+ * never sits on the system tab bar. Tap opens Film; swipe sideways or the
+ * close button dismisses it.
+ */
 export function VideoTransferBanner({
   onDismiss,
   onPress,
@@ -22,6 +31,9 @@ export function VideoTransferBanner({
   readonly onPress: () => void;
   readonly status: VideoTransferStatus;
 }) {
+  const { colors, tokens } = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const slideX = useRef(new Animated.Value(0)).current;
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
@@ -30,109 +42,142 @@ export function VideoTransferBanner({
     status.stage === "importing" ||
     status.stage === "uploading" ||
     status.stage === "processing";
-  const dismiss = (direction = 1) => {
-    Animated.timing(slideX, {
-      duration: 160,
-      easing: Easing.out(Easing.cubic),
-      toValue: direction * 420,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) dismissRef.current();
+  const responder = useMemo(() => {
+    const settle = (toValue: number, done?: () => void) =>
+      Animated.timing(slideX, {
+        duration: reduceMotion ? 0 : 160,
+        toValue,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) done?.();
+      });
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) =>
+        Math.abs(gesture.dx) > 10 &&
+        Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onPanResponderMove: (_event, gesture) => slideX.setValue(gesture.dx),
+      onPanResponderRelease: (_event, gesture) => {
+        if (Math.abs(gesture.dx) >= 72 || Math.abs(gesture.vx) > 0.65) {
+          settle(gesture.dx < 0 ? -420 : 420, () => dismissRef.current());
+          return;
+        }
+        settle(0);
+      },
+      onPanResponderTerminate: () => settle(0),
     });
-  };
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gesture) =>
-          Math.abs(gesture.dx) > 10 &&
-          Math.abs(gesture.dx) > Math.abs(gesture.dy),
-        onPanResponderMove: (_event, gesture) => slideX.setValue(gesture.dx),
-        onPanResponderRelease: (_event, gesture) => {
-          if (Math.abs(gesture.dx) >= 72 || Math.abs(gesture.vx) > 0.65) {
-            dismiss(gesture.dx < 0 ? -1 : 1);
-            return;
-          }
-          Animated.timing(slideX, {
-            duration: 140,
-            easing: Easing.out(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        },
-        onPanResponderTerminate: () => {
-          Animated.timing(slideX, {
-            duration: 140,
-            easing: Easing.out(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        },
-      }),
-    [slideX],
-  );
-  const opacity = slideX.interpolate({
-    inputRange: [-240, 0, 240],
-    outputRange: [0.15, 1, 0.15],
-    extrapolate: "clamp",
-  });
+  }, [reduceMotion, slideX]);
   return (
     <Animated.View
       {...responder.panHandlers}
       style={[
-        styles.videoTransferBanner,
-        { opacity, transform: [{ translateX: slideX }] },
+        styles.root,
+        {
+          top: insets.top + tokens.space["2"],
+          left: insets.left + tokens.space["3"],
+          right: insets.right + tokens.space["3"],
+          transform: [{ translateX: slideX }],
+        },
       ]}
     >
       <Pressable
-        accessibilityLabel={`${status.title}. ${status.detail}. Open video uploads.`}
+        accessibilityHint="Opens Film"
+        accessibilityLabel={`${status.title}. ${status.detail}.${status.progress !== undefined ? ` ${Math.round(progress * 100)} percent.` : ""}`}
+        accessibilityRole="button"
         onPress={onPress}
-        style={styles.videoTransferTap}
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderRadius: tokens.radius.xl,
+          },
+        ]}
       >
-        <View style={styles.videoTransferMark}>
+        <View style={styles.mark}>
           {active ? (
-            <ActivityIndicator color={colors.aqua} size="small" />
+            <Spinner label={status.title} />
           ) : (
-            <Text style={styles.videoTransferMarkText}>
-              {status.stage === "complete" ? "✓" : "⇅"}
-            </Text>
+            <Icon
+              name={status.stage === "complete" ? "success" : "film"}
+              tone={status.stage === "complete" ? "positive" : "text-2"}
+            />
           )}
         </View>
-        <View style={styles.videoTransferCopy}>
-          <View style={styles.videoTransferHeading}>
-            <Text style={styles.videoTransferTitle}>{status.title}</Text>
-            {status.progress !== undefined && (
-              <Text style={styles.videoTransferPercent}>
-                {Math.round(progress * 100)}%
+        <View style={styles.copy}>
+          <View style={styles.heading}>
+            <Text
+              numberOfLines={1}
+              style={styles.flex}
+              variant="phone-body"
+              weight={600}
+            >
+              {status.title}
+            </Text>
+            {status.progress !== undefined ? (
+              <Text tabular tone="text-2" variant="phone-meta" weight={600}>
+                {`${Math.round(progress * 100)}%`}
               </Text>
-            )}
+            ) : null}
           </View>
-          <Text numberOfLines={2} style={styles.videoTransferDetail}>
+          <Text numberOfLines={2} tone="text-2" variant="phone-meta">
             {status.detail}
           </Text>
-          {status.progress !== undefined && (
-            <View style={styles.videoTransferTrack}>
+          {status.progress !== undefined ? (
+            <View
+              style={[
+                styles.track,
+                { backgroundColor: colors["surface-sunken"] },
+              ]}
+            >
               <View
                 style={[
-                  styles.videoTransferFill,
-                  { width: `${progress * 100}%` },
+                  styles.fill,
+                  {
+                    backgroundColor: colors.action,
+                    width: `${progress * 100}%`,
+                  },
                 ]}
               />
             </View>
-          )}
+          ) : null}
         </View>
-        <Text style={styles.videoTransferOpen}>View</Text>
         <Pressable
-          accessibilityLabel="Dismiss video import status"
-          hitSlop={4}
+          accessibilityLabel="Dismiss video upload status"
+          accessibilityRole="button"
+          hitSlop={8}
           onPress={(event) => {
             event.stopPropagation();
-            dismiss();
+            dismissRef.current();
           }}
-          style={styles.videoTransferDismiss}
+          style={styles.close}
         >
-          <DunaIcon color={colors.muted} name="close" size={18} />
+          <Icon name="close" size="inline" tone="text-2" />
         </Pressable>
       </Pressable>
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { position: "absolute", zIndex: 20 },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    boxShadow: "0 8px 24px rgba(14, 26, 34, 0.12)",
+  },
+  mark: { width: 28, alignItems: "center" },
+  copy: { flex: 1, gap: 4 },
+  heading: { flexDirection: "row", alignItems: "center", gap: 8 },
+  flex: { flex: 1 },
+  track: { height: 4, borderRadius: 2, overflow: "hidden" },
+  fill: { height: 4 },
+  close: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

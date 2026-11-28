@@ -81,6 +81,10 @@ import {
   legalPublicRouter,
 } from "./routers/legal";
 import {
+  participationOperatorRouter,
+  participationPlayerRouter,
+} from "./routers/participation";
+import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
   adminOverviewSchema,
@@ -1822,7 +1826,8 @@ function throwDomainError(error: unknown): never {
         : error.code === "MEMBERSHIP_REQUIRED" ||
             error.code === "PARTICIPANT_NOT_ALLOWED"
           ? "FORBIDDEN"
-          : error.code === "CHECKOUT_UNAVAILABLE"
+          : error.code === "CHECKOUT_UNAVAILABLE" ||
+              error.code === "ALREADY_BOOKED"
             ? "CONFLICT"
             : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
@@ -8538,6 +8543,7 @@ const playerRouter = router({
   fees: feesPlayerRouter,
   households: householdsPlayerRouter,
   legal: legalPlayerRouter,
+  participation: participationPlayerRouter,
 });
 
 const operatorRouter = router({
@@ -14074,6 +14080,7 @@ const operatorRouter = router({
   // W3-0 seams (schema steward): platform fees, organisation terms.
   fees: feesOperatorRouter,
   legal: legalOperatorRouter,
+  participation: participationOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({

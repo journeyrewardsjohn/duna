@@ -4487,6 +4487,25 @@ export const occurrenceParticipationStateSchema = z.object({
   nextCreditsPerPlayer: z.number().int().positive().optional(),
   bookingCreditsPerPlayer: z.number().int().positive().optional(),
   settledHeadcount: z.number().int().nonnegative().optional(),
+  // PART (additive): the state every surface shows, the lock with any
+  // extension (also the free-cancellation deadline, decision 1).
+  displayState: z
+    .enum([
+      "needs-players",
+      "minimum-reached",
+      "full",
+      "confirmed",
+      "running-small",
+      "cancelled-low",
+      "cancelled-club",
+      "done",
+      "settled",
+    ])
+    .optional(),
+  lockAt: z.iso.datetime().optional(),
+  freeCancelUntil: z.iso.datetime().optional(),
+  waitlistCount: z.number().int().nonnegative().optional(),
+  heldCount: z.number().int().nonnegative().optional(),
 });
 
 export const operatorCatalogSessionOccurrenceSchema = z.object({
@@ -4505,6 +4524,9 @@ export const operatorCatalogSessionOccurrenceSchema = z.object({
       settlementBasis: participationSettlementBasisSchema,
       decidedAt: z.iso.datetime().optional(),
       settledAt: z.iso.datetime().optional(),
+      // PART: with payments:read only.
+      atStakeCredits: z.number().int().nonnegative().optional(),
+      atStakeMinor: z.number().int().nonnegative().optional(),
     })
     .optional(),
   bookings: z
@@ -4653,6 +4675,8 @@ export const playerCatalogSessionBookingSchema = z.object({
   creditsSettled: z.number().int().nonnegative().optional(),
   creditsReturned: z.number().int().nonnegative().optional(),
   participation: occurrenceParticipationStateSchema.optional(),
+  lateCancelCharge: z.number().int().nonnegative().optional(),
+  waitlistPosition: z.number().int().positive().optional(),
   cancellable: z.boolean(),
   refundableUntil: z.iso.datetime().optional(),
   refundIfCancelledNow: z.boolean(),
@@ -4669,6 +4693,8 @@ export const catalogSessionCancellationResultSchema = z.object({
     "not-applicable",
   ]),
   creditsReturned: z.number().int().nonnegative(),
+  // PART decision 4: the final price a late cancellation pays.
+  chargedCredits: z.number().int().nonnegative().optional(),
   message: z.string(),
 });
 
