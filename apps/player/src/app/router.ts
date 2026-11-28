@@ -151,11 +151,13 @@ export const ROUTES = {
     "Ask about your games, bookings and clubs",
     { presentation: "window" },
   ),
+  // The wallet (WALLET-2): club cards, the pass, credits and the balance.
   wallet: route(
     "connect",
     "Wallet",
     "wallet",
     "Passes, memberships and credits",
+    { legacy: false, ownTitle: true },
   ),
   predictions: route(
     "connect",

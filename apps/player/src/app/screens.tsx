@@ -119,9 +119,7 @@ export const SCREENS = {
   // Ask Duna stays mounted for the whole session (its conversation survives);
   // `DunaApp` renders it over the window.
   ai: () => null,
-  wallet: (_entry, shell) => (
-    <WalletScreen onClose={() => shell.back("connect")} />
-  ),
+  wallet: () => <WalletScreen />,
   predictions: (_entry, shell) => (
     <PredictionPortfolioScreen onBack={() => shell.open("wallet")} />
   ),

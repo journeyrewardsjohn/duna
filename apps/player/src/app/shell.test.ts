@@ -47,6 +47,8 @@ describe("route table", () => {
   it("keeps every pre-shell screen reachable (no function dropped)", () => {
     // Find (discover) was rebuilt by M-P1 and is no longer legacy.
     expect(ROUTES.discover.legacy).toBe(false);
+    // The wallet was rebuilt by WALLET-2 and draws its own title.
+    expect(ROUTES.wallet).toMatchObject({ legacy: false, ownTitle: true });
     const legacy: RouteKey[] = [
       "coaches",
       "plans",
@@ -58,7 +60,6 @@ describe("route table", () => {
       "you",
       "messages",
       "ai",
-      "wallet",
       "predictions",
     ];
     for (const key of legacy) expect(ROUTES[key].legacy).toBe(true);
