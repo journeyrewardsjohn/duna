@@ -57,6 +57,13 @@ export const featureFlagRegistry = {
     defaultEnabled: true,
     clientVisible: true,
   },
+  "invites.sms": {
+    description:
+      "Players may text an invitation (one transactional message per chosen contact) to something they host or are booked into. Off: send answers not-enabled and makes no provider call; the preview still works.",
+    owner: "INVITE-SMS",
+    defaultEnabled: true,
+    clientVisible: true,
+  },
   "team.contractorPayouts": {
     description:
       "Pay 1099 contractors through their own connected account. Off: no payout is created and no provider call is made.",

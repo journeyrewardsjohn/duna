@@ -17,6 +17,7 @@ describe("feature flag registry", () => {
         "concierge.channel.whatsapp",
         "facility.owners",
         "health.juniors",
+        "invites.sms",
         "pay.embeddedOnboarding",
         "team.contractorPayouts",
         "training.scene3d",

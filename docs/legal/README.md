@@ -46,6 +46,7 @@ Code facts were read from `origin/main` at `a11b21a`. Paths below are relative t
 | O20 | Staff minimum age                                         | 18                                                                                                                                                                                                                                           | hq-terms §3.4                                                |
 | O21 | Domain ownership for club sites                           | Registered in the club's name or transferred on request                                                                                                                                                                                      | hq-terms §10.3                                               |
 | O22 | Processing-cost rates as published rates                  | 3% + $0.35 online; 2.8% + $0.15 in person; ACH 1% capped at $6 (from `packages/pricing/src/index.ts:224-260`)                                                                                                                                | duna-pay §4.2                                                |
+| O23 | Invitation text wording and limits (INVITE-SMS)           | The exact copy in section (i); 20 texts per sender and 3 per number per 24 hours; juniors never texted                                                                                                                                       | section (i)                                                  |
 
 ## (c) Questions for counsel
 
@@ -74,6 +75,7 @@ Code facts were read from `origin/main` at `a11b21a`. Paths below are relative t
 23. **Parent-signed waivers:** should Duna require state-specific waiver templates for minors, given that FL and NJ do not enforce parent pre-injury releases for commercial activities?
 24. **Guardian indemnity:** is the Guardian indemnity in terms §18 enforceable?
 25. **SMS:** does the messaging consent language meet TCPA and the FCC's 2026 revocation order (category-specific STOP), and CTIA requirements?
+    25a. **Invitation texts (INVITE-SMS):** a player asks Duna to text one invitation to a contact they picked (section (i)). The recipient has not opted in to Duna. Is a single, person-initiated, transactional text with the inviter named, Duna identified and STOP offered permitted under the TCPA (no autodialer, but a platform-sent text) and CTIA guidance, and will carriers accept it for the 10DLC / toll-free campaign the provider must register?
 26. **Retention periods:** confirm 7 years for financial records and 6 years for consents and safeguarding reports.
 27. **State privacy notices:** is the single US-wide rights section enough, or are state-specific sections required?
 
@@ -366,3 +368,36 @@ counsel and the owner:
 7. **Cookie Policy.** List `duna-score-draft` (item g.8).
 8. **Ratings.** Terms should keep saying a self-reported result moves a rating only after
    confirmation by the other side; an anonymous submission never does.
+
+## (i) Invitations by text message: copy for counsel's review (INVITE-SMS, 28 November 2026)
+
+How it works: `docs/product/invites.md`. A signed-in adult picks up to eight contacts in the Player
+app; Duna shows them exactly what each person will receive; only after they confirm does Duna send
+**one** text per person, through Duna's text-message provider. Nothing else is ever sent to that
+number unless someone invites them again (at most 3 invitation texts per number per 24 hours, from
+anyone; at most 20 per sender). Juniors' numbers are never texted (the guardian flow applies).
+
+The exact message (one template; the provider requires the same text to be registered):
+
+```text
+Duna: {{inviter}} invited you to {{details}}. Join here: {{link}} Reply STOP to opt out.
+```
+
+Example: `Duna: Alex R. invited you to a court booking at Sunset Beach Courts on Sun, Dec 6 at 9:00 AM
+PST. Join here: https://duna.coach/app/booking-invite/… Reply STOP to opt out.`
+
+Consent basis as drafted: the text is sent at the request of a named person the recipient knows, is
+transactional (an invitation to a specific booking, session, pickup, match or club), identifies Duna
+as the sender in its first word, and says how to stop. STOP (and a carrier disconnect) puts the
+number on Duna's suppression list for all invitation texts; START removes a STOP. What the drafts
+should say:
+
+1. **Messaging terms §3–4.** Add invitation texts as a message type sent at a member's request to a
+   person who is not (yet) a member; STOP applies to all invitation texts. HELP is answered by the
+   provider's default reply unless the owner configures one.
+2. **Privacy Policy.** A member may give Duna a contact's name and number to invite them; Duna stores
+   the number only with the invitation it belongs to and a one-way hash for opt-outs and limits; the
+   contacts list itself is never uploaded. The carrier-required sentence: "No mobile information will
+   be shared with third parties or affiliates for marketing or promotional purposes."
+3. **Subprocessors.** The text-message provider (Prelude) belongs in the list.
+4. Decision O23 and counsel question 25a.

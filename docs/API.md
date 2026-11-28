@@ -211,6 +211,23 @@ The Places routes (`/api/places/autocomplete`, `/details`, `/map`) answer 429 wi
 over a per-address budget, take `session=<token>` and pass it to the provider, and cache identical
 requests for 10 minutes.
 
+## Invitations by text message (`player.invites`, INVITE-SMS)
+
+Contracts: `packages/api/src/contracts/invites.ts`; how it works, the exact
+message and the block reasons: `docs/product/invites.md`.
+
+| Procedure                                                                                                     | Who                   | What                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `player.invites.smsPreview({ inviteKind, subjectId, recipients })` (mutation)                                 | Signed-in adult       | `inviteKind`: `match`, `court-booking`, `session`, `pickup`, `club`. Up to 8 picked contacts `{ name, phoneE164 }`. Returns `previewHash`, `expiresAt`, `sendState`, and per person the exact text or why not. |
+| `player.invites.sendSms({ inviteKind, subjectId, recipients, previewHash, confirmed: true, idempotencyKey })` | Signed-in adult       | One transactional text per ready person. Stale preview → `CONFLICT`; same key → same answer; no provider → `PRECONDITION_FAILED` "This feature is not configured yet.".                                        |
+| `player.invites.smsStatus({ inviteKind, subjectId })` (query)                                                 | Signed-in adult (own) | The sender's own texts for that subject: `sending`, `sent`, `delivered`, `failed` (`failureCode`), `not-configured`, `skipped` (`reason`).                                                                     |
+
+Only the host or someone booked in may invite; another person's subject is
+`NOT_FOUND`. Limits: 20 texts per sender and 3 per number per 24 hours,
+database-backed. Flag `invites.sms` (kill switch, default on). Webhook:
+`POST /api/invites/sms/webhook` (signed; delivery receipts, STOP, carrier
+disconnect).
+
 ## Search: where, when, what (`public.search`, `player.search`, owner B10)
 
 Contract: `packages/api/src/contracts/search.ts`; service: `packages/api/src/services/search/`;
