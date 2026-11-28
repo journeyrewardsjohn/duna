@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   DUNA_SERVICE_FEE_BPS,
   MEMBERSHIP_PLANS,
@@ -97,23 +97,24 @@ test.describe("Marketing pages in the new shell", () => {
 
   test("no page loads a legacy stylesheet", async ({ page }) => {
     for (const { path } of PAGES) {
-      const sheets: string[] = [];
-      const onResponse = async (response: Response) => {
-        if (response.request().resourceType() !== "stylesheet") return;
-        sheets.push(await response.text().catch(() => ""));
-      };
-      page.on("response", onResponse);
       await page.goto(path, { waitUntil: "load" });
-      expect(sheets.length, path).toBeGreaterThan(0);
-      for (const css of sheets) {
-        for (const marker of LEGACY_MARKERS) {
-          expect(
-            css.includes(`${marker}{`) || css.includes(`${marker} {`),
-            `${path} ${marker}`,
-          ).toBe(false);
-        }
+      // The rules the document applies (a prefetched sheet for another
+      // route is never applied, so it does not count).
+      const css = await page.evaluate(() =>
+        [...document.styleSheets]
+          .map((sheet) => {
+            try {
+              return [...sheet.cssRules].map((rule) => rule.cssText).join("\n");
+            } catch {
+              return "";
+            }
+          })
+          .join("\n"),
+      );
+      expect(css.length, path).toBeGreaterThan(0);
+      for (const marker of LEGACY_MARKERS) {
+        expect(css.includes(`${marker} {`), `${path} ${marker}`).toBe(false);
       }
-      page.off("response", onResponse);
     }
   });
 
@@ -245,7 +246,10 @@ test.describe("Marketing pages in the new shell", () => {
     ] as const) {
       const response = await request.get(from, { maxRedirects: 0 });
       expect(response.status(), from).toBe(301);
-      expect(new URL(response.headers().location!).pathname, from).toBe(to);
+      expect(
+        new URL(response.headers().location!, "http://localhost").pathname,
+        from,
+      ).toBe(to);
     }
   });
 

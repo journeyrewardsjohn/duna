@@ -2442,21 +2442,26 @@
     }
   }
 
-  /* Reduced motion: every concept at its end state, nothing travels. */
+  /* Reduced motion: every concept at its end state, nothing travels.
+     Selectors match the playing rules' weight so they always win. */
   @media (prefers-reduced-motion: reduce) {
     .td {
-      .site-reveal,
-      .site-reveal--rally > *,
-      .site-concept-site *,
+      .site-reveal[data-phase],
+      .site-reveal--rally[data-phase] > *,
+      .site-concept-site[data-phase] *,
       :is(
           .site-concept-payout,
           .site-concept-team,
           .site-concept-concierge,
           .site-concept-setup
-        )
+        )[data-phase]
         li,
-      .site-concept-watch .td-num {
+      .site-concept-watch[data-phase] .site-watch__row .td-num {
         animation: none;
+      }
+
+      .site-concept-site[data-phase] .site-concept-site__before {
+        opacity: 0;
       }
 
       .site-story-rating__replay {
