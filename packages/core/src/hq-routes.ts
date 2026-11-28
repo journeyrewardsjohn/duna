@@ -19,7 +19,7 @@ export const hqRoutes = {
   /** Retired by the IA (its cards have homes); package B4 removes it. */
   activities: "/activities",
 
-  // People and play. People, Events, Offerings, Schedule, Marketing and
+  // People and play. People, Events, Schedule, Marketing and
   // Reports lists are served by the generic module page; see hqModuleHref.
   memberInvite: "/people/invite",
   member: "/people/[personId]",
@@ -53,11 +53,24 @@ export const hqRoutes = {
   eventMatch: "/events/matches/[activityId]",
   /** Becomes an in-page filter of Events in package H9. */
   eventType: "/events/types/[eventType]",
+  /** Offerings (H-OFFER): every offering as an object, filtered in-page by kind. */
+  offerings: "/offerings",
   offeringCreate: "/offerings/create",
+  /** Sessions that need players this week, and coaches' requests to cancel. */
+  offeringsAtRisk: "/offerings/at-risk",
+  /** The club's booking rule every offering inherits, and rules to review. */
+  offeringsSettings: "/offerings/settings",
   offering: "/offerings/[itemId]",
+  offeringSchedule: "/offerings/[itemId]/schedule",
+  offeringPrice: "/offerings/[itemId]/price",
+  offeringGroupSize: "/offerings/[itemId]/group-size",
+  offeringPeople: "/offerings/[itemId]/people",
+  offeringSettings: "/offerings/[itemId]/settings",
+  /** Old builder address: opens the offering. */
   offeringBuilder: "/offerings/[itemId]/builder",
+  /** Old "draft saved" address: opens the offering. */
   offeringDraftReady: "/offerings/[itemId]/draft-ready",
-  /** Becomes an in-page filter of Offerings in package H9. */
+  /** Old type pages: the list filtered by kind (`/offerings?kind=…`). */
   offeringType: "/offerings/types/[productType]",
 
   // Money and setup.
@@ -147,7 +160,6 @@ export function isHqDevOnlyRoute(path: string): boolean {
 export const hqOperatorModuleSlugs = [
   "events",
   "marketing",
-  "offerings",
   "people",
   "reports",
   "schedule",

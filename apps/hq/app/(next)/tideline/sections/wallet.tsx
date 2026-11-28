@@ -134,10 +134,11 @@ const examples: GalleryExample[] = [
   {
     group,
     order: 51,
-    title: "The pass · static Duna credential, paused, pending, ended",
+    title:
+      "The pass · static Duna credential, paused, pending, ended, the longest names",
     wide: true,
     content: (
-      <div className={styles.grid}>
+      <div className={styles.grid} data-wallet-passes="">
         {(["saltline", "kelp", "pier9", "driftwood"] as const).map((id) => (
           <MembershipCard {...card(id)} flipped key={id} motion="still" />
         ))}
@@ -146,6 +147,20 @@ const examples: GalleryExample[] = [
           flipped
           motion="still"
           pass={null}
+        />
+        <MembershipCard
+          {...card("kelp")}
+          club={{
+            name: "Montgomery-Clarke Beach Volleyball Association",
+            color: "#5B3A8C",
+          }}
+          flipped
+          heldBy="Rae Castillo-Featherstonehaugh"
+          member="Bartholomew Featherstonehaugh-Montgomery"
+          motion="still"
+          number="000412"
+          plan="Family plan · 3 people · Saturday juniors"
+          validThrough="Nov 30, 2027"
         />
       </div>
     ),
@@ -158,7 +173,6 @@ const examples: GalleryExample[] = [
       <div
         style={{
           position: "relative",
-          aspectRatio: "1.586",
           maxWidth: 372,
           containerType: "inline-size",
           borderRadius: 16,

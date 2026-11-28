@@ -104,6 +104,30 @@ export function participationOrdinal(value: number): string {
   }
 }
 
+/**
+ * "a" or "an" for a number as English says it: "an 8th", "an 11th", "an
+ * 18th", "an 80th", "an 800th", "an 8,000th"; "a 7th", "a 12th", "a 1st".
+ */
+export function participationIndefiniteArticle(value: number): "a" | "an" {
+  let leading = Math.abs(Math.trunc(value));
+  // English groups by thousands: 8,000 and 11,000 are said "eight thousand",
+  // "eleven thousand".
+  while (leading >= 1_000) leading = Math.floor(leading / 1_000);
+  const vowelSound =
+    leading === 8 ||
+    leading === 11 ||
+    leading === 18 ||
+    (leading >= 80 && leading <= 89) ||
+    (leading >= 800 && leading <= 899);
+  return vowelSound ? "an" : "a";
+}
+
+/** "An 8th", "A 7th": the ordinal with its article, capitalised. */
+export function participationOrdinalWithArticle(value: number): string {
+  const article = participationIndefiniteArticle(value);
+  return `${article === "an" ? "An" : "A"} ${participationOrdinal(value)}`;
+}
+
 function readTiers(value: unknown): ParticipationPriceTier[] {
   if (!Array.isArray(value)) return [];
   const tiers: ParticipationPriceTier[] = [];
@@ -382,8 +406,8 @@ export function participationRevenueCliffs(
           unit,
           message:
             unit === "credits"
-              ? `A ${participationOrdinal(size + 1)} ${noun} lowers your total from ${total} to ${plural(next, "credit")}.`
-              : `A ${participationOrdinal(size + 1)} ${noun} lowers your total from ${formatParticipationMoney(total, currency)} to ${formatParticipationMoney(next, currency)}.`,
+              ? `${participationOrdinalWithArticle(size + 1)} ${noun} lowers your total from ${total} to ${plural(next, "credit")}.`
+              : `${participationOrdinalWithArticle(size + 1)} ${noun} lowers your total from ${formatParticipationMoney(total, currency)} to ${formatParticipationMoney(next, currency)}.`,
         });
       }
     }

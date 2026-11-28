@@ -6,6 +6,7 @@
  */
 import { randomBytes } from "node:crypto";
 import {
+  auditLog,
   catalogItems,
   catalogSessionOccurrences,
   getDatabase,
@@ -19,6 +20,7 @@ import {
 } from "@duna/core";
 import { log } from "@duna/observability";
 import { and, eq, sql } from "drizzle-orm";
+import { stableHash } from "../../canonical";
 import type { ApiActor } from "../../context";
 import {
   CATALOG_SUBJECT,
@@ -86,36 +88,131 @@ export async function createParticipationInvite(input: {
       "Book a place first, then share the session.",
     );
   }
+  const invite = await issueInvite({
+    organizationId: occurrence.organizationId,
+    occurrenceId: occurrence.id,
+    personId: input.actor.personId,
+    expiresAt: occurrence.startsAt,
+    now: input.now,
+  });
+  log.info("participation.invite.changed", {
+    organizationId: occurrence.organizationId,
+    subjectId: occurrence.id,
+    step: "link_created",
+  });
+  return invite;
+}
+
+/**
+ * The one way an invite link is made (players and operators): one link per
+ * person and session, expiring at the start. A second ask returns the same
+ * link.
+ */
+async function issueInvite(input: {
+  readonly organizationId: string;
+  readonly occurrenceId: string;
+  readonly personId: string;
+  readonly expiresAt: Date;
+  readonly now: Date;
+}): Promise<{
+  readonly url: string;
+  readonly code: string;
+  readonly expiresAt: string;
+}> {
+  const database = getDatabase();
   await database
     .insert(participationInvites)
     .values({
-      organizationId: occurrence.organizationId,
+      organizationId: input.organizationId,
       subjectType: CATALOG_SUBJECT,
-      subjectId: occurrence.id,
-      createdByPersonId: input.actor.personId,
+      subjectId: input.occurrenceId,
+      createdByPersonId: input.personId,
       code: newCode(),
-      expiresAt: occurrence.startsAt,
+      expiresAt: input.expiresAt,
       createdAt: input.now,
     })
     .onConflictDoNothing();
   const invite = await database.query.participationInvites.findFirst({
     where: and(
       eq(participationInvites.subjectType, CATALOG_SUBJECT),
-      eq(participationInvites.subjectId, occurrence.id),
-      eq(participationInvites.createdByPersonId, input.actor.personId),
+      eq(participationInvites.subjectId, input.occurrenceId),
+      eq(participationInvites.createdByPersonId, input.personId),
     ),
   });
   if (!invite) throw new Error("The invite link could not be created.");
-  log.info("participation.invite.changed", {
-    organizationId: occurrence.organizationId,
-    subjectId: occurrence.id,
-    step: "link_created",
-  });
   return {
     url: inviteUrl(invite.code),
     code: invite.code,
     expiresAt: invite.expiresAt.toISOString(),
   };
+}
+
+/**
+ * `operator.participation.shareLink`: a club member's share link for one of
+ * the club's sessions ("Message the group", the session sheet). Same
+ * machinery, scope and expiry as a player's invite; another club's session
+ * answers "not found". Audited; logs carry ids only.
+ */
+export async function createOperatorShareLink(input: {
+  readonly organizationId: string;
+  readonly actorPersonId: string;
+  readonly subjectType: string;
+  readonly subjectId: string;
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<{
+  readonly url: string;
+  readonly code: string;
+  readonly expiresAt: string;
+}> {
+  requireParticipationDatabase();
+  if (input.subjectType !== CATALOG_SUBJECT) {
+    throw new ParticipationError(
+      "INVALID",
+      "Share links for this kind of session arrive with PART-9.",
+    );
+  }
+  const database = getDatabase();
+  const occurrence = await database.query.catalogSessionOccurrences.findFirst({
+    where: and(
+      eq(catalogSessionOccurrences.id, input.subjectId),
+      eq(catalogSessionOccurrences.organizationId, input.organizationId),
+    ),
+  });
+  if (!occurrence) {
+    throw new ParticipationError("NOT_FOUND", "This session was not found.");
+  }
+  if (occurrence.status !== "scheduled" || occurrence.startsAt <= input.now) {
+    throw new ParticipationError(
+      "NOT_ALLOWED",
+      "This session is no longer taking bookings.",
+    );
+  }
+  const invite = await issueInvite({
+    organizationId: occurrence.organizationId,
+    occurrenceId: occurrence.id,
+    personId: input.actorPersonId,
+    expiresAt: occurrence.startsAt,
+    now: input.now,
+  });
+  await database.insert(auditLog).values({
+    organizationId: input.organizationId,
+    actorPersonId: input.actorPersonId,
+    actorType: "person",
+    action: "participation.share_link_created",
+    entityType: CATALOG_SUBJECT,
+    entityId: occurrence.id,
+    afterHash: stableHash({ code: invite.code, expiresAt: invite.expiresAt }),
+    reason: "A club member created a share link for this session.",
+    traceId: input.requestId,
+    createdAt: input.now,
+  });
+  log.info("participation.invite.changed", {
+    organizationId: occurrence.organizationId,
+    subjectId: occurrence.id,
+    step: "operator_link_created",
+  });
+  return invite;
 }
 
 /** The public invite landing: no names, no roster, the storefront's facts only. */

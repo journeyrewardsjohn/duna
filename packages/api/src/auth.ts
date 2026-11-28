@@ -4,7 +4,7 @@ import {
   formatObservedErrorShape,
   observeProcedure,
 } from "./observability/trpc";
-import { consumeRateLimit } from "./rate-limit";
+import { consumeRateLimit, e2eRateLimitMultiplier } from "./rate-limit";
 
 export interface ProcedurePolicy {
   requiredScope?: string;
@@ -58,10 +58,12 @@ export function rateLimitMiddleware(policy: RateLimitPolicy) {
         : policy.scope === "ip"
           ? ctx.ipAddress
           : (ctx.actor?.personId ?? ctx.ipAddress);
+    // 1 everywhere except the Playwright web servers; always 1 in production.
+    const multiplier = e2eRateLimitMultiplier();
     const decision = await consumeRateLimit({
       key: `${policy.id}:${identity ?? "anonymous"}`,
-      capacity: policy.capacity,
-      refillPerMinute: policy.refillPerMinute,
+      capacity: policy.capacity * multiplier,
+      refillPerMinute: policy.refillPerMinute * multiplier,
       cost: policy.cost,
       now: ctx.now,
     });

@@ -176,5 +176,26 @@ test.describe("CH-8 Training programs", () => {
 });
 
 test.describe("CH-9 Group sessions that need players", () => {
-  test.fixme("CH-9.1 Opens a session that needs players; Nudge opens a Send review with the share link [PART-7, PART-12]", async () => {});
+  test("CH-9.1 Opens a session that needs players; Message the group opens a review with the share link (web step)", async ({
+    page,
+  }) => {
+    await page.goto(hq("/offerings/at-risk"));
+    await expectPageReady(page, "At risk this week");
+    await page
+      .getByRole("list", { name: "Sessions at risk this week" })
+      .getByRole("button", { name: /Saturday semi-private/ })
+      .click();
+    const panel = page.getByRole("dialog", { name: "Saturday semi-private" });
+    await panel.getByRole("button", { name: "Message the group" }).click();
+    await expect(panel.getByText("Nothing is sent from here")).toBeVisible();
+    await expect(
+      panel.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue(/clubs\/.+\/products\/.+\?session=/);
+    await expect(
+      panel.getByRole("button", { name: "Copy the booking link" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("link", { name: "Review in Inbox" }),
+    ).toHaveAttribute("href", /\/inbox\?compose=new/);
+  });
 });

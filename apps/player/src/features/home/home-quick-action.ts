@@ -1,5 +1,6 @@
 export type HomeQuickAction =
   | "upload-score"
+  | "score-match"
   | "find-match"
   | "create-match"
   | "book-court"
