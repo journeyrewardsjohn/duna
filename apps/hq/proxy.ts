@@ -5,11 +5,12 @@ import {
   handleAuthkitProxy,
   partitionAuthkitHeaders,
 } from "@workos-inc/authkit-nextjs";
-import { type NextRequest, NextResponse } from "next/server";
+import { REQUEST_ID_HEADER, resolveEdgeRequestId } from "@duna/observability";
+import { NextRequest, NextResponse } from "next/server";
 import { isHiddenTidelineGalleryRoute } from "./app/tideline/gallery-guard";
 import { isPublicHqRoute, routeMatches } from "./lib/public-routes";
 
-export default async function proxy(request: NextRequest) {
+async function routeProxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
   // The Tideline gallery is development-only: a true 404 without its flag.
   if (isHiddenTidelineGalleryRoute(pathname)) {
@@ -25,14 +26,14 @@ export default async function proxy(request: NextRequest) {
     (routeMatches(pathname, "/api/ask-duna") &&
       request.headers.get("authorization")?.startsWith("Bearer "))
   ) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: request.headers } });
   }
   if (!isWorkOSAuthKitConfigured()) {
     if (
       isPublicHqRoute(pathname) ||
       process.env.NEXT_PUBLIC_DEMO_MODE !== "false"
     ) {
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: request.headers } });
     }
     return NextResponse.redirect(new URL("/sign-in", request.url));
   }
@@ -69,6 +70,22 @@ export default async function proxy(request: NextRequest) {
     });
   }
   return handleAuthkitProxy(request, result.headers);
+}
+
+/**
+ * Every request gets one id at the edge (Duna Hosting's own id when present),
+ * forwarded to the app in `x-request-id` and returned in the response
+ * header, so a person's error reference finds the request in the logs.
+ */
+export default async function proxy(request: NextRequest) {
+  const requestId = resolveEdgeRequestId(request.headers);
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+  const response = await routeProxy(
+    new NextRequest(request.url, { method: request.method, headers }),
+  );
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
 }
 
 export const config = {
