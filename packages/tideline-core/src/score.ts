@@ -17,6 +17,7 @@ export type MatchStatus =
   | "scheduled"
   | "warmup"
   | "live"
+  | "not-finished"
   | "pending-verification"
   | "verified"
   | "disputed"
@@ -25,13 +26,13 @@ export type MatchStatus =
   | "cancelled";
 
 /**
- * PROPOSED, not in the `match_status` enum yet: a match stopped part-way
- * (rain, injury, curfew). Accepted here so renderers can be built ahead of
- * the schema change; remove this note when the enum gains the value.
+ * A match stopped part-way (rain, injury, curfew). Now a value of the
+ * `match_status` enum; the alias is kept so existing imports still compile.
  */
 export type NotFinishedStatus = "not-finished";
 
-export type NetScoreStatus = MatchStatus | NotFinishedStatus;
+/** Every state a score card draws: exactly the `match_status` enum. */
+export type NetScoreStatus = MatchStatus;
 
 export type Side = "home" | "away";
 
