@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./score": "./src/score.ts",
+    "./score-sentence": "./src/score-sentence.ts",
     "./rating-ring": "./src/rating-ring.ts",
     "./day-strip": "./src/day-strip.ts",
     "./time-slots": "./src/time-slots.ts",

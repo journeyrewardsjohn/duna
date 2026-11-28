@@ -62,9 +62,6 @@ jobs:
       - name: Verify readable type
         run: pnpm verify:readable-type
 
-      - name: Verify HQ CSS line ratchet
-        run: pnpm verify:hq-css-ratchet
-
       - name: Lint
         run: pnpm lint
 

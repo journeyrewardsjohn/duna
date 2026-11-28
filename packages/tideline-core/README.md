@@ -21,19 +21,20 @@ import { netScoreState } from "@duna/tideline-core"; // or "@duna/tideline-core/
 
 ## Modules
 
-| Subpath        | What it gives you                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------- |
-| `/score`       | `netScoreState(match)`: headline, set rows, sets won, winner, label parts, accessible summary     |
-| `/rating-ring` | `ratingRingModel`, `ratingRingLayout`, `reliabilityBand`, `RATING_RING_GEOMETRY`                  |
-| `/day-strip`   | `dayStrip({ items, timeZone, now })`: days, counts, today, empty days, week and DST flags         |
-| `/time-slots`  | `timeSlots(...)`, `DEFAULT_DURATIONS`, duration choices and why a start is unavailable            |
-| `/light`       | `sunTimes`, `lightMarkFor`, `dayLineParts`                                                        |
-| `/conditions`  | `playCall`, `windOnCourt`, `needsWeatherChip`, `conditionsLine`, `fitConditionsLine`, thresholds  |
-| `/map-pins`    | `mapStyleForZoom`, `pinModel`, zoom constants                                                     |
-| `/club-mark`   | `monogramFor`, `foregroundFor` (contrast-safe ink), colour maths                                  |
-| `/concierge`   | `ThreadContext` union, `threadContextParts`                                                       |
-| `/format`      | `formatTime`, `formatTimeRange`, `countdownParts`, `formatCountdown`, `formatMoney`, `moneyParts` |
-| `/zoned-time`  | Civil dates and IANA-zone helpers the other modules share                                         |
+| Subpath           | What it gives you                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `/score`          | `netScoreState(match)`: headline, set rows, sets won, winner, label parts, accessible summary     |
+| `/rating-ring`    | `ratingRingModel`, `ratingRingLayout`, `reliabilityBand`, `ratingRingArcPath`, `ratingRingLabel`  |
+| `/score-sentence` | `MATCH_STATUSES`, `netScoreSentence`, `scoreAnnouncementText`, `createAnnouncementGate`           |
+| `/day-strip`      | `dayStrip({ items, timeZone, now })`: days, counts, today, empty days, week and DST flags         |
+| `/time-slots`     | `timeSlots(...)`, `DEFAULT_DURATIONS`, duration choices and why a start is unavailable            |
+| `/light`          | `sunTimes`, `lightMarkFor`, `dayLineParts`                                                        |
+| `/conditions`     | `playCall`, `windOnCourt`, `needsWeatherChip`, `conditionsLine`, `fitConditionsLine`, thresholds  |
+| `/map-pins`       | `mapStyleForZoom`, `pinModel`, zoom constants                                                     |
+| `/club-mark`      | `monogramFor`, `foregroundFor`, `clubMarkModel`, `generatedClubColor`, `membershipPassModel`      |
+| `/concierge`      | `ThreadContext` union, `threadContextParts`                                                       |
+| `/format`         | `formatTime`, `formatTimeRange`, `countdownParts`, `formatCountdown`, `formatMoney`, `moneyParts` |
+| `/zoned-time`     | Civil dates and IANA-zone helpers the other modules share                                         |
 
 ## Examples
 

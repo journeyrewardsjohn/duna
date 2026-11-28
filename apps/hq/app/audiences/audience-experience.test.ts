@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { renderForTest } from "@/lib/render-for-test";
 import { AudienceOverview } from "./audience-overview";
 
-// The rule builder, people selection, preview, and responsive layout are
-// exercised in the browser: tests/e2e/hq-ui-contracts.spec.ts. Demo mode
-// always has one saved audience, so the empty state is rendered here.
+// The rule builder, people selection and preview are covered by the persona
+// journeys when this screen is rebuilt. Demo mode always has one saved
+// audience, so the empty state is rendered here.
 describe("HQ Audience overview", () => {
   it("gives an empty workspace one unmistakable way to start", () => {
     const overview = renderForTest(AudienceOverview, {

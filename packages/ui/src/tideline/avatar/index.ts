@@ -13,3 +13,8 @@ export {
   type PlayerSlotProps,
   type PlayerSummary,
 } from "./avatar";
+export {
+  WindowAvatar,
+  type WindowAvatarGround,
+  type WindowAvatarProps,
+} from "./window-avatar";

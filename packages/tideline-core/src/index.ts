@@ -1,6 +1,7 @@
 export * from "./zoned-time";
 export * from "./format";
 export * from "./score";
+export * from "./score-sentence";
 export * from "./rating-ring";
 export * from "./day-strip";
 export * from "./time-slots";

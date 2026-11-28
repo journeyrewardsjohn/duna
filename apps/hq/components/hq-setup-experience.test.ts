@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { operatorModules } from "./navigation";
 
 // Setup on Home, the dedicated guide, mobile navigation, and the shared
-// readiness steps in Settings are checked in the browser:
-// tests/e2e/hq-ui-contracts.spec.ts.
+// readiness steps in Settings are checked in the browser journeys.
 describe("HQ setup navigation", () => {
   it("keeps Get started in the Today group, right after Home", () => {
     const today = operatorModules.filter((module) => module.group === "Today");

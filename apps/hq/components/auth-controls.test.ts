@@ -13,7 +13,7 @@ import { AuthControls } from "./auth-controls";
 // control in each session state. Opening the menu, Escape, outside-click
 // dismissal, and focus return need a WorkOS session that demo mode does not
 // have; the organization switcher shares that dismissal code and is driven in
-// tests/e2e/hq-ui-contracts.spec.ts.
+// the browser journeys.
 describe("HQ account control", () => {
   beforeEach(() => {
     mocks.useAuth.mockReset();

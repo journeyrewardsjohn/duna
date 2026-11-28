@@ -93,6 +93,23 @@ units from a device or locale. Priority when space is short (first dropped
 last): reason, wind, temperature, rain, UV, sunset; the reason is never
 dropped.
 
+## Score words and club identity
+
+`score-sentence.ts`: `MATCH_STATUSES` (a test compares it with the
+`match_status` enum in `packages/db/src/schema.ts`, so a new value fails until
+it is designed), `parseNetScoreStatus` (hyphens or underscores, never a
+guess), `netScoreSentence` (the one sentence a screen reader hears for a score
+card), `scoreAnnouncementText` (live-region words from `scoreAnnouncement`
+parts) and `createAnnouncementGate` (at most one announcement per quiet
+window; the latest held message wins). `rating-ring.ts` adds
+`ratingRingArcPath` (SVG arcs from 12 o'clock) and `ratingRingLabel` (the
+ring's text alternative). `club-mark.ts` adds `clubMarkModel` (logo, tile or
+monogram; below 28 px a logo becomes the monogram unless it works small; 26%
+radius; digits in a monogram are flagged so they are not set in Jost),
+`generatedClubColor` (a name-hashed ground that passes 4.5:1 with Salt for
+clubs with no colour yet; never used to recolour a chosen brand) and
+`membershipPassModel` (a code only for an active membership that has one).
+
 ## Score announcements
 
 `scoreAnnouncement(prev, next)` returns what changed between two successive
