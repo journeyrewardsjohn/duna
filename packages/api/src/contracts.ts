@@ -1,4 +1,4 @@
-import { MEMBERSHIP_PLAN_IDS } from "@duna/core";
+import { MEMBERSHIP_PLAN_IDS, PARTICIPATION_STATES } from "@duna/core";
 import { z } from "zod";
 
 export const currencySchema = z.enum(["USD", "CAD", "AUD", "BRL", "EUR"]);
@@ -4467,6 +4467,8 @@ export const publicParticipationSummarySchema = z.object({
       }),
     )
     .readonly(),
+  // B10 (additive): the rule keeps a waitlist once the session is full.
+  waitlist: z.boolean().optional(),
 });
 
 export const occurrenceParticipationStateSchema = z.object({
@@ -5860,6 +5862,19 @@ export const discoveryMapItemSchema = z.object({
   level: z.string().optional(),
   price: moneySchema.optional(),
   tags: z.array(z.string()).readonly(),
+  /**
+   * B10 (additive): group state for an event or pickup that has a group
+   * rule, from the core display model (never new wording).
+   */
+  participation: z
+    .object({
+      displayState: z.enum([...PARTICIPATION_STATES, "open"]),
+      copy: z.object({
+        status: z.string(),
+        line: z.string().optional(),
+      }),
+    })
+    .optional(),
 });
 
 export const discoveryMapSchema = z.object({

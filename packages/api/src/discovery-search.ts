@@ -1,11 +1,24 @@
+/**
+ * The device search (Player Find, the site's discover pages): Where, When
+ * and What over `public.discoveryMap`. Filtering and ordering live in
+ * ./discovery-ranking.ts, which the server search (`public.search.query`)
+ * shares, so both give the same answers for the same items.
+ */
 import type { DiscoveryMapItem } from "./contracts";
+import {
+  DISCOVERY_RADIUS_STEPS,
+  discoveryDistanceMiles,
+  discoveryMatchesInstantRange,
+  discoveryMatchesWhat,
+  rankNearby,
+  sortDiscoveryItems,
+  type DiscoveryCoordinates,
+  type DiscoveryWhat,
+} from "./discovery-ranking";
 
 export type { DiscoveryEntityType, DiscoveryMapItem } from "./contracts";
-
-export type DiscoveryCoordinates = {
-  readonly latitude: number;
-  readonly longitude: number;
-};
+export type { DiscoveryCoordinates, DiscoveryWhat } from "./discovery-ranking";
+export { DISCOVERY_RADIUS_STEPS, discoveryDistanceMiles };
 
 export type DiscoveryLocation =
   | { readonly mode: "anywhere"; readonly label: "Anywhere" }
@@ -31,15 +44,6 @@ export type DiscoveryDateRange = {
   readonly endsAt?: string;
 };
 
-export type DiscoveryWhat =
-  | "for-you"
-  | "events"
-  | "tournaments"
-  | "leagues"
-  | "training"
-  | "matches"
-  | "court-rentals";
-
 export type DiscoverySearchCriteria = {
   readonly location: DiscoveryLocation;
   readonly when: DiscoveryDateRange;
@@ -54,10 +58,6 @@ export type DiscoverySearchResult = {
   readonly expandedWorldwide: boolean;
   readonly totalMatches: number;
 };
-
-export const DISCOVERY_RADIUS_STEPS = [
-  10, 30, 60, 120, 240, 480, 960, 1_920, 3_840, 7_680, 12_000,
-] as const;
 
 export const discoveryWhatOptions: readonly {
   readonly value: DiscoveryWhat;
@@ -163,89 +163,9 @@ export function discoveryPresetRange(
   };
 }
 
-export function discoveryDistanceMiles(
-  origin: DiscoveryCoordinates,
-  item: Pick<DiscoveryMapItem, "latitude" | "longitude">,
-) {
-  if (item.latitude === undefined || item.longitude === undefined) {
-    return Number.POSITIVE_INFINITY;
-  }
-  const radians = (value: number) => (value * Math.PI) / 180;
-  const latitudeDelta = radians(item.latitude - origin.latitude);
-  const longitudeDelta = radians(item.longitude - origin.longitude);
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(radians(origin.latitude)) *
-      Math.cos(radians(item.latitude)) *
-      Math.sin(longitudeDelta / 2) ** 2;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function matchesDate(item: DiscoveryMapItem, range: DiscoveryDateRange) {
-  if (range.preset === "flexible" || !range.startsAt || !range.endsAt) {
-    return true;
-  }
-  if (!item.startsAt && !item.endsAt) return true;
-  const rangeStart = Date.parse(range.startsAt);
-  const rangeEnd = Date.parse(range.endsAt);
-  const itemStart = Date.parse(item.startsAt ?? item.endsAt ?? "");
-  const itemEnd = Date.parse(item.endsAt ?? item.startsAt ?? "");
-  if ([rangeStart, rangeEnd, itemStart, itemEnd].some(Number.isNaN)) {
-    return true;
-  }
-  return itemStart <= rangeEnd && itemEnd >= rangeStart;
-}
-
-function matchesWhat(item: DiscoveryMapItem, what: readonly DiscoveryWhat[]) {
-  if (what.length === 0 || what.includes("for-you")) return true;
-  const kind = item.kind.toLowerCase();
-  return what.some((selection) => {
-    if (selection === "events") {
-      return item.entityType === "event" && kind !== "tournament";
-    }
-    if (selection === "tournaments") {
-      return item.entityType === "pro-tour" || kind === "tournament";
-    }
-    if (selection === "leagues") return kind === "league";
-    if (selection === "training") {
-      return (
-        item.entityType === "coach" ||
-        ["clinic", "private-lesson", "lesson", "training"].includes(kind)
-      );
-    }
-    if (selection === "matches") {
-      return (
-        item.entityType === "match" ||
-        ["match", "open-play", "pickup", "hosted-match"].includes(kind)
-      );
-    }
-    return item.entityType === "venue" || kind === "court-booking";
-  });
-}
-
-function startTimestamp(item: DiscoveryMapItem) {
-  const timestamp = item.startsAt ? Date.parse(item.startsAt) : Number.NaN;
-  return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
-}
-
-function sortedResults(
-  items: readonly DiscoveryMapItem[],
-  origin?: DiscoveryCoordinates,
-) {
-  return [...items].sort((left, right) => {
-    const liveDifference =
-      Number(Boolean(right.live)) - Number(Boolean(left.live));
-    if (liveDifference) return liveDifference;
-    if (origin) {
-      const distanceDifference =
-        discoveryDistanceMiles(origin, left) -
-        discoveryDistanceMiles(origin, right);
-      if (distanceDifference) return distanceDifference;
-    }
-    const dateDifference = startTimestamp(left) - startTimestamp(right);
-    if (dateDifference) return dateDifference;
-    return left.title.localeCompare(right.title);
-  });
+  if (range.preset === "flexible") return true;
+  return discoveryMatchesInstantRange(item, range);
 }
 
 export function runDiscoverySearch(
@@ -255,12 +175,13 @@ export function runDiscoverySearch(
 ): DiscoverySearchResult {
   const matching = items.filter(
     (item) =>
-      matchesDate(item, criteria.when) && matchesWhat(item, criteria.what),
+      matchesDate(item, criteria.when) &&
+      discoveryMatchesWhat(item, criteria.what),
   );
   if (criteria.location.mode === "anywhere") {
     return {
       criteria,
-      items: sortedResults(matching),
+      items: sortDiscoveryItems(matching),
       expandedWorldwide: false,
       totalMatches: matching.length,
     };
@@ -270,36 +191,15 @@ export function runDiscoverySearch(
     latitude: criteria.location.latitude,
     longitude: criteria.location.longitude,
   };
-  const geocoded = matching.filter(
-    (item) => item.latitude !== undefined && item.longitude !== undefined,
-  );
-  const selectedRadius = DISCOVERY_RADIUS_STEPS.find(
-    (radius) =>
-      geocoded.filter((item) => discoveryDistanceMiles(origin, item) <= radius)
-        .length >= minimumNearbyResults,
-  );
-  if (selectedRadius !== undefined) {
-    const nearby = matching.filter(
-      (item) =>
-        item.latitude !== undefined &&
-        item.longitude !== undefined &&
-        discoveryDistanceMiles(origin, item) <= selectedRadius,
-    );
-    return {
-      criteria,
-      items: sortedResults(nearby, origin),
-      origin,
-      radiusMiles: selectedRadius,
-      expandedWorldwide: false,
-      totalMatches: matching.length,
-    };
-  }
-
+  const ranked = rankNearby(matching, origin, { minimumNearbyResults });
   return {
     criteria,
-    items: sortedResults(matching, origin),
+    items: ranked.items,
     origin,
-    expandedWorldwide: matching.length > 0,
+    ...(ranked.radiusMiles !== undefined
+      ? { radiusMiles: ranked.radiusMiles }
+      : {}),
+    expandedWorldwide: ranked.expandedWorldwide,
     totalMatches: matching.length,
   };
 }

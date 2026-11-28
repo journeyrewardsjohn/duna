@@ -208,6 +208,72 @@ The Places routes (`/api/places/autocomplete`, `/details`, `/map`) answer 429 wi
 over a per-address budget, take `session=<token>` and pass it to the provider, and cache identical
 requests for 10 minutes.
 
+## Search: where, when, what (`public.search`, `player.search`, owner B10)
+
+Contract: `packages/api/src/contracts/search.ts`; service: `packages/api/src/services/search/`;
+what it covers and how results are ordered: [`docs/product/search.md`](product/search.md).
+
+| Procedure                                        | Who       | What                                                                                                                                       |
+| ------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `public.search.query(searchQueryInput)`          | Anyone    | One page of public results (`items`, `nextCursor`, `totalEstimate`, `facets`, `resultBounds`).                                             |
+| `player.search.query(searchQueryInput)`          | Signed in | The same, plus members-only sessions of the clubs the person belongs to (never cached).                                                    |
+| `public.search.suggest({ text })`                | Anyone    | Typeahead: Duna clubs and venues with a map point (`places`) and the five best results.                                                    |
+| `public.search.session({ id, viewerTimeZone? })` | Anyone    | One bookable session occurrence (detail screen, `duna://sessions/:id`); `NOT_FOUND` for anything the caller may not see (never FORBIDDEN). |
+
+Input (all optional except `limit`, 1 to 100, default 25):
+
+- `where.near { latitude, longitude, radiusKm ≤ 500 }`: within the radius, widening in the device
+  search's steps (10, 30, 60 … miles) until five results; `distanceKm` on each result.
+- `where.bounds { north, south, east, west }`: "search this area"; wins over `near` (which then only
+  orders by distance). Bounds across the date line are refused.
+- `where.place`: `venue:<uuid>` or `club:<uuid>` for one Duna venue or club; any other text matches
+  the locality, the place name and the title.
+- `when { from, to, timezone? }`: calendar dates, inclusive, at most 366 days. Without `timezone`
+  each result's dates are read in its venue's own zone (a 7 PM Thursday session in Los Angeles is
+  Thursday); with it, in that zone (the device's).
+- `what.kinds`: `club`, `venue`, `event`, `league`, `lesson` (lessons, clinics, group training),
+  `open-play` (open play and pickups), `coach`. `what.tags` narrows to results carrying every tag;
+  `daypart:morning|afternoon|evening` (05–12, 12–17, 17–05 venue time) filters by start time.
+- `text` (≤ 120 characters): ranks the whole title, then a title prefix, then a title word, then
+  every word anywhere; never reaches SQL and is never logged (lengths only).
+- `cursor`: the previous page's `nextCursor`. A cursor from a different query is `BAD_REQUEST`.
+
+```ts
+// Evening sessions near Manhattan Beach this weekend, venue time.
+await api.public.search.query({
+  limit: 20,
+  where: { near: { latitude: 33.8847, longitude: -118.4109, radiusKm: 40 } },
+  when: { from: "2026-12-05", to: "2026-12-06" },
+  what: { kinds: ["lesson", "open-play"], tags: ["daypart:evening"] },
+});
+// → { items: [{ kind: "lesson", title: "Beginner clinic", startsAt, distanceKm: 1.2,
+//      availability: { state: "few-left", summary: "<core participation status>" } }, …],
+//    nextCursor: "eyJ2Ijox…", totalEstimate: 14, facets: { kinds: [...], tags: [...] },
+//    resultBounds: { north, south, east, west } }
+
+// The session detail screen.
+await api.public.search.session({
+  id: occurrenceId,
+  viewerTimeZone: "America/New_York",
+});
+// → { title, club, venue, startsAt, endsAt, timezone, local: { date, startTime, endTime },
+//    capacity, spotsLeft, prices, participation: { displayState, display, copy },
+//    waitlist: { available, waiting }, status, path }
+```
+
+Availability: sessions carry the core participation status line in `availability.summary`
+(`full`, `few-left` at 1–2 places, `open`, `not-bookable` when cancelled); events read their places
+left; the Pro Tour is `not-bookable`; clubs, venues and coaches are `unknown`. A signed-in person's
+own booking and waitlist place stay in `player.participation.quote`.
+
+Limits per address (database-backed limiter, one-way hash of the address): query 60 (60 a minute),
+suggest 120 (120 a minute), session 60 (30 a minute). A refusal is `TOO_MANY_REQUESTS` with the
+seconds in the message and `cause.retryAfterSeconds` (the tRPC route can send it as `Retry-After`).
+
+Additive fields elsewhere: `public.discoveryMap` items with a group rule carry
+`participation: { displayState, copy: { status, line? } }`; `public.organizationStorefront`
+`catalog[].participation.waitlist` says whether the rule keeps a waitlist.
+
 ## Duna Pay (`operator.pay`, owner B2)
 
 Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
