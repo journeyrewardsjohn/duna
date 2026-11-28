@@ -86,7 +86,10 @@ class AnimatedValue {
     this.value = value;
   }
   stopAnimation() {}
-  interpolate(config: Record<string, unknown>) {
+  interpolate(config: Record<string, unknown>): {
+    interpolate: Record<string, unknown>;
+    from: AnimatedValue;
+  } {
     return { interpolate: config, from: this };
   }
 }
