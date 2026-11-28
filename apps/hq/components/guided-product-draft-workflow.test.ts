@@ -27,8 +27,7 @@ const item = {
 } as unknown as OperatorWorkspace["catalog"][number];
 
 // The demo catalog is empty, so a saved draft cannot be reached in the
-// browser; the builder's own gates are covered in
-// tests/e2e/hq-ui-contracts.spec.ts.
+// browser; the builder's own gates are covered here.
 describe("guided product draft workflow", () => {
   it("takes a saved draft to an explicit publish decision", () => {
     const page = renderForTest(ProductDraftReady, { currency: "USD", item });

@@ -119,6 +119,8 @@ Universal "must not touch" rule: anything outside a WP's **Owns** column. Every 
 
 ### 4. Work packages
 
+> F5 and F6 (the HQ and Web cascade layering and the dead-CSS deletions) are superseded by [`legacy-styles.md`](legacy-styles.md): they are cancelled.
+
 Model column: **Top** = top-tier model, **Fast** = cheaper and faster model. Line counts are approximate changed lines.
 
 **Wave 0: reconcile and lay the rails (mostly serial, 1–2 days)**
