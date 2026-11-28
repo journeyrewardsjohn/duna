@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeClubColor, playerAccents } from "./brand";
+import { normalizeClubColor, playerAccents } from "./club-colors";
 
 describe("normalizeClubColor", () => {
   it("preserves hue while clamping chroma into the Duna band", () => {

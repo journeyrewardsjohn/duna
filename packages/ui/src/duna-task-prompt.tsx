@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { DunaMark } from "./web";
+import { DunaMark } from "./brand/duna-mark";
 import { openDunaAi } from "./duna-action-center";
 
 export function DunaTaskPrompt({
@@ -63,7 +63,7 @@ export function DunaTaskPrompt({
         />
         <div className="duna-task-prompt__tools">
           <span>
-            <DunaMark compact /> Duna AI
+            <DunaMark decorative size={16} /> Duna AI
           </span>
           <button
             aria-label="Send to Duna"

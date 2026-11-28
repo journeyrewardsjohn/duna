@@ -1,44 +1,6 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import { DunaMark } from "./brand/duna-mark";
 import type { DunaZone } from "./tokens";
-
-export function DunaMark({
-  compact = false,
-  className,
-}: {
-  readonly compact?: boolean;
-  readonly className?: string;
-}) {
-  return (
-    <span className={["duna-mark", className].filter(Boolean).join(" ")}>
-      {compact ? (
-        <img
-          alt="Duna"
-          className="duna-mark__icon"
-          src="/brand/duna-icon.png"
-        />
-      ) : (
-        <>
-          <img
-            alt=""
-            aria-hidden
-            className="duna-mark__icon duna-mark__icon--compact"
-            src="/brand/duna-icon.png"
-          />
-          <img
-            alt="Duna"
-            className="duna-mark__logo duna-mark__logo--blue"
-            src="/brand/duna-horizontal-blue.png"
-          />
-          <img
-            alt="Duna"
-            className="duna-mark__logo duna-mark__logo--white"
-            src="/brand/duna-horizontal-white.png"
-          />
-        </>
-      )}
-    </span>
-  );
-}
 
 export function DunaLoader({
   label = "Opening Duna",
@@ -73,7 +35,7 @@ export function DunaLoader({
       )}
       <div className="duna-loader__content">
         <span aria-hidden="true" className="duna-loader__mark">
-          <DunaMark compact />
+          <DunaMark decorative size={72} />
         </span>
         <span className="duna-loader__label">{label}</span>
       </div>
