@@ -305,7 +305,7 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 
 ### Training programs, practice plans and the drill library (B4/B5, 28 November 2026)
 
-- Migration `0121_training_library_indexes` (additive: six indexes, two of them trigram) must run
+- Migration `0122_training_library_indexes` (additive: six indexes, two of them trigram) must run
   before the deploy; it was not rehearsed on a Neon branch by B4/B5 (left to the orchestrator).
 - `TRAINING_MARKETPLACE_FEE_BPS` (basis points, e.g. `1500`): the owner's marketplace fee on paid
   drill listings. Unset, paid listings answer "not configured"; free listings work.
