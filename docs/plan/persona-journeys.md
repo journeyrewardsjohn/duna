@@ -52,11 +52,11 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 
 ### CO-2 Set up the club from its website
 
-| Step   | The person does → expected result                                                                             | Surface | Packages | Status  |
-| ------ | ------------------------------------------------------------------------------------------------------------- | ------- | -------- | ------- |
-| CO-2.1 | Enters the club's website → Duna reads it (Rally loader) and proposes name, hours, places, offerings, socials | HQ      | B1, H11  | Planned |
-| CO-2.2 | Reviews each proposal with Keep, Edit or Skip → nothing applies until confirmed; Edit opens the same SpecForm | HQ      | H11      | Planned |
-| CO-2.3 | Opens Club setup → a readiness list, one decision at a time, with "Set up payments"                           | HQ      | H11      | Main    |
+| Step   | The person does → expected result                                                                             | Surface | Packages | Status |
+| ------ | ------------------------------------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CO-2.1 | Enters the club's website → Duna reads it (Rally loader) and proposes name, hours, places, offerings, socials | HQ      | B1, H11  | Main   |
+| CO-2.2 | Reviews each proposal with Keep, Edit or Skip → nothing applies until confirmed; Edit opens the same SpecForm | HQ      | H11      | Main   |
+| CO-2.3 | Opens Club setup → a readiness list, one decision at a time, with "Set up payments"                           | HQ      | H11      | Main   |
 
 ### CO-3 Connect payments (Duna Pay)
 
@@ -72,7 +72,7 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 | Step   | The person does → expected result                                                  | Surface | Packages | Status  |
 | ------ | ---------------------------------------------------------------------------------- | ------- | -------- | ------- |
 | CO-4.1 | Starts adding a venue by describing it or by hand → both paths offered             | HQ      | H11      | Main    |
-| CO-4.2 | Saves the venue and adds courts → the venue's Courts tab lists them                | HQ      | H11      | Planned |
+| CO-4.2 | Saves the venue and adds courts → the venue's Courts tab lists them                | HQ      | H11      | Main    |
 | CO-4.3 | Sets opening hours, layout and court orientation → orientation feeds wind on court | HQ      | H11, B11 | Planned |
 
 ### CO-5 Publish a lesson and a program

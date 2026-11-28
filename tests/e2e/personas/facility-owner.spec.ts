@@ -11,9 +11,11 @@ test.use({ persona: "facility-owner" });
 test.describe("FO-1 List the facility", () => {
   test("FO-1.1 Venues open with a workspace per venue", async ({ page }) => {
     await page.goto(hq("/setup/places"));
-    await expect(page.getByRole("heading", { name: "Venues" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Open venue workspace" }).first(),
+      page.getByRole("heading", { name: "Places and courts", level: 1 }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Beach Elite Training Center/ }).first(),
     ).toBeVisible();
   });
   test.fixme("FO-1.2 List public courts as a facility with photos and hours [B9, H14]", async () => {});
