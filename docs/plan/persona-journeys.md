@@ -60,12 +60,12 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 
 ### CO-3 Connect payments (Duna Pay)
 
-| Step   | The person does → expected result                                                                          | Surface | Packages | Status  |
-| ------ | ---------------------------------------------------------------------------------------------------------- | ------- | -------- | ------- |
-| CO-3.1 | Opens Duna Pay setup from Money → "Configure money once." with a secure link button                        | HQ      | H10      | Main    |
-| CO-3.2 | Completes verification in the embedded onboarding → one of six statuses; "not configured yet" without keys | HQ      | B2, H10  | Planned |
-| CO-3.3 | Chooses the payout schedule and refund policy → saved inline with a toast; `[club policy]` until written   | HQ      | H10      | Planned |
-| CO-3.n | Same on the phone: payments status and payouts                                                             | Pro     | M-R4     | Native  |
+| Step   | The person does → expected result                                                                          | Surface | Packages | Status |
+| ------ | ---------------------------------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CO-3.1 | Opens Duna Pay setup from Money → where the club stands and the one next step                              | HQ      | H10      | Main   |
+| CO-3.2 | Completes verification in the embedded onboarding → one of six statuses; "not configured yet" without keys | HQ      | B2, H10  | Main   |
+| CO-3.3 | Chooses the payout schedule and refund policy → saved inline with a toast; `[club policy]` until written   | HQ      | H10      | Main   |
+| CO-3.n | Same on the phone: payments status and payouts                                                             | Pro     | M-R4     | Native |
 
 ### CO-4 Add places and courts
 
@@ -124,10 +124,10 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 
 ### CO-10 See a payout
 
-| Step    | The person does → expected result                        | Surface | Packages | Status  |
-| ------- | -------------------------------------------------------- | ------- | -------- | ------- |
-| CO-10.1 | Opens Money → balance, payout rhythm, "Request a payout" | HQ      | H10      | Main    |
-| CO-10.2 | Opens a payout → arrival date and the payments in it     | HQ      | H10, B2  | Planned |
+| Step    | The person does → expected result                        | Surface | Packages | Status |
+| ------- | -------------------------------------------------------- | ------- | -------- | ------ |
+| CO-10.1 | Opens Money → balance, payout rhythm, "Request a payout" | HQ      | H10      | Main   |
+| CO-10.2 | Opens a payout → arrival date and the payments in it     | HQ      | H10, B2  | Main   |
 
 ### CO-11 Ask Duna to do it
 
