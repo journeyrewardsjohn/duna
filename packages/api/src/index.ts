@@ -23,6 +23,7 @@ export * from "./contracts/households";
 export * from "./contracts/legal";
 export * from "./contracts/participation";
 export * from "./contracts/add-score";
+export * from "./contracts/schedule";
 export * from "./contracts/invites";
 export * from "./contracts/people";
 export * from "./auth";

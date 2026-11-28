@@ -6,6 +6,7 @@
  * browser"). The people and coaches are the demo club's own fixtures.
  */
 import { demoPlayer } from "@duna/core/demo";
+import { scheduleDemoBooking } from "@duna/core/demo/schedule";
 import { teamAvailabilityDemoStaff } from "@duna/core/demo/team-availability";
 import { addCalendarDays, wallTimeToInstant } from "@duna/scheduling";
 import type { ItemKind, ItemPerson, ScheduleItem } from "./schedule-model";
@@ -177,18 +178,37 @@ export function demoDayItems(input: {
     items.push(
       {
         ...base,
+        // The schedule fixtures' booking (SCHED-API), so its previews
+        // (who gets what back, who is told) describe this booking.
         id: key("hire"),
         kind: "booking",
         title: "Court hire",
-        who: person(0).name,
+        who: scheduleDemoBooking.booker.name,
         startsAt: at(date, 8, 0, input.zone),
-        endsAt: at(date, 9, 0, input.zone),
+        endsAt: at(date, 9, 30, input.zone),
         courtId: side.id,
         courtName: side.name,
         status: "confirmed",
-        people: roster(key("hire"), [person(0)], "paid"),
-        amountMinor: 4_800,
-        paidMinor: 4_800,
+        people: [
+          ...roster(
+            key("hire"),
+            [
+              {
+                id: scheduleDemoBooking.booker.personId,
+                name: scheduleDemoBooking.booker.name,
+              },
+            ],
+            "paid",
+          ),
+          {
+            id: `${key("hire")}:p1`,
+            personId: scheduleDemoBooking.invited.personId,
+            name: scheduleDemoBooking.invited.name,
+            checkedIn: false,
+          },
+        ],
+        amountMinor: scheduleDemoBooking.totalMinor,
+        paidMinor: scheduleDemoBooking.totalMinor,
         currency: "USD",
         movable: true,
       },
@@ -242,6 +262,7 @@ export function demoDayItems(input: {
         status: "blocked",
         people: [],
         movable: false,
+        removable: true,
       },
       {
         ...base,
@@ -276,7 +297,7 @@ export function demoDayItems(input: {
           courtName: side.name,
           status: "confirmed",
           people: roster(key("walkin"), [person(3)], "due"),
-          amountMinor: 4_800,
+          amountMinor: scheduleDemoBooking.totalMinor,
           paidMinor: 0,
           currency: "USD",
           movable: true,
@@ -354,6 +375,7 @@ export function applyDemoStore(
       ...(entry.reason ? { reason: entry.reason } : {}),
       ...(entry.mode ? { blockMode: entry.mode } : {}),
       movable: entry.kind !== "block",
+      ...(entry.kind === "block" ? { removable: true } : {}),
     };
   });
   return (

@@ -124,11 +124,11 @@ interface StoredCourtRateCandidate extends CourtRatePlanCandidate {
 
 async function loadCourtRateCandidates(
   courtIds: readonly string[],
+  database: ReturnType<typeof getDatabase> = getDatabase(),
 ): Promise<ReadonlyMap<string, readonly StoredCourtRateCandidate[]>> {
   const result = new Map<string, StoredCourtRateCandidate[]>();
   if (courtIds.length === 0) return result;
 
-  const database = getDatabase();
   const [courtRows, assignmentRows] = await Promise.all([
     database
       .select({ id: courts.id, primaryRatePlanId: courts.ratePlanId })
@@ -1155,11 +1155,13 @@ async function checkoutResource(courtId: string) {
   };
 }
 
-async function hasOrganizationMembership(input: {
-  readonly personId: string;
-  readonly organizationId: string;
-}): Promise<boolean> {
-  const database = getDatabase();
+async function hasOrganizationMembership(
+  input: {
+    readonly personId: string;
+    readonly organizationId: string;
+  },
+  database: ReturnType<typeof getDatabase> = getDatabase(),
+): Promise<boolean> {
   const [staff, member] = await Promise.all([
     database.query.organizationMemberships.findFirst({
       where: and(
@@ -1229,6 +1231,75 @@ export interface CourtCheckoutPricing {
   readonly dunaPlusApplied: boolean;
 }
 
+export interface CourtRate {
+  /** The rate for the slot, before any consumer fee. */
+  readonly amountMinor: number;
+  readonly currency: CurrencyCode;
+  readonly rateUnitMinutes: number;
+  readonly planId: string;
+  readonly planName: string;
+  readonly priceKind: "base" | "public" | "member";
+}
+
+/**
+ * The court's own rate for one slot: the lowest qualifying rate plan for the
+ * person (member price when they belong to the club) on that local date.
+ * Shared by the player checkout (`priceCourtCheckout`, which adds the
+ * consumer fees) and the front desk (`operator.schedule.*`, SCHED-API). A
+ * person-less walk-in is priced as a non-member.
+ */
+export async function priceCourtRate(input: {
+  readonly courtId: string;
+  readonly organizationId: string;
+  readonly subjectPersonId?: string;
+  /** The slot's local date in the place's time zone (YYYY-MM-DD). */
+  readonly localDate: string;
+  readonly durationMinutes: number;
+  /** A caller's transaction (the desk prices inside the write). */
+  readonly database?: ReturnType<typeof getDatabase>;
+}): Promise<CourtRate> {
+  const database = input.database ?? getDatabase();
+  const [organizationMember, candidates] = await Promise.all([
+    input.subjectPersonId
+      ? hasOrganizationMembership(
+          {
+            personId: input.subjectPersonId,
+            organizationId: input.organizationId,
+          },
+          database,
+        )
+      : Promise.resolve(false),
+    loadCourtRateCandidates([input.courtId], database),
+  ]);
+  const applicableCandidates = (candidates.get(input.courtId) ?? []).filter(
+    (plan) => plan.organizationId === input.organizationId,
+  );
+  const selectedRate = selectLowestQualifiedCourtRate({
+    plans: applicableCandidates,
+    localDate: input.localDate,
+    durationMinutes: input.durationMinutes,
+    isMember: organizationMember,
+    personId: input.subjectPersonId,
+  });
+  const selectedPlan = selectedRate
+    ? applicableCandidates.find((plan) => plan.id === selectedRate.planId)
+    : undefined;
+  if (!selectedRate || !selectedPlan) {
+    throw new CourtCheckoutError(
+      "RATE_NOT_CONFIGURED",
+      "No court rate applies to this player and date.",
+    );
+  }
+  return {
+    amountMinor: selectedRate.amountMinor,
+    currency: selectedPlan.currency,
+    rateUnitMinutes: selectedRate.rateUnitMinutes,
+    planId: selectedRate.planId,
+    planName: selectedRate.planName,
+    priceKind: selectedRate.priceKind,
+  };
+}
+
 /**
  * The single source of truth for what a court reservation costs the buyer.
  * `quoteCourtCheckout` and `startCourtCheckout` both price through this so the
@@ -1245,38 +1316,19 @@ async function priceCourtCheckout(input: {
   readonly now: Date;
 }): Promise<CourtCheckoutPricing> {
   const { resource } = input;
-  const [organizationMember, hasDunaPlus] = await Promise.all([
-    hasOrganizationMembership({
-      personId: input.subjectPersonId,
+  const [selectedRate, hasDunaPlus] = await Promise.all([
+    priceCourtRate({
+      courtId: resource.courtId,
       organizationId: resource.organizationId,
+      subjectPersonId: input.subjectPersonId,
+      localDate: dateOfLocalDateTime(input.localStartsAt),
+      durationMinutes: input.durationMinutes,
     }),
     hasActiveDunaPlusMembership(input.buyerPersonId, input.now),
   ]);
-  const candidates = (await loadCourtRateCandidates([resource.courtId])).get(
-    resource.courtId,
-  );
-  const applicableCandidates = (candidates ?? []).filter(
-    (plan) => plan.organizationId === resource.organizationId,
-  );
-  const selectedRate = selectLowestQualifiedCourtRate({
-    plans: applicableCandidates,
-    localDate: dateOfLocalDateTime(input.localStartsAt),
-    durationMinutes: input.durationMinutes,
-    isMember: organizationMember,
-    personId: input.subjectPersonId,
-  });
-  const selectedPlan = selectedRate
-    ? applicableCandidates.find((plan) => plan.id === selectedRate.planId)
-    : undefined;
-  if (!selectedRate || !selectedPlan) {
-    throw new CourtCheckoutError(
-      "RATE_NOT_CONFIGURED",
-      "No court rate applies to this player and date.",
-    );
-  }
   const subtotalMinor = selectedRate.amountMinor;
   const priced = priceConsumerOrder({
-    currency: selectedPlan.currency,
+    currency: selectedRate.currency,
     isDunaPlus: hasDunaPlus,
     items: [
       {

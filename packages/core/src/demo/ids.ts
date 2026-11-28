@@ -28,6 +28,7 @@ export const demoIdPrefixes = {
   participation: "d0130000",
   "add-score": "d0140000",
   invites: "d0150000",
+  schedule: "d0160000",
   storefront: "d01f0000",
   tournament: "d01e0000",
 } as const;

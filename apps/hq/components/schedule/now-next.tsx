@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, RallyOnChange } from "@duna/ui/tideline";
+import { Avatar, Button, RallyOnChange } from "@duna/ui/tideline";
 import {
   clock,
   clockRange,
@@ -47,12 +47,16 @@ export function NowAndNextStrip({
   );
   const itemRow = (item: ScheduleItem) => (
     <li className="sch-now__row" key={`${item.source}:${item.id}`}>
-      <button className="sch-link" onClick={() => onOpen(item)} type="button">
-        {item.courtName ? `${item.courtName} · ` : ""}
-        {item.title}
-      </button>
-      <span className="sch-time">
-        {clockRange(item.startsAt, item.endsAt, item.timeZone)}
+      <span className="sch-now__stack">
+        <button className="sch-link" onClick={() => onOpen(item)} type="button">
+          {item.title}
+        </button>
+        <small>
+          {item.courtName ? `${item.courtName} · ` : ""}
+          <span className="sch-time">
+            {clockRange(item.startsAt, item.endsAt, item.timeZone)}
+          </span>
+        </small>
       </span>
     </li>
   );
@@ -80,11 +84,16 @@ export function NowAndNextStrip({
         <ul className="sch-now__list">
           {strip.notCheckedIn.slice(0, 6).map(({ item, person }) => (
             <li className="sch-now__row" key={`${item.id}:${person.id}`}>
-              <span>
-                {person.name}
-                <span className="sch-time">
-                  {" "}
-                  · {clock(item.startsAt, item.timeZone)}
+              <span className="sch-now__who">
+                <Avatar decorative name={person.name} size="sm" />
+                <span className="sch-now__stack">
+                  <span className="sch-now__name">{person.name}</span>
+                  <small>
+                    <span className="sch-time">
+                      {clock(item.startsAt, item.timeZone)}
+                    </span>
+                    {item.courtName ? ` · ${item.courtName}` : ""}
+                  </small>
                 </span>
               </span>
               {canCheckIn(item) ? (
@@ -113,14 +122,29 @@ export function NowAndNextStrip({
         <ul className="sch-now__list">
           {strip.unpaid.map((item) => (
             <li className="sch-now__row" key={item.id}>
-              <button
-                className="sch-link"
-                onClick={() => onOpen(item)}
-                type="button"
-              >
-                {item.who ?? item.title}
-              </button>
-              <span className="sch-time">
+              <span className="sch-now__who">
+                <Avatar
+                  decorative
+                  name={item.people[0]?.name ?? item.who ?? item.title}
+                  size="sm"
+                />
+                <span className="sch-now__stack">
+                  <button
+                    className="sch-link"
+                    onClick={() => onOpen(item)}
+                    type="button"
+                  >
+                    {item.who ?? item.title}
+                  </button>
+                  <small>
+                    <span className="sch-time">
+                      {clock(item.startsAt, item.timeZone)}
+                    </span>
+                    {item.courtName ? ` · ${item.courtName}` : ""}
+                  </small>
+                </span>
+              </span>
+              <span className="sch-time sch-now__due">
                 {money(
                   (item.amountMinor ?? 0) - (item.paidMinor ?? 0),
                   item.currency,

@@ -45,6 +45,8 @@ import { readinessAdminRouter } from "./routers/readiness";
 import { setupOperatorRouter } from "./routers/setup";
 import { payOperatorRouter } from "./routers/pay";
 import { teamAvailabilityOperatorRouter } from "./routers/team-availability";
+import { scheduleOperatorRouter } from "./routers/schedule";
+import { assertMayRecordSessionAttendance } from "./services/schedule";
 import { teamPayOperatorRouter } from "./routers/team-pay";
 import { peopleOperatorRouter } from "./routers/people";
 import { teamPayoutsOperatorRouter } from "./routers/team-payouts";
@@ -10672,7 +10674,9 @@ const operatorRouter = router({
         },
       }),
     ),
-  recordSessionAttendance: organizationProcedure("sessions:write")
+  // SCHED-API: "sessions:read" plus the narrow rule (an assigned coach on
+  // their own session); everyone else still needs "sessions:write".
+  recordSessionAttendance: organizationProcedure("sessions:read")
     .input(
       z.object({
         registrationId: z.string().uuid(),
@@ -10689,6 +10693,11 @@ const operatorRouter = router({
         request: input,
         ctx,
         execute: async () => {
+          await assertMayRecordSessionAttendance({
+            actor: ctx.actor!,
+            organizationId: ctx.organizationId,
+            registrationId: input.registrationId,
+          });
           try {
             return await recordSessionAttendance({
               actor: ctx.actor!,
@@ -14138,6 +14147,9 @@ const operatorRouter = router({
   fees: feesOperatorRouter,
   legal: legalOperatorRouter,
   participation: participationOperatorRouter,
+  // SCHED-API: the front desk's court bookings, moves, cancellations, desk
+  // payments and blocks (./routers/schedule.ts).
+  schedule: scheduleOperatorRouter,
   // HQ People (PEOPLE-API): import, merge, notes, tags, households,
   // documents and membership changes.
   people: peopleOperatorRouter,

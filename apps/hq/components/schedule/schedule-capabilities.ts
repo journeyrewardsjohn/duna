@@ -8,13 +8,13 @@
  * reads the router's procedure paths and passes them in (`schedule-data.ts`).
  */
 export const SCHEDULE_CAPABILITY_PROCEDURES = {
-  /** Book a court or a lesson for a member or a walk-in. */
+  /** Book a court for a member or a walk-in, with how it is paid. */
   createBooking: "operator.schedule.createCourtBooking",
   /** Move a court booking (drag or the panel's Move). */
   moveBooking: "operator.schedule.moveCourtBooking",
   /** Cancel a court booking, with its refund choice. */
   cancelBooking: "operator.schedule.cancelCourtBooking",
-  /** Record a payment taken at the desk. */
+  /** Record a payment taken at the desk (the whole amount due). */
   deskPayment: "operator.schedule.recordDeskPayment",
   /** Remove a block or a closure. */
   removeBlock: "operator.schedule.removeCalendarBlock",
