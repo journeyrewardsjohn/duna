@@ -104,6 +104,22 @@ single `correction`. `netScoreState` takes optional `rules` (`SetRules`, with
 point, and returns `setPoint` / `matchPoint` sides. A Live Activity, a
 screen-reader announcement and an animation all key off the same parts.
 
+## Time and conditions additions (C4, C5)
+
+- `time-zone.ts`: `timeZonesDiffer`, `timeZoneLabel`, `timeZoneNote`,
+  `wallClockMinutes`, `dstTransition` (23- and 25-hour days, half-hour shifts).
+- `dayparts.ts`: morning (to 11 AM), midday (to 2 PM), afternoon, golden hour
+  (60 minutes before sunset), evening (from sunset; 6 PM without a sunset);
+  `dayLightMinutes`, `groupByDaypart`, `lightMarkAtMinute`, `LIGHT_MARK_GLYPH`.
+- `slot-state.ts`: `slotChip` (available, few left at 2 or fewer, selected,
+  taken, outside hours, too dark, stale), `staleStarts`, `durationCrests`,
+  `durationOptions`.
+- `time-rail.ts`: `railModel` (positions, lanes, free windows, now, sun marks).
+- `sun-arc.ts`: `sunArcModel`, `formatSpan`.
+- `conditions-view.ts`: `CONDITIONS_FRESH_MINUTES` (60), `conditionsFreshness`,
+  play-call words and crests, `windOnCourtSentence`.
+- `dayStrip` days also carry `month` and `startsMonth`.
+
 ## Existing helpers that should move here later (not moved now)
 
 In `packages/ui/src/tideline`:
