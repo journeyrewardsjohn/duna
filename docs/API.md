@@ -131,36 +131,39 @@ HQ form until PART-6 replaces it.
 The rule a session uses is the **snapshot** in `participation_decisions`, taken
 at its first booking; editing the offering changes only unbooked sessions.
 
-| Procedure                                           | Scope                                                 | Purpose                                                                                                               |
-| --------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `operator.participation.defaults`                   | `sessions:read`                                       | The club default, what it applies to, how many offerings inherit it                                                   |
-| `operator.participation.setDefaults`                | `sessions:write`                                      | Save the club default (idempotency key); returns `issues` (nothing saved) or the rule                                 |
-| `operator.participation.previewRuleChange`          | `sessions:read`                                       | Issues, cliff warnings, `loosens` / `tightens` / `neutral`, unbooked count, booked sessions affected                  |
-| `operator.participation.applyRuleToBooked`          | `sessions:write`                                      | Apply the offering's saved rule to booked sessions, loosening only (`confirmed: true`)                                |
-| `operator.participation.atRisk`                     | `sessions:read` (+ `payments:read` for money)         | Sessions in the next 7 days that need players and have bookings, with money at stake                                  |
-| `operator.participation.extendLock`                 | `sessions:write`                                      | Move the decision (and free cancellation) later; booked players are told (`confirmed: true`)                          |
-| `operator.participation.runAnyway`                  | `sessions:write`                                      | Pre-decide: the session runs whatever the group size (`confirmed: true`)                                              |
-| `operator.participation.cancelSession`              | `payments:write`                                      | Cancel with full refunds; `confirmed: true` from the strong tier; `note` is never stored (Send review)                |
-| `operator.participation.requestCancel`              | `sessions:read`, assigned coach                       | A coach asks a director to cancel                                                                                     |
-| `operator.participation.cancelRequests`             | `sessions:read`                                       | Open requests to cancel                                                                                               |
-| `operator.participation.recordAttendance`           | `sessions:read` + assigned coach, or `sessions:write` | Mark attended / absent; offline `deviceMarkedAt`; later mark wins; never changes a price                              |
-| `player.participation.quote`                        | signed in                                             | The display model for a session: tokens, numbers, rendered English, ladder, reserve, most chargeable, `alreadyBooked` |
-| `player.participation.joinWaitlist`                 | signed in                                             | Join a full session's waitlist (self or a managed child); position and status                                         |
-| `player.participation.leaveWaitlist`                | signed in                                             | Leave the waitlist; a declined offer passes to the next person                                                        |
-| `player.participation.createInvite`                 | adult                                                 | A share link (`/i/[code]`) for a session the caller holds a place in                                                  |
-| `player.participation.setPickupRule`                | pickup host                                           | The group rule of a pickup the caller hosts                                                                           |
-| `public.participation.invite`                       | public                                                | The invite landing: title, club, time, state, "needs", book link; no names                                            |
-| `operator.participation.mergeSessions`              | `payments:write`                                      | Move a thin session's bookings into another of the same offering (never raises a price), then cancel it as merged     |
-| `operator.participation.mergeDivisions`             | `sessions:write`                                      | Move a thin division's registrations into another division of the event                                               |
-| `operator.participation.setSubjectRule`             | `sessions:write`                                      | The group rule of an event session, a division or a club pickup                                                       |
-| `operator.participation.rulesToReview` / `keepRule` | `sessions:read` / `sessions:write`                    | Legacy minimums mapped to "run": list and keep                                                                        |
-| `public.organizationStorefront`                     | public                                                | Each service adds `participation`; each occurrence adds headcount and `participation` state                           |
-| `player.startCatalogCheckout`                       | signed in                                             | Optional `participantPersonId` and `creditSource`; `CONFLICT` with code `ALREADY_BOOKED` for a second booking         |
-| `player.bookCatalogSessions`                        | signed in                                             | Book up to 20 session occurrences with credits; atomic by default, per-session results                                |
-| `player.catalogSessionBookings`                     | signed in                                             | The schedule; `participation` adds `displayState`, `lockAt`, `freeCancelUntil`; `lateCancelCharge`                    |
-| `player.cancelCatalogSessionBooking`                | signed in                                             | Free before the decision; after it, needs acknowledgement and returns `chargedCredits` (the final price)              |
-| `operator.catalogSessionOccurrences`                | `sessions:read`                                       | Rosters with the snapshot rule, `displayState`, attendance; `atStake*` with `payments:read`                           |
-| `operator.settleCatalogSessionOccurrence`           | `payments:write`                                      | Decide early, or settle a 289 attendance-priced session                                                               |
+| Procedure                                           | Scope                                                 | Purpose                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator.participation.defaults`                   | `sessions:read`                                       | The club default, what it applies to, how many offerings inherit it                                                                                                                                                                                                                                                     |
+| `operator.participation.setDefaults`                | `sessions:write`                                      | Save the club default (idempotency key); returns `issues` (nothing saved) or the rule                                                                                                                                                                                                                                   |
+| `operator.participation.previewRuleChange`          | `sessions:read`                                       | Issues, cliff warnings, `loosens` / `tightens` / `neutral`, unbooked count, booked sessions affected                                                                                                                                                                                                                    |
+| `operator.participation.applyRuleToBooked`          | `sessions:write`                                      | Apply the offering's saved rule to booked sessions, loosening only (`confirmed: true`)                                                                                                                                                                                                                                  |
+| `operator.participation.atRisk`                     | `sessions:read` (+ `payments:read` for money)         | Sessions in the next 7 days that need players and have bookings, with money at stake                                                                                                                                                                                                                                    |
+| `operator.participation.extendLock`                 | `sessions:write`                                      | Move the decision (and free cancellation) later; booked players are told (`confirmed: true`)                                                                                                                                                                                                                            |
+| `operator.participation.runAnyway`                  | `sessions:write`                                      | Pre-decide: the session runs whatever the group size (`confirmed: true`)                                                                                                                                                                                                                                                |
+| `operator.participation.cancelSession`              | `payments:write`                                      | Cancel with full refunds; `confirmed: true` from the strong tier; `note` is never stored (Send review)                                                                                                                                                                                                                  |
+| `operator.participation.requestCancel`              | `sessions:read`, assigned coach                       | A coach asks a director to cancel                                                                                                                                                                                                                                                                                       |
+| `operator.participation.cancelRequests`             | `sessions:read`                                       | Open requests to cancel                                                                                                                                                                                                                                                                                                 |
+| `operator.participation.recordAttendance`           | `sessions:read` + assigned coach, or `sessions:write` | Mark attended / absent; offline `deviceMarkedAt`; later mark wins; never changes a price                                                                                                                                                                                                                                |
+| `operator.participation.cancelPreview`              | `sessions:read` (+ `payments:read` for money)         | PART-B. What cancelling returns to whom, from the plan `cancelSession` runs; read-only; juniors by first name, guardian as notice audience                                                                                                                                                                              |
+| `operator.participation.resolveCancelRequest`       | `sessions:write`; approve needs `payments:write`      | PART-B. Approve (same cancellation as `cancelSession`) or decline a coach's request; `confirmed: true`; `note` never stored; `coachNotified: false`                                                                                                                                                                     |
+| `operator.participation.shareLink`                  | `sessions:read`                                       | PART-B. `{ url, code, expiresAt }` for one of the club's sessions; same links as player invites; rate-limited, audited                                                                                                                                                                                                  |
+| `player.participation.quote`                        | signed in                                             | The display model for a session: tokens, numbers, rendered English, ladder, reserve, most chargeable, `alreadyBooked`                                                                                                                                                                                                   |
+| `player.participation.joinWaitlist`                 | signed in                                             | Join a full session's waitlist (self or a managed child); position and status                                                                                                                                                                                                                                           |
+| `player.participation.leaveWaitlist`                | signed in                                             | Leave the waitlist; a declined offer passes to the next person                                                                                                                                                                                                                                                          |
+| `player.participation.createInvite`                 | adult                                                 | A share link (`/i/[code]`) for a session the caller holds a place in                                                                                                                                                                                                                                                    |
+| `player.participation.setPickupRule`                | pickup host                                           | The group rule of a pickup the caller hosts                                                                                                                                                                                                                                                                             |
+| `public.participation.invite`                       | public                                                | The invite landing: title, club, time, state, "needs", book link; no names                                                                                                                                                                                                                                              |
+| `operator.participation.mergeSessions`              | `payments:write`                                      | Move a thin session's bookings into another of the same offering (never raises a price), then cancel it as merged                                                                                                                                                                                                       |
+| `operator.participation.mergeDivisions`             | `sessions:write`                                      | Move a thin division's registrations into another division of the event                                                                                                                                                                                                                                                 |
+| `operator.participation.setSubjectRule`             | `sessions:write`                                      | The group rule of an event session, a division or a club pickup                                                                                                                                                                                                                                                         |
+| `operator.participation.rulesToReview` / `keepRule` | `sessions:read` / `sessions:write`                    | Legacy minimums mapped to "run": list and keep                                                                                                                                                                                                                                                                          |
+| `public.organizationStorefront`                     | public                                                | Each service adds `participation`; each occurrence adds headcount and `participation` state                                                                                                                                                                                                                             |
+| `player.startCatalogCheckout`                       | signed in                                             | Optional `participantPersonId` and `creditSource`; `CONFLICT` with code `ALREADY_BOOKED` for a second booking                                                                                                                                                                                                           |
+| `player.bookCatalogSessions`                        | signed in                                             | Book up to 20 session occurrences with credits; atomic by default, per-session results                                                                                                                                                                                                                                  |
+| `player.catalogSessionBookings`                     | signed in                                             | The schedule; `participation` adds `displayState`, `lockAt`, `freeCancelUntil`; `lateCancelCharge`                                                                                                                                                                                                                      |
+| `player.cancelCatalogSessionBooking`                | signed in                                             | Free before the decision; after it, needs acknowledgement and returns `chargedCredits` (the final price)                                                                                                                                                                                                                |
+| `operator.catalogSessionOccurrences`                | `sessions:read`                                       | Rosters with the snapshot rule, `displayState`, attendance; `atStake*` with `payments:read`. PART-B: `coach`, `court`, `venue` (null when none), per booking `isMinor` and `guardianDisplayName` (never an age or birth date); optional `occurrenceId` reads one session; fixed query count; demo fixtures in demo mode |
+| `operator.settleCatalogSessionOccurrence`           | `payments:write`                                      | Decide early, or settle a 289 attendance-priced session                                                                                                                                                                                                                                                                 |
 
 Every operator mutation takes an `idempotencyKey`; a retry with the same key
 replays the first answer. Every procedure returns fixtures from
@@ -208,6 +211,72 @@ The Places routes (`/api/places/autocomplete`, `/details`, `/map`) answer 429 wi
 over a per-address budget, take `session=<token>` and pass it to the provider, and cache identical
 requests for 10 minutes.
 
+## Search: where, when, what (`public.search`, `player.search`, owner B10)
+
+Contract: `packages/api/src/contracts/search.ts`; service: `packages/api/src/services/search/`;
+what it covers and how results are ordered: [`docs/product/search.md`](product/search.md).
+
+| Procedure                                        | Who       | What                                                                                                                                       |
+| ------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `public.search.query(searchQueryInput)`          | Anyone    | One page of public results (`items`, `nextCursor`, `totalEstimate`, `facets`, `resultBounds`).                                             |
+| `player.search.query(searchQueryInput)`          | Signed in | The same, plus members-only sessions of the clubs the person belongs to (never cached).                                                    |
+| `public.search.suggest({ text })`                | Anyone    | Typeahead: Duna clubs and venues with a map point (`places`) and the five best results.                                                    |
+| `public.search.session({ id, viewerTimeZone? })` | Anyone    | One bookable session occurrence (detail screen, `duna://sessions/:id`); `NOT_FOUND` for anything the caller may not see (never FORBIDDEN). |
+
+Input (all optional except `limit`, 1 to 100, default 25):
+
+- `where.near { latitude, longitude, radiusKm ≤ 500 }`: within the radius, widening in the device
+  search's steps (10, 30, 60 … miles) until five results; `distanceKm` on each result.
+- `where.bounds { north, south, east, west }`: "search this area"; wins over `near` (which then only
+  orders by distance). Bounds across the date line are refused.
+- `where.place`: `venue:<uuid>` or `club:<uuid>` for one Duna venue or club; any other text matches
+  the locality, the place name and the title.
+- `when { from, to, timezone? }`: calendar dates, inclusive, at most 366 days. Without `timezone`
+  each result's dates are read in its venue's own zone (a 7 PM Thursday session in Los Angeles is
+  Thursday); with it, in that zone (the device's).
+- `what.kinds`: `club`, `venue`, `event`, `league`, `lesson` (lessons, clinics, group training),
+  `open-play` (open play and pickups), `coach`. `what.tags` narrows to results carrying every tag;
+  `daypart:morning|afternoon|evening` (05–12, 12–17, 17–05 venue time) filters by start time.
+- `text` (≤ 120 characters): ranks the whole title, then a title prefix, then a title word, then
+  every word anywhere; never reaches SQL and is never logged (lengths only).
+- `cursor`: the previous page's `nextCursor`. A cursor from a different query is `BAD_REQUEST`.
+
+```ts
+// Evening sessions near Manhattan Beach this weekend, venue time.
+await api.public.search.query({
+  limit: 20,
+  where: { near: { latitude: 33.8847, longitude: -118.4109, radiusKm: 40 } },
+  when: { from: "2026-12-05", to: "2026-12-06" },
+  what: { kinds: ["lesson", "open-play"], tags: ["daypart:evening"] },
+});
+// → { items: [{ kind: "lesson", title: "Beginner clinic", startsAt, distanceKm: 1.2,
+//      availability: { state: "few-left", summary: "<core participation status>" } }, …],
+//    nextCursor: "eyJ2Ijox…", totalEstimate: 14, facets: { kinds: [...], tags: [...] },
+//    resultBounds: { north, south, east, west } }
+
+// The session detail screen.
+await api.public.search.session({
+  id: occurrenceId,
+  viewerTimeZone: "America/New_York",
+});
+// → { title, club, venue, startsAt, endsAt, timezone, local: { date, startTime, endTime },
+//    capacity, spotsLeft, prices, participation: { displayState, display, copy },
+//    waitlist: { available, waiting }, status, path }
+```
+
+Availability: sessions carry the core participation status line in `availability.summary`
+(`full`, `few-left` at 1–2 places, `open`, `not-bookable` when cancelled); events read their places
+left; the Pro Tour is `not-bookable`; clubs, venues and coaches are `unknown`. A signed-in person's
+own booking and waitlist place stay in `player.participation.quote`.
+
+Limits per address (database-backed limiter, one-way hash of the address): query 60 (60 a minute),
+suggest 120 (120 a minute), session 60 (30 a minute). A refusal is `TOO_MANY_REQUESTS` with the
+seconds in the message and `cause.retryAfterSeconds` (the tRPC route can send it as `Retry-After`).
+
+Additive fields elsewhere: `public.discoveryMap` items with a group rule carry
+`participation: { displayState, copy: { status, line? } }`; `public.organizationStorefront`
+`catalog[].participation.waitlist` says whether the rule keeps a waitlist.
+
 ## Duna Pay (`operator.pay`, owner B2)
 
 Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
@@ -215,19 +284,20 @@ Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
 writes need `payments:write` (owner). In demo mode every procedure returns
 its fixture from `@duna/core/demo/pay`.
 
-| Procedure                                        | Status              | Notes                                                                                                                                        |
-| ------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `obligations`                                    | live                | Newest first, cursor `<createdAt>                                                                                                            | <id>`, filter by `status`and`deliveryRule` |
-| `obligation`                                     | live                | Tranches, delivery facts, refunds, hold ids; `NOT_FOUND` outside the caller's club                                                           |
-| `holds`                                          | live                | Every hold on the club, newest first                                                                                                         |
-| `disputes`, `dispute`                            | live                | Platform-side dispute cases for the caller's club, newest first                                                                              |
-| `submitDisputeEvidence`                          | live (owner)        | Idempotent by key; "not configured yet" without processor keys                                                                               |
-| `reserves`, `recoveries`, `requestReserveReview` | live                | Review request is owner-only and needs an active reserve                                                                                     |
-| `account`, `updateBusiness`, `publishGate`       | live                | Six derived statuses; the gate is `assertPaymentsReady`                                                                                      |
-| `startOnboarding`                                | live (owner)        | Hosted link or embedded session; `not-configured` without keys                                                                               |
-| `payoutSettings`, `updatePayoutSettings`         | live                | Reuses `organization_money_settings`; daily by default                                                                                       |
-| `player.fees.quote`                              | live                | All-in price before commitment; records `pay_fee_quotes`                                                                                     |
-| other procedures                                 | not implemented yet | `refundPolicies`, `upsertRefundPolicy`, `taxSettings`, `updateTaxSettings`, `balance`, `moneyHome`, `operator.fees.platformSummary`, Premium |
+| Procedure                                        | Status                 | Notes                                                                                                                                                                                                                            |
+| ------------------------------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `obligations`                                    | live                   | Newest first, cursor `<createdAt>                                                                                                                                                                                                | <id>`, filter by `status`and`deliveryRule` |
+| `obligation`                                     | live                   | Tranches, delivery facts, refunds, hold ids; `NOT_FOUND` outside the caller's club                                                                                                                                               |
+| `holds`                                          | live                   | Every hold on the club, newest first                                                                                                                                                                                             |
+| `disputes`, `dispute`                            | live                   | Platform-side dispute cases for the caller's club, newest first                                                                                                                                                                  |
+| `submitDisputeEvidence`                          | live (owner)           | Idempotent by key; "not configured yet" without processor keys                                                                                                                                                                   |
+| `reserves`, `recoveries`, `requestReserveReview` | live                   | Review request is owner-only and needs an active reserve                                                                                                                                                                         |
+| `account`, `updateBusiness`, `publishGate`       | live                   | Six derived statuses; the gate is `assertPaymentsReady`                                                                                                                                                                          |
+| `startOnboarding`                                | live (owner)           | Hosted link or embedded session; `not-configured` without keys                                                                                                                                                                   |
+| `payoutSettings`, `updatePayoutSettings`         | live                   | Reuses `organization_money_settings`; daily by default                                                                                                                                                                           |
+| `player.fees.quote`                              | live                   | All-in price before commitment; records `pay_fee_quotes`                                                                                                                                                                         |
+| `operator.fees.quote`                            | live (`payments:read`) | PART-B. `{ offeringId \| priceMinor, currency, method: card \| cash \| credits }` → what a player pays, what the club receives, each fee line; `status: "unavailable"` with a reason instead of an invented fee; records nothing |
+| other procedures                                 | not implemented yet    | `refundPolicies`, `upsertRefundPolicy`, `taxSettings`, `updateTaxSettings`, `balance`, `moneyHome`, `operator.fees.platformSummary`, Premium                                                                                     |
 
 Payouts are created only by the hourly `/api/cron/money-payouts` job and the
 existing owner-confirmed manual payout, and only from releasable tranches

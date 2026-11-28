@@ -619,11 +619,12 @@ Contract `contracts/search.ts`; fixtures `@duna/core/demo/search`; router `route
 
 **Procedures.**
 
-| Path                    | Kind  | Access    | Input → Output                                                      |
-| ----------------------- | ----- | --------- | ------------------------------------------------------------------- |
-| `public.search.query`   | query | public    | `searchQueryInputSchema` → `searchResultsSchema` (public rows only) |
-| `public.search.suggest` | query | public    | `searchSuggestInputSchema` → `searchSuggestionsSchema`              |
-| `player.search.query`   | query | signed in | same → same, plus `members` rows of the player's clubs              |
+| Path                    | Kind  | Access    | Input → Output                                                                                                       |
+| ----------------------- | ----- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `public.search.query`   | query | public    | `searchQueryInputSchema` → `searchResultsSchema` (public rows only)                                                  |
+| `public.search.suggest` | query | public    | `searchSuggestInputSchema` → `searchSuggestionsSchema`                                                               |
+| `player.search.query`   | query | signed in | same → same, plus `members` rows of the player's clubs                                                               |
+| `public.search.session` | query | public    | `searchSessionInputSchema` → `searchSessionSchema` (B10, additive: one bookable session; NOT_FOUND when not visible) |
 
 Input: `where` (map `bounds` | `near` point + radius | `place` text), `when` (date range + timezone), `what` (`kinds`, `tags`), `text`, `cursor`, `limit`. Output: `items` (with `availability.state` and `distanceKm`), `nextCursor`, `totalEstimate` (never shown as exact), `facets.kinds`/`facets.tags`, `resultBounds` to fit the map. `searchDocumentSchema` is the index row shape (admin/tests).
 
