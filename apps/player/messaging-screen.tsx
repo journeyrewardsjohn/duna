@@ -2087,7 +2087,9 @@ export function PlayerMessagingScreen({
 
   return (
     <View style={styles.screen}>
-      <View style={styles.modeBar}>
+      {/* Below the status bar and the Dynamic Island: Back and Close must
+          always be reachable (owner feedback 28 Nov, "no way to get back"). */}
+      <View style={[styles.modeBar, { paddingTop: insets.top + 10 }]}>
         {messagingSpace === "assistant" ? (
           <Pressable
             accessibilityLabel="Open recent Duna AI chats"

@@ -1,7 +1,6 @@
 import { Pressable, ScrollView, View } from "react-native";
 import { usePlayerRuntime } from "../../../runtime";
 import { SatoshiText as Text } from "../../../satoshi-text";
-import { selectionHaptic } from "../../shared/haptics";
 import { AppHeader } from "../../app/AppHeader";
 import { SectionHeader } from "../../shared/SectionHeader";
 import {
@@ -12,11 +11,7 @@ import { MobilePredictionDiscoveryRail } from "./MobilePredictionDiscoveryRail";
 import { PredictionPositionRow } from "./PredictionPositionRow";
 import { styles } from "../../legacy/styles";
 
-export function PredictionPortfolioScreen({
-  onBack,
-}: {
-  readonly onBack: () => void;
-}) {
+export function PredictionPortfolioScreen() {
   const { predictionDiscovery, predictionWallet } = usePlayerRuntime();
   const positions = predictionWallet?.positions ?? [];
   const openPositions = positions.filter(
@@ -32,17 +27,6 @@ export function PredictionPortfolioScreen({
       showsVerticalScrollIndicator={false}
     >
       <AppHeader eyebrow="WALLET · PREDICTIONS" />
-      <Pressable
-        accessibilityLabel="Back to wallet"
-        accessibilityRole="button"
-        onPress={() => {
-          selectionHaptic();
-          onBack();
-        }}
-        style={styles.predictionPortfolioBack}
-      >
-        <Text style={styles.predictionPortfolioBackText}>← Wallet</Text>
-      </Pressable>
       <Text style={styles.displayTitle}>Your calls.</Text>
       <Text style={styles.predictionPortfolioIntro}>
         Follow every open position, closed order, win, and loss. Your handle is

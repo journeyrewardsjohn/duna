@@ -38,6 +38,7 @@ import {
 } from "./router";
 import { SCREENS } from "./screens";
 import { RouteEntryContext, ShellContext, useShell } from "./ShellContext";
+import { EdgeSwipeBack } from "./EdgeSwipeBack";
 import { ShellStatus } from "./ShellStatus";
 import {
   isRouteActive,
@@ -110,20 +111,22 @@ function RouteStack({
   const shell = useShell();
   const definition = ROUTES[entry.key];
   const body = (
-    <View style={styles.fill}>
-      <RouteHeader
-        backLabel={tabDefinition(tab).title}
-        onBack={showBack ? () => shell.back(tab) : undefined}
-        title={definition.ownTitle ? undefined : definition.title}
-      />
-      {/* A nested provider: the legacy screen's own safe-area views measure
-          from below the header, so nothing is padded twice. */}
-      <SafeAreaProvider style={styles.fill}>
-        <RouteEntryContext.Provider value={entry}>
-          {SCREENS[entry.key](entry, shell)}
-        </RouteEntryContext.Provider>
-      </SafeAreaProvider>
-    </View>
+    <EdgeSwipeBack enabled={showBack} onBack={() => shell.back(tab)}>
+      <View style={styles.fill}>
+        <RouteHeader
+          backLabel={tabDefinition(tab).title}
+          onBack={showBack ? () => shell.back(tab) : undefined}
+          title={definition.ownTitle ? undefined : definition.title}
+        />
+        {/* A nested provider: the legacy screen's own safe-area views measure
+            from below the header, so nothing is padded twice. */}
+        <SafeAreaProvider style={styles.fill}>
+          <RouteEntryContext.Provider value={entry}>
+            {SCREENS[entry.key](entry, shell)}
+          </RouteEntryContext.Provider>
+        </SafeAreaProvider>
+      </View>
+    </EdgeSwipeBack>
   );
   // Legacy screens are drawn for the light palette only; they stay light
   // inside the shell until their package rebuilds them.
@@ -239,26 +242,28 @@ function FilmLayer({ active }: { readonly active: boolean }) {
       pointerEvents={active ? "auto" : "none"}
       style={[StyleSheet.absoluteFill, active ? null : styles.hidden]}
     >
-      {active ? (
-        <ThemeOverride theme="light">
-          <RouteHeader
-            backLabel="Improve"
-            onBack={() => shell.back("improve")}
-            title={ROUTES.video.title}
-          />
-        </ThemeOverride>
-      ) : null}
-      <View style={styles.fill}>
-        <SafeAreaProvider style={styles.fill}>
-          <VideoStudioScreen
-            active={active}
-            onCreateMatch={shell.createMatch}
-            onTransferStatus={shell.onVideoTransfer}
-            runtime={runtime}
-            theme="light"
-          />
-        </SafeAreaProvider>
-      </View>
+      <EdgeSwipeBack enabled={active} onBack={() => shell.back("improve")}>
+        {active ? (
+          <ThemeOverride theme="light">
+            <RouteHeader
+              backLabel="Improve"
+              onBack={() => shell.back("improve")}
+              title={ROUTES.video.title}
+            />
+          </ThemeOverride>
+        ) : null}
+        <View style={styles.fill}>
+          <SafeAreaProvider style={styles.fill}>
+            <VideoStudioScreen
+              active={active}
+              onCreateMatch={shell.createMatch}
+              onTransferStatus={shell.onVideoTransfer}
+              runtime={runtime}
+              theme="light"
+            />
+          </SafeAreaProvider>
+        </View>
+      </EdgeSwipeBack>
     </View>
   );
 }

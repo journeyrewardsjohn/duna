@@ -11,7 +11,6 @@
 import type { ReactNode } from "react";
 import { HealthScreen } from "../../health-screen";
 import { PlayerMessagingScreen } from "../../messaging-screen";
-import { ProfileHubScreen } from "../../profile-hub";
 import { PlayerTrainingScreen } from "../../training-screen";
 import { PlansScreen } from "../features/calendar/PlansScreen";
 import { FindCoachScreen } from "../features/coaches/FindCoachScreen";
@@ -19,6 +18,7 @@ import { CourtTimesScreen } from "../features/find/CourtTimesScreen";
 import { SessionDetailScreen } from "../features/find/SessionDetailScreen";
 import { PredictionPortfolioScreen } from "../features/predictions/PredictionPortfolioScreen";
 import { PerformanceScreen } from "../features/profile/PerformanceScreen";
+import { ProfileScreen } from "../features/profile/ProfileScreen";
 import { RatingHomeScreen } from "../features/rating/RatingHomeScreen";
 import { AddResultScreen } from "../features/score/AddResultScreen";
 import { ResultScreen } from "../features/score/ResultScreen";
@@ -53,10 +53,7 @@ export const SCREENS = {
   session: () => <SessionDetailScreen />,
   court: () => <CourtTimesScreen />,
   coaches: (_entry, shell) => (
-    <FindCoachScreen
-      onBack={() => shell.back("find")}
-      onOpenEvent={shell.openEventAtIndex}
-    />
+    <FindCoachScreen onOpenEvent={shell.openEventAtIndex} />
   ),
   plans: (_entry, shell) => (
     <PlansScreen
@@ -80,7 +77,6 @@ export const SCREENS = {
   insights: (_entry, shell) => (
     <PerformanceScreen
       onArtwork={shell.openArtwork}
-      onBack={() => shell.open("performance")}
       onEditProfile={shell.editProfile}
       onHealth={() => shell.open("health")}
       onPredictions={() => shell.open("predictions")}
@@ -90,20 +86,9 @@ export const SCREENS = {
   // The film studio stays mounted for the whole session (uploads and the
   // capture session survive switching tabs); `TabRoot` renders it.
   video: () => null,
-  health: (_entry, shell) => (
-    <HealthScreen onBack={() => shell.back("improve")} theme="light" />
-  ),
-  training: (_entry, shell) => (
-    <PlayerTrainingScreen onBack={() => shell.back("improve")} />
-  ),
-  you: (_entry, shell) => (
-    <ProfileHubScreen
-      onArtwork={shell.openArtwork}
-      onDestination={(destination) => shell.open(destination)}
-      onEditProfile={shell.editProfile}
-      onOrganization={shell.openOrganization}
-    />
-  ),
+  health: () => <HealthScreen theme="light" />,
+  training: () => <PlayerTrainingScreen />,
+  you: () => <ProfileScreen />,
   messages: (entry, shell) => (
     <PlayerMessagingScreen
       initialConversationId={
@@ -123,8 +108,6 @@ export const SCREENS = {
   // `DunaApp` renders it over the window.
   ai: () => null,
   wallet: () => <WalletScreen />,
-  predictions: (_entry, shell) => (
-    <PredictionPortfolioScreen onBack={() => shell.open("wallet")} />
-  ),
+  predictions: () => <PredictionPortfolioScreen />,
   account: () => <AccountScreen />,
 } satisfies Record<RouteKey, Renderer>;
