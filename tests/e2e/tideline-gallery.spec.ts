@@ -714,7 +714,13 @@ test.describe("Tideline gallery, foundations", () => {
     expect(await ground("HQ")).toBe("rgb(255, 255, 255)");
     expect(await ground("Dark")).toBe("rgb(14, 26, 34)");
     expect(await ground("Live zone")).toBe("rgb(14, 26, 34)");
-    await expect(foundations.getByText(/falls back to Geist/)).toBeVisible();
+    // The fonts have landed: the type scale names Jost for the one title and
+    // Geist for everything else, with no "falls back" note.
+    await expect(
+      foundations.getByText(/Jost Medium 500.*one per screen/),
+    ).toBeVisible();
+    await expect(foundations.getByText(/Geist 400, 16\/24/)).toBeVisible();
+    await expect(foundations.getByText(/falls back to Geist/)).toHaveCount(0);
   });
 
   test("closed UI SDK parts stay hidden without an important rule", async ({
