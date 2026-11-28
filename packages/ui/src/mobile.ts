@@ -1,3 +1,4 @@
+import { nativeTokens } from "./native/tokens/tokens.native";
 import {
   resolveDunaTokens,
   type DunaContrast,
@@ -46,36 +47,37 @@ export const mobileType = {
   display: { fontSize: 38, lineHeight: 42 },
 } as const;
 
+const light = nativeTokens.color.light;
+
 /**
- * Product-app color roles from the current Duna mobile design system.
- *
- * Keep these semantic instead of reaching for the broader environmental
- * palette. The app is deliberately snow/charcoal first; Duna color belongs in
- * small brand, status, data, and section moments.
+ * Product-app colour names from the earlier mobile system, re-pointed at the
+ * Tideline 4.1.1 light roles (M-F0/M-F1) so unmigrated screens take the new
+ * palette at once. Values come from the generated tokens; new screens use
+ * `@duna/ui/native` and its theme instead.
  */
 export const dunaAppColors = {
-  page: "#FCFCFF",
-  card: "#FFFFFF",
-  subtle: "#F5F5F8",
-  subtleStrong: "#F2F3F6",
-  ink: "#18181B",
-  inkPressed: "#464649",
-  textSecondary: "#6E6E72",
-  textTertiary: "#909092",
-  textFaint: "#B9B9BE",
-  hairline: "#E4E6EC",
-  border: "#D7DAE3",
-  navy: "#142335",
-  navyLift: "#2B385C",
-  mist: "#7C95AB",
-  sky: "#D3E3F0",
-  blush: "#FECFC0",
-  sand: "#E6B48C",
-  cream: "#FAF6F2",
-  gold: "#D6B143",
-  positive: "#1E7A46",
-  positiveWash: "#E8F2EC",
-  danger: "#C94443",
+  page: light.ground,
+  card: light.surface,
+  subtle: light["surface-sunken"],
+  subtleStrong: light["action-soft"],
+  ink: light.text,
+  inkPressed: light["action-hover"],
+  textSecondary: light["text-2"],
+  textTertiary: light["text-3"],
+  textFaint: light["text-disabled"],
+  hairline: light.line,
+  border: light["line-strong"],
+  navy: light.action,
+  navyLift: light["action-hover"],
+  mist: light["text-3"],
+  sky: light.selected,
+  blush: light["sun-wash"],
+  sand: light.sun,
+  cream: light["surface-subtle"],
+  gold: light["sun-ink"],
+  positive: light.positive,
+  positiveWash: light["positive-wash"],
+  danger: light.danger,
 } as const;
 
 export const dunaAppShape = {
@@ -97,20 +99,18 @@ export function resolveDunaMobileTokens(
 ) {
   const semantic = resolveDunaTokens(theme, zone, contrast);
   const dark = theme === "dark" || zone === "live";
-  const whiteCanvas = !dark && contrast === "ambient";
+  const role = nativeTokens.color[zone === "live" ? "live" : theme];
 
+  // The Salt ground replaces the old white canvas; glass and underlays map to
+  // the Tideline glass, selection and warm-wash roles.
   return {
     ...semantic,
-    ground: whiteCanvas ? "#FFFFFF" : semantic.ground,
-    groundWarm: whiteCanvas ? "#F8F4EC" : semantic.groundWarm,
-    groundCool: whiteCanvas ? "#F1F6F9" : semantic.groundCool,
-    surface2: whiteCanvas ? "#F4F4F2" : semantic.surface2,
-    glass: dark ? "rgba(20,26,30,0.82)" : "rgba(255,255,255,0.82)",
-    glassStrong: dark ? "rgba(20,26,30,0.94)" : "rgba(255,255,255,0.94)",
-    glassEdge: dark ? "rgba(181,204,211,0.18)" : "rgba(255,255,255,0.72)",
-    blueUnderlay: dark ? "rgba(34,52,59,0.78)" : "rgba(181,204,211,0.30)",
-    sandUnderlay: dark ? "rgba(201,169,106,0.18)" : "rgba(239,230,211,0.58)",
-    selectedFill: dark ? semantic.surface3 : "rgba(255,255,255,0.76)",
-    inactiveFill: dark ? semantic.surface1 : "#F4F4F2",
+    glass: role["glass-fill-light"],
+    glassStrong: role.surface,
+    glassEdge: role["glass-edge"],
+    blueUnderlay: role.selected,
+    sandUnderlay: role["sun-wash"],
+    selectedFill: dark ? semantic.surface3 : role.surface,
+    inactiveFill: role["surface-sunken"],
   } as const;
 }

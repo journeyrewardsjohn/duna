@@ -7,5 +7,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "sourceMap": true
-  }
+  },
+  // The React Native layer is consumed from source by Metro and type-checked
+  // by `pnpm typecheck` (tsconfig.json). The emitted build serves web; on the
+  // web deployment's install react-native-svg's class types do not resolve.
+  "exclude": ["src/native/**", "dist", "node_modules"]
 }

@@ -1,58 +1,53 @@
-export const lightColors = {
-  canvas: "#eef4f8",
-  ink: "#173b65",
-  depth: "#ffffff",
-  navy: "#d8e8f2",
-  navyLift: "#f4f8fb",
-  bone: "#173b65",
-  muted: "#687b8e",
-  aqua: "#214b7a",
-  aquaDeep: "#173b65",
-  sand: "#d6a874",
-  flare: "#f0a06d",
-  positive: "#3c7a5b",
-  warning: "#d9955f",
-  danger: "#a64b43",
-  onAccent: "#ffffff",
-  overlayRgb: "23,59,101",
-  accentRgb: "33,75,122",
-  warningRgb: "217,149,95",
-  positiveRgb: "60,122,91",
-  dangerRgb: "166,75,67",
-  flareRgb: "240,160,109",
-  inkRgb: "23,59,101",
-  depthRgb: "255,255,255",
-} as const;
+import { nativeColors, type NativeColors } from "@duna/ui/native/tokens";
+
+/** "r,g,b" for the legacy `rgba(rgb, alpha)` helper. */
+function rgbOf(hex: string): string {
+  const value = Number.parseInt(hex.slice(1, 7), 16);
+  return `${(value >> 16) & 255},${(value >> 8) & 255},${value & 255}`;
+}
+
+/**
+ * Pro's legacy palette names, re-pointed at Tideline 4.1.1 roles by meaning
+ * (M-F0/M-F1) for light and dark. The retired flare orange becomes the warm
+ * signal (its ink on light, Dune on dark); Solar stays for live screens built
+ * on `@duna/ui/native`'s live zone.
+ */
+function legacyPalette(role: NativeColors, dark: boolean) {
+  const flare = dark ? role.sun : role["sun-ink"];
+  return {
+    canvas: role.ground,
+    ink: dark ? role.ground : role.text,
+    depth: role.surface,
+    navy: role["surface-sunken"],
+    navyLift: dark ? role["surface-raised"] : role["surface-subtle"],
+    bone: role.text,
+    muted: role["text-2"],
+    aqua: role.action,
+    aquaDeep: role["action-hover"],
+    sand: role.sun,
+    flare,
+    positive: role.positive,
+    warning: role.warning,
+    danger: role.danger,
+    onAccent: role["on-action"],
+    overlayRgb: rgbOf(role.text),
+    accentRgb: rgbOf(role.action),
+    warningRgb: rgbOf(role.warning),
+    positiveRgb: rgbOf(role.positive),
+    dangerRgb: rgbOf(role.danger),
+    flareRgb: rgbOf(flare),
+    inkRgb: rgbOf(dark ? role.ground : role.text),
+    depthRgb: rgbOf(role.surface),
+  };
+}
+
+export const lightColors = legacyPalette(nativeColors("light"), false);
 
 export type Palette = {
   readonly [Key in keyof typeof lightColors]: string;
 };
 
-export const darkColors: Palette = {
-  canvas: "#0d1114",
-  ink: "#0d1114",
-  depth: "#141a1e",
-  navy: "#101a20",
-  navyLift: "#1b2429",
-  bone: "#edf1f2",
-  muted: "#a9b4b8",
-  aqua: "#b5ccd3",
-  aquaDeep: "#8fb0bc",
-  sand: "#d4b77c",
-  flare: "#f4794c",
-  positive: "#6bae78",
-  warning: "#d4b77c",
-  danger: "#c4785c",
-  onAccent: "#0d1114",
-  overlayRgb: "237,241,242",
-  accentRgb: "181,204,211",
-  warningRgb: "212,183,124",
-  positiveRgb: "107,174,120",
-  dangerRgb: "196,120,92",
-  flareRgb: "244,121,76",
-  inkRgb: "13,17,20",
-  depthRgb: "20,26,30",
-};
+export const darkColors: Palette = legacyPalette(nativeColors("dark"), true);
 
 export type ThemeName = "light" | "dark";
 

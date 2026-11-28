@@ -11,18 +11,32 @@ import {
 describe("organization fund availability", () => {
   const now = new Date("2026-08-18T12:00:00.000Z");
 
-  it("holds refundable event money until the cancellation cutoff", () => {
+  it("holds event money until the event has ended, not the cancellation cutoff", () => {
     const result = calculateFundAvailability({
       policyMode: "refundable",
       refundBeforeMinutes: 24 * 60,
       eventStartsAt: new Date("2026-08-21T12:00:00.000Z"),
+      eventEndsAt: new Date("2026-08-21T14:00:00.000Z"),
       orderCreatedAt: new Date("2026-08-17T12:00:00.000Z"),
       processorAvailableAt: new Date("2026-08-18T10:00:00.000Z"),
       now,
     });
 
     expect(result.status).toBe("held");
-    expect(result.availableAt.toISOString()).toBe("2026-08-20T12:00:00.000Z");
+    // Before Duna Pay this was the start minus the refund window (20 August),
+    // which let money leave before a session that was then cancelled.
+    expect(result.availableAt.toISOString()).toBe("2026-08-21T14:00:00.000Z");
+    const nonRefundable = calculateFundAvailability({
+      policyMode: "non-refundable",
+      eventStartsAt: new Date("2026-08-21T12:00:00.000Z"),
+      eventEndsAt: new Date("2026-08-21T14:00:00.000Z"),
+      orderCreatedAt: new Date("2026-08-17T12:00:00.000Z"),
+      processorAvailableAt: new Date("2026-08-18T10:00:00.000Z"),
+      now,
+    });
+    expect(nonRefundable.availableAt.toISOString()).toBe(
+      "2026-08-21T14:00:00.000Z",
+    );
   });
 
   it("releases non-refundable money only after the processor clears it", () => {

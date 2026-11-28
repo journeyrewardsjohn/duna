@@ -201,8 +201,9 @@ describe("operator.pay in demo mode and connected mode (W3-0 stubs)", () => {
 
   it("says 'not implemented yet' outside demo mode", async () => {
     dataSource.demo = false;
+    // `account` and most procedures are live (B2); `moneyHome` is still a stub.
     const error = await as(["owner"])
-      .account()
+      .moneyHome()
       .catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(isNotImplementedYet(error)).toBe(true);

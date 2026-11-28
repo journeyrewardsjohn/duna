@@ -1,35 +1,11 @@
 import * as SplashScreen from "expo-splash-screen";
-import { useState } from "react";
-import { View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { ProLaunchExperience } from "./launch-experience";
-import { ProRuntimeProvider } from "./runtime";
-import { useSatoshiFonts } from "./satoshi-text";
-import { ProApp } from "./src/app/ProApp";
+import { AppRoot } from "./src/app/AppRoot";
 
-// Keep the native poster in place until the first React frame contains the
-// bundled launch film. This prevents a white bridge frame on cold starts.
+// Keep the native poster until the saved theme is read and the first frame
+// (the first-open sequence over the first screen) is laid out. Brand fonts
+// are embedded by the expo-font config plugin, so nothing waits on them.
 void SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-  const [fontsLoaded, fontError] = useSatoshiFonts();
-  const [showLaunchExperience, setShowLaunchExperience] = useState(true);
-
-  if (fontError) throw fontError;
-  if (!fontsLoaded) return null;
-
-  return (
-    <SafeAreaProvider>
-      <View onLayout={() => void SplashScreen.hideAsync()} style={{ flex: 1 }}>
-        <ProRuntimeProvider>
-          <ProApp />
-        </ProRuntimeProvider>
-        {showLaunchExperience && (
-          <ProLaunchExperience
-            onComplete={() => setShowLaunchExperience(false)}
-          />
-        )}
-      </View>
-    </SafeAreaProvider>
-  );
+  return <AppRoot />;
 }
