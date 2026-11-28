@@ -1,4 +1,11 @@
-import { Button, Chip, Icon, type IconName, Tideline } from "@duna/ui/tideline";
+import {
+  glyphFamilies,
+  Icon,
+  type IconName,
+  type IconSize,
+  iconSizes,
+} from "@duna/ui/icons";
+import { Button, Chip, Tideline } from "@duna/ui/tideline";
 import {
   type TidelineColorRole,
   tidelineColors,
@@ -197,39 +204,46 @@ const typeRoles: Array<{
   },
 ];
 
-const icons: Array<{
-  name: IconName;
-  size: "sm" | "md" | "lg";
-  className?: string;
-  px: number;
-  use: string;
-}> = [
-  {
-    name: "calendar",
-    size: "sm",
-    className: styles.iconChip,
-    px: tidelineTokens.size["size-icon-chip"],
-    use: "Chips and dense rows",
-  },
-  {
-    name: "calendar",
-    size: "sm",
-    px: tidelineTokens.size["size-icon-inline"],
-    use: "Inline with text",
-  },
-  {
-    name: "calendar",
-    size: "md",
-    px: tidelineTokens.size["size-icon-control"],
-    use: "Buttons, rows and inputs",
-  },
-  {
-    name: "calendar",
-    size: "lg",
-    px: tidelineTokens.size["size-icon-nav"],
-    use: "Navigation",
-  },
+const icons: Array<{ size: IconSize; use: string }> = [
+  { size: "chip", use: "Chips and dense rows" },
+  { size: "inline", use: "Inline with text" },
+  { size: "control", use: "Buttons, rows and inputs" },
+  { size: "nav", use: "Navigation" },
 ];
+
+const iconSizeNames = Object.keys(iconSizes) as IconSize[];
+
+/** Every custom glyph at the four sizes, grouped by family. */
+function IconSheet({ theme }: { theme?: "dark" }) {
+  return (
+    <Tideline
+      aria-label={`Icon sheet, ${theme ?? "light"}`}
+      className={styles.iconSheet}
+      ground
+      role="group"
+      theme={theme}
+    >
+      <span className="td-title">{theme === "dark" ? "Dark" : "Light"}</span>
+      {Object.entries(glyphFamilies).map(([family, names]) => (
+        <section className={styles.iconFamily} key={family}>
+          <h3 className="td-meta">{family}</h3>
+          <ul className={styles.iconGlyphs}>
+            {names.map((name) => (
+              <li className={styles.iconGlyph} data-glyph={name} key={name}>
+                <span className={styles.iconSizesRow}>
+                  {iconSizeNames.map((size) => (
+                    <Icon key={size} name={name as IconName} size={size} />
+                  ))}
+                </span>
+                <span className="td-code">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </Tideline>
+  );
+}
 
 const examples: GalleryExample[] = [
   {
@@ -275,10 +289,6 @@ const examples: GalleryExample[] = [
     wide: true,
     content: (
       <>
-        <p className="td-meta">
-          Jost is not loaded yet: the brand title falls back to Geist until the
-          font files land (work package F3). The token already names Jost.
-        </p>
         <dl className={styles.typeRoles}>
           {typeRoles.map((type) => (
             <div className={styles.typeRole} key={type.role}>
@@ -300,17 +310,25 @@ const examples: GalleryExample[] = [
     content: (
       <ul className={styles.iconScale}>
         {icons.map((icon) => (
-          <li className={styles.iconStep} key={icon.px}>
-            <Icon
-              className={icon.className}
-              name={icon.name}
-              size={icon.size}
-            />
-            <span className={styles.swatchName}>{icon.px}px</span>
+          <li className={styles.iconStep} key={icon.size}>
+            <Icon name="schedule" size={icon.size} />
+            <span className={styles.swatchName}>{iconSizes[icon.size]}px</span>
             <span className="td-meta">{icon.use}</span>
           </li>
         ))}
       </ul>
+    ),
+  },
+  {
+    group: foundations,
+    order: 45,
+    title: "Icon sheet: every custom glyph at 14, 16, 20 and 24",
+    wide: true,
+    content: (
+      <div className={styles.iconSheets}>
+        <IconSheet />
+        <IconSheet theme="dark" />
+      </div>
     ),
   },
   {
