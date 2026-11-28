@@ -139,6 +139,21 @@ export const Animated = {
       for (const item of items) item.start();
     }),
   loop: (item: CompositeAnimation) => animation("loop", undefined, () => item),
+  ScrollView: host("Animated.ScrollView"),
+  event: (_mapping: unknown, config?: Record<string, unknown>) => {
+    const handler = () => undefined;
+    (handler as unknown as { config?: unknown }).config = config;
+    return handler;
+  },
+  add: (a: AnimatedValue, b: AnimatedValue) => ({ add: [a, b] }),
+};
+
+/** The gesture system: handlers record nothing; tests press, not drag. */
+export const PanResponder = {
+  create: (config: Record<string, unknown>) => ({
+    config,
+    panHandlers: {},
+  }),
 };
 
 export const Easing = {

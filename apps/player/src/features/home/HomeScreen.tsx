@@ -68,6 +68,7 @@ import {
   type HomeNextUp,
 } from "./home-model";
 import type { HomeQuickAction } from "./home-quick-action";
+import { WalletHomeEntry } from "../wallet/WalletHomeEntry";
 
 const deviceTimeZone =
   Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -475,6 +476,7 @@ export function HomeWeek({
         </View>
       ) : null}
       {withGame ? <HomeGame model={model} /> : null}
+      <WalletHomeEntry />
       <View style={styles.block}>
         <SectionHead
           action="Calendar"
