@@ -62,6 +62,12 @@ describe("R3 domain seams", () => {
       caller.public.facility.status(),
       caller.public.search.status(),
       caller.public.conditions.status(),
+      caller.public.legal.status(),
+      caller.player.fees.status(),
+      caller.player.households.status(),
+      caller.player.legal.status(),
+      caller.operator.fees.status(),
+      caller.operator.legal.status(),
     ]);
     expect(results.map((r) => r.domain)).toEqual([
       "training-programs",
@@ -74,6 +80,12 @@ describe("R3 domain seams", () => {
       "facility",
       "search",
       "conditions",
+      "legal",
+      "fees",
+      "households",
+      "legal",
+      "fees",
+      "legal",
     ]);
   });
 
