@@ -1,0 +1,15 @@
+/*
+ * One rule gives every existing lucide icon in both apps the brand stroke
+ * (Brand Book 2.0, R8: 1.75, square ends, mitred joins) without touching a call
+ * site. Imported first by `../styles.css`, which both apps load.
+ *
+ * It is unlayered and a single class, so it beats lucide's own `stroke-width`
+ * presentation attribute (including a `strokeWidth` prop) and loses only to a
+ * more specific rule such as `.card svg { stroke-width: ... }` or an inline
+ * `style`. Plain `svg` and `[class*="icon"]` element rules lose to it.
+ */
+.lucide {
+  stroke-width: 1.75;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}

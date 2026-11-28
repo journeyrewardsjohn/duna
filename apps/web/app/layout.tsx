@@ -13,6 +13,7 @@ import { themeBootScript } from "@duna/ui/theme";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DunaAuthProvider } from "@/components/auth-provider";
+import { dunaFontClassName } from "./fonts";
 import {
   absolutePublicUrl,
   publicSiteOrigin,
@@ -93,6 +94,7 @@ export default function RootLayout({
   };
   return (
     <html
+      className={dunaFontClassName}
       data-scroll-behavior="smooth"
       data-theme="light"
       data-theme-preference="system"
@@ -100,17 +102,6 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <link href="https://api.fontshare.com" rel="preconnect" />
-        <link
-          href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap"
-          rel="stylesheet"
-        />
-        <link href="https://fonts.googleapis.com" rel="preconnect" />
-        <link href="https://fonts.gstatic.com" rel="preconnect" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>

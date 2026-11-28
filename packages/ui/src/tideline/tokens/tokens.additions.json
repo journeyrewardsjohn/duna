@@ -1,5 +1,5 @@
 {
-  "note": "Tokens the code needs that the published tokens.json does not carry yet. The token build merges them in; a token of the same name in tokens.json always wins, so each entry disappears from effect once design publishes it.",
+  "note": "Tokens the code needs that the published tokens.json does not carry yet. The token build merges them in; a token, type style or reduced-motion value of the same name in tokens.json always wins, so each entry disappears from effect once design publishes it.",
   "type": {
     "groups": [
       {
@@ -16,5 +16,46 @@
         ]
       }
     ]
+  },
+  "duration": {
+    "tokens": [
+      {
+        "name": "duration-rally",
+        "value": "600ms",
+        "usage": "Rally: each item makes the Rise move (contract R10), stagger-rally apart."
+      },
+      {
+        "name": "duration-fade-reduced",
+        "value": "200ms",
+        "usage": "Reduced motion: the end state with at most this fade (contract R10)."
+      }
+    ]
+  },
+  "easing": {
+    "tokens": [
+      {
+        "name": "ease-rally",
+        "value": "cubic-bezier(.2, .8, .2, 1)",
+        "usage": "Rally: the Rise curve, per item."
+      },
+      {
+        "name": "ease-cross",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "usage": "Cross: travelling over a line. The one ease-out curve; nothing overshoots."
+      }
+    ]
+  },
+  "reducedMotion": {
+    "duration-press": "0ms",
+    "duration-instant": "0ms",
+    "duration-base": "0ms",
+    "duration-settle": "120ms",
+    "duration-popover": "120ms",
+    "duration-sheet": "120ms",
+    "duration-reveal": "0ms",
+    "duration-rise": "200ms",
+    "duration-rally": "200ms",
+    "stagger-rally": "0ms",
+    "duration-cross": "200ms"
   }
 }

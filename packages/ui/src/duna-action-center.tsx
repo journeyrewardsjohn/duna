@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DunaMark } from "./brand/duna-mark";
 
 export type DunaActionCenterSurface = "hq" | "player";
 
@@ -1183,7 +1184,7 @@ export function DunaActionCenter({
         >
           <header className="duna-action-center__chat-header">
             <span className="duna-action-center__avatar">
-              <img alt="" src="/brand/duna-icon.png" />
+              <DunaMark decorative size={24} />
             </span>
             <span>
               <strong>Duna AI</strong>
@@ -1388,7 +1389,7 @@ export function DunaActionCenter({
           }}
           type="button"
         >
-          <img alt="" src="/brand/duna-icon.png" />
+          <DunaMark decorative size={24} />
         </button>
         <button
           aria-label="Open quick actions"

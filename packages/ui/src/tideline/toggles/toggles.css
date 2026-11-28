@@ -96,8 +96,8 @@
       }
 
       .td-icon {
-        width: 16px;
-        height: 16px;
+        width: var(--td-size-icon-inline);
+        height: var(--td-size-icon-inline);
         stroke-width: 2.5;
       }
 
@@ -205,8 +205,8 @@
     }
 
     .td-check__box .td-icon {
-      width: 14px;
-      height: 14px;
+      width: var(--td-size-icon-chip);
+      height: var(--td-size-icon-chip);
       stroke-width: 2.25;
     }
 

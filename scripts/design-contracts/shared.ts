@@ -10,55 +10,7 @@ export const shared: SurfaceContract = {
   surface: "shared",
   owners: "R2, F1, F2a, F2b, F3, native planner",
   migrated: ["packages/ui/src/tideline/", "packages/ui/src/native/"],
-  tidelineExemptions: [
-    {
-      path: "packages/ui/src/tideline/tokens/tokens.json",
-      rules: ["retired-orange"],
-      reason:
-        "legacy: Tideline 3.1 token source from the UI SDK branch; F2a replaces it with 4.1.1 and deletes this exemption",
-    },
-    {
-      path: "packages/ui/src/tideline/tokens/tokens.css",
-      rules: ["retired-orange"],
-      reason:
-        "legacy: generated from the 3.1 token source; F2a regenerates it and deletes this exemption",
-    },
-    {
-      path: "packages/ui/src/tideline/tokens/tokens.ts",
-      rules: ["retired-orange"],
-      reason:
-        "legacy: generated from the 3.1 token source; F2a regenerates it and deletes this exemption",
-    },
-    {
-      path: "packages/ui/src/tideline/tokens/tokens.additions.json",
-      rules: ["retired-orange"],
-      reason: "legacy: 3.1 token additions; F2a folds them into 4.1.1",
-    },
-    {
-      path: "packages/ui/src/tideline/base/base.css",
-      rules: ["important"],
-      reason:
-        "legacy: the 3.1 stylesheet (split by F1) hides closed UI SDK content with one !important until the apps' global CSS is layered (F5a/F6a); F2a deletes this exemption",
-    },
-    {
-      path: "packages/ui/src/tideline/button/button.css",
-      rules: ["important"],
-      reason:
-        "legacy: the 3.1 stylesheet (split by F1) locks the primary label colour with three !important declarations against unlayered host CSS; F2a deletes this exemption",
-    },
-    {
-      path: "packages/ui/src/tideline/styles.test.ts",
-      rules: ["important"],
-      reason:
-        "legacy: not a style; the unit test that enforces the same no-!important rule (and allow-lists the two legacy uses above) names the keyword; delete with those exemptions (F2a)",
-    },
-    {
-      path: "packages/ui/src/tideline/search/search.css",
-      rules: ["solar-outside-live"],
-      reason:
-        "legacy: the 3.1 stylesheet (split by F1) uses live colour on the offline search state (Tideline 4.0 step 1 removed it); F2a deletes this exemption",
-    },
-  ],
+  tidelineExemptions: [],
   checks: [
     // The design contract itself (not legacy).
     { kind: "exists", path: "AGENTS.md" },
@@ -140,15 +92,15 @@ export const shared: SurfaceContract = {
     },
     {
       kind: "exists",
-      path: "packages/ui/src/brand.ts",
-      legacy:
-        "legacy: delete when DunaMark/DunaLogo move to packages/ui/src/brand/ (F3)",
+      path: "packages/ui/src/brand/club-colors.ts",
     },
     {
       kind: "exists",
-      path: "packages/ui/src/brand.test.ts",
-      legacy:
-        "legacy: delete when DunaMark/DunaLogo move to packages/ui/src/brand/ (F3)",
+      path: "packages/ui/src/brand/duna-mark.tsx",
+    },
+    {
+      kind: "exists",
+      path: "packages/ui/src/brand/duna-logo.tsx",
     },
     {
       kind: "includes",
@@ -185,12 +137,14 @@ export const shared: SurfaceContract = {
       kind: "includes",
       file: "packages/ui/src/styles.css",
       values: [
-        '--font-display: "Satoshi", "Helvetica Neue", Arial, sans-serif',
-        '--font-body: "Satoshi", "Helvetica Neue", Arial, sans-serif',
+        '--font-display: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
+        '--font-body: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
         "--font-heading: var(--font-display)",
         "--font-ui: var(--font-body)",
         "--font-sans: var(--font-body)",
-        '--font-data: "Satoshi", "Helvetica Neue", Arial, sans-serif',
+        '--font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
+        "--td-font-display: var(--td-font-ui)",
+        "--td-font-numeric: var(--td-font-ui)",
         "--signal-text: #52630f",
         "--signal-text: #c9e265",
         "clamp(4.5rem, 8vw, 8.75rem)",

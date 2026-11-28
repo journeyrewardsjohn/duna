@@ -9,6 +9,7 @@
     "./mobile": "./src/mobile.ts",
     "./theme": "./src/theme.ts",
     "./theme-toggle": "./src/theme-toggle.tsx",
+    "./icons": "./src/icons/index.ts",
     "./tokens": "./src/tokens.ts",
     "./hq-workspace.css": "./src/hq-workspace.css",
     "./particle-loader": "./src/particle-loader.tsx",

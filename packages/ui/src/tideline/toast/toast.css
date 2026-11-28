@@ -90,8 +90,10 @@
       }
     }
 
+    /* The toast is an inverse surface; its icon takes the inverse ink. */
+
     .td-toast__icon {
-      color: var(--td-energy);
+      color: inherit;
     }
 
     .td-toast__body {

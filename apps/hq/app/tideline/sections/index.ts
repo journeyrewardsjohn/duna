@@ -23,3 +23,4 @@ export { default as commandPalette } from "./command-palette";
 export { default as loaders } from "./loaders";
 export { default as surfaces } from "./surfaces";
 export { default as progress } from "./progress";
+export { default as foundations } from "./foundations";

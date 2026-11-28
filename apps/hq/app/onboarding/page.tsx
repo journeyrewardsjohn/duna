@@ -6,7 +6,7 @@ import {
 } from "@duna/api";
 import { isWorkOSAuthKitConfigured } from "@duna/api/workos-environment";
 import { formatMoney, ORGANIZATION_PLANS } from "@duna/core";
-import { DunaMark, Numeric } from "@duna/ui";
+import { DunaLogo, Numeric } from "@duna/ui";
 import {
   getWorkOS,
   switchToOrganization,
@@ -188,7 +188,7 @@ export default async function OrganizationOnboardingPage({
     <main className="auth-page">
       <section className="organization-onboarding organization-onboarding--workos">
         <header>
-          <DunaMark />
+          <DunaLogo size={28} />
           <span>Duna HQ</span>
         </header>
         <div className="organization-onboarding__intro">

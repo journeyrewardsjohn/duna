@@ -636,35 +636,105 @@ test.describe("Tideline gallery, Book a lesson", () => {
     ).toHaveAttribute("aria-disabled", "true");
   });
 
+  // The primary label is `on-action`: Salt on Night Court in light, Night
+  // Court on Dune in dark and live.
+  const onAction: Record<string, string> = {
+    light: "rgb(244, 242, 236)",
+    dark: "rgb(14, 26, 34)",
+    live: "rgb(14, 26, 34)",
+  };
   for (const theme of ["light", "dark", "live"]) {
-    test(`the primary label is white in ${theme}, whatever the page does to links`, async ({
+    test(`the primary label keeps on-action in ${theme}, whatever the page does to links`, async ({
       page,
     }) => {
       await page.goto(`${base}/tideline?theme=${theme}`);
       await page.waitForLoadState("networkidle");
-      // A hostile host page: every trick short of an inline style.
+      // A hostile host page: unlayered link and button rules, as HQ and Web
+      // have. The legacy bridge hands the colour back to Tideline.
       await page.addStyleTag({
-        content: `a, a:link, a:visited, html body .td a, #__next a, button,
-          html body div a.td-btn { color: rgb(0, 0, 128) !important;
-          -webkit-text-fill-color: rgb(0, 0, 128) !important; }`,
+        content: `a, a:link, a:visited, html body .td a, button,
+          html body div a.td-btn { color: rgb(0, 0, 128);
+          -webkit-text-fill-color: rgb(0, 0, 128); }`,
       });
-      const white = "rgb(255, 255, 255)";
-      for (const name of [
-        "Primary link",
-        "Save result",
-        "Full width",
-        "Disabled",
-      ]) {
+      const label = onAction[theme]!;
+      for (const name of ["Primary link", "Save result", "Full width"]) {
         const button = page
           .locator("section#controls .td-btn--primary")
           .filter({ hasText: name })
           .first();
-        await expect(button).toHaveCSS("color", white);
-        await expect(button).toHaveCSS("-webkit-text-fill-color", white);
+        await expect(button).toHaveCSS("color", label);
+        await expect(button).toHaveCSS("-webkit-text-fill-color", label);
       }
       const link = page.locator("section#controls a.td-btn--primary").first();
       await link.hover();
-      await expect(link.locator(".td-btn__label")).toHaveCSS("color", white);
+      await expect(link.locator(".td-btn__label")).toHaveCSS("color", label);
     });
   }
+});
+
+test.describe("Tideline gallery, foundations", () => {
+  test("shows the brand by role in light, HQ, dark and live", async ({
+    page,
+  }) => {
+    await page.goto(`${base}/tideline`);
+    await page.waitForLoadState("networkidle");
+    const foundations = page.locator("section#foundations");
+    await expect(
+      foundations.getByRole("heading", { name: "Foundations" }),
+    ).toBeVisible();
+    for (const name of ["Night Court", "Salt", "Dune", "Hardwood", "Solar"]) {
+      await expect(foundations.getByText(name, { exact: true })).toBeVisible();
+    }
+    const ground = (label: string) =>
+      foundations
+        .getByRole("group", { name: `${label} palette` })
+        .evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(await ground("Light")).toBe("rgb(244, 242, 236)");
+    expect(await ground("HQ")).toBe("rgb(255, 255, 255)");
+    expect(await ground("Dark")).toBe("rgb(14, 26, 34)");
+    expect(await ground("Live zone")).toBe("rgb(14, 26, 34)");
+    await expect(foundations.getByText(/falls back to Geist/)).toBeVisible();
+  });
+
+  test("closed UI SDK parts stay hidden without an important rule", async ({
+    page,
+  }) => {
+    await page.goto(`${base}/tideline`);
+    await page.waitForLoadState("networkidle");
+    const shown = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '.td [data-slot][hidden]:not([hidden="until-found"])',
+        ),
+      ]
+        .filter((element) => getComputedStyle(element).display !== "none")
+        .map((element) => element.getAttribute("data-slot")),
+    );
+    expect(shown).toEqual([]);
+  });
+
+  test("Solar appears only on live states", async ({ page }) => {
+    await page.goto(`${base}/tideline`);
+    await page.waitForLoadState("networkidle");
+    const offenders = await page.evaluate(() => {
+      const solar = "rgb(242, 84, 45)";
+      return [...document.querySelectorAll(".td *")]
+        .filter((element) => {
+          const style = getComputedStyle(element);
+          return [
+            style.color,
+            style.backgroundColor,
+            style.borderTopColor,
+          ].includes(solar);
+        })
+        .filter(
+          (element) =>
+            !element.closest(
+              '[class*="live"], [data-zone="live"], [data-swatch]',
+            ),
+        )
+        .map((element) => element.className.toString());
+    });
+    expect(offenders).toEqual([]);
+  });
 });

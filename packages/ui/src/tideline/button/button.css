@@ -90,13 +90,15 @@
     }
 
     /*
-     * Each filled variant locks its label colour on the button itself, for
+     * Each filled variant sets its label colour on the button itself, for
      * links in every state and for every child, so a page's own `a` or text
-     * rules can never put a dark label on the navy fill.
+     * rules inside the layers cannot put the wrong label on the fill. Against
+     * unlayered host CSS, legacy-bridge.css hands `color` and
+     * `-webkit-text-fill-color` back to these rules.
      */
 
     .td-btn--primary,
-    a.td-btn--primary:is(:link, :visited, :hover, :active) {
+    a.td-btn--primary:is(:link, :visited, :hover, :active, :focus) {
       background: var(--td-action);
       color: var(--td-on-action);
       -webkit-text-fill-color: var(--td-on-action);
@@ -152,17 +154,21 @@
       }
     }
 
-    /* The one main action on a dark ground, where navy would vanish. */
+    /* The one main action on a dark mesh, where Night Court would vanish. */
 
     .td-btn--light,
     a.td-btn--light:is(:link, :visited, :hover, :active) {
       background: var(--td-on-mesh);
-      color: var(--td-tide-900);
-      -webkit-text-fill-color: var(--td-tide-900);
+      color: var(--td-brand-night-court);
+      -webkit-text-fill-color: var(--td-brand-night-court);
       box-shadow: none;
 
       &:hover {
-        background: var(--td-tide-50);
+        background: color-mix(
+          in srgb,
+          var(--td-on-mesh) 88%,
+          var(--td-brand-dune)
+        );
       }
     }
 
@@ -279,23 +285,17 @@
     }
 
     /*
-     * The primary label is white in every state and theme. `!important`
-     * inside a layer outranks every unlayered rule a host page has, important
-     * or not, so no page style for links or text can turn it dark.
+     * A disabled primary is a neutral grey fill with a muted (text-3) label,
+     * never tinted; the screen shows the reason next to it.
      */
-
-    .td-btn--primary,
-    a.td-btn--primary:is(:link, :visited, :hover, :active, :focus),
-    .td-btn--primary * {
-      color: var(--td-on-action) !important;
-      -webkit-text-fill-color: var(--td-on-action) !important;
-    }
 
     .td-btn--primary:is(:disabled, [data-disabled]):not(
         [data-pending],
         [data-loading]
       ) {
       background: var(--td-action-disabled);
+      color: var(--td-text-3);
+      -webkit-text-fill-color: var(--td-text-3);
     }
   }
 }

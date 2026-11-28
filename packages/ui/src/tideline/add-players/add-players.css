@@ -82,8 +82,8 @@
       }
 
       .td-icon {
-        width: 12px;
-        height: 12px;
+        width: var(--td-size-icon-chip);
+        height: var(--td-size-icon-chip);
         stroke-width: 2;
       }
 
@@ -171,8 +171,8 @@
       }
 
       .td-icon {
-        width: 16px;
-        height: 16px;
+        width: var(--td-size-icon-inline);
+        height: var(--td-size-icon-inline);
       }
 
       &:hover:not([data-disabled], [data-pressed]) {

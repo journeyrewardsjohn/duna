@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import { ThemeToggle } from "@duna/ui/theme-toggle";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
@@ -50,7 +50,7 @@ export function SiteAudienceHeader({
           href={forClubs ? "/" : "/players"}
           prefetch
         >
-          <DunaMark />
+          <DunaLogo decorative size={24} />
         </Link>
         <nav aria-label="Main navigation" className="site-header__nav">
           {forClubs ? (
