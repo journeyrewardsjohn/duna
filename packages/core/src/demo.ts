@@ -327,6 +327,72 @@ export const demoEvents: readonly EventSummary[] = [
       },
     ],
     attendees: demoAttendees,
+    // The public entry list (SITE-5). The server sends only adults with a
+    // public profile; the third team carries a player without one, so the
+    // page's own guard (never shown, never named) is exercised in demo mode.
+    registrationTeams: [
+      {
+        id: "20000000-0000-4000-8000-000000000101",
+        divisionId: "20000000-0000-4000-8000-000000000001",
+        divisionName: "Open",
+        name: "Theo Park / Noa Williams",
+        seed: 1,
+        status: "confirmed",
+        registeredAt: "2026-07-01T17:00:00.000Z",
+        averageRating: 5.1,
+        players: [
+          {
+            displayName: "Theo Park",
+            initials: "TP",
+            publicPath: "/players/theopark",
+            ratingDisplay: 5.2,
+          },
+          {
+            displayName: "Noa Williams",
+            initials: "NW",
+            publicPath: "/players/noawilliams",
+            ratingDisplay: 5,
+          },
+        ],
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000102",
+        divisionId: "20000000-0000-4000-8000-000000000001",
+        divisionName: "Open",
+        name: "Sam Rivera / Junior Private",
+        seed: 2,
+        status: "confirmed",
+        registeredAt: "2026-07-02T17:00:00.000Z",
+        players: [
+          {
+            displayName: "Sam Rivera",
+            initials: "SR",
+            publicPath: "/players/samrivera",
+          },
+          { displayName: "Junior Private", initials: "JP" },
+        ],
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000103",
+        divisionId: "20000000-0000-4000-8000-000000000001",
+        divisionName: "Open",
+        name: "Elena Torres / Mara Lewis",
+        status: "waitlisted",
+        registeredAt: "2026-07-03T17:00:00.000Z",
+        players: [
+          {
+            displayName: "Elena Torres",
+            initials: "ET",
+            publicPath: "/players/elenatorres",
+          },
+          {
+            displayName: "Mara Lewis",
+            initials: "ML",
+            publicPath: "/players/maralewis",
+          },
+        ],
+      },
+    ],
     live: true,
     tags: ["Open", "Doubles", "$1,500 purse"],
   },
