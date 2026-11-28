@@ -5,6 +5,7 @@ import { log, report } from "@duna/observability";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { getServerCaller, getServerContext } from "@/lib/api";
+import { readWithRateLimitRetry } from "@/lib/server-read";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 import {
   ACTING_FOR_COOKIE,
@@ -21,13 +22,18 @@ import {
 
 type Caller = Awaited<ReturnType<typeof getServerCaller>>;
 
-/** The dashboard and settings, read once per request (the shell and Home share them). */
-export const loadDashboard = cache(async () =>
-  (await getServerCaller()).player.dashboard(),
-);
-export const loadSettings = cache(async () =>
-  (await getServerCaller()).player.settings(),
-);
+/**
+ * The dashboard and settings, read once per request (the shell and Home share
+ * them). A short rate-limit refusal is retried once (lib/server-read.ts).
+ */
+export const loadDashboard = cache(async () => {
+  const caller = await getServerCaller();
+  return readWithRateLimitRetry(() => caller.player.dashboard());
+});
+export const loadSettings = cache(async () => {
+  const caller = await getServerCaller();
+  return readWithRateLimitRetry(() => caller.player.settings());
+});
 
 function roleLabel(role: string): string {
   if (role === "owner") return "Admin";
