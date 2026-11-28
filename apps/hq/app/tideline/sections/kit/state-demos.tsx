@@ -116,10 +116,13 @@ export function AsyncBoundaryDemo() {
 export function ErrorStateDemo() {
   const lab = useLab();
   const [reported, setReported] = useState(0);
+  // One error for the life of the demo: ErrorState reports once per error, so
+  // a new object on every render would report, re-render and report again.
+  const [error] = useState(apiError);
   return (
     <div className={styles.stack}>
       <ErrorState
-        error={apiError()}
+        error={error}
         onRetry={() => lab.request(() => true)}
         report={() => {
           setReported((count) => count + 1);

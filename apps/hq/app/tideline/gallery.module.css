@@ -108,6 +108,9 @@
 
 .example {
   display: grid;
+  /* One shrinkable column: an implicit auto column grows to the widest child
+     (the Document table) and pushes the page past a 390 px screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--td-space-4);
   align-content: start;
   min-width: 0;

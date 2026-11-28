@@ -398,8 +398,12 @@ test.describe("Tideline gallery, keyboard", () => {
       "Reminders are off.",
     );
     await expect(reminders).toHaveAttribute("aria-checked", "false");
+    // The message is both the visible toast and the live-region announcement
+    // (by design): look at the toast, not at the screen-reader copy.
     await expect(
-      page.getByText("Could not turn reminders on. Put back."),
+      page
+        .getByLabel("Notifications")
+        .getByText("Could not turn reminders on. Put back."),
     ).toBeVisible();
   });
 
