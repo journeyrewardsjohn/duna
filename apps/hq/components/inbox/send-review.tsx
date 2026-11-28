@@ -13,7 +13,7 @@ import {
   useAction,
   useConfirm,
 } from "@duna/ui/tideline";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   cancelReviewAction,
   confirmSendAction,
@@ -357,17 +357,16 @@ function SentCard({
   const [deliveries, setDeliveries] = useState<
     readonly ConciergeDelivery[] | "loading" | "error"
   >(canSeeDeliveries && sent ? "loading" : []);
+  // One read per send, even when an effect runs twice (development's
+  // strict mode, a remount): the same request is shared, never repeated.
+  const requested = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!canSeeDeliveries || !sent) return;
-    let live = true;
-    void deliveriesAction({ proposalId: proposal.proposalId }).then(
-      (result) => {
-        if (live) setDeliveries(result.ok ? result.data : "error");
-      },
+    if (requested.current === proposal.proposalId) return;
+    requested.current = proposal.proposalId;
+    void deliveriesAction({ proposalId: proposal.proposalId }).then((result) =>
+      setDeliveries(result.ok ? result.data : "error"),
     );
-    return () => {
-      live = false;
-    };
   }, [canSeeDeliveries, sent, proposal.proposalId]);
   const title =
     proposal.status === "cancelled"
