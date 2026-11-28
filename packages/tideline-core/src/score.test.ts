@@ -12,6 +12,7 @@ const ALL: ReadonlyArray<MatchStatus> = [
   "scheduled",
   "warmup",
   "live",
+  "not-finished",
   "pending-verification",
   "verified",
   "disputed",
@@ -26,8 +27,8 @@ const twoSets = [
 ];
 
 describe("netScoreState", () => {
-  it("covers every match_status value plus not-finished", () => {
-    for (const status of [...ALL, "not-finished" as const]) {
+  it("covers every match_status value", () => {
+    for (const status of ALL) {
       const state = netScoreState({ status, sets: twoSets });
       expect(state.status).toBe(status);
       expect(state.statusLabelKey).toBe(`netScore.status.${status}`);
