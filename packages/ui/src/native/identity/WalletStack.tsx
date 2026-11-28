@@ -19,6 +19,7 @@ import {
 import { stackLayout, type StackSlot } from "@duna/tideline-core";
 import { useEffect, useMemo, useRef } from "react";
 import { useHaptics, useReducedMotion } from "../motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 import { nativeTokens } from "../tokens";
 import { Text } from "../type";
 import { MembershipCard } from "./MembershipCard";
@@ -88,8 +89,13 @@ function StackCard({
         useNativeDriver: true,
       }),
     ]);
-    animation.start();
-    return () => animation.stop();
+    return runWithWatchdog(animation, {
+      timeline: reduced ? 0 : DRAW_MS,
+      settle: settleValues([
+        [y, slot.y],
+        [scale, slot.scale],
+      ]),
+    });
   }, [reduced, scale, slot.scale, slot.y, y]);
 
   // The latest handlers, so the responder (made once) never goes stale.
@@ -111,12 +117,15 @@ function StackCard({
           const now = latest.current;
           if (now.drawnHere && gesture.dy > 60) now.onReturn();
           else if (!now.anyDrawn && gesture.dy < -30) now.onDraw();
-          Animated.timing(drag, {
-            toValue: 0,
-            duration: 200,
-            easing: RISE,
-            useNativeDriver: true,
-          }).start();
+          runWithWatchdog(
+            Animated.timing(drag, {
+              toValue: 0,
+              duration: 200,
+              easing: RISE,
+              useNativeDriver: true,
+            }),
+            { timeline: 200, settle: settleValues([[drag, 0]]) },
+          );
         },
         onPanResponderTerminate: () => drag.setValue(0),
       }),

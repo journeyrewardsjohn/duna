@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { act, create } from "react-test-renderer";
-import { beforeEach, describe, expect, it } from "vitest";
+import { Animated } from "react-native";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testAnimations } from "../test-support/react-native";
 import { MotionPreference } from "../motion/reduced-motion";
 import { flipStartsAt, LAUNCH } from "./launch";
@@ -121,5 +122,126 @@ describe("first open", () => {
       testAnimations.filter((a) => a.kind === "timing").at(-1)?.config,
     ).toMatchObject({ duration: 200 });
     expect(completed).toBe(2);
+  });
+});
+
+describe("LaunchSequence watchdog", () => {
+  type Callback = (result: { finished: boolean }) => void;
+  let callbacks: Callback[];
+  let stops: number;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    callbacks = [];
+    stops = 0;
+    // The native driver that never reports back: only the flip (the one
+    // animation started with a callback) is captured, and it never fires.
+    vi.spyOn(Animated, "timing").mockImplementation(
+      () =>
+        ({
+          start: (callback?: Callback) => {
+            if (callback) callbacks.push(callback);
+          },
+          stop: () => {
+            stops += 1;
+          },
+          reset: () => {},
+        }) as unknown as Animated.CompositeAnimation,
+    );
+    vi.spyOn(Animated, "parallel").mockImplementation(
+      () =>
+        ({
+          start: () => {},
+          stop: () => {},
+          reset: () => {},
+        }) as unknown as Animated.CompositeAnimation,
+    );
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const timeline = LAUNCH.flip.at + LAUNCH.flip.duration;
+
+  async function mount(onComplete: () => void) {
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(LaunchSequence, { onComplete }));
+    });
+    return renderer;
+  }
+
+  it("normal completion calls onComplete once and the watchdog does nothing", async () => {
+    const onComplete = vi.fn();
+    await mount(onComplete);
+    await act(async () => {
+      callbacks[0]!({ finished: true });
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes once, a second after its timeline, when the animation never reports back", async () => {
+    const onComplete = vi.fn();
+    await mount(onComplete);
+    await act(async () => {
+      vi.advanceTimersByTime(timeline + 999);
+    });
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(stops).toBeGreaterThan(0);
+  });
+
+  it("a callback arriving after the watchdog still completes exactly once", async () => {
+    const onComplete = vi.fn();
+    await mount(onComplete);
+    await act(async () => {
+      vi.advanceTimersByTime(timeline + 1000);
+    });
+    await act(async () => {
+      callbacks[0]!({ finished: true });
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmounting before either completes nothing and leaves no timer", async () => {
+    const onComplete = vi.fn();
+    const renderer = await mount(onComplete);
+    await act(async () => {
+      renderer.unmount();
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      callbacks[0]?.({ finished: true });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("reduced motion is covered too", async () => {
+    const onComplete = vi.fn();
+    await act(async () => {
+      create(
+        createElement(
+          MotionPreference,
+          { reduceMotion: true },
+          createElement(LaunchSequence, { onComplete }),
+        ),
+      );
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(LAUNCH.reduced.hold + LAUNCH.reduced.fade + 1000);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });
