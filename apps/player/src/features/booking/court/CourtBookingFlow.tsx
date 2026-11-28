@@ -48,6 +48,7 @@ import {
   type GlyphName,
 } from "@duna/ui/native";
 import { AdaptiveSheet } from "@duna/ui/native/layout";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
 import {
@@ -173,13 +174,9 @@ export function CourtBookingFlow({
   /** Preview builds only: open on a step with fixture data (screenshots). */
   readonly preview?: CourtFlowPreview;
 }) {
-  const [nonce, setNonce] = useState(0);
   const key = request
-    ? `${request.venueId}-${request.date}-${request.localStartsAt ?? ""}-${request.courtId ?? ""}-${nonce}`
+    ? `${request.venueId}-${request.date}-${request.localStartsAt ?? ""}-${request.courtId ?? ""}`
     : "closed";
-  useEffect(() => {
-    if (request) setNonce((count) => count + 1);
-  }, [request]);
   if (!request) return null;
   return (
     <Flow
@@ -210,6 +207,7 @@ function Flow({
   const haptics = useHaptics();
   const { colors, tokens } = useTheme();
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const live = runtime.mode === "live" ? runtime.client : undefined;
   const {
     inventory,
@@ -475,7 +473,8 @@ function Flow({
 
   const busy = state.step === "confirming";
   const dark = state.step === "confirming";
-  const sheetHeight = Math.min(height - 64, 940);
+  // Fills the sheet without passing its frame (bottom sheet or centred).
+  const sheetHeight = Math.min(height - insets.top - insets.bottom - 64, 940);
 
   let body: ReactNode;
   if (!inventory || !venue) {
