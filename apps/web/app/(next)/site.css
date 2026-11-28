@@ -18,6 +18,38 @@
 @layer ui-sdk, tideline, site;
 
 @layer site {
+  /* ---------- The first screen is visible at first paint ---------- */
+
+  /*
+   * Motion never gates content (docs/design/website.md §2.10): everything in
+   * the first viewport on load (kicker, headline, lead, search, actions, hero
+   * photograph or stage) paints at full opacity in the first frame. The
+   * kit's Rise starts at opacity 0 behind a closed clip, which also made
+   * Chrome report the hero text as painted only when its Rise ended, 0.7-0.9 s
+   * after first paint (docs/design/website-performance.md §8). Here the
+   * Rise keeps only its travel: same duration, easing and Rally stagger, no
+   * fade, no clip. Below the first screen, Rise and Rally play as designed.
+   * One list of first-screen containers; add a page's hero here, nowhere else.
+   */
+  :is(
+      .site-hero,
+      .site-page-hero,
+      .site-team-hero,
+      .site-return,
+      .club-hero,
+      .club-offer
+    )
+    .td-rise,
+  :is(.vn-head, .as-panel, .lc-root > *).td-rise {
+    animation-name: site-first-rise;
+  }
+
+  @keyframes site-first-rise {
+    from {
+      translate: var(--td-rise-x) var(--td-rise-y);
+    }
+  }
+
   /* ---------- Document ---------- */
 
   html {

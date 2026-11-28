@@ -1,6 +1,6 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "vitest";
-import { Cross } from "./motion";
+import { Cross } from "./cross";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

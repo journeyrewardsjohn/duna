@@ -3,7 +3,7 @@ import {
   Icon,
   type ButtonStyleOptions,
 } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import type { ReactNode } from "react";
 
 interface LinkButtonProps extends ButtonStyleOptions {

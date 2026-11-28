@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { buttonClassName, EmptyState } from "@duna/ui/tideline";
 import { legalSearchEntries } from "@/components/legal/legal-library";
 import { LegalSearch } from "@/components/legal/legal-search";

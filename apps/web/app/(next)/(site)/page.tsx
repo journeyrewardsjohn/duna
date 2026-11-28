@@ -14,10 +14,10 @@ import {
   railSessions,
   SessionRail,
 } from "@/components/site/home/session-rail";
-import { StoryScroller } from "@/components/site/home/story-scroller";
 import { NetLine } from "@/components/site/net-line";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 import { createPublicCaller } from "@/lib/public-api";
+import { LaterStoryScroller } from "@/components/site/deferred";
 
 /** Rebuilt every five minutes, so the rail stays current while the page is static. */
 export const revalidate = 300;
@@ -104,7 +104,7 @@ export default async function HomePage() {
       <HomeHero />
       <SessionRail sessions={sessions} />
       <section aria-labelledby="play-title" className="site-wrap site-section">
-        <StoryScroller
+        <LaterStoryScroller
           heading={
             <>
               <NetLine label="For players" />

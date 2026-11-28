@@ -3,7 +3,7 @@ import "../../../pages.css";
 import type { PublicProfessionalTeam } from "@duna/api";
 import { Avatar, Icon } from "@duna/ui/tideline";
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { notFound } from "next/navigation";
 import { NetLine } from "@/components/site/net-line";
 import { TeamTrend } from "@/components/site/pro/team-trend";

@@ -2,14 +2,7 @@ import "../pages.css";
 
 import { ORGANIZATION_PLANS } from "@duna/core";
 import type { Metadata } from "next";
-import { ConceptAskDuna } from "@/components/site/concepts/concept-ask-duna";
-import { ConceptConcierge } from "@/components/site/concepts/concept-concierge";
-import { ConceptMemberPass } from "@/components/site/concepts/concept-member-pass";
-import { ConceptOpenGame } from "@/components/site/concepts/concept-open-game";
-import { ConceptPayout } from "@/components/site/concepts/concept-payout";
-import { ConceptSetupRead } from "@/components/site/concepts/concept-setup-read";
 import { ConceptSiteEdit } from "@/components/site/concepts/concept-site-edit";
-import { ConceptTeamWeek } from "@/components/site/concepts/concept-team-week";
 import { ConceptTile } from "@/components/site/home/home-bands";
 import { LinkButton } from "@/components/site/link-button";
 import { clubSignupHref, siteLinks } from "@/components/site/links";
@@ -27,6 +20,15 @@ import { Reveal } from "@/components/site/reveal";
 import { ConceptStage } from "@/components/site/stage";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 import { siteOgImage } from "@/components/site/og";
+import {
+  LaterConceptAskDuna,
+  LaterConceptConcierge,
+  LaterConceptMemberPass,
+  LaterConceptOpenGame,
+  LaterConceptPayout,
+  LaterConceptSetupRead,
+  LaterConceptTeamWeek,
+} from "@/components/site/deferred";
 
 const title = "Run your volleyball club";
 const description =
@@ -172,7 +174,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="bookings"
             body="Courts, clinics, privates, leagues and open games with minimums, waitlists and a confirm time. Programs and seasons sit on the same schedule."
-            concept={<ConceptOpenGame view="club" />}
+            concept={<LaterConceptOpenGame view="club" />}
             label="Bookings and programs"
             photo={sitePhotos.courtsFirstLight}
             span="wide"
@@ -182,7 +184,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="memberships"
             body="Plans and credits, and a card in every member’s phone wallet that shows the right pass on a class day."
-            concept={<ConceptMemberPass />}
+            concept={<LaterConceptMemberPass />}
             label="Memberships and the card"
             photo={sitePhotos.friendsWalk}
             span="narrow"
@@ -192,7 +194,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="payments"
             body="Cards and bank payments, refunds in a tap, every payout listed. You are paid within three business days once the money has settled and the session has taken place."
-            concept={<ConceptPayout />}
+            concept={<LaterConceptPayout />}
             label="Payments · Duna Pay"
             photo={sitePhotos.partnersLowfive}
             span="narrow"
@@ -202,7 +204,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="team"
             body="Coaches and staff with roles, schedules and pay. See who is on each session and what still needs someone."
-            concept={<ConceptTeamWeek />}
+            concept={<LaterConceptTeamWeek />}
             label="Team and schedule"
             photo={sitePhotos.coachMorning}
             span="wide"
@@ -212,7 +214,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="concierge"
             body="Texts, email and chat from one person in one thread, answered the way they wrote."
-            concept={<ConceptConcierge />}
+            concept={<LaterConceptConcierge />}
             label="Concierge"
             photo={sitePhotos.beachAttack}
             span="wide"
@@ -222,7 +224,7 @@ export default function RunYourClubPage() {
           <ConceptTile
             anchor="ask-duna"
             body="Ask a question about your club, or ask for a change. Duna shows the before and after and who gets told; nothing moves until you approve it."
-            concept={<ConceptAskDuna />}
+            concept={<LaterConceptAskDuna />}
             label="Ask Duna"
             photo={sitePhotos.indoorServe}
             span="narrow"
@@ -290,7 +292,7 @@ export default function RunYourClubPage() {
                 line; nothing is applied until you confirm.
               </p>
             </div>
-            <ConceptSetupRead />
+            <LaterConceptSetupRead />
           </div>
         </div>
       </section>

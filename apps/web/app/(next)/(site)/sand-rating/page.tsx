@@ -9,11 +9,11 @@ import { siteLinks } from "@/components/site/links";
 import { sitePhotos } from "@/components/site/media";
 import { siteOgImage } from "@/components/site/og";
 import { PageHero, SectionHead } from "@/components/site/page-parts";
-import { RatingStory } from "@/components/site/rating/rating-story";
 import { Reveal } from "@/components/site/reveal";
 import { ConceptStage } from "@/components/site/stage";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
 import { createPublicCaller } from "@/lib/public-api";
+import { LaterRatingStory } from "@/components/site/deferred";
 
 /** The published evidence changes when a new audited run completes. */
 export const revalidate = 3_600;
@@ -215,7 +215,7 @@ export default async function SandRatingPage() {
           lead="Here is what happens between the last rally and a new number."
           title="Watch a result become a rating."
         />
-        <RatingStory />
+        <LaterRatingStory />
       </section>
 
       <section

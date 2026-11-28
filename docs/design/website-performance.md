@@ -181,6 +181,9 @@ as §5 lands. Each run attaches the measured numbers to the test result (annotat
 
 ## 5. Quick wins not done here, with expected gain
 
+Status after SITE-PERF-2 (§7): the duplicate chunk, the legacy prefetch and the unused script are
+fixed; the text-LCP row is explained in §7.4.
+
 | Finding                                                                         | Expected gain                                                                        | Owner path                                                                                                                                                                   |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Duplicate Tideline chunk (`0qgs…` = `1ssn…`, same 89 modules) on every page     | −190 KiB compressed and ~560 KB less script to parse per view; TBT and LCP on phones | build configuration / `packages/ui` chunking (try one client entry for `@duna/ui/tideline`, then compare `.next/static/chunks`)                                              |
@@ -212,3 +215,137 @@ Read each report's `categories.performance.score` and the audits `largest-conten
 `largest-contentful-paint-element`. Expect `/` to drop the two `/_next/static/media/*.webp` originals
 from `network-requests`, and `curl -sI https://duna.coach/site/hero-loop.mp4 | grep -i cache-control`
 to show `max-age=86400`.
+
+## 7. SITE-PERF-2: what is shipped, and when (28 November 2026)
+
+Package SITE-PERF-2 changes what the public site ships on the first view and when the rest
+arrives. Nothing is restyled or moved: every change keeps the markup, the motion and the
+behaviour a visitor sees.
+
+### 7.1 Method
+
+`next build` and `next start` locally (port 3417, no database, so the rail and discovery show
+their empty states), images warmed through the optimiser before measuring (production serves
+them from Vercel's cache; see §1 for the `next start` optimiser stall). Lighthouse 12.8 mobile
+preset (simulated slow 4G, 4x CPU), performance only, one run at a time, nothing else running.
+The four target pages were run twice after the change; both runs agreed within 0.02 s. The
+bundle composition comes from `next experimental-analyze -o` (Turbopack's analyzer; the output
+lands in `apps/web/.next/diagnostics/analyze`).
+
+### 7.2 Before and after (local production build, Lighthouse mobile)
+
+| Page             | Score before | Score after | LCP before | LCP after | Script before the LCP | Total script |
+| ---------------- | ------------ | ----------- | ---------- | --------- | --------------------- | ------------ |
+| `/`              | 78           | 89          | 5.94 s     | 3.75 s    | 650 → 191 KiB         | 650 → 412    |
+| `/discover`      | 79           | 90          | 5.71 s     | 3.51 s    | 640 → 252 KiB         | 661 → 355    |
+| `/pricing`       | 77           | 92          | 6.31 s     | 3.36 s    | 661 → 208 KiB         | 661 → 399    |
+| `/run-your-club` | 76           | 87          | 7.00 s     | 3.90 s    | 665 → 187 KiB         | 665 → 368    |
+| `/apps`          | 78 (live)    | 85          | 4.8 (live) | 4.27 s    | → 254 KiB             | → 341        |
+| `/sand-rating`   | 89 (live)    | 90          | 3.6 (live) | 3.51 s    | → 189 KiB             | → 299        |
+| `/pro`           | 78 (live)    | 89          | 5.0 (live) | 3.66 s    | → 211 KiB             | → 293        |
+| `/add-score`     | 85 (live)    | 88          | 4.4 (live) | 3.92 s    | → 312 KiB             | → 393        |
+
+Compressed transfer. "Script before the LCP" is what finished downloading before the observed
+largest contentful paint, which is what Lighthouse's model charges to LCP; "total script" now
+includes the prefetches and deferred islands that arrive after the first view. CLS stayed 0.000
+and TBT under 20 ms everywhere. FCP is unchanged (1.35–1.66 s). The last four pages were not
+measured locally before the change; their "before" is the live baseline in §2.
+
+### 7.3 What changed, in order of gain
+
+1. **`"sideEffects": ["*.css"]` on `@duna/ui`.** Without it Turbopack had to keep every module
+   behind `export *` in `@duna/ui/tideline`, so any client component importing one part pulled the
+   whole kit (UI SDK popups, calendar, toast, the training-scene player…), and it did so once per
+   chunk group: that was the 190 KiB chunk downloaded twice (§2, ²). First-view script fell from
+   ~2.0 MB to ~1.1 MB raw on every page in one line.
+2. **First-view settling** (`components/site/first-view.ts`). The site waits for `load`, the end
+   of the entrance motion (1.5 s) and an idle moment, or the visitor's first scroll, tap or key,
+   before spending bandwidth on what is not on screen:
+   - `SiteLink` (`components/site/site-link.tsx`, now used for every link on the public site)
+     prefetches only after that. Viewport prefetch had fired 5–7 RSC requests plus the next
+     pages' chunks in the first 450 ms of every page (−1.1 s LCP on `/pricing` by itself).
+   - `SiteLink` never prefetches a page still in `(legacy)` (`isCrossDocumentPath` in
+     `components/site/links.ts`): `/about`, `/rankings`, `/safety`, `/sign-in`, `/sign-up`. Their
+     prefetch only downloaded the 675 KB legacy stylesheet; following the link is a full page load
+     anyway. Remove an entry when its page moves into `(next)`.
+   - `deferHydration` (`components/site/defer-hydration.tsx`, used in
+     `components/site/deferred.tsx`) renders an island on the server as before and fetches its
+     script after the first view; React keeps the server HTML and hydrates it when the code
+     arrives. Used for everything below the hero: the concept tiles, the home story, the
+     run-your-club setup read, the pricing fee calculator, the Pro finder and the rating story.
+     Heroes keep their eager components.
+   - The header's phone menu sheet (`site-menu.tsx`), the home search card's pickers
+     (`search/search-pickers.tsx`) and the discovery bar's pickers
+     (`discover/search-bar-pickers.tsx`) load the same way, or on the first press. The menu
+     button is the server's button until the sheet's script is here; it is never swapped in the
+     middle of a press, and a press before then opens the sheet when it arrives.
+3. **Error boundaries and the header without the UI SDK.** Next ships every `error.tsx` and
+   `global-error.tsx` with every page, and `global-error` in its own chunk group, so what they
+   import is paid for twice. `SiteErrorState` draws the kit's error state (same `td-state` markup,
+   retry, home link, copyable reference) without the interaction kit and toasts. The header's
+   Sign in is the button-styled link it always rendered, without the UI SDK Button; the home
+   Search submit likewise. `Cross`/`PageTransition` moved to `motion/cross.tsx` so the site layout
+   stops shipping the first-open sequence and its Button.
+
+Also: hidden button loaders stand still (`button.css`): every UI SDK Button carries a
+`MicroRally` whose infinite animation ran unseen on every page in every app.
+
+Tried and reverted: `experimental.inlineCss` (LCP +0.15–0.2 s: larger documents, same CSS).
+
+### 7.4 What still misses the target, and why
+
+No page reaches LCP 2.5 s; `/`, `/run-your-club`, `/apps`, `/pro` and `/add-score` are still below 90.
+
+- **Chrome counts the hero's Rise.** The LCP element on most pages is the h1 or the lead
+  paragraph, which Rises from opacity 0. Chrome reports an element that starts at opacity 0 at the
+  end of its opacity animation, not at its first paint (measured: an h1 with the Rise is
+  reported at 744 ms, the same h1 starting at opacity 0.01 at 8 ms). With the Rally stagger the
+  LCP lands 720–900 ms after first paint, and Lighthouse's model then charges everything loaded
+  and run before that moment: the framework (React and the Next router, ~165 KiB, about 0.9 s of
+  simulated phone CPU) and the main-thread work of the entrance animations. With all script
+  blocked, `/pricing` still measures 2.26 s.
+- So the floor with this motion is about 3.3–3.5 s. Reaching 2.5 s needs a design decision, not a
+  bundling one: start the hero text's Rise at a visible opacity (with the clip-path alone
+  revealing it) or shorten it on the LCP element. That is the motion contract
+  (`packages/ui/src/tideline/motion/motion.css`), owned by the design review, so it is not
+  changed here. Changing only the starting opacity to a non-zero value would also make Chrome
+  skip the text entirely while it is fully clipped, which would hide the problem rather than fix
+  it.
+- `/run-your-club` and `/apps` also load four below-the-fold photographs (~150 KiB) inside the
+  browser's lazy-load distance before the LCP (−0.15 s if they were later; native lazy loading,
+  left alone).
+- `/add-score` and `/discover` are applications on the first view (the flow, the results with
+  their states); their remaining script is what they need to work.
+
+Budgets in §4 and `BUDGET_KIB` in `tests/e2e/site-pages.spec.ts` were not lowered here: lower
+them from the next CI run's `first-screen transfer (KiB)` annotations.
+
+### 7.5 Re-measure
+
+Locally: `next build`, `next start --port 3417`, warm the hero images with `curl`, then the §6
+loop against `http://127.0.0.1:3417`. On production, §6 as written.
+
+## 8. First screen visible at first paint (owner decision, 28 November 2026)
+
+Decision: every element in the first viewport on load starts visible; it may keep a transform-only
+Rise. Implemented as one rule in `apps/web/app/(next)/site.css` (`site-first-rise`: the kit's Rise
+travel without the opacity fade or the clip, on the first-screen containers of every site page:
+home, page heroes, Pro team, return page, club and offering pages, venue head, Add a score panel,
+legal documents). `docs/design/website.md` §2.10 records it.
+
+Chrome now reports the LCP at first paint (measured in Chromium: `/pricing` h1 at 68 ms,
+`/run-your-club` lead at 60 ms, was 764–937 ms), so the translate-only Rise does not delay it and
+stays. Lighthouse mobile, same method as §7.1, two runs each (identical within 0.01 s):
+
+| Page             | Score (§7 → now) | LCP (§7 → now) |
+| ---------------- | ---------------- | -------------- |
+| `/`              | 89 → 89          | 3.75 → 3.66 s  |
+| `/discover`      | 90 → 90          | 3.51 → 3.51 s  |
+| `/pricing`       | 92 → 93          | 3.36 → 3.21 s  |
+| `/run-your-club` | 87 → 88          | 3.90 → 3.89 s  |
+
+2.5 s is still not met. With the paint at ~60 ms the remaining LCP is Lighthouse's model, not the
+page: the framework's async scripts (React and the Next router, ~165 KiB) finish and run before
+that first paint on a fast connection, so the simulation counts their download on slow 4G and their
+4x CPU before the paint. Going lower means less framework script before hydration (fewer client
+components in the layout, or a lighter router), not motion or bundling of the site's own code.

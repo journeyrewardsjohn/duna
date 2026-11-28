@@ -5,15 +5,17 @@ import {
 } from "@duna/core";
 import { CrestMark } from "@duna/ui/tideline";
 import type { ReactNode } from "react";
-import { ConceptAskDuna } from "../concepts/concept-ask-duna";
-import { ConceptDrill } from "../concepts/concept-drill";
-import { ConceptMemberPass } from "../concepts/concept-member-pass";
-import { ConceptOpenGame } from "../concepts/concept-open-game";
 import { ArrowLink, LinkButton } from "../link-button";
 import { siteLinks } from "../links";
 import { type SitePhoto, sitePhotos } from "../media";
 import { NetLine } from "../net-line";
 import { PhotoStage } from "../photo-stage";
+import {
+  LaterConceptAskDuna,
+  LaterConceptDrill,
+  LaterConceptMemberPass,
+  LaterConceptOpenGame,
+} from "../deferred";
 
 /* ------------------------------------------------------------------ */
 /* Honeypot band (spec 3.1 item 5)                                     */
@@ -150,7 +152,7 @@ export function ClubsChapter() {
       <div className="site-tiles">
         <ConceptTile
           body="Members carry one card in their phone’s wallet. On a class day it shows the pass for that class."
-          concept={<ConceptMemberPass />}
+          concept={<LaterConceptMemberPass />}
           label="Memberships"
           photo={sitePhotos.indoorHuddle}
           span="wide"
@@ -158,7 +160,7 @@ export function ClubsChapter() {
         />
         <ConceptTile
           body="Set a minimum and a confirm time. Players see “needs 2 more”, and Duna runs or cancels it on time."
-          concept={<ConceptOpenGame view="club" />}
+          concept={<LaterConceptOpenGame view="club" />}
           label="Bookings"
           photo={sitePhotos.courtsFirstLight}
           span="narrow"
@@ -166,7 +168,7 @@ export function ClubsChapter() {
         />
         <ConceptTile
           body="Practice plans built from a drill library, drawn on a court, with the time for each block."
-          concept={<ConceptDrill />}
+          concept={<LaterConceptDrill />}
           label="Programs and drills"
           photo={sitePhotos.coachMorning}
           span="narrow"
@@ -174,7 +176,7 @@ export function ClubsChapter() {
         />
         <ConceptTile
           body="It notices wind, gaps and clashes, and proposes a change with the before and after. Nothing moves until you approve it."
-          concept={<ConceptAskDuna />}
+          concept={<LaterConceptAskDuna />}
           label="Ask Duna"
           photo={sitePhotos.indoorServe}
           span="wide"

@@ -25,10 +25,7 @@ import {
   TourNav,
   WorldRankings,
 } from "@/components/site/pro/pro-parts";
-import {
-  type ProFinderPlayer,
-  PlayerFinder,
-} from "@/components/site/pro/player-finder";
+import type { ProFinderPlayer } from "@/components/site/pro/player-finder";
 import { ConceptStage } from "@/components/site/stage";
 import { getServerCaller } from "@/lib/api";
 import { parseIsoDay } from "@/lib/date-filter";
@@ -37,6 +34,7 @@ import {
   professionalOgImageUrl,
   serializeJsonLd,
 } from "@/lib/pro-seo";
+import { LaterPlayerFinder } from "@/components/site/deferred";
 
 const proTourSocialImage = professionalOgImageUrl({
   title: "The world’s game, point by point.",
@@ -336,7 +334,7 @@ export default async function ProTourPage({
             label="Player directory"
             title="Know who to watch."
           />
-          <PlayerFinder players={players} />
+          <LaterPlayerFinder players={players} />
         </section>
       ) : null}
 
